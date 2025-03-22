@@ -1,0 +1,144 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:OwnaAvalonia.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:sukiUi="clr-namespace:SukiUI.Controls;assembly=SukiUI"
+        xmlns:converter="using:OwnaAvalonia.Views.Converters"
+        mc:Ignorable="d" d:DesignWidth="510" d:DesignHeight="750"
+        Width="510" Height="750"
+        x:Class="OwnaAvalonia.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        ExtendClientAreaToDecorationsHint="True"
+        Background="#333339"
+        CanResize="False"
+        Title="OwnaAvalonia">
+
+    <Window.Resources>
+        <converter:TimeSpanMsConverter x:Key="TimeSpanMsConverter"/>
+        <converter:LogColorConverter x:Key="LogColorConverter"/>
+    </Window.Resources>
+    
+    <Grid RowDefinitions="35, Auto, Auto, Auto, Auto, Auto, *">
+        
+        <!--File list-->
+        <Border Grid.Row="1"
+                BorderBrush="gray"
+                BorderThickness="1" CornerRadius="5"
+                MinHeight="150" Margin="10,0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding FileNames}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Margin="5" Text="{Binding}" 
+                                       Foreground="{DynamicResource HighlightBrush}"
+                                       TextWrapping="Wrap" MaxWidth="420"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!--Add-, Remove file, Reset-->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="5,0">
+            <Button Content="Add Audio file" Margin="2"
+                    Command="{Binding AddFileCommand}"/>
+            <Button Content="Remove Audio File" Margin="2"
+                    Command="{Binding RemoveFileCommand}"/>
+            <Button Content="Reset" Margin="2"
+                    Command="{Binding ResetCommand}"/>
+            <ToggleButton Content="FX" 
+                    IsChecked="{Binding IsFxEnabled, Mode=TwoWay}" Margin="2"/>
+            <!--<Button Content="Input" Margin="2"
+                    Command="{Binding InputCommand}"/>-->
+        </StackPanel>
+
+        <!--Pitch, Tempo, Volume-->
+        <Grid Grid.Row="3"
+              RowDefinitions="Auto, Auto, Auto"
+              ColumnDefinitions="Auto, *"
+              Margin="10,0">
+              
+            <Label Grid.Row="0" Grid.Column="0" Content="Pitch" Margin="5" 
+                   VerticalAlignment="Top" HorizontalAlignment="Center" Foreground="{DynamicResource ThemeControlLowBrush}"/>
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding #SliderPitch.Value}" 
+                       VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                       Foreground="{DynamicResource ThemeControlLowBrush}"/>  
+            <Slider Name="SliderPitch" Grid.Row="0" Grid.Column="1"
+                    Minimum="-6" Maximum="6" 
+                    TickFrequency="1" IsSnapToTickEnabled="True"
+                    Margin="5"
+                    Value="{Binding Pitch}"/>
+            
+            <Label Grid.Row="1" Grid.Column="0" Content="Tempo" Margin="5" 
+                   VerticalAlignment="Top" HorizontalAlignment="Center" Foreground="{DynamicResource ThemeControlLowBrush}"/>
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding #SliderTempo.Value}" 
+                       VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                       Foreground="{DynamicResource ThemeControlLowBrush}"/>
+            <Slider Name="SliderTempo" Grid.Row="1" Grid.Column="1"
+                    Minimum="-20" Maximum="20"
+                    TickFrequency="1" IsSnapToTickEnabled="True"
+                    Margin="5"
+                    Value="{Binding Tempo}"/>
+
+            <Label Grid.Row="2" Grid.Column="0" Content="Volume" Margin="5" 
+                   VerticalAlignment="Top" HorizontalAlignment="Center" Foreground="{DynamicResource ThemeControlLowBrush}"/>
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding #SliderVolume.Value}" 
+                       VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                       Foreground="{DynamicResource ThemeControlLowBrush}"/>
+            <Slider Name="SliderVolume" Grid.Row="2" Grid.Column="1"
+                    Minimum="0" Maximum="100"
+                    TickFrequency="1" IsSnapToTickEnabled="True"
+                    Margin="5"
+                    Value="{Binding Volume}"/>
+        </Grid>
+
+        <!--Progress, PLay, Stop-->
+        <Grid Grid.Row="4" RowDefinitions="Auto, Auto" Margin="10,5">
+            <Border Grid.RowSpan="2" CornerRadius="3"
+                    BorderBrush="gray" BorderThickness="1"/>
+            <ProgressBar Name="Progress" Orientation="Horizontal" VerticalAlignment="Center"
+                         Minimum="0" Margin="5,10" Height="10"
+                         Maximum="{Binding Duration, Converter={StaticResource TimeSpanMsConverter}}"
+                         Value="{Binding Position, Converter={StaticResource TimeSpanMsConverter}}"/>
+            <StackPanel Grid.Row="1" Orientation="Horizontal">
+                <Button Content="{Binding PlayPauseText}" MinWidth="235" HorizontalAlignment="Left" Margin="5,10"
+                        Command="{Binding PlayPauseCommand}"/>
+                <Button Content="Stop" MinWidth="235" HorizontalAlignment="Right" Margin="5,10"
+                        Command="{Binding StopCommand}"/>
+            </StackPanel>
+        </Grid>
+
+        <!--Save file-->
+        <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="5">
+            <ToggleSwitch Name="IsSaveSwitch" Content="Save file" Margin="10" IsChecked="{Binding IsSaveFile}"/>
+            <Border Background="#44555555" CornerRadius="5" Margin="5,10">
+                <TextBlock Name="PathText" Text="{Binding SaveFilePath}" Margin="3,8,3,3" Width="340" 
+                           TextAlignment="Start" ToolTip.Tip="{Binding #PathText.Text}"
+                           Foreground="{DynamicResource ThemeControlMidBrush}"/> 
+            </Border>
+            <Button Classes="Flat Rounded"
+                Content="..." Margin="0,10" Command="{Binding SaveFilePathCommand}"
+                IsEnabled="{Binding #IsSaveSwitch.IsChecked}"/>
+        </StackPanel>
+
+        <!--Log-->
+        <Border Grid.Row="6"
+                BorderBrush="Gray"
+                BorderThickness="1" CornerRadius="5"
+                MinHeight="100" Margin="10">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Logs}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Margin="5" Text="{Binding}"
+                                       Foreground="{Binding, Converter={StaticResource LogColorConverter}}"
+                                       MaxWidth="420" TextWrapping="Wrap"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</Window>

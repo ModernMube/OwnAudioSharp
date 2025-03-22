@@ -1,0 +1,276 @@
+using System;
+using System.Runtime.InteropServices;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+using Ownaudio.Engines;
+using Ownaudio.Utilities;
+
+
+
+namespace Ownaudio.Sources;
+
+public unsafe partial class SourceManager
+{
+    /// <summary>
+    /// Mix output sources into a stream. Considering the state of the source manager.
+    /// </summary> 
+    private void MixEngine()
+    {
+        bool useSources = false;
+        List<float> mixedBuffer = new List<float>();
+        List<float> _frequencies = new List<float>();
+
+        TimeSpan lastKnownPosition = Position;
+        bool seekJustHappened = false;
+
+        int maxLength = Sources.Max(src => 
+            src.SourceSampleData.TryPeek(out float[]? peekedSamples) && peekedSamples != null 
+            ? peekedSamples.Length 
+            : 0);
+                
+        if (maxLength > 0)
+            mixedBuffer.Capacity = maxLength;
+
+        double sampleDurationMs = 1000.0 / OutputEngineOptions.SampleRate;
+        int channelCount = (int)OutputEngineOptions.Channels;
+
+        while (State != SourceState.Idle) 
+        {
+            if (IsSeeking)
+            {
+                seekJustHappened = true;
+
+                Thread.Sleep(10);
+                mixedBuffer.Clear();
+                continue;
+            }
+
+            if (seekJustHappened && !IsSeeking)
+            {
+                lastKnownPosition = Position;
+                seekJustHappened = false;
+            }
+
+            for (int i = 0; i < maxLength; i++)
+                mixedBuffer.Add(0.0f);
+
+            if (!Sources.Any(p => p.SourceSampleData.Count() > 0))  
+            {
+                if (Sources.All(p => p.State == SourceState.Idle))
+                {
+                    SetAndRaisePositionChanged(TimeSpan.Zero);
+                }
+
+                if(!IsRecorded)
+                {
+                    Thread.Sleep(10);
+                    continue;
+                }
+                else
+                {
+                    useSources = false;
+                }
+            } 
+
+            if (State == SourceState.Paused) 
+            {
+                if (!IsRecorded) 
+                {
+                    Thread.Sleep(10);
+                    continue;
+                }  
+                else
+                {
+                    useSources = false;
+                }          
+            }
+            else 
+            {
+                useSources = true;
+            }
+
+            if (mixedBuffer.Count > 0) 
+            {
+                float[] _mixedBuffer = new float[mixedBuffer.Count];
+                
+                for (int i = 0; i < maxLength; i++)
+                    _mixedBuffer[i] = 0.0f;
+
+                if (Sources.Count() > 0 && useSources)
+                {
+                    if (State == SourceState.Playing)
+                    {
+                        bool needToResync = false;
+
+                        if (Sources.Count > 1)
+                        {
+                            TimeSpan minPos = TimeSpan.MaxValue;
+                            TimeSpan maxPos = TimeSpan.MinValue;
+                            
+                            foreach (ISource src in Sources)
+                            {
+                                if (src.Position < minPos) minPos = src.Position;
+                                if (src.Position > maxPos) maxPos = src.Position;
+                            }
+
+                            if ((maxPos - minPos).TotalMilliseconds > 200)
+                            {
+                                needToResync = true;
+                            }
+                        }
+                        
+                        if (needToResync)
+                        {
+                            foreach (ISource src in Sources)
+                            {
+                                if (Math.Abs((src.Position - lastKnownPosition).TotalMilliseconds) > 100)
+                                {
+                                    src.Seek(lastKnownPosition);
+                                }
+                            }
+                        }
+                    }
+
+                    foreach (ISource src in Sources)
+                    {
+                        if (src.SourceSampleData.TryDequeue(out float[]? samples))
+                        {
+                            for (int i = 0; i < samples.Length; i++)
+                            {
+                                _mixedBuffer[i] += samples[i];
+                                _mixedBuffer[i] = Math.Clamp(_mixedBuffer[i], -1.0f, 1.0f);
+                            }
+                        }
+                    }
+                }
+
+                if (IsRecorded && Engine is not null)
+                {
+                    float[] inputBuffer = new float[EngineFramesPerBuffer * (int)InputEngineOptions.Channels];
+                    float[] stereoData = new float[EngineFramesPerBuffer * (int)OutputEngineOptions.Channels];
+
+                    ((SourceInput)SourcesInput[0]).ReceivesData(out inputBuffer, Engine);
+
+                    if (InputEngineOptions.Channels == Engines.OwnAudioEngine.EngineChannels.Mono &&
+                        OutputEngineOptions.Channels == Engines.OwnAudioEngine.EngineChannels.Stereo)
+                    {
+                        for (int i = 0; i < inputBuffer.Length; i++)
+                        {
+                            _mixedBuffer[i * 2] += inputBuffer[i];     //Left channel
+                            _mixedBuffer[i * 2 + 1] += inputBuffer[i]; //Right channel
+                            _mixedBuffer[i * 2] = Math.Clamp(_mixedBuffer[i * 2], -1.0f, 1.0f);
+                            _mixedBuffer[i * 2 + 1] = Math.Clamp(_mixedBuffer[i * 2 + 1], -1.0f, 1.0f);
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < inputBuffer.Length; i++)
+                        {
+                            _mixedBuffer[i] += inputBuffer[i];
+                            _mixedBuffer[i] = Math.Clamp(_mixedBuffer[i], -1.0f, 1.0f);
+                        }
+                    }
+                }
+
+                Span<float> mixedSpan = CollectionsMarshal.AsSpan(_mixedBuffer.ToList());
+
+                ProcessSampleProcessors(mixedSpan);
+
+                Engine?.Send(mixedSpan);
+
+                if (State == SourceState.Playing)
+                {
+                    double processedTimeMs = (mixedBuffer.Count / channelCount) * sampleDurationMs;
+
+                    lastKnownPosition = lastKnownPosition.Add(TimeSpan.FromMilliseconds(processedTimeMs));
+
+                    if (Math.Abs((lastKnownPosition - Position).TotalMilliseconds) > 20)
+                    {
+                        SetAndRaisePositionChanged(lastKnownPosition);
+                    }
+                }
+
+                mixedBuffer.Clear();
+
+                if (Position.TotalMilliseconds >= Duration.TotalMilliseconds)
+                {
+                    SetAndRaisePositionChanged(Duration);
+                    ResetPlayback();
+                    break;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Alaphelyzetbe állítja a lejátszót a lejátszás befejezése után, 
+    /// hogy újra használható legyen, anélkül hogy teljesen leállítaná.
+    /// </summary>
+    private void ResetPlayback()
+    {
+        SetAndRaiseStateChanged(SourceState.Idle);
+        SetAndRaisePositionChanged(TimeSpan.Zero);
+
+        foreach (ISource src in Sources)
+        {
+            while (src.SourceSampleData.TryDequeue(out _)) { }
+            src.Seek(TimeSpan.Zero);
+        }
+
+        if (IsWriteData && File.Exists(writefilePath) && SaveWaveFileName is not null)
+        {
+            Task.Run(() =>
+            {
+                WriteWaveFile.WriteFile(
+                    filePath: SaveWaveFileName,
+                    rawFilePath: writefilePath,
+                    sampleRate: OwnAudio.DefaultOutputDevice.DefaultSampleRate,
+                    channels: 2,
+                    bitPerSamples: BitPerSamples);
+            });
+            IsWriteData = false;
+        }
+    }
+
+    /// <summary>
+    /// Let's initialize the audio engine based on the settings. Returns true on successful initialization
+    /// </summary>
+    /// <returns></returns>
+    private bool InitializeEngine()
+    {
+        if (OwnAudio.IsPortAudioInitialized && Engine is null)
+        {
+            if (OwnAudio.DefaultInputDevice.MaxInputChannels > 0)
+                Engine = new OwnAudioEngine(InputEngineOptions, OutputEngineOptions, EngineFramesPerBuffer);
+            else
+                Engine = new OwnAudioEngine(OutputEngineOptions, EngineFramesPerBuffer);
+        }
+        else if(OwnAudio.IsPortAudioInitialized && Engine is not null)
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// We will kill the audio engine
+    /// </summary>
+    private void TerminateEngine()
+    {
+        if (Engine != null)
+        {
+            Engine.Dispose();
+
+            Engine = null;
+        }
+    }
+}

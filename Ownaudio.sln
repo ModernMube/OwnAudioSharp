@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.11.35222.181
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Ownaudio", "OwnaudioSrc\Ownaudio\Ownaudio.csproj", "{159C3715-2051-4321-A821-C05B18B7DDAF}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OwnaAvalonia", "OwnaudioExample\OwnaAvalonia\OwnaAvalonia.csproj", "{B3E57AC9-BE07-4FBE-BC3B-6F7E1CAF7273}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{159C3715-2051-4321-A821-C05B18B7DDAF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{159C3715-2051-4321-A821-C05B18B7DDAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{159C3715-2051-4321-A821-C05B18B7DDAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{159C3715-2051-4321-A821-C05B18B7DDAF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B3E57AC9-BE07-4FBE-BC3B-6F7E1CAF7273}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3E57AC9-BE07-4FBE-BC3B-6F7E1CAF7273}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3E57AC9-BE07-4FBE-BC3B-6F7E1CAF7273}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3E57AC9-BE07-4FBE-BC3B-6F7E1CAF7273}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {72FAA1E7-3C25-4F92-B9CC-39AA875AB913}
+	EndGlobalSection
+EndGlobal

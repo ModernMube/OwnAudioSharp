@@ -1,0 +1,29 @@
+root = true
+
+# Global files
+[*]
+indent_style = space
+
+# C# files
+[*.cs]
+indent_size = 4
+insert_final_newline = true
+
+# XAML files
+[*.xaml]
+indent_size = 2
+insert_final_newline = true
+
+# XML files
+[*.xml]
+indent_size = 2
+insert_final_newline = true
+
+# XML project files
+[*.{csproj,vcxproj,vcxproj.filters,proj,nativeproj,locproj}]
+indent_size = 2
+insert_final_newline = true
+
+# EditorGuidelines plugin (Visual Studio)
+[*.{cs,xaml}]
+guidelines = 120 1px solid bdbdbd
