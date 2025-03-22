@@ -26,7 +26,9 @@ You can add this library to your project via NuGet (when published) or by direct
 
 ### Required Libraries
 
-Depending on your operating system, you'll need:
+You will find the required files in the LIBS folder in a compressed file. 
+Extract the package appropriate for your operating system into the folder containing the compressed file.
+Depending on your operating system, you will need the following:
 
 #### Windows
 - FFmpeg libraries (avcodec, avformat, avutil, etc.)
