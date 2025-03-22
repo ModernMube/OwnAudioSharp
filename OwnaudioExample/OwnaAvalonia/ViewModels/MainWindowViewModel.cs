@@ -57,25 +57,25 @@ namespace OwnaAvalonia.ViewModels
 
         #region Binding propertyes
         private float _pitch = 0.0f;
-        public float Pitch 
-        { 
-            get => _pitch; 
-          
-            set  
+        public float Pitch
+        {
+            get => _pitch;
+
+            set
             {
                 this.RaiseAndSetIfChanged(ref _pitch, value);
                 for (int i = 0; i < player?.Sources.Count; i++)
                 {
                     player.SetPitch(i, value);
                 }
-            } 
-        }                                                
+            }
+        }
 
         private float _tempo = 0.0f;
         public float Tempo
         {
             get => _tempo;
-            
+
             set
             {
                 this.RaiseAndSetIfChanged(ref _tempo, value);
@@ -87,15 +87,15 @@ namespace OwnaAvalonia.ViewModels
         }
 
         private float _volume = 100.0f;
-        public float Volume 
-        { 
-            get => _volume; 
+        public float Volume
+        {
+            get => _volume;
             set
             {
                 this.RaiseAndSetIfChanged(ref _volume, value);
                 if (player is not null)
-                    { player.Volume = value / 100; }
-            }   
+                { player.Volume = value / 100; }
+            }
         }
 
         private TimeSpan _duration;
@@ -114,7 +114,7 @@ namespace OwnaAvalonia.ViewModels
             set
             {
                 this.RaiseAndSetIfChanged(ref _isFxEnabled, value);
-                _Fxprocessor.IsEnabled = value; 
+                _Fxprocessor.IsEnabled = value;
             }
         }
 
@@ -129,30 +129,45 @@ namespace OwnaAvalonia.ViewModels
         public ObservableCollection<Log> Logs { get; } = new ObservableCollection<Log>();
         #endregion
 
+        /// <summary>
+        /// Logs an informational message to the application's log collection
+        /// </summary>
         public void LogInfo(string message)
         {
             Dispatcher.UIThread.InvokeAsync(() => Logs.Add(new Log(message, Log.LogType.Info)));
         }
 
+        /// <summary>
+        /// Logs a warning message to the application's log collection
+        /// </summary>
         public void LogWarning(string message)
         {
             Dispatcher.UIThread.InvokeAsync(() => Logs.Add(new Log(message, Log.LogType.Warning)));
         }
 
+        /// <summary>
+        /// Logs an error message to the application's log collection
+        /// </summary>
         public void LogError(string message)
         {
             Dispatcher.UIThread.InvokeAsync(() => Logs.Add(new Log(message, Log.LogType.Error)));
         }
 
+        /// <summary>
+        /// Seeks to a specific position in the currently playing audio
+        /// </summary>
         public void Seek(double ms)
         {
             if (player is not null && player.IsLoaded)
             {
                 player.Seek(TimeSpan.FromMilliseconds(ms));
             }
-               
+
         }
 
+        /// <summary>
+        /// Initializes the audio engine with default settings for input and output
+        /// </summary>
         private void AudioEngineInitialize()
         {
             AudioEngineOutputOptions _audioEngineOptions = new AudioEngineOutputOptions
@@ -174,12 +189,12 @@ namespace OwnaAvalonia.ViewModels
             SourceManager.OutputEngineOptions = _audioEngineOptions;
             SourceManager.InputEngineOptions = _audioInputOptions;
             SourceManager.EngineFramesPerBuffer = 512;
-            
+
             player = SourceManager.Instance;
-            player.CustomSampleProcessor = _Fxprocessor;             
+            player.CustomSampleProcessor = _Fxprocessor;
             add_FXprocessor();
 
-            player.Logger = this;             
+            player.Logger = this;
 
             player.StateChanged += OnStateChanged;
             player.PositionChanged += OnPositionChanged;
@@ -193,6 +208,9 @@ namespace OwnaAvalonia.ViewModels
             }
         }
 
+        /// <summary>
+        /// Adds various audio effects to the output processor chain
+        /// </summary>
         private void add_FXprocessor()
         {
             /// <summary>
@@ -200,32 +218,23 @@ namespace OwnaAvalonia.ViewModels
             /// remove unnecessary lows and clean up the midrange
             /// </summary>
             Equalizer _equalizer = new Equalizer((float)SourceManager.OutputEngineOptions.SampleRate);
-            // Sub-bass - Enyhe kiemelés a mély basszusban
-            _equalizer.SetBandGain(band: 0, frequency: 30, q: 0.7f, gainDB: 1.2f);    // 30 Hz
-            // Low bass - Enyhe vágás a tisztább hangzásért
-            _equalizer.SetBandGain(band: 1, frequency: 60, q: 0.8f, gainDB: -1.0f);   // 60 Hz
-            // Upper bass - Kis kiemelés a "punch" érdekében
-            _equalizer.SetBandGain(band: 2, frequency: 120, q: 1.0f, gainDB: 0.8f);   // 120 Hz
-            // Low mids - Enyhe vágás a "muddy" hangzás elkerülésére
-            _equalizer.SetBandGain(band: 3, frequency: 250, q: 1.2f, gainDB: -2.0f);  // 250 Hz
-            // Middle - Kis vágás a tisztább vokálokért
-            _equalizer.SetBandGain(band: 4, frequency: 500, q: 1.4f, gainDB: -1.5f);  // 500 Hz
-            // Upper mids - Enyhe kiemelés a vokál jelenlétért
-            _equalizer.SetBandGain(band: 5, frequency: 2000, q: 1.0f, gainDB: -0.5f);  // 2 kHz
-            // Presence - Kiemelés a részletekért
-            _equalizer.SetBandGain(band: 6, frequency: 4000, q: 1.2f, gainDB: 0.6f);  // 4 kHz
-            // High mids - Levegősség hozzáadása
-            _equalizer.SetBandGain(band: 7, frequency: 6000, q: 1.0f, gainDB: 0.3f);  // 6 kHz
-            // Highs - Csillogás
-            _equalizer.SetBandGain(band: 8, frequency: 10000, q: 0.8f, gainDB: 0.8f); // 10 kHz
-            // Air band - Extra fényesség
-            _equalizer.SetBandGain(band: 9, frequency: 16000, q: 0.7f, gainDB: 0.8f); // 16 kHz
+
+            _equalizer.SetBandGain(band: 0, frequency: 50, q: 0.7f, gainDB: 1.2f);    // 30 Hz Sub-bass - Slight emphasis on deep bass
+            _equalizer.SetBandGain(band: 1, frequency: 60, q: 0.8f, gainDB: -1.0f);   // 60 Hz Low bass - Slight cut for cleaner sound
+            _equalizer.SetBandGain(band: 2, frequency: 120, q: 1.0f, gainDB: 0.8f);   // 120 Hz Upper bass - Small emphasis for "punch"
+            _equalizer.SetBandGain(band: 3, frequency: 250, q: 1.2f, gainDB: -2.0f);  // 250 Hz Low mids - Slight cut to avoid "muddy" sound
+            _equalizer.SetBandGain(band: 4, frequency: 500, q: 1.4f, gainDB: -1.5f);  // 500 Hz Middle - Small cut for clearer vocals
+            _equalizer.SetBandGain(band: 5, frequency: 2000, q: 1.0f, gainDB: -0.5f); // 2 kHz Upper mids - Slight emphasis for vocal presence
+            _equalizer.SetBandGain(band: 6, frequency: 4000, q: 1.2f, gainDB: 0.6f);  // 4 kHz Presence - Emphasis for details
+            _equalizer.SetBandGain(band: 7, frequency: 6000, q: 1.0f, gainDB: 0.3f);  // 6 kHz High mids - Adding airiness
+            _equalizer.SetBandGain(band: 8, frequency: 10000, q: 0.8f, gainDB: 0.8f); // 10 kHz Highs - Shimmer
+            _equalizer.SetBandGain(band: 9, frequency: 16000, q: 0.7f, gainDB: 0.8f); // 16 kHz Air band - Extra brightness
 
             // Mastering compressor
             Compressor _compressor = new Compressor
             (
                 threshold: 0.5f,    // -6 dB
-                ratio: 4.0f,        // 4:1 kompressziós arány
+                ratio: 4.0f,        // 4:1 compression ratio
                 attackTime: 100f,   // 100 ms
                 releaseTime: 200f,  // 200 ms
                 makeupGain: 1.0f,    // 0 dB
@@ -241,13 +250,13 @@ namespace OwnaAvalonia.ViewModels
                 sampleRate: SourceManager.OutputEngineOptions.SampleRate
             );
 
-            // Dinamikus erősítés
+            // Dynamic amplification
             DynamicAmp _dynamicAmp = new DynamicAmp
             (
-                targetLevel: 0.22f,        // Alacsonyabb célszint a jobb dinamikáért
-                attackTimeSeconds: 1.25f,   // Lassabb attack a természetesebb felfutásért
-                releaseTimeSeconds: 2.25f,  // Hosszabb release az észrevétlen lecsengésért
-                noiseThreshold: 0.035f    // Alacsony zajküszöb a halk részek megőrzéséért
+                targetLevel: 0.22f,        // Lower target level for better dynamics
+                attackTimeSeconds: 1.25f,   // Slower attack for more natural rise
+                releaseTimeSeconds: 2.25f,  // Longer release for unnoticeable decay
+                noiseThreshold: 0.035f    // Low noise threshold to preserve quiet parts
             );
 
             _Fxprocessor.AddFx(_equalizer);
@@ -256,15 +265,18 @@ namespace OwnaAvalonia.ViewModels
             _Fxprocessor.AddFx(_dynamicAmp);
         }
 
+        /// <summary>
+        /// Adds effects to the input processor chain for microphone input
+        /// </summary>
         private void add_inputFxprocessor()
         {
             Reverb _reverb = new Reverb
                 (
-                    size: 0.45f,        // Közepes tér, hosszú reverb tail
-                    damp: 0.45f,        // Mérsékelt magasfrekvenciás csillapítás
-                    wet: 0.25f,         // 25% effekt - nem túl sok reverb
-                    dry: 0.75f,         // 85% száraz jel - az ének érthetősége megmarad
-                    stereoWidth: 0.8f,  // Jó sztereó tér, de nem túl széles
+                    size: 0.45f,        // Medium space, long reverb tail
+                    damp: 0.45f,        // Moderate high frequency damping
+                    wet: 0.25f,         // 25% effect - not too much reverb
+                    dry: 0.75f,         // 85% dry signal - vocal intelligibility is maintained
+                    stereoWidth: 0.8f,  // Good stereo space, but not too wide
                     sampleRate: SourceManager.OutputEngineOptions.SampleRate
                 );
 
@@ -278,13 +290,13 @@ namespace OwnaAvalonia.ViewModels
 
             Compressor _vocalCompressor = new Compressor
                 (
-                    threshold: 0.25f,   // -12 dB - az emberi hang átlagos dinamikatartományához igazítva
-                    ratio: 3.0f,        // 3:1 - természetes, muzikális kompresszió
-                    attackTime: 10f,    // 10 ms - elég gyors hogy elkapja a tranzenseket
-                    releaseTime: 100f,  // 100 ms - követi az ének természetes lecsengését
-                    makeupGain: 2.0f    // +6 dB - kompenzálja a kompressziót
+                    threshold: 0.25f,   // -12 dB - adjusted to human voice average dynamic range
+                    ratio: 3.0f,        // 3:1 - natural, musical compression
+                    attackTime: 10f,    // 10 ms - fast enough to catch transients
+                    releaseTime: 100f,  // 100 ms - follows natural vocal decay
+                    makeupGain: 2.0f    // +6 dB - compensates for compression
                 );
-            
+
             _inputFxprocessor.AddFx(_reverb);
             _inputFxprocessor.AddFx(_delay);
             _inputFxprocessor.AddFx(_vocalCompressor);
@@ -315,7 +327,10 @@ namespace OwnaAvalonia.ViewModels
             AppleUniformTypeIdentifiers = new[] { "public.audio" },
             MimeTypes = new[] { "audio/wav", "audio/flac", "audio/mpeg", "audio/aac", "audio/aiff", "audio/mp4", "audio/ogg", "audio/x-ms-wma", "audio/webm" }
         };
-                                                                                                                    
+
+        /// <summary>
+        /// Handles the file selection process to add audio tracks to the player
+        /// </summary>
         private async void addFileCommand()
         {
             if (MainWindow.Instance != null && _isStopRequested && _isFFmpegInitialized)
@@ -333,9 +348,9 @@ namespace OwnaAvalonia.ViewModels
                     foreach (var file in result)
                     {
                         referenceFile = file.TryGetLocalPath();
-                        if(referenceFile is not null)
-                        {                           
-                            if(player is not null && !await player.AddOutputSource(referenceFile))
+                        if (referenceFile is not null)
+                        {
+                            if (player is not null && !await player.AddOutputSource(referenceFile))
                             {
                                 return;
                             }
@@ -360,9 +375,12 @@ namespace OwnaAvalonia.ViewModels
             }
         }
 
+        /// <summary>
+        /// Removes the last added audio source from the player
+        /// </summary>
         private void removeFileCommand()
         {
-            if(FileNames.Count > 0 && _isStopRequested)
+            if (FileNames.Count > 0 && _isStopRequested)
             {
                 if (FileNames[FileNames.Count - 1].Contains("input source"))
                 {
@@ -378,9 +396,12 @@ namespace OwnaAvalonia.ViewModels
                 FileNames.RemoveAt(FileNames.Count - 1);
                 _trackNumber--;
             }
-                
+
         }
 
+        /// <summary>
+        /// Adds a microphone input source to the player
+        /// </summary>
         private void inputCommand()
         {
             if (_isStopRequested && _isFFmpegInitialized)
@@ -391,9 +412,12 @@ namespace OwnaAvalonia.ViewModels
             }
         }
 
+        /// <summary>
+        /// Opens a file save dialog to select where to save the processed audio
+        /// </summary>
         private async void saveFilePathCommand()
         {
-            if(MainWindow.Instance != null)
+            if (MainWindow.Instance != null)
             {
                 var result = await MainWindow.Instance.StorageProvider.SaveFilePickerAsync(options);
                 if (result != null)
@@ -403,13 +427,16 @@ namespace OwnaAvalonia.ViewModels
             }
         }
 
+        /// <summary>
+        /// Toggles between play and pause states for the audio player
+        /// </summary>
         private void playPauseCommand()
         {
-            if (player is not null && !player.IsLoaded) 
+            if (player is not null && !player.IsLoaded)
                 return;
 
             _isStopRequested = false;
-            if(player is not null)
+            if (player is not null)
             {
                 player.Volume = Volume / 100;
                 player.IsWriteData = IsSaveFile;
@@ -419,11 +446,11 @@ namespace OwnaAvalonia.ViewModels
                     SourceManager.Instance.SourcesInput[0].CustomSampleProcessor = _inputFxprocessor;
                     add_inputFxprocessor();
                 }
-                    
-            }                                             
 
-            if (player?.State is SourceState.Paused or SourceState.Idle) 
-                if(IsSaveFile && SaveFilePath is not null)
+            }
+
+            if (player?.State is SourceState.Paused or SourceState.Idle)
+                if (IsSaveFile && SaveFilePath is not null)
                     player.Play(SaveFilePath, 16);
                 else
                     player.Play();
@@ -431,17 +458,23 @@ namespace OwnaAvalonia.ViewModels
                 player?.Pause();
         }
 
+        /// <summary>
+        /// Stops playback and recording of audio
+        /// </summary>
         private void stopCommand()
         {
             _isStopRequested = true;
             player?.Stop();
         }
 
+        /// <summary>
+        /// Resets the player state, clears all sources and logs
+        /// </summary>
         private void resetCommand()
         {
             if (!_isStopRequested)
                 player?.Stop();
-               
+
             player?.Sources.Clear();
             FileNames.Clear();
             Logs.Clear();
@@ -454,12 +487,18 @@ namespace OwnaAvalonia.ViewModels
             AudioEngineInitialize();
         }
 
+        /// <summary>
+        /// Handles UI updates when the player state changes between playing, paused, etc.
+        /// </summary>
         private void OnStateChanged(object? sender, EventArgs e)
         {
-            if(player is not null)
+            if (player is not null)
                 PlayPauseText = player.State is SourceState.Playing or SourceState.Buffering ? "Pause" : "Play";
         }
 
+        /// <summary>
+        /// Handles position updates from the audio player to keep the UI in sync
+        /// </summary>
         private void OnPositionChanged(object? sender, EventArgs e)
         {
             if (player is not null && player.IsSeeking)
