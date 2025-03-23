@@ -84,4 +84,16 @@ public interface ISource : IDisposable
     /// Changes the status of the given resource
     /// </summary>
     void ChangeState(SourceState state);
+
+    /// <summary>
+    /// Returns the contents of the audio file loaded into the source in a byte array.
+    /// </summary>
+    /// <returns></returns>
+    byte[] GetByteAudioData(TimeSpan position);
+
+    /// <summary>
+    /// Returns the contents of the audio file loaded into the source in a float array.
+    /// </summary>
+    /// <returns></returns>
+    float[] GetFloatAudioData(TimeSpan position);
 }

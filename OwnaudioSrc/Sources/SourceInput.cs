@@ -133,5 +133,17 @@ namespace Ownaudio.Sources
 
             _disposed = true;
         }
+
+        /// <summary>
+        /// Returns the contents of the audio file loaded into the source in a byte array.
+        /// </summary>
+        /// <returns></returns>
+        public byte[] GetByteAudioData(TimeSpan position) { return null; }
+
+        /// <summary>
+        /// Returns the contents of the audio file loaded into the source in a float array.
+        /// </summary>
+        /// <returns></returns>
+        public float[] GetFloatAudioData(TimeSpan position) { return null; }
     }
 }

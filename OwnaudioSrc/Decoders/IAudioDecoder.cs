@@ -27,4 +27,10 @@ public interface IAudioDecoder : IDisposable
     /// <param name="error">An error message while seeking audio stream.</param>
     /// <returns><c>true</c> if successfully seeks, otherwise, <c>false</c>.</returns>
     bool TrySeek(TimeSpan position, out string error);
+
+    /// <summary>
+    /// It processes all the frames. And returns them in an AudioDecoderResult
+    /// </summary>
+    /// <returns></returns>
+    AudioDecoderResult DecodeAllFrames(TimeSpan position);
 }

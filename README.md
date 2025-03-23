@@ -140,6 +140,16 @@ var processor = new MyAudioProcessor();
 sourceManager.CustomSampleProcessor = processor;
 ```
 
+## Audio Data Read
+
+```csharp
+// We load the source audio data into a byte array.
+byte[] audioByte = sourceManager.Sources[0].GetByteAudioData(TimeSpan.Zero);
+
+// We load the source audio data into a float array.
+float[] audioFloat = sourceManager.Sources[0].GetFloatAudioData(TimeSpan.Zero);
+```
+
 ## Architecture
 
 The library follows a layered architecture:

@@ -11,7 +11,7 @@ namespace Ownaudio.Sources;
 
 public partial class Source : ISource
 {
-   /// <summary>
+    /// <summary>
     /// Handles audio decoder error, returns <c>true</c> to continue decoder thread, <c>false</c> will
     /// break the thread. By default, this will try to re-initializes <see cref="CurrentDecoder"/>
     /// and seeks to the last position.
@@ -37,9 +37,9 @@ public partial class Source : ISource
 
             try
             {
-#nullable disable
+    #nullable disable
                 CurrentDecoder = CurrentUrl != null ? CreateDecoder(CurrentUrl) : CreateDecoder(CurrentStream);
-#nullable restore
+    #nullable restore
                 break;
             }
             catch (Exception ex)
@@ -55,7 +55,7 @@ public partial class Source : ISource
         return true;
     }
 
-   /// <summary>
+    /// <summary>
     /// It continuously decodes data during playback.
     /// </summary>
     private void RunDecoder()
@@ -254,7 +254,7 @@ public partial class Source : ISource
         Logger?.LogInfo("Engine thread is completed.");
     }
 
-   /// <summary>
+    /// <summary>
     /// Prepares the data for the source manager
     /// </summary>
     /// <param name="soundTouchBuffer">List of processed data</param>
@@ -280,6 +280,43 @@ public partial class Source : ISource
                 calculateTime += (samples.Length / CurrentDecoder.StreamInfo.SampleRate * CurrentDecoder.StreamInfo.Channels) * 1000;
 
             SetAndRaisePositionChanged(TimeSpan.FromMilliseconds(calculateTime));
+        }
+    }
+
+    /// <summary>
+    /// Returns the contents of the audio file loaded into the source in a byte array.
+    /// </summary>
+    /// <returns></returns>
+    public byte[] GetByteAudioData(TimeSpan position)
+    {
+        if(IsLoaded)
+        {
+            AudioDecoderResult result = CurrentDecoder.DecodeAllFrames(position);
+            return result.Frame.Data;
+
+        }
+        else
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Returns the contents of the audio file loaded into the source in a float array.
+    /// </summary>
+    /// <returns></returns>
+    public float[] GetFloatAudioData(TimeSpan position)
+    {
+        if (IsLoaded)
+        {
+            AudioDecoderResult result = CurrentDecoder.DecodeAllFrames(position);
+            Span<float> audioData = MemoryMarshal.Cast<byte, float>(result.Frame.Data);
+            return audioData.ToArray();
+
+        }
+        else
+        {
+            return null;
         }
     }
 #nullable restore

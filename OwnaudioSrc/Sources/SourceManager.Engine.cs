@@ -204,22 +204,6 @@ public unsafe partial class SourceManager
                 }
             }
         }
-    }
-
-    /// <summary>
-    /// Alaphelyzetbe állítja a lejátszót a lejátszás befejezése után, 
-    /// hogy újra használható legyen, anélkül hogy teljesen leállítaná.
-    /// </summary>
-    private void ResetPlayback()
-    {
-        SetAndRaiseStateChanged(SourceState.Idle);
-        SetAndRaisePositionChanged(TimeSpan.Zero);
-
-        foreach (ISource src in Sources)
-        {
-            while (src.SourceSampleData.TryDequeue(out _)) { }
-            src.Seek(TimeSpan.Zero);
-        }
 
         if (IsWriteData && File.Exists(writefilePath) && SaveWaveFileName is not null)
         {
@@ -233,6 +217,22 @@ public unsafe partial class SourceManager
                     bitPerSamples: BitPerSamples);
             });
             IsWriteData = false;
+        }
+    }
+
+    /// <summary>
+    /// Resets the player after playback is finished,
+    /// so that it can be used again without completely stopping it.
+    /// </summary>
+    private void ResetPlayback()
+    {
+        SetAndRaiseStateChanged(SourceState.Idle);
+        SetAndRaisePositionChanged(TimeSpan.Zero);
+
+        foreach (ISource src in Sources)
+        {
+            while (src.SourceSampleData.TryDequeue(out _)) { }
+            src.Seek(TimeSpan.Zero);
         }
     }
 

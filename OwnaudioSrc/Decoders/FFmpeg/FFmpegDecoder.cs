@@ -238,7 +238,7 @@ public sealed unsafe class FFmpegDecoder : IAudioDecoder
     /// <summary>
     /// It processes all the frames. And returns them in an AudioDecoderResult
     /// </summary>
-    public AudioDecoderResult DecodeAllFrames()
+    public AudioDecoderResult DecodeAllFrames(TimeSpan position = default)
     {
         lock (_syncLock)
         {
@@ -266,6 +266,8 @@ public sealed unsafe class FFmpegDecoder : IAudioDecoder
                     return new AudioDecoderResult(null, false, false, frameResult.ErrorMessage);
                 }
             }
+            
+            TrySeek(position, out var error);
 
             // Az összegyűjtött adatokat egyetlen AudioFrame-ben csomagoljuk
             return new AudioDecoderResult(new AudioFrame(lastPresentationTime, accumulatedData.ToArray()), true, false);
