@@ -18,7 +18,7 @@
     <PackageProjectUrl></PackageProjectUrl>
     <PackageTags>audio,player,ffmpeg,portaudio,sound,cross-platform</PackageTags>
     <Product>Ownaudio</Product>
-    <RepositoryUrl>https://github.com/luthfiampas/Ownaudio</RepositoryUrl>
+    <RepositoryUrl>https://github.com/ModernMube/OwnAudioSharp</RepositoryUrl>
     <Version>0.25.03</Version>
   </PropertyGroup>
 
@@ -30,7 +30,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="../../LICENSE" Pack="true" Visible="false" PackagePath="" />
+    <None Include="../LICENSE" Pack="true" Visible="false" PackagePath="" />
     <Compile Remove="nupkg\**" />
     <EmbeddedResource Remove="nupkg\**" />
     <None Remove="nupkg\**" />

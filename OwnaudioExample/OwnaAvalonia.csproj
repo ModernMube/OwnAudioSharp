@@ -26,6 +26,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\OwnaudioSrc\Ownaudio\Ownaudio.csproj" />
+    <ProjectReference Include="..\OwnaudioSrc\Ownaudio.csproj" />
   </ItemGroup>
 </Project>

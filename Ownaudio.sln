@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.11.35222.181
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Ownaudio", "OwnaudioSrc\Ownaudio\Ownaudio.csproj", "{159C3715-2051-4321-A821-C05B18B7DDAF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Ownaudio", "OwnaudioSrc\Ownaudio.csproj", "{159C3715-2051-4321-A821-C05B18B7DDAF}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OwnaAvalonia", "OwnaudioExample\OwnaAvalonia\OwnaAvalonia.csproj", "{B3E57AC9-BE07-4FBE-BC3B-6F7E1CAF7273}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OwnaAvalonia", "OwnaudioExample\OwnaAvalonia.csproj", "{B3E57AC9-BE07-4FBE-BC3B-6F7E1CAF7273}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

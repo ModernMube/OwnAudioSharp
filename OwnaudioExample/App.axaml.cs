@@ -15,7 +15,7 @@ namespace OwnaAvalonia
             AvaloniaXamlLoader.Load(this);
 
             SukiTheme.GetInstance().ChangeBaseTheme(ThemeVariant.Dark);
-            SukiTheme.GetInstance().ChangeColorTheme(SukiUI.Enums.SukiColor.Green);
+            SukiTheme.GetInstance().ChangeColorTheme(SukiUI.Enums.SukiColor.Red);
         }
 
         public override void OnFrameworkInitializationCompleted()
