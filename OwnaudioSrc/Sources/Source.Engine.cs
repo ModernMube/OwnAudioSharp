@@ -286,7 +286,11 @@ public partial class Source : ISource
     /// <summary>
     /// Returns the contents of the audio file loaded into the source in a byte array.
     /// </summary>
-    /// <returns></returns>
+    /// <param name="position">
+    /// Jumps to the position specified in the parameter after decoding all the data. 
+    /// The most typical is zero (the beginning of the file).
+    /// </param>
+    /// <returns>The array containing the data.</returns>
     public byte[] GetByteAudioData(TimeSpan position)
     {
         if(IsLoaded)
@@ -304,7 +308,11 @@ public partial class Source : ISource
     /// <summary>
     /// Returns the contents of the audio file loaded into the source in a float array.
     /// </summary>
-    /// <returns></returns>
+    /// <param name="position">
+    /// Jumps to the position specified in the parameter after decoding all the data. 
+    /// The most typical is zero (the beginning of the file).
+    /// </param>
+    /// <returns>The array containing the data.</returns>
     public float[] GetFloatAudioData(TimeSpan position)
     {
         if (IsLoaded)
