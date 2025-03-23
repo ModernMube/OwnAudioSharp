@@ -295,6 +295,88 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
+        /// Completely resets the player to its initial state.
+        /// Clears all sources and resets all values, but leaves the audio engine initialized.
+        /// </summary>
+        /// <returns>True if the operation was successful, False otherwise.</returns>
+        public bool Reset()
+        {
+            try
+            {
+                Logger?.LogInfo("Resetting SourceManager to initial state...");
+
+                if (State != SourceState.Idle)
+                {
+                    SetAndRaiseStateChanged(SourceState.Idle);
+                    EnsureThreadsDone();
+                }
+
+                if (Engine?.OwnAudioEngineStopped() == 0)
+                {
+                    Engine?.Stop();
+                }
+
+                foreach (ISource src in Sources)
+                {
+                    src.Dispose();
+                }
+
+                foreach (ISource inputSrc in SourcesInput)
+                {
+                    inputSrc.Dispose();
+                }
+
+                Sources.Clear();
+                SourcesInput.Clear();
+                UrlList.Clear();
+
+                Duration = TimeSpan.Zero;
+                Position = TimeSpan.Zero;
+                IsLoaded = false;
+                IsRecorded = false;
+                IsSeeking = false;
+
+                if (IsWriteData && File.Exists(writefilePath) && SaveWaveFileName is not null)
+                {
+                    Task.Run(() =>
+                    {
+                        WriteWaveFile.WriteFile(
+                            filePath: SaveWaveFileName,
+                            rawFilePath: writefilePath,
+                            sampleRate: OwnAudio.DefaultOutputDevice.DefaultSampleRate,
+                            channels: 2,
+                            bitPerSamples: BitPerSamples);
+                    });
+
+                    IsWriteData = false;
+                    SaveWaveFileName = null;
+
+                    if (File.Exists(writefilePath))
+                    {
+                        try { File.Delete(writefilePath); } catch { /* Ignore */ }
+                    }
+                }
+
+                writedDataBuffer.Clear();
+
+                Volume = 1.0f;
+
+                CustomSampleProcessor = null;
+
+                SetAndRaiseStateChanged(SourceState.Idle);
+                SetAndRaisePositionChanged(TimeSpan.Zero);
+
+                Logger?.LogInfo("SourceManager successfully reset to initial state.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger?.LogError($"Error resetting SourceManager: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
         ///  Uniform format settings for all sources
         /// </summary>
         /// <returns></returns>

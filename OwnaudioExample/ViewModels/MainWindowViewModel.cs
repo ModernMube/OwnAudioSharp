@@ -253,7 +253,7 @@ namespace OwnaAvalonia.ViewModels
             // Dynamic amplification
             DynamicAmp _dynamicAmp = new DynamicAmp
             (
-                targetLevel: 0.22f,        // Lower target level for better dynamics
+                targetLevel: 0.45f,        // Lower target level for better dynamics
                 attackTimeSeconds: 1.25f,   // Slower attack for more natural rise
                 releaseTimeSeconds: 2.25f,  // Longer release for unnoticeable decay
                 noiseThreshold: 0.035f    // Low noise threshold to preserve quiet parts
@@ -475,16 +475,18 @@ namespace OwnaAvalonia.ViewModels
             if (!_isStopRequested)
                 player?.Stop();
 
-            player?.Sources.Clear();
-            FileNames.Clear();
-            Logs.Clear();
+            if(player is not null && player.Reset())
+            {
+                FileNames.Clear();
+                Logs.Clear();
 
-            Pitch = 0;
-            Tempo = 0;
+                Pitch = 0;
+                Tempo = 0;
+                Volume = 100;
+                _sourceOutputId = -1;
 
-            _sourceOutputId = -1;
-
-            AudioEngineInitialize();
+                AudioEngineInitialize();
+            }
         }
 
         /// <summary>
