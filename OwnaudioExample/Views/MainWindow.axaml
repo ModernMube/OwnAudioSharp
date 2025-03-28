@@ -5,8 +5,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:sukiUi="clr-namespace:SukiUI.Controls;assembly=SukiUI"
         xmlns:converter="using:OwnaAvalonia.Views.Converters"
-        mc:Ignorable="d" d:DesignWidth="510" d:DesignHeight="750"
-        Width="510" Height="750"
+        mc:Ignorable="d" d:DesignWidth="510" d:DesignHeight="850"
+        Width="510" Height="850"
         x:Class="OwnaAvalonia.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
@@ -57,13 +57,13 @@
         <!--Pitch, Tempo, Volume-->
         <Grid Grid.Row="3"
               RowDefinitions="Auto, Auto, Auto"
-              ColumnDefinitions="Auto, *"
+              ColumnDefinitions="Auto, *, Auto"
               Margin="10,0">
               
             <Label Grid.Row="0" Grid.Column="0" Content="Pitch" Margin="5" 
                    VerticalAlignment="Top" HorizontalAlignment="Center" Foreground="{DynamicResource ThemeControlLowBrush}"/>
             <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding #SliderPitch.Value}" 
-                       VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                       VerticalAlignment="Center" HorizontalAlignment="Center"
                        Foreground="{DynamicResource ThemeControlLowBrush}"/>  
             <Slider Name="SliderPitch" Grid.Row="0" Grid.Column="1"
                     Minimum="-6" Maximum="6" 
@@ -74,7 +74,7 @@
             <Label Grid.Row="1" Grid.Column="0" Content="Tempo" Margin="5" 
                    VerticalAlignment="Top" HorizontalAlignment="Center" Foreground="{DynamicResource ThemeControlLowBrush}"/>
             <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding #SliderTempo.Value}" 
-                       VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                       VerticalAlignment="Center" HorizontalAlignment="Center"
                        Foreground="{DynamicResource ThemeControlLowBrush}"/>
             <Slider Name="SliderTempo" Grid.Row="1" Grid.Column="1"
                     Minimum="-20" Maximum="20"
@@ -85,13 +85,20 @@
             <Label Grid.Row="2" Grid.Column="0" Content="Volume" Margin="5" 
                    VerticalAlignment="Top" HorizontalAlignment="Center" Foreground="{DynamicResource ThemeControlLowBrush}"/>
             <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding #SliderVolume.Value}" 
-                       VerticalAlignment="Bottom" HorizontalAlignment="Center"
+                       VerticalAlignment="Center" HorizontalAlignment="Center"
                        Foreground="{DynamicResource ThemeControlLowBrush}"/>
             <Slider Name="SliderVolume" Grid.Row="2" Grid.Column="1"
                     Minimum="0" Maximum="100"
                     TickFrequency="1" IsSnapToTickEnabled="True"
                     Margin="5"
                     Value="{Binding Volume}"/>
+
+            <StackPanel Grid.Column="2" Grid.RowSpan="3" Orientation="Horizontal">
+                <ProgressBar Grid.Column="2" Grid.RowSpan="3" Orientation="Vertical"
+                             Minimum="0" Maximum="100" Value="{Binding LeftLevel}"/>
+                <ProgressBar Grid.Column="3" Grid.RowSpan="3" Orientation="Vertical"
+                             Minimum="0" Maximum="100" Value="{Binding RightLevel}"/>
+            </StackPanel>
         </Grid>
 
         <!--Progress, PLay, Stop-->

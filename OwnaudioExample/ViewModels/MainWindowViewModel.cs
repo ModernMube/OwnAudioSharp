@@ -16,6 +16,7 @@ using OwnaAvalonia.Models;
 using OwnaAvalonia.Views;
 using OwnaAvalonia.Processor;
 using Ownaudio.Fx;
+using System.Diagnostics;
 
 namespace OwnaAvalonia.ViewModels
 {
@@ -28,6 +29,7 @@ namespace OwnaAvalonia.ViewModels
         private int _sourceOutputId = -1;
         private FXProcessor _Fxprocessor;
         private FXProcessor _inputFxprocessor;
+        private DispatcherTimer _timer;
 
         #region Reactive commands
         public ReactiveCommand<Unit, Unit> AddFileCommand { get; }
@@ -53,6 +55,9 @@ namespace OwnaAvalonia.ViewModels
             _inputFxprocessor = new FXProcessor() { IsEnabled = true };
 
             AudioEngineInitialize();
+
+            _timer = new DispatcherTimer(new TimeSpan(0, 0, 0, 0, 200), DispatcherPriority.Normal, new EventHandler(_outputLevel));
+            _timer.Start();
         }
 
         #region Binding propertyes
@@ -127,6 +132,20 @@ namespace OwnaAvalonia.ViewModels
         public ObservableCollection<string> FileNames { get; } = new ObservableCollection<string>();
 
         public ObservableCollection<Log> Logs { get; } = new ObservableCollection<Log>();
+
+        private double _leftLevel;
+        public double LeftLevel
+        {
+            get => _leftLevel; 
+            set => this.RaiseAndSetIfChanged(ref _leftLevel, value);
+        }
+
+        private double _rightLevel;
+        public double RightLevel
+        {
+            get => _rightLevel;
+            set => this.RaiseAndSetIfChanged(ref _rightLevel, value);
+        }
         #endregion
 
         /// <summary>
@@ -163,6 +182,22 @@ namespace OwnaAvalonia.ViewModels
                 player.Seek(TimeSpan.FromMilliseconds(ms));
             }
 
+        }
+
+        /// <summary>
+        /// Displays the time and the next song
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void _outputLevel(object sender, EventArgs e)
+        {
+            if(player is not null)
+            {
+                LeftLevel = (double)player.OutputLevels.left * 100;
+                RightLevel = (double)player.OutputLevels.right * 100;
+
+                //Debug.WriteLine(LeftLevel.ToString() + " - " + RightLevel.ToString());
+            }
         }
 
         /// <summary>

@@ -229,8 +229,7 @@ namespace Ownaudio.Sources
             if(State == SourceState.Idle)
                 return;
 
-            SetAndRaiseStateChanged(SourceState.Idle);
-            SetAndRaisePositionChanged(TimeSpan.Zero);            
+            ResetPlayback();
 
             EnsureThreadsDone();
 

@@ -305,6 +305,9 @@ public unsafe partial class SourceManager
         SetAndRaiseStateChanged(SourceState.Idle);
         SetAndRaisePositionChanged(TimeSpan.Zero);
 
+        OutputLevels = (0f, 0f);
+        InputLevels = (0f, 0f);
+
         foreach (ISource src in Sources)
         {
             while (src.SourceSampleData.TryDequeue(out _)) { }
