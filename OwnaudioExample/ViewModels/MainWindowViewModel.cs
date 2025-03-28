@@ -442,9 +442,11 @@ namespace OwnaAvalonia.ViewModels
                 player.IsWriteData = IsSaveFile;
                 if (!player.IsRecorded)
                 {
-                    player.AddInputSource();
-                    SourceManager.Instance.SourcesInput[0].CustomSampleProcessor = _inputFxprocessor;
-                    add_inputFxprocessor();
+                    if(player.AddInputSource().Result)
+                    {
+                        SourceManager.Instance.SourcesInput[0].CustomSampleProcessor = _inputFxprocessor;
+                        add_inputFxprocessor();
+                    }
                 }
 
             }

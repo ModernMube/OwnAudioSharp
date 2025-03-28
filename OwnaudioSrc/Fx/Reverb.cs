@@ -4,26 +4,26 @@ using System;
 namespace Ownaudio.Fx
 {
     /// <summary>
-    /// Professzionális minőségű reverb effekt implementáció Freeverb algoritmus alapján.
-    /// Alkalmas valós idejű audio feldolgozásra és professzionális hangminőség előállítására.
+    /// Professional quality reverb effect implementation based on the Freeverb algorithm.
+    /// Suitable for real-time audio processing and professional sound quality production.
     /// </summary>
     public class Reverb : SampleProcessorBase
     {
         /// <summary>
-        /// All-pass filter implementáció, amely fázisváltást végez a jelben 
-        /// anélkül, hogy megváltoztatná a frekvencia spektrumot.
+        /// An all-pass filter implementation that performs a phase shift on the signal
+        /// without changing the frequency spectrum.
         /// </summary>
         private class AllPassFilter
         {
-            private readonly float[] buffer;        // Késleltetési buffer
-            private int index;                      // Aktuális buffer pozíció
-            private readonly float gain;            // Filter erősítés
+            private readonly float[] buffer;        // Delay buffer
+            private int index;                      // Current buffer position
+            private readonly float gain;            // Filter amplification
 
             /// <summary>
-            /// Inicializál egy új all-pass filtert.
+            /// Initializes a new all-pass filter.
             /// </summary>
-            /// <param name="size">Buffer méret mintavételekben.</param>
-            /// <param name="gain">Filter erősítés (általában 0.5f körüli érték).</param>
+            /// <param name="size">Buffer size in samples.</param>
+            /// <param name="gain">Filter gain (usually around 0.5f).</param>
             public AllPassFilter(int size, float gain)
             {
                 buffer = new float[size];
@@ -31,10 +31,10 @@ namespace Ownaudio.Fx
             }
 
             /// <summary>
-            /// Feldolgoz egy input mintát.
+            /// Processes an input pattern.
             /// </summary>
-            /// <param name="input">Bemeneti minta.</param>
-            /// <returns>Feldolgozott minta.</returns>
+            /// <param name="input">Input pattern.</param>
+            /// <returns>Processed pattern.</returns>
             public float Process(float input)
             {
                 float bufout = buffer[index];
@@ -45,28 +45,28 @@ namespace Ownaudio.Fx
             }
 
             /// <summary>
-            /// Törli a filter belső állapotát.
+            /// Clears the internal state of the filter.
             /// </summary>
             public void Clear() => Array.Clear(buffer, 0, buffer.Length);
         }
 
         /// <summary>
-        /// Comb filter implementáció, amely ismétlődő visszacsatolásokat hoz létre
-        /// változtatható feedback és damping értékekkel.
+        /// Comb filter implementation that creates repetitive feedback
+        /// with variable feedback and damping values.
         /// </summary>
         private class CombFilter
         {
-            private readonly float[] buffer;        // Késleltetési buffer
-            private int index;                      // Aktuális buffer pozíció
-            private float feedback;                 // Visszacsatolás mértéke
-            private float damp1;                    // Csillapítás paramétere
+            private readonly float[] buffer;        // Delay buffer
+            private int index;                      // Current buffer position
+            private float feedback;                 // Feedback rate
+            private float damp1;                    // Damping parameter
             private float damp2;                    // 1 - damp1
-            private float filtered;                 // Előző szűrt minta
+            private float filtered;                 // Previous filtered sample
 
             /// <summary>
-            /// Inicializál egy új comb filtert.
+            /// Initializes a new comb filter.
             /// </summary>
-            /// <param name="size">Buffer méret mintavételekben.</param>
+            /// <param name="size">Buffer size in samples.</param>
             public CombFilter(int size)
             {
                 buffer = new float[size];
@@ -76,15 +76,15 @@ namespace Ownaudio.Fx
             }
 
             /// <summary>
-            /// Beállítja a visszacsatolás mértékét.
+            /// Sets the amount of feedback.
             /// </summary>
-            /// <param name="value">Visszacsatolás értéke (0.0 - 1.0).</param>
+            /// <param name="value">Feedback value (0.0 - 1.0).</param>
             public void SetFeedback(float value) => feedback = value;
 
             /// <summary>
-            /// Beállítja a csillapítás mértékét.
+            /// Sets the amount of damping.
             /// </summary>
-            /// <param name="value">Csillapítás értéke (0.0 - 1.0).</param>
+            /// <param name="value">Damping value (0.0 - 1.0).</param>
             public void SetDamp(float value)
             {
                 damp1 = value;
@@ -92,10 +92,10 @@ namespace Ownaudio.Fx
             }
 
             /// <summary>
-            /// Feldolgoz egy input mintát.
+            /// Processes an input pattern.
             /// </summary>
-            /// <param name="input">Bemeneti minta.</param>
-            /// <returns>Feldolgozott minta.</returns>
+            /// <param name="input">Input pattern.</param>
+            /// <returns>Processed pattern.</returns>
             public float Process(float input)
             {
                 float output = buffer[index];
@@ -106,7 +106,7 @@ namespace Ownaudio.Fx
             }
 
             /// <summary>
-            /// Törli a filter belső állapotát.
+            /// Clears the internal state of the filter.
             /// </summary>
             public void Clear()
             {
@@ -115,30 +115,30 @@ namespace Ownaudio.Fx
             }
         }
 
-        // Freeverb konstansok
+        // Freeverb constants
         private const int NUM_COMBS = 8;           // Comb filterek száma
-        private const int NUM_ALLPASSES = 4;       // All-pass filterek száma
+        private const int NUM_ALLPASSES = 4;       // Number of all-pass filters
 
-        // Filter komponensek
+        // Filter components
         private readonly CombFilter[] combFilters;
         private readonly AllPassFilter[] allPassFilters;
 
-        // Késleltetési idők mintavételekben (44.1kHz-re optimalizálva)
+        // Delay times in samples (optimized for 44.1kHz)
         private readonly float[] combTunings = { 1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617 };
         private readonly float[] allPassTunings = { 556, 441, 341, 225 };
 
-        // Effekt paraméterek
-        private float roomSize;       // Terem mérete (0.0 - 1.0)
-        private float damping;        // Magas frekvenciák csillapítása (0.0 - 1.0)
-        private float width;          // Sztereó szélesség (0.0 - 1.0)
-        private float wetLevel;       // Effektezett jel szintje (0.0 - 1.0)
-        private float dryLevel;       // Száraz jel szintje (0.0 - 1.0)
-        private float gain;           // Bemeneti erősítés
-        private float sampleRate;     // Mintavételi frekvencia
+        // Effect parameters
+        private float roomSize;       // Room size (0.0 - 1.0)
+        private float damping;        // High frequency attenuation (0.0 - 1.0)
+        private float width;          // Stereo width (0.0 - 1.0)
+        private float wetLevel;       // Effected signal level (0.0 - 1.0)
+        private float dryLevel;       // Dry signal level (0.0 - 1.0)
+        private float gain;           // Input gain
+        private float sampleRate;     // Sampling frequency
         private readonly object parametersLock = new object();    // Thread-safety
 
         /// <summary>
-        /// Terem méretének beállítása. Nagyobb érték nagyobb virtuális teret eredményez.
+        /// Set the room size. A larger value results in a larger virtual space.
         /// </summary>
         public float RoomSize
         {
@@ -154,7 +154,7 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Magas frekvenciák csillapításának mértéke.
+        /// The amount of attenuation of high frequencies.
         /// </summary>
         public float Damping
         {
@@ -170,7 +170,7 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Sztereó szélesség beállítása.
+        /// Stereo width setting.
         /// </summary>
         public float Width
         {
@@ -179,7 +179,7 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Effektezett (wet) jel szintje.
+        /// Wet signal level.
         /// </summary>
         public float WetLevel
         {
@@ -188,7 +188,7 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Száraz (dry) jel szintje.
+        /// Dry signal level.
         /// </summary>
         public float DryLevel
         {
@@ -197,7 +197,7 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Mintavételi frekvencia beállítása Hz-ben.
+        /// Set the sampling frequency in Hz.
         /// </summary>
         public float SampleRate
         {
@@ -219,22 +219,22 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Létrehoz egy új Professional Reverb effektet.
+        /// Creates a new Professional Reverb effect.
         /// </summary>
-        /// <param name="size">A terem mérete</param>
-        /// <param name="damp">A magas csillapítása</param>
-        /// <param name="wet">Effektezett jel színtje</param>
-        /// <param name="dry">Eredeti jel szintje</param>
-        /// <param name="stereoWidth">A sztereó tér szélessége</param>
-        /// <param name="gainLevel">Bemeneti erősítés</param>
-        /// <param name="sampleRate">Mintavételi frekvencia Hz-ben.</param>
+        /// <param name="size">Room size</param>
+        /// <param name="damp">Treble damping</param>
+        /// <param name="wet">Color of the effected signal</param>
+        /// <param name="dry">Original signal level</param>
+        /// <param name="stereoWidth">Width of the stereo space</param>
+        /// <param name="gainLevel">Input gain</param>
+        /// <param name="sampleRate">Sampling rate in Hz.</param>
         public Reverb(float size = 0.5f, float damp = 0.5f, float wet = 0.33f, float dry = 0.7f, float stereoWidth = 1.0f,float gainLevel = 0.015f, float sampleRate = 44100)
         {
             this.sampleRate = sampleRate;
             combFilters = new CombFilter[NUM_COMBS];
             allPassFilters = new AllPassFilter[NUM_ALLPASSES];
 
-            // Alapértelmezett paraméterek beállítása
+            // Setting default parameters
             roomSize = size;
             damping = damp;
             width = stereoWidth;
@@ -246,20 +246,20 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Inicializálja vagy újrainicializálja a filtereket a jelenlegi mintavételi frekvenciához.
+        /// Initializes or reinitializes the filters for the current sample rate.
         /// </summary>
         private void InitializeFilters()
         {
             float sampleRateScale = sampleRate / 44100f;
 
-            // Comb filterek inicializálása
+            // Initializing comb filters
             for (int i = 0; i < NUM_COMBS; i++)
             {
                 int size = (int)(combTunings[i] * sampleRateScale);
                 combFilters[i] = new CombFilter(size);
             }
 
-            // All-pass filterek inicializálása
+            // Initializing all-pass filters
             for (int i = 0; i < NUM_ALLPASSES; i++)
             {
                 int size = (int)(allPassTunings[i] * sampleRateScale);
@@ -271,7 +271,7 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Frissíti a comb filterek visszacsatolási értékeit a teremméret alapján.
+        /// Updates the feedback values ​​of the thigh filters based on the room size.
         /// </summary>
         private void UpdateCombFilters()
         {
@@ -283,7 +283,7 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Frissíti a comb filterek csillapítási értékeit.
+        /// Updates the attenuation values ​​of thigh filters.
         /// </summary>
         private void UpdateDamping()
         {
@@ -295,9 +295,9 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Feldolgoz egy buffer-nyi audio mintát.
+        /// Processes a buffer of audio samples.
         /// </summary>
-        /// <param name="samples">Audio minták buffere.</param>
+        /// <param name="samples">Buffer of audio samples.</param>
         public override void Process(Span<float> samples)
         {
             float currentWet, currentDry, currentWidth;
@@ -314,10 +314,10 @@ namespace Ownaudio.Fx
                 float dry = input;
                 float wet = 0;
 
-                // Bemeneti erősítés alkalmazása
+                // Apply input gain
                 input *= gain;
 
-                // Freeverb algoritmus
+                // Freeverb algorithm
                 float mono = 0;
                 foreach (var comb in combFilters)
                 {
@@ -329,16 +329,16 @@ namespace Ownaudio.Fx
                     mono = allPass.Process(mono);
                 }
 
-                // Sztereó szélesség és keverés alkalmazása
+                // Applying stereo width and mixing
                 wet = mono * currentWidth;
 
-                // Végső keverés
+                // Final mixing
                 samples[i] = wet * currentWet + dry * currentDry;
             }
         }
 
         /// <summary>
-        /// Alaphelyzetbe állítja az effektet, törölve minden belső állapotot.
+        /// Resets the effect, clearing all internal states.
         /// </summary>
         public void Reset()
         {

@@ -15,11 +15,13 @@
     <NoWarn>IDE0090</NoWarn>
     <PackageId>Ownaudio</PackageId>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <PackageProjectUrl></PackageProjectUrl>
-    <PackageTags>audio,player,ffmpeg,portaudio,sound,cross-platform</PackageTags>
+    <PackageProjectUrl>https://github.com/ModernMube/OwnAudioSharp</PackageProjectUrl>
+    <PackageTags>audio,player,ffmpeg,portaudio,sound,multitrack,cross-platform</PackageTags>
     <Product>Ownaudio</Product>
     <RepositoryUrl>https://github.com/ModernMube/OwnAudioSharp</RepositoryUrl>
     <Version>0.25.03</Version>
+    <Authors>ModernMube</Authors>
+    <Company>Modernbit</Company>
   </PropertyGroup>
 
   <ItemGroup>
@@ -34,6 +36,8 @@
     <Compile Remove="nupkg\**" />
     <EmbeddedResource Remove="nupkg\**" />
     <None Remove="nupkg\**" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="ownaudio.png" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>

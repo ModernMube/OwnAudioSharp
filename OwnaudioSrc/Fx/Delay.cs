@@ -25,7 +25,7 @@ namespace Ownaudio.Fx
             set
             {
                 if (value <= 0)
-                    throw new ArgumentException("A késleltetési időnek pozitívnak kell lennie.", nameof(Time));
+                    throw new ArgumentException("The delay time must be positive.", nameof(Time));
 
                 _time = value;
                 UpdateDelayTime();  // Automatic update
@@ -52,16 +52,16 @@ namespace Ownaudio.Fx
         public Delay(int time, float repeat, float mix, int sampleRate)
         {
             if (time <= 0)
-                throw new ArgumentException("A késleltetésnek pozitívnak kell lennie.", nameof(time));
+                throw new ArgumentException("The delay time must be positive.", nameof(time));
 
             if (sampleRate <= 0)
-                throw new ArgumentException("A mintavételi frekvenciának pozitívnak kell lennie.", nameof(sampleRate));
+                throw new ArgumentException("The sampling frequency must be positive.", nameof(sampleRate));
 
             if (repeat < 0.0f || repeat > 1.0f)
-                throw new ArgumentException("A Repeat értékének 0.0 és 1.0 között kell lennie.", nameof(repeat));
+                throw new ArgumentException("The value of Repeat must be between 0.0 and 1.0.", nameof(repeat));
 
             if (mix < 0.0f || mix > 1.0f)
-                throw new ArgumentException("A Mix értékének 0.0 és 1.0 között kell lennie.", nameof(mix));
+                throw new ArgumentException("The Mix value must be between 0.0 and 1.0.", nameof(mix));
 
             Time = time;
             Repeat = repeat;
@@ -99,7 +99,7 @@ namespace Ownaudio.Fx
             if (_delayBuffer is not null)
             {
                 _delaySamples = (int)((Time / 1000.0) * _sampleRate);
-                Array.Clear(_delayBuffer, 0, _delayBuffer.Length); // Puffer törlése a stabil működés érdekében
+                Array.Clear(_delayBuffer, 0, _delayBuffer.Length); // Clear buffer for stable operation
             }
         }
     }

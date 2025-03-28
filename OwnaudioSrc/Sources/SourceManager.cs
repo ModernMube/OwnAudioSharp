@@ -93,7 +93,7 @@ namespace Ownaudio.Sources
         {
             if(IsLoaded && !IsRecorded)
             {
-                if(OwnAudio.InputDevices.Count > 0)
+                if(InputEngineOptions.Device.MaxInputChannels > 0)
                 {
                     SourceInput _inputSource = new SourceInput(InputEngineOptions);
                     SourcesInput.Add(_inputSource);
@@ -415,6 +415,11 @@ namespace Ownaudio.Sources
                 if (useVolumeProcessor)
                     VolumeProcessor.Process(samples);
             }
+
+            if(OutputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo)
+                OutputLevels = CalculateAverageStereoLevels(samples.ToArray());
+            else
+                OutputLevels = CalculateAverageMonoLevel(samples.ToArray());
 
             if (IsWriteData) //Save data to file
             {

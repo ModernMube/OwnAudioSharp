@@ -160,7 +160,7 @@ public unsafe partial class SourceManager
                     {
                         for (int i = 0; i < inputBuffer.Length; i++)
                         {
-                            _mixedBuffer[i * 2] += inputBuffer[i];     //Left channel
+                            _mixedBuffer[i * 2] += Math.Clamp(inputBuffer[i], -1.0f, 1.0f);     //Left channel
                             _mixedBuffer[i * 2 + 1] += inputBuffer[i]; //Right channel
                             _mixedBuffer[i * 2] = Math.Clamp(_mixedBuffer[i * 2], -1.0f, 1.0f);
                             _mixedBuffer[i * 2 + 1] = Math.Clamp(_mixedBuffer[i * 2 + 1], -1.0f, 1.0f);
@@ -174,6 +174,11 @@ public unsafe partial class SourceManager
                             _mixedBuffer[i] = Math.Clamp(_mixedBuffer[i], -1.0f, 1.0f);
                         }
                     }
+
+                    if(InputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo)
+                        InputLevels = CalculateAverageStereoLevels(_mixedBuffer);
+                    else
+                        InputLevels = CalculateAverageMonoLevel(_mixedBuffer);
                 }
 
                 Span<float> mixedSpan = CollectionsMarshal.AsSpan(_mixedBuffer.ToList());
@@ -218,6 +223,77 @@ public unsafe partial class SourceManager
             });
             IsWriteData = false;
         }
+    }
+
+    /// <summary>
+    /// Calculates the average signal level of a stereo audio signal for the left and right channels.
+    /// </summary>
+    /// <param name="stereoAudioData">Stereo audio data</param>
+    /// <returns>Average data left and righ channel</returns>
+    private (float, float) CalculateAverageStereoLevels(float[] stereoAudioData)
+    {
+        if (stereoAudioData == null || stereoAudioData.Length == 0)
+        {
+            Console.WriteLine("Nincs feldolgozandó adat.");
+            return (0f, 0f);
+        }
+
+        // We use absolute values ​​because the signal level can be negative.
+        float leftChannelSum = 0;
+        float rightChannelSum = 0;
+        int leftSampleCount = 0;
+        int rightSampleCount = 0;
+
+        // Left channel: 0, 2, 4, ...
+        // Right channel: 1, 3, 5, ...
+        for (int i = 0; i < stereoAudioData.Length; i++)
+        {
+            if (i % 2 == 0) // Left channel (even indices)
+            {
+                leftChannelSum += Math.Abs(stereoAudioData[i]);
+                leftSampleCount++;
+            }
+            else // Right channel (odd indices)
+            {
+                rightChannelSum += Math.Abs(stereoAudioData[i]);
+                rightSampleCount++;
+            }
+        }
+
+        // Calculating averages
+        float leftAverage = leftSampleCount > 0 ? leftChannelSum / leftSampleCount : 0;
+        float rightAverage = rightSampleCount > 0 ? rightChannelSum / rightSampleCount : 0;
+
+        return (leftAverage, rightAverage);
+    }
+
+    /// <summary>
+    /// Calculates the average signal level of a mono audio signal.
+    /// </summary>
+    /// <param name="monoAudioData">Stereo audio data</param>
+    /// <returns>Average data left and righ channel</returns>
+    private (float, float) CalculateAverageMonoLevel(float[] monoAudioData)
+    {
+        if (monoAudioData == null || monoAudioData.Length == 0)
+        {
+            Console.WriteLine("Nincs feldolgozandó adat.");
+            return (0f, 0f);
+        }
+
+        // We use absolute values ​​because the signal level can be negative.
+        float leftChannelSum = 0;
+        int leftSampleCount = 0;
+
+        // Mono channel data
+        for (int i = 0; i < monoAudioData.Length; i++)
+        {
+                leftChannelSum += Math.Abs(monoAudioData[i]);
+        }
+
+        // Calculating averages
+        float leftAverage = leftSampleCount > 0 ? leftChannelSum / leftSampleCount : 0;
+
+        return (leftAverage, 0f);
     }
 
     /// <summary>

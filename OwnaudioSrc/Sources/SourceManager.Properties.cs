@@ -98,6 +98,18 @@ public unsafe partial class SourceManager
     public bool IsWriteData { get; set; } = false;
 
     /// <summary>
+    /// Stereo audio output level. 
+    /// In the case of mono signal, only the left channel value changes.
+    /// </summary>
+    public (float left, float right) OutputLevels { get; set; } = (0f, 0f);
+
+    /// <summary>
+    /// Stereo audio input level. 
+    /// In the case of mono signal, only the left channel value changes.
+    /// </summary>
+    public (float left, float right) InputLevels { get; set; } = (0f, 0f);
+
+    /// <summary>
     /// The name and path of the recorded audio file
     /// </summary>
     protected string? SaveWaveFileName {  get; private set; }
