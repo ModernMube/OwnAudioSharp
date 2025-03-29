@@ -21,24 +21,34 @@
     </Window.Resources>
     
     <Grid RowDefinitions="35, Auto, Auto, Auto, Auto, Auto, *">
-        
-        <!--File list-->
-        <Border Grid.Row="1"
-                BorderBrush="gray"
-                BorderThickness="1" CornerRadius="5"
-                MinHeight="150" Margin="10,0">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding FileNames}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Margin="5" Text="{Binding}" 
-                                       Foreground="{DynamicResource HighlightBrush}"
-                                       TextWrapping="Wrap" MaxWidth="420"/>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
-        </Border>
+        <Grid ColumnDefinitions="10*, *, *"
+              Grid.Row="1">
+            <!--File list-->
+            <Border Grid.Row="1"
+                    BorderBrush="gray"
+                    BorderThickness="1" CornerRadius="5"
+                    MinHeight="150" Margin="10,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding FileNames}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Margin="5" Text="{Binding}" 
+                                           Foreground="{DynamicResource HighlightBrush}"
+                                           TextWrapping="Wrap" MaxWidth="420"
+                                           FontSize="10"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <ProgressBar Orientation="Vertical"
+                             Minimum="0" Maximum="100" Value="{Binding LeftLevel}"/>
+                <ProgressBar Orientation="Vertical"
+                             Minimum="0" Maximum="100" Value="{Binding RightLevel}"/>
+            </StackPanel>
+        </Grid>
 
         <!--Add-, Remove file, Reset-->
         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="5,0">
@@ -54,10 +64,26 @@
                     Command="{Binding InputCommand}"/>-->
         </StackPanel>
 
+        <!--Progress, PLay, Stop-->
+        <Grid Grid.Row="3" RowDefinitions="Auto, Auto" Margin="10,5">
+            <Border Grid.RowSpan="2" CornerRadius="3"
+                    BorderBrush="gray" BorderThickness="1"/>
+            <ProgressBar Name="Progress" Orientation="Horizontal" VerticalAlignment="Center"
+                         Minimum="0" Margin="5,10" Height="10"
+                         Maximum="{Binding Duration, Converter={StaticResource TimeSpanMsConverter}}"
+                         Value="{Binding Position, Converter={StaticResource TimeSpanMsConverter}}"/>
+            <StackPanel Grid.Row="1" Orientation="Horizontal">
+                <Button Content="{Binding PlayPauseText}" MinWidth="235" HorizontalAlignment="Left" Margin="5,10"
+                        Command="{Binding PlayPauseCommand}"/>
+                <Button Content="Stop" MinWidth="235" HorizontalAlignment="Right" Margin="5,10"
+                        Command="{Binding StopCommand}"/>
+            </StackPanel>
+        </Grid>
+
         <!--Pitch, Tempo, Volume-->
-        <Grid Grid.Row="3"
+        <Grid Grid.Row="4"
               RowDefinitions="Auto, Auto, Auto"
-              ColumnDefinitions="Auto, *, Auto"
+              ColumnDefinitions="Auto, *"
               Margin="10,0">
               
             <Label Grid.Row="0" Grid.Column="0" Content="Pitch" Margin="5" 
@@ -92,29 +118,6 @@
                     TickFrequency="1" IsSnapToTickEnabled="True"
                     Margin="5"
                     Value="{Binding Volume}"/>
-
-            <StackPanel Grid.Column="2" Grid.RowSpan="3" Orientation="Horizontal">
-                <ProgressBar Grid.Column="2" Grid.RowSpan="3" Orientation="Vertical"
-                             Minimum="0" Maximum="100" Value="{Binding LeftLevel}"/>
-                <ProgressBar Grid.Column="3" Grid.RowSpan="3" Orientation="Vertical"
-                             Minimum="0" Maximum="100" Value="{Binding RightLevel}"/>
-            </StackPanel>
-        </Grid>
-
-        <!--Progress, PLay, Stop-->
-        <Grid Grid.Row="4" RowDefinitions="Auto, Auto" Margin="10,5">
-            <Border Grid.RowSpan="2" CornerRadius="3"
-                    BorderBrush="gray" BorderThickness="1"/>
-            <ProgressBar Name="Progress" Orientation="Horizontal" VerticalAlignment="Center"
-                         Minimum="0" Margin="5,10" Height="10"
-                         Maximum="{Binding Duration, Converter={StaticResource TimeSpanMsConverter}}"
-                         Value="{Binding Position, Converter={StaticResource TimeSpanMsConverter}}"/>
-            <StackPanel Grid.Row="1" Orientation="Horizontal">
-                <Button Content="{Binding PlayPauseText}" MinWidth="235" HorizontalAlignment="Left" Margin="5,10"
-                        Command="{Binding PlayPauseCommand}"/>
-                <Button Content="Stop" MinWidth="235" HorizontalAlignment="Right" Margin="5,10"
-                        Command="{Binding StopCommand}"/>
-            </StackPanel>
         </Grid>
 
         <!--Save file-->

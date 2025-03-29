@@ -415,10 +415,18 @@ namespace Ownaudio.Sources
                     VolumeProcessor.Process(samples);
             }
 
-            if(OutputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo)
-                OutputLevels = CalculateAverageStereoLevels(samples.ToArray());
-            else
-                OutputLevels = CalculateAverageMonoLevel(samples.ToArray());
+            lock (_lock)
+            {
+                float[] samplesArray = samples.ToArray();
+                Task.Run(() => 
+                {
+                    if (OutputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo)
+                        OutputLevels = CalculateAverageStereoLevels(samplesArray);
+                    else
+                        OutputLevels = CalculateAverageMonoLevel(samplesArray);
+                });
+                
+            }
 
             if (IsWriteData) //Save data to file
             {
