@@ -150,6 +150,64 @@ byte[] audioByte = sourceManager.Sources[0].GetByteAudioData(TimeSpan.Zero);
 float[] audioFloat = sourceManager.Sources[0].GetFloatAudioData(TimeSpan.Zero);
 ```
 
+## WaveAvaloniaDisplay
+
+A flexible, resource-efficient audio waveform visualization component for Avalonia applications.
+
+## Key Features
+
+- **Multiple display styles:** MinMax (classic waveform), Positive (half-wave rectified), or RMS (energy representation)
+- **Zoom in/out:** Supports zooming for detailed audio inspection
+- **Interactive playback position:** Users can change the playback position by clicking or dragging
+- **Customizable appearance:** Colors and scaling are fully customizable
+- **Optimized performance:** Minimal resource usage even with large audio files
+
+## Usage
+
+The following example demonstrates how to use the `WaveAvaloniaDisplay` component in an Avalonia application:
+
+```xml
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:audio="using:Ownaudio.Utilities"
+        x:Class="MyAudioApp.MainWindow"
+        Title="Audio Visualizer" Height="450" Width="800">
+
+    <Grid>
+        <audio:WaveAvaloniaDisplay x:Name="waveformDisplay"
+                                WaveformBrush="DodgerBlue"
+                                PlaybackPositionBrush="Red"
+                                VerticalScale="1.0"
+                                DisplayStyle="MinMax"/>
+    </Grid>
+</Window>
+```
+
+## C# code
+
+```csharp
+waveformDisplay.SetAudioData(SourceManager.Instance.Sources[0].GetFloatAudioData(TimeSpan.Zero));
+waveformDisplay.PlaybackPositionChanged += OnPlaybackPositionChanged;
+```
+
+## Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| WaveformBrush | IBrush | The color of the waveform |
+| PlaybackPositionBrush | IBrush | The color of the playback position indicator |
+| VerticalScale | double | Vertical scaling of the waveform (1.0 = original size) |
+| DisplayStyle | WaveformDisplayStyle | The waveform display style (MinMax, Positive, RMS) |
+| ZoomFactor | double | Zoom factor (1.0 = full view, larger values = more detailed view) |
+| ScrollOffset | double | Horizontal scroll position (0.0 - 1.0) |
+| PlaybackPosition | double | Current playback position (0.0 - 1.0) |
+
+## Events
+
+| Event | Parameter | Description |
+|-------|-----------|-------------|
+| PlaybackPositionChanged | double | Triggered when the user changes the playback position |
+
 ## Architecture
 
 The library follows a layered architecture:

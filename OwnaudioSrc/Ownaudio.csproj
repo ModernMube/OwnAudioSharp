@@ -25,6 +25,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.6" />
     <PackageReference Include="FFmpeg.AutoGen" Version="7.0.0" />
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
     <PackageReference Include="SoundTouch.Net" Version="2.3.2" />

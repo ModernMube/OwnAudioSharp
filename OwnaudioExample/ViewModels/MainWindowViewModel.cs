@@ -389,6 +389,9 @@ namespace OwnaAvalonia.ViewModels
                                 return;
                             }
 
+                            if(player is not null)
+                                MainWindow.Instance.waveformDisplay.SetAudioData(player.Sources[_sourceOutputId + 1].GetFloatAudioData(TimeSpan.Zero));
+
                             FileNames.Add(String.Format("track{0}:  {1}", (_trackNumber++).ToString(), referenceFile));
                             _sourceOutputId++;
                         }
@@ -548,6 +551,8 @@ namespace OwnaAvalonia.ViewModels
             if (player is not null && ((player.Position - Position).TotalSeconds > 1 || Position > player.Position))
             {
                 Position = player.Position;
+                if(MainWindow.Instance is not null)
+                    Dispatcher.UIThread.InvokeAsync(() => MainWindow.Instance.waveformDisplay.PlaybackPosition = Position.TotalSeconds / Duration.TotalSeconds);
             }
 
             if (!_isStopRequested && Position == TimeSpan.Zero)
