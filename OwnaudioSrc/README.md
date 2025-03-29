@@ -12,6 +12,7 @@ Ownaudio is a cross-platform C# audio library that provides a high-level API for
 - **Volume control** and custom audio processing
 - **Seeking** within audio files
 - **Real-time audio processing** with custom sample processors
+- **Audio data visualize** customizable waveform display
 
 ## Prerequisites
 
