@@ -89,7 +89,7 @@
             <Label Grid.Row="0" Grid.Column="0" Content="Pitch" Margin="5" 
                    VerticalAlignment="Top" HorizontalAlignment="Center" Foreground="{DynamicResource ThemeControlLowBrush}"/>
             <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding #SliderPitch.Value}" 
-                       VerticalAlignment="Center" HorizontalAlignment="Center"
+                       VerticalAlignment="Bottom" HorizontalAlignment="Center"
                        Foreground="{DynamicResource ThemeControlLowBrush}"/>  
             <Slider Name="SliderPitch" Grid.Row="0" Grid.Column="1"
                     Minimum="-6" Maximum="6" 
@@ -100,7 +100,7 @@
             <Label Grid.Row="1" Grid.Column="0" Content="Tempo" Margin="5" 
                    VerticalAlignment="Top" HorizontalAlignment="Center" Foreground="{DynamicResource ThemeControlLowBrush}"/>
             <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding #SliderTempo.Value}" 
-                       VerticalAlignment="Center" HorizontalAlignment="Center"
+                       VerticalAlignment="Bottom" HorizontalAlignment="Center"
                        Foreground="{DynamicResource ThemeControlLowBrush}"/>
             <Slider Name="SliderTempo" Grid.Row="1" Grid.Column="1"
                     Minimum="-20" Maximum="20"
@@ -111,7 +111,7 @@
             <Label Grid.Row="2" Grid.Column="0" Content="Volume" Margin="5" 
                    VerticalAlignment="Top" HorizontalAlignment="Center" Foreground="{DynamicResource ThemeControlLowBrush}"/>
             <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding #SliderVolume.Value}" 
-                       VerticalAlignment="Center" HorizontalAlignment="Center"
+                       VerticalAlignment="Bottom" HorizontalAlignment="Center"
                        Foreground="{DynamicResource ThemeControlLowBrush}"/>
             <Slider Name="SliderVolume" Grid.Row="2" Grid.Column="1"
                     Minimum="0" Maximum="100"
