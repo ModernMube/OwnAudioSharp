@@ -524,6 +524,9 @@ namespace OwnaAvalonia.ViewModels
                 Volume = 100;
                 _sourceOutputId = -1;
 
+                if(MainWindow.Instance is not null)
+                    MainWindow.Instance.waveformDisplay.SetAudioData(new float[] { });
+
                 AudioEngineInitialize();
             }
         }
