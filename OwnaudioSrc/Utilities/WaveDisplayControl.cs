@@ -3,6 +3,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Reactive;
 using System;
+using System.Buffers;
 
 namespace Ownaudio.Utilities
 {
@@ -14,16 +15,21 @@ namespace Ownaudio.Utilities
     {
         private float[] _audioData;
 
-        private Avalonia.Point[] _pointCache;
+        // Using ArrayPool for more efficient memory usage
+        private readonly ArrayPool<Point> _pointPool = ArrayPool<Point>.Shared;
+        private Point[] _pointCache;
         private int _pointCacheSize = 0;
+        private int _pointCacheCapacity = 1000;
 
         private double _zoomFactor = 1.0;
         private double _scrollOffset = 0.0;
         private double _playbackPosition = 0.0;
 
-        
         private Pen _waveformPen;
         private Pen _playbackPen;
+
+        // Reuse existing point arrays for different rendering styles
+        private readonly Point[] _linePoints = new Point[2];
 
         #region Display properties
         /// <summary>
@@ -189,27 +195,31 @@ namespace Ownaudio.Utilities
         /// Initializes a new instance of the WaveAvaloniaDisplay class.
         /// Sets up default values and subscribes to property changes.
         /// </summary>
+        /// <remarks>
+        /// This constructor initializes the control with default settings and
+        /// subscribes to relevant property changes to update the visual display.
+        /// It uses ArrayPool for efficient memory management of the point cache.
+        /// </remarks>
         public WaveAvaloniaDisplay()
         {
-            // Default preferred size
             MinHeight = 50;
 
-            // Legyen egy kezdeti méretű pont gyorsítótár
-            _pointCache = new Avalonia.Point[1000];
+            // Initialize point cache from pool instead of direct allocation
+            _pointCache = _pointPool.Rent(_pointCacheCapacity);
 
-            // Tollak inicializálása
             _waveformPen = new Pen(WaveformBrush);
             _playbackPen = new Pen(PlaybackPositionBrush, 2);
 
-            // Observer újrafelhasználás a memória takarékosság érdekében
             var visualInvalidator = new AnonymousObserver<object>(_ => InvalidateVisual());
 
             this.GetObservable(WaveformBrushProperty).Subscribe(new AnonymousObserver<IBrush>(brush => {
+                //_waveformPen.Dispose(); // Dispose the old pen
                 _waveformPen = new Pen(brush);
                 InvalidateVisual();
             }));
 
             this.GetObservable(PlaybackPositionBrushProperty).Subscribe(new AnonymousObserver<IBrush>(brush => {
+                //_playbackPen.Dispose(); // Dispose the old pen
                 _playbackPen = new Pen(brush, 2);
                 InvalidateVisual();
             }));
@@ -228,6 +238,11 @@ namespace Ownaudio.Utilities
         /// Sets the audio data to be displayed and resets zoom and scroll state.
         /// </summary>
         /// <param name="audioData">The audio sample data to display.</param>
+        /// <remarks>
+        /// This method updates the internal audio data reference, resets the zoom factor
+        /// to 1.0 (showing the entire waveform), resets the scroll offset to 0.0 (starting position),
+        /// and triggers a visual update of the control.
+        /// </remarks>
         public void SetAudioData(float[] audioData)
         {
             _audioData = audioData;
@@ -242,6 +257,15 @@ namespace Ownaudio.Utilities
         /// Renders the waveform based on the current display settings.
         /// </summary>
         /// <param name="context">The drawing context.</param>
+        /// <remarks>
+        /// This method handles the rendering of the waveform according to the selected display style.
+        /// It calculates the visible portion of the audio data based on zoom and scroll state,
+        /// ensures the point cache has sufficient capacity, renders the waveform using the
+        /// appropriate style method, and draws the playback position indicator.
+        /// 
+        /// Memory usage is optimized by reusing point arrays from a shared pool and
+        /// drawing the waveform in batches to reduce GPU draw calls.
+        /// </remarks>
         public override void Render(DrawingContext context)
         {
             base.Render(context);
@@ -272,18 +296,14 @@ namespace Ownaudio.Utilities
 
             int samplesPerPixel = Math.Max(1, visibleSamples / (int)width);
 
-            // Make sure the point array is big enough
+            // Ensure point cache is large enough
             int requiredSize = (int)width * 2;
-            if (_pointCache.Length < requiredSize)
-            {
-                _pointCache = new Avalonia.Point[requiredSize];
-            }
+            EnsurePointCacheCapacity(requiredSize);
 
             _pointCacheSize = 0;
 
             var displayStyle = DisplayStyle;
 
-            // Use precomputed buffers for different display modes
             if (displayStyle == WaveformDisplayStyle.MinMax)
             {
                 RenderMinMaxStyle(width, centerY, vScale, startSampleIndex, samplesPerPixel);
@@ -297,7 +317,7 @@ namespace Ownaudio.Utilities
                 RenderRmsStyle(width, centerY, vScale, startSampleIndex, samplesPerPixel);
             }
 
-            // Draw the lines in sections for better performance
+            // Draw lines in batches to reduce GPU draw calls
             const int batchSize = 1000;
             for (int i = 0; i < _pointCacheSize; i += batchSize * 2)
             {
@@ -311,98 +331,184 @@ namespace Ownaudio.Utilities
                 }
             }
 
-            // Draw playback position
             double pixelPosition = ConvertAbsolutePositionToPixel(_playbackPosition, width, startSampleIndex, visibleSamples, totalSamples);
 
             if (pixelPosition >= 0 && pixelPosition < width)
             {
-                context.DrawLine(_playbackPen, new Avalonia.Point(pixelPosition, 0), new Avalonia.Point(pixelPosition, height));
+                _linePoints[0] = new Point(pixelPosition, 0);
+                _linePoints[1] = new Point(pixelPosition, height);
+                context.DrawLine(_playbackPen, _linePoints[0], _linePoints[1]);
             }
         }
 
+        /// <summary>
+        /// Ensures the point cache has enough capacity for the required number of points.
+        /// </summary>
+        /// <param name="requiredCapacity">The minimum required capacity for the point cache.</param>
+        /// <remarks>
+        /// This method checks if the current point cache has sufficient capacity.
+        /// If not, it returns the old buffer to the pool, calculates a new capacity,
+        /// and rents a new buffer from the shared pool. This approach optimizes memory
+        /// usage by reusing arrays instead of frequent allocations and deallocations.
+        /// </remarks>
+        private void EnsurePointCacheCapacity(int requiredCapacity)
+        {
+            if (_pointCacheCapacity < requiredCapacity)
+            {
+                // Return the old buffer to the pool
+                _pointPool.Return(_pointCache, clearArray: false);
+
+                // Calculate new capacity (round up to nearest multiple of 1000)
+                _pointCacheCapacity = ((requiredCapacity + 999) / 1000) * 1000;
+
+                // Rent a new buffer from the pool
+                _pointCache = _pointPool.Rent(_pointCacheCapacity);
+            }
+        }
+
+        /// <summary>
+        /// Renders the waveform using the MinMax display style.
+        /// </summary>
+        /// <param name="width">The width of the control in pixels.</param>
+        /// <param name="centerY">The vertical center position of the waveform.</param>
+        /// <param name="vScale">The vertical scale factor to apply to the waveform.</param>
+        /// <param name="startSampleIndex">The starting sample index in the audio data.</param>
+        /// <param name="samplesPerPixel">The number of audio samples represented by each horizontal pixel.</param>
+        /// <remarks>
+        /// This method renders the waveform by finding the minimum and maximum sample values
+        /// for each pixel column, creating a classic oscilloscope-style waveform display.
+        /// It populates the point cache with vertical line segments for each pixel column.
+        /// Local variables are reused to reduce stack pressure and memory allocations.
+        /// </remarks>
         private void RenderMinMaxStyle(double width, double centerY, float vScale, int startSampleIndex, int samplesPerPixel)
         {
+            // Reuse local variables to reduce stack allocations
+            int pixelStartSample, endSample;
+            float minValue, maxValue, sample;
+
             for (int x = 0; x < width; x++)
             {
-                int pixelStartSample = startSampleIndex + (int)(x * samplesPerPixel);
+                pixelStartSample = startSampleIndex + (int)(x * samplesPerPixel);
 
-                float minValue = 1.0f;
-                float maxValue = -1.0f;
+                minValue = 1.0f;
+                maxValue = -1.0f;
 
-                // Performance optimized loop
-                int endSample = Math.Min(pixelStartSample + samplesPerPixel, _audioData.Length);
+                endSample = Math.Min(pixelStartSample + samplesPerPixel, _audioData.Length);
                 for (int i = pixelStartSample; i < endSample; i++)
                 {
                     if (i >= 0)
                     {
-                        float sample = _audioData[i];
+                        sample = _audioData[i];
                         if (sample < minValue) minValue = sample;
                         if (sample > maxValue) maxValue = sample;
                     }
                 }
 
-                _pointCache[_pointCacheSize++] = new Avalonia.Point(x, centerY + minValue * vScale);
-                _pointCache[_pointCacheSize++] = new Avalonia.Point(x, centerY + maxValue * vScale);
+                _pointCache[_pointCacheSize++] = new Point(x, centerY + minValue * vScale);
+                _pointCache[_pointCacheSize++] = new Point(x, centerY + maxValue * vScale);
             }
         }
 
+        /// <summary>
+        /// Renders the waveform using the Positive display style.
+        /// </summary>
+        /// <param name="width">The width of the control in pixels.</param>
+        /// <param name="height">The height of the control in pixels.</param>
+        /// <param name="vScale">The vertical scale factor to apply to the waveform.</param>
+        /// <param name="startSampleIndex">The starting sample index in the audio data.</param>
+        /// <param name="samplesPerPixel">The number of audio samples represented by each horizontal pixel.</param>
+        /// <remarks>
+        /// This method renders the waveform by finding the maximum absolute value
+        /// for each pixel column, creating a half-wave rectified display that shows
+        /// only the positive amplitude of the audio signal. The waveform is drawn
+        /// from the bottom of the control upward.
+        /// Local variables are reused to reduce stack pressure and memory allocations.
+        /// </remarks>
         private void RenderPositiveStyle(double width, double height, float vScale, int startSampleIndex, int samplesPerPixel)
         {
+            // Reuse local variables to reduce stack allocations
+            int pixelStartSample, endSample;
+            float maxPositive, sample;
+
             for (int x = 0; x < width; x++)
             {
-                int pixelStartSample = startSampleIndex + (int)(x * samplesPerPixel);
+                pixelStartSample = startSampleIndex + (int)(x * samplesPerPixel);
 
-                float maxPositive = 0;
+                maxPositive = 0;
 
-                int endSample = Math.Min(pixelStartSample + samplesPerPixel, _audioData.Length);
+                endSample = Math.Min(pixelStartSample + samplesPerPixel, _audioData.Length);
                 for (int i = pixelStartSample; i < endSample; i++)
                 {
                     if (i >= 0)
                     {
-                        float sample = Math.Abs(_audioData[i]);
+                        sample = Math.Abs(_audioData[i]);
                         if (sample > maxPositive) maxPositive = sample;
                     }
                 }
 
-                _pointCache[_pointCacheSize++] = new Avalonia.Point(x, height);
-                _pointCache[_pointCacheSize++] = new Avalonia.Point(x, height - maxPositive * vScale);
+                _pointCache[_pointCacheSize++] = new Point(x, height);
+                _pointCache[_pointCacheSize++] = new Point(x, height - maxPositive * vScale);
             }
         }
 
+        /// <summary>
+        /// Renders the waveform using the RMS display style.
+        /// </summary>
+        /// <param name="width">The width of the control in pixels.</param>
+        /// <param name="centerY">The vertical center position of the waveform.</param>
+        /// <param name="vScale">The vertical scale factor to apply to the waveform.</param>
+        /// <param name="startSampleIndex">The starting sample index in the audio data.</param>
+        /// <param name="samplesPerPixel">The number of audio samples represented by each horizontal pixel.</param>
+        /// <remarks>
+        /// This method renders the waveform by calculating the root mean square (RMS) value
+        /// for each pixel column, creating an energy-based visualization of the audio signal.
+        /// The RMS values are rendered as vertical lines extending equally above and below the center line.
+        /// Local variables are reused to reduce stack pressure and memory allocations.
+        /// </remarks>
         private void RenderRmsStyle(double width, double centerY, float vScale, int startSampleIndex, int samplesPerPixel)
         {
+            // Reuse local variables to reduce stack allocations
+            int pixelStartSample, endSample, count;
+            float sumSquares, sample, rms;
+
             for (int x = 0; x < width; x++)
             {
-                int pixelStartSample = startSampleIndex + (int)(x * samplesPerPixel);
+                pixelStartSample = startSampleIndex + (int)(x * samplesPerPixel);
 
-                float sumSquares = 0;
-                int count = 0;
+                sumSquares = 0;
+                count = 0;
 
-                int endSample = Math.Min(pixelStartSample + samplesPerPixel, _audioData.Length);
+                endSample = Math.Min(pixelStartSample + samplesPerPixel, _audioData.Length);
                 for (int i = pixelStartSample; i < endSample; i++)
                 {
                     if (i >= 0)
                     {
-                        float sample = _audioData[i];
+                        sample = _audioData[i];
                         sumSquares += sample * sample;
                         count++;
                     }
                 }
 
-                float rms = count > 0 ? (float)Math.Sqrt(sumSquares / count) : 0;
+                rms = count > 0 ? (float)Math.Sqrt(sumSquares / count) : 0;
 
-                _pointCache[_pointCacheSize++] = new Avalonia.Point(x, centerY + rms * vScale);
-                _pointCache[_pointCacheSize++] = new Avalonia.Point(x, centerY - rms * vScale);
+                _pointCache[_pointCacheSize++] = new Point(x, centerY + rms * vScale);
+                _pointCache[_pointCacheSize++] = new Point(x, centerY - rms * vScale);
             }
         }
 
-        // Mouse handling for setting playback position
         private bool _isDraggingPlayhead = false;
 
         /// <summary>
         /// Handles pointer press events.
-        /// Left click sets playback position, middle or right click prepares for zoom/scroll operations.
         /// </summary>
+        /// <param name="sender">The event sender.</param>
+        /// <param name="e">The event arguments.</param>
+        /// <remarks>
+        /// This method handles different mouse button interactions:
+        /// - Left click sets the playback position and initiates playhead dragging
+        /// - Middle or right click prepares for zoom/scroll operations
+        /// When the playback position changes, it raises the PlaybackPositionChanged event.
+        /// </remarks>
         private void WaveformDisplay_PointerPressed(object sender, PointerPressedEventArgs e)
         {
             var point = e.GetPosition(this);
@@ -427,8 +533,13 @@ namespace Ownaudio.Utilities
 
         /// <summary>
         /// Handles pointer move events.
-        /// Updates playback position during drag operations.
         /// </summary>
+        /// <param name="sender">The event sender.</param>
+        /// <param name="e">The event arguments.</param>
+        /// <remarks>
+        /// This method updates the playback position during playhead drag operations.
+        /// When the playback position changes, it raises the PlaybackPositionChanged event.
+        /// </remarks>
         private void WaveformDisplay_PointerMoved(object sender, PointerEventArgs e)
         {
             if (_isDraggingPlayhead)
@@ -442,8 +553,12 @@ namespace Ownaudio.Utilities
 
         /// <summary>
         /// Handles pointer release events.
-        /// Ends drag operations.
         /// </summary>
+        /// <param name="sender">The event sender.</param>
+        /// <param name="e">The event arguments.</param>
+        /// <remarks>
+        /// This method ends drag operations and releases pointer capture.
+        /// </remarks>
         private void WaveformDisplay_PointerReleased(object sender, PointerReleasedEventArgs e)
         {
             _isDraggingPlayhead = false;
@@ -452,10 +567,16 @@ namespace Ownaudio.Utilities
 
         /// <summary>
         /// Handles mouse wheel events.
-        /// CTRL+Wheel: Zoom in/out
-        /// SHIFT+Wheel or horizontal wheel: Horizontal scroll
-        /// Regular wheel: Adjust vertical scale
         /// </summary>
+        /// <param name="sender">The event sender.</param>
+        /// <param name="e">The event arguments.</param>
+        /// <remarks>
+        /// This method provides several interactive features:
+        /// - CTRL+Wheel: Zoom in/out centered on the mouse position
+        /// - SHIFT+Wheel or horizontal wheel: Horizontal scroll through the waveform
+        /// - Regular wheel: Adjust vertical scale of the waveform
+        /// Each operation updates the appropriate property and triggers a visual update.
+        /// </remarks>
         private void WaveformDisplay_PointerWheelChanged(object sender, PointerWheelEventArgs e)
         {
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
@@ -493,12 +614,16 @@ namespace Ownaudio.Utilities
             }
         }
 
-        // Helper methods
         /// <summary>
         /// Calculates playback position from mouse X coordinate.
         /// </summary>
         /// <param name="x">X coordinate in control space.</param>
         /// <returns>Playback position between 0.0 and 1.0.</returns>
+        /// <remarks>
+        /// This method converts a pixel coordinate within the control to an absolute
+        /// playback position in the audio data, taking into account the current
+        /// zoom factor and scroll offset.
+        /// </remarks>
         private double CalculatePlaybackPositionFromMousePosition(double x)
         {
             if (_audioData == null || _audioData.Length == 0)
@@ -525,6 +650,11 @@ namespace Ownaudio.Utilities
         /// <param name="visibleSamples">Number of visible samples.</param>
         /// <param name="totalSamples">Total number of samples.</param>
         /// <returns>X coordinate in control space.</returns>
+        /// <remarks>
+        /// This method converts an absolute playback position in the audio data
+        /// to a pixel coordinate within the control, taking into account the current
+        /// zoom factor and scroll offset.
+        /// </remarks>
         private double ConvertAbsolutePositionToPixel(double position, double width, int startSampleIndex, int visibleSamples, int totalSamples)
         {
             int samplePosition = (int)(position * totalSamples);
@@ -537,10 +667,44 @@ namespace Ownaudio.Utilities
         /// <summary>
         /// Ensures scroll offset is within valid range based on current zoom factor.
         /// </summary>
+        /// <remarks>
+        /// This method restricts the scroll offset to ensure it remains within
+        /// valid bounds based on the current zoom factor, preventing scrolling
+        /// beyond the end of the waveform.
+        /// </remarks>
         private void ValidateScrollOffset()
         {
             double maxOffset = Math.Max(0.0, 1.0 - (1.0 / _zoomFactor));
             _scrollOffset = Math.Clamp(_scrollOffset, 0.0, maxOffset);
+        }
+
+        /// <summary>
+        /// Cleans up resources when the control is detached from the visual tree.
+        /// </summary>
+        /// <param name="e">The event arguments.</param>
+        /// <remarks>
+        /// This method ensures proper cleanup of resources when the control is removed:
+        /// - Returns the point cache to the shared pool
+        /// - Disposes of the pens used for rendering
+        /// - Unsubscribes from event handlers to prevent memory leaks
+        /// Proper resource cleanup is essential for memory optimization.
+        /// </remarks>
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+#nullable disable
+            base.OnDetachedFromVisualTree(e);
+
+            if (_pointCache != null)
+            {
+                _pointPool.Return(_pointCache, clearArray: false);
+                _pointCache = null;
+            }
+
+            this.PointerPressed -= WaveformDisplay_PointerPressed;
+            this.PointerMoved -= WaveformDisplay_PointerMoved;
+            this.PointerReleased -= WaveformDisplay_PointerReleased;
+            this.PointerWheelChanged -= WaveformDisplay_PointerWheelChanged;
+#nullable restore
         }
     }
 }

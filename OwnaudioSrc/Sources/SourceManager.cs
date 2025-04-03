@@ -236,7 +236,10 @@ namespace Ownaudio.Sources
             StateChanged?.Invoke(this, EventArgs.Empty);
 
             if (Engine?.OwnAudioEngineStopped() == 0)
+            {
                 Engine.Stop();
+                Engine.ResetPosition();
+            }                 
 
             TerminateEngine();
         }
