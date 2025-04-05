@@ -44,7 +44,7 @@ public unsafe partial class SourceManager
             {
                 seekJustHappened = true;
 
-                Thread.Sleep(10);
+                Thread.Sleep(1);
                 mixedBuffer.Clear();
                 continue;
             }
@@ -53,6 +53,13 @@ public unsafe partial class SourceManager
             {
                 lastKnownPosition = Position;
                 seekJustHappened = false;
+
+                bool allSourcesReady = Sources.All(src => src.SourceSampleData.Count > 0 || src.State == SourceState.Idle);
+
+                if (!allSourcesReady)
+                {
+                    Thread.Sleep(5);
+                }
             }
 
             for (int i = 0; i < maxLength; i++)

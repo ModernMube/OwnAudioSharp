@@ -255,6 +255,8 @@ namespace Ownaudio.Sources
 
             IsSeeking = true;
 
+            Thread.CurrentThread.Priority = ThreadPriority.Highest;
+
             bool wasPlaying = State == SourceState.Playing;
             if (wasPlaying)
             {
@@ -263,11 +265,11 @@ namespace Ownaudio.Sources
 
             try
             {
-                foreach (ISource src in Sources)
+                Parallel.ForEach(Sources, src =>
                 {
                     src.IsSeeking = true;
                     src.Seek(position);
-                }
+                });
 
                 Logger?.LogInfo($"Seeking to: {position}.");
 

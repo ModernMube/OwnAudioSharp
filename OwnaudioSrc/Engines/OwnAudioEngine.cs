@@ -446,6 +446,12 @@ public sealed partial class OwnAudioEngine : IAudioEngine
         {
             _totalSamplesProcessed = 0;
             _totalSamplesQueued = 0;
+
+            float[] dummy;
+#nullable disable
+            while (_outputBufferQueue.TryDequeue(out dummy)) { }
+            while (_inputBufferQueue.TryDequeue(out dummy)) { }
+#nullable restore
         }
     }
 
@@ -512,8 +518,6 @@ public sealed partial class OwnAudioEngine : IAudioEngine
         }
         else
         {
-            Thread.Sleep(5);
-
             if (_outputBufferQueue.Count < _maxQueueSize)
             {
                 Send(samples);
