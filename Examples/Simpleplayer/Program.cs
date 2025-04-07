@@ -11,7 +11,7 @@ namespace Simpleplayer
             {
                 SourceManager sourceManager = SourceManager.Instance;
 
-                await sourceManager.AddOutputSource("d:\\ffoutput\\RETRO Magyar Nyárzáró.mp3");
+                await sourceManager.AddOutputSource("path/audio.mp3");
 
                 sourceManager.Play();
 
