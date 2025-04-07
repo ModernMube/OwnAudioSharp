@@ -238,6 +238,8 @@ public sealed unsafe class FFmpegDecoder : IAudioDecoder
     /// <summary>
     /// It processes all the frames. And returns them in an AudioDecoderResult
     /// </summary>
+    /// <param name="position">Current position from which to continue</param>
+    /// <returns>Audio decoder result</returns>
     public AudioDecoderResult DecodeAllFrames(TimeSpan position = default)
     {
         lock (_syncLock)
@@ -246,30 +248,25 @@ public sealed unsafe class FFmpegDecoder : IAudioDecoder
             double lastPresentationTime = 0;
             while (true)
             {
-                // Egy frame dekódolása (alapértelmezettként 0, azaz 1 frame)
                 AudioDecoderResult frameResult = DecodeNextFrame(0);
 
                 if (frameResult.IsSucceeded)
                 {
-                    // Az aktuális frame adatait hozzáfűzzük az eddigi adatokhoz
                     accumulatedData.Write(frameResult.Frame.Data, 0, frameResult.Frame.Data.Length);
                     lastPresentationTime = frameResult.Frame.PresentationTime;
                 }
                 else if (frameResult.IsEOF)
                 {
-                    // Ha elértük a fájl végét, kilépünk a ciklusból
                     break;
                 }
                 else
                 {
-                    // Hiba esetén azonnal visszatérünk a hibaüzenettel
                     return new AudioDecoderResult(null, false, false, frameResult.ErrorMessage);
                 }
             }
             
             TrySeek(position, out var error);
 
-            // Az összegyűjtött adatokat egyetlen AudioFrame-ben csomagoljuk
             return new AudioDecoderResult(new AudioFrame(lastPresentationTime, accumulatedData.ToArray()), true, false);
         }
     }

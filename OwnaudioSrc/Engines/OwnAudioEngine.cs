@@ -17,7 +17,8 @@ namespace Ownaudio.Engines;
 /// </summary>
 public sealed partial class OwnAudioEngine : IAudioEngine
 {
-    private const PaStreamFlags StreamFlags = PaStreamFlags.paNoFlag;
+    private const PaStreamFlags StreamFlags = PaStreamFlags.paPrimeOutputBuffersUsingStreamCallback | PaStreamFlags.paClipOff;
+
     private readonly AudioEngineOutputOptions _outoptions;
     private readonly AudioEngineInputOptions _inputoptions;
     private readonly IntPtr _stream;
@@ -32,11 +33,15 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     private readonly GCHandle _callbackHandle;
     private readonly ConcurrentQueue<float[]> _inputBufferQueue = new ConcurrentQueue<float[]>();
     private readonly ConcurrentQueue<float[]> _outputBufferQueue = new ConcurrentQueue<float[]>();
-    private readonly int _maxQueueSize = 10; 
+    private readonly int _maxQueueSize = 10;
 
     private long _totalSamplesProcessed = 0;
     private long _totalSamplesQueued = 0;
     private readonly object _positionLock = new object();
+
+    // Időzítés mérését segítő mezők
+    private Stopwatch _playbackTimer = new Stopwatch();
+    private bool _isPlaying = false;
 
     /// <summary>
     /// Initializes a new instance of the OwnAudioEngine class with output options only.
@@ -52,19 +57,20 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// </remarks>
     public OwnAudioEngine(AudioEngineOutputOptions? outoptions = default, int framesPerBuffer = 512)
     {
-        _outoptions = outoptions ?? new AudioEngineOutputOptions();
         _inputoptions = new AudioEngineInputOptions();
+        _outoptions = outoptions ?? new AudioEngineOutputOptions();
         FramesPerBuffer = framesPerBuffer;
 
         unsafe
         {
-            _paCallback = 
+#nullable disable
+            _paCallback =
             (void* inputBuffer, void* outputBuffer, long frameCount, IntPtr timeInfo, PaStreamCallbackFlags statusFlags, void* userData) =>
             {
                 if (outputBuffer != null && _outoptions.Channels > 0)
                 {
-#nullable disable
                     float[] outputData = null;
+
                     if (_outputBufferQueue.TryDequeue(out outputData))
                     {
                         if (outputData.Length != frameCount * (int)_outoptions.Channels)
@@ -76,10 +82,9 @@ public sealed partial class OwnAudioEngine : IAudioEngine
 
                         lock (_positionLock)
                         {
-                            _totalSamplesProcessed += outputData.Length / (int)_outoptions.Channels;
+                            _totalSamplesProcessed += frameCount;
                         }
                     }
-#nullable restore
                     else
                     {
                         var silence = new float[(int)(frameCount * (int)_outoptions.Channels)];
@@ -96,122 +101,12 @@ public sealed partial class OwnAudioEngine : IAudioEngine
                 {
                     var inputData = new float[(int)(frameCount * (int)_inputoptions.Channels)];
                     Marshal.Copy((IntPtr)inputBuffer, inputData, 0, inputData.Length);
-
-#nullable disable
-                    while (_inputBufferQueue.Count >= _maxQueueSize)
-                    {
-                        float[] dummy;
-                        _inputBufferQueue.TryDequeue(out dummy);
-                    }
-#nullable restore
-
-                    _inputBufferQueue.Enqueue(inputData);
-                }
-
-                return PaStreamCallbackResult.paContinue;
-            };
-        }
-
-        _callbackHandle = GCHandle.Alloc(_paCallback);
-
-        var parameters = new PaStreamParameters
-        {
-            channelCount = _outoptions.Channels,
-            device = _outoptions.Device.DeviceIndex,
-            hostApiSpecificStreamInfo = IntPtr.Zero,
-            sampleFormat = OwnAudio.Constants.PaSampleFormat,
-            suggestedLatency = _outoptions.Latency
-        };
-
-        IntPtr stream;
-
-        unsafe
-        {
-            PaStreamParameters tempParameters;
-            var parametersPtr = new IntPtr(&tempParameters);
-            Marshal.StructureToPtr(parameters, parametersPtr, false);
-
-#nullable disable
-            var code = Pa_OpenStream(
-                new IntPtr(&stream),
-                IntPtr.Zero,
-                parametersPtr,
-                _outoptions.SampleRate,
-                FramesPerBuffer,
-                StreamFlags,
-                _paCallback,
-                IntPtr.Zero).PaGuard();
-#nullable restore
-
-            Debug.WriteLine(code.PaErrorToText());
-        }
-
-        _stream = stream;
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the OwnAudioEngine class with both input and output options.
-    /// </summary>
-    /// <param name="inoptions">Optional audio engine input options.</param>
-    /// <param name="outoptions">Optional audio engine output options.</param>
-    /// <param name="framesPerBuffer">Number of frames per buffer (default is 512).</param>
-    /// <exception cref="PortAudioException">
-    /// Thrown when errors occur during PortAudio stream initialization.
-    /// </exception>
-    /// <remarks>
-    /// This constructor initializes the audio engine with both input and output capabilities.
-    /// It sets up the PortAudio stream with the specified input and output device parameters,
-    /// and also configures host-specific settings for WASAPI or ASIO if detected.
-    /// </remarks>
-    public OwnAudioEngine(AudioEngineInputOptions? inoptions = default, AudioEngineOutputOptions? outoptions = default, int framesPerBuffer = 512)
-    {
-        _inputoptions = inoptions ?? new AudioEngineInputOptions();
-        _outoptions = outoptions ?? new AudioEngineOutputOptions();
-        FramesPerBuffer = framesPerBuffer;
-
-        unsafe
-        {
-#nullable disable
-            _paCallback = 
-            (void* inputBuffer, void* outputBuffer, long frameCount, IntPtr timeInfo, PaStreamCallbackFlags statusFlags, void* userData) =>
-            {
-                if (outputBuffer != null && _outoptions.Channels > 0)
-                {
-                    float[] outputData = null;
-
-                    if (_outputBufferQueue.TryDequeue(out outputData))
-                    {
-                        if (outputData.Length != frameCount * (int)_outoptions.Channels)
-                        {
-                            Array.Resize(ref outputData, (int)(frameCount * (int)_outoptions.Channels));
-                        }
-
-                        Marshal.Copy(outputData, 0, (IntPtr)outputBuffer, outputData.Length);
-                    }
-                    else
-                    {
-                        var silence = new float[(int)(frameCount * (int)_outoptions.Channels)];
-                        Marshal.Copy(silence, 0, (IntPtr)outputBuffer, silence.Length);
-                    }
-                }
-
-                if (inputBuffer != null && _inputoptions.Channels > 0)
-                {
-                    var inputData = new float[(int)(frameCount * (int)_inputoptions.Channels)];
-                    Marshal.Copy((IntPtr)inputBuffer, inputData, 0, inputData.Length);
-
-                    while (_inputBufferQueue.Count >= _maxQueueSize)
-                    {
-                        float[] dummy;
-                        _inputBufferQueue.TryDequeue(out dummy);
-                    }
-
-                    _inputBufferQueue.Enqueue(inputData);
                 }
 
                 return PaStreamCallbackResult.paContinue;
             };
 #nullable disable
+
             _callbackHandle = GCHandle.Alloc(_paCallback);
 
             inparameters = new PaStreamParameters
@@ -279,7 +174,154 @@ public sealed partial class OwnAudioEngine : IAudioEngine
                     _paCallback,
                     IntPtr.Zero).PaGuard();
 #nullable restore
+                Debug.WriteLine(codeIn.PaErrorToText());
+            }
 
+            _stream = stream;
+        }
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the OwnAudioEngine class with both input and output options.
+    /// </summary>
+    /// <param name="inoptions">Optional audio engine input options.</param>
+    /// <param name="outoptions">Optional audio engine output options.</param>
+    /// <param name="framesPerBuffer">Number of frames per buffer (default is 512).</param>
+    /// <exception cref="PortAudioException">
+    /// Thrown when errors occur during PortAudio stream initialization.
+    /// </exception>
+    /// <remarks>
+    /// This constructor initializes the audio engine with both input and output capabilities.
+    /// It sets up the PortAudio stream with the specified input and output device parameters,
+    /// and also configures host-specific settings for WASAPI or ASIO if detected.
+    /// </remarks>
+    public OwnAudioEngine(AudioEngineInputOptions? inoptions = default, AudioEngineOutputOptions? outoptions = default, int framesPerBuffer = 512)
+    {
+        _inputoptions = inoptions ?? new AudioEngineInputOptions();
+        _outoptions = outoptions ?? new AudioEngineOutputOptions();
+        FramesPerBuffer = framesPerBuffer;
+
+        unsafe
+        {
+#nullable disable
+            _paCallback =
+            (void* inputBuffer, void* outputBuffer, long frameCount, IntPtr timeInfo, PaStreamCallbackFlags statusFlags, void* userData) =>
+            {
+                if (outputBuffer != null && _outoptions.Channels > 0)
+                {
+                    float[] outputData = null;
+
+                    if (_outputBufferQueue.TryDequeue(out outputData))
+                    {
+                        if (outputData.Length != frameCount * (int)_outoptions.Channels)
+                        {
+                            Array.Resize(ref outputData, (int)(frameCount * (int)_outoptions.Channels));
+                        }
+
+                        Marshal.Copy(outputData, 0, (IntPtr)outputBuffer, outputData.Length);
+
+                        lock (_positionLock)
+                        {
+                            _totalSamplesProcessed += frameCount;
+                        }
+                    }
+                    else
+                    {
+                        var silence = new float[(int)(frameCount * (int)_outoptions.Channels)];
+                        Marshal.Copy(silence, 0, (IntPtr)outputBuffer, silence.Length);
+
+                        lock (_positionLock)
+                        {
+                            _totalSamplesProcessed += frameCount;
+                        }
+                    }
+                }
+
+                if (inputBuffer != null && _inputoptions.Channels > 0)
+                {
+                    var inputData = new float[(int)(frameCount * (int)_inputoptions.Channels)];
+                    Marshal.Copy((IntPtr)inputBuffer, inputData, 0, inputData.Length);
+
+                    while (_inputBufferQueue.Count >= _maxQueueSize)
+                    {
+                        float[] dummy;
+                        _inputBufferQueue.TryDequeue(out dummy);
+                    }
+
+                    _inputBufferQueue.Enqueue(inputData);
+                }
+
+                return PaStreamCallbackResult.paContinue;
+            };
+#nullable disable
+
+            _callbackHandle = GCHandle.Alloc(_paCallback);
+
+            inparameters = new PaStreamParameters
+            {
+                channelCount = _inputoptions.Channels,
+                device = _inputoptions.Device.DeviceIndex,
+                hostApiSpecificStreamInfo = IntPtr.Zero,
+                sampleFormat = OwnAudio.Constants.PaSampleFormat,
+                suggestedLatency = _inputoptions.Latency
+            };
+
+            if (OwnAudio.HostID.PaHostApiInfo().name.ToLower().Contains("wasapi")) //Wasapi host spcific
+            {
+                inHostApiSpecific = CreateWasapiStreamInfo(PaWasapiFlags.ThreadPriority);
+                inparameters.hostApiSpecificStreamInfo = inHostApiSpecific;
+            }
+
+            if (OwnAudio.HostID.PaHostApiInfo().name.ToLower().Contains("asio")) //Asio host specific
+            {
+                inHostApiSpecific = CreateAsioStreamInfo(new int[] { 0 });
+                inparameters.hostApiSpecificStreamInfo = inHostApiSpecific;
+            }
+
+            parameters = new PaStreamParameters
+            {
+                channelCount = _outoptions.Channels,
+                device = _outoptions.Device.DeviceIndex,
+                hostApiSpecificStreamInfo = IntPtr.Zero,
+                sampleFormat = OwnAudio.Constants.PaSampleFormat,
+                suggestedLatency = _outoptions.Latency
+            };
+
+            if (OwnAudio.HostID.PaHostApiInfo().name.ToLower().Contains("wasapi")) //Wasapi host spcific
+            {
+                outHostApiSpecific = CreateWasapiStreamInfo(PaWasapiFlags.ThreadPriority);
+                parameters.hostApiSpecificStreamInfo = outHostApiSpecific;
+            }
+
+            if (OwnAudio.HostID.PaHostApiInfo().name.ToLower().Contains("asio")) //Asio host specific
+            {
+                outHostApiSpecific = CreateAsioStreamInfo(new int[] { 0, 1 });
+                parameters.hostApiSpecificStreamInfo = outHostApiSpecific;
+            }
+
+            IntPtr stream;
+
+            unsafe
+            {
+                PaStreamParameters intempParameters;
+                var inparametersPtr = new IntPtr(&intempParameters);
+                Marshal.StructureToPtr(inparameters, inparametersPtr, false);
+
+                PaStreamParameters tempParameters;
+                var parametersPtr = new IntPtr(&tempParameters);
+                Marshal.StructureToPtr(parameters, parametersPtr, false);
+
+#nullable disable
+                var codeIn = Pa_OpenStream(
+                    new IntPtr(&stream),
+                    inparametersPtr,
+                    parametersPtr,
+                    outoptions.SampleRate,
+                    FramesPerBuffer,
+                    StreamFlags,
+                    _paCallback,
+                    IntPtr.Zero).PaGuard();
+#nullable restore
                 Debug.WriteLine(codeIn.PaErrorToText());
             }
 
@@ -410,9 +452,22 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// </remarks>
     public double GetCurrentPositionInSeconds()
     {
-        lock (_positionLock)
+        if (_isPlaying)
         {
-            return (double)_totalSamplesProcessed / _outoptions.SampleRate;
+            double elapsedTime = _playbackTimer.Elapsed.TotalSeconds;
+
+            lock (_positionLock)
+            {
+                double portAudioTime = (double)_totalSamplesProcessed / _outoptions.SampleRate;
+                return (elapsedTime + portAudioTime) / 2.0;
+            }
+        }
+        else
+        {
+            lock (_positionLock)
+            {
+                return (double)_totalSamplesProcessed / _outoptions.SampleRate;
+            }
         }
     }
 
@@ -465,12 +520,15 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// </remarks>
     public int Start()
     {
-        // Reset position counters on start
         lock (_positionLock)
         {
             _totalSamplesProcessed = 0;
             _totalSamplesQueued = 0;
         }
+
+        _playbackTimer.Reset();
+        _playbackTimer.Start();
+        _isPlaying = true;
 
         return Pa_StartStream(_stream).PaGuard();
     }
@@ -485,6 +543,9 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     public int Stop()
     {
 #nullable disable
+        _playbackTimer.Stop();
+        _isPlaying = false;
+
         int result = Pa_StopStream(_stream).PaGuard();
 
         float[] dummy;
@@ -518,9 +579,17 @@ public sealed partial class OwnAudioEngine : IAudioEngine
         }
         else
         {
+            Thread.Sleep(5);
+
             if (_outputBufferQueue.Count < _maxQueueSize)
             {
-                Send(samples);
+                var data = samples.ToArray();
+                _outputBufferQueue.Enqueue(data);
+
+                lock (_positionLock)
+                {
+                    _totalSamplesQueued += samples.Length / (int)_outoptions.Channels;
+                }
             }
         }
     }

@@ -159,8 +159,8 @@ public unsafe partial class SourceManager
                 {
                     float[] inputBuffer = new float[EngineFramesPerBuffer * (int)InputEngineOptions.Channels];
                     float[] stereoData = new float[EngineFramesPerBuffer * (int)OutputEngineOptions.Channels];
-
-                    ((SourceInput)SourcesInput[0]).ReceivesData(out inputBuffer, Engine);
+                    
+                    ((SourceInput)SourcesInput[0]).ReceivesData(out inputBuffer, Engine);                   
 
                     if (InputEngineOptions.Channels == Engines.OwnAudioEngine.EngineChannels.Mono &&
                         OutputEngineOptions.Channels == Engines.OwnAudioEngine.EngineChannels.Stereo)
@@ -330,7 +330,7 @@ public unsafe partial class SourceManager
     {
         if (OwnAudio.IsPortAudioInitialized && Engine is null)
         {
-            if (OwnAudio.DefaultInputDevice.MaxInputChannels > 0)
+            if (OwnAudio.DefaultInputDevice.MaxInputChannels > 0 && IsRecorded)
                 Engine = new OwnAudioEngine(InputEngineOptions, OutputEngineOptions, EngineFramesPerBuffer);
             else
                 Engine = new OwnAudioEngine(OutputEngineOptions, EngineFramesPerBuffer);
