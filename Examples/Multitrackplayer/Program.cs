@@ -11,8 +11,8 @@ namespace Simpleplayer
             {
                 SourceManager sourceManager = SourceManager.Instance;
 
-                await sourceManager.AddOutputSource("D:\\Sogorock\\Ocam\\2025\\Erted szulettem\\Nótar Mary x Peter Srámek-Érted születtem (Official Music Video)_audio_music.wav");
-                await sourceManager.AddOutputSource("D:\\Sogorock\\Ocam\\2025\\Erted szulettem\\Nótar Mary x Peter Srámek-Érted születtem (Official Music Video)_audio_vocal.wav");
+                await sourceManager.AddOutputSource("path/track1audio.mp3");
+                await sourceManager.AddOutputSource("path/track2audio.mp3");
 
                 sourceManager.Play();
 
