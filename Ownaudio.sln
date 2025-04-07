@@ -7,6 +7,10 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Ownaudio", "OwnaudioSrc\Own
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OwnaAvalonia", "OwnaudioExample\OwnaAvalonia.csproj", "{B3E57AC9-BE07-4FBE-BC3B-6F7E1CAF7273}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Simpleplayer", "Examples\Simpleplayer\Simpleplayer.csproj", "{8015F2FE-4F99-2CE3-FF89-9D3EAC4F8E38}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Multitrackplayer", "Examples\Multitrackplayer\Multitrackplayer.csproj", "{1D54BA61-BE64-42DE-A38C-3E2BD7EFBDD5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +25,14 @@ Global
 		{B3E57AC9-BE07-4FBE-BC3B-6F7E1CAF7273}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B3E57AC9-BE07-4FBE-BC3B-6F7E1CAF7273}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B3E57AC9-BE07-4FBE-BC3B-6F7E1CAF7273}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8015F2FE-4F99-2CE3-FF89-9D3EAC4F8E38}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8015F2FE-4F99-2CE3-FF89-9D3EAC4F8E38}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8015F2FE-4F99-2CE3-FF89-9D3EAC4F8E38}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8015F2FE-4F99-2CE3-FF89-9D3EAC4F8E38}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1D54BA61-BE64-42DE-A38C-3E2BD7EFBDD5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1D54BA61-BE64-42DE-A38C-3E2BD7EFBDD5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1D54BA61-BE64-42DE-A38C-3E2BD7EFBDD5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1D54BA61-BE64-42DE-A38C-3E2BD7EFBDD5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

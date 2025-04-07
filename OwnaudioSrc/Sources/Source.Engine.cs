@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Ownaudio.Decoders;
+using Ownaudio.Engines;
 using Ownaudio.Utilities.Extensions;
 
 namespace Ownaudio.Sources;
@@ -139,19 +140,10 @@ public partial class Source : ISource
         double calculateTime = 0;
         int numSamples = 0;
         bool isSoundtouch = true;
-
-        if(CurrentDecoder != null)
-        {
-            soundTouch.Clear();
-            soundTouch.SampleRate = CurrentDecoder.StreamInfo.SampleRate;
-            soundTouch.Channels = CurrentDecoder.StreamInfo.Channels;
-        }
-        else
-        {
-            soundTouch.Clear();
-            soundTouch.SampleRate = OwnAudio.DefaultOutputDevice.DefaultSampleRate;
-            soundTouch.Channels = 2;
-        }
+        
+        soundTouch.Clear();
+        soundTouch.SampleRate = SourceManager.OutputEngineOptions.SampleRate;
+        soundTouch.Channels = (int)SourceManager.OutputEngineOptions.Channels;
 
         while (State != SourceState.Idle)
         {
@@ -174,14 +166,12 @@ public partial class Source : ISource
                 continue;
             }
 
-            // If there is enough data in the buffer
             if (soundTouchBuffer.Count >= FixedBufferSize)  
             {
                 SendDataEngine(soundTouchBuffer, calculateTime);
             }
             else
             {
-                // Load new data from SoundTouch if the buffer is not large enough
                 if (Queue.TryDequeue(out var frame)) 
                 {
                     Span<float> samples = MemoryMarshal.Cast<byte, float>(frame.Data);
@@ -208,7 +198,6 @@ public partial class Source : ISource
                 }
                 else
                 {
-                    //No more data in decoder, check for EOF
                     if (IsEOF) 
                     {
                         numSamples = 0;

@@ -76,7 +76,10 @@ namespace Ownaudio.Sources
             IsLoaded = _source.IsLoaded;
             
             if(IsLoaded)
+            {
                 UrlList.Add(url);
+                AddInputSource();
+            }                 
 
             SetAndRaisePositionChanged(TimeSpan.Zero);            
 
@@ -89,7 +92,7 @@ namespace Ownaudio.Sources
         /// Add an input source
         /// </summary>
         /// <returns></returns>
-        public Task<bool> AddInputSource()
+        public Task<bool> AddInputSource(float inputVolume = 0f)
         {
             if(IsLoaded && !IsRecorded)
             {
@@ -98,9 +101,17 @@ namespace Ownaudio.Sources
                     SourceInput _inputSource = new SourceInput(InputEngineOptions);
                     SourcesInput.Add(_inputSource);
                     if (_inputSource is not null)
+                    {
                         IsRecorded = true;
+                    } 
                 }
             }
+
+            if(IsRecorded)
+            {
+                SourcesInput[SourcesInput.Count - 1].Volume = inputVolume;
+            }
+
             return Task.FromResult(IsRecorded);            
         }
 

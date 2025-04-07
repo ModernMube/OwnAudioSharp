@@ -90,7 +90,7 @@ public unsafe partial class SourceManager
     /// A process that modifies data
     /// </summary>
     //public ISampleProcessor? CustomSampleProcessor { get; set; }
-    public SampleProcessorBase? CustomSampleProcessor { get; set; }
+    public SampleProcessorBase? CustomSampleProcessor { get; set; } = new DefaultProcessor();
 
     /// <summary>
     /// Specifies whether to save audio data during playback.
@@ -117,7 +117,7 @@ public unsafe partial class SourceManager
     /// <summary>
     /// The bit depth of the recorded audio file
     /// </summary>
-    protected int BitPerSamples { get; private set; }
+    protected int BitPerSamples { get; private set; }  = OutputEngineOptions.SampleRate;
 
     /// <summary>
     /// Gets <see cref="IAudioEngine"/> instance.
@@ -177,4 +177,16 @@ public unsafe partial class SourceManager
             Sources[index].Tempo = tempo;
         }
     }
+}
+
+/// <summary>
+/// Default Customprocessor 
+/// </summary>
+public class DefaultProcessor : SampleProcessorBase
+{
+    /// <summary>
+    /// Sample data process
+    /// </summary>
+    /// <param name="sample"></param>
+    public override void Process(Span<float> sample) { }
 }
