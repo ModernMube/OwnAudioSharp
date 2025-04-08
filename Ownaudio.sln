@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Multitrackplayer", "Example
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microphone", "Examples\Microphone\Microphone.csproj", "{5155302A-0BCB-2647-9326-8CFE82EAFD55}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FXUsage", "Examples\FXUsage\FXUsage.csproj", "{1368B7BE-832D-4609-85E0-82A3460A4603}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +35,10 @@ Global
 		{5155302A-0BCB-2647-9326-8CFE82EAFD55}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5155302A-0BCB-2647-9326-8CFE82EAFD55}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5155302A-0BCB-2647-9326-8CFE82EAFD55}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1368B7BE-832D-4609-85E0-82A3460A4603}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1368B7BE-832D-4609-85E0-82A3460A4603}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1368B7BE-832D-4609-85E0-82A3460A4603}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1368B7BE-832D-4609-85E0-82A3460A4603}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
