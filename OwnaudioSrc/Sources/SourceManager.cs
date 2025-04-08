@@ -89,12 +89,34 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
+        /// Add an output source.
+        /// </summary>
+        /// <param name="url">Access and name of the file you want to play</param>
+        /// <returns></returns>
+        public Task<bool> AddEmptyOutputSource()
+        {
+            Ensure.That<OwnaudioException>(State == SourceState.Idle, "Playback thread is currently running.");
+
+            SourceWithoutData _sourceWithoutData = new SourceWithoutData();
+            Sources.Add(_sourceWithoutData);
+
+            if(Duration.TotalMilliseconds < _sourceWithoutData.Duration.TotalMilliseconds)
+                Duration = _sourceWithoutData.Duration;
+
+            IsLoaded = true;
+
+            SetAndRaisePositionChanged(TimeSpan.Zero);
+
+            return Task.FromResult(IsLoaded);
+        }
+
+        /// <summary>
         /// Add an input source
         /// </summary>
         /// <returns></returns>
         public Task<bool> AddInputSource(float inputVolume = 0f)
         {
-            if(IsLoaded && !IsRecorded)
+            if(!IsRecorded)
             {
                 if(InputEngineOptions.Device.MaxInputChannels > 0)
                 {
@@ -150,6 +172,7 @@ namespace Ownaudio.Sources
                 SourcesInput.Clear();
 
             IsRecorded = false;
+            AddInputSource();
             return Task.FromResult(true);
         }
         
@@ -194,6 +217,11 @@ namespace Ownaudio.Sources
             if (Position.TotalMilliseconds >= Duration.TotalMilliseconds)
             {
                 SetAndRaisePositionChanged(TimeSpan.Zero);
+            }
+
+            if (SourcesInput.Count > 0 && Sources.Count < 1)
+            {
+                AddEmptyOutputSource(); 
             }
 
             if (InitializeEngine())
@@ -351,27 +379,7 @@ namespace Ownaudio.Sources
                 IsRecorded = false;
                 IsSeeking = false;
 
-                if (IsWriteData && File.Exists(writefilePath) && SaveWaveFileName is not null)
-                {
-                    Task.Run(() =>
-                    {
-                        WriteWaveFile.WriteFile(
-                            filePath: SaveWaveFileName,
-                            rawFilePath: writefilePath,
-                            sampleRate: OwnAudio.DefaultOutputDevice.DefaultSampleRate,
-                            channels: 2,
-                            bitPerSamples: BitPerSamples);
-                    });
-
-                    IsWriteData = false;
-                    SaveWaveFileName = null;
-
-                    if (File.Exists(writefilePath))
-                    {
-                        try { File.Delete(writefilePath); } catch { /* Ignore */ }
-                    }
-                }
-
+                writeDataToFile();
                 writedDataBuffer.Clear();
 
                 Volume = 1.0f;
@@ -414,40 +422,29 @@ namespace Ownaudio.Sources
         }
         
         /// <summary>
-        /// Run <see cref="VolumeProcessor"/> and <see cref="CustomSampleProcessor"/> to the specified samples.
+        /// Write the recorded data to a file
         /// </summary>
-        /// <param name="samples">Audio samples to process to.</param>
-        protected virtual void ProcessSampleProcessors(Span<float> samples)
+        private void writeDataToFile()
         {
-            bool useCustomProcessor = CustomSampleProcessor is { IsEnabled: true };
-            bool useVolumeProcessor = VolumeProcessor.Volume != 1.0f;
-
-            if (useCustomProcessor || useVolumeProcessor)
+            if (IsWriteData && File.Exists(writefilePath) && SaveWaveFileName is not null)
             {
-                if (useCustomProcessor && CustomSampleProcessor is not null)
-                    CustomSampleProcessor.Process(samples);
-
-                if (useVolumeProcessor)
-                    VolumeProcessor.Process(samples);
-            }
-
-            lock (_lock)
-            {
-                float[] samplesArray = samples.ToArray();
-                Task.Run(() => 
+                Task.Run(() =>
                 {
-                    if (OutputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo)
-                        OutputLevels = CalculateAverageStereoLevels(samplesArray);
-                    else
-                        OutputLevels = CalculateAverageMonoLevel(samplesArray);
+                    WriteWaveFile.WriteFile(
+                        filePath: SaveWaveFileName,
+                        rawFilePath: writefilePath,
+                        sampleRate: OwnAudio.DefaultOutputDevice.DefaultSampleRate,
+                        channels: 2,
+                        bitPerSamples: BitPerSamples);
                 });
-                
-            }
 
-            if (IsWriteData) //Save data to file
-            {
-                var samplesArray = samples.ToArray();
-                Task.Run(() => { SaveSamplesToFile(samplesArray, writefilePath); });
+                IsWriteData = false;
+                SaveWaveFileName = null;
+
+                if (File.Exists(writefilePath))
+                {
+                    try { File.Delete(writefilePath); } catch { /* Ignore */ }
+                }
             }
         }
 
@@ -542,7 +539,9 @@ namespace Ownaudio.Sources
             }
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Dispose 
+        /// </summary>
         public virtual void Dispose()
         {
             if (_disposed)

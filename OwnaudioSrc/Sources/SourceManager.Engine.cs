@@ -1,13 +1,11 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
 using Ownaudio.Engines;
-using Ownaudio.Utilities;
 
 
 
@@ -217,18 +215,44 @@ public unsafe partial class SourceManager
             }
         }
 
-        if (IsWriteData && File.Exists(writefilePath) && SaveWaveFileName is not null)
+        writeDataToFile();
+    }
+
+    /// <summary>
+    /// Run <see cref="VolumeProcessor"/> and <see cref="CustomSampleProcessor"/> to the specified samples.
+    /// </summary>
+    /// <param name="samples">Audio samples to process to.</param>
+    protected virtual void ProcessSampleProcessors(Span<float> samples)
+    {
+        bool useCustomProcessor = CustomSampleProcessor is { IsEnabled: true };
+        bool useVolumeProcessor = VolumeProcessor.Volume != 1.0f;
+
+        if (useCustomProcessor || useVolumeProcessor)
         {
-            Task.Run(() =>
+            if (useCustomProcessor && CustomSampleProcessor is not null)
+                CustomSampleProcessor.Process(samples);
+
+            if (useVolumeProcessor)
+                VolumeProcessor.Process(samples);
+        }
+
+        lock (_lock)
+        {
+            float[] samplesArray = samples.ToArray();
+            Task.Run(() => 
             {
-                WriteWaveFile.WriteFile(
-                    filePath: SaveWaveFileName,
-                    rawFilePath: writefilePath,
-                    sampleRate: OwnAudio.DefaultOutputDevice.DefaultSampleRate,
-                    channels: 2,
-                    bitPerSamples: BitPerSamples);
+                if (OutputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo)
+                    OutputLevels = CalculateAverageStereoLevels(samplesArray);
+                else
+                    OutputLevels = CalculateAverageMonoLevel(samplesArray);
             });
-            IsWriteData = false;
+            
+        }
+
+        if (IsWriteData) //Save data to file
+        {
+            var samplesArray = samples.ToArray();
+            Task.Run(() => { SaveSamplesToFile(samplesArray, writefilePath); });
         }
     }
 
