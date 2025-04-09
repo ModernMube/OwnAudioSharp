@@ -29,14 +29,10 @@ namespace Microphone
             }
             else
             {
-                if (!OwnAudio.IsFFmpegInitialized)
+                if (!OwnAudio.IsFFmpegInitialized || !OwnAudio.IsPortAudioInitialized)
                 {
-                    Console.WriteLine("FFMPEG library initialization failed!");
-                }
-
-                if(!OwnAudio.IsPortAudioInitialized)
-                {
-                    Console.WriteLine("PORTAUDIO library initialization failed!");
+                    Console.WriteLine("library initialization failed!");
+                    Console.WriteLine("Unpack the files in the LIB directory!");
                 }
             }
         }

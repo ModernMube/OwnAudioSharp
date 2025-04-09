@@ -13,6 +13,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microphone", "Examples\Micr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FXUsage", "Examples\FXUsage\FXUsage.csproj", "{1368B7BE-832D-4609-85E0-82A3460A4603}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PitchTempo", "Examples\PitchTempo\PitchTempo.csproj", "{D6476DEB-2948-E497-4B4B-CF115EBA327F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AudioEngine", "Examples\AudioEngine\AudioEngine.csproj", "{7CA06F44-6D2F-41FA-89C9-0BEA50E43917}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -39,6 +43,14 @@ Global
 		{1368B7BE-832D-4609-85E0-82A3460A4603}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1368B7BE-832D-4609-85E0-82A3460A4603}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1368B7BE-832D-4609-85E0-82A3460A4603}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D6476DEB-2948-E497-4B4B-CF115EBA327F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6476DEB-2948-E497-4B4B-CF115EBA327F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6476DEB-2948-E497-4B4B-CF115EBA327F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6476DEB-2948-E497-4B4B-CF115EBA327F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7CA06F44-6D2F-41FA-89C9-0BEA50E43917}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7CA06F44-6D2F-41FA-89C9-0BEA50E43917}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7CA06F44-6D2F-41FA-89C9-0BEA50E43917}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7CA06F44-6D2F-41FA-89C9-0BEA50E43917}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
