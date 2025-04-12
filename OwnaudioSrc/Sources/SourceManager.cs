@@ -91,7 +91,6 @@ namespace Ownaudio.Sources
         /// <summary>
         /// Add an output source.
         /// </summary>
-        /// <param name="url">Access and name of the file you want to play</param>
         /// <returns></returns>
         public Task<bool> AddEmptyOutputSource()
         {
@@ -208,6 +207,9 @@ namespace Ownaudio.Sources
                 return;
             }
 
+            float oldVolume = Volume;
+            Volume = 0f;
+
             if (State == SourceState.Paused)
             {
                 SetAndRaiseStateChanged(SourceState.Playing);                
@@ -249,6 +251,8 @@ namespace Ownaudio.Sources
                 Debug.WriteLine("Engine Initialization Error!");
                 return;
             }
+
+            Volume = oldVolume;
         }
 
         /// <summary>
@@ -277,7 +281,6 @@ namespace Ownaudio.Sources
             if (Engine?.OwnAudioEngineStopped() == 0)
             {
                 Engine.Stop();
-                Engine.ResetPosition();
             }                 
 
             TerminateEngine();

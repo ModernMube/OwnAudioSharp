@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
-
 using Ownaudio.Exceptions;
 using Ownaudio.Utilities.Extensions;
 using static Ownaudio.Bindings.PortAudio.PaBinding;
@@ -21,27 +20,23 @@ public sealed partial class OwnAudioEngine : IAudioEngine
 
     private readonly AudioEngineOutputOptions _outoptions;
     private readonly AudioEngineInputOptions _inputoptions;
-    private readonly IntPtr _stream;
-    private readonly PaStreamParameters inparameters;
-    private readonly PaStreamParameters parameters;
-    private readonly IntPtr inHostApiSpecific;
-    private readonly IntPtr outHostApiSpecific;
+    private IntPtr _stream;
+    private PaStreamParameters inparameters;
+    private PaStreamParameters parameters;
+    private IntPtr inHostApiSpecific;
+    private IntPtr outHostApiSpecific;
 
     private bool _disposed;
 
-    private readonly PaStreamCallback _paCallback;
-    private readonly GCHandle _callbackHandle;
-    private readonly ConcurrentQueue<float[]> _inputBufferQueue = new ConcurrentQueue<float[]>();
-    private readonly ConcurrentQueue<float[]> _outputBufferQueue = new ConcurrentQueue<float[]>();
+    private PaStreamCallback? _paCallback;
+    private GCHandle _callbackHandle;
+    private ConcurrentQueue<float[]> _inputBufferQueue = new ConcurrentQueue<float[]>();
+    private ConcurrentQueue<float[]> _outputBufferQueue = new ConcurrentQueue<float[]>();
     private readonly int _maxQueueSize = 10;
 
-    private long _totalSamplesProcessed = 0;
-    private long _totalSamplesQueued = 0;
-    private readonly object _positionLock = new object();
-
-    // Időzítés mérését segítő mezők
-    private Stopwatch _playbackTimer = new Stopwatch();
-    private bool _isPlaying = false;
+    private readonly ConcurrentBag<float[]> _inputBufferPool = new ConcurrentBag<float[]>();
+    private readonly ConcurrentBag<float[]> _outputBufferPool = new ConcurrentBag<float[]>();
+    private float[]? _silenceBuffer;
 
     /// <summary>
     /// Initializes a new instance of the OwnAudioEngine class with output options only.
@@ -56,129 +51,8 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// It sets up the PortAudio stream with the specified output device parameters.
     /// </remarks>
     public OwnAudioEngine(AudioEngineOutputOptions? outoptions = default, int framesPerBuffer = 512)
+    :this(null, outoptions, framesPerBuffer)
     {
-        _inputoptions = new AudioEngineInputOptions();
-        _outoptions = outoptions ?? new AudioEngineOutputOptions();
-        FramesPerBuffer = framesPerBuffer;
-
-        unsafe
-        {
-#nullable disable
-            _paCallback =
-            (void* inputBuffer, void* outputBuffer, long frameCount, IntPtr timeInfo, PaStreamCallbackFlags statusFlags, void* userData) =>
-            {
-                if (outputBuffer != null && _outoptions.Channels > 0)
-                {
-                    float[] outputData = null;
-
-                    if (_outputBufferQueue.TryDequeue(out outputData))
-                    {
-                        if (outputData.Length != frameCount * (int)_outoptions.Channels)
-                        {
-                            Array.Resize(ref outputData, (int)(frameCount * (int)_outoptions.Channels));
-                        }
-
-                        Marshal.Copy(outputData, 0, (IntPtr)outputBuffer, outputData.Length);
-
-                        lock (_positionLock)
-                        {
-                            _totalSamplesProcessed += frameCount;
-                        }
-                    }
-                    else
-                    {
-                        var silence = new float[(int)(frameCount * (int)_outoptions.Channels)];
-                        Marshal.Copy(silence, 0, (IntPtr)outputBuffer, silence.Length);
-
-                        lock (_positionLock)
-                        {
-                            _totalSamplesProcessed += frameCount;
-                        }
-                    }
-                }
-
-                if (inputBuffer != null && _inputoptions.Channels > 0)
-                {
-                    var inputData = new float[(int)(frameCount * (int)_inputoptions.Channels)];
-                    Marshal.Copy((IntPtr)inputBuffer, inputData, 0, inputData.Length);
-                }
-
-                return PaStreamCallbackResult.paContinue;
-            };
-#nullable disable
-
-            _callbackHandle = GCHandle.Alloc(_paCallback);
-
-            inparameters = new PaStreamParameters
-            {
-                channelCount = _inputoptions.Channels,
-                device = _inputoptions.Device.DeviceIndex,
-                hostApiSpecificStreamInfo = IntPtr.Zero,
-                sampleFormat = OwnAudio.Constants.PaSampleFormat,
-                suggestedLatency = _inputoptions.Latency
-            };
-
-            if (OwnAudio.HostID.PaHostApiInfo().name.ToLower().Contains("wasapi")) //Wasapi host spcific
-            {
-                inHostApiSpecific = CreateWasapiStreamInfo(PaWasapiFlags.ThreadPriority);
-                inparameters.hostApiSpecificStreamInfo = inHostApiSpecific;
-            }
-
-            if (OwnAudio.HostID.PaHostApiInfo().name.ToLower().Contains("asio")) //Asio host specific
-            {
-                inHostApiSpecific = CreateAsioStreamInfo(new int[] { 0 });
-                inparameters.hostApiSpecificStreamInfo = inHostApiSpecific;
-            }
-
-            parameters = new PaStreamParameters
-            {
-                channelCount = _outoptions.Channels,
-                device = _outoptions.Device.DeviceIndex,
-                hostApiSpecificStreamInfo = IntPtr.Zero,
-                sampleFormat = OwnAudio.Constants.PaSampleFormat,
-                suggestedLatency = _outoptions.Latency
-            };
-
-            if (OwnAudio.HostID.PaHostApiInfo().name.ToLower().Contains("wasapi")) //Wasapi host spcific
-            {
-                outHostApiSpecific = CreateWasapiStreamInfo(PaWasapiFlags.ThreadPriority);
-                parameters.hostApiSpecificStreamInfo = outHostApiSpecific;
-            }
-
-            if (OwnAudio.HostID.PaHostApiInfo().name.ToLower().Contains("asio")) //Asio host specific
-            {
-                outHostApiSpecific = CreateAsioStreamInfo(new int[] { 0, 1 });
-                parameters.hostApiSpecificStreamInfo = outHostApiSpecific;
-            }
-
-            IntPtr stream;
-
-            unsafe
-            {
-                PaStreamParameters intempParameters;
-                var inparametersPtr = new IntPtr(&intempParameters);
-                Marshal.StructureToPtr(inparameters, inparametersPtr, false);
-
-                PaStreamParameters tempParameters;
-                var parametersPtr = new IntPtr(&tempParameters);
-                Marshal.StructureToPtr(parameters, parametersPtr, false);
-
-#nullable disable
-                var codeIn = Pa_OpenStream(
-                    new IntPtr(&stream),
-                    inparametersPtr,
-                    parametersPtr,
-                    outoptions.SampleRate,
-                    FramesPerBuffer,
-                    StreamFlags,
-                    _paCallback,
-                    IntPtr.Zero).PaGuard();
-#nullable restore
-                Debug.WriteLine(codeIn.PaErrorToText());
-            }
-
-            _stream = stream;
-        }
     }
 
     /// <summary>
@@ -201,51 +75,86 @@ public sealed partial class OwnAudioEngine : IAudioEngine
         _outoptions = outoptions ?? new AudioEngineOutputOptions();
         FramesPerBuffer = framesPerBuffer;
 
+        InitializeBufferPools();
+        OwnAudioEngineInitialize();
+
+    }
+
+    /// <summary>
+    /// Initializes the PortAudio stream and configures audio parameters.
+    /// </summary>
+    /// <remarks>
+    /// This private method handles the core initialization of the PortAudio system.
+    /// It sets up the callback function, configures input/output parameters,
+    /// initializes host-specific settings for WASAPI or ASIO if detected,
+    /// and opens the audio stream with the specified configuration.
+    /// </remarks>
+    private void OwnAudioEngineInitialize()
+    { 
         unsafe
         {
 #nullable disable
             _paCallback =
             (void* inputBuffer, void* outputBuffer, long frameCount, IntPtr timeInfo, PaStreamCallbackFlags statusFlags, void* userData) =>
             {
+                int expectedOutputSize = (int)(frameCount * (int)_outoptions.Channels);
+                int expectedInputSize = (int)(frameCount * (int)_inputoptions.Channels);
+
                 if (outputBuffer != null && _outoptions.Channels > 0)
                 {
                     float[] outputData = null;
+                    bool needsReturn = false;
 
                     if (_outputBufferQueue.TryDequeue(out outputData))
                     {
-                        if (outputData.Length != frameCount * (int)_outoptions.Channels)
+                        needsReturn = true;
+
+                        if (outputData.Length != expectedOutputSize)
                         {
-                            Array.Resize(ref outputData, (int)(frameCount * (int)_outoptions.Channels));
+                            float[] correctSizeBuffer;
+                            if (!_outputBufferPool.TryTake(out correctSizeBuffer))
+                            {
+                                correctSizeBuffer = new float[expectedOutputSize];
+                            }
+
+                            int copyLength = Math.Min(outputData.Length, expectedOutputSize);
+                            Array.Copy(outputData, correctSizeBuffer, copyLength);
+
+                            _outputBufferPool.Add(outputData);
+
+                            outputData = correctSizeBuffer;
+                            needsReturn = false;
                         }
 
                         Marshal.Copy(outputData, 0, (IntPtr)outputBuffer, outputData.Length);
 
-                        lock (_positionLock)
-                        {
-                            _totalSamplesProcessed += frameCount;
-                        }
+                        if (needsReturn)
+                            _outputBufferPool.Add(outputData);
                     }
                     else
                     {
-                        var silence = new float[(int)(frameCount * (int)_outoptions.Channels)];
-                        Marshal.Copy(silence, 0, (IntPtr)outputBuffer, silence.Length);
-
-                        lock (_positionLock)
-                        {
-                            _totalSamplesProcessed += frameCount;
-                        }
+                        Marshal.Copy(_silenceBuffer, 0, (IntPtr)outputBuffer, expectedOutputSize);
                     }
                 }
 
                 if (inputBuffer != null && _inputoptions.Channels > 0)
                 {
-                    var inputData = new float[(int)(frameCount * (int)_inputoptions.Channels)];
+                    float[] inputData;
+                    if (!_inputBufferPool.TryTake(out inputData) || inputData.Length != expectedInputSize)
+                    {
+                        if (inputData != null)
+                            _inputBufferPool.Add(inputData);
+
+                        inputData = new float[expectedInputSize];
+                    }
+
                     Marshal.Copy((IntPtr)inputBuffer, inputData, 0, inputData.Length);
 
                     while (_inputBufferQueue.Count >= _maxQueueSize)
                     {
                         float[] dummy;
-                        _inputBufferQueue.TryDequeue(out dummy);
+                        if (_inputBufferQueue.TryDequeue(out dummy))
+                            _inputBufferPool.Add(dummy);
                     }
 
                     _inputBufferQueue.Enqueue(inputData);
@@ -316,7 +225,7 @@ public sealed partial class OwnAudioEngine : IAudioEngine
                     new IntPtr(&stream),
                     inparametersPtr,
                     parametersPtr,
-                    outoptions.SampleRate,
+                    _outoptions.SampleRate,
                     FramesPerBuffer,
                     StreamFlags,
                     _paCallback,
@@ -330,9 +239,39 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     }
 
     /// <summary>
-    /// Engine Frames per Buffer
+    /// Gets or sets the number of frames processed per buffer.
     /// </summary>
+    /// <remarks>
+    /// This property defines the size of audio chunks processed in each callback.
+    /// Higher values increase latency but may improve performance.
+    /// </remarks>
     public int FramesPerBuffer { get; private set; } = 512;
+
+    /// <summary>
+    /// Initializes the PortAudio stream and configures audio parameters.
+    /// </summary>
+    /// <remarks>
+    /// This private method handles the core initialization of the PortAudio system.
+    /// It sets up the callback function, configures input/output parameters,
+    /// initializes host-specific settings for WASAPI or ASIO if detected,
+    /// and opens the audio stream with the specified configuration.
+    /// </remarks>   
+    private void InitializeBufferPools()
+    {
+        int outputBufferSize = FramesPerBuffer * (int)_outoptions.Channels;
+        int inputBufferSize = FramesPerBuffer * (int)_inputoptions.Channels;
+
+        _silenceBuffer = new float[outputBufferSize];
+
+        for (int i = 0; i < _maxQueueSize * 2; i++)
+        {
+            if (_outoptions.Channels > 0)
+                _outputBufferPool.Add(new float[outputBufferSize]);
+
+            if (_inputoptions.Channels > 0)
+                _inputBufferPool.Add(new float[inputBufferSize]);
+        }
+    }
 
     /// <summary>
     /// Creates a WASAPI host API specific stream information structure.
@@ -401,7 +340,7 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     public IntPtr GetStream() { return _stream; }
 
     /// <summary>
-    /// Checks if the audio engine is currently active.
+    /// Checks the active state of the audio engine.
     /// </summary>
     /// <returns>
     /// 0 - the engine is not playing or recording
@@ -409,12 +348,13 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// negative value if there is an error
     /// </returns>
     /// <remarks>
-    /// This function checks the activity state of the audio engine.
+    /// This method calls the PortAudio Pa_IsStreamActive function to determine
+    /// if the audio stream is currently active (playing or recording).
     /// </remarks>
     public int OwnAudioEngineActivate() { return Pa_IsStreamActive(_stream); }
 
     /// <summary>
-    /// Checks if the audio engine is currently stopped.
+    /// Checks the stopped state of the audio engine.
     /// </summary>
     /// <returns>
     /// 0 - the engine is running
@@ -422,113 +362,32 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// negative value if there is an error
     /// </returns>
     /// <remarks>
-    /// This function checks the stopped state of the audio engine.
+    /// This method calls the PortAudio Pa_IsStreamStopped function to determine
+    /// if the audio stream is currently in a stopped state.
     /// </remarks>
     public int OwnAudioEngineStopped() { return Pa_IsStreamStopped(_stream); }
 
-    /// <summary>
-    /// Gets the current playback position in samples.
-    /// </summary>
-    /// <returns>The current playback position expressed in samples.</returns>
-    /// <remarks>
-    /// This function returns the number of audio samples that have been processed
-    /// since the start of playback or since the last position reset.
-    /// </remarks>
-    public long GetCurrentPosition()
-    {
-        lock (_positionLock)
-        {
-            return _totalSamplesProcessed;
-        }
-    }
-
-    /// <summary>
-    /// Gets the current playback position in seconds.
-    /// </summary>
-    /// <returns>The current playback position expressed in seconds.</returns>
-    /// <remarks>
-    /// This function returns the playback time in seconds by converting the
-    /// sample position using the configured sample rate.
-    /// </remarks>
-    public double GetCurrentPositionInSeconds()
-    {
-        if (_isPlaying)
-        {
-            double elapsedTime = _playbackTimer.Elapsed.TotalSeconds;
-
-            lock (_positionLock)
-            {
-                double portAudioTime = (double)_totalSamplesProcessed / _outoptions.SampleRate;
-                return (elapsedTime + portAudioTime) / 2.0;
-            }
-        }
-        else
-        {
-            lock (_positionLock)
-            {
-                return (double)_totalSamplesProcessed / _outoptions.SampleRate;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets the estimated latency in samples.
-    /// </summary>
-    /// <returns>The latency expressed in samples.</returns>
-    /// <remarks>
-    /// This function calculates the difference between the number of samples
-    /// queued and the number of samples processed, which represents the
-    /// current latency of the audio engine.
-    /// </remarks>
-    public long GetCurrentLatencyInSamples()
-    {
-        lock (_positionLock)
-        {
-            return _totalSamplesQueued - _totalSamplesProcessed;
-        }
-    }
-
-    /// <summary>
-    /// Resets the position counters of the audio engine.
-    /// </summary>
-    /// <remarks>
-    /// This function resets both the processed samples counter and the
-    /// queued samples counter to zero, effectively resetting the playback position.
-    /// </remarks>
-    public void ResetPosition()
-    {
-        lock (_positionLock)
-        {
-            _totalSamplesProcessed = 0;
-            _totalSamplesQueued = 0;
-
-            float[] dummy;
-#nullable disable
-            while (_outputBufferQueue.TryDequeue(out dummy)) { }
-            while (_inputBufferQueue.TryDequeue(out dummy)) { }
-#nullable restore
-        }
-    }
 
     /// <summary>
     /// Starts the audio engine.
     /// </summary>
     /// <returns>Error code from the PortAudio library (0 means success).</returns>
     /// <remarks>
-    /// This function starts the audio stream and resets the position counters.
+    /// This function starts the audio stream and begins processing.
     /// It should be called before sending audio data to the engine.
+    /// The return value should be checked to ensure the stream started successfully.
     /// </remarks>
     public int Start()
     {
-        lock (_positionLock)
-        {
-            _totalSamplesProcessed = 0;
-            _totalSamplesQueued = 0;
-        }
+        float[]? buffer;
+        while (_outputBufferQueue.TryDequeue(out buffer))
+            _outputBufferPool.Add(buffer);
 
-        _playbackTimer.Reset();
-        _playbackTimer.Start();
-        _isPlaying = true;
+        while (_inputBufferQueue.TryDequeue(out buffer))
+            _inputBufferPool.Add(buffer);
+
+        if (_silenceBuffer != null)
+            Array.Clear(_silenceBuffer, 0, _silenceBuffer.Length);
 
         return Pa_StartStream(_stream).PaGuard();
     }
@@ -539,18 +398,19 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// <returns>Error code from the PortAudio library (0 means success).</returns>
     /// <remarks>
     /// This function stops the audio stream and clears all internal buffers.
+    /// Any pending audio data in the queues is returned to the buffer pools.
+    /// The return value should be checked to ensure the stream stopped successfully.
     /// </remarks>
     public int Stop()
     {
-#nullable disable
-        _playbackTimer.Stop();
-        _isPlaying = false;
-
         int result = Pa_StopStream(_stream).PaGuard();
 
-        float[] dummy;
-        while (_outputBufferQueue.TryDequeue(out dummy)) { }
-        while (_inputBufferQueue.TryDequeue(out dummy)) { }
+        float[]? buffer;
+        while (_outputBufferQueue.TryDequeue(out buffer))
+            _outputBufferPool.Add(buffer);
+
+        while (_inputBufferQueue.TryDequeue(out buffer))
+            _inputBufferPool.Add(buffer);
 
         return result;
 #nullable restore
@@ -563,19 +423,24 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// <remarks>
     /// This function queues audio data for playback. If the output queue is full,
     /// it will wait briefly and retry. Each sample array should contain interleaved
-    /// audio data for all channels.
+    /// audio data for all channels according to the configured format.
+    /// The samples span should contain exactly FramesPerBuffer * Channels elements.
     /// </remarks>
     public void Send(Span<float> samples)
     {
         if (_outputBufferQueue.Count < _maxQueueSize)
         {
-            var data = samples.ToArray();
-            _outputBufferQueue.Enqueue(data);
-
-            lock (_positionLock)
+            float[]? buffer;
+            if (!_outputBufferPool.TryTake(out buffer) || buffer.Length != samples.Length)
             {
-                _totalSamplesQueued += samples.Length / (int)_outoptions.Channels;
+                if (buffer != null)
+                    _outputBufferPool.Add(buffer);
+
+                buffer = new float[samples.Length];
             }
+
+            samples.CopyTo(buffer);
+            _outputBufferQueue.Enqueue(buffer);
         }
         else
         {
@@ -583,13 +448,17 @@ public sealed partial class OwnAudioEngine : IAudioEngine
 
             if (_outputBufferQueue.Count < _maxQueueSize)
             {
-                var data = samples.ToArray();
-                _outputBufferQueue.Enqueue(data);
-
-                lock (_positionLock)
+                float[]? buffer;
+                if (!_outputBufferPool.TryTake(out buffer) || buffer.Length != samples.Length)
                 {
-                    _totalSamplesQueued += samples.Length / (int)_outoptions.Channels;
+                    if (buffer != null)
+                        _outputBufferPool.Add(buffer);
+
+                    buffer = new float[samples.Length];
                 }
+
+                samples.CopyTo(buffer);
+                _outputBufferQueue.Enqueue(buffer);
             }
         }
     }
@@ -602,7 +471,8 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// This function attempts to retrieve audio data from the input queue.
     /// If no data is immediately available, it will wait briefly for data
     /// to arrive. If no data arrives within the timeout period, it will
-    /// return an empty buffer.
+    /// return an empty buffer. The samples array will contain interleaved
+    /// audio data for all input channels.
     /// </remarks>
     public void Receives(out float[] samples)
     {
@@ -623,7 +493,15 @@ public sealed partial class OwnAudioEngine : IAudioEngine
 
         if (samples == null)
         {
-            samples = new float[FramesPerBuffer * (int)_inputoptions.Channels];
+            if (!_inputBufferPool.TryTake(out samples) || samples.Length != FramesPerBuffer * (int)_inputoptions.Channels)
+            {
+                if (samples != null)
+                    _inputBufferPool.Add(samples);
+
+                samples = new float[FramesPerBuffer * (int)_inputoptions.Channels];
+            }
+
+            Array.Clear(samples, 0, samples.Length);
         }
 #nullable restore
     }
@@ -634,15 +512,34 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// <remarks>
     /// This function stops and closes the audio stream, frees any allocated
     /// memory for host-specific stream information, and releases the GC handle
-    /// for the callback. It should be called when the audio engine is no longer needed.
+    /// for the callback. It clears all buffer pools and marks the instance as disposed.
+    /// This method is called automatically when the object is garbage collected.
     /// </remarks>
     public void Dispose()
     {
         if (_disposed || _stream == IntPtr.Zero)
             return;
 
-        Pa_AbortStream(_stream);
-        Pa_CloseStream(_stream);
+        if (_stream != IntPtr.Zero)
+        {
+            try
+            {
+                Pa_AbortStream(_stream);
+                Pa_CloseStream(_stream);
+            }
+            catch (PortAudioException pae)
+            {
+                Debug.WriteLine($"Error closing PortAudio stream: {pae.Message})");
+            }
+            _stream = IntPtr.Zero;
+        }
+
+        float[]? buffer;
+        while (_outputBufferQueue.TryDequeue(out buffer))
+            _outputBufferPool.Add(buffer);
+
+        while (_inputBufferQueue.TryDequeue(out buffer))
+            _inputBufferPool.Add(buffer);
 
         if (inHostApiSpecific != IntPtr.Zero)
             Marshal.FreeHGlobal(inHostApiSpecific);
@@ -652,6 +549,10 @@ public sealed partial class OwnAudioEngine : IAudioEngine
 
         if (_callbackHandle.IsAllocated)
             _callbackHandle.Free();
+
+        _inputBufferPool.Clear();
+        _outputBufferPool.Clear();
+        _silenceBuffer = null;
 
         _disposed = true;
     }
