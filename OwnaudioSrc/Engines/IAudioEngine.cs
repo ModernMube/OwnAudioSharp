@@ -39,17 +39,6 @@ public interface IAudioEngine : IDisposable
     int OwnAudioEngineStopped();
 
     /// <summary>
-    /// Gets the current playback position in seconds.
-    /// </summary>
-    /// <returns>The current playback position expressed in seconds.</returns>
-    double GetCurrentPositionInSeconds();
-
-    /// <summary>
-    /// Resets the position counters of the audio engine.
-    /// </summary>
-    void ResetPosition();
-
-    /// <summary>
     /// Audio engine start
     /// </summary>
     /// <returns>Error code</returns>

@@ -14,7 +14,6 @@ namespace Ownaudio.Sources
     {
         private AudioEngineInputOptions _inputoptions;
         private bool _disposed;
-        private float _oldVolume;
 
         /// <summary>
         /// Initializes <see cref="SourceInput"/>
