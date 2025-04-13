@@ -37,6 +37,14 @@ You can add this library to your project via NuGet (when published) or by direct
 
 You will find the required files in the LIBS folder in a compressed file. 
 Extract the package appropriate for your operating system into the folder containing the compressed file.
+You can also extract the files to a different folder than the default one. 
+In this case, you will need to specify its path when initializing OwnAudio.
+
+```csharp
+// Initialize Ownaudio
+OwnAudio.Initialize("/ffmpegpath");
+```
+
 Depending on your operating system, you will need the following:
 
 #### Windows
