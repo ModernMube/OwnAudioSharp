@@ -1,3 +1,15 @@
+<a href="../../wiki/OwnAudio-first-steps">
+  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20first%20step-blue" alt="Wiki OwnAudio first steps">
+</a>
+
+<a href="../../wiki/How-to-use-OwnAudio's-built‐in-effects">
+  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20FX%20processor-blue" alt="Wiki OwnAudio FX processor">
+</a>
+
+<a href="https://www.buymeacoffee.com/ModernMube">
+  <img src="https://img.shields.io/badge/Support-Buy%20Me%20A%20Coffe-yellow" alt="Buy Me a Coffe">
+</a>
+
 # Ownaudio
 
 Ownaudio is a cross-platform C# audio library that provides a high-level API for audio playback, recording, and processing. It leverages FFmpeg for audio decoding and PortAudio for audio I/O, offering a simple and unified interface for audio operations.
