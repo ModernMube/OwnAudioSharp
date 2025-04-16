@@ -14,6 +14,13 @@
 
 Ownaudio is a cross-platform C# audio library that provides a high-level API for audio playback, recording, and processing. It leverages FFmpeg for audio decoding and PortAudio for audio I/O, offering a simple and unified interface for audio operations.
 
+<a href="../../wiki/OwnAudio-Library-Documentation">
+  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20library%20documentation-green" alt="Wiki OwnAudio Library Documentation">
+</a>
+
+<a href="../../wiki/SourceManager-Documentation">
+  <img src="https://img.shields.io/badge/Wiki-SourceManager%20documentation-green" alt="Wiki Source manager documentation">
+</a>
 
 ## Features
 
