@@ -1,4 +1,6 @@
-<a href="../../wiki/OwnAudio-first-steps">
+ <img src="Ownaudiologo.png" alt="Logó" width="600"/>
+
+ <a href="../../wiki/OwnAudio-first-steps">
   <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20first%20step-blue" alt="Wiki OwnAudio first steps">
 </a>
 
@@ -10,21 +12,7 @@
   <img src="https://img.shields.io/badge/Support-Buy%20Me%20A%20Coffe-yellow" alt="Buy Me a Coffe">
 </a>
 
- <img src="Ownaudiologo.png" alt="Logó" width="600"/>
-
 Ownaudio is a cross-platform C# audio library that provides a high-level API for audio playback, recording, and processing. It leverages FFmpeg for audio decoding and PortAudio for audio I/O, offering a simple and unified interface for audio operations.
-
-<a href="../../wiki/OwnAudio-Library-Documentation">
-  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20library%20documentation-green" alt="Wiki OwnAudio Library Documentation">
-</a>
-
-<a href="../../wiki/Ownaudio-SourceManager-Class-Documentation">
-  <img src="https://img.shields.io/badge/Wiki-SourceManager%20documentation-green" alt="Wiki Source manager documentation">
-</a>
-
-<a href="../../wiki/Ownaudio-Source-Class-Documentation">
-  <img src="https://img.shields.io/badge/Wiki-Source%20documentation-green" alt="Wiki Source documentation">
-</a>
 
 ## Features
 
@@ -37,6 +25,18 @@ Ownaudio is a cross-platform C# audio library that provides a high-level API for
 - **Seeking** within audio files
 - **Real-time audio processing** with custom sample processors
 - **Audio data visualize** customizable waveform display
+
+<a href="../../wiki/OwnAudio-Library-Documentation">
+  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20library%20documentation-green" alt="Wiki OwnAudio Library Documentation">
+</a>
+
+<a href="../../wiki/Ownaudio-SourceManager-Class-Documentation">
+  <img src="https://img.shields.io/badge/Wiki-SourceManager%20documentation-green" alt="Wiki Source manager documentation">
+</a>
+
+<a href="../../wiki/Ownaudio-Source-Class-Documentation">
+  <img src="https://img.shields.io/badge/Wiki-Source%20documentation-green" alt="Wiki Source documentation">
+</a>
 
 ## Prerequisites
 
