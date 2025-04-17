@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/Support-Buy%20Me%20A%20Coffe-yellow" alt="Buy Me a Coffe">
 </a>
 
- # Ownaudio
+ <img src="Ownaudiologo.png" alt="Logó" width="600"/>
 
 Ownaudio is a cross-platform C# audio library that provides a high-level API for audio playback, recording, and processing. It leverages FFmpeg for audio decoding and PortAudio for audio I/O, offering a simple and unified interface for audio operations.
 
