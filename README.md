@@ -18,8 +18,12 @@ Ownaudio is a cross-platform C# audio library that provides a high-level API for
   <img src="https://img.shields.io/badge/Wiki-OwnAudio%20library%20documentation-green" alt="Wiki OwnAudio Library Documentation">
 </a>
 
-<a href="../../wiki/SourceManager-Documentation">
+<a href="../../wiki/Ownaudio-SourceManager-Class-Documentation">
   <img src="https://img.shields.io/badge/Wiki-SourceManager%20documentation-green" alt="Wiki Source manager documentation">
+</a>
+
+<a href="../../wiki/Ownaudio-Source-Class-Documentation">
+  <img src="https://img.shields.io/badge/Wiki-Source%20documentation-green" alt="Wiki Source documentation">
 </a>
 
 ## Features
