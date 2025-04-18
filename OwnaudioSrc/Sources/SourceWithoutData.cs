@@ -14,10 +14,8 @@ namespace Ownaudio.Sources;
 /// </summary>
 public partial class SourceWithoutData : ISource
 {
-    private const int MinQueueSize = 2;
     private const int MaxQueueSize = 12;
-    private bool _disposed;
-    private int FixedBufferSize;  
+    private bool _disposed; 
     private readonly int FramesPerBuffer;
     private readonly object lockObject = new object();
 
@@ -29,7 +27,6 @@ public partial class SourceWithoutData : ISource
         VolumeProcessor = new VolumeProcessor {  Volume = 1.0f  };
         SourceSampleData = new ConcurrentQueue<float[]>();
 
-        FixedBufferSize = SourceManager.EngineFramesPerBuffer;
         FramesPerBuffer = SourceManager.EngineFramesPerBuffer;
 
         Duration = new TimeSpan(0, 1, 0);

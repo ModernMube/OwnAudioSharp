@@ -73,6 +73,7 @@ namespace Microphone
 
     public class MasterProcessor : SampleProcessorBase
     {
+        //Master compressor
         Compressor compressor = new Compressor
         (
             threshold: 0.5f,    // -6 dB
