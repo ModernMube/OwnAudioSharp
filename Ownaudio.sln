@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PitchTempo", "Examples\Pitc
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AudioEngine", "Examples\AudioEngine\AudioEngine.csproj", "{7CA06F44-6D2F-41FA-89C9-0BEA50E43917}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RealTimeData", "Examples\RealTimeData\RealTimeData.csproj", "{2AF32FAF-8F64-4E6C-B8B6-D294581A28BA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -51,6 +53,10 @@ Global
 		{7CA06F44-6D2F-41FA-89C9-0BEA50E43917}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7CA06F44-6D2F-41FA-89C9-0BEA50E43917}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7CA06F44-6D2F-41FA-89C9-0BEA50E43917}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2AF32FAF-8F64-4E6C-B8B6-D294581A28BA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2AF32FAF-8F64-4E6C-B8B6-D294581A28BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2AF32FAF-8F64-4E6C-B8B6-D294581A28BA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2AF32FAF-8F64-4E6C-B8B6-D294581A28BA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
