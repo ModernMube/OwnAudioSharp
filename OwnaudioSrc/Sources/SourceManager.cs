@@ -159,6 +159,9 @@ namespace Ownaudio.Sources
 
             Logger?.LogInfo("Real-time source added.");
 
+            if (!IsLoaded)
+                AddEmptyOutputSource().Wait();
+
             return source;
         }
 
