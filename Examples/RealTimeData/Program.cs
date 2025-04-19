@@ -11,7 +11,7 @@ namespace RealTimeData
             {
                 SourceManager manager = SourceManager.Instance;
 
-                SourceSound source = manager.AddRealTimeSource(0.4f);
+                SourceSound source = manager.AddRealTimeSource(initialVolume: 0.4f, dataChannels: 1);
 
                 manager.Play();
 
