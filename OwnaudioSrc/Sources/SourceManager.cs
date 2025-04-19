@@ -133,17 +133,18 @@ namespace Ownaudio.Sources
                 SourcesInput[SourcesInput.Count - 1].Volume = inputVolume;
             }
 
-            return Task.FromResult(IsRecorded);            
+            return Task.FromResult(IsRecorded);
         }
 
         /// <summary>
         /// Adds a new real-time sample-based source to the mix.
         /// </summary>
         /// <param name="initialVolume">Initial volume for the source (default: 1.0f)</param>
+        /// <param name="dataChannels">Specifies the number of channels for input data. Default: 2 channels</param>
         /// <returns>The created SoundSource instance</returns>
-        public SourceSound AddRealTimeSource(float initialVolume = 1.0f)
+        public SourceSound AddRealTimeSource(float initialVolume = 1.0f, int dataChannels = 2)
         {
-            var source = new SourceSound()
+            var source = new SourceSound(dataChannels)
             {
                 Volume = initialVolume,
                 Logger = Logger
