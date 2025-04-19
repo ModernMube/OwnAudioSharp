@@ -62,12 +62,12 @@ public interface ISource : IDisposable
     /// <summary>
     /// Gets or sets custom sample processor.
     /// </summary>
-    SampleProcessorBase CustomSampleProcessor { get; set; }
+    SampleProcessorBase? CustomSampleProcessor { get; set; }
 
     /// <summary>
     /// Gets or sets logger instance.
     /// </summary>
-    ILogger Logger { get; set; }
+    ILogger? Logger { get; set; }
 
     /// <summary>
     /// Gets queue object that holds queued audio frames.

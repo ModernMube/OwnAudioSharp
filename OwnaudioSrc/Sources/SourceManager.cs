@@ -137,6 +137,32 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
+        /// Adds a new real-time sample-based source to the mix.
+        /// </summary>
+        /// <param name="initialVolume">Initial volume for the source (default: 1.0f)</param>
+        /// <returns>The created SoundSource instance</returns>
+        public SourceSound AddRealTimeSource(float initialVolume = 1.0f)
+        {
+            var source = new SourceSound()
+            {
+                Volume = initialVolume,
+                Logger = Logger
+            };
+
+            Sources.Add(source);
+
+            // Optionally, we can set the maximum Duration value to 10 seconds
+            if (Duration.TotalMilliseconds < 10000)
+                Duration = TimeSpan.FromMilliseconds(10000);
+
+            SetAndRaisePositionChanged(TimeSpan.Zero);
+
+            Logger?.LogInfo("Real-time source added.");
+
+            return source;
+        }
+
+        /// <summary>
         /// Removes the output source
         /// </summary>
         /// <param name="SourceID">The identification number of the source</param>
@@ -174,7 +200,25 @@ namespace Ownaudio.Sources
             AddInputSource();
             return Task.FromResult(true);
         }
-        
+
+        /// <summary>
+        /// Remove the real time samples source
+        /// </summary>
+        /// <param name="source"></param>
+        /// <returns></returns>
+        public bool RemoveRealtimeSource(SourceSound source)
+        {
+            if (Sources.Contains(source))
+            {
+                source.Dispose();
+                Sources.Remove(source);
+                Logger?.LogInfo("Real-time source removed.");
+                return true;
+            }
+
+            return false;
+        }
+
         /// <summary>
         /// Play mixed sources
         /// </summary>
@@ -206,9 +250,6 @@ namespace Ownaudio.Sources
             {
                 return;
             }
-
-            float oldVolume = Volume;
-            Volume = 0f;
 
             if (State == SourceState.Paused)
             {
@@ -251,8 +292,6 @@ namespace Ownaudio.Sources
                 Debug.WriteLine("Engine Initialization Error!");
                 return;
             }
-
-            Volume = oldVolume;
         }
 
         /// <summary>
