@@ -34,37 +34,37 @@
 
   <ItemGroup>
     <None Include="../LICENSE" Pack="true" Visible="false" PackagePath="" />
+    <AvaloniaXaml Remove="Libs\linux-x64\**" />
+    <AvaloniaXaml Remove="Libs\osx-x64\**" />
+    <AvaloniaXaml Remove="Libs\win-x64\**" />
+    <Compile Remove="Libs\linux-x64\**" />
+    <Compile Remove="Libs\osx-x64\**" />
+    <Compile Remove="Libs\win-x64\**" />
     <Compile Remove="nupkg\**" />
+    <EmbeddedResource Remove="Libs\linux-x64\**" />
+    <EmbeddedResource Remove="Libs\osx-x64\**" />
+    <EmbeddedResource Remove="Libs\win-x64\**" />
     <EmbeddedResource Remove="nupkg\**" />
+    <None Remove="Libs\linux-x64\**" />
+    <None Remove="Libs\osx-x64\**" />
+    <None Remove="Libs\win-x64\**" />
     <None Remove="nupkg\**" />
     <None Include="README.md" Pack="true" PackagePath="\" />
     <None Include="ownaudio.png" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Libs\linux-x64\" />
-    <Folder Include="Libs\osx-x64\" />
-    <Folder Include="Libs\win-x64\" />
     <Folder Include="Properties\" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Libs\linux-x64\linux-x64_libs.tar.gz">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="Libs\linux-x64_libs.tar.gz">
+    <None Update="Libs\linux-x64.tar.gz">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="Libs\osx-x64.zip">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Libs\osx-x64\osx-x64.zip">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Update="Libs\win-x64.zip">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="Libs\win-x64\win-x64.zip">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
