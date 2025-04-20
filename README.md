@@ -1,16 +1,12 @@
- <img src="Ownaudiologo.png" alt="Logó" width="600"/>
-
- <a href="../../wiki/OwnAudio-first-steps">
-  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20first%20step-blue" alt="Wiki OwnAudio first steps">
-</a>
-
-<a href="../../wiki/How-to-use-OwnAudio's-built‐in-effects">
-  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20FX%20processor-blue" alt="Wiki OwnAudio FX processor">
-</a>
+<div align="center">
+  <img src="Ownaudiologo.png" alt="Logó" width="600"/>
+</div>
 
 <a href="https://www.buymeacoffee.com/ModernMube">
-  <img src="https://img.shields.io/badge/Support-Buy%20Me%20A%20Coffe-yellow" alt="Buy Me a Coffe">
+  <img src="https://img.shields.io/badge/Support-Buy%20Me%20A%20Coffe-orange" alt="Buy Me a Coffe">
 </a>
+
+##
 
 Ownaudio is a cross-platform C# audio library that provides a high-level API for audio playback, recording, and processing. It leverages FFmpeg for audio decoding and PortAudio for audio I/O, offering a simple and unified interface for audio operations.
 
@@ -26,23 +22,31 @@ Ownaudio is a cross-platform C# audio library that provides a high-level API for
 - **Real-time audio processing** with custom sample processors
 - **Audio data visualize** customizable waveform display
 
+## Documentation
+
+ <a href="../../wiki/OwnAudio-first-steps">
+  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20first%20step-blue" alt="Wiki OwnAudio first steps">
+</a>
+
+<a href="../../wiki/How-to-use-OwnAudio's-built‐in-effects">
+  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20FX%20processor-blue" alt="Wiki OwnAudio FX processor">
+</a>
+
 <a href="../../wiki/OwnAudio-Library-Documentation">
-  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20library-orange" alt="Wiki OwnAudio Library Documentation">
+  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20library-darkgreen" alt="Wiki OwnAudio Library Documentation">
 </a>
 
 <a href="../../wiki/Ownaudio-SourceManager-Class-Documentation">
-  <img src="https://img.shields.io/badge/Wiki-SourceManager-orange" alt="Wiki Source manager documentation">
+  <img src="https://img.shields.io/badge/Wiki-SourceManager-darkgreen" alt="Wiki Source manager documentation">
 </a>
 
 <a href="../../wiki/Ownaudio-Source-Class-Documentation">
-  <img src="https://img.shields.io/badge/Wiki-Source-orange" alt="Wiki Source documentation">
+  <img src="https://img.shields.io/badge/Wiki-Source-darkgreen" alt="Wiki Source documentation">
 </a>
 
 <a href="../../wiki/Ownaudio-Real-Time-Source-Class-Documentation">
-  <img src="https://img.shields.io/badge/Wiki-Real%20time%20source-orange" alt="Wiki Source documentation">
+  <img src="https://img.shields.io/badge/Wiki-Real%20time%20source-darkgreen" alt="Wiki Source documentation">
 </a>
-
-
 
 ## Prerequisites
 
