@@ -1,4 +1,5 @@
 ﻿using Ownaudio;
+using Ownaudio.Engines;
 using Ownaudio.Sources;
 
 namespace RealTimeData
@@ -11,18 +12,18 @@ namespace RealTimeData
             {
                 SourceManager manager = SourceManager.Instance;
 
-                SourceSound source = manager.AddRealTimeSource(initialVolume: 0.4f, dataChannels: 1);
+                SourceSound source = manager.AddRealTimeSource(initialVolume: 0.8f, dataChannels: 1);
 
-                manager.Play();
+                float[] samples = GetAudioSamples(100, 10000, SourceManager.OutputEngineOptions.SampleRate, 20); // Your method to obtain audio samples
 
                 Console.Clear();
                 Console.WriteLine("Hi! Ownaudio user");
-
-                float[] samples = GetAudioSamples(50, 16000, 48000, 20); // Your method to obtain audio samples
+                
+                manager.Play();
                 source.SubmitSamples(samples);
 
                 Console.WriteLine("Press any key to stop...");
-                Console.ReadKey();
+                Console.Read();
 
                 manager.Stop();
 
@@ -44,27 +45,53 @@ namespace RealTimeData
             int numSamples = (int)(sampleRate * duration);
             float[] samples = new float[numSamples];
 
-            double freqRatio = Math.Pow(endFrequency / startFrequency, 1.0 / numSamples);
+            double totalTime = duration;
 
-            double phase = 0;
-            double currentFrequency = startFrequency;
+            double phase = 0.0;
 
             for (int i = 0; i < numSamples; i++)
             {
-                currentFrequency = startFrequency * Math.Pow(freqRatio, i);
+                double timePosition = i / sampleRate;
 
-                double phaseIncrement = 2 * Math.PI * currentFrequency / sampleRate;
-                phase += phaseIncrement;
+                double normalizedPosition = timePosition / totalTime;
+                double currentFrequency = startFrequency * Math.Pow(endFrequency / startFrequency, normalizedPosition);
 
-                while (phase > 2 * Math.PI)
-                {
-                    phase -= 2 * Math.PI;
-                }
+                double angularFrequency = 2.0 * Math.PI * currentFrequency;
 
-                samples[i] = (float)Math.Sin(phase);
+                double instantPhaseIncrement = angularFrequency / sampleRate;
+
+                phase += instantPhaseIncrement;
+
+                samples[i] = Math.Clamp((float)Math.Sin(phase), -1.0f, 1.0f)    ;
             }
+            ApplyFadeInOut(samples, sampleRate, 0.01); // 10 ms fade
 
             return samples;
+        }
+
+        /// <summary>
+        /// Apply fade-in and fade-out at the beginning and end of the signal to avoid clicks
+        /// </summary>
+        /// <param name="samples"></param>
+        /// <param name="sampleRate"></param>
+        /// <param name="fadeTime"></param>
+        private static void ApplyFadeInOut(float[] samples, double sampleRate, double fadeTime)
+        {
+            int fadeLength = (int)(fadeTime * sampleRate);
+
+            fadeLength = Math.Min(fadeLength, samples.Length / 2);
+
+            for (int i = 0; i < fadeLength; i++)
+            {
+                double fadeMultiplier = (double)i / fadeLength;
+                samples[i] *= (float)fadeMultiplier;
+            }
+
+            for (int i = 0; i < fadeLength; i++)
+            {
+                double fadeMultiplier = (double)i / fadeLength;
+                samples[samples.Length - i - 1] *= (float)fadeMultiplier;
+            }
         }
     }
 }
