@@ -9,20 +9,22 @@ namespace Simpleplayer
         {
             if(OwnAudio.Initialize())
             {
-                SourceManager sourceManager = SourceManager.Instance;
+                SourceManager manager = SourceManager.Instance;
 
-                await sourceManager.AddOutputSource("path/audio.mp3");
+                await manager.AddOutputSource("path/audio.mp3");
 
-                sourceManager.Play();
+                manager.Play();
 
                 Console.Clear();
                 Console.WriteLine("Hi! Ownaudio user");
                 Console.WriteLine("Default output device: " + OwnAudio.DefaultOutputDevice.Name);
 
                 Console.WriteLine("Press any key to stop playback...");
-                Console.ReadKey();
+                Console.Read();
 
-                sourceManager.Stop();
+                manager.Stop();
+
+                manager.Reset();
                 OwnAudio.Free();
             }
             else

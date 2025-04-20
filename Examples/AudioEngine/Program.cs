@@ -56,12 +56,12 @@ namespace Simpleplayer
                 SourceManager.InputEngineOptions = _audioInputOptions;
                 SourceManager.EngineFramesPerBuffer = 512;
 
-                SourceManager sourceManager = SourceManager.Instance;
+                SourceManager manager = SourceManager.Instance;
 
-                await sourceManager.AddOutputSource("path/audio.mp3");
-                int track1Number = sourceManager.Sources.Count - 1;
+                await manager.AddOutputSource("D:\\Sogorock\\Ocam\\2025\\Szep julia\\Szép Júlia - Beszkid József (cover)_audio_music.wav");
+                int track1Number = manager.Sources.Count - 1;
 
-                sourceManager.Play();
+                manager.Play();
 
                 Console.Clear();
 
@@ -69,9 +69,11 @@ namespace Simpleplayer
                 Console.WriteLine("Default output device: " + OwnAudio.DefaultOutputDevice.Name);
 
                 Console.WriteLine("Press any key to stop playback...");
-                Console.ReadKey();
+                Console.Read();
 
-                sourceManager.Stop();
+                manager.Stop();
+
+                manager.Reset();
                 OwnAudio.Free();
             }
             else

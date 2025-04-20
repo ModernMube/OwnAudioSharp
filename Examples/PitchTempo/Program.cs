@@ -9,30 +9,32 @@ namespace Simpleplayer
         {
             if (OwnAudio.Initialize())
             {
-                SourceManager sourceManager = SourceManager.Instance;
+                SourceManager manager = SourceManager.Instance;
 
-                await sourceManager.AddOutputSource("path/audio.mp3");
-                int track1Number = sourceManager.Sources.Count - 1;
-                await sourceManager.AddOutputSource("path/audio.mp3");
-                int track2Number = sourceManager.Sources.Count - 1;
+                await manager.AddOutputSource("path/audio_1.mp3");
+                int track1Number = manager.Sources.Count - 1;
+                await manager.AddOutputSource("path/audio_2.mp3");
+                int track2Number = manager.Sources.Count - 1;
 
-                sourceManager.Play();
+                manager.Play();
 
                 Console.Clear();
                 Console.WriteLine("Hi! Ownaudio user");
                 Console.WriteLine("Default output device: " + OwnAudio.DefaultOutputDevice.Name);
 
-                Console.WriteLine("Audio pitch 2 semitone, and tempo -4%");
-                sourceManager.SetPitch(track1Number, 2);
-                sourceManager.SetPitch(track2Number, 2);
+                Console.WriteLine("Audio pitch -2 semitone, and tempo 4%");
+                manager.SetPitch(track1Number, -2);
+                manager.SetPitch(track2Number, -2);
 
-                sourceManager.SetTempo(track1Number, -4);
-                sourceManager.SetTempo(track2Number, -4);
+                manager.SetTempo(track1Number, 4);
+                manager.SetTempo(track2Number, 4);
 
                 Console.WriteLine("Press any key to stop playback...");
-                Console.ReadKey();
+                Console.Read();
 
-                sourceManager.Stop();
+                manager.Stop();
+
+                manager.Reset();
                 OwnAudio.Free();
             }
             else

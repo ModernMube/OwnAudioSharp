@@ -12,25 +12,27 @@ namespace Microphone
 
             if (OwnAudio.Initialize())
             {
-                SourceManager sourceManager = SourceManager.Instance;
+                SourceManager manager = SourceManager.Instance;
 
-                await sourceManager.AddInputSource(inputVolume: 1.0f); //Input volume value 0.0f silence - 1.0f maximum
-                int inputNumber = sourceManager.SourcesInput.Count - 1;
-                sourceManager.SourcesInput[inputNumber].CustomSampleProcessor = new InputProcessor() { IsEnabled = true }; //Fx input
+                await manager.AddInputSource(inputVolume: 1.0f); //Input volume value 0.0f silence - 1.0f maximum
+                int inputNumber = manager.SourcesInput.Count - 1;
+                manager.SourcesInput[inputNumber].CustomSampleProcessor = new InputProcessor() { IsEnabled = true }; //Fx input
 
                 //master FX
-                sourceManager.CustomSampleProcessor = new MasterProcessor() { IsEnabled = true };
+                manager.CustomSampleProcessor = new MasterProcessor() { IsEnabled = true };
 
-                sourceManager.Play();
+                manager.Play();
 
                 Console.Clear();
                 Console.WriteLine("Hi! Ownaudio user");
                 Console.WriteLine("Default input device: " + OwnAudio.DefaultInputDevice.Name);
 
                 Console.WriteLine("Press any key to stop record...");
-                Console.ReadKey();
+                Console.Read();
 
-                sourceManager.Stop();
+                manager.Stop();
+
+                manager.Reset();
                 OwnAudio.Free();
             }
             else
@@ -58,7 +60,7 @@ namespace Microphone
 
         Delay delay = new Delay
         (
-            time: 310,      // Delay time 310 ms
+            time: 210,      // Delay time 310 ms
             repeat: 0.4f,   // Rate of delayed signal feedback to the input 40%
             mix: 0.15f,     // Delayed signal ratio in the mix 15%
             sampleRate: SourceManager.OutputEngineOptions.SampleRate
@@ -73,7 +75,6 @@ namespace Microphone
 
     public class MasterProcessor : SampleProcessorBase
     {
-        //Master compressor
         Compressor compressor = new Compressor
         (
             threshold: 0.5f,    // -6 dB

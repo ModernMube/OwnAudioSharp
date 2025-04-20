@@ -9,22 +9,24 @@ namespace Microphone
         {
             if(OwnAudio.Initialize())
             {
-                SourceManager sourceManager = SourceManager.Instance;
+                SourceManager manager = SourceManager.Instance;
 
-                await sourceManager.AddInputSource( inputVolume: 1.0f ); //Input volume value 0.0f silence - 1.0f maximum
-                int inputNumber = sourceManager.SourcesInput.Count - 1;
-                sourceManager.SourcesInput[inputNumber].Volume = 0.8f; //Input volume 80%
+                await manager.AddInputSource( inputVolume: 1.0f ); //Input volume value 0.0f silence - 1.0f maximum
+                int inputNumber = manager.SourcesInput.Count - 1;
+                manager.SourcesInput[inputNumber].Volume = 0.8f; //Input volume 80%
 
-                sourceManager.Play();
+                manager.Play();
 
                 Console.Clear();
                 Console.WriteLine("Hi! Ownaudio user");
                 Console.WriteLine("Default input device: " + OwnAudio.DefaultInputDevice.Name);
 
                 Console.WriteLine("Press any key to stop record...");
-                Console.ReadKey();
+                Console.Read();
 
-                sourceManager.Stop();
+                manager.Stop();
+
+                manager.Reset();
                 OwnAudio.Free();
             }
             else
