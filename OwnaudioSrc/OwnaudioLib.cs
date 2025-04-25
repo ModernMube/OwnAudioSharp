@@ -34,9 +34,9 @@ public static partial class OwnAudio
     /// Leave the directory parameter blank to use system-level directories. 
     /// Exits if already initialized.
     /// </summary>
-    /// <param name="ffmpegPath">Path to FFmpeg native libraries, leave blank to use system level libraries.</param>
+    /// <param name="libraryPath">Path to FFmpeg native libraries, leave blank to use system level libraries.</param>
     /// <param name="hostType">Sets the audio api to be used.</param>
-    public static bool Initialize(string? ffmpegPath, OwnAudioEngine.EngineHostType hostType = OwnAudioEngine.EngineHostType.None)
+    public static bool Initialize(string? libraryPath, OwnAudioEngine.EngineHostType hostType = OwnAudioEngine.EngineHostType.None)
     {
         lock (_initLock)
         {
@@ -52,20 +52,20 @@ public static partial class OwnAudio
                 else if (cpuArchitec == Architecture.X64)
                     pathPortAudio = Path.Combine("/opt", "local", "lib", $"libportaudio.{ridext.Item2}");
 
-            if (!File.Exists(pathPortAudio) && ffmpegPath is not null)
-                pathPortAudio = Path.Combine(ffmpegPath, $"libportaudio.{ridext.Item2}");
+            if (!File.Exists(pathPortAudio) && libraryPath is not null)
+                pathPortAudio = Path.Combine(libraryPath, $"libportaudio.{ridext.Item2}");
 
             try
             {
                 PortAudioPath = pathPortAudio;
-                FFmpegPath = ffmpegPath;
+                LibraryPath = libraryPath;
 
                 Ensure.That<OwnaudioException>(File.Exists(pathPortAudio), "AudioEngine is not initialized.");
 
                 InitializePortAudio(pathPortAudio, hostType);
                 try
                 {
-                    InitializeFFmpeg(ffmpegPath);
+                    InitializeFFmpeg(libraryPath);
                 }
                 catch (Exception)
                 {
