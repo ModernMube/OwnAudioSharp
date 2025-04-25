@@ -27,7 +27,7 @@ public static partial class OwnAudio
    /// <summary>
    /// It stores FFmpeg's default or specified path.
    /// </summary>
-   public static string? FFmpegPath { get; private set; }
+   public static string? LibraryPath { get; private set; }
 
    /// <summary>
    /// Boolean variable in which we store the value of whether the PortAudio library is initialized or not.
