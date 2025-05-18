@@ -188,7 +188,7 @@ namespace Ownaudio.MiniAudio
 
                 if (result != MaResult.Success)
                 {
-                    MaBinding.ma_free(_device);
+                    MaBinding.ma_free(_device, IntPtr.Zero, "MaEngine device config not success...");
                     _device = IntPtr.Zero;
                     throw new InvalidOperationException($"Failed to initialize the device. Error: {result}");
                 }
@@ -226,7 +226,7 @@ namespace Ownaudio.MiniAudio
 
                 MaBinding.ma_device_stop(_device);
                 MaBinding.ma_device_uninit(_device);
-                MaBinding.ma_free(_device);
+                MaBinding.ma_free(_device, IntPtr.Zero, "MaEngine clean up device...");
                 _device = IntPtr.Zero;
             }
         }
@@ -458,7 +458,7 @@ namespace Ownaudio.MiniAudio
 
                 CleanupCurrentDevice();
                 MaBinding.ma_context_uninit(_context);
-                MaBinding.ma_free(_context);
+                MaBinding.ma_free(_context, IntPtr.Zero, "MaEngine dispose...");
 
                 _isDisposed = true;
             }

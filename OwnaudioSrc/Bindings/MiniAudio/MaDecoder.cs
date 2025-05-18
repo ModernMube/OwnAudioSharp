@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.IO;
+using System.Diagnostics;
 using Ownaudio.Exceptions;
 using static Ownaudio.Bindings.Miniaudio.MaBinding;
 
@@ -54,29 +55,74 @@ namespace Ownaudio.MiniAudio
         {
             _stream = stream ?? throw new ArgumentNullException(nameof(stream));
             SampleFormat = (MaFormat)sampleFormat;
-            _readBuffer = ArrayPool<byte>.Shared.Rent(4096);
+            _readBuffer = ArrayPool<byte>.Shared.Rent(4096); 
 
-            var config = sf_allocate_decoder_config(SampleFormat, (uint)channels, (uint)sampleRate);
+            IntPtr config_ptr_to_free = IntPtr.Zero;
+            try
+            {
+                config_ptr_to_free = sf_allocate_decoder_config(SampleFormat, (uint)channels, (uint)sampleRate);
+                
+                if (config_ptr_to_free == IntPtr.Zero)
+                    throw new OwnaudioException("Failed to allocate decoder config."); 
 
-            _decoder = sf_allocate_decoder();
-            var result = ma_decoder_init(
-                _readCallback = ReadCallback,
-                _seekCallback = SeekCallback,
-                IntPtr.Zero,
-                config,
-                _decoder);
+                _decoder = sf_allocate_decoder();
+                if (_decoder == IntPtr.Zero)
+                {
+                    if (config_ptr_to_free != IntPtr.Zero)
+                    {
+                        ma_free(config_ptr_to_free, IntPtr.Zero, "Decoder config dispose due to decoder allocation failure");
+                        config_ptr_to_free = IntPtr.Zero;
+                    }
+                    throw new OwnaudioException("Failed to allocate decoder.");
+                }
 
-            if (result != MaResult.Success)
-                throw new Exception($"Failed to initialize the decoder. Error: {result}");
+                var result = ma_decoder_init(
+                    _readCallback = ReadCallback,
+                    _seekCallback = SeekCallback,
+                    IntPtr.Zero, 
+                    config_ptr_to_free,
+                    _decoder);
 
-            ulong length;
-            result = ma_decoder_get_length_in_pcm_frames(_decoder, out length);
-            if (result != MaResult.Success)
-                throw new Exception($"Failed to query the decoder length. Error: {result}");
+                if (result != MaResult.Success)
+                {
+                    if (_decoder != IntPtr.Zero)
+                    {
+                        ma_free(_decoder, IntPtr.Zero, $"Decoder dispose due to init failure ({result})");
+                    }
+                    if (config_ptr_to_free != IntPtr.Zero)
+                    {
+                        ma_free(config_ptr_to_free, IntPtr.Zero, $"Decoder config dispose due to init failure ({result})");
+                    }
+                    throw new OwnaudioException($"Failed to initialize the decoder. Error: {result}");
+                }
 
-            Length = (int)length * channels;
-            _channels = channels;
-            _endOfStreamReached = false;
+                if (config_ptr_to_free != IntPtr.Zero)
+                {
+                    ma_free(config_ptr_to_free, IntPtr.Zero, "Decoder config dispose after successful init");
+                    config_ptr_to_free = IntPtr.Zero;
+                }
+
+                ulong length;
+                result = ma_decoder_get_length_in_pcm_frames(_decoder, out length);
+                if (result != MaResult.Success)
+                {
+                    ma_decoder_uninit(_decoder);
+                    ma_free(_decoder,  IntPtr.Zero, $"Decoder dispose due to get_length failure ({result})");
+                    throw new OwnaudioException($"Failed to query the decoder length. Error: {result}");
+                }
+
+                Length = (int)length * channels;
+                _channels = channels;
+                _endOfStreamReached = false;
+            }
+            catch (Exception)
+            {
+                if (config_ptr_to_free != IntPtr.Zero)
+                {
+                    ma_free(config_ptr_to_free, IntPtr.Zero, "Decoder config dispose due to an exception during constructor");
+                }
+                throw;
+            }
         }
 
         /// <summary>
@@ -90,16 +136,16 @@ namespace Ownaudio.MiniAudio
         {
             if (IsDisposed) throw new ObjectDisposedException(nameof(MiniAudioDecoder));
             if (buffer == null) throw new ArgumentNullException(nameof(buffer));
-            if (offset < 0 || count < 0 || offset + count > buffer.Length)
-                throw new ArgumentOutOfRangeException();
+
+            if (offset < 0 || count < 0 || (offset + (long)count * _channels) > buffer.Length)
+                throw new ArgumentOutOfRangeException(nameof(count), "Buffer is too small for the requested offset and count of frames.");
 
             ulong framesToRead = (ulong)count;
             ulong framesRead;
 
             fixed (float* pBufferStart = &buffer[0])
             {
-                int bytesPerFrame = sizeof(float) * _channels;
-                IntPtr nativeBuffer = (IntPtr)(pBufferStart + offset * _channels);
+                IntPtr nativeBuffer = (IntPtr)(pBufferStart + offset);
 
                 MaResult result = ma_decoder_read_pcm_frames(
                     _decoder,
@@ -108,119 +154,91 @@ namespace Ownaudio.MiniAudio
                     out framesRead
                 );
 
-                if (result != MaResult.Success)
+                if (result != MaResult.Success && result != MaResult.AtEnd)
+                {
                     MiniaudioException.ThrowIfError(result, "Miniaudio Decoder Error");
+                }
             }
 
             return (long)framesRead;
         }
 
         /// <summary>
-        /// Gets a native pointer to the appropriate buffer based on the sample format.
-        /// </summary>
-        /// <param name="samples">The float samples span that will eventually hold the data.</param>
-        /// <returns>A pointer to the appropriate native buffer.</returns>
-        private IntPtr GetNativeBufferPointer(Span<float> samples)
-        {
-            switch (SampleFormat)
-            {
-                case MaFormat.S16:
-                    _shortBuffer = ArrayPool<short>.Shared.Rent(samples.Length);
-                    fixed (short* pSamples = _shortBuffer)
-                        return (IntPtr)pSamples;
-                case MaFormat.S24:
-                    _byteBuffer = ArrayPool<byte>.Shared.Rent(samples.Length * 3);
-                    fixed (byte* pSamples = _byteBuffer)
-                        return (IntPtr)pSamples;
-                case MaFormat.S32:
-                    _intBuffer = ArrayPool<int>.Shared.Rent(samples.Length);
-                    fixed (int* pSamples = _intBuffer)
-                        return (IntPtr)pSamples;
-                case MaFormat.U8:
-                    _byteBuffer = ArrayPool<byte>.Shared.Rent(samples.Length);
-                    fixed (byte* pSamples = _byteBuffer)
-                        return (IntPtr)pSamples;
-                case MaFormat.F32:
-                    fixed (float* pSamples = samples)
-                        return (IntPtr)pSamples;
-                default:
-                    throw new NotSupportedException($"Sample format {SampleFormat} is not supported.");
-            }
-        }
-
-        /// <summary>
         /// Converts samples from the native format to float if necessary.
+        /// FIGYELEM: Ez a metódus a GetNativeBufferPointer által potenciálisan
+        /// érvénytelenített pointerrel dolgozhatott. Ha a GetNativeBufferPointer
+        /// nincs használatban, ez a metódus sem releváns.
         /// </summary>
-        /// <param name="samples">The target float samples span.</param>
-        /// <param name="framesRead">Number of frames read.</param>
-        /// <param name="nativeBuffer">Pointer to the native buffer containing the samples.</param>
-        /// <param name="channels">Number of audio channels.</param>
         private void ConvertToFloatIfNecessary(Span<float> samples, uint framesRead, IntPtr nativeBuffer, int channels)
         {
+            if (nativeBuffer == IntPtr.Zero && SampleFormat != MaFormat.F32)
+            {
+                if (SampleFormat != MaFormat.F32)
+                    Debug.WriteLine("ConvertToFloatIfNecessary: nativeBuffer is IntPtr.Zero, skipping conversion for non-F32 format.");
+                return;
+            }
+
             var sampleCount = (int)framesRead * channels;
+
+            if (SampleFormat == MaFormat.F32) return;
+
+            Debug.WriteLineIf(nativeBuffer == IntPtr.Zero, "ConvertToFloatIfNecessary called with IntPtr.Zero for non-F32 format, which is unexpected.");
+
             switch (SampleFormat)
             {
                 case MaFormat.S16:
+                    if (_shortBuffer == null || nativeBuffer == IntPtr.Zero) break;
                     var shortSpan = new Span<short>(nativeBuffer.ToPointer(), sampleCount);
                     for (var i = 0; i < sampleCount; i++)
-                        samples[i] = shortSpan[i] / (float)short.MaxValue;
-                    if (_shortBuffer != null)
-                        ArrayPool<short>.Shared.Return(_shortBuffer);
-                    _shortBuffer = null;
+                        samples[i] = shortSpan[i] / 32767.0f;
                     break;
                 case MaFormat.S24:
-                    var s24Bytes = new Span<byte>(nativeBuffer.ToPointer(), sampleCount * 3); // 3 bytes per sample
+                    if (_byteBuffer == null || nativeBuffer == IntPtr.Zero) break;
+                    var s24Bytes = new Span<byte>(nativeBuffer.ToPointer(), sampleCount * 3);
                     for (var i = 0; i < sampleCount; i++)
                     {
                         var sample24 = (s24Bytes[i * 3] << 0) | (s24Bytes[i * 3 + 1] << 8) | (s24Bytes[i * 3 + 2] << 16);
-                        if ((sample24 & 0x800000) != 0) // Sign extension for negative values
+                        if ((sample24 & 0x800000) != 0)
                             sample24 |= unchecked((int)0xFF000000);
-                        samples[i] = sample24 / 8388608f; // 2^23
+                        samples[i] = sample24 / 8388608.0f;
                     }
-                    if (_byteBuffer != null)
-                        ArrayPool<byte>.Shared.Return(_byteBuffer);
-                    _byteBuffer = null;
                     break;
                 case MaFormat.S32:
+                    if (_intBuffer == null || nativeBuffer == IntPtr.Zero) break;
                     var int32Span = new Span<int>(nativeBuffer.ToPointer(), sampleCount);
                     for (var i = 0; i < sampleCount; i++)
-                        samples[i] = int32Span[i] / (float)int.MaxValue;
-                    if (_intBuffer != null)
-                        ArrayPool<int>.Shared.Return(_intBuffer);
-                    _intBuffer = null;
+                        samples[i] = int32Span[i] / 2147483647.0f;
                     break;
                 case MaFormat.U8:
+                    if (_byteBuffer == null || nativeBuffer == IntPtr.Zero) break;
                     var byteSpan = new Span<byte>(nativeBuffer.ToPointer(), sampleCount);
                     for (var i = 0; i < sampleCount; i++)
-                        samples[i] = (byteSpan[i] - 128) / 128f; // Scale U8 to range -1.0 to 1.0
-                    if (_byteBuffer != null)
-                        ArrayPool<byte>.Shared.Return(_byteBuffer);
-                    _byteBuffer = null;
+                        samples[i] = (byteSpan[i] - 128) / 128.0f;
                     break;
             }
+
+            if (_shortBuffer != null && SampleFormat == MaFormat.S16) { ArrayPool<short>.Shared.Return(_shortBuffer); _shortBuffer = null; }
+            if (_intBuffer != null && SampleFormat == MaFormat.S32) { ArrayPool<int>.Shared.Return(_intBuffer); _intBuffer = null; }
+            if (_byteBuffer != null && (SampleFormat == MaFormat.S24 || SampleFormat == MaFormat.U8)) { ArrayPool<byte>.Shared.Return(_byteBuffer); _byteBuffer = null; }
         }
 
         /// <summary>
         /// Seeks to the specified position in the decoder.
         /// </summary>
-        /// <param name="offset">The position in samples.</param>
-        /// <param name="channels">The number of channels.</param>
+        /// <param name="offsetInSamples">The position in total samples (frames * channels).</param>
+        /// <param name="channelsForFrameCalc">The number of channels to calculate PCM frames for seeking.</param>
         /// <returns>True if the positioning was successful.</returns>
-        public bool Seek(int offset, int channels)
+        public bool Seek(int offsetInSamples, int channelsForFrameCalc)
         {
             lock (_syncLock)
             {
-                if (Length == 0)
-                {
-                    ulong length = 0;
-                    var decoderresult = ma_decoder_get_length_in_pcm_frames(_decoder, out length);
-                    if (decoderresult != MaResult.Success || (int)length == 0)
-                        return false;
-                    Length = (int)length * channels;
-                }
+                if (IsDisposed) return false;
+                if (channelsForFrameCalc <= 0) return false;
+
+                ulong pcmFrameIndex = (ulong)(offsetInSamples / channelsForFrameCalc);
 
                 _endOfStreamReached = false;
-                var result = ma_decoder_seek_to_pcm_frame(_decoder, (ulong)(offset / channels));
+                var result = ma_decoder_seek_to_pcm_frame(_decoder, pcmFrameIndex);
                 return result == MaResult.Success;
             }
         }
@@ -228,39 +246,68 @@ namespace Ownaudio.MiniAudio
         /// <summary>
         /// Callback invoked by the miniaudio library to read data from the stream.
         /// </summary>
-        /// <param name="pDecoder">Pointer to the decoder.</param>
-        /// <param name="pBufferOut">Pointer to the output buffer.</param>
-        /// <param name="bytesToRead">Number of bytes to read.</param>
-        /// <param name="pBytesRead">Number of bytes actually read.</param>
-        /// <returns>Result code of the read operation.</returns>
         private MaResult ReadCallback(IntPtr pDecoder, IntPtr pBufferOut, ulong bytesToRead, out ulong pBytesRead)
         {
             lock (_syncLock)
             {
+                if (IsDisposed)
+                {
+                    pBytesRead = 0;
+                    return MaResult.Error;
+                }
+
                 if (!_stream.CanRead || _endOfStreamReached)
                 {
                     pBytesRead = 0;
-                    return MaResult.NoDataAvailable;
+                    return _endOfStreamReached ? MaResult.AtEnd : MaResult.NoDataAvailable;
                 }
 
                 var size = (int)bytesToRead;
-                if (_readBuffer.Length < size)
-                    Array.Resize(ref _readBuffer, size);
+                if (_readBuffer == null)
+                {
+                    pBytesRead = 0;
+                    return MaResult.Error;
+                }
 
-                var read = _stream.Read(_readBuffer, 0, size);
-                
+                if (_readBuffer.Length < size)
+                {
+                    try
+                    {
+                        ArrayPool<byte>.Shared.Return(_readBuffer, clearArray: false);
+                    }
+                    catch (ArgumentException ex)
+                    {
+                        Debug.WriteLine($"ArrayPool.Return failed in ReadCallback (buffer may have been returned concurrently or is not from pool): {ex.Message}");
+                    }
+                    _readBuffer = ArrayPool<byte>.Shared.Rent(size);
+                }
+
+                var read = 0;
+                try
+                {
+                    read = _stream.Read(_readBuffer, 0, size);
+                }
+                catch (ObjectDisposedException)
+                {
+                    _endOfStreamReached = true;
+                    pBytesRead = 0;
+                    return MaResult.Error;
+                }
+
                 if (read == 0 && !_endOfStreamReached)
                 {
                     _endOfStreamReached = true;
                     EndOfStreamReached?.Invoke(this, EventArgs.Empty);
                 }
 
-                fixed (byte* pReadBuffer = _readBuffer)
+                if (read > 0)
                 {
-                    Buffer.MemoryCopy(pReadBuffer, (void*)pBufferOut, size, read);
+                    fixed (byte* pReadBuffer = _readBuffer)
+                    {
+                        Buffer.MemoryCopy(pReadBuffer, (void*)pBufferOut, bytesToRead, (ulong)read);
+                    }
+                    Array.Clear(_readBuffer, 0, read);
                 }
-
-                Array.Clear(_readBuffer, 0, read);
 
                 pBytesRead = (ulong)read;
                 return MaResult.Success;
@@ -270,19 +317,47 @@ namespace Ownaudio.MiniAudio
         /// <summary>
         /// Callback invoked by the miniaudio library to seek within the stream.
         /// </summary>
-        /// <param name="pDecoder">Pointer to the decoder.</param>
-        /// <param name="byteOffset">Byte offset to seek to.</param>
-        /// <param name="origin">Origin of the seek operation.</param>
-        /// <returns>Result code of the seek operation.</returns>
         private MaResult SeekCallback(IntPtr pDecoder, long byteOffset, SeekPoint origin)
         {
-            lock (_syncLock)
+            lock (_syncLock) //
             {
-                if (!_stream.CanSeek)
-                    return MaResult.NoDataAvailable;
+                if (IsDisposed)
+                {
+                    return MaResult.Error;
+                }
 
-                if (byteOffset >= 0 && byteOffset < _stream.Length - 1)
-                    _stream.Seek(byteOffset, origin == SeekPoint.FromCurrent ? SeekOrigin.Current : SeekOrigin.Begin);
+                if (!_stream.CanSeek)
+                    return MaResult.FormatNotSupported;
+
+                try
+                {
+                    SeekOrigin seekOrigin;
+                    switch (origin)
+                    {
+                        case SeekPoint.FromCurrent:
+                            seekOrigin = SeekOrigin.Current;
+                            break;
+                        case SeekPoint.FromStart:
+                        default:
+                            seekOrigin = SeekOrigin.Begin;
+                            break;
+                    }
+
+                    _stream.Seek(byteOffset, seekOrigin);
+                    _endOfStreamReached = false;
+                }
+                catch (IOException)
+                {
+                    return MaResult.IoError;
+                }
+                catch (ArgumentOutOfRangeException)
+                {
+                    return MaResult.InvalidArgs;
+                }
+                catch (ObjectDisposedException)
+                {
+                    return MaResult.Error;
+                }
 
                 return MaResult.Success;
             }
@@ -316,6 +391,19 @@ namespace Ownaudio.MiniAudio
                 if (IsDisposed)
                     return;
 
+                GC.KeepAlive(_readCallback);
+                GC.KeepAlive(_seekCallback);
+
+                if (_decoder != IntPtr.Zero)
+                {
+                    Debug.WriteLine($"MiniAudioDecoder: Disposing native decoder {_decoder}");
+                    ma_decoder_uninit(_decoder);
+                    Debug.WriteLine($"MiniAudioDecoder: Uninit completed for {_decoder}. Now freeing memory.");
+                    ma_free(_decoder, IntPtr.Zero, "Decoder dispose...");
+                    Debug.WriteLine($"MiniAudioDecoder: Memory freed for former {_decoder}.");
+                }
+
+
                 if (disposeManaged)
                 {
                     if (_shortBuffer != null)
@@ -335,14 +423,21 @@ namespace Ownaudio.MiniAudio
                         ArrayPool<byte>.Shared.Return(_byteBuffer);
                         _byteBuffer = null;
                     }
+
+                    if (_readBuffer != null)
+                    {
+                        try
+                        {
+                            ArrayPool<byte>.Shared.Return(_readBuffer, clearArray: false);
+                        }
+                        catch (ArgumentException ex)
+                        {
+                            Debug.WriteLine($"ArrayPool.Return failed for _readBuffer in Dispose (buffer may have been returned concurrently or is not from pool): {ex.Message}");
+                        }
+                        _readBuffer = null!;
+                    }
+                    EndOfStreamReached = null;
                 }
-
-                GC.KeepAlive(_readCallback);
-                GC.KeepAlive(_seekCallback);
-
-                ma_decoder_uninit(_decoder);
-                ma_free(_decoder);
-
                 IsDisposed = true;
             }
         }
