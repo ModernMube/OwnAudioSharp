@@ -73,7 +73,7 @@ internal static partial class PaBinding
     }
 
     public static int Pa_OpenStream(
-        IntPtr stream,
+        out IntPtr stream,
         IntPtr inputParameters,
         IntPtr outputParameters,
         double sampleRate,
@@ -83,7 +83,7 @@ internal static partial class PaBinding
         IntPtr userData)
     {
         return _openStream(
-            stream,
+            out stream,
             inputParameters,
             outputParameters,
             sampleRate,

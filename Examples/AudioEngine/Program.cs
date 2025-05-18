@@ -17,7 +17,7 @@ namespace Simpleplayer
             }
             if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                ownAudioInit = OwnAudio.Initialize(Ownaudio.Engines.OwnAudioEngine.EngineHostType.CoreAudio);
+                ownAudioInit = OwnAudio.Initialize(Ownaudio.Engines.OwnAudioEngine.EngineHostType.COREAUDIO);
             }
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {

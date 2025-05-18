@@ -35,15 +35,13 @@ public static partial class OwnAudio
     /// <exception cref="OwnaudioException">Throws an exception if no output device is available.</exception>
     private static void InitializePortAudio(string? portAudioPath = default, OwnAudioEngine.EngineHostType hostType = OwnAudioEngine.EngineHostType.None)
     {
-        if (IsPortAudioInitialized)
+        if (IsPortAudioInitialized || string.IsNullOrEmpty(portAudioPath))
         {
             return;
         }
 
-        portAudioPath = string.IsNullOrEmpty(portAudioPath) ? GetPortAudioLibName() : portAudioPath;
-
         PaBinding.InitializeBindings(new LibraryLoader(portAudioPath));
-        PaBinding.Pa_Initialize();
+        PaBinding.Pa_Initialize().PaGuard();
 
         if(hostType == OwnAudioEngine.EngineHostType.None)
         {
@@ -62,7 +60,7 @@ public static partial class OwnAudio
         {
             HostID = PaBinding.Pa_HostApiTypeIdToHostApiIndex(PaBinding.PaHostApiTypeId.paASIO).PaGuard();
         }
-        else if (hostType == OwnAudioEngine.EngineHostType.CoreAudio)
+        else if (hostType == OwnAudioEngine.EngineHostType.COREAUDIO)
         {
             HostID = PaBinding.Pa_HostApiTypeIdToHostApiIndex(PaBinding.PaHostApiTypeId.paCoreAudio).PaGuard();
         }
@@ -108,25 +106,5 @@ public static partial class OwnAudio
         }
 
         IsPortAudioInitialized = true;
-   }
-
-   /// <summary>
-   /// Default name of portaudio, per system.
-   /// </summary>
-   /// <returns></returns>
-   /// <exception cref="NotImplementedException">Throws an exception in the case of an unknown system.</exception>
-   private static string GetPortAudioLibName()
-   {
-      if (PlatformInfo.IsWindows)
-         return "portaudio.dll";
-
-      else if (PlatformInfo.IsLinux)
-         return "libportaudio.so.2";
-
-      else if (PlatformInfo.IsOSX)
-         return "libportaudio.dylib";
-
-      else
-         throw new NotImplementedException();
-   }
+    }
 }

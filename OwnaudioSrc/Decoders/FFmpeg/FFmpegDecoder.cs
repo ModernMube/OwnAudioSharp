@@ -5,7 +5,6 @@ using Ownaudio.Exceptions;
 using Ownaudio.Utilities;
 using Ownaudio.Utilities.Extensions;
 using FFmpeg.AutoGen;
-using Microsoft.Win32.SafeHandles;
 
 namespace Ownaudio.Decoders.FFmpeg;
 
@@ -154,14 +153,14 @@ public sealed unsafe class FFmpegDecoder : IAudioDecoder
     /// <summary>
     /// It processes the specified number of frames
     /// </summary>
-    /// <param name="frameNumber">The number of additional frames to be processed.</param>
     /// <returns></returns>
-    public AudioDecoderResult DecodeNextFrame(int? frameNumber = 0)
+    public AudioDecoderResult DecodeNextFrame()
     {
         lock (_syncLock)
         {
             using var accumulatedData = new MemoryStream();
             double lastPresentationTime = 0;
+            int frameNumber = 0; //Frame number read
 
             for (int i = 0; i <= frameNumber; i++)
             {
@@ -248,7 +247,7 @@ public sealed unsafe class FFmpegDecoder : IAudioDecoder
             double lastPresentationTime = 0;
             while (true)
             {
-                AudioDecoderResult frameResult = DecodeNextFrame(0);
+                AudioDecoderResult frameResult = DecodeNextFrame();
 
                 if (frameResult.IsSucceeded)
                 {

@@ -1,14 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <RuntimeIdentifiers>osx-x64;osx-arm64;win-x64</RuntimeIdentifiers>
-    <OutputType>Library</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFrameworks>net8.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Authors>Modernbit</Authors>
-    <Copyright>Modernbit 2024</Copyright>
-    <Description>A cross platform audio library for .NET with PortAudio and FFmpeg.</Description>
-    <FileVersion>0.25.03</FileVersion>
+    <Copyright>Copyright (c) 2025 LSXPrime</Copyright>
+    <Description>A cross platform audio library for .NET with PortAudio, Miniaudio and FFmpeg.</Description>
+    <FileVersion>0.25.05</FileVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <LangVersion>11</LangVersion>
@@ -16,56 +14,62 @@
     <PackageId>Ownaudio</PackageId>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageProjectUrl>https://github.com/ModernMube/OwnAudioSharp</PackageProjectUrl>
-    <PackageTags>audio,player,ffmpeg,portaudio,sound,multitrack,cross-platform</PackageTags>
+    <PackageIcon>ownaudio.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>audio,player,ffmpeg,portaudio,miniaudio,sound,multitrack,cross-platform</PackageTags>
     <Product>Ownaudio</Product>
     <RepositoryUrl>https://github.com/ModernMube/OwnAudioSharp</RepositoryUrl>
-    <Version>0.25.03</Version>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Version>0.25.05</Version>
     <Authors>ModernMube</Authors>
     <Company>Modernbit</Company>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
+    <SupportedOSPlatformVersion>21.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
+    <SupportedOSPlatformVersion>14.2</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-maccatalyst'">
+    <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.2.7" />
-    <PackageReference Include="FFmpeg.AutoGen" Version="7.0.0" />
+    <PackageReference Include="Avalonia" Version="11.3.0" />
+    <PackageReference Include="FFmpeg.AutoGen" Version="6.1.0.1" />
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
     <PackageReference Include="SoundTouch.Net" Version="2.3.2" />
     <PackageReference Include="System.Memory" Version="4.6.3" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="../LICENSE" Pack="true" Visible="false" PackagePath="" />
-    <AvaloniaXaml Remove="Libs\linux-x64\**" />
-    <AvaloniaXaml Remove="Libs\osx-x64\**" />
-    <AvaloniaXaml Remove="Libs\win-x64\**" />
-    <Compile Remove="Libs\linux-x64\**" />
-    <Compile Remove="Libs\osx-x64\**" />
-    <Compile Remove="Libs\win-x64\**" />
-    <Compile Remove="nupkg\**" />
-    <EmbeddedResource Remove="Libs\linux-x64\**" />
-    <EmbeddedResource Remove="Libs\osx-x64\**" />
-    <EmbeddedResource Remove="Libs\win-x64\**" />
-    <EmbeddedResource Remove="nupkg\**" />
-    <None Remove="Libs\linux-x64\**" />
-    <None Remove="Libs\osx-x64\**" />
-    <None Remove="Libs\win-x64\**" />
-    <None Remove="nupkg\**" />
-    <None Include="README.md" Pack="true" PackagePath="\" />
-    <None Include="ownaudio.png" Pack="true" PackagePath="\" />
+    <Content Include="runtimes\**\*.*">
+      <Link>runtimes\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <PackagePath>runtimes</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+    <Content Include="buildTransitive\**\*.*">
+      <PackagePath>buildTransitive</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\ownaudio.png" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="Properties\" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Update="Libs\linux-x64.tar.gz">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="Libs\osx-x64.zip">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="Libs\win-x64.zip">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
 </Project>

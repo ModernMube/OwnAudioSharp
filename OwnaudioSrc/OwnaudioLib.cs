@@ -4,11 +4,10 @@ using System.IO;
 using System.Diagnostics;
 
 using Ownaudio.Bindings.PortAudio;
-using Ownaudio.Exceptions;
-using Ownaudio.Utilities;
 using Ownaudio.Engines;
 
 using FFmpeg.AutoGen;
+using System.Linq;
 
 namespace Ownaudio;
 /// <summary>
@@ -42,39 +41,77 @@ public static partial class OwnAudio
         {
             var ridext = GetRidAndLibExtensions();
             string? pathPortAudio;
+            string? pathMiniAudio;
             Architecture cpuArchitec = RuntimeInformation.ProcessArchitecture;
 
-            pathPortAudio = System.IO.Path.Combine("libs", ridext.Item1, $"libportaudio.{ridext.Item2}");
+            string? relativeBase = Directory.Exists("runtimes") ? "runtimes" :
+                Directory.EnumerateDirectories(Directory.GetCurrentDirectory(), "runtimes", SearchOption.AllDirectories)
+                    .Select(dirPath => Path.GetRelativePath(Directory.GetCurrentDirectory(), dirPath))
+                    .FirstOrDefault();
 
-            if (!File.Exists(pathPortAudio) && RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            if(string.IsNullOrEmpty(relativeBase))
+                return false;
+
+            pathPortAudio = System.IO.Path.Combine(relativeBase, ridext.Item1, "native", $"libportaudio.{ridext.Item2}");
+            pathMiniAudio = System.IO.Path.Combine(relativeBase, ridext.Item1, "native", $"libminiaudio.{ridext.Item2}");
+
+            if(!File.Exists(pathMiniAudio) && OperatingSystem.IsIOS())
+                pathMiniAudio = System.IO.Path.Combine(relativeBase, ridext.Item1, "native", "miniaudio.framework", "miniaudio");
+
+            if (!File.Exists(pathPortAudio) && OperatingSystem.IsMacOS())
                 if (cpuArchitec == Architecture.Arm64)
-                    pathPortAudio = Path.Combine("/opt", "local", "lib", $"libportaudio.{ridext.Item2}");
+                    pathPortAudio = Path.Combine("/opt", "homebrew", "opt", "portaudio","lib", $"libportaudio.{ridext.Item2}");
                 else if (cpuArchitec == Architecture.X64)
-                    pathPortAudio = Path.Combine("/opt", "local", "lib", $"libportaudio.{ridext.Item2}");
+                    pathPortAudio = Path.Combine("/usr", "local", "opt", "portaudio", "lib", $"libportaudio.{ridext.Item2}");
 
             if (!File.Exists(pathPortAudio) && ffmpegPath is not null)
+            {
                 pathPortAudio = Path.Combine(ffmpegPath, $"libportaudio.{ridext.Item2}");
-
+                if (OperatingSystem.IsLinux())
+                {
+                    switch (cpuArchitec)
+                    {
+                        case Architecture.Arm:
+                            pathPortAudio = Path.Combine("/usr/lib", "arm-linux-gnueabihf", $"libportaudio.{ridext.Item2}.2");
+                            break;
+                        case Architecture.Arm64:
+                            pathPortAudio = Path.Combine("/usr/lib", "aarch64-linux-gnu", $"libportaudio.{ridext.Item2}.2");
+                            break;
+                        case Architecture.X64:
+                            pathPortAudio = Path.Combine("/usr/lib", "x86_64-linux-gnu", $"libportaudio.{ridext.Item2}.2");
+                            break;    
+                        case Architecture.X86:
+                            pathPortAudio = Path.Combine("/usr/lib", "i386-linux-gnu", $"libportaudio.{ridext.Item2}.2");
+                            break; 
+                        default:    
+                            pathPortAudio = Path.Combine("/usr/lib", $"libportaudio.{ridext.Item2}.2");
+                            break; 
+                    }
+                }
+            }
+            
             try
             {
-                PortAudioPath = pathPortAudio;
+                PortAudioPath = pathPortAudio;      
+                MiniAudioPath = pathMiniAudio;
                 FFmpegPath = ffmpegPath;
-
-                Ensure.That<OwnaudioException>(File.Exists(pathPortAudio), "AudioEngine is not initialized.");
-
-                InitializePortAudio(pathPortAudio, hostType);
+                
                 try
                 {
+                    InitializeMa(pathMiniAudio, hostType);
+                    InitializePortAudio(pathPortAudio, hostType);
+                    
                     InitializeFFmpeg(ffmpegPath);
                 }
                 catch (Exception)
                 {
-                    // If FFmpeg initialization throws an error, free up PortAudio resources
-                    Free();
-                    throw;
+                    Debug.WriteLine("Audio initialize error.");
                 }
 
-                if (IsFFmpegInitialized && IsPortAudioInitialized)
+                //IsFFmpegInitialized = false;
+                //IsPortAudioInitialized = false;
+                
+                if (IsMiniAudioInitialized)
                     return true;
                 else
                     return false;
@@ -118,18 +155,57 @@ public static partial class OwnAudio
     /// <exception cref="NotSupportedException"></exception>
     private static (string, string) GetRidAndLibExtensions()
     {
-        if (PlatformInfo.IsWindows)
+        if (OperatingSystem.IsWindows())
         {
-            var rid = Environment.Is64BitOperatingSystem ? "win-x64" : "win-x86";
-            return (rid, "dll");
+            return RuntimeInformation.ProcessArchitecture switch
+            {
+                Architecture.X64 => ("win-x64", "dll"),
+                Architecture.X86 => ("win-x86", "dll"),
+                Architecture.Arm64 => ("win-arm64", "dll"),
+                _ => throw new PlatformNotSupportedException(
+                        $"Unsupported Windows architecture: {RuntimeInformation.ProcessArchitecture}")
+            };
         }
-        else if (PlatformInfo.IsLinux)
+        else if (OperatingSystem.IsLinux())
         {
-            return ("linux-x64", "so.2");
+            return RuntimeInformation.ProcessArchitecture switch
+            {
+                Architecture.X64 => ("linux-x64", "so"),
+                Architecture.Arm => ("linux-arm", "so"),
+                Architecture.Arm64 => ("linux-arm64", "so"),
+                _ => throw new PlatformNotSupportedException(
+                        $"unsupported Linux architecture: {RuntimeInformation.ProcessArchitecture}"),
+            };
         }
-        else if (PlatformInfo.IsOSX)
+        else if (OperatingSystem.IsMacOS())
         {
-            return ("osx-x64", "dylib");
+            return RuntimeInformation.ProcessArchitecture switch
+            {
+                Architecture.X64 => ("osx-x64", "dylib"),
+                Architecture.Arm64 => ("osx-arm64", "dylib"),
+                _ => throw new PlatformNotSupportedException(
+                        $"unsupported MacOS architecture: {RuntimeInformation.ProcessArchitecture}"),
+            };
+        }
+        else if (OperatingSystem.IsAndroid())
+        {
+            return RuntimeInformation.ProcessArchitecture switch
+            {
+                Architecture.X64 => ("android-x64", "so"),
+                Architecture.Arm => ("android-arm", "so"),
+                Architecture.Arm64 => ("android-arm64", "so"),
+                _ => throw new PlatformNotSupportedException(
+                        $"unsupported Android architecture: {RuntimeInformation.ProcessArchitecture}"),
+            };
+        }
+        else if (OperatingSystem.IsIOS())
+        {
+            return RuntimeInformation.ProcessArchitecture switch
+            {
+                Architecture.Arm64 => ("ios-arm64", ""),
+                _ => throw new PlatformNotSupportedException(
+                        $"unsupported IOS architecture: {RuntimeInformation.ProcessArchitecture}"),
+            };
         }
         else
         {

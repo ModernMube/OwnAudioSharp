@@ -234,7 +234,9 @@ public partial class SourceWithoutData : ISource
         EngineThread = null;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Dispose
+    /// </summary>
     public virtual void Dispose()
     {
         if (_disposed)
