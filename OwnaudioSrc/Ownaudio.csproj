@@ -3,15 +3,15 @@
     <TargetFrameworks>net8.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Authors>Modernbit</Authors>
+    <Authors>ModernMube</Authors>
     <Copyright>Copyright (c) 2025 LSXPrime</Copyright>
     <Description>A cross platform audio library for .NET with PortAudio, Miniaudio and FFmpeg.</Description>
-    <FileVersion>0.25.05</FileVersion>
+    <FileVersion>0.25.5</FileVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <LangVersion>11</LangVersion>
     <NoWarn>IDE0090</NoWarn>
-    <PackageId>Ownaudio</PackageId>
+    <PackageId>OwnAudioSharp</PackageId>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageProjectUrl>https://github.com/ModernMube/OwnAudioSharp</PackageProjectUrl>
     <PackageIcon>ownaudio.png</PackageIcon>
@@ -24,7 +24,7 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <Version>0.25.05</Version>
+    <Version>0.25.5-preview.1</Version>
     <Authors>ModernMube</Authors>
     <Company>Modernbit</Company>
   </PropertyGroup>
