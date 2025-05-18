@@ -3,348 +3,365 @@ using System.Buffers;
 using System.IO;
 using System.Diagnostics;
 using Ownaudio.MiniAudio;
-using Ownaudio.Decoders.FFmpeg;
+ using Ownaudio.Decoders.FFmpeg;
 
-namespace Ownaudio.Decoders.MiniAudio;
-
-/// <summary>
-/// A class that uses MiniAudio for decoding and demuxing specified audio source.
-/// This class cannot be inherited.
-/// Process description:
-/// 
-/// <para>Implements: <see cref="IAudioDecoder"/>.</para>
-/// </summary>
-public sealed class MiniDecoder : IAudioDecoder
+namespace Ownaudio.Decoders.MiniAudio
 {
-    private MiniAudioDecoder? _decoder;
-    private readonly object _syncLock = new object();
-    private readonly Stream _inputStream;
-    private bool _disposed;
-    private readonly int _channels;
-    private readonly int _sampleRate;
-    private AudioFrame? _lastFrame;
-    private float[]? _decodingBuffer;
-    private readonly ArrayPool<float> _bufferPool = ArrayPool<float>.Shared;
-    private readonly int _bufferSize = 8192;
-    private readonly int _bytesPerSample = sizeof(float);
-    private bool _endOfStreamReached = false;
-
     /// <summary>
-    /// Audio stream info <see cref="AudioStreamInfo"/>
+    /// A class that uses MiniAudio for decoding and demuxing specified audio source.
+    /// This class cannot be inherited.
+    /// <para>Implements: <see cref="IAudioDecoder"/>.</para>
     /// </summary>
-    public AudioStreamInfo StreamInfo { get; private set; }
-
-    /// <summary>
-    /// Initializes <see cref="MiniDecoder"/> by providing audio URL.
-    /// The audio URL can be URL or path to local audio file.
-    /// </summary>
-    /// <param name="url">Audio URL or audio file path to decode.</param>
-    /// <param name="options">An optional FFmpeg decoder options.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the given url is <c>null</c>.</exception>
-    /// <exception cref="Exception">Thrown when errors occurred during setups.</exception>
-    public MiniDecoder(string url, FFmpegDecoderOptions? options = default)
+    public sealed class MiniDecoder : IAudioDecoder
     {
-        if (string.IsNullOrEmpty(url))
-            throw new ArgumentNullException(nameof(url));
+        private MiniAudioDecoder? _decoder;
+        private readonly object _syncLock = new object();
+        private Stream? _inputStreamToDispose;
+        private bool _disposed;
+        private readonly int _channels;
+        private readonly int _sampleRate;
+        private float[]? _decodingBuffer;
+        private readonly ArrayPool<float> _bufferPool = ArrayPool<float>.Shared;
+        private readonly int _bufferSize = 4096;
+        private readonly int _bytesPerSample = sizeof(float);
+        private bool _endOfStreamReached = false;
 
-        options ??= new FFmpegDecoderOptions(2, OwnAudio.DefaultOutputDevice.DefaultSampleRate);
-        _channels = options.Channels;
-        _sampleRate = options.SampleRate;
+        /// <summary>
+        /// Audio stream info <see cref="AudioStreamInfo"/>
+        /// </summary>
+        public AudioStreamInfo StreamInfo { get; private set; } //
 
-        try
+        /// <summary>
+        /// Initializes <see cref="MiniDecoder"/> by providing audio URL.
+        /// The audio URL can be URL or path to local audio file.
+        /// </summary>
+        public MiniDecoder(string url, FFmpegDecoderOptions? options = default)
         {
-            _inputStream = File.OpenRead(url);
-            InitializeDecoder(options);
-        }
-        catch (Exception ex)
-        {
-            throw new Exception($"Failed to initialize MiniAudio decoder: {ex.Message}", ex);
-        }
-    }
+            if (string.IsNullOrEmpty(url))
+                throw new ArgumentNullException(nameof(url));
 
-    /// <summary>
-    /// Initializes <see cref="MiniDecoder"/> by providing source audio stream.
-    /// </summary>
-    /// <param name="stream">Source of audio stream to decode.</param>
-    /// <param name="options">An optional FFmpeg decoder options.</param>
-    /// <exception cref="ArgumentNullException">Thrown when the given stream is <c>null</c>.</exception>
-    /// <exception cref="Exception">Thrown when errors occurred during setups.</exception>
-    public MiniDecoder(Stream stream, FFmpegDecoderOptions? options = default)
-    {
-        _inputStream = stream ?? throw new ArgumentNullException(nameof(stream));
+            options ??= new FFmpegDecoderOptions(2, OwnAudio.DefaultOutputDevice.DefaultSampleRate); //
+            _channels = options.Channels;
+            _sampleRate = options.SampleRate;
 
-        options ??= new FFmpegDecoderOptions(2, OwnAudio.DefaultOutputDevice.DefaultSampleRate);
-        _channels = options.Channels;
-        _sampleRate = options.SampleRate;
-
-        InitializeDecoder(options);
-    }
-
-    private void InitializeDecoder(FFmpegDecoderOptions options)
-    {
-        try
-        {
-            _decoder = new MiniAudioDecoder(
-                _inputStream,
-                EngineAudioFormat.F32,
-                options.Channels,
-                options.SampleRate);
-
-            _decoder.EndOfStreamReached += (sender, e) =>
-            {
-                _endOfStreamReached = true;
-            };
-
-            _decodingBuffer = _bufferPool.Rent(_bufferSize);
-
-            double totalSeconds = (_decoder.Length / (double)options.Channels) / options.SampleRate;
-            StreamInfo = new AudioStreamInfo(
-                options.Channels,
-                options.SampleRate,
-                TimeSpan.FromSeconds(totalSeconds));
-        }
-        catch (Exception ex)
-        {
-            throw new Exception($"Failed to initialize MiniAudio decoder: {ex.Message}", ex);
-        }
-    }
-
-    /// <summary>
-    /// Decodes the next available audio frame.
-    /// </summary>
-    /// <returns>An <see cref="AudioDecoderResult"/> containing the decoded frame or error information.</returns>
-    public AudioDecoderResult DecodeNextFrame()
-    {
-#nullable disable
-        lock (_syncLock)
-        {
-            if (_endOfStreamReached)
-            {
-                return new AudioDecoderResult(null, false, true, "End of stream reached (already at EOF)");
-            }
-
-            if (_disposed)
-            {
-                return new AudioDecoderResult(null, false, true, "Decoder disposed");
-            }
-
+            Stream? localInputStream = null;
             try
             {
-                int framesToRead = 2048;
-                int samplesToRead = framesToRead * _channels;
-
-                if (samplesToRead > _decodingBuffer?.Length)
-                {
-                    _bufferPool.Return(_decodingBuffer);
-                    _decodingBuffer = _bufferPool.Rent(samplesToRead);
-                }
-
-                long framesRead = _decoder.Decode(_decodingBuffer, 0, framesToRead);
-
-                if (framesRead <= 0)
-                {
-                    _endOfStreamReached = true;
-                    return new AudioDecoderResult(null, false, true, "End of stream reached (no frames read)");
-                }
-
-                int samplesRead = (int)(framesRead * _channels);
-                int dataSize = samplesRead * _bytesPerSample;
-
-                if (dataSize <= 0)
-                {
-                    _endOfStreamReached = true;
-                    return new AudioDecoderResult(null, false, true, "End of stream reached (no data)");
-                }
-
-                var data = new byte[dataSize];
-                Buffer.BlockCopy(_decodingBuffer, 0, data, 0, dataSize);
-
-                double presentationTime = (double)framesRead / _sampleRate * 1000;
-                _lastFrame = new AudioFrame(presentationTime, data);
-
-                return new AudioDecoderResult(_lastFrame, true, false);
+                localInputStream = File.OpenRead(url);
+                _inputStreamToDispose = localInputStream;
+                InitializeDecoder(localInputStream, options);
             }
             catch (Exception ex)
             {
-                if (ex.Message.Contains("At end") || ex.Message.Contains("end of stream") ||
-                    ex.Message.Contains("EOF") || ex.Message.Contains("No data available"))
-                {
-                    Debug.WriteLine($"EOF detected from exception: {ex.Message}");
-                    _endOfStreamReached = true;
-                    return new AudioDecoderResult(null, false, true, $"End of stream reached (exception: {ex.Message})");
-                }
-
-                return new AudioDecoderResult(null, false, false, ex.Message);
+                localInputStream?.Dispose();
+                throw new Exception($"Failed to initialize MiniAudio decoder from URL: {ex.Message}", ex);
             }
         }
-#nullable restore
-    }
 
-    /// <summary>
-    /// Try to seeks audio stream to the specified position and returns <c>true</c> if successfully seeks,
-    /// otherwise, <c>false</c>.
-    /// </summary>
-    /// <param name="position">Desired seek position.</param>
-    /// <param name="error">An error message while seeking audio stream.</param>
-    /// <returns><c>true</c> if successfully seeks, otherwise, <c>false</c>.</returns>
-    public bool TrySeek(TimeSpan position, out string error)
-    {
-#nullable disable
-        lock (_syncLock)
+        /// <summary>
+        /// Initializes <see cref="MiniDecoder"/> by providing source audio stream.
+        /// </summary>
+        public MiniDecoder(Stream stream, FFmpegDecoderOptions? options = default)
         {
-            error = null;
+            var inputStream = stream ?? throw new ArgumentNullException(nameof(stream));
+            _inputStreamToDispose = null;
 
-            if (_disposed)
-            {
-                error = "Decoder is disposed";
-                return false;
-            }
+            options ??= new FFmpegDecoderOptions(2, OwnAudio.DefaultOutputDevice.DefaultSampleRate);
+            _channels = options.Channels;
+            _sampleRate = options.SampleRate;
 
+            InitializeDecoder(inputStream, options);
+        }
+
+        private void InitializeDecoder(Stream streamToDecode, FFmpegDecoderOptions options)
+        {
             try
             {
-                _endOfStreamReached = false;
+                _decoder = new MiniAudioDecoder(
+                    streamToDecode,
+                    Ownaudio.MiniAudio.EngineAudioFormat.F32,
+                    options.Channels,
+                    options.SampleRate);
 
-                bool result = _decoder.Seek(0, _channels);
+                _decoder.EndOfStreamReached += OnDecoderEndOfStreamReached;
 
-                if (result)
-                {
-                    int samplePosition = (int)(position.TotalSeconds * _sampleRate) * _channels;
+                _decodingBuffer = _bufferPool.Rent(_bufferSize);
 
-                    result = _decoder.Seek(samplePosition, _channels);
-                }
-
-                return result;
+                double totalSeconds = (_decoder.Length / (double)options.Channels) / options.SampleRate;
+                StreamInfo = new AudioStreamInfo(
+                    options.Channels,
+                    options.SampleRate,
+                    TimeSpan.FromSeconds(totalSeconds));
             }
             catch (Exception ex)
             {
-                error = ex.Message;
-                Debug.WriteLine($"Seek exception: {error}");
-                return false;
+                _decoder?.Dispose();
+                throw new Exception($"Failed to initialize internal MiniAudioDecoder: {ex.Message}", ex); //
             }
         }
-        #nullable restore
-    }
 
-    /// <summary>
-    /// It processes all the frames. And returns them in an AudioDecoderResult
-    /// </summary>
-    /// <param name="position">Current position from which to continue</param>
-    /// <returns>Audio decoder result</returns>
-    public AudioDecoderResult DecodeAllFrames(TimeSpan position = default)
-    {
-        lock (_syncLock)
+        private void OnDecoderEndOfStreamReached(object? sender, EventArgs e)
         {
-            if (_disposed)
-            {
-                return new AudioDecoderResult(null, false, true, "Decoder disposed");
-            }
+            _endOfStreamReached = true;
+        }
 
-            try
+        /// <summary>
+        /// Decodes the next available audio frame.
+        /// </summary>
+        public AudioDecoderResult DecodeNextFrame()
+        {
+            lock (_syncLock) //
             {
-                using var accumulatedData = new MemoryStream();
-                double lastPresentationTime = 0;
-
-                if (position != default)
+                if (_endOfStreamReached)
                 {
-                    if (!TrySeek(position, out var seekError))
-                    {
-                        return new AudioDecoderResult(null, false, false, seekError);
-                    }
-                }
-                else
-                {
-                    if (!TrySeek(TimeSpan.Zero, out var seekError))
-                    {
-                        return new AudioDecoderResult(null, false, false, seekError);
-                    }
+                    return new AudioDecoderResult(null, false, true, "End of stream reached (already at EOF)");
                 }
 
-                bool anyFrameProcessed = false;
-                int maxIterations = 100000; 
-                int iteration = 0;
-
-                while (iteration < maxIterations)
+                if (_disposed || _decoder == null || _decoder.IsDisposed)
                 {
-                    iteration++;
+                    return new AudioDecoderResult(null, false, true, "Decoder disposed");
+                }
 
-                    if (_endOfStreamReached)
+                try
+                {
+                    int framesToRead = _bufferSize / _channels;
+                    //framesToRead = 2048;
+                    int samplesToRead = framesToRead * _channels;
+
+                    if (_decodingBuffer == null || samplesToRead > _decodingBuffer.Length)
                     {
-                        break;
+                        if (_decodingBuffer != null)
+                            _bufferPool.Return(_decodingBuffer);
+                        _decodingBuffer = _bufferPool.Rent(samplesToRead);
                     }
 
-                    AudioDecoderResult frameResult = DecodeNextFrame();
+                    long framesRead = _decoder.Decode(_decodingBuffer, 0, framesToRead);
 
-                    if (frameResult.IsSucceeded && frameResult.Frame != null)
-                    {
-                        accumulatedData.Write(frameResult.Frame.Data, 0, frameResult.Frame.Data.Length);
-                        lastPresentationTime = frameResult.Frame.PresentationTime;
-                        anyFrameProcessed = true;
-                    }
-                    else if (frameResult.IsEOF)
+                    if (framesRead <= 0)
                     {
                         _endOfStreamReached = true;
-                        break;
+                        return new AudioDecoderResult(null, false, true, "End of stream reached (no frames read)");
+                    }
+
+                    int samplesRead = (int)(framesRead * _channels);
+                    int dataSize = samplesRead * _bytesPerSample;
+
+                    if (dataSize <= 0)
+                    {
+                        _endOfStreamReached = true;
+                        return new AudioDecoderResult(null, false, true, "End of stream reached (no data)");
+                    }
+
+                    var data = new byte[dataSize];
+                    Buffer.BlockCopy(_decodingBuffer, 0, data, 0, dataSize);
+
+                    double presentationTime = (double)framesRead / _sampleRate * 1000;
+                    var lastFrame = new AudioFrame(presentationTime, data);
+
+                    return new AudioDecoderResult(lastFrame, true, false);
+                }
+                catch (ObjectDisposedException) 
+                {
+                    _disposed = true;
+                    _endOfStreamReached = true;
+                    return new AudioDecoderResult(null, false, true, "Decoder was disposed during operation.");
+                }
+                catch (Exception ex)
+                {
+                    if (ex.Message.Contains("At end") || ex.Message.Contains("end of stream") ||
+                        ex.Message.Contains("EOF") || ex.Message.Contains("No data available")) 
+                    {
+                        Debug.WriteLine($"EOF detected from exception: {ex.Message}");
+                        _endOfStreamReached = true;
+                        return new AudioDecoderResult(null, false, true, $"End of stream reached (exception: {ex.Message})"); 
+                    }
+                    Debug.WriteLine($"DecodeNextFrame exception: {ex.Message}");
+                    return new AudioDecoderResult(null, false, false, ex.Message);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Try to seeks audio stream to the specified position and returns <c>true</c> if successfully seeks,
+        /// otherwise, <c>false</c>.
+        /// </summary>
+        public bool TrySeek(TimeSpan position, out string error)
+        {
+            lock (_syncLock)
+            {
+                error = string.Empty;
+
+                if (_disposed || _decoder == null || _decoder.IsDisposed)
+                {
+                    error = "Decoder is disposed";
+                    return false;
+                }
+
+                try
+                {
+                    int samplePosition = (int)(position.TotalSeconds * _sampleRate) * _channels;
+                    bool result = _decoder.Seek(samplePosition, _channels);
+
+                    if (result)
+                    {
+                        _endOfStreamReached = false; 
                     }
                     else
                     {
-                        Debug.WriteLine($"Decoder error: {frameResult.ErrorMessage ?? "Unknown error"}");
-                        return new AudioDecoderResult(null, false, false,
-                            $"Decoder error: {frameResult.ErrorMessage ?? "Unknown error"}");
+                        error = "Seek operation failed.";
                     }
+                    return result;
+                }
+                catch (ObjectDisposedException)
+                {
+                    error = "Decoder was disposed during seek.";
+                    _disposed = true;
+                    _endOfStreamReached = true;
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    error = ex.Message;
+                    Debug.WriteLine($"Seek exception: {error}");
+                    return false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// It processes all the frames. And returns them in an AudioDecoderResult
+        /// </summary>
+        public AudioDecoderResult DecodeAllFrames(TimeSpan position = default)
+        {
+            lock (_syncLock)
+            {
+                if (_disposed || _decoder == null || _decoder.IsDisposed)
+                {
+                    return new AudioDecoderResult(null, false, true, "Decoder disposed");
                 }
 
-                if (!anyFrameProcessed || accumulatedData.Length == 0)
+                try
                 {
-                    return new AudioDecoderResult(null, false, false, "No frames were processed or no audio data available");
-                }
+                    using var accumulatedData = new MemoryStream();
+                    double lastPresentationTime = 0; 
 
-                if (iteration >= maxIterations)
-                {
+                    if (position != default)
+                    {
+                        if (!TrySeek(position, out var seekError))
+                        {
+                            return new AudioDecoderResult(null, false, false, seekError ?? "Seek failed"); //
+                        }
+                    }
+                    else
+                    {
+                        if (!TrySeek(TimeSpan.Zero, out var seekError))
+                        {
+                            return new AudioDecoderResult(null, false, false, seekError ?? "Seek to zero failed"); //
+                        }
+                    }
+
+                    bool anyFrameProcessed = false;
+                    int maxIterations = 100000;
+                    int iteration = 0;
+
+                    while (iteration < maxIterations)
+                    {
+                        iteration++;
+
+                        if (_disposed || _decoder.IsDisposed || _endOfStreamReached)
+                        {
+                            break;
+                        }
+
+                        AudioDecoderResult frameResult = DecodeNextFrame();
+
+                        if (frameResult.IsSucceeded && frameResult.Frame != null)
+                        {
+                            accumulatedData.Write(frameResult.Frame.Data, 0, frameResult.Frame.Data.Length);
+                            lastPresentationTime = frameResult.Frame.PresentationTime;
+                            anyFrameProcessed = true;
+                        }
+                        else if (frameResult.IsEOF)
+                        {
+                            _endOfStreamReached = true;
+                            break;
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"Decoder error during DecodeAllFrames: {frameResult.ErrorMessage ?? "Unknown error"}");
+                            return new AudioDecoderResult(null, false, false,
+                                $"Decoder error: {frameResult.ErrorMessage ?? "Unknown error"}");
+                        }
+                    }
+
+                    if (!anyFrameProcessed || accumulatedData.Length == 0)
+                    {
+                        return new AudioDecoderResult(null, false, true, "No frames were processed or no audio data available (EOF or error).");
+                    }
+
+                    if (iteration >= maxIterations)
+                    {
+                        return new AudioDecoderResult(
+                            new AudioFrame(lastPresentationTime, accumulatedData.ToArray()),
+                            true,
+                            false,
+                            "Warning: Maximum iteration count reached - possible infinite loop prevented");
+                    }
+
+                    var frameData = accumulatedData.ToArray();
+
                     return new AudioDecoderResult(
-                        new AudioFrame(lastPresentationTime, accumulatedData.ToArray()),
+                        new AudioFrame(lastPresentationTime, frameData),
                         true,
-                        false,
-                        "Warning: Maximum iteration count reached - possible infinite loop prevented");
+                        _endOfStreamReached);
+                }
+                catch (ObjectDisposedException)
+                {
+                    _disposed = true;
+                    _endOfStreamReached = true;
+                    return new AudioDecoderResult(null, false, true, "Decoder was disposed during DecodeAllFrames.");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"DecodeAllFrames exception: {ex.Message}"); //
+                    return new AudioDecoderResult(null, false, false, ex.Message); //
+                }
+            }
+        }
+
+        /// <summary>
+        /// Disposes of resources used by the decoder.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            lock (_syncLock)
+            {
+                if (_disposed)
+                    return;
+
+                if (_decoder != null)
+                {
+                    _decoder.EndOfStreamReached -= OnDecoderEndOfStreamReached;
+                    _decoder.Dispose();
+                    _decoder = null;
                 }
 
-                TrySeek(position, out _);
+                if (_decodingBuffer != null)
+                {
+                    _bufferPool.Return(_decodingBuffer, clearArray: false);
+                    _decodingBuffer = null;
+                }
 
-                var frameData = accumulatedData.ToArray();
+                _inputStreamToDispose?.Dispose();
+                _inputStreamToDispose = null;
 
-                return new AudioDecoderResult(
-                    new AudioFrame(lastPresentationTime, frameData),
-                    true,
-                    false);
+                _disposed = true;
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"DecodeAllFrames exception: {ex.Message}");
-                return new AudioDecoderResult(null, false, false, ex.Message);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Disposes of resources used by the decoder.
-    /// </summary>
-    public void Dispose()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        lock (_syncLock)
-        {
-            _decoder?.Dispose();
-
-            if (_decodingBuffer != null)
-            {
-                _bufferPool.Return(_decodingBuffer);
-                _decodingBuffer = null;
-            }
-
-            _disposed = true;
         }
     }
 }

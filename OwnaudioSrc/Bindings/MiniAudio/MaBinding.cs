@@ -601,11 +601,12 @@ internal static partial class MaBinding
         return _maMalloc(size, pUserData);
     }
 
-    public static void ma_free(IntPtr ptr, IntPtr pUserData)
+    public static void ma_free(IntPtr ptr, IntPtr pUserData, string message)
     {
         if (_maFree == null)
             throw new NotSupportedException("Memory free operation is not supported.");
 
+        if (string.IsNullOrEmpty(message)) Console.WriteLine(message);
         _maFree(ptr, pUserData);
     }
 
