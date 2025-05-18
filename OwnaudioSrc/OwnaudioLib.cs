@@ -94,7 +94,7 @@ public static partial class OwnAudio
             {
                 PortAudioPath = pathPortAudio;      
                 MiniAudioPath = pathMiniAudio;
-                FFmpegPath = ffmpegPath;
+                LibraryPath = ffmpegPath;
                 
                 try
                 {
