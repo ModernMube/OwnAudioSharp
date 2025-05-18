@@ -20,8 +20,11 @@ internal sealed class LibraryLoader : IDisposable
     {
         Ensure.NotNull(libraryName, nameof(libraryName));
 
-        if (PlatformInfo.IsWindows || PlatformInfo.IsLinux || PlatformInfo.IsOSX)
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS() || 
+            OperatingSystem.IsAndroid() || OperatingSystem.IsIOS())
+        {
             _handle = NativeLibrary.Load(libraryName);
+        }
         else
             throw new NotSupportedException("Platform is not supported.");
 

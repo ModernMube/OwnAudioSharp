@@ -59,7 +59,7 @@ internal static partial class PaBinding
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int OpenStream(
-        IntPtr stream,
+        out IntPtr stream,
         IntPtr inputParameters,
         IntPtr outputParameters,
         double sampleRate,

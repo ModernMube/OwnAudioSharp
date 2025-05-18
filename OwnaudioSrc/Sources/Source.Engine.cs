@@ -62,7 +62,6 @@ public partial class Source : ISource
     private void RunDecoder()
     {
         Logger?.LogInfo("Decoder thread is started.");
-        int? _frameNum = 0;
 
         while (State != SourceState.Idle)
         {
@@ -81,7 +80,7 @@ public partial class Source : ISource
             }
 
 #nullable disable
-            AudioDecoderResult result = CurrentDecoder.DecodeNextFrame(_frameNum);
+            AudioDecoderResult result = CurrentDecoder.DecodeNextFrame();
 
             if (result.IsEOF)
             {

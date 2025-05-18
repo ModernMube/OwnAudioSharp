@@ -48,7 +48,7 @@ public partial class SourceInput : ISource
         /// <summary>
         /// Processing unit connected to the sourceinput <see cref="ISampleProcessor"/>
         /// </summary>
-        public SampleProcessorBase CustomSampleProcessor { get; set; }
+        public SampleProcessorBase? CustomSampleProcessor { get; set; }
 
         /// <summary>
         /// Gets <see cref="VolumeProcessor"/> instance.
@@ -58,7 +58,7 @@ public partial class SourceInput : ISource
         /// <summary>
         /// Gets or sets logger instance.
         /// </summary>
-        public ILogger Logger { get; set; }
+        public ILogger? Logger { get; set; }
 
         /// <summary>
         /// Gets queue object that holds queued audio frames.

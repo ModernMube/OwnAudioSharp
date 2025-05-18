@@ -5,6 +5,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Ownaudio.Decoders;
 using Ownaudio.Decoders.FFmpeg;
+using Ownaudio.Decoders.Miniaudio;
+using Ownaudio.Decoders.MiniAudio;
 using Ownaudio.Exceptions;
 using Ownaudio.Processors;
 using Ownaudio.Utilities;
@@ -196,7 +198,10 @@ public partial class Source : ISource
     {
         // Egységes formátum beállítások használata
         var decoderOptions = SourceManager.GetUnifiedDecoderOptions();
-        return new FFmpegDecoder(url, decoderOptions);
+        if(OwnAudio.IsFFmpegInitialized)
+            return new FFmpegDecoder(url, decoderOptions);
+        else
+            return new MiniDecoder(url, decoderOptions);
     }
 
     /// <summary>

@@ -27,7 +27,7 @@ public readonly struct AudioDevice
         double defaultLowInputLatency,
         double defaultHighInputLatency,
         int defaultSampleRate)
-    {
+        {
         DeviceIndex = deviceIndex;
         Name = name;
         MaxOutputChannels = maxOutputChannels;

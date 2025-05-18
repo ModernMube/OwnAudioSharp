@@ -157,8 +157,8 @@ public unsafe partial class SourceManager
                 {
                     float[] inputBuffer = new float[EngineFramesPerBuffer * (int)InputEngineOptions.Channels];
                     float[] stereoData = new float[EngineFramesPerBuffer * (int)OutputEngineOptions.Channels];
-                    
-                    ((SourceInput)SourcesInput[0]).ReceivesData(out inputBuffer, Engine);                   
+
+                    ((SourceInput)SourcesInput[0]).ReceivesData(out inputBuffer, Engine);
 
                     if (InputEngineOptions.Channels == Engines.OwnAudioEngine.EngineChannels.Mono &&
                         OutputEngineOptions.Channels == Engines.OwnAudioEngine.EngineChannels.Stereo)
@@ -352,16 +352,19 @@ public unsafe partial class SourceManager
     /// <returns></returns>
     private bool InitializeEngine()
     {
-        if (OwnAudio.IsPortAudioInitialized && Engine is null)
+        if (OwnAudio.IsPortAudioInitialized && Engine is null)  // Portaudio engine initialze
         {
             if (OwnAudio.DefaultInputDevice.MaxInputChannels > 0 && IsRecorded)
                 Engine = new OwnAudioEngine(InputEngineOptions, OutputEngineOptions, EngineFramesPerBuffer);
             else
                 Engine = new OwnAudioEngine(OutputEngineOptions, EngineFramesPerBuffer);
         }
-        else if(OwnAudio.IsPortAudioInitialized && Engine is not null)
+        else if(!OwnAudio.IsPortAudioInitialized && OwnAudio.IsMiniAudioInitialized && Engine is null)  // Miniaudio engine initialize
         {
-            return true;
+            if (OwnAudio.DefaultInputDevice.MaxInputChannels > 0 && IsRecorded)
+                Engine = new OwnAudioMiniEngine(InputEngineOptions, OutputEngineOptions, EngineFramesPerBuffer);
+            //else
+                //Engine = new OwnAudioMiniEngine(OutputEngineOptions, EngineFramesPerBuffer);
         }
         else
         {
