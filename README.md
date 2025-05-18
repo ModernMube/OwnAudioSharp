@@ -66,13 +66,6 @@ The library will attempt to find these dependencies in standard system locations
 
 You can add this library to your project via NuGet (when published) or by directly referencing the project.
 
-### Required Libraries
-
-You will find the required files in the LIBS folder in a compressed file. 
-Extract the package appropriate for your operating system into the folder containing the compressed file.
-You can also extract the files to a different folder than the default one. 
-In this case, you will need to specify its path when initializing OwnAudio.
-
 ## Optional dependencies: Portaudio and FFmpeg
 
 Hi! By default, our code includes **Miniaudio**, which is ready to use for all systems, so you can get started right away!
