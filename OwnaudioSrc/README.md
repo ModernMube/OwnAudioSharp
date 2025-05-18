@@ -1,23 +1,19 @@
-<a href="../../wiki/OwnAudio-first-steps">
-  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20first%20step-blue" alt="Wiki OwnAudio first steps">
-</a>
-
-<a href="../../wiki/How-to-use-OwnAudio's-built‐in-effects">
-  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20FX%20processor-blue" alt="Wiki OwnAudio FX processor">
-</a>
+<div align="center">
+  <img src="Ownaudiologo.png" alt="Logó" width="600"/>
+</div>
 
 <a href="https://www.buymeacoffee.com/ModernMube">
-  <img src="https://img.shields.io/badge/Support-Buy%20Me%20A%20Coffe-yellow" alt="Buy Me a Coffe">
+  <img src="https://img.shields.io/badge/Support-Buy%20Me%20A%20Coffe-orange" alt="Buy Me a Coffe">
 </a>
 
-# Ownaudio
+##
 
-Ownaudio is a cross-platform C# audio library that provides a high-level API for audio playback, recording, and processing. It leverages FFmpeg for audio decoding and PortAudio for audio I/O, offering a simple and unified interface for audio operations.
+Ownaudio is a cross-platform C# audio library that provides a high-level API for audio playback, recording, and processing. By default, it uses FFmpeg for audio decoding and PortAudio for audio I/O. If ffmpeg or portaudio is not installed, it automatically substitutes the missing one for Miniaudio. This way, it can work without any external dependencies using Miniaudio. The implementation of Miniaudio also allowed the API to be used on mobile platforms.
 
 ## Features
 
-- **Cross-platform** compatibility (Windows, macOS, Linux)
-- **Audio playback** with support for various formats through FFmpeg
+- **Cross-platform** compatibility (Windows, macOS, Linux, Android, Ios)
+- **Audio playback** with support for various formats via FFmpeg, or miniaudio (mp3, wav, flac) formats.
 - **Audio recording** capabilities through input devices
 - **Time stretching and pitch shifting** using SoundTouch
 - **Mixing** multiple audio sources
@@ -26,10 +22,43 @@ Ownaudio is a cross-platform C# audio library that provides a high-level API for
 - **Real-time audio processing** with custom sample processors
 - **Audio data visualize** customizable waveform display
 
-## Prerequisites
+## Documentation
 
-- FFmpeg libraries
-- PortAudio libraries
+ <a href="../../wiki/OwnAudio-first-steps">
+  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20first%20step-blue" alt="Wiki OwnAudio first steps">
+</a>
+
+<a href="../../wiki/How-to-use-OwnAudio's-built‐in-effects">
+  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20FX%20processor-blue" alt="Wiki OwnAudio FX processor">
+</a>
+
+<a href="../../wiki/OwnAudio-Library-Documentation">
+  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20library-darkgreen" alt="Wiki OwnAudio Library Documentation">
+</a>
+
+<a href="../../wiki/Ownaudio-SourceManager-Class-Documentation">
+  <img src="https://img.shields.io/badge/Wiki-SourceManager-darkgreen" alt="Wiki Source manager documentation">
+</a>
+
+<a href="../../wiki/Ownaudio-Source-Class-Documentation">
+  <img src="https://img.shields.io/badge/Wiki-Source-darkgreen" alt="Wiki Source documentation">
+</a>
+
+<a href="../../wiki/Ownaudio-Real-Time-Source-Class-Documentation">
+  <img src="https://img.shields.io/badge/Wiki-Real%20time%20source-darkgreen" alt="Wiki Source documentation">
+</a>
+
+## Supported Systems
+
+The table below summarizes the supported operating systems, the APIs used, and their testing status.
+
+| System     | APIs                           | Status       |
+|------------|--------------------------------|--------------|
+| Windows    | Portaudio 2, Miniaudio, Ffmpeg 6 | Tested       |
+| Linux      | Portaudio 2, Miniaudio, Ffmpeg 6 | Not tested   |
+| MacOs      | Portaudio 2, Miniaudio, Ffmpeg 6 | Tested       |
+| Android    | Miniaudio                      | Not tested   |
+| Ios        | Miniaudio                      | Not tested   |
 
 The library will attempt to find these dependencies in standard system locations but also supports specifying custom paths.
 
@@ -37,23 +66,50 @@ The library will attempt to find these dependencies in standard system locations
 
 You can add this library to your project via NuGet (when published) or by directly referencing the project.
 
-### Required Libraries
+## Optional dependencies: Portaudio and FFmpeg
 
-You will find the required files in the LIBS folder in a compressed file. 
-Extract the package appropriate for your operating system into the folder containing the compressed file.
-Depending on your operating system, you will need the following:
+By default, our code includes **Miniaudio**, which is ready to use for all systems, so you can get started right away!
 
-#### Windows
-- FFmpeg libraries (avcodec, avformat, avutil, etc.)
-- portaudio.dll
+If you want to use **Portaudio** and **FFmpeg** on certain platforms for extended functionality, you can configure them as follows:
 
-#### macOS
-- FFmpeg libraries (libavcodec.dylib, libavformat.dylib, libavutil.dylib, etc.)
-- libportaudio.dylib
+### Windows
 
-#### Linux
-- FFmpeg libraries (libavcodec.so, libavformat.so, libavutil.so, etc.)
-- libportaudio.so.2
+1. Grab the **FFmpeg 6** files and extract them to a folder.
+
+2. Copy the **Portaudio 2** DLL file to the same folder.
+
+3. When you initialize `OwnAudio` in your code, just point to the folder path.
+
+### Linux
+
+1. Use Synaptic package manager (or your distribution's equivalent) to install `portaudio19-dev` (this usually provides Portaudio v2) and `ffmpeg` (version 6 or compatible).
+* For example, on Debian/Ubuntu based systems:
+
+```bash
+sudo apt update
+sudo apt install portaudio19-dev ffmpeg
+
+```
+(Note: Package names may vary slightly depending on your Linux distribution. Make sure you get libraries compatible with FFmpeg version 6.)
+
+2. `OwnAudio` is smart and will automatically find and use them if they are installed systemwide.
+
+### macOS
+
+1. Launch the terminal and use Homebrew:
+
+```bash
+brew install portaudio
+brew install ffmpeg@6
+
+```
+2. After installation, the code will automatically detect and prioritize Portaudio and FFmpeg.
+
+### Android and iOS
+
+* Good news! **Miniaudio** works out of the box on Android and iOS. These platforms don't require any additional steps to handle audio.
+
+---
 
 ## Basic Usage
 
@@ -230,6 +286,16 @@ The library follows a layered architecture:
 3. **Sources** - Audio source management (Source, SourceInput)
 4. **SourceManager** - Mixing and controlling multiple sources
 5. **Processors** - Custom audio processing pipeline
+
+## Support My Work
+
+If you find this project helpful, consider buying me a coffee!
+
+<a href="https://www.buymeacoffee.com/ModernMube" 
+    target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" 
+    alt="Buy Me A Coffee" 
+    style="height: 60px !important;width: 217px !important;" >
+ </a>
 
 ## Acknowledgements
 
