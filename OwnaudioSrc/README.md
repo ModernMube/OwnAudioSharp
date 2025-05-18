@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="Ownaudiologo.png" alt="Logó" width="600"/>
+  <img src="../Ownaudiologo.png" alt="Logó" width="600"/>
 </div>
 
 <a href="https://www.buymeacoffee.com/ModernMube">
