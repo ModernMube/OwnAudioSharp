@@ -6,6 +6,14 @@
   <img src="https://img.shields.io/badge/Support-Buy%20Me%20A%20Coffe-orange" alt="Buy Me a Coffe">
 </a>
 
+<a href="https://www.nuget.org/packages/OwnAudioSharp">
+  <img src="https://img.shields.io/badge/Nuget-OwnAudioSharp%20Nuget%20Package-blue" alt="OwnAudioSharp Package">
+</a>
+
+<a href="https://github.com/ModernMube/OwnAudioSharpDemo">
+  <img src="https://img.shields.io/badge/Sample-OwnAudioSharp%20Demo%20Application-purple" alt="OwnAudioSharp Package">
+</a>
+
 ##
 
 Ownaudio is a cross-platform C# audio library that provides a high-level API for audio playback, recording, and processing. By default, it uses FFmpeg for audio decoding and PortAudio for audio I/O. If ffmpeg or portaudio is not installed, it automatically substitutes the missing one for Miniaudio. This way, it can work without any external dependencies using Miniaudio. The implementation of Miniaudio also allowed the API to be used on mobile platforms.
