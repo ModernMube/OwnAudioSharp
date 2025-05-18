@@ -68,7 +68,7 @@ You can add this library to your project via NuGet (when published) or by direct
 
 ## Optional dependencies: Portaudio and FFmpeg
 
-Hi! By default, our code includes **Miniaudio**, which is ready to use for all systems, so you can get started right away!
+By default, our code includes **Miniaudio**, which is ready to use for all systems, so you can get started right away!
 
 If you want to use **Portaudio** and **FFmpeg** on certain platforms for extended functionality, you can configure them as follows:
 
