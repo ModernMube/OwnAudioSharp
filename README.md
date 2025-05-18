@@ -64,7 +64,11 @@ The library will attempt to find these dependencies in standard system locations
 
 ## Installation
 
-You can add this library to your project via NuGet (OwnAudioSharp) or by directly referencing the project.
+You can add this library to your project via NuGet or by directly referencing the project.
+```bash
+NuGet\Install-Package OwnAudioSharp
+
+```
 
 ## Optional dependencies: Portaudio and FFmpeg
 
