@@ -11,7 +11,7 @@
 </a>
 
 <a href="https://github.com/ModernMube/OwnAudioSharpDemo">
-  <img src="https://img.shields.io/badge/Sample-OwnAudioSharp%20Demo%20Application-purple" alt="OwnAudioSharp Package">
+  <img src="https://img.shields.io/badge/Sample-OwnAudioSharp%20Demo%20Application-darkgreen" alt="OwnAudioSharp Package">
 </a>
 
 ##
