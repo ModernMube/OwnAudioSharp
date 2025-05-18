@@ -8,12 +8,12 @@
 
 ##
 
-Ownaudio is a cross-platform C# audio library that provides a high-level API for audio playback, recording, and processing. It leverages FFmpeg for audio decoding and PortAudio for audio I/O, offering a simple and unified interface for audio operations.
+Ownaudio is a cross-platform C# audio library that provides a high-level API for audio playback, recording, and processing. By default, it uses FFmpeg for audio decoding and PortAudio for audio I/O. If ffmpeg or portaudio is not installed, it automatically substitutes the missing one for Miniaudio. This way, it can work without any external dependencies using Miniaudio. The implementation of Miniaudio also allowed the API to be used on mobile platforms.
 
 ## Features
 
-- **Cross-platform** compatibility (Windows, macOS, Linux)
-- **Audio playback** with support for various formats through FFmpeg
+- **Cross-platform** compatibility (Windows, macOS, Linux, Android, Ios)
+- **Audio playback** with support for various formats via FFmpeg, or miniaudio (mp3, wav, flac) formats.
 - **Audio recording** capabilities through input devices
 - **Time stretching and pitch shifting** using SoundTouch
 - **Mixing** multiple audio sources
@@ -48,10 +48,17 @@ Ownaudio is a cross-platform C# audio library that provides a high-level API for
   <img src="https://img.shields.io/badge/Wiki-Real%20time%20source-darkgreen" alt="Wiki Source documentation">
 </a>
 
-## Prerequisites
+## Supported Systems
 
-- FFmpeg libraries
-- PortAudio libraries
+The table below summarizes the supported operating systems, the APIs used, and their testing status.
+
+| System     | APIs                           | Status       |
+|------------|--------------------------------|--------------|
+| Windows    | Portaudio 2, Miniaudio, Ffmpeg 6 | Tested       |
+| Linux      | Portaudio 2, Miniaudio, Ffmpeg 6 | Not tested   |
+| MacOs      | Portaudio 2, Miniaudio, Ffmpeg 6 | Tested       |
+| Android    | Miniaudio                      | Not tested   |
+| Ios        | Miniaudio                      | Not tested   |
 
 The library will attempt to find these dependencies in standard system locations but also supports specifying custom paths.
 
@@ -66,24 +73,50 @@ Extract the package appropriate for your operating system into the folder contai
 You can also extract the files to a different folder than the default one. 
 In this case, you will need to specify its path when initializing OwnAudio.
 
-```csharp
-// Initialize Ownaudio
-OwnAudio.Initialize("/ffmpegpath");
+## Optional dependencies: Portaudio and FFmpeg
+
+Hi! By default, our code includes **Miniaudio**, which is ready to use for all systems, so you can get started right away!
+
+If you want to use **Portaudio** and **FFmpeg** on certain platforms for extended functionality, you can configure them as follows:
+
+### Windows
+
+1. Grab the **FFmpeg 6** files and extract them to a folder.
+
+2. Copy the **Portaudio 2** DLL file to the same folder.
+
+3. When you initialize `OwnAudio` in your code, just point to the folder path.
+
+### Linux
+
+1. Use Synaptic package manager (or your distribution's equivalent) to install `portaudio19-dev` (this usually provides Portaudio v2) and `ffmpeg` (version 6 or compatible).
+* For example, on Debian/Ubuntu based systems:
+
+```bash
+sudo apt update
+sudo apt install portaudio19-dev ffmpeg
+
 ```
+(Note: Package names may vary slightly depending on your Linux distribution. Make sure you get libraries compatible with FFmpeg version 6.)
 
-Depending on your operating system, you will need the following:
+2. `OwnAudio` is smart and will automatically find and use them if they are installed systemwide.
 
-#### Windows
-- FFmpeg libraries (avcodec, avformat, avutil, etc.)
-- portaudio.dll
+### macOS
 
-#### macOS
-- FFmpeg libraries (libavcodec.dylib, libavformat.dylib, libavutil.dylib, etc.)
-- libportaudio.dylib
+1. Launch the terminal and use Homebrew:
 
-#### Linux
-- FFmpeg libraries (libavcodec.so, libavformat.so, libavutil.so, etc.)
-- libportaudio.so.2
+```bash
+brew install portaudio
+brew install ffmpeg@6
+
+```
+2. After installation, the code will automatically detect and prioritize Portaudio and FFmpeg.
+
+### Android and iOS
+
+* Good news! **Miniaudio** works out of the box on Android and iOS. These platforms don't require any additional steps to handle audio.
+
+---
 
 ## Basic Usage
 
