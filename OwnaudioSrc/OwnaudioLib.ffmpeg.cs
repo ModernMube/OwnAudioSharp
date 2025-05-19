@@ -1,3 +1,4 @@
+using System;
 using System.Runtime.InteropServices;
 using System.IO;
 
@@ -98,12 +99,22 @@ public static partial class OwnAudio
         }
     }
 
+    private class AndroidPathProvider : IPlatformPathProvider
+    {
+        public string GetFFmpegPath()
+        {
+            return System.Environment.GetFolderPath(System.Environment.SpecialFolder.Personal); ;
+        }
+    }
+
     private static IPlatformPathProvider GetPlatformProvider()
     {
         if (OperatingSystem.IsWindows()) return new WindowsPathProvider();
         if (OperatingSystem.IsLinux()) return new LinuxPathProvider();
         if (OperatingSystem.IsMacOS()) return new OSXPathProvider();
-        throw new NotSupportedException("Platform not supported");
+        if (OperatingSystem.IsAndroid()) return new AndroidPathProvider();
+        if (OperatingSystem.IsIOS()) return new AndroidPathProvider();
+        throw new NotImplementedException("Platform is not supported.");
     }
 }
 

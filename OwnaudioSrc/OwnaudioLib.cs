@@ -42,21 +42,38 @@ public static partial class OwnAudio
             var ridext = GetRidAndLibExtensions();
             string? pathPortAudio;
             string? pathMiniAudio;
+            string? relativeBase;
             Architecture cpuArchitec = RuntimeInformation.ProcessArchitecture;
 
-            string? relativeBase = Directory.Exists("runtimes") ? "runtimes" :
-                Directory.EnumerateDirectories(Directory.GetCurrentDirectory(), "runtimes", SearchOption.AllDirectories)
+            if(!OperatingSystem.IsAndroid() && !OperatingSystem.IsIOS())
+            {
+                 relativeBase = Directory.Exists("runtimes") ? "runtimes" :
+                    Directory.EnumerateDirectories(Directory.GetCurrentDirectory(), "runtimes", SearchOption.AllDirectories)
                     .Select(dirPath => Path.GetRelativePath(Directory.GetCurrentDirectory(), dirPath))
                     .FirstOrDefault();
+            }
+            else
+            {
+               relativeBase = System.Environment.GetFolderPath(System.Environment.SpecialFolder.Personal);
+            }
 
-            if(string.IsNullOrEmpty(relativeBase))
+            if (string.IsNullOrEmpty(relativeBase))
                 return false;
 
             pathPortAudio = System.IO.Path.Combine(relativeBase, ridext.Item1, "native", $"libportaudio.{ridext.Item2}");
             pathMiniAudio = System.IO.Path.Combine(relativeBase, ridext.Item1, "native", $"libminiaudio.{ridext.Item2}");
 
-            if(!File.Exists(pathMiniAudio) && OperatingSystem.IsIOS())
+            if(OperatingSystem.IsIOS())
+            {
                 pathMiniAudio = System.IO.Path.Combine(relativeBase, ridext.Item1, "native", "miniaudio.framework", "miniaudio");
+                pathPortAudio = "";
+            }
+
+            if(OperatingSystem.IsAndroid())
+            {
+                pathMiniAudio = Path.Combine($"libminiaudio.{ridext.Item2}");
+                pathPortAudio = "";
+            }
 
             if (!File.Exists(pathPortAudio) && OperatingSystem.IsMacOS())
                 if (cpuArchitec == Architecture.Arm64)
