@@ -26,7 +26,7 @@ internal sealed class LibraryLoader : IDisposable
         }
         catch(DllNotFoundException ex)
         {
-            Console.WriteLine($"[ERROR] DllNotFoundException when loading 'miniaudio': {ex.Message}");
+            Console.WriteLine($"[ERROR] DllNotFoundException when loading native library: {ex.Message}");
         }
         catch (Exception ex)
         {

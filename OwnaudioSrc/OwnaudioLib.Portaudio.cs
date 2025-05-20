@@ -21,8 +21,11 @@ public static partial class OwnAudio
     /// </summary>
     public static void Free()
     {
-      PaBinding.Pa_Terminate();
-      IsPortAudioInitialized = false;
+        if(IsPortAudioInitialized)
+        {
+            PaBinding.Pa_Terminate();
+            IsPortAudioInitialized = false;
+        }      
     }
 
     /// <summary>
