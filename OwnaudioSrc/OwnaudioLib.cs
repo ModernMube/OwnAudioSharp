@@ -63,48 +63,97 @@ public static partial class OwnAudio
             pathPortAudio = System.IO.Path.Combine(relativeBase, ridext.Item1, "native", $"libportaudio.{ridext.Item2}");
             pathMiniAudio = System.IO.Path.Combine(relativeBase, ridext.Item1, "native", $"libminiaudio.{ridext.Item2}");
 
+            //Ios system
             if(OperatingSystem.IsIOS())
             {
-                pathMiniAudio = System.IO.Path.Combine(relativeBase, ridext.Item1, "native", "miniaudio.framework", "miniaudio");
-                pathPortAudio = "";
-            }
+#if IOS
+                string sourceFrameworkFolderInBundle = Path.Combine("runtimes", ridext.Item1, "native", "miniaudio.framework");
+                string targetFrameworkSubFolder = Path.Combine(ridext.Item1, "native_copied", "miniaudio.framework");
 
-            if(OperatingSystem.IsAndroid())
+                Console.WriteLine($"[INFO] IOS: Attempting to copy '{sourceFrameworkFolderInBundle}' from bundle to '{targetFrameworkSubFolder}' in app data.");
+
+                try
+                {
+                    Ownaudio.Utilities.PlatformUtils.IOSBundleCopier.CopyBundleFolderToAppData(
+                        sourceFolderNameInBundle: sourceFrameworkFolderInBundle,
+                        targetSubFolderInAppData: targetFrameworkSubFolder,
+                        overwrite: false // Állítsd 'true'-ra, ha mindig felül akarod írni.
+                    );
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[ERROR] OwnAudio.Initialize (iOS): Exception during IOSBundleCopier.CopyBundleFolderToAppData. {ex.Message}");
+                    Console.WriteLine($"[ERROR] OwnAudio.Initialize (iOS): Exception during IOSBundleCopier.CopyBundleFolderToAppData. {ex.Message}");
+                }
+
+                string? appSpecificDataPath = Ownaudio.Utilities.PlatformUtils.GetAppSpecificBasePath(); //
+                if (!string.IsNullOrEmpty(appSpecificDataPath))
+                {
+                    pathMiniAudio = Path.Combine(appSpecificDataPath, targetFrameworkSubFolder, "miniaudio");
+
+                    if (!File.Exists(pathMiniAudio))
+                    {
+                        Debug.WriteLine($"[ERROR] OwnAudio.Initialize (iOS): miniaudio binary not found at '{pathMiniAudio}' after copy attempt.");
+                        Console.WriteLine($"[ERROR] OwnAudio.Initialize (iOS): miniaudio binary not found at '{pathMiniAudio}' after copy attempt.");
+                        pathMiniAudio = null; 
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"[INFO] OwnAudio.Initialize (iOS): miniaudio path set to '{pathMiniAudio}'");
+                        Console.WriteLine($"[INFO] OwnAudio.Initialize (iOS): miniaudio path set to '{pathMiniAudio}'");
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine("[ERROR] OwnAudio.Initialize (iOS): Failed to get app specific data path.");
+                    Console.WriteLine("[ERROR] OwnAudio.Initialize (iOS): Failed to get app specific data path.");
+                    pathMiniAudio = null;
+                }
+                pathPortAudio = "";
+#endif
+            }
+            //Android system
+            else if(OperatingSystem.IsAndroid())
             {
-                pathMiniAudio = Path.Combine($"libminiaudio.{ridext.Item2}");
+                pathMiniAudio = "libminiaudio";
                 pathPortAudio = "";
             }
-
-            if (!File.Exists(pathPortAudio) && OperatingSystem.IsMacOS())
+            //Macos System
+            else if (OperatingSystem.IsMacOS())
+            {
                 if (cpuArchitec == Architecture.Arm64)
-                    pathPortAudio = Path.Combine("/opt", "homebrew", "opt", "portaudio","lib", $"libportaudio.{ridext.Item2}");
+                    pathPortAudio = Path.Combine("/opt", "homebrew", "opt", "portaudio", "lib", $"libportaudio.{ridext.Item2}");
                 else if (cpuArchitec == Architecture.X64)
                     pathPortAudio = Path.Combine("/usr", "local", "opt", "portaudio", "lib", $"libportaudio.{ridext.Item2}");
+            }
+            //Linux system
+            else if (OperatingSystem.IsLinux())
+            {
+                switch (cpuArchitec)
+                {
+                    case Architecture.Arm:
+                        pathPortAudio = Path.Combine("/usr/lib", "arm-linux-gnueabihf", $"libportaudio.{ridext.Item2}.2");
+                        break;
+                    case Architecture.Arm64:
+                        pathPortAudio = Path.Combine("/usr/lib", "aarch64-linux-gnu", $"libportaudio.{ridext.Item2}.2");
+                        break;
+                    case Architecture.X64:
+                        pathPortAudio = Path.Combine("/usr/lib", "x86_64-linux-gnu", $"libportaudio.{ridext.Item2}.2");
+                        break;
+                    case Architecture.X86:
+                        pathPortAudio = Path.Combine("/usr/lib", "i386-linux-gnu", $"libportaudio.{ridext.Item2}.2");
+                        break;
+                    default:
+                        pathPortAudio = Path.Combine("/usr/lib", $"libportaudio.{ridext.Item2}.2");
+                        break;
+                }
+            }
+
 
             if (!File.Exists(pathPortAudio) && ffmpegPath is not null)
             {
-                pathPortAudio = Path.Combine(ffmpegPath, $"libportaudio.{ridext.Item2}");
-                if (OperatingSystem.IsLinux())
-                {
-                    switch (cpuArchitec)
-                    {
-                        case Architecture.Arm:
-                            pathPortAudio = Path.Combine("/usr/lib", "arm-linux-gnueabihf", $"libportaudio.{ridext.Item2}.2");
-                            break;
-                        case Architecture.Arm64:
-                            pathPortAudio = Path.Combine("/usr/lib", "aarch64-linux-gnu", $"libportaudio.{ridext.Item2}.2");
-                            break;
-                        case Architecture.X64:
-                            pathPortAudio = Path.Combine("/usr/lib", "x86_64-linux-gnu", $"libportaudio.{ridext.Item2}.2");
-                            break;    
-                        case Architecture.X86:
-                            pathPortAudio = Path.Combine("/usr/lib", "i386-linux-gnu", $"libportaudio.{ridext.Item2}.2");
-                            break; 
-                        default:    
-                            pathPortAudio = Path.Combine("/usr/lib", $"libportaudio.{ridext.Item2}.2");
-                            break; 
-                    }
-                }
+                if (!OperatingSystem.IsAndroid() && !OperatingSystem.IsIOS())
+                    pathPortAudio = Path.Combine(ffmpegPath, $"libportaudio.{ridext.Item2}");                
             }
             
             try

@@ -20,13 +20,18 @@ internal sealed class LibraryLoader : IDisposable
     {
         Ensure.NotNull(libraryName, nameof(libraryName));
 
-        if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS() || 
-            OperatingSystem.IsAndroid() || OperatingSystem.IsIOS())
+        try
         {
             _handle = NativeLibrary.Load(libraryName);
         }
-        else
-            throw new NotSupportedException("Platform is not supported.");
+        catch(DllNotFoundException ex)
+        {
+            Console.WriteLine($"[ERROR] DllNotFoundException when loading 'miniaudio': {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            throw new NotSupportedException($"Platform is not supported. ERROR: {ex.Message}");
+        }
 
         Ensure.That<Exception>(_handle != IntPtr.Zero, $"Could not load native libary: {libraryName}.");
     }
