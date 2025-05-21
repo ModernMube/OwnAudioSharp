@@ -26,7 +26,31 @@ public static partial class OwnAudio
         public const AVSampleFormat FFmpegSampleFormat = AVSampleFormat.AV_SAMPLE_FMT_FLT;
         public const PaBinding.PaSampleFormat PaSampleFormat = PaBinding.PaSampleFormat.paFloat32;
     }
-    
+
+/// <summary>
+    /// Initialize and register the PortAudio library and initialize and 
+    /// register the FFmpeg functions with the FFmpeg native libraries, 
+    /// the system default directory.
+    /// </summary>
+    public static bool Initialize()
+    {
+        IPlatformPathProvider _platform = GetPlatformProvider();
+        return Initialize(_platform.GetFFmpegPath());
+    }
+
+    /// <summary>
+    /// Initialize and register the PortAudio library and initialize 
+    /// and register the FFmpeg functions with the FFmpeg native libraries, the system default director 
+    /// and sets the audio api to use.
+    /// </summary>
+    /// <param name="hostType">Host API type</param>
+    /// <returns></returns>
+    public static bool Initialize(OwnAudioEngine.EngineHostType hostType)
+    {
+        IPlatformPathProvider _platform = GetPlatformProvider();
+        return Initialize(_platform.GetFFmpegPath(), hostType);
+    }
+
     /// <summary>
     /// Initialize and register the PortAudio library and 
     /// initialize and register the FFmpeg functions by specifying the path to the FFmpeg native libraries. 
@@ -45,16 +69,14 @@ public static partial class OwnAudio
             string? relativeBase;
             Architecture cpuArchitec = RuntimeInformation.ProcessArchitecture;
 
-            if(!OperatingSystem.IsAndroid() && !OperatingSystem.IsIOS())
+            //Not a mobile system
+            if (!OperatingSystem.IsAndroid() && !OperatingSystem.IsIOS())
             {
-                 relativeBase = Directory.Exists("runtimes") ? "runtimes" :
-                    Directory.EnumerateDirectories(Directory.GetCurrentDirectory(), "runtimes", SearchOption.AllDirectories)
-                    .Select(dirPath => Path.GetRelativePath(Directory.GetCurrentDirectory(), dirPath))
-                    .FirstOrDefault();
+                relativeBase = DetermineDesktopRelativeBase();
             }
             else
             {
-               relativeBase = System.Environment.GetFolderPath(System.Environment.SpecialFolder.Personal);
+                relativeBase = System.Environment.GetFolderPath(System.Environment.SpecialFolder.Personal);
             }
 
             if (string.IsNullOrEmpty(relativeBase))
@@ -64,7 +86,7 @@ public static partial class OwnAudio
             pathMiniAudio = System.IO.Path.Combine(relativeBase, ridext.Item1, "native", $"libminiaudio.{ridext.Item2}");
 
             //Ios system
-            if(OperatingSystem.IsIOS())
+            if (OperatingSystem.IsIOS())
             {
 #if IOS
                 string sourceFrameworkFolderInBundle = Path.Combine("runtimes", ridext.Item1, "native", "miniaudio.framework");
@@ -113,7 +135,7 @@ public static partial class OwnAudio
 #endif
             }
             //Android system
-            else if(OperatingSystem.IsAndroid())
+            else if (OperatingSystem.IsAndroid())
             {
                 pathMiniAudio = "libminiaudio";
                 pathPortAudio = "";
@@ -153,34 +175,40 @@ public static partial class OwnAudio
             if (!File.Exists(pathPortAudio) && ffmpegPath is not null)
             {
                 if (!OperatingSystem.IsAndroid() && !OperatingSystem.IsIOS())
-                    pathPortAudio = Path.Combine(ffmpegPath, $"libportaudio.{ridext.Item2}");                
+                    pathPortAudio = Path.Combine(ffmpegPath, $"libportaudio.{ridext.Item2}");
             }
-            
+
             try
             {
-                PortAudioPath = pathPortAudio;      
+                PortAudioPath = pathPortAudio;
                 MiniAudioPath = pathMiniAudio;
                 LibraryPath = ffmpegPath;
-                
+
                 try
                 {
-                    InitializeMa(pathMiniAudio, hostType);
+                    InitializeMiniAudio(pathMiniAudio, hostType);
                     InitializePortAudio(pathPortAudio, hostType);
-                    
                     InitializeFFmpeg(ffmpegPath);
                 }
                 catch (Exception)
                 {
-                    Debug.WriteLine("Audio initialize error.");
+                    Debug.WriteLine($"Audio initialize error.");
                 }
 
                 //IsFFmpegInitialized = false;
                 //IsPortAudioInitialized = false;
-                
+
                 if (IsMiniAudioInitialized)
+                {
                     return true;
+                }
                 else
-                    return false;
+                {
+                    if (IsPortAudioInitialized && IsFFmpegInitialized)
+                        return true;
+                    else
+                        return false;
+                }
             }
             catch (Exception ex)
             {
@@ -190,30 +218,6 @@ public static partial class OwnAudio
         }
     }
 
-    /// <summary>
-    /// Initialize and register the PortAudio library and initialize and 
-    /// register the FFmpeg functions with the FFmpeg native libraries, 
-    /// the system default directory.
-    /// </summary>
-    public static bool Initialize()
-    {
-        IPlatformPathProvider _platform = GetPlatformProvider();
-        return Initialize(_platform.GetFFmpegPath()); 
-    }
-
-    /// <summary>
-    /// Initialize and register the PortAudio library and initialize 
-    /// and register the FFmpeg functions with the FFmpeg native libraries, the system default director 
-    /// and sets the audio api to use.
-    /// </summary>
-    /// <param name="hostType">Host API type</param>
-    /// <returns></returns>
-    public static bool Initialize(OwnAudioEngine.EngineHostType hostType)
-    {
-        IPlatformPathProvider _platform = GetPlatformProvider();
-        return Initialize(_platform.GetFFmpegPath(), hostType);
-    }
-   
     /// <summary>
     /// Specifies to access and extend the current system's PortAudio library. 
     /// </summary>
@@ -276,6 +280,40 @@ public static partial class OwnAudio
         else
         {
             throw new NotSupportedException();
+        }
+    }
+
+    /// <summary>
+    /// Defines the relative base path of the application
+    /// </summary>
+    /// <returns>Relative base path</returns>
+    private static string? DetermineDesktopRelativeBase()
+    {
+        string? appCtxBaseDir = Ownaudio.Utilities.PlatformUtils.tGetAppSpecificBasePah();
+
+        if (!string.IsNullOrEmpty(appCtxBaseDir))
+        {
+            string runtimesDirectPath = Path.Combine(appCtxBaseDir, "runtimes");
+            if (Directory.Exists(runtimesDirectPath))
+            {
+                Console.WriteLine($"[INFO] Desktop: 'runtimes' folder found here: {runtimesDirectPath}");
+                return runtimesDirectPath;
+            }
+            Console.WriteLine($"[INFO] Desktop: 'runtimes' folder not found here: '{runtimesDirectPath}'. Default base: '{appCtxBaseDir}'. Expected structure: '{appCtxBaseDir}/{{RID}}/native/'.");
+            return appCtxBaseDir;
+        }
+        else
+        {
+            Console.WriteLine("[WARNING] Desktop: GetAppSpecificBasePath() returned null or empty value. Reverting to original 'runtimes' search logic (based on CurrentDirectory).");
+            string? fallbackRelativeBase = Directory.Exists("runtimes") ? "runtimes" :
+                                        Directory.EnumerateDirectories(Directory.GetCurrentDirectory(), "runtimes", SearchOption.AllDirectories)
+                                        .Select(dirPath => Path.GetRelativePath(Directory.GetCurrentDirectory(), dirPath))
+                                        .FirstOrDefault();
+            if (string.IsNullOrEmpty(fallbackRelativeBase))
+            {
+                Debug.WriteLine("[ERROR] Desktop: Critical error - Unable to determine the value of relativeBase using either GetAppSpecificBasePath() or fallback logic.");
+            }
+            return fallbackRelativeBase;
         }
     }
 }
