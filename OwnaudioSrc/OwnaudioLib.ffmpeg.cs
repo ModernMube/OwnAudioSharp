@@ -2,10 +2,8 @@ using System;
 using System.Runtime.InteropServices;
 using System.IO;
 
-using Ownaudio.Utilities;
-
 using FFmpeg.AutoGen;
-using System;
+using System.Diagnostics;
 
 namespace Ownaudio;
 
@@ -28,9 +26,18 @@ public static partial class OwnAudio
             return;
         }
 
-        ffmpeg.RootPath = ffmpegDirectory ?? "";
-        ffmpeg.av_log_set_level(ffmpeg.AV_LOG_QUIET);
-        IsFFmpegInitialized = true;
+        IsFFmpegInitialized = false;
+
+        try
+        {
+            ffmpeg.RootPath = ffmpegDirectory ?? "";
+            ffmpeg.av_log_set_level(ffmpeg.AV_LOG_QUIET);
+            IsFFmpegInitialized = true;
+        }
+        catch (Exception)
+        {
+            Debug.WriteLine("Ffmpeg initialize error.");
+        }
     }
 
     private interface IPlatformPathProvider
