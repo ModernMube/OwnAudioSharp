@@ -363,8 +363,8 @@ public unsafe partial class SourceManager
         {
             if (OwnAudio.DefaultInputDevice.MaxInputChannels > 0 && IsRecorded)
                 Engine = new OwnAudioMiniEngine(InputEngineOptions, OutputEngineOptions, EngineFramesPerBuffer);
-            //else
-                //Engine = new OwnAudioMiniEngine(OutputEngineOptions, EngineFramesPerBuffer);
+            else
+                Engine = new OwnAudioMiniEngine(OutputEngineOptions, EngineFramesPerBuffer);
         }
         else
         {
