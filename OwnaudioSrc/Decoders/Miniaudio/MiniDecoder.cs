@@ -125,7 +125,6 @@ namespace Ownaudio.Decoders.MiniAudio
                 try
                 {
                     int framesToRead = _bufferSize / _channels;
-                    //framesToRead = 2048;
                     int samplesToRead = framesToRead * _channels;
 
                     if (_decodingBuffer == null || samplesToRead > _decodingBuffer.Length)

@@ -1,16 +1,17 @@
-﻿using System;
+﻿using Ownaudio.Exceptions;
+using Ownaudio.MiniAudio;
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Ownaudio.Exceptions;
-using Ownaudio.MiniAudio;
 
 namespace Ownaudio.Engines;
 
 /// <summary>
-/// Interact with audio devices using MiniAudio library.
+/// Interact with audio devices using separate MiniAudio engines for playback and capture.
 /// This class cannot be inherited.
 /// <para>Implements: <see cref="IAudioEngine"/>.</para>
 /// </summary>
@@ -18,7 +19,8 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
 {
     private readonly AudioEngineOutputOptions _outOptions;
     private readonly AudioEngineInputOptions _inOptions;
-    private readonly MiniAudioEngine _miniAudioEngine;
+    private readonly MiniAudioEngine? _playbackEngine;
+    private readonly MiniAudioEngine? _captureEngine;
     private readonly int _framesPerBuffer;
     private bool _disposed;
 
@@ -30,17 +32,18 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
 
     private Stopwatch _stopwatch = new Stopwatch();
 
-    private GCHandle? _engineHandle; 
+    private GCHandle? _playbackEngineHandle;
+    private GCHandle? _captureEngineHandle;
 
     /// <summary>
     /// Initializes a new instance of OwnAudioMiniEngine with only output options.
     /// </summary>
     /// <param name="outOptions">Optional audio engine output options.</param>
-    /// <param name="framesPerBuffer">The number of frames in the buffer (default 1024).</param>
+    /// <param name="framesPerBuffer">The number of frames in the buffer (default 512).</param>
     /// <exception cref="MiniaudioException">
     /// Thrown if an error occurs during MiniAudio initialization.
     /// </exception>
-    public OwnAudioMiniEngine(AudioEngineOutputOptions? outOptions = default, int framesPerBuffer = 1024)
+    public OwnAudioMiniEngine(AudioEngineOutputOptions? outOptions = default, int framesPerBuffer = 512)
         : this(null, outOptions, framesPerBuffer)
     {
     }
@@ -50,45 +53,69 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// </summary>
     /// <param name="inOptions">Optional audio engine input options.</param>
     /// <param name="outOptions">Optional audio engine output options.</param>
-    /// <param name="framesPerBuffer">Number of frames per buffer (default is 1024).</param>
+    /// <param name="framesPerBuffer">Number of frames per buffer (default is 512).</param>
     /// <exception cref="MiniaudioException">
     /// Thrown when errors occur during MiniAudio initialization.
     /// </exception>
-    public OwnAudioMiniEngine(AudioEngineInputOptions? inOptions = default, AudioEngineOutputOptions? outOptions = default, int framesPerBuffer = 1024)
+    public OwnAudioMiniEngine(AudioEngineInputOptions? inOptions = default, AudioEngineOutputOptions? outOptions = default, int framesPerBuffer = 512)
     {
         _inOptions = inOptions ?? new AudioEngineInputOptions();
         _outOptions = outOptions ?? new AudioEngineOutputOptions();
         _framesPerBuffer = framesPerBuffer;
 
-        var deviceType = EngineDeviceType.Playback;
-        if (_inOptions.Channels > 0 && _outOptions.Channels > 0)
-            deviceType = EngineDeviceType.Duplex;
-        else if (_inOptions.Channels > 0)
-            deviceType = EngineDeviceType.Capture;
+        if (_outOptions.Channels > 0)
+        {
+            _playbackEngine = new MiniAudioEngine(
+                sampleRate: (int)_outOptions.SampleRate,
+                deviceType: EngineDeviceType.Playback,
+                sampleFormat: EngineAudioFormat.F32,
+                channels: (int)_outOptions.Channels
+            );
 
-        _miniAudioEngine = new MiniAudioEngine(
-            sampleRate: (int)_outOptions.SampleRate,
-            deviceType: deviceType,
-            sampleFormat: EngineAudioFormat.F32,
-            channels: (int)(_outOptions.Channels > 0 ? _outOptions.Channels : _inOptions.Channels)
-        );
+            SetupPlaybackProcessing();
+        }
+
+        if (_inOptions.Channels > 0)
+        {
+            _captureEngine = new MiniAudioEngine(
+                sampleRate: (int)_inOptions.SampleRate,
+                deviceType: EngineDeviceType.Capture,
+                sampleFormat: EngineAudioFormat.F32,
+                channels: (int)_inOptions.Channels
+            );
+
+            SetupCaptureProcessing();
+        }
 
         InitializeBufferPools();
-        SetupAudioProcessing();
     }
 
     /// <summary>
-    /// Sets up the audio processing callback for MiniAudio.
+    /// Sets up the audio processing callback for the playback engine.
     /// </summary>
-    private void SetupAudioProcessing()
+    private void SetupPlaybackProcessing()
     {
-        _miniAudioEngine.AudioProcessing += (sender, args) =>
+        if (_playbackEngine == null) return;
+
+        _playbackEngine.AudioProcessing += (sender, args) =>
         {
             if (args.Direction == AudioDataDirection.Output)
             {
                 ProcessOutput(args);
             }
-            else if (args.Direction == AudioDataDirection.Input)
+        };
+    }
+
+    /// <summary>
+    /// Sets up the audio processing callback for the capture engine.
+    /// </summary>
+    private void SetupCaptureProcessing()
+    {
+        if (_captureEngine == null) return;
+
+        _captureEngine.AudioProcessing += (sender, args) =>
+        {
+            if (args.Direction == AudioDataDirection.Input)
             {
                 ProcessInput(args);
             }
@@ -127,43 +154,26 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// <param name="args">The audio data event arguments.</param>
     private void ProcessInput(AudioDataEventArgs args)
     {
+        int actualSampleCount = args.SampleCount;
         int requiredSize = _framesPerBuffer * (int)_inOptions.Channels;
+
         float[]? inputData;
 
-        if (!_inputBufferPool.TryTake(out inputData))
+        if (!_inputBufferPool.TryTake(out inputData) || inputData.Length != actualSampleCount)
         {
-            inputData = new float[requiredSize];
-        }
-        else
-        {
-            Debug.Assert(inputData.Length == requiredSize, "ProcessInput: Buffer from pool has incorrect size!");
-
-            if (inputData.Length != requiredSize)
-            {
-                Debug.WriteLine($"ProcessInput: Incorrect buffer size {inputData.Length} from pool, expected {requiredSize}. Reallocating.");
-                inputData = new float[requiredSize];
-            }
+            inputData = new float[actualSampleCount]; 
         }
 
-        int copyLength = Math.Min(args.SampleCount, requiredSize);
-        Array.Copy(args.Buffer, inputData, copyLength);
-
-        if (copyLength < requiredSize)
-        {
-            Array.Clear(inputData, copyLength, requiredSize - copyLength);
-        }
+        Array.Copy(args.Buffer, inputData, actualSampleCount);
 
         while (_inputBufferQueue.Count >= _maxQueueSize)
         {
             if (_inputBufferQueue.TryDequeue(out float[]? dummy))
-            {
                 _inputBufferPool.Add(dummy);
-            }
             else
-            {
                 break;
-            }
         }
+
         _inputBufferQueue.Enqueue(inputData);
     }
 
@@ -173,15 +183,17 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     private void InitializeBufferPools()
     {
         int outputBufferSize = _framesPerBuffer * (int)_outOptions.Channels;
-        int inputBufferSize = _framesPerBuffer * (int)_inOptions.Channels;
+
+        int inputBufferSize = _framesPerBuffer * (int)_inOptions.Channels * 4; 
+
+        Debug.WriteLine($"Initializing buffer pools:");
+        Debug.WriteLine($"  Output buffers: {outputBufferSize} samples");
+        Debug.WriteLine($"  Input buffer pool size: {inputBufferSize} samples (dynamic sizing)");
 
         for (int i = 0; i < _maxQueueSize * 2; i++)
         {
             if (_outOptions.Channels > 0)
                 _outputBufferPool.Add(new float[outputBufferSize]);
-
-            if (_inOptions.Channels > 0)
-                _inputBufferPool.Add(new float[inputBufferSize]);
         }
     }
 
@@ -191,46 +203,63 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     public int FramesPerBuffer => _framesPerBuffer;
 
     /// <summary>
-    /// Gets the MiniAudio engine internal handle.
+    /// Gets the primary engine handle (playback if available, otherwise capture).
     /// </summary>
-    /// <returns>IntPtr representing the MiniAudio engine</returns>
+    /// <returns>IntPtr representing the primary MiniAudio engine</returns>
     public IntPtr GetStream()
     {
-        if (!_engineHandle.HasValue || !_engineHandle.Value.IsAllocated)
+        if (_playbackEngine != null)
         {
-            _engineHandle = GCHandle.Alloc(_miniAudioEngine);
+            if (!_playbackEngineHandle.HasValue || !_playbackEngineHandle.Value.IsAllocated)
+                _playbackEngineHandle = GCHandle.Alloc(_playbackEngine);
+
+            return GCHandle.ToIntPtr(_playbackEngineHandle.Value);
         }
-        return GCHandle.ToIntPtr(_engineHandle.Value);
+        else if (_captureEngine != null)
+        {
+            if (!_captureEngineHandle.HasValue || !_captureEngineHandle.Value.IsAllocated)
+                _captureEngineHandle = GCHandle.Alloc(_captureEngine);
+
+            return GCHandle.ToIntPtr(_captureEngineHandle.Value);
+        }
+
+        return IntPtr.Zero;
     }
 
     /// <summary>
-    /// Checks the active state of the audio engine.
+    /// Checks the active state of the audio engines.
     /// </summary>
     /// <returns>
-    /// 1 - the engine is playing or recording
-    /// 0 - the engine is not playing or recording
+    /// 1 - at least one engine is running
+    /// 0 - no engines are running
     /// </returns>
     public int OwnAudioEngineActivate()
     {
-        return _miniAudioEngine.IsRunning() ? 1 : 0;
+        bool playbackRunning = _playbackEngine?.IsRunning() ?? false;
+        bool captureRunning = _captureEngine?.IsRunning() ?? false;
+
+        return (playbackRunning || captureRunning) ? 1 : 0;
     }
 
     /// <summary>
-    /// Checks the stopped state of the audio engine.
+    /// Checks the stopped state of the audio engines.
     /// </summary>
     /// <returns>
-    /// 1 - the engine is stopped
-    /// 0 - the engine is running
+    /// 1 - all engines are stopped
+    /// 0 - at least one engine is running
     /// </returns>
     public int OwnAudioEngineStopped()
     {
-        return _miniAudioEngine.IsRunning() ? 0 : 1;
+        bool playbackRunning = _playbackEngine?.IsRunning() ?? false;
+        bool captureRunning = _captureEngine?.IsRunning() ?? false;
+
+        return (playbackRunning || captureRunning) ? 0 : 1;
     }
 
     /// <summary>
-    /// Starts the audio engine.
+    /// Starts the audio engines.
     /// </summary>
-    /// <returns>0 for success</returns>
+    /// <returns>0 for success, -1 for error</returns>
     public int Start()
     {
         try
@@ -241,31 +270,46 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
             while (_inputBufferQueue.TryDequeue(out float[]? buffer))
                 _inputBufferPool.Add(buffer);
 
-            _miniAudioEngine.Start();
+            if (_playbackEngine != null)
+                _playbackEngine.Start();
+
+            if (_captureEngine != null)
+                _captureEngine.Start();
+
             return 0;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Miniaudio initialize error: {ex.Message}");
+            Debug.WriteLine($"Miniaudio start error: {ex.Message}");
             return -1;
         }
     }
 
     /// <summary>
-    /// Stops the audio engine.
+    /// Stops the audio engines.
     /// </summary>
     /// <returns>0 for success</returns>
     public int Stop()
     {
-        _miniAudioEngine.Stop();
+        try
+        {
+            _playbackEngine?.Stop();
 
-        while (_outputBufferQueue.TryDequeue(out float[]? buffer))
-            _outputBufferPool.Add(buffer);
+            _captureEngine?.Stop();
 
-        while (_inputBufferQueue.TryDequeue(out float[]? buffer))
-            _inputBufferPool.Add(buffer);
+            while (_outputBufferQueue.TryDequeue(out float[]? buffer))
+                _outputBufferPool.Add(buffer);
 
-        return 0;
+            while (_inputBufferQueue.TryDequeue(out float[]? buffer))
+                _inputBufferPool.Add(buffer);
+
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error stopping engines: {ex.Message}");
+            return -1;
+        }
     }
 
     /// <summary>
@@ -274,6 +318,12 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// <param name="samples">A span containing the audio samples to be played.</param>
     public void Send(Span<float> samples)
     {
+        if (_playbackEngine == null)
+        {
+            Debug.WriteLine("Warning: Trying to send audio data but no playback engine is available.");
+            return;
+        }
+
         int expectedSize = _framesPerBuffer * (int)_outOptions.Channels;
         if (samples.Length != expectedSize)
         {
@@ -282,18 +332,13 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
         }
 
         if (_outputBufferQueue.Count >= _maxQueueSize)
-        {
             Thread.Sleep(5);
-        }
 
         if (_outputBufferQueue.Count < _maxQueueSize)
-        {
             EnqueueOutputBuffer(samples);
-        }
         else
-        {
             Debug.WriteLine("Output buffer queue still full after wait. Dropping samples.");
-        }
+        
         _stopwatch.Restart();
     }
 
@@ -330,42 +375,27 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// <param name="samples">An output array that will be filled with the received audio samples.</param>
     public void Receives(out float[] samples)
     {
-        #nullable disable
+#nullable disable
         if (_inputBufferQueue.TryDequeue(out samples))
-        {
-            Debug.Assert(samples != null && samples.Length == _framesPerBuffer * (int)_inOptions.Channels,
-                "Input buffer size mismatch - every buffer must be FramesPerBuffer * Channels");
             return;
-        }
 
         int waitCount = 0;
-        const int maxWait = 20;
+        const int maxWait = 5;
 
         while (!_inputBufferQueue.TryDequeue(out samples) && waitCount < maxWait)
         {
-            Thread.Sleep(5);
+            Thread.Sleep(1);
             waitCount++;
         }
 
         if (samples == null)
         {
-            int requiredSize = _framesPerBuffer * (int)_inOptions.Channels;
-            if (!_inputBufferPool.TryTake(out samples))
-            {
-                samples = new float[requiredSize];
-            }
-            else
-            {
-                Debug.Assert(samples.Length == requiredSize, "Receives: Buffer from pool has incorrect size!");
-                if (samples.Length != requiredSize)
-                {
-                    Debug.WriteLine($"Receives: Incorrect buffer size {samples.Length} from pool for empty data, expected {requiredSize}. Reallocating.");
-                    samples = new float[requiredSize];
-                }
-            }
+            int expectedSize = _framesPerBuffer * (int)_inOptions.Channels;
+            samples = new float[expectedSize];
             Array.Clear(samples, 0, samples.Length);
+            Debug.WriteLine($"No input data available, returning silence ({expectedSize} samples)");
         }
-        #nullable restore
+#nullable restore
     }
 
     /// <summary>
@@ -378,22 +408,30 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     {
         try
         {
+            var engine = isInputDevice ? _captureEngine : _playbackEngine;
+
+            if (engine == null)
+            {
+                Debug.WriteLine($"Warning: No {(isInputDevice ? "capture" : "playback")} engine available for device switching.");
+                return false;
+            }
+
             var devices = isInputDevice
-                ? _miniAudioEngine.CaptureDevices
-                : _miniAudioEngine.PlaybackDevices;
+                ? engine.CaptureDevices
+                : engine.PlaybackDevices;
 
             var targetDevice = devices.FirstOrDefault(d =>
                 d.Name?.Contains(deviceName, StringComparison.OrdinalIgnoreCase) == true);
 
             if (targetDevice != null)
             {
-                _miniAudioEngine.SwitchDevice(targetDevice,
+                engine.SwitchDevice(targetDevice,
                     isInputDevice ? EngineDeviceType.Capture : EngineDeviceType.Playback);
                 return true;
             }
             return false;
         }
-        catch (Exception ex) // Általánosabb hibaelfogás a robusztusság érdekében
+        catch (Exception ex)
         {
             Debug.WriteLine($"Error switching device: {ex.Message}");
             return false;
@@ -401,7 +439,25 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     }
 
     /// <summary>
-    /// Releases all resources used by the audio engine.
+    /// Gets the list of available playback devices.
+    /// </summary>
+    /// <returns>Enumerable of available playback devices</returns>
+    public IEnumerable<object> GetPlaybackDevices()
+    {
+        return _playbackEngine?.PlaybackDevices ?? Enumerable.Empty<object>();
+    }
+
+    /// <summary>
+    /// Gets the list of available capture devices.
+    /// </summary>
+    /// <returns>Enumerable of available capture devices</returns>
+    public IEnumerable<object> GetCaptureDevices()
+    {
+        return _captureEngine?.CaptureDevices ?? Enumerable.Empty<object>();
+    }
+
+    /// <summary>
+    /// Releases all resources used by the audio engines.
     /// </summary>
     public void Dispose()
     {
@@ -410,16 +466,29 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
 
         _disposed = true;
 
-        if (_miniAudioEngine != null)
+        if (_playbackEngine != null)
         {
             try
             {
-                _miniAudioEngine.Stop();
-                _miniAudioEngine.Dispose();
+                _playbackEngine.Stop();
+                _playbackEngine.Dispose();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error disposing MiniAudio engine: {ex.Message}");
+                Debug.WriteLine($"Error disposing playback engine: {ex.Message}");
+            }
+        }
+
+        if (_captureEngine != null)
+        {
+            try
+            {
+                _captureEngine.Stop();
+                _captureEngine.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error disposing capture engine: {ex.Message}");
             }
         }
 
@@ -433,10 +502,16 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
         while (_inputBufferPool.TryTake(out _)) { }
         while (_outputBufferPool.TryTake(out _)) { }
 
-        if (_engineHandle.HasValue && _engineHandle.Value.IsAllocated)
+        if (_playbackEngineHandle.HasValue && _playbackEngineHandle.Value.IsAllocated)
         {
-            _engineHandle.Value.Free();
-            _engineHandle = null;
+            _playbackEngineHandle.Value.Free();
+            _playbackEngineHandle = null;
+        }
+
+        if (_captureEngineHandle.HasValue && _captureEngineHandle.Value.IsAllocated)
+        {
+            _captureEngineHandle.Value.Free();
+            _captureEngineHandle = null;
         }
     }
 }

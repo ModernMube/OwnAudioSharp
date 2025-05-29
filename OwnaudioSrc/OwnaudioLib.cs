@@ -71,13 +71,9 @@ public static partial class OwnAudio
 
             //Not a mobile system
             if (!OperatingSystem.IsAndroid() && !OperatingSystem.IsIOS())
-            {
                 relativeBase = DetermineDesktopRelativeBase();
-            }
             else
-            {
                 relativeBase = System.Environment.GetFolderPath(System.Environment.SpecialFolder.Personal);
-            }
 
             if (string.IsNullOrEmpty(relativeBase))
                 return false;
@@ -190,13 +186,10 @@ public static partial class OwnAudio
                     InitializePortAudio(pathPortAudio, hostType);
                     InitializeFFmpeg(ffmpegPath);
                 }
-                catch (Exception)
+                catch (Exception Ex)
                 {
-                    Debug.WriteLine($"Audio initialize error.");
+                    Debug.WriteLine($"Audio library initialize error: {Ex.Message}");
                 }
-
-                //IsFFmpegInitialized = false;
-                //IsPortAudioInitialized = false;
 
                 if (IsMiniAudioInitialized)
                 {
@@ -212,7 +205,9 @@ public static partial class OwnAudio
             }
             catch (Exception ex)
             {
+                Debug.WriteLine("An error occurred while initializing the audio libraries.");
                 Debug.WriteLine(ex.Message);
+
                 return false;
             }
         }

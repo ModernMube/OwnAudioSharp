@@ -1,14 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-
 using Ownaudio.Bindings.Miniaudio;
 using Ownaudio.Exceptions;
 using Ownaudio.Utilities;
-using Ownaudio.Utilities.Extensions;
 using Ownaudio.Engines;
-using System.IO;
-using System.Runtime.InteropServices;
-using static Ownaudio.Bindings.Miniaudio.MaBinding;
 using Ownaudio.MiniAudio;
 using System.Linq;
 using System.Diagnostics;
@@ -21,8 +15,6 @@ namespace Ownaudio;
 /// </summary>
 public static partial class OwnAudio
 {
-    private static IntPtr _context = IntPtr.Zero;
-
     /// <summary>
     /// Terminates processes and frees memory.
     /// </summary>
