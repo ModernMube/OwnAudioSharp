@@ -67,7 +67,7 @@ The table below summarizes the supported operating systems, the APIs used, and t
 | System     | APIs                           | Status       |
 |------------|--------------------------------|--------------|
 | Windows    | Portaudio 2, Miniaudio, Ffmpeg 6 | Tested       |
-| Linux      | Portaudio 2, Miniaudio, Ffmpeg 6 | Not tested   |
+| Linux      | Portaudio 2, Miniaudio, Ffmpeg 6 | Tested   |
 | MacOs      | Portaudio 2, Miniaudio, Ffmpeg 6 | Tested       |
 | Android    | Miniaudio                      | Not tested   |
 | Ios        | Miniaudio                      | Not tested   |
@@ -126,6 +126,16 @@ brew install ffmpeg@6
 * Good news! **Miniaudio** works out of the box on Android and iOS. These platforms don't require any additional steps to handle audio.
 
 ---
+
+## Support My Work
+
+If you find this project helpful, consider buying me a coffee!
+
+<a href="https://www.buymeacoffee.com/ModernMube" 
+    target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" 
+    alt="Buy Me A Coffee" 
+    style="height: 60px !important;width: 217px !important;" >
+ </a>
 
 ## Basic Usage
 
@@ -302,16 +312,6 @@ The library follows a layered architecture:
 3. **Sources** - Audio source management (Source, SourceInput)
 4. **SourceManager** - Mixing and controlling multiple sources
 5. **Processors** - Custom audio processing pipeline
-
-## Support My Work
-
-If you find this project helpful, consider buying me a coffee!
-
-<a href="https://www.buymeacoffee.com/ModernMube" 
-    target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" 
-    alt="Buy Me A Coffee" 
-    style="height: 60px !important;width: 217px !important;" >
- </a>
 
 ## Acknowledgements
 
