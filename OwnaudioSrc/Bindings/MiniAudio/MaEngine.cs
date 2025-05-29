@@ -96,7 +96,7 @@ namespace Ownaudio.MiniAudio
             }
             else if (OperatingSystem.IsWindows())
             {
-                var backends = new[] { MaBackend.Wasapi, MaBackend.Dsound, MaBackend.Winmm };
+                var backends = new[] { MaBackend.Wasapi };
                 result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _context);
             }
             else if(OperatingSystem.IsMacOS() || OperatingSystem.IsIOS())
@@ -114,7 +114,7 @@ namespace Ownaudio.MiniAudio
                 result = MaBinding.ma_context_init(null, 0, IntPtr.Zero, _context);
             }
             
-            MiniaudioException.ThrowIfError(result, $"Failed to initialize the context. Error: {result}");
+            MiniaudioException.ThrowIfError(result, $"Failed to initialize the miniaudio context. Error: {result}");
         }
 
         /// <summary>
@@ -147,15 +147,30 @@ namespace Ownaudio.MiniAudio
                 MaResult result;
                 if (OperatingSystem.IsLinux())
                 {
-                    var backends = new[] { MaBackend.Alsa};
+                    var backends = new[] { MaBackend.Alsa, MaBackend.PulseAudio, MaBackend.Jack };
+                    result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _context);
+                }
+                else if (OperatingSystem.IsWindows())
+                {
+                    var backends = new[] { MaBackend.Wasapi };
+                    result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _context);
+                }
+                else if (OperatingSystem.IsMacOS() || OperatingSystem.IsIOS())
+                {
+                    var backends = new[] { MaBackend.CoreAudio };
+                    result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _context);
+                }
+                else if (OperatingSystem.IsAndroid())
+                {
+                    var backends = new[] { MaBackend.Aaudio, MaBackend.OpenSL };
                     result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _context);
                 }
                 else
                 {
                     result = MaBinding.ma_context_init(null, 0, IntPtr.Zero, _context);
                 }
-                    
-                MiniaudioException.ThrowIfError(result, $"Failed to initialize the context. Error: {result}");
+
+                MiniaudioException.ThrowIfError(result, $"Failed to initialize the miniaudio context. Error: {result}");
 
                 InitializeDeviceInternal(IntPtr.Zero, _deviceType);
             }
@@ -190,14 +205,14 @@ namespace Ownaudio.MiniAudio
                 {
                     MaBinding.ma_free(_device, IntPtr.Zero, "MaEngine device config not success...");
                     _device = IntPtr.Zero;
-                    throw new InvalidOperationException($"Failed to initialize the device. Error: {result}");
+                    throw new InvalidOperationException($"Failed to initialize the miniaudio device. Error: {result}");
                 }
 
                 result = MaBinding.ma_device_start(_device);
                 if (result != MaResult.Success)
                 {
                     CleanupCurrentDevice();
-                    throw new InvalidOperationException($"Failed to start the device. Error: {result}");
+                    throw new InvalidOperationException($"Failed to start the miniaudio device. Error: {result}");
                 }
 
                 UpdateDevicesInfo();
@@ -335,11 +350,11 @@ namespace Ownaudio.MiniAudio
                         out captureDeviceCount);
 
                     if (result != MaResult.Success)
-                        throw new InvalidOperationException($"Failed to query devices. Error: {result}");
+                        throw new InvalidOperationException($"Failed to query miniaudio devices. Error: {result}");
 
                     if (pPlaybackDevices == IntPtr.Zero || pCaptureDevices == IntPtr.Zero ||
                         playbackDeviceCount == 0 || captureDeviceCount == 0)
-                        throw new InvalidOperationException("Failed to query devices.");
+                        throw new InvalidOperationException("Failed to query miniaudio devices.");
 
                     _playbackDevices.Clear();
                     for (int i = 0; i < playbackDeviceCount; i++)

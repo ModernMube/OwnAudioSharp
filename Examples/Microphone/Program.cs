@@ -34,7 +34,6 @@ namespace Microphone
                 if (!OwnAudio.IsFFmpegInitialized || !OwnAudio.IsPortAudioInitialized)
                 {
                     Console.WriteLine("library initialization failed!");
-                    Console.WriteLine("Unpack the files in the LIB directory!");
                 }
             }
         }

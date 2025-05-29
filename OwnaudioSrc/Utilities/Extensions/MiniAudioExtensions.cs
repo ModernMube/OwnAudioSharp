@@ -1,24 +1,23 @@
 ﻿using System;
 using System.Runtime.InteropServices;
-using Ownaudio.Bindings.Miniaudio;
 using Ownaudio.Exceptions;
 using static Ownaudio.Bindings.Miniaudio.MaBinding;
 
 namespace Ownaudio.Utilities.Extensions
 {
     /// <summary>
-    /// Kiterjesztések a miniaudio eredménykódokhoz.
+    /// Extensions to miniaudio result codes.
     /// </summary>
     public static class MaResultExtensions
     {
         /// <summary>
-        /// Ellenőrzi a miniaudio művelet eredményét, és kivételt dob, ha hiba történt.
+        /// Checks the result of the miniaudio operation and throws an exception if an error occurs.
         /// </summary>
-        /// <param name="result">A ellenőrizendő miniaudio eredmény (egész számként).</param>
-        /// <param name="errorMessage">Az üzenet, amelyet a kivételben kell használni, ha hiba történt.</param>
-        /// <returns>Ugyanazt az eredménykódot adja vissza, ha az nem jelent hibát.</returns>
-        /// <exception cref="MiniaudioException">Ha az eredmény hibát jelez.</exception>
-        public static int MaGuard(this int result, string errorMessage = "Miniaudio hiba történt")
+        /// <param name="result">The miniaudio result to check (as an integer).</param>
+        /// <param name="errorMessage">The message to use in the exception if an error occurs.</param>
+        /// <returns>Returns the same result code if it does not indicate an error.</returns>
+        /// <exception cref="MiniaudioException">If the result indicates an error.</exception>
+        public static int MaGuard(this int result, string errorMessage = "Miniaudio ERROR: ")
         {
             if (result != 0) // MA_SUCCESS = 0
             {
@@ -29,28 +28,28 @@ namespace Ownaudio.Utilities.Extensions
         }
 
         /// <summary>
-        /// Lekéri a miniaudio eredménykód szöveges leírását.
+        /// Gets a text description of the miniaudio result code.
         /// </summary>
-        /// <param name="errorCode">A miniaudio eredmény egész számként.</param>
-        /// <returns>Az eredménykód szöveges leírása.</returns>
+        /// <param name="errorCode">The miniaudio result as an integer.</param>
+        /// <returns>A text description of the result code.</returns>
         public static string MaErrorToText(this int errorCode)
         {
             IntPtr errorStringPtr = ma_result_description((MaResult)errorCode);
 
             if (errorStringPtr == IntPtr.Zero)
-                return "Ismeretlen miniaudio hiba";
+                return "Unknown miniaudio error";
 
-            return Marshal.PtrToStringAnsi(errorStringPtr) ?? "Ismeretlen miniaudio hiba";
+            return Marshal.PtrToStringAnsi(errorStringPtr) ?? "Unknown miniaudio error";
         }
 
         /// <summary>
-        /// Ellenőrzi a miniaudio művelet eredményét, és kivételt dob, ha hiba történt.
+        /// Checks the result of the miniaudio operation and throws an exception if an error occurs.
         /// </summary>
-        /// <param name="result">A ellenőrizendő miniaudio eredmény.</param>
-        /// <param name="errorMessage">Az üzenet, amelyet a kivételben kell használni, ha hiba történt.</param>
-        /// <returns>Ugyanazt az eredménykódot adja vissza, ha az nem jelent hibát.</returns>
-        /// <exception cref="MiniaudioException">Ha az eredmény hibát jelez.</exception>
-        internal static MaResult MaGuard(this MaResult result, string errorMessage = "Miniaudio hiba történt")
+        /// <param name="result">The miniaudio result to check.</param>
+        /// <param name="errorMessage">The message to use in the exception if an error occurs.</param>
+        /// <returns>Returns the same result code if it does not indicate an error.</returns>
+        /// <exception cref="MiniaudioException">If the result indicates an error.</exception>
+        internal static MaResult MaGuard(this MaResult result, string errorMessage = "Miniaudio ERROR: ")
         {
             if (result != MaResult.Success)
             {
@@ -61,18 +60,18 @@ namespace Ownaudio.Utilities.Extensions
         }
 
         /// <summary>
-        /// Lekéri a miniaudio eredménykód szöveges leírását.
+        /// Gets the text description of the miniaudio result code.
         /// </summary>
-        /// <param name="result">A miniaudio eredmény.</param>
-        /// <returns>Az eredménykód szöveges leírása.</returns>
+        /// <param name="result">The miniaudio result.</param>
+        /// <returns>The text description of the result code.</returns>
         internal static string MaErrorToText(this MaResult result)
         {
             IntPtr errorStringPtr = ma_result_description(result);
 
             if (errorStringPtr == IntPtr.Zero)
-                return "Ismeretlen miniaudio hiba";
+                return "Unknown miniaudio error";
 
-            return Marshal.PtrToStringAnsi(errorStringPtr) ?? "Ismeretlen miniaudio hiba";
+            return Marshal.PtrToStringAnsi(errorStringPtr) ?? "Unknown miniaudio error";
         }
 
 

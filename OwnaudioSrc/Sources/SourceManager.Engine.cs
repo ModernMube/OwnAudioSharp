@@ -156,34 +156,19 @@ public unsafe partial class SourceManager
                 if (IsRecorded && Engine is not null)
                 {
                     float[] inputBuffer = new float[EngineFramesPerBuffer * (int)InputEngineOptions.Channels];
-                    float[] stereoData = new float[EngineFramesPerBuffer * (int)OutputEngineOptions.Channels];
-
                     ((SourceInput)SourcesInput[0]).ReceivesData(out inputBuffer, Engine);
 
-                    if (InputEngineOptions.Channels == Engines.OwnAudioEngine.EngineChannels.Mono &&
-                        OutputEngineOptions.Channels == Engines.OwnAudioEngine.EngineChannels.Stereo)
-                    {
-                        for (int i = 0; i < inputBuffer.Length; i++)
-                        {
-                            _mixedBuffer[i * 2] += Math.Clamp(inputBuffer[i], -1.0f, 1.0f);     //Left channel
-                            _mixedBuffer[i * 2 + 1] += inputBuffer[i]; //Right channel
-                            _mixedBuffer[i * 2] = Math.Clamp(_mixedBuffer[i * 2], -1.0f, 1.0f);
-                            _mixedBuffer[i * 2 + 1] = Math.Clamp(_mixedBuffer[i * 2 + 1], -1.0f, 1.0f);
-                        }
-                    }
-                    else
-                    {
-                        for (int i = 0; i < inputBuffer.Length; i++)
-                        {
-                            _mixedBuffer[i] += inputBuffer[i];
-                            _mixedBuffer[i] = Math.Clamp(_mixedBuffer[i], -1.0f, 1.0f);
-                        }
-                    }
+                    MixInput(
+                        inputBuffer: inputBuffer,
+                        mixedBuffer: _mixedBuffer,
+                        inputChannels: (int)InputEngineOptions.Channels,
+                        outputChannels: (int)OutputEngineOptions.Channels,
+                        mixingGain: 0.8f
+                    );
 
-                    if(InputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo)
-                        InputLevels = CalculateAverageStereoLevels(_mixedBuffer);
-                    else
-                        InputLevels = CalculateAverageMonoLevel(_mixedBuffer);
+                    InputLevels = InputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
+                        ? CalculateAverageStereoLevels(inputBuffer)
+                        : CalculateAverageMonoLevel(inputBuffer);
                 }
 
                 Span<float> mixedSpan = CollectionsMarshal.AsSpan(_mixedBuffer.ToList());
@@ -216,6 +201,60 @@ public unsafe partial class SourceManager
         }
 
         writeDataToFile();
+    }
+
+    /// <summary>
+    /// Optimized mixing function for different channel configurations
+    /// </summary>
+    /// <param name="inputBuffer">Input audio data</param>
+    /// <param name="mixedBuffer">Output buffer (already contains data to be mixed into)</param>
+    /// <param name="inputChannels">Number of input channels</param>
+    /// <param name="outputChannels">Number of output channels</param>
+    /// <param name="mixingGain">Mixing gain (0.0f - 1.0f)</param>
+    public static void MixInput(ReadOnlySpan<float> inputBuffer, Span<float> mixedBuffer,
+                               int inputChannels, int outputChannels, float mixingGain = 1.0f)
+    {
+        if (inputChannels == 1 && outputChannels == 2)
+        {
+            // Mono → Stereo
+            int frames = inputBuffer.Length;
+            for (int frame = 0; frame < frames; frame++)
+            {
+                float sample = Math.Clamp(inputBuffer[frame] * mixingGain, -1.0f, 1.0f);
+                mixedBuffer[frame * 2] += sample;     // Left
+                mixedBuffer[frame * 2 + 1] += sample; // Right
+            }
+        }
+        else if (inputChannels == 2 && outputChannels == 1)
+        {
+            // Stereo → Mono
+            int frames = inputBuffer.Length / 2;
+            for (int frame = 0; frame < frames; frame++)
+            {
+                float left = inputBuffer[frame * 2] * mixingGain;
+                float right = inputBuffer[frame * 2 + 1] * mixingGain;
+                float monoSample = Math.Clamp((left + right) * 0.5f, -1.0f, 1.0f);
+                mixedBuffer[frame] += monoSample;
+            }
+        }
+        else if (inputChannels == outputChannels)
+        {
+            // Identical channels
+            for (int i = 0; i < inputBuffer.Length; i++)
+            {
+                mixedBuffer[i] += Math.Clamp(inputBuffer[i] * mixingGain, -1.0f, 1.0f);
+            }
+        }
+        else
+        {
+            throw new NotSupportedException($"Mixing from {inputChannels} to {outputChannels} channels is not supported.");
+        }
+
+        // Final clamp
+        for (int i = 0; i < mixedBuffer.Length; i++)
+        {
+            mixedBuffer[i] = Math.Clamp(mixedBuffer[i], -1.0f, 1.0f);
+        }
     }
 
     /// <summary>
@@ -307,23 +346,17 @@ public unsafe partial class SourceManager
     {
         if (monoAudioData == null || monoAudioData.Length == 0)
         {
-            Console.WriteLine("Nincs feldolgozandó adat.");
             return (0f, 0f);
         }
 
-        // We use absolute values ​​because the signal level can be negative.
         float leftChannelSum = 0;
-        int leftSampleCount = 0;
 
-        // Mono channel data
         for (int i = 0; i < monoAudioData.Length; i++)
         {
-                leftChannelSum += Math.Abs(monoAudioData[i]);
+            leftChannelSum += Math.Abs(monoAudioData[i]);
         }
 
-        // Calculating averages
-        float leftAverage = leftSampleCount > 0 ? leftChannelSum / leftSampleCount : 0;
-
+        float leftAverage = monoAudioData.Length > 0 ? leftChannelSum / monoAudioData.Length : 0;
         return (leftAverage, 0f);
     }
 
@@ -362,7 +395,10 @@ public unsafe partial class SourceManager
         else if(!OwnAudio.IsPortAudioInitialized && OwnAudio.IsMiniAudioInitialized && Engine is null)  // Miniaudio engine initialize
         {
             if (OwnAudio.DefaultInputDevice.MaxInputChannels > 0 && IsRecorded)
+            {
+                InputEngineOptions = new AudioEngineInputOptions(OutputEngineOptions.Channels, OutputEngineOptions.SampleRate);
                 Engine = new OwnAudioMiniEngine(InputEngineOptions, OutputEngineOptions, EngineFramesPerBuffer);
+            }                  
             else
                 Engine = new OwnAudioMiniEngine(OutputEngineOptions, EngineFramesPerBuffer);
         }

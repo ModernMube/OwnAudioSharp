@@ -482,7 +482,7 @@ namespace Ownaudio.Sources
                         sampleRate: OwnAudio.DefaultOutputDevice.DefaultSampleRate,
                         channels: 2,
                         bitPerSamples: BitPerSamples);
-                });
+                }).Wait();
 
                 IsWriteData = false;
                 SaveWaveFileName = null;
