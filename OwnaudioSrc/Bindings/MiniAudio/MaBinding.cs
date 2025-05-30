@@ -79,12 +79,10 @@ internal static partial class MaBinding
         // Error handling functions
         _getErrorString = loader.LoadFunc<GetErrorString>(nameof(ma_result_description));
     }
-
+#nullable disable
     #region Context Operations
-
     public static unsafe MaResult ma_context_init(MaBackend[]? backends, uint backendCount, IntPtr contextConfig, IntPtr context)
     {
-#nullable disable
         if (backends == null || backends.Length == 0)
         {
             return _contextInit(IntPtr.Zero, 0, contextConfig, context);
@@ -634,4 +632,5 @@ internal static partial class MaBinding
     }
 
     #endregion
+#nullable restore
 }

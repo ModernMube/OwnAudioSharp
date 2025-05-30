@@ -5,7 +5,7 @@ namespace Ownaudio.Bindings.Miniaudio;
 internal static partial class MaBinding
 {
     /// <summary>
-    /// Miniaudio result codes - aligned with SoundFlow.Backends.MiniAudio.Enums.Result values
+    /// Miniaudio result codes - aligned with MiniAudio.Enums.Result values
     /// </summary>
     public enum MaResult
     {
@@ -81,7 +81,7 @@ internal static partial class MaBinding
     }
 
     /// <summary>
-    /// Miniaudio device types - aligned with SoundFlow.Enums.DeviceType values
+    /// Miniaudio device types - aligned with DeviceType values
     /// </summary>
     public enum MaDeviceType
     {
@@ -92,7 +92,7 @@ internal static partial class MaBinding
     }
 
     /// <summary>
-    /// Audio formats - aligned with SoundFlow.Enums.SampleFormat values
+    /// Audio formats - aligned with SampleFormat values
     /// </summary>
     public enum MaFormat
     {
