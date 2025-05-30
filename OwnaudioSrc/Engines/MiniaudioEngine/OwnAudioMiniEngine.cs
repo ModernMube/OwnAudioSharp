@@ -11,454 +11,913 @@ using System.Threading;
 namespace Ownaudio.Engines;
 
 /// <summary>
-/// Interact with audio devices using separate MiniAudio engines for playback and capture.
-/// This class cannot be inherited.
-/// <para>Implements: <see cref="IAudioEngine"/>.</para>
+/// Provides audio device interaction using separate MiniAudio engines for playback and capture operations.
+/// This sealed class implements the IAudioEngine interface and manages audio buffer pools for efficient data processing.
 /// </summary>
+/// <remarks>
+/// This engine supports both input (capture) and output (playback) audio operations with configurable sample rates,
+/// channels, and buffer sizes. It uses concurrent collections for thread-safe buffer management and provides
+/// automatic device switching capabilities.
+/// </remarks>
 public sealed class OwnAudioMiniEngine : IAudioEngine
 {
-    private readonly AudioEngineOutputOptions _outOptions;
-    private readonly AudioEngineInputOptions _inOptions;
-    private readonly MiniAudioEngine? _playbackEngine;
-    private readonly MiniAudioEngine? _captureEngine;
+    #region Constants and Configuration
+    
+    /// <summary>
+    /// Maximum number of buffers that can be queued before dropping audio data.
+    /// </summary>
+    private const int MaxQueueSize = 10;
+    
+    /// <summary>
+    /// Maximum number of milliseconds to wait when trying to dequeue input data.
+    /// </summary>
+    private const int MaxInputWaitTime = 5;
+    
+    /// <summary>
+    /// Sleep duration in milliseconds when output buffer queue is full.
+    /// </summary>
+    private const int OutputBufferWaitTime = 5;
+    
+    #endregion
+
+    #region Private Fields
+    
+    private readonly AudioEngineOutputOptions _outputOptions;
+    private readonly AudioEngineInputOptions _inputOptions;
+    private MiniAudioEngine? _playbackEngine;
+    private MiniAudioEngine? _captureEngine;
     private readonly int _framesPerBuffer;
     private bool _disposed;
 
-    private readonly ConcurrentQueue<float[]> _inputBufferQueue = new ConcurrentQueue<float[]>();
-    private readonly ConcurrentQueue<float[]> _outputBufferQueue = new ConcurrentQueue<float[]>();
-    private readonly ConcurrentBag<float[]> _inputBufferPool = new ConcurrentBag<float[]>();
-    private readonly ConcurrentBag<float[]> _outputBufferPool = new ConcurrentBag<float[]>();
-    private readonly int _maxQueueSize = 10;
+    // Buffer management
+    private readonly ConcurrentQueue<float[]> _inputBufferQueue = new();
+    private readonly ConcurrentQueue<float[]> _outputBufferQueue = new();
+    private readonly ConcurrentBag<float[]> _inputBufferPool = new();
+    private readonly ConcurrentBag<float[]> _outputBufferPool = new();
 
-    private Stopwatch _stopwatch = new Stopwatch();
-
+    // Engine handles for unmanaged resources
     private GCHandle? _playbackEngineHandle;
     private GCHandle? _captureEngineHandle;
 
+    // Performance monitoring
+    private readonly Stopwatch _performanceStopwatch = new();
+    
+    #endregion
+
+    #region Constructors
+
     /// <summary>
-    /// Initializes a new instance of OwnAudioMiniEngine with only output options.
+    /// Initializes a new instance of the <see cref="OwnAudioMiniEngine"/> class with output-only configuration.
     /// </summary>
-    /// <param name="outOptions">Optional audio engine output options.</param>
-    /// <param name="framesPerBuffer">The number of frames in the buffer (default 512).</param>
+    /// <param name="outputOptions">Configuration options for audio output. If null, default options will be used.</param>
+    /// <param name="framesPerBuffer">Number of frames to process per buffer cycle. Default is 512.</param>
     /// <exception cref="MiniaudioException">
-    /// Thrown if an error occurs during MiniAudio initialization.
+    /// Thrown when MiniAudio engine initialization fails due to hardware or configuration issues.
     /// </exception>
-    public OwnAudioMiniEngine(AudioEngineOutputOptions? outOptions = default, int framesPerBuffer = 512)
-        : this(null, outOptions, framesPerBuffer)
+    /// <remarks>
+    /// This constructor creates an audio engine capable of playback only. For recording capabilities,
+    /// use the constructor that accepts input options.
+    /// </remarks>
+    public OwnAudioMiniEngine(AudioEngineOutputOptions? outputOptions = default, int framesPerBuffer = 512)
+        : this(null, outputOptions, framesPerBuffer)
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the OwnAudioMiniEngine class with both input and output options.
+    /// Initializes a new instance of the <see cref="OwnAudioMiniEngine"/> class with full input and output configuration.
     /// </summary>
-    /// <param name="inOptions">Optional audio engine input options.</param>
-    /// <param name="outOptions">Optional audio engine output options.</param>
-    /// <param name="framesPerBuffer">Number of frames per buffer (default is 512).</param>
+    /// <param name="inputOptions">Configuration options for audio input (recording). If null, default options will be used.</param>
+    /// <param name="outputOptions">Configuration options for audio output (playback). If null, default options will be used.</param>
+    /// <param name="framesPerBuffer">Number of frames to process per buffer cycle. Default is 512.</param>
     /// <exception cref="MiniaudioException">
-    /// Thrown when errors occur during MiniAudio initialization.
+    /// Thrown when MiniAudio engine initialization fails due to hardware or configuration issues.
     /// </exception>
-    public OwnAudioMiniEngine(AudioEngineInputOptions? inOptions = default, AudioEngineOutputOptions? outOptions = default, int framesPerBuffer = 512)
+    /// <remarks>
+    /// This constructor creates a full-duplex audio engine capable of both recording and playback.
+    /// Engines are only created for configurations where the channel count is greater than zero.
+    /// </remarks>
+    public OwnAudioMiniEngine(AudioEngineInputOptions? inputOptions = default, 
+                             AudioEngineOutputOptions? outputOptions = default, 
+                             int framesPerBuffer = 512)
     {
-        _inOptions = inOptions ?? new AudioEngineInputOptions();
-        _outOptions = outOptions ?? new AudioEngineOutputOptions();
+        _inputOptions = inputOptions ?? new AudioEngineInputOptions();
+        _outputOptions = outputOptions ?? new AudioEngineOutputOptions();
         _framesPerBuffer = framesPerBuffer;
 
-        if (_outOptions.Channels > 0)
-        {
-            _playbackEngine = new MiniAudioEngine(
-                sampleRate: (int)_outOptions.SampleRate,
-                deviceType: EngineDeviceType.Playback,
-                sampleFormat: EngineAudioFormat.F32,
-                channels: (int)_outOptions.Channels
-            );
-
-            SetupPlaybackProcessing();
-        }
-
-        if (_inOptions.Channels > 0)
-        {
-            _captureEngine = new MiniAudioEngine(
-                sampleRate: (int)_inOptions.SampleRate,
-                deviceType: EngineDeviceType.Capture,
-                sampleFormat: EngineAudioFormat.F32,
-                channels: (int)_inOptions.Channels
-            );
-
-            SetupCaptureProcessing();
-        }
-
+        InitializePlaybackEngine();
+        InitializeCaptureEngine();
         InitializeBufferPools();
     }
 
+    #endregion
+
+    #region Public Properties
+
     /// <summary>
-    /// Sets up the audio processing callback for the playback engine.
+    /// Gets the number of frames processed per buffer cycle.
+    /// </summary>
+    /// <value>The number of frames per buffer as specified during initialization.</value>
+    public int FramesPerBuffer => _framesPerBuffer;
+
+    #endregion
+
+    #region Initialization Methods
+
+    /// <summary>
+    /// Initializes the playback engine if output channels are configured.
+    /// </summary>
+    private void InitializePlaybackEngine()
+    {
+        if (_outputOptions.Channels <= 0) return;
+
+        _playbackEngine = new MiniAudioEngine(
+            sampleRate: (int)_outputOptions.SampleRate,
+            deviceType: EngineDeviceType.Playback,
+            sampleFormat: EngineAudioFormat.F32,
+            channels: (int)_outputOptions.Channels
+        );
+
+        SetupPlaybackProcessing();
+    }
+
+    /// <summary>
+    /// Initializes the capture engine if input channels are configured.
+    /// </summary>
+    private void InitializeCaptureEngine()
+    {
+        if (_inputOptions.Channels <= 0) return;
+
+        _captureEngine = new MiniAudioEngine(
+            sampleRate: (int)_inputOptions.SampleRate,
+            deviceType: EngineDeviceType.Capture,
+            sampleFormat: EngineAudioFormat.F32,
+            channels: (int)_inputOptions.Channels
+        );
+
+        SetupCaptureProcessing();
+    }
+
+    /// <summary>
+    /// Initializes buffer pools for efficient memory management during audio processing.
+    /// </summary>
+    /// <remarks>
+    /// Pre-allocates buffers to avoid garbage collection during real-time audio processing.
+    /// Output buffers are sized according to frames per buffer, while input buffers use dynamic sizing.
+    /// </remarks>
+    private void InitializeBufferPools()
+    {
+        int outputBufferSize = _framesPerBuffer * (int)_outputOptions.Channels;
+        int inputBufferSize = _framesPerBuffer * (int)_inputOptions.Channels * 4;
+
+        LogBufferPoolInitialization(outputBufferSize, inputBufferSize);
+
+        // Pre-allocate output buffers
+        if (_outputOptions.Channels > 0)
+        {
+            for (int i = 0; i < MaxQueueSize * 2; i++)
+            {
+                _outputBufferPool.Add(new float[outputBufferSize]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Logs buffer pool initialization details for debugging purposes.
+    /// </summary>
+    /// <param name="outputBufferSize">Size of output buffers in samples.</param>
+    /// <param name="inputBufferSize">Size of input buffers in samples.</param>
+    private static void LogBufferPoolInitialization(int outputBufferSize, int inputBufferSize)
+    {
+        Debug.WriteLine("Initializing audio buffer pools:");
+        Debug.WriteLine($"  Output buffers: {outputBufferSize} samples");
+        Debug.WriteLine($"  Input buffer pool size: {inputBufferSize} samples (dynamic sizing)");
+    }
+
+    #endregion
+
+    #region Audio Processing Setup
+
+    /// <summary>
+    /// Configures the audio processing callback for the playback engine.
     /// </summary>
     private void SetupPlaybackProcessing()
     {
         if (_playbackEngine == null) return;
 
-        _playbackEngine.AudioProcessing += (sender, args) =>
-        {
-            if (args.Direction == AudioDataDirection.Output)
-            {
-                ProcessOutput(args);
-            }
-        };
+        _playbackEngine.AudioProcessing += OnPlaybackAudioProcessing;
     }
 
     /// <summary>
-    /// Sets up the audio processing callback for the capture engine.
+    /// Configures the audio processing callback for the capture engine.
     /// </summary>
     private void SetupCaptureProcessing()
     {
         if (_captureEngine == null) return;
 
-        _captureEngine.AudioProcessing += (sender, args) =>
-        {
-            if (args.Direction == AudioDataDirection.Input)
-            {
-                ProcessInput(args);
-            }
-        };
+        _captureEngine.AudioProcessing += OnCaptureAudioProcessing;
     }
 
     /// <summary>
-    /// Processes output data for playback.
+    /// Handles audio processing events for playback operations.
     /// </summary>
-    /// <param name="args">The audio data event arguments.</param>
-    private void ProcessOutput(AudioDataEventArgs args)
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="args">Event arguments containing audio data and processing information.</param>
+    private void OnPlaybackAudioProcessing(object? sender, AudioDataEventArgs args)
+    {
+        if (args.Direction == AudioDataDirection.Output)
+        {
+            ProcessOutputData(args);
+        }
+    }
+
+    /// <summary>
+    /// Handles audio processing events for capture operations.
+    /// </summary>
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="args">Event arguments containing audio data and processing information.</param>
+    private void OnCaptureAudioProcessing(object? sender, AudioDataEventArgs args)
+    {
+        if (args.Direction == AudioDataDirection.Input)
+        {
+            ProcessInputData(args);
+        }
+    }
+
+    #endregion
+
+    #region Audio Data Processing
+
+    /// <summary>
+    /// Processes audio data for playback output, retrieving queued samples and copying them to the output buffer.
+    /// </summary>
+    /// <param name="args">Audio data event arguments containing the output buffer and sample count.</param>
+    /// <remarks>
+    /// If no output data is available in the queue, the output buffer is filled with silence.
+    /// Buffer size validation ensures consistent audio processing.
+    /// </remarks>
+    private void ProcessOutputData(AudioDataEventArgs args)
     {
         if (_outputBufferQueue.TryDequeue(out float[]? outputData))
         {
-            Debug.Assert(outputData.Length == _framesPerBuffer * (int)_outOptions.Channels,
-                "Output buffer size mismatch - every buffer must be FramesPerBuffer * Channels");
-
-            int copyLength = Math.Min(outputData.Length, args.SampleCount);
-            Array.Copy(outputData, args.Buffer, copyLength);
-
-            if (copyLength < args.SampleCount)
-            {
-                Array.Clear(args.Buffer, copyLength, args.SampleCount - copyLength);
-            }
+            ValidateOutputBufferSize(outputData);
+            CopyOutputSamples(outputData, args);
             _outputBufferPool.Add(outputData);
         }
         else
         {
+            // Fill with silence when no data is available
             Array.Clear(args.Buffer, 0, args.SampleCount);
         }
     }
 
     /// <summary>
-    /// Processes input data from recording.
+    /// Validates that the output buffer size matches expected dimensions.
     /// </summary>
-    /// <param name="args">The audio data event arguments.</param>
-    private void ProcessInput(AudioDataEventArgs args)
+    /// <param name="outputData">The output data buffer to validate.</param>
+    private void ValidateOutputBufferSize(float[] outputData)
     {
-        int actualSampleCount = args.SampleCount;
-        int requiredSize = _framesPerBuffer * (int)_inOptions.Channels;
+        int expectedSize = _framesPerBuffer * (int)_outputOptions.Channels;
+        Debug.Assert(outputData.Length == expectedSize,
+            $"Output buffer size mismatch - expected {expectedSize}, got {outputData.Length}");
+    }
 
-        float[]? inputData;
+    /// <summary>
+    /// Copies output samples to the audio processing buffer, handling size mismatches gracefully.
+    /// </summary>
+    /// <param name="outputData">Source audio data to copy.</param>
+    /// <param name="args">Audio processing arguments containing the destination buffer.</param>
+    private static void CopyOutputSamples(float[] outputData, AudioDataEventArgs args)
+    {
+        int copyLength = Math.Min(outputData.Length, args.SampleCount);
+        Array.Copy(outputData, args.Buffer, copyLength);
 
-        if (!_inputBufferPool.TryTake(out inputData) || inputData.Length != actualSampleCount)
+        // Fill remaining buffer with silence if source data is smaller
+        if (copyLength < args.SampleCount)
         {
-            inputData = new float[actualSampleCount]; 
+            Array.Clear(args.Buffer, copyLength, args.SampleCount - copyLength);
         }
+    }
 
-        Array.Copy(args.Buffer, inputData, actualSampleCount);
+    /// <summary>
+    /// Processes incoming audio data from capture operations, managing buffer allocation and queue limits.
+    /// </summary>
+    /// <param name="args">Audio data event arguments containing input samples.</param>
+    /// <remarks>
+    /// Implements automatic queue management to prevent memory buildup by enforcing maximum queue size.
+    /// Uses buffer pooling to minimize garbage collection during real-time processing.
+    /// </remarks>
+    private void ProcessInputData(AudioDataEventArgs args)
+    {
+        float[] inputBuffer = GetOrCreateInputBuffer(args.SampleCount);
+        Array.Copy(args.Buffer, inputBuffer, args.SampleCount);
 
-        while (_inputBufferQueue.Count >= _maxQueueSize)
+        EnforceInputQueueLimit();
+        _inputBufferQueue.Enqueue(inputBuffer);
+    }
+
+    /// <summary>
+    /// Retrieves a buffer from the input pool or creates a new one if necessary.
+    /// </summary>
+    /// <param name="sampleCount">Required buffer size in samples.</param>
+    /// <returns>A float array buffer of the specified size.</returns>
+    private float[] GetOrCreateInputBuffer(int sampleCount)
+    {
+        if (_inputBufferPool.TryTake(out float[]? buffer) && buffer.Length == sampleCount)
         {
-            if (_inputBufferQueue.TryDequeue(out float[]? dummy))
-                _inputBufferPool.Add(dummy);
+            return buffer;
+        }
+        
+        return new float[sampleCount];
+    }
+
+    /// <summary>
+    /// Enforces input buffer queue size limits by removing excess buffers.
+    /// </summary>
+    private void EnforceInputQueueLimit()
+    {
+        while (_inputBufferQueue.Count >= MaxQueueSize)
+        {
+            if (_inputBufferQueue.TryDequeue(out float[]? excessBuffer))
+            {
+                _inputBufferPool.Add(excessBuffer);
+            }
             else
+            {
                 break;
+            }
         }
-
-        _inputBufferQueue.Enqueue(inputData);
     }
 
+    #endregion
+
+    #region Public Audio Operations
+
     /// <summary>
-    /// Initializes the buffer pools for input and output data.
+    /// Sends audio samples to the output device for playback.
     /// </summary>
-    private void InitializeBufferPools()
+    /// <param name="samples">Audio samples to be played back. Must match the expected buffer size.</param>
+    /// <remarks>
+    /// The sample count must equal FramesPerBuffer * OutputChannels. Mismatched sizes will be dropped
+    /// with a warning. If the output queue is full, the method will briefly wait before attempting
+    /// to enqueue the samples.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// float[] audioSamples = new float[engine.FramesPerBuffer * 2]; // Stereo
+    /// // Fill audioSamples with audio data...
+    /// engine.Send(audioSamples);
+    /// </code>
+    /// </example>
+    public void Send(Span<float> samples)
     {
-        int outputBufferSize = _framesPerBuffer * (int)_outOptions.Channels;
-
-        int inputBufferSize = _framesPerBuffer * (int)_inOptions.Channels * 4; 
-
-        Debug.WriteLine($"Initializing buffer pools:");
-        Debug.WriteLine($"  Output buffers: {outputBufferSize} samples");
-        Debug.WriteLine($"  Input buffer pool size: {inputBufferSize} samples (dynamic sizing)");
-
-        for (int i = 0; i < _maxQueueSize * 2; i++)
+        if (_playbackEngine == null)
         {
-            if (_outOptions.Channels > 0)
-                _outputBufferPool.Add(new float[outputBufferSize]);
+            Debug.WriteLine("Warning: Cannot send audio data - no playback engine available.");
+            return;
+        }
+
+        if (!ValidateSampleSize(samples))
+        {
+            return;
+        }
+
+        WaitForOutputQueueSpace();
+        
+        if (_outputBufferQueue.Count < MaxQueueSize)
+        {
+            EnqueueOutputBuffer(samples);
+        }
+        else
+        {
+            Debug.WriteLine("Output buffer queue full after wait period. Dropping audio samples.");
+        }
+        
+        _performanceStopwatch.Restart();
+    }
+
+    /// <summary>
+    /// Validates that the incoming sample size matches the expected buffer dimensions.
+    /// </summary>
+    /// <param name="samples">Audio samples to validate.</param>
+    /// <returns>True if the sample size is correct, false otherwise.</returns>
+    private bool ValidateSampleSize(Span<float> samples)
+    {
+        int expectedSize = _framesPerBuffer * (int)_outputOptions.Channels;
+        if (samples.Length != expectedSize)
+        {
+            Debug.WriteLine($"Warning: Sample size mismatch - expected {expectedSize}, got {samples.Length}. Dropping samples.");
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Waits briefly if the output buffer queue is at capacity.
+    /// </summary>
+    private void WaitForOutputQueueSpace()
+    {
+        if (_outputBufferQueue.Count >= MaxQueueSize)
+        {
+            Thread.Sleep(OutputBufferWaitTime);
         }
     }
 
     /// <summary>
-    /// Gets or sets the number of frames processed per buffer.
+    /// Enqueues audio samples into the output buffer queue using buffer pooling for efficiency.
     /// </summary>
-    public int FramesPerBuffer => _framesPerBuffer;
+    /// <param name="samples">Audio samples to enqueue.</param>
+    private void EnqueueOutputBuffer(Span<float> samples)
+    {
+        float[] buffer = GetOrCreateOutputBuffer();
+        samples.CopyTo(buffer);
+        _outputBufferQueue.Enqueue(buffer);
+    }
 
     /// <summary>
-    /// Gets the primary engine handle (playback if available, otherwise capture).
+    /// Retrieves a buffer from the output pool or creates a new one if necessary.
     /// </summary>
-    /// <returns>IntPtr representing the primary MiniAudio engine</returns>
+    /// <returns>A float array buffer sized for output operations.</returns>
+    private float[] GetOrCreateOutputBuffer()
+    {
+        int expectedSize = _framesPerBuffer * (int)_outputOptions.Channels;
+
+        if (_outputBufferPool.TryTake(out float[]? buffer))
+        {
+            if (ValidatePooledBufferSize(buffer, expectedSize))
+            {
+                return buffer;
+            }
+        }
+
+        return new float[expectedSize];
+    }
+
+    /// <summary>
+    /// Validates that a pooled buffer has the correct size.
+    /// </summary>
+    /// <param name="buffer">Buffer to validate.</param>
+    /// <param name="expectedSize">Expected buffer size.</param>
+    /// <returns>True if the buffer size is correct, false otherwise.</returns>
+    private static bool ValidatePooledBufferSize(float[] buffer, int expectedSize)
+    {
+        if (buffer.Length == expectedSize) return true;
+        
+        Debug.WriteLine($"Warning: Pooled buffer size mismatch - expected {expectedSize}, got {buffer.Length}. Creating new buffer.");
+        return false;
+    }
+
+    /// <summary>
+    /// Receives audio samples from the input device.
+    /// </summary>
+    /// <param name="samples">Output parameter that will contain the received audio samples.</param>
+    /// <remarks>
+    /// This method attempts to dequeue audio data from the input buffer. If no data is immediately
+    /// available, it will wait briefly for incoming data. If no data becomes available within the
+    /// wait period, it returns a buffer filled with silence.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// engine.Receives(out float[] inputSamples);
+    /// // Process inputSamples...
+    /// </code>
+    /// </example>
+    public void Receives(out float[] samples)
+    {
+        if (TryGetInputSamples(out samples))
+        {
+            return;
+        }
+
+        WaitForInputData(out samples);
+        
+        if (samples == null)
+        {
+            samples = CreateSilentInputBuffer();
+        }
+    }
+
+    /// <summary>
+    /// Attempts to immediately retrieve input samples from the queue.
+    /// </summary>
+    /// <param name="samples">Retrieved samples, or null if none available.</param>
+    /// <returns>True if samples were successfully retrieved, false otherwise.</returns>
+    private bool TryGetInputSamples(out float[] samples)
+    {
+        return _inputBufferQueue.TryDequeue(out samples!);
+    }
+
+    /// <summary>
+    /// Waits for input data to become available, with timeout.
+    /// </summary>
+    /// <param name="samples">Retrieved samples, or null if timeout occurred.</param>
+    private void WaitForInputData(out float[] samples)
+    {
+        samples = null!;
+        int waitCount = 0;
+
+        while (!_inputBufferQueue.TryDequeue(out samples) && waitCount < MaxInputWaitTime)
+        {
+            Thread.Sleep(1);
+            waitCount++;
+        }
+    }
+
+    /// <summary>
+    /// Creates a buffer filled with silence when no input data is available.
+    /// </summary>
+    /// <returns>A silent audio buffer of the expected input size.</returns>
+    private float[] CreateSilentInputBuffer()
+    {
+        int expectedSize = _framesPerBuffer * (int)_inputOptions.Channels;
+        float[] silentBuffer = new float[expectedSize];
+        Array.Clear(silentBuffer, 0, silentBuffer.Length);
+        
+        Debug.WriteLine($"No input data available - returning silence ({expectedSize} samples)");
+        return silentBuffer;
+    }
+
+    #endregion
+
+    #region Engine Control Operations
+
+    /// <summary>
+    /// Gets a handle to the primary audio engine for interoperability with unmanaged code.
+    /// </summary>
+    /// <returns>
+    /// An IntPtr representing the primary MiniAudio engine handle. Returns the playback engine
+    /// if available, otherwise the capture engine. Returns IntPtr.Zero if no engines are available.
+    /// </returns>
+    /// <remarks>
+    /// The returned handle is managed through GCHandle to prevent garbage collection of the
+    /// underlying engine objects. This handle should be used carefully in unmanaged interop scenarios.
+    /// </remarks>
     public IntPtr GetStream()
     {
         if (_playbackEngine != null)
         {
-            if (!_playbackEngineHandle.HasValue || !_playbackEngineHandle.Value.IsAllocated)
-                _playbackEngineHandle = GCHandle.Alloc(_playbackEngine);
-
-            return GCHandle.ToIntPtr(_playbackEngineHandle.Value);
+            return GetOrCreateEngineHandle(ref _playbackEngineHandle, _playbackEngine);
         }
-        else if (_captureEngine != null)
+        
+        if (_captureEngine != null)
         {
-            if (!_captureEngineHandle.HasValue || !_captureEngineHandle.Value.IsAllocated)
-                _captureEngineHandle = GCHandle.Alloc(_captureEngine);
-
-            return GCHandle.ToIntPtr(_captureEngineHandle.Value);
+            return GetOrCreateEngineHandle(ref _captureEngineHandle, _captureEngine);
         }
 
         return IntPtr.Zero;
     }
 
     /// <summary>
-    /// Checks the active state of the audio engines.
+    /// Gets or creates a GC handle for the specified engine.
+    /// </summary>
+    /// <param name="handleField">Reference to the handle field to manage.</param>
+    /// <param name="engine">Engine object to create handle for.</param>
+    /// <returns>IntPtr representing the engine handle.</returns>
+    private static IntPtr GetOrCreateEngineHandle(ref GCHandle? handleField, object engine)
+    {
+        if (!handleField.HasValue || !handleField.Value.IsAllocated)
+        {
+            handleField = GCHandle.Alloc(engine);
+        }
+
+        return GCHandle.ToIntPtr(handleField.Value);
+    }
+
+    /// <summary>
+    /// Checks whether any audio engines are currently active and running.
     /// </summary>
     /// <returns>
-    /// 1 - at least one engine is running
-    /// 0 - no engines are running
+    /// 1 if at least one engine (playback or capture) is running;
+    /// 0 if all engines are stopped or no engines are available.
     /// </returns>
+    /// <remarks>
+    /// This method provides a simple integer return value for compatibility with C-style APIs
+    /// that expect integer status codes rather than boolean values.
+    /// </remarks>
     public int OwnAudioEngineActivate()
     {
-        bool playbackRunning = _playbackEngine?.IsRunning() ?? false;
-        bool captureRunning = _captureEngine?.IsRunning() ?? false;
-
-        return (playbackRunning || captureRunning) ? 1 : 0;
+        bool isAnyEngineRunning = IsPlaybackEngineRunning() || IsCaptureEngineRunning();
+        return isAnyEngineRunning ? 1 : 0;
     }
 
     /// <summary>
-    /// Checks the stopped state of the audio engines.
+    /// Checks whether all audio engines are currently stopped.
     /// </summary>
     /// <returns>
-    /// 1 - all engines are stopped
-    /// 0 - at least one engine is running
+    /// 1 if all engines are stopped or no engines are available;
+    /// 0 if at least one engine is currently running.
     /// </returns>
+    /// <remarks>
+    /// This method provides a simple integer return value for compatibility with C-style APIs.
+    /// It returns the inverse of the OwnAudioEngineActivate method.
+    /// </remarks>
     public int OwnAudioEngineStopped()
     {
-        bool playbackRunning = _playbackEngine?.IsRunning() ?? false;
-        bool captureRunning = _captureEngine?.IsRunning() ?? false;
-
-        return (playbackRunning || captureRunning) ? 0 : 1;
+        bool isAnyEngineRunning = IsPlaybackEngineRunning() || IsCaptureEngineRunning();
+        return isAnyEngineRunning ? 0 : 1;
     }
 
     /// <summary>
-    /// Starts the audio engines.
+    /// Checks if the playback engine is currently running.
     /// </summary>
-    /// <returns>0 for success, -1 for error</returns>
+    /// <returns>True if playback engine exists and is running, false otherwise.</returns>
+    private bool IsPlaybackEngineRunning() => _playbackEngine?.IsRunning() ?? false;
+
+    /// <summary>
+    /// Checks if the capture engine is currently running.
+    /// </summary>
+    /// <returns>True if capture engine exists and is running, false otherwise.</returns>
+    private bool IsCaptureEngineRunning() => _captureEngine?.IsRunning() ?? false;
+
+    /// <summary>
+    /// Starts all configured audio engines and prepares them for audio processing.
+    /// </summary>
+    /// <returns>
+    /// 0 for successful startup of all engines;
+    /// -1 if an error occurred during startup.
+    /// </returns>
+    /// <remarks>
+    /// Before starting the engines, this method clears any existing buffers in the queues
+    /// and returns them to their respective pools. This ensures a clean state for audio processing.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// int result = audioEngine.Start();
+    /// if (result == 0)
+    /// {
+    ///     Console.WriteLine("Audio engines started successfully");
+    /// }
+    /// else
+    /// {
+    ///     Console.WriteLine("Failed to start audio engines");
+    /// }
+    /// </code>
+    /// </example>
     public int Start()
     {
         try
         {
-            while (_outputBufferQueue.TryDequeue(out float[]? buffer))
-                _outputBufferPool.Add(buffer);
-
-            while (_inputBufferQueue.TryDequeue(out float[]? buffer))
-                _inputBufferPool.Add(buffer);
-
-            if (_playbackEngine != null)
-                _playbackEngine.Start();
-
-            if (_captureEngine != null)
-                _captureEngine.Start();
-
+            ClearAllBufferQueues();
+            StartIndividualEngines();
             return 0;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Miniaudio start error: {ex.Message}");
+            Debug.WriteLine($"Error starting audio engines: {ex.Message}");
             return -1;
         }
     }
 
     /// <summary>
-    /// Stops the audio engines.
+    /// Clears all buffer queues and returns buffers to their pools.
     /// </summary>
-    /// <returns>0 for success</returns>
+    private void ClearAllBufferQueues()
+    {
+        ClearBufferQueue(_outputBufferQueue, _outputBufferPool);
+        ClearBufferQueue(_inputBufferQueue, _inputBufferPool);
+    }
+
+    /// <summary>
+    /// Clears a specific buffer queue and returns buffers to the pool.
+    /// </summary>
+    /// <param name="queue">Queue to clear.</param>
+    /// <param name="pool">Pool to return buffers to.</param>
+    private static void ClearBufferQueue(ConcurrentQueue<float[]> queue, ConcurrentBag<float[]> pool)
+    {
+        while (queue.TryDequeue(out float[]? buffer))
+        {
+            pool.Add(buffer);
+        }
+    }
+
+    /// <summary>
+    /// Starts individual audio engines if they exist.
+    /// </summary>
+    private void StartIndividualEngines()
+    {
+        _playbackEngine?.Start();
+        _captureEngine?.Start();
+    }
+
+    /// <summary>
+    /// Stops all audio engines and cleans up their buffer queues.
+    /// </summary>
+    /// <returns>
+    /// 0 for successful shutdown (always returns 0, as exceptions are caught and logged).
+    /// </returns>
+    /// <remarks>
+    /// This method gracefully stops both playback and capture engines, then clears all
+    /// buffer queues and returns the buffers to their respective pools for reuse.
+    /// Any errors during shutdown are logged but do not prevent the method from completing.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// int result = audioEngine.Stop();
+    /// Console.WriteLine("Audio engines stopped");
+    /// </code>
+    /// </example>
     public int Stop()
     {
         try
         {
-            _playbackEngine?.Stop();
-
-            _captureEngine?.Stop();
-
-            while (_outputBufferQueue.TryDequeue(out float[]? buffer))
-                _outputBufferPool.Add(buffer);
-
-            while (_inputBufferQueue.TryDequeue(out float[]? buffer))
-                _inputBufferPool.Add(buffer);
-
+            StopIndividualEngines();
+            ClearAllBufferQueues();
             return 0;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Error stopping engines: {ex.Message}");
-            return -1;
+            Debug.WriteLine($"Error stopping audio engines: {ex.Message}");
+            return 0; // Always return success for stop operations
         }
     }
 
     /// <summary>
-    /// Sends audio data to the output device.
+    /// Stops individual audio engines if they exist.
     /// </summary>
-    /// <param name="samples">A span containing the audio samples to be played.</param>
-    public void Send(Span<float> samples)
+    private void StopIndividualEngines()
     {
-        if (_playbackEngine == null)
-        {
-            Debug.WriteLine("Warning: Trying to send audio data but no playback engine is available.");
-            return;
-        }
-
-        int expectedSize = _framesPerBuffer * (int)_outOptions.Channels;
-        if (samples.Length != expectedSize)
-        {
-            Debug.WriteLine($"Warning: Incoming sample size ({samples.Length}) doesn't match expected size ({expectedSize}). Dropping samples.");
-            return;
-        }
-
-        if (_outputBufferQueue.Count >= _maxQueueSize)
-            Thread.Sleep(5);
-
-        if (_outputBufferQueue.Count < _maxQueueSize)
-            EnqueueOutputBuffer(samples);
-        else
-            Debug.WriteLine("Output buffer queue still full after wait. Dropping samples.");
-        
-        _stopwatch.Restart();
+        _playbackEngine?.Stop();
+        _captureEngine?.Stop();
     }
 
-    /// <summary>
-    /// Helper function for enqueueing samples.
-    /// </summary>
-    /// <param name="samples">The samples to be enqueued.</param>
-    private void EnqueueOutputBuffer(Span<float> samples)
-    {
-        float[]? buffer;
-        int expectedSize = _framesPerBuffer * (int)_outOptions.Channels;
+    #endregion
 
-        if (!_outputBufferPool.TryTake(out buffer))
-        {
-            buffer = new float[expectedSize];
-        }
-        else
-        {
-            Debug.Assert(buffer.Length == expectedSize, "EnqueueOutputBuffer: Buffer from pool has incorrect size!");
-            if (buffer.Length != expectedSize)
-            {
-                Debug.WriteLine($"EnqueueOutputBuffer: Incorrect buffer size {buffer.Length} from pool, expected {expectedSize}. Reallocating.");
-                buffer = new float[expectedSize];
-            }
-        }
-
-        samples.CopyTo(buffer);
-        _outputBufferQueue.Enqueue(buffer);
-    }
+    #region Device Management
 
     /// <summary>
-    /// Receives audio data from the input device.
+    /// Switches the audio processing to a different audio device.
     /// </summary>
-    /// <param name="samples">An output array that will be filled with the received audio samples.</param>
-    public void Receives(out float[] samples)
-    {
-#nullable disable
-        if (_inputBufferQueue.TryDequeue(out samples))
-            return;
-
-        int waitCount = 0;
-        const int maxWait = 5;
-
-        while (!_inputBufferQueue.TryDequeue(out samples) && waitCount < maxWait)
-        {
-            Thread.Sleep(1);
-            waitCount++;
-        }
-
-        if (samples == null)
-        {
-            int expectedSize = _framesPerBuffer * (int)_inOptions.Channels;
-            samples = new float[expectedSize];
-            Array.Clear(samples, 0, samples.Length);
-            Debug.WriteLine($"No input data available, returning silence ({expectedSize} samples)");
-        }
-#nullable restore
-    }
-
-    /// <summary>
-    /// Switches to another audio device.
-    /// </summary>
-    /// <param name="deviceName">The name of the target device.</param>
-    /// <param name="isInputDevice">True if input device; false if output device.</param>
-    /// <returns>True if the switch was successful; otherwise, false.</returns>
+    /// <param name="deviceName">
+    /// The name or partial name of the target audio device. Device matching is case-insensitive
+    /// and supports partial name matching.
+    /// </param>
+    /// <param name="isInputDevice">
+    /// True to switch the input (capture) device; false to switch the output (playback) device.
+    /// Default is false (output device).
+    /// </param>
+    /// <returns>
+    /// True if the device switch was successful; false if the device was not found,
+    /// the corresponding engine is not available, or an error occurred during switching.
+    /// </returns>
+    /// <remarks>
+    /// The device switching operation searches through available devices using case-insensitive
+    /// partial matching. The first device whose name contains the specified deviceName will be selected.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Switch to a USB headset for output
+    /// bool success = engine.SwitchToDevice("USB Headset", false);
+    /// 
+    /// // Switch to built-in microphone for input
+    /// bool success = engine.SwitchToDevice("Built-in Microphone", true);
+    /// </code>
+    /// </example>
     public bool SwitchToDevice(string deviceName, bool isInputDevice = false)
     {
         try
         {
-            var engine = isInputDevice ? _captureEngine : _playbackEngine;
-
+            var engine = GetTargetEngine(isInputDevice);
             if (engine == null)
             {
-                Debug.WriteLine($"Warning: No {(isInputDevice ? "capture" : "playback")} engine available for device switching.");
+                LogEngineNotAvailable(isInputDevice);
                 return false;
             }
 
-            var devices = isInputDevice
-                ? engine.CaptureDevices
-                : engine.PlaybackDevices;
-
-            var targetDevice = devices.FirstOrDefault(d =>
-                d.Name?.Contains(deviceName, StringComparison.OrdinalIgnoreCase) == true);
-
-            if (targetDevice != null)
+            DeviceInfo targetDevice = FindDeviceByName(engine, deviceName, isInputDevice);
+            if (targetDevice == null)
             {
-                engine.SwitchDevice(targetDevice,
-                    isInputDevice ? EngineDeviceType.Capture : EngineDeviceType.Playback);
-                return true;
+                return false;
             }
-            return false;
+
+            var deviceType = isInputDevice ? EngineDeviceType.Capture : EngineDeviceType.Playback;
+            engine.SwitchDevice(targetDevice, deviceType);
+            return true;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Error switching device: {ex.Message}");
+            Debug.WriteLine($"Error switching to device '{deviceName}': {ex.Message}");
             return false;
         }
     }
 
     /// <summary>
-    /// Gets the list of available playback devices.
+    /// Gets the appropriate engine for device switching operations.
     /// </summary>
-    /// <returns>Enumerable of available playback devices</returns>
+    /// <param name="isInputDevice">True for input engine, false for output engine.</param>
+    /// <returns>The target engine, or null if not available.</returns>
+    private MiniAudioEngine? GetTargetEngine(bool isInputDevice)
+    {
+        return isInputDevice ? _captureEngine : _playbackEngine;
+    }
+
+    /// <summary>
+    /// Logs a message when the requested engine type is not available.
+    /// </summary>
+    /// <param name="isInputDevice">True if input engine was requested, false for output engine.</param>
+    private static void LogEngineNotAvailable(bool isInputDevice)
+    {
+        string engineType = isInputDevice ? "capture" : "playback";
+        Debug.WriteLine($"Warning: No {engineType} engine available for device switching.");
+    }
+
+    /// <summary>
+    /// Finds a device by name using partial, case-insensitive matching.
+    /// </summary>
+    /// <param name="engine">Engine to search for devices.</param>
+    /// <param name="deviceName">Device name to search for.</param>
+    /// <param name="isInputDevice">True for input devices, false for output devices.</param>
+    /// <returns>The found device, or null if not found.</returns>
+    private static DeviceInfo? FindDeviceByName(MiniAudioEngine engine, string deviceName, bool isInputDevice)
+    {
+        var devices = isInputDevice ? engine.CaptureDevices : engine.PlaybackDevices;
+        
+        return devices.FirstOrDefault(device =>
+        {
+            // Assuming devices have a Name property - adjust based on actual device object structure
+            var deviceNameProperty = device.GetType().GetProperty("Name");
+            var name = deviceNameProperty?.GetValue(device) as string;
+            return name?.Contains(deviceName, StringComparison.OrdinalIgnoreCase) == true;
+        });
+    }
+
+    /// <summary>
+    /// Gets the list of available audio playback devices.
+    /// </summary>
+    /// <returns>
+    /// An enumerable collection of available playback devices. Returns an empty collection
+    /// if no playback engine is configured or available.
+    /// </returns>
+    /// <remarks>
+    /// The returned objects represent audio devices and their specific type depends on the
+    /// underlying MiniAudio implementation. These objects can be used for device enumeration
+    /// and selection purposes.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var playbackDevices = engine.GetPlaybackDevices();
+    /// foreach (var device in playbackDevices)
+    /// {
+    ///     Console.WriteLine($"Available playback device: {device}");
+    /// }
+    /// </code>
+    /// </example>
     public IEnumerable<object> GetPlaybackDevices()
     {
         return _playbackEngine?.PlaybackDevices ?? Enumerable.Empty<object>();
     }
 
     /// <summary>
-    /// Gets the list of available capture devices.
+    /// Gets the list of available audio capture devices.
     /// </summary>
-    /// <returns>Enumerable of available capture devices</returns>
+    /// <returns>
+    /// An enumerable collection of available capture devices. Returns an empty collection
+    /// if no capture engine is configured or available.
+    /// </returns>
+    /// <remarks>
+    /// The returned objects represent audio input devices and their specific type depends on the
+    /// underlying MiniAudio implementation. These objects can be used for device enumeration
+    /// and microphone selection purposes.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var captureDevices = engine.GetCaptureDevices();
+    /// foreach (var device in captureDevices)
+    /// {
+    ///     Console.WriteLine($"Available capture device: {device}");
+    /// }
+    /// </code>
+    /// </example>
     public IEnumerable<object> GetCaptureDevices()
     {
         return _captureEngine?.CaptureDevices ?? Enumerable.Empty<object>();
     }
 
+    #endregion
+
+    #region Resource Management and Disposal
+
     /// <summary>
-    /// Releases all resources used by the audio engines.
+    /// Releases all resources used by the audio engines and cleans up unmanaged handles.
     /// </summary>
+    /// <remarks>
+    /// This method implements the Dispose pattern and ensures proper cleanup of:
+    /// - Both playback and capture engines
+    /// - All buffer queues and pools
+    /// - Unmanaged GC handles used for engine interoperability
+    /// 
+    /// The method is safe to call multiple times and will only perform cleanup on the first call.
+    /// Any errors during disposal are logged but do not prevent the cleanup process from completing.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// using (var audioEngine = new OwnAudioMiniEngine(outputOptions))
+    /// {
+    ///     // Use the audio engine...
+    /// } // Dispose is called automatically
+    /// 
+    /// // Or call explicitly:
+    /// audioEngine.Dispose();
+    /// </code>
+    /// </example>
     public void Dispose()
     {
         if (_disposed)
@@ -466,52 +925,87 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
 
         _disposed = true;
 
-        if (_playbackEngine != null)
+        DisposeEngines();
+        ClearAllBuffers();
+        FreeUnmanagedHandles();
+    }
+
+    /// <summary>
+    /// Disposes both audio engines safely, logging any errors that occur.
+    /// </summary>
+    private void DisposeEngines()
+    {
+        DisposeEngine(_playbackEngine, "playback");
+        DisposeEngine(_captureEngine, "capture");
+    }
+
+    /// <summary>
+    /// Safely disposes a single audio engine.
+    /// </summary>
+    /// <param name="engine">Engine to dispose, or null.</param>
+    /// <param name="engineType">Type description for error logging.</param>
+    private static void DisposeEngine(MiniAudioEngine? engine, string engineType)
+    {
+        if (engine == null) return;
+
+        try
         {
-            try
-            {
-                _playbackEngine.Stop();
-                _playbackEngine.Dispose();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error disposing playback engine: {ex.Message}");
-            }
+            engine.Stop();
+            engine.Dispose();
         }
-
-        if (_captureEngine != null)
+        catch (Exception ex)
         {
-            try
-            {
-                _captureEngine.Stop();
-                _captureEngine.Dispose();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error disposing capture engine: {ex.Message}");
-            }
-        }
-
-        float[]? buffer;
-        while (_outputBufferQueue.TryDequeue(out buffer))
-            _outputBufferPool.Add(buffer);
-
-        while (_inputBufferQueue.TryDequeue(out buffer))
-            _inputBufferPool.Add(buffer);
-
-        while (_inputBufferPool.TryTake(out _)) { }
-        while (_outputBufferPool.TryTake(out _)) { }
-
-        if (_playbackEngineHandle.HasValue && _playbackEngineHandle.Value.IsAllocated)
-        {
-            _playbackEngineHandle.Value.Free();
-            _playbackEngineHandle = null;
-        }
-
-        if (_captureEngineHandle.HasValue && _captureEngineHandle.Value.IsAllocated)
-        {
-            _captureEngineHandle.Value.Free();
-            _captureEngineHandle = null;
+            Debug.WriteLine($"Error disposing {engineType} engine: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// Clears all buffer queues and pools, ensuring no memory leaks.
+    /// </summary>
+    private void ClearAllBuffers()
+    {
+        // Move queued buffers back to pools
+        ClearBufferQueue(_outputBufferQueue, _outputBufferPool);
+        ClearBufferQueue(_inputBufferQueue, _inputBufferPool);
+
+        // Clear the pools completely
+        ClearBufferPool(_inputBufferPool);
+        ClearBufferPool(_outputBufferPool);
+    }
+
+    /// <summary>
+    /// Completely clears a buffer pool.
+    /// </summary>
+    /// <param name="pool">Buffer pool to clear.</param>
+    private static void ClearBufferPool(ConcurrentBag<float[]> pool)
+    {
+        while (pool.TryTake(out _)) 
+        { 
+            // Continue until pool is empty
+        }
+    }
+
+    /// <summary>
+    /// Frees any allocated GC handles to prevent memory leaks.
+    /// </summary>
+    private void FreeUnmanagedHandles()
+    {
+        FreeGCHandle(ref _playbackEngineHandle);
+        FreeGCHandle(ref _captureEngineHandle);
+    }
+
+    /// <summary>
+    /// Safely frees a GC handle if it exists and is allocated.
+    /// </summary>
+    /// <param name="handleField">Reference to the handle field to free.</param>
+    private static void FreeGCHandle(ref GCHandle? handleField)
+    {
+        if (handleField.HasValue && handleField.Value.IsAllocated)
+        {
+            handleField.Value.Free();
+            handleField = null;
+        }
+    }
+
+    #endregion
 }

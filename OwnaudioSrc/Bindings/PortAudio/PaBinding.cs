@@ -11,7 +11,6 @@ internal static partial class PaBinding
         _initialize = loader.LoadFunc<Initialize>(nameof(Pa_Initialize));
         _terminate = loader.LoadFunc<Terminate>(nameof(Pa_Terminate));
 
-        //_getVersionInfo = loader.LoadFunc<GetVersionInfo>(nameof(Pa_GetVersionInfo));
         _getErrorText = loader.LoadFunc<GetErrorText>(nameof(Pa_GetErrorText));
 
         _getDefaultOutputDevice = loader.LoadFunc<GetDefaultOutputDevice>(nameof(Pa_GetDefaultOutputDevice));
@@ -46,11 +45,6 @@ internal static partial class PaBinding
     {
         return _terminate();
     }
-
-    //public static IntPtr Pa_GetVersionInfo()
-    //{
-    //    return _getVersionInfo();
-    //}
 
     public static IntPtr Pa_GetErrorText(int code)
     {
