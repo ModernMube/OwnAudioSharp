@@ -11,7 +11,7 @@ namespace Simpleplayer
             {
                 SourceManager manager = SourceManager.Instance;
 
-                await manager.AddOutputSource("D:\\Sogorock\\Ocam\\2025\\Szepjulia\\Szép Júlia - Beszkid József (cover)_audio.flac");
+                await manager.AddOutputSource("path/audio.mp3");
 
                 manager.Play();
 
