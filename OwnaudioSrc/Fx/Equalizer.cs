@@ -110,6 +110,21 @@ namespace Ownaudio.Fx
                 samples[i] = sample;
             }
         }
+
+        /// <summary>
+        /// Resets the equalizer by clearing all internal filter states.
+        /// Does not modify any band settings or parameters.
+        /// </summary>
+        public override void Reset()
+        {
+            for (int band = 0; band < BANDS; band++)
+            {
+                for (int i = 0; i < 2; i++)
+                {
+                    _filters[band][i].Reset();
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -171,6 +186,18 @@ namespace Ownaudio.Fx
             _y1 = output;
 
             return output;
+        }
+
+        /// <summary>
+        /// Resets the biquad filter's internal state by clearing previous input and output values.
+        /// Does not modify any filter coefficients or parameters.
+        /// </summary>
+        public void Reset()
+        {
+            _x1 = 0.0f;
+            _x2 = 0.0f;
+            _y1 = 0.0f;
+            _y2 = 0.0f;
         }
     }
 }

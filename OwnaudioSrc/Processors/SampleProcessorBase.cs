@@ -29,4 +29,9 @@ public abstract class SampleProcessorBase : ISampleProcessor
     /// <param name="samples"></param>
     /// <returns></returns>
     public abstract void Process(Span<float> samples);
+
+    /// <summary>
+    /// It clears temporary storage but does not change parameters.
+    /// </summary>
+    public abstract void Reset();
 }

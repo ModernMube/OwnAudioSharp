@@ -58,6 +58,16 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
+        /// Resets the enhancer's internal filter state by clearing previous sample values.
+        /// Does not modify any settings or parameters.
+        /// </summary>
+        public override void Reset()
+        {
+            _xPrev = 0.0f;
+            _yPrev = 0.0f;
+        }
+
+        /// <summary>
         /// Set Compressor parameters
         /// </summary>
         /// <param name="mix">mix(0-1) : Controls the amount of processed signal blended with the original</param>
