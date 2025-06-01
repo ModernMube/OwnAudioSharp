@@ -189,4 +189,9 @@ public class DefaultProcessor : SampleProcessorBase
     /// </summary>
     /// <param name="sample"></param>
     public override void Process(Span<float> sample) { }
+
+    /// <summary>
+    /// Processor reset
+    /// </summary>
+    public override void Reset() { }
 }
