@@ -340,7 +340,7 @@ namespace Ownaudio.Fx
         /// <summary>
         /// Resets the effect, clearing all internal states.
         /// </summary>
-        public void Reset()
+        public override void Reset()
         {
             foreach (var comb in combFilters)
             {
