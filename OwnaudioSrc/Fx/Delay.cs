@@ -92,6 +92,16 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
+        /// Resets the delay effect by clearing the delay buffer and resetting the buffer index.
+        /// Does not modify any settings or parameters.
+        /// </summary>
+        public override void Reset()
+        {
+            Array.Clear(_delayBuffer, 0, _delayBuffer.Length);
+            _bufferIndex = 0;
+        }
+
+        /// <summary>
         /// Update the delay time.
         /// </summary>
         private void UpdateDelayTime()

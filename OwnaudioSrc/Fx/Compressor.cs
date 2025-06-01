@@ -73,6 +73,15 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
+        /// Resets the compressor's internal state by clearing the envelope follower.
+        /// Does not modify any settings or parameters.
+        /// </summary>
+        public override void Reset()
+        {
+            envelope = 0.0f;
+        }
+
+        /// <summary>
         /// Threshold level in range [0,1] where 1.0 = 0dB, 0.5 = -6dB
         /// Minimum: 0.0 (negative infinity dB)
         /// Maximum: 1.0 (0 dB)
