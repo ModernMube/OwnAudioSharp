@@ -8,7 +8,7 @@ namespace Microphone
     internal class Program
     {
         static async Task Main(string[] args)
-        {        
+        {
 
             if (OwnAudio.Initialize())
             {
@@ -71,6 +71,12 @@ namespace Microphone
             reverb.Process(sample);
             delay.Process(sample);
         }
+
+        public override void Reset()
+        {
+            reverb.Reset();
+            delay.Reset();
+        }
     }
 
     public class MasterProcessor : SampleProcessorBase
@@ -88,6 +94,11 @@ namespace Microphone
         public override void Process(Span<float> sample)
         {
             compressor.Process(sample);
+        }
+
+        public override void Reset()
+        {
+            compressor.Reset();
         }
     }
 }
