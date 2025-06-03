@@ -1,9 +1,6 @@
-﻿using System;
-using System.Collections.Concurrent;
-using System.Threading.Channels;
-using Ownaudio.Common;
-using Ownaudio.Processors;
-using Ownaudio.Utilities.Extensions;
+﻿using Ownaudio.Processors;
+using Ownaudio.Sources.Extensions;
+using System;
 
 namespace Ownaudio.Sources
 {
@@ -37,42 +34,57 @@ namespace Ownaudio.Sources
 
             int engineChannels = (int)SourceManager.OutputEngineOptions.Channels;
             int framesPerBuffer = SourceManager.EngineFramesPerBuffer;
-
             int inputFrames = samples.Length / InputDataChannels;
 
             for (int i = 0; i + framesPerBuffer <= inputFrames; i += framesPerBuffer)
             {
-                float[] buffer = new float[framesPerBuffer * engineChannels];
+                int outputBufferSize = framesPerBuffer * engineChannels;
 
-                for (int frame = 0; frame < framesPerBuffer; frame++)
+                float[]? buffer = outputBufferSize > 512
+                    ? SimpleAudioBufferPool.Rent(outputBufferSize)
+                    : new float[outputBufferSize];
+
+                try
                 {
-                    int inputIndex = (i + frame) * InputDataChannels;
-                    int outputIndex = frame * engineChannels;
-
                     if (InputDataChannels == 1 && engineChannels == 2) // Mono to Stereo
                     {
-                        float monoSample = samples[inputIndex];
-                        buffer[outputIndex] = monoSample;
-                        buffer[outputIndex + 1] = monoSample;
+                        for (int frame = 0; frame < framesPerBuffer; frame++)
+                        {
+                            int inputIndex = (i + frame) * InputDataChannels;
+                            int outputIndex = frame * engineChannels;
+
+                            float monoSample = samples[inputIndex];
+                            buffer[outputIndex] = monoSample;     // Left
+                            buffer[outputIndex + 1] = monoSample; // Right
+                        }
                     }
                     else if (InputDataChannels == 2 && engineChannels == 1) // Stereo to Mono
-                    {                        
-                        float left = samples[inputIndex];
-                        float right = samples[inputIndex + 1];
-                        buffer[outputIndex] = (left + right) / 2;
+                    {
+                        for (int frame = 0; frame < framesPerBuffer; frame++)
+                        {
+                            int inputIndex = (i + frame) * InputDataChannels;
+                            int outputIndex = frame;
+
+                            float left = samples[inputIndex];
+                            float right = samples[inputIndex + 1];
+                            buffer[outputIndex] = (left + right) / 2;
+                        }
                     }
                     else if (InputDataChannels == engineChannels) // Same format
                     {
-                        Array.Copy(samples, inputIndex, buffer, outputIndex, engineChannels);
+                        Array.Copy(samples, i * InputDataChannels, buffer, 0, framesPerBuffer * InputDataChannels);
                     }
-                    else
-                    {
-                        Logger?.LogWarning($"Unsupported channel conversion: Input={InputDataChannels}, Output={engineChannels}");
-                    }
-                }
 
-                ProcessSampleProcessors(buffer.AsSpan());
-                SourceSampleData.Enqueue(buffer);
+                    ProcessSampleProcessors(buffer.AsSpan());
+                    SourceSampleData.Enqueue(buffer);
+
+                    buffer = null;
+                }
+                finally
+                {
+                    if (buffer != null && outputBufferSize > 512)
+                        SimpleAudioBufferPool.Return(buffer);
+                }
             }
         }
 
@@ -200,7 +212,12 @@ namespace Ownaudio.Sources
             if (_disposed) return;
 
             State = SourceState.Idle;
-            while (SourceSampleData.TryDequeue(out _)) { }
+
+            while (SourceSampleData.TryDequeue(out var buffer))
+            {
+                SimpleAudioBufferPool.Return(buffer);
+            }
+
             GC.SuppressFinalize(this);
             _disposed = true;
         }

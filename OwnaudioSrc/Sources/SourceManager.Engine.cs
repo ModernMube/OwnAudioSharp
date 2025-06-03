@@ -1,49 +1,43 @@
+using Ownaudio.Engines;
+using Ownaudio.Sources.Extensions;
 using System;
-using System.Runtime.InteropServices;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-
-using Ownaudio.Engines;
-
-
 
 namespace Ownaudio.Sources;
 
 public unsafe partial class SourceManager
 {
+    // Egyetlen pre-allocated buffer a mixing-hez
+    private float[] _mixBuffer;
+    private int _lastMixBufferSize = 0;
+
     /// <summary>
     /// Mix output sources into a stream. Considering the state of the source manager.
-    /// </summary> 
+    /// </summary>  
     private void MixEngine()
     {
         bool useSources = false;
-        List<float> mixedBuffer = new List<float>();
-        List<float> _frequencies = new List<float>();
-
         TimeSpan lastKnownPosition = Position;
         bool seekJustHappened = false;
 
-        int maxLength = Sources.Max(src => 
-            src.SourceSampleData.TryPeek(out float[]? peekedSamples) && peekedSamples != null 
-            ? peekedSamples.Length 
-            : 0);
-                
-        if (maxLength > 0)
-            mixedBuffer.Capacity = maxLength;
+        // Egy buffer allokálás a kezdeten
+        int maxLength = CalculateMaxBufferLength();
+        EnsureMixBufferAllocated(maxLength);
 
         double sampleDurationMs = 1000.0 / OutputEngineOptions.SampleRate;
         int channelCount = (int)OutputEngineOptions.Channels;
 
-        while (State != SourceState.Idle) 
+        while (State != SourceState.Idle)
         {
             if (IsSeeking)
             {
                 seekJustHappened = true;
-
-                Thread.Sleep(1);
-                mixedBuffer.Clear();
+                Thread.Sleep(1); // Eredeti sleep - egyszerű és működik
+                Array.Clear(_mixBuffer, 0, maxLength);
                 continue;
             }
 
@@ -53,24 +47,24 @@ public unsafe partial class SourceManager
                 seekJustHappened = false;
 
                 bool allSourcesReady = Sources.All(src => src.SourceSampleData.Count > 0 || src.State == SourceState.Idle);
-
                 if (!allSourcesReady)
                 {
                     Thread.Sleep(5);
+                    continue;
                 }
             }
 
-            for (int i = 0; i < maxLength; i++)
-                mixedBuffer.Add(0.0f);
+            // Clear mix buffer - egyszerű, gyors
+            Array.Clear(_mixBuffer, 0, maxLength);
 
-            if (!Sources.Any(p => p.SourceSampleData.Count() > 0))  
+            if (!Sources.Any(p => p.SourceSampleData.Count() > 0))
             {
                 if (Sources.All(p => p.State == SourceState.Idle))
                 {
                     SetAndRaisePositionChanged(TimeSpan.Zero);
                 }
 
-                if(!IsRecorded)
+                if (!IsRecorded)
                 {
                     Thread.Sleep(10);
                     continue;
@@ -79,108 +73,49 @@ public unsafe partial class SourceManager
                 {
                     useSources = false;
                 }
-            } 
-
-            if (State == SourceState.Paused) 
-            {
-                if (!IsRecorded) 
-                {
-                    Thread.Sleep(10);
-                    continue;
-                }  
-                else
-                {
-                    useSources = false;
-                }          
             }
-            else 
+
+            if (State == SourceState.Paused)
+            {
+                if (!IsRecorded)
+                {
+                    Thread.Sleep(10);
+                    continue;
+                }
+                else
+                {
+                    useSources = false;
+                }
+            }
+            else
             {
                 useSources = true;
             }
 
-            if (mixedBuffer.Count > 0) 
+            if (maxLength > 0)
             {
-                float[] _mixedBuffer = new float[mixedBuffer.Count];
-                
-                for (int i = 0; i < maxLength; i++)
-                    _mixedBuffer[i] = 0.0f;
-
-                if (Sources.Count() > 0 && useSources)
+                // Source mixing - egyszerű scalar művelet
+                if (Sources.Count() > 0 && useSources && State == SourceState.Playing)
                 {
-                    if (State == SourceState.Playing)
-                    {
-                        bool needToResync = false;
-
-                        if (Sources.Count > 1)
-                        {
-                            TimeSpan minPos = TimeSpan.MaxValue;
-                            TimeSpan maxPos = TimeSpan.MinValue;
-                            
-                            foreach (ISource src in Sources)
-                            {
-                                if (src.Position < minPos) minPos = src.Position;
-                                if (src.Position > maxPos) maxPos = src.Position;
-                            }
-
-                            if ((maxPos - minPos).TotalMilliseconds > 200)
-                            {
-                                needToResync = true;
-                            }
-                        }
-                        
-                        if (needToResync)
-                        {
-                            foreach (ISource src in Sources)
-                            {
-                                if (Math.Abs((src.Position - lastKnownPosition).TotalMilliseconds) > 100)
-                                {
-                                    src.Seek(lastKnownPosition);
-                                }
-                            }
-                        }
-                    }
-
-                    foreach (ISource src in Sources)
-                    {
-                        if (src.SourceSampleData.TryDequeue(out float[]? samples))
-                        {
-                            for (int i = 0; i < samples.Length; i++)
-                            {
-                                _mixedBuffer[i] += samples[i];
-                                _mixedBuffer[i] = Math.Clamp(_mixedBuffer[i], -1.0f, 1.0f);
-                            }
-                        }
-                    }
+                    ProcessSourceMixingSimple(lastKnownPosition);
                 }
 
+                // Input recording mixing
                 if (IsRecorded && Engine is not null)
                 {
-                    float[] inputBuffer = new float[EngineFramesPerBuffer * (int)InputEngineOptions.Channels];
-                    ((SourceInput)SourcesInput[0]).ReceivesData(out inputBuffer, Engine);
-
-                    MixInput(
-                        inputBuffer: inputBuffer,
-                        mixedBuffer: _mixedBuffer,
-                        inputChannels: (int)InputEngineOptions.Channels,
-                        outputChannels: (int)OutputEngineOptions.Channels,
-                        mixingGain: 0.8f
-                    );
-
-                    InputLevels = InputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
-                        ? CalculateAverageStereoLevels(inputBuffer)
-                        : CalculateAverageMonoLevel(inputBuffer);
+                    ProcessInputMixingSimple();
                 }
 
-                Span<float> mixedSpan = CollectionsMarshal.AsSpan(_mixedBuffer.ToList());
+                // Apply sample processors
+                ProcessSampleProcessors(_mixBuffer.AsSpan(0, maxLength));
 
-                ProcessSampleProcessors(mixedSpan);
+                // Send to audio engine
+                Engine?.Send(_mixBuffer.AsSpan(0, maxLength));
 
-                Engine?.Send(mixedSpan);
-
+                // Update position
                 if (State == SourceState.Playing)
                 {
-                    double processedTimeMs = (mixedBuffer.Count / channelCount) * sampleDurationMs;
-
+                    double processedTimeMs = (maxLength / channelCount) * sampleDurationMs;
                     lastKnownPosition = lastKnownPosition.Add(TimeSpan.FromMilliseconds(processedTimeMs));
 
                     if (Math.Abs((lastKnownPosition - Position).TotalMilliseconds) > 20)
@@ -188,8 +123,6 @@ public unsafe partial class SourceManager
                         SetAndRaisePositionChanged(lastKnownPosition);
                     }
                 }
-
-                mixedBuffer.Clear();
 
                 if (Position.TotalMilliseconds >= Duration.TotalMilliseconds)
                 {
@@ -203,6 +136,114 @@ public unsafe partial class SourceManager
         writeDataToFile();
     }
 
+    private void ProcessSourceMixingSimple(TimeSpan lastKnownPosition)
+    {
+        // Sync check csak ha több source van
+        if (Sources.Count > 1)
+        {
+            TimeSpan minPos = TimeSpan.MaxValue;
+            TimeSpan maxPos = TimeSpan.MinValue;
+
+            foreach (ISource src in Sources)
+            {
+                if (src.Position < minPos) minPos = src.Position;
+                if (src.Position > maxPos) maxPos = src.Position;
+            }
+
+            if ((maxPos - minPos).TotalMilliseconds > 200)
+            {
+                foreach (ISource src in Sources)
+                {
+                    if (Math.Abs((src.Position - lastKnownPosition).TotalMilliseconds) > 100)
+                    {
+                        src.Seek(lastKnownPosition);
+                    }
+                }
+            }
+        }
+
+        // Egyszerű mixing - scalar, de gyors
+        foreach (ISource src in Sources)
+        {
+            if (src.SourceSampleData.TryDequeue(out float[]? samples))
+            {
+                try
+                {
+                    int mixLength = Math.Min(samples.Length, _mixBuffer.Length);
+
+                    // Egyszerű scalar mixing
+                    for (int i = 0; i < mixLength; i++)
+                    {
+                        _mixBuffer[i] += samples[i];
+                        _mixBuffer[i] = Math.Clamp(_mixBuffer[i], -1.0f, 1.0f);
+                    }
+                }
+                finally
+                {
+                    // Pool visszaadás csak nagy buffer-eknél
+                    SimpleAudioBufferPool.Return(samples);
+                }
+            }
+        }
+    }
+
+    private void ProcessInputMixingSimple()
+    {
+        if (SourcesInput.Count > 0)
+        {
+            int inputBufferSize = EngineFramesPerBuffer * (int)InputEngineOptions.Channels;
+
+            ((SourceInput)SourcesInput[0]).ReceivesData(out var inputBuffer, Engine);
+
+            try
+            {
+                // Egyszerű input mixing
+                MixInputSimple(
+                    inputBuffer: inputBuffer.AsSpan(),
+                    mixedBuffer: _mixBuffer.AsSpan(),
+                    inputChannels: (int)InputEngineOptions.Channels,
+                    outputChannels: (int)OutputEngineOptions.Channels,
+                    mixingGain: 0.8f
+                );
+
+                InputLevels = InputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
+                    ? CalculateAverageStereoLevels(inputBuffer)
+                    : CalculateAverageMonoLevel(inputBuffer);
+            }
+            finally
+            {
+                // Input buffer-t is pool-ba ha érdemes
+                SimpleAudioBufferPool.Return(inputBuffer);
+            }
+        }
+    }
+
+    private void EnsureMixBufferAllocated(int size)
+    {
+        if (_mixBuffer == null || _lastMixBufferSize != size)
+        {
+            _mixBuffer = new float[size];
+            _lastMixBufferSize = size;
+        }
+    }
+
+    private int CalculateMaxBufferLength()
+    {
+        if (Sources.Count == 0)
+            return EngineFramesPerBuffer * (int)OutputEngineOptions.Channels;
+
+        int maxLength = 0;
+        foreach (var src in Sources)
+        {
+            if (src.SourceSampleData.TryPeek(out float[]? peekedSamples) && peekedSamples != null)
+            {
+                maxLength = Math.Max(maxLength, peekedSamples.Length);
+            }
+        }
+
+        return maxLength > 0 ? maxLength : EngineFramesPerBuffer * (int)OutputEngineOptions.Channels;
+    }
+    
     /// <summary>
     /// Optimized mixing function for different channel configurations
     /// </summary>
@@ -211,49 +252,50 @@ public unsafe partial class SourceManager
     /// <param name="inputChannels">Number of input channels</param>
     /// <param name="outputChannels">Number of output channels</param>
     /// <param name="mixingGain">Mixing gain (0.0f - 1.0f)</param>
-    public static void MixInput(ReadOnlySpan<float> inputBuffer, Span<float> mixedBuffer,
-                               int inputChannels, int outputChannels, float mixingGain = 1.0f)
+    public static void MixInputSimple(ReadOnlySpan<float> inputBuffer, Span<float> mixedBuffer,
+                                     int inputChannels, int outputChannels, float mixingGain = 1.0f)
     {
         if (inputChannels == 1 && outputChannels == 2)
         {
             // Mono → Stereo
             int frames = inputBuffer.Length;
-            for (int frame = 0; frame < frames; frame++)
+            for (int frame = 0; frame < frames && frame * 2 + 1 < mixedBuffer.Length; frame++)
             {
                 float sample = Math.Clamp(inputBuffer[frame] * mixingGain, -1.0f, 1.0f);
                 mixedBuffer[frame * 2] += sample;     // Left
                 mixedBuffer[frame * 2 + 1] += sample; // Right
+
+                mixedBuffer[frame * 2] = Math.Clamp(mixedBuffer[frame * 2], -1.0f, 1.0f);
+                mixedBuffer[frame * 2 + 1] = Math.Clamp(mixedBuffer[frame * 2 + 1], -1.0f, 1.0f);
             }
         }
         else if (inputChannels == 2 && outputChannels == 1)
         {
             // Stereo → Mono
             int frames = inputBuffer.Length / 2;
-            for (int frame = 0; frame < frames; frame++)
+            for (int frame = 0; frame < frames && frame < mixedBuffer.Length; frame++)
             {
                 float left = inputBuffer[frame * 2] * mixingGain;
                 float right = inputBuffer[frame * 2 + 1] * mixingGain;
                 float monoSample = Math.Clamp((left + right) * 0.5f, -1.0f, 1.0f);
+
                 mixedBuffer[frame] += monoSample;
+                mixedBuffer[frame] = Math.Clamp(mixedBuffer[frame], -1.0f, 1.0f);
             }
         }
         else if (inputChannels == outputChannels)
         {
             // Identical channels
-            for (int i = 0; i < inputBuffer.Length; i++)
+            int length = Math.Min(inputBuffer.Length, mixedBuffer.Length);
+            for (int i = 0; i < length; i++)
             {
                 mixedBuffer[i] += Math.Clamp(inputBuffer[i] * mixingGain, -1.0f, 1.0f);
+                mixedBuffer[i] = Math.Clamp(mixedBuffer[i], -1.0f, 1.0f);
             }
         }
         else
         {
             throw new NotSupportedException($"Mixing from {inputChannels} to {outputChannels} channels is not supported.");
-        }
-
-        // Final clamp
-        for (int i = 0; i < mixedBuffer.Length; i++)
-        {
-            mixedBuffer[i] = Math.Clamp(mixedBuffer[i], -1.0f, 1.0f);
         }
     }
 
