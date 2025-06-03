@@ -81,7 +81,7 @@ internal static partial class MaBinding
     }
 #nullable disable
     #region Context Operations
-    public static unsafe MaResult ma_context_init(MaBackend[] backends, uint backendCount, IntPtr contextConfig, IntPtr context)
+    public static unsafe MaResult ma_context_init(MaBackend[]? backends, uint backendCount, IntPtr contextConfig, IntPtr context)
     {
         if (backends == null || backends.Length == 0)
         {
