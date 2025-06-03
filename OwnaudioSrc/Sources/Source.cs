@@ -5,7 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Ownaudio.Decoders;
 using Ownaudio.Decoders.FFmpeg;
-using Ownaudio.Decoders.Miniaudio;
 using Ownaudio.Decoders.MiniAudio;
 using Ownaudio.Exceptions;
 using Ownaudio.Processors;
@@ -21,17 +20,44 @@ namespace Ownaudio.Sources;
 /// </summary>
 public partial class Source : ISource
 {
+    /// <summary>
+    /// Minimum number of audio frames that should be maintained in the queue for smooth playback.
+    /// </summary>
     private const int MinQueueSize = 2;
+
+    /// <summary>
+    /// Maximum number of audio frames that can be stored in the queue to prevent excessive memory usage.
+    /// </summary>
     private const int MaxQueueSize = 12;
+
+    /// <summary>
+    /// Indicates whether this instance has been disposed.
+    /// </summary>
     private bool _disposed;
+
+    /// <summary>
+    /// The fixed size of audio buffers used for processing, set from the engine configuration.
+    /// </summary>
     private int FixedBufferSize;
 
-    private readonly SoundTouchProcessor soundTouch = new SoundTouchProcessor();     
+    /// <summary>
+    /// SoundTouch processor instance for audio pitch shifting and tempo changes.
+    /// </summary>
+    private readonly SoundTouchProcessor soundTouch = new SoundTouchProcessor();
+
+    /// <summary>
+    /// Number of audio frames per buffer, determined by the engine configuration.
+    /// </summary>
     private readonly int FramesPerBuffer;
+
+    /// <summary>
+    /// Synchronization object used to ensure thread-safe operations on shared resources.
+    /// </summary>
     private readonly object lockObject = new object();
 
     /// <summary>
-    /// Initializes <see cref="Source"/> 
+    /// Initializes a new instance of the <see cref="Source"/> class.
+    /// Sets up internal processors, queues, and buffer configurations.
     /// </summary>
     public Source()
     {
@@ -42,7 +68,7 @@ public partial class Source : ISource
         FixedBufferSize = SourceManager.EngineFramesPerBuffer;
         FramesPerBuffer = SourceManager.EngineFramesPerBuffer;
     }
-   
+
     /// <inheritdoc />
     /// <exception cref="ArgumentNullException">Thrown when given url is null.</exception>
     public Task<bool> LoadAsync(string url)
@@ -80,10 +106,17 @@ public partial class Source : ISource
     }
 
     /// <summary>
-    /// Changes the status of the given resource
-    /// <see cref="SourceState"/>
+    /// Changes the playback state of the audio source to the specified state.
+    /// This method acts as a state machine controller that delegates to appropriate methods.
     /// </summary>
-    /// <param name="state"></param>
+    /// <param name="state">The desired playback state to transition to.</param>
+    /// <remarks>
+    /// Supported state transitions:
+    /// - <see cref="SourceState.Idle"/>: Stops playback
+    /// - <see cref="SourceState.Playing"/>: Starts or resumes playback
+    /// - <see cref="SourceState.Paused"/>: Pauses current playback
+    /// - <see cref="SourceState.Buffering"/>: No action taken (handled internally)
+    /// </remarks>
     public void ChangeState(SourceState state)
     {
         switch (state)
@@ -103,9 +136,11 @@ public partial class Source : ISource
     }
 
     /// <summary>
-    /// Prepares the source for playback, starts the decoding and playback threads.
-    /// <see cref="OwnaudioException"/>
+    /// Prepares the source for playback and starts the decoding and playback threads.
+    /// If already playing or buffering, this method returns without action.
+    /// If paused, resumes playback without reinitializing threads.
     /// </summary>
+    /// <exception cref="OwnaudioException">Thrown when no audio is loaded for playback.</exception>
     protected void Play()
     {
         Ensure.That<OwnaudioException>(IsLoaded, "No loaded audio for playback.");
@@ -136,7 +171,8 @@ public partial class Source : ISource
     }
 
     /// <summary>
-    /// Pauses playback.
+    /// Pauses the current playback if the source is currently playing or buffering.
+    /// The playback can be resumed later by calling <see cref="Play"/>.
     /// </summary>
     protected void Pause()
     {
@@ -147,11 +183,12 @@ public partial class Source : ISource
     }
 
     /// <summary>
-    /// Stops playback and resets background processes
+    /// Stops playback completely and resets all background processes.
+    /// This method terminates decoder and engine threads and resets the state to idle.
     /// </summary>
     protected void Stop()
     {
-        if(State == SourceState.Idle)
+        if (State == SourceState.Idle)
             return;
 
         State = SourceState.Idle;
@@ -160,9 +197,17 @@ public partial class Source : ISource
     }
 
     /// <summary>
-    /// Moves to the position specified in the parameter in the source.
+    /// Seeks to the specified position in the audio stream with efficient buffer management.
+    /// Clears all internal buffers and queues before seeking to ensure clean playback from the new position.
     /// </summary>
-    /// <param name="position">The value of the position is determined in time</param>
+    /// <param name="position">The target position to seek to in the audio stream.</param>
+    /// <remarks>
+    /// This method performs the following operations:
+    /// - Clears audio queues and returns buffers to the pool
+    /// - Clears SoundTouch processor buffers
+    /// - Attempts to seek in the decoder
+    /// - Updates the current position and raises position changed event
+    /// </remarks>
     public void Seek(TimeSpan position)
     {
         if (!IsLoaded || CurrentDecoder == null)
@@ -170,9 +215,14 @@ public partial class Source : ISource
             return;
         }
 
-        while (Queue.TryDequeue(out _)) { }
-        while (SourceSampleData.TryDequeue(out _)) { }
-        soundTouch.Clear();
+        // Efficient buffer clearing
+        ClearQueuesWithPoolReturn();
+
+        lock (lockObject)
+        {
+            soundTouch.Clear();
+            _soundTouchCircularBuffer?.Clear();
+        }
 
         Logger?.LogInfo($"Seeking to: {position}.");
 
@@ -184,32 +234,42 @@ public partial class Source : ISource
         }
 
         SetAndRaisePositionChanged(position);
-
         Logger?.LogInfo($"Successfully seeks to {position}.");
     }
 
     /// <summary>
-    /// Creates an <see cref="IAudioDecoder"/> instance.
-    /// By default, it will returns a new <see cref="FFmpegDecoder"/> instance.
+    /// Creates an audio decoder instance for the specified URL.
+    /// The decoder type is determined by FFmpeg initialization status.
     /// </summary>
-    /// <param name="url">Audio URL or path to be loaded.</param>
-    /// <returns>A new <see cref="FFmpegDecoder"/> instance.</returns>
+    /// <param name="url">Audio URL or file path to be loaded.</param>
+    /// <returns>
+    /// A new <see cref="FFmpegDecoder"/> instance if FFmpeg is initialized,
+    /// otherwise a new <see cref="MiniDecoder"/> instance.
+    /// </returns>
+    /// <remarks>
+    /// Uses unified decoder options from <see cref="SourceManager.GetUnifiedDecoderOptions"/>
+    /// to ensure consistent audio format handling across different decoder types.
+    /// </remarks>
     protected virtual IAudioDecoder CreateDecoder(string url)
     {
         // Egységes formátum beállítások használata
         var decoderOptions = SourceManager.GetUnifiedDecoderOptions();
-        if(OwnAudio.IsFFmpegInitialized)
+        if (OwnAudio.IsFFmpegInitialized)
             return new FFmpegDecoder(url, decoderOptions);
         else
             return new MiniDecoder(url, decoderOptions);
     }
 
     /// <summary>
-    /// Creates an <see cref="IAudioDecoder"/> instance.
-    /// By default, it will returns a new <see cref="FFmpegDecoder"/> instance.
+    /// Creates an audio decoder instance for the specified stream.
+    /// Currently only supports FFmpeg decoder for stream-based input.
     /// </summary>
     /// <param name="stream">Audio stream to be loaded.</param>
-    /// <returns>A new <see cref="FFmpegDecoder"/> instance.</returns>
+    /// <returns>A new <see cref="FFmpegDecoder"/> instance configured for stream input.</returns>
+    /// <remarks>
+    /// Uses unified decoder options from <see cref="SourceManager.GetUnifiedDecoderOptions"/>
+    /// to ensure consistent audio format handling.
+    /// </remarks>
     protected virtual IAudioDecoder CreateDecoder(Stream stream)
     {
         // Egységes formátum beállítások használata
@@ -218,9 +278,10 @@ public partial class Source : ISource
     }
 
     /// <summary>
-    /// Sets <see cref="State"/> value and raise <see cref="StateChanged"/> if value is changed.
+    /// Sets the playback state and raises the <see cref="StateChanged"/> event if the state has changed.
+    /// This method ensures that state change events are only fired when the state actually changes.
     /// </summary>
-    /// <param name="state">Playback state.</param>
+    /// <param name="state">The new playback state to set.</param>
     protected virtual void SetAndRaiseStateChanged(SourceState state)
     {
         var raise = State != state;
@@ -233,9 +294,10 @@ public partial class Source : ISource
     }
 
     /// <summary>
-    /// Sets <see cref="Position"/> value and raise <see cref="PositionChanged"/> if value is changed.
+    /// Sets the playback position and raises the <see cref="PositionChanged"/> event if the position has changed.
+    /// This method ensures that position change events are only fired when the position actually changes.
     /// </summary>
-    /// <param name="position">Playback position.</param>
+    /// <param name="position">The new playback position to set.</param>
     protected virtual void SetAndRaisePositionChanged(TimeSpan position)
     {
         var raise = position != Position;
@@ -248,9 +310,16 @@ public partial class Source : ISource
     }
 
     /// <summary>
-    /// Run <see cref="VolumeProcessor"/> and <see cref="CustomSampleProcessor"/> to the specified samples.
+    /// Applies audio processing to the specified audio samples using configured processors.
+    /// Processes samples through custom sample processor first, then volume processor if needed.
     /// </summary>
-    /// <param name="samples">Audio samples to process to.</param>
+    /// <param name="samples">Audio samples to process. The span is modified in-place.</param>
+    /// <remarks>
+    /// Processing order:
+    /// 1. Custom sample processor (if enabled)
+    /// 2. Volume processor (if volume is not 1.0f)
+    /// This order ensures that volume changes are applied after any custom effects.
+    /// </remarks>
     protected virtual void ProcessSampleProcessors(Span<float> samples)
     {
         if (CustomSampleProcessor is { IsEnabled: true })
@@ -261,9 +330,18 @@ public partial class Source : ISource
     }
 
     /// <summary>
-    /// Loading the selected data into the decoder.
+    /// Internal method for loading audio data using the specified decoder factory.
+    /// Handles decoder creation, error handling, and property initialization.
     /// </summary>
-    /// <param name="decoderFactory"></param>
+    /// <param name="decoderFactory">Factory function that creates the appropriate decoder instance.</param>
+    /// <remarks>
+    /// This method:
+    /// - Disposes any existing decoder
+    /// - Creates a new decoder using the factory
+    /// - Sets up duration and loading status
+    /// - Handles exceptions and logs appropriate messages
+    /// - Resets position to zero
+    /// </remarks>
     private void LoadInternal(Func<IAudioDecoder> decoderFactory)
     {
         Logger?.LogInfo("Loading audio to the player.");
@@ -291,8 +369,13 @@ public partial class Source : ISource
     }
 
     /// <summary>
-    /// Terminate and close threads used by the resource.
+    /// Ensures that all background threads (decoder and engine) are properly terminated and cleaned up.
+    /// This method blocks until both threads have completed execution.
     /// </summary>
+    /// <remarks>
+    /// This method is called during state transitions and disposal to ensure clean shutdown.
+    /// Thread references are set to null after termination to prevent accidental reuse.
+    /// </remarks>
     private void EnsureThreadsDone()
     {
         EngineThread?.EnsureThreadDone();
@@ -302,7 +385,19 @@ public partial class Source : ISource
         DecoderThread = null;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Performs enhanced disposal with proper buffer cleanup and resource management.
+    /// This method ensures all resources are properly released and prevents multiple disposal calls.
+    /// </summary>
+    /// <remarks>
+    /// Disposal process:
+    /// - Sets state to idle and terminates threads
+    /// - Disposes current decoder
+    /// - Clears queues and returns buffers to pool
+    /// - Disposes SoundTouch buffers
+    /// - Logs buffer pool statistics in debug builds
+    /// - Suppresses finalization to improve GC performance
+    /// </remarks>
     public virtual void Dispose()
     {
         if (_disposed)
@@ -314,11 +409,18 @@ public partial class Source : ISource
         EnsureThreadsDone();
 
         CurrentDecoder?.Dispose();
-        while (Queue.TryDequeue(out _)) { }
-        while (SourceSampleData.TryDequeue(out _)) { }
+
+        // Efficient queue clearing with pool return
+        ClearQueuesWithPoolReturn();
+
+        // Dispose SoundTouch buffers
+        DisposeSoundTouchBuffers();
+
+#if DEBUG
+        Logger?.LogInfo($"Buffer Pool Stats - Hits: {_bufferPoolHits}, Misses: {_bufferPoolMisses}");
+#endif
 
         GC.SuppressFinalize(this);
-
         _disposed = true;
     }
 }

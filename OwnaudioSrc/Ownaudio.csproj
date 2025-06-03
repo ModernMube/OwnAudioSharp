@@ -6,7 +6,7 @@
     <Authors>ModernMube</Authors>
     <Copyright>Copyright (c) 2025 LSXPrime</Copyright>
     <Description>A cross platform audio library for .NET with PortAudio, Miniaudio and FFmpeg.</Description>
-    <FileVersion>0.25.78</FileVersion>
+    <FileVersion>0.25.80</FileVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <LangVersion>11</LangVersion>
@@ -24,10 +24,10 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <Version>0.25.78</Version>
+    <Version>0.25.80</Version>
     <Authors>ModernMube</Authors>
     <Company>Modernbit</Company>
-    <PlatformTarget>x64</PlatformTarget>
+    <PlatformTarget>AnyCPU</PlatformTarget>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">

@@ -30,6 +30,12 @@ Ownaudio is a cross-platform C# audio library that provides a high-level API for
 - **Real-time audio processing** with custom sample processors
 - **Audio data visualize** customizable waveform display
 
+## Recent development:
+
+Introduction of techniques for professional audio applications.
+- Implementation of circular audio buffering for memory efficiency, thread safety, and real-time audio data processing.
+- Implementation of audio buffer pool for performance improvement.
+
 ## Sample Application
 
 Check out the sample application [OwnAudioSharpDemo](https://github.com/ModernMube/OwnAudioSharpDemo) that demonstrates the capabilities of the OwnAudioSharp audio library through an Avalonia MVVM application using ReactiveUI. MainWindowViewModel.cs contains the core logic for audio processing, playback, effects application, and UI control.
