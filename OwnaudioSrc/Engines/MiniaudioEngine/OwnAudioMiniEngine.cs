@@ -518,13 +518,11 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
         samples = null!;
         int waitCount = 0;
 
-#nullable disable
         while (!_inputBufferQueue.TryDequeue(out samples) && waitCount < MaxInputWaitTime)
         {
             Thread.Sleep(1);
             waitCount++;
         }
-#nullable restore
     }
 
     /// <summary>

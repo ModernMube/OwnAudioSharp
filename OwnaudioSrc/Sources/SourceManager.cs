@@ -20,44 +20,18 @@ namespace Ownaudio.Sources
     /// </summary>
     public unsafe partial class SourceManager
     {
-        /// <summary>
-        /// Buffer that temporarily stores written audio data during file operations.
-        /// </summary>
         private List<float> writedDataBuffer = new List<float>();
-
-        /// <summary>
-        /// Indicates whether this instance has been disposed.
-        /// </summary>
         private bool _disposed;
 
-        /// <summary>
-        /// Thread-safe lock object for singleton pattern implementation.
-        /// </summary>
         private static readonly object _lock = new object();
-
-        /// <summary>
-        /// The single instance of SourceManager (Singleton pattern).
-        /// </summary>
         private static SourceManager? _instance;
 
-        /// <summary>
-        /// Lock object for synchronizing write operations to prevent concurrent file access.
-        /// </summary>
         private object writeLock = new object();
-
-        /// <summary>
-        /// Flag indicating whether a write operation is currently in progress.
-        /// </summary>
         private bool isWriting = false;
-
-        /// <summary>
-        /// The file path where temporary audio data is written during recording operations.
-        /// </summary>
         private string writefilePath = "";
 
         /// <summary>
-        /// Initializes <see cref="SourceManager"/> instance by providing <see cref="IAudioEngine"/> instance.
-        /// Private constructor to enforce singleton pattern.
+        /// Initializes <see cref="Source"/> instance by providing <see cref="IAudioEngine"/> instance.
         /// </summary>
         private SourceManager()
         {
@@ -65,10 +39,8 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Gets the single instance of the SourceManager class (Singleton pattern).
-        /// Thread-safe implementation using double-checked locking.
+        /// Public static property to access the single instance
         /// </summary>
-        /// <value>The singleton instance of SourceManager.</value>
         public static SourceManager Instance
         {
             get
@@ -85,12 +57,10 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Adds an output source from the specified URL/file path.
+        /// Add an output source.
         /// </summary>
-        /// <param name="url">The file path or URL of the audio source to add.</param>
-        /// <returns>A task that represents the asynchronous operation. The task result contains a boolean indicating success.</returns>
-        /// <exception cref="ArgumentNullException">Thrown when <paramref name="url"/> is null.</exception>
-        /// <exception cref="OwnaudioException">Thrown when the playback thread is currently running.</exception>
+        /// <param name="url">Access and name of the file you want to play</param>
+        /// <returns></returns>
         public Task<bool> AddOutputSource(string url)
         {
             Ensure.NotNull(url, nameof(url));
@@ -104,14 +74,14 @@ namespace Ownaudio.Sources
                 Duration = _source.Duration;
 
             IsLoaded = _source.IsLoaded;
-
-            if (IsLoaded)
+            
+            if(IsLoaded)
             {
                 UrlList.Add(url);
                 AddInputSource();
-            }
+            }                 
 
-            SetAndRaisePositionChanged(TimeSpan.Zero);
+            SetAndRaisePositionChanged(TimeSpan.Zero);            
 
             Logger?.LogInfo("Source add url.");
 
@@ -119,10 +89,9 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Adds an empty output source with default duration for scenarios where no actual audio file is needed.
+        /// Add an output source.
         /// </summary>
-        /// <returns>A task that represents the asynchronous operation. The task result contains a boolean indicating success.</returns>
-        /// <exception cref="OwnaudioException">Thrown when the playback thread is currently running.</exception>
+        /// <returns></returns>
         public Task<bool> AddEmptyOutputSource()
         {
             Ensure.That<OwnaudioException>(State == SourceState.Idle, "Playback thread is currently running.");
@@ -130,7 +99,7 @@ namespace Ownaudio.Sources
             SourceWithoutData _sourceWithoutData = new SourceWithoutData();
             Sources.Add(_sourceWithoutData);
 
-            if (Duration.TotalMilliseconds < _sourceWithoutData.Duration.TotalMilliseconds)
+            if(Duration.TotalMilliseconds < _sourceWithoutData.Duration.TotalMilliseconds)
                 Duration = _sourceWithoutData.Duration;
 
             IsLoaded = true;
@@ -141,27 +110,25 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Adds an input source for recording audio with the specified input volume.
-        /// Creates a new input source if recording is not already active.
+        /// Add an input source
         /// </summary>
-        /// <param name="inputVolume">The volume level for the input source. Default is 0.0f.</param>
-        /// <returns>A task that represents the asynchronous operation. The task result contains a boolean indicating if recording is active.</returns>
+        /// <returns></returns>
         public Task<bool> AddInputSource(float inputVolume = 0f)
         {
-            if (!IsRecorded)
+            if(!IsRecorded)
             {
-                if (InputEngineOptions.Device.MaxInputChannels > 0)
+                if(InputEngineOptions.Device.MaxInputChannels > 0)
                 {
                     SourceInput _inputSource = new SourceInput(InputEngineOptions);
                     SourcesInput.Add(_inputSource);
                     if (_inputSource is not null)
                     {
                         IsRecorded = true;
-                    }
+                    } 
                 }
             }
 
-            if (IsRecorded)
+            if(IsRecorded)
             {
                 SourcesInput[SourcesInput.Count - 1].Volume = inputVolume;
             }
@@ -170,12 +137,11 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Adds a new real-time sample-based source to the mix for streaming audio data.
-        /// This method is useful for scenarios where audio data is generated or received in real-time.
+        /// Adds a new real-time sample-based source to the mix.
         /// </summary>
-        /// <param name="initialVolume">The initial volume for the source. Default is 1.0f (full volume).</param>
-        /// <param name="dataChannels">The number of audio channels for input data. Default is 2 (stereo).</param>
-        /// <returns>The created SourceSound instance that can be used to feed real-time audio data.</returns>
+        /// <param name="initialVolume">Initial volume for the source (default: 1.0f)</param>
+        /// <param name="dataChannels">Specifies the number of channels for input data. Default: 2 channels</param>
+        /// <returns>The created SoundSource instance</returns>
         public SourceSound AddRealTimeSource(float initialVolume = 1.0f, int dataChannels = 2)
         {
             var source = new SourceSound(dataChannels)
@@ -201,18 +167,16 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Removes an output source by its index from the sources collection.
+        /// Removes the output source
         /// </summary>
-        /// <param name="SourceID">The zero-based index of the source to remove.</param>
-        /// <returns>A task that represents the asynchronous operation. The task result contains a boolean indicating success.</returns>
-        /// <exception cref="ArgumentNullException">Thrown when Sources collection is null.</exception>
-        /// <exception cref="OwnaudioException">Thrown when the specified SourceID does not exist.</exception>
+        /// <param name="SourceID">The identification number of the source</param>
+        /// <returns></returns>
         public Task<bool> RemoveOutputSource(int SourceID)
         {
             Ensure.NotNull(Sources, nameof(Sources));
             Ensure.That<OwnaudioException>(SourceID < Sources.Count, "Output source id not exist.");
 
-            try
+            try 
             {
                 Sources.RemoveAt(SourceID);
                 UrlList?.RemoveAt(SourceID);
@@ -223,15 +187,14 @@ namespace Ownaudio.Sources
 
                 return Task.FromResult(true);
             }
-            catch { return Task.FromResult(false); }
-
+            catch {  return  Task.FromResult(false); }
+            
         }
 
         /// <summary>
-        /// Removes all input sources and stops recording.
-        /// Clears the input sources collection and resets recording state.
+        /// Remove input
         /// </summary>
-        /// <returns>A task that represents the asynchronous operation. The task result is always true.</returns>
+        /// <returns></returns>
         public Task<bool> RemoveInputSource()
         {
             if (IsRecorded)
@@ -243,11 +206,10 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Removes a specific real-time source from the sources collection.
-        /// Properly disposes the source before removing it.
+        /// Remove the real time samples source
         /// </summary>
-        /// <param name="source">The SourceSound instance to remove.</param>
-        /// <returns>True if the source was found and removed successfully; otherwise, false.</returns>
+        /// <param name="source"></param>
+        /// <returns></returns>
         public bool RemoveRealtimeSource(SourceSound source)
         {
             if (Sources.Contains(source))
@@ -262,31 +224,29 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Starts playback of mixed sources and saves the output to a specified file with given bit depth.
-        /// Enables data writing mode and configures file output parameters.
+        /// Play mixed sources
         /// </summary>
-        /// <param name="fileName">The output file name where the mixed audio will be saved.</param>
-        /// <param name="bitPerSamples">The bit depth for the output audio file (e.g., 16, 24, 32).</param>
+        /// <param name="fileName"></param>
+        /// <param name="bitPerSamples"></param>
         public void Play(string fileName, short bitPerSamples)
         {
             IsWriteData = true;
-
+            
             SaveWaveFileName = fileName;
-
+            
             string directoryPath = Path.GetDirectoryName(fileName) ?? Environment.CurrentDirectory;
             writefilePath = Path.Combine(directoryPath, "writeaudiodata.raw");
-
-            if (File.Exists(writefilePath))
-            { File.Delete(writefilePath); }
-
+            
+            if(File.Exists(writefilePath))
+                { File.Delete(writefilePath); }
+            
             BitPerSamples = bitPerSamples;
 
-            this.Play();
+            this.Play();             
         }
 
         /// <summary>
-        /// Starts playback of all mixed sources.
-        /// Handles different playback states and initializes the audio engine and mixing thread.
+        /// Play mixed sources
         /// </summary>
         public void Play()
         {
@@ -297,7 +257,7 @@ namespace Ownaudio.Sources
 
             if (State == SourceState.Paused)
             {
-                SetAndRaiseStateChanged(SourceState.Playing);
+                SetAndRaiseStateChanged(SourceState.Playing);                
                 return;
             }
 
@@ -308,7 +268,7 @@ namespace Ownaudio.Sources
 
             if (SourcesInput.Count > 0 && Sources.Count < 1)
             {
-                AddEmptyOutputSource();
+                AddEmptyOutputSource(); 
             }
 
             if (InitializeEngine())
@@ -321,7 +281,7 @@ namespace Ownaudio.Sources
 
                 Thread.Sleep(100);
 
-                MixEngineThread = new Thread(MixEngine) { Name = "Mix Engine Thread", IsBackground = true, Priority = ThreadPriority.AboveNormal };
+                MixEngineThread = new Thread(MixEngine) { Name = "Mix Engine Thread", IsBackground = true, Priority = ThreadPriority.AboveNormal};
 
                 if (IsRecorded && SourcesInput.Count > 0)
                     SourcesInput.Any(i => i.State == SourceState.Recording);
@@ -339,8 +299,7 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Pauses the current playback.
-        /// Only effective when playback is in Playing or Buffering state.
+        /// Pauses playback
         /// </summary>
         public void Pause()
         {
@@ -349,12 +308,11 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Stops the current playback and resets the player state.
-        /// Terminates all threads, stops the audio engine, and cleans up resources.
+        /// Stops playback
         /// </summary>
         public void Stop()
         {
-            if (State == SourceState.Idle)
+            if(State == SourceState.Idle)
                 return;
 
             ResetPlayback();
@@ -366,16 +324,15 @@ namespace Ownaudio.Sources
             if (Engine?.OwnAudioEngineStopped() == 0)
             {
                 Engine.Stop();
-            }
+            }                 
 
             TerminateEngine();
         }
 
         /// <summary>
-        /// Seeks to the specified position in all audio sources.
-        /// Temporarily sets thread priority to highest for smooth seeking operation.
+        /// Find the specified position in the sources
         /// </summary>
-        /// <param name="position">The target position to seek to.</param>
+        /// <param name="position"></param>
         public void Seek(TimeSpan position)
         {
             if (!IsLoaded || IsSeeking)
@@ -428,10 +385,9 @@ namespace Ownaudio.Sources
 
         /// <summary>
         /// Completely resets the player to its initial state.
-        /// Clears all sources, resets all values, disposes resources, and saves any pending data.
-        /// The audio engine remains initialized after reset.
+        /// Clears all sources and resets all values, but leaves the audio engine initialized.
         /// </summary>
-        /// <returns>True if the operation was successful; otherwise, false.</returns>
+        /// <returns>True if the operation was successful, False otherwise.</returns>
         public bool Reset()
         {
             try
@@ -490,10 +446,9 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Gets unified decoder options that ensure all sources use the same format settings.
-        /// Returns FFmpeg decoder options configured with the output engine's channels and sample rate.
+        ///  Uniform format settings for all sources
         /// </summary>
-        /// <returns>A configured FFmpegDecoderOptions instance with unified format settings.</returns>
+        /// <returns></returns>
         public static FFmpegDecoderOptions GetUnifiedDecoderOptions()
         {
             int outputChannels = (int)OutputEngineOptions.Channels;
@@ -503,8 +458,7 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Ensures that the mixing engine thread is properly terminated and cleaned up.
-        /// Waits for the thread to complete before setting it to null.
+        /// Ending the thread that is doing the mixing
         /// </summary>
         private void EnsureThreadsDone()
         {
@@ -512,10 +466,9 @@ namespace Ownaudio.Sources
 
             MixEngineThread = null;
         }
-
+        
         /// <summary>
-        /// Writes the recorded audio data from temporary storage to the final wave file.
-        /// This method is called internally to finalize audio file creation after recording/playback ends.
+        /// Write the recorded data to a file
         /// </summary>
         private void writeDataToFile()
         {
@@ -542,11 +495,10 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Saves audio sample data to a temporary file in a thread-safe manner.
-        /// Uses buffering to handle concurrent write operations and prevent data loss.
+        /// Write the data received in the parameter to a temporary file.
         /// </summary>
-        /// <param name="samplesArray">The array of audio samples to write to the file.</param>
-        /// <param name="writeFile">The file path where the samples should be written.</param>
+        /// <param name="samplesArray"></param>
+        /// <param name="writeFile"></param>
         private void SaveSamplesToFile(float[] samplesArray, string writeFile)
         {
             lock (writeLock)
@@ -559,7 +511,7 @@ namespace Ownaudio.Sources
 
                 isWriting = true;
             }
-
+            
             try
             {
                 lock (writeLock)
@@ -586,7 +538,7 @@ namespace Ownaudio.Sources
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"ERROR file write: {ex.Message}");
+                Console.WriteLine($"Hiba az írás során: {ex.Message}");
             }
             finally
             {
@@ -598,10 +550,9 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Sets the <see cref="State"/> value and raises the <see cref="StateChanged"/> event if the value has changed.
-        /// Also propagates the state change to all sources in the collection.
+        /// Sets <see cref="State"/> value and raise <see cref="StateChanged"/> if value is changed.
         /// </summary>
-        /// <param name="state">The new playback state to set.</param>
+        /// <param name="state">Playback state.</param>
         protected virtual void SetAndRaiseStateChanged(SourceState state)
         {
             var raise = State != state;
@@ -620,10 +571,9 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Sets the <see cref="Position"/> value and raises the <see cref="PositionChanged"/> event if the value has changed.
-        /// This method is used to notify subscribers about playback position updates.
+        /// Sets <see cref="Position"/> value and raise <see cref="PositionChanged"/> if value is changed.
         /// </summary>
-        /// <param name="position">The new playback position to set.</param>
+        /// <param name="position">Playback position.</param>
         protected virtual void SetAndRaisePositionChanged(TimeSpan position)
         {
             var raise = position != Position;
@@ -636,16 +586,14 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Releases all resources used by the SourceManager instance.
-        /// This method should be called when the instance is no longer needed to prevent memory leaks.
+        /// Dispose 
         /// </summary>
-        public void Dispose()
+        public virtual void Dispose()
         {
             if (_disposed)
+            {
                 return;
-
-            _bufferReady?.Dispose();
-            ClearBufferPools();
+            }
 
             State = SourceState.Idle;
             EnsureThreadsDone();
