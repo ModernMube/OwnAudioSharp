@@ -1,17 +1,18 @@
-﻿using System;
-using System.Collections.Concurrent;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
-using Ownaudio.Decoders;
+﻿using Ownaudio.Decoders;
 using Ownaudio.Decoders.FFmpeg;
 using Ownaudio.Decoders.Miniaudio;
 using Ownaudio.Decoders.MiniAudio;
 using Ownaudio.Exceptions;
 using Ownaudio.Processors;
+using Ownaudio.Sources.Extensions;
 using Ownaudio.Utilities;
 using Ownaudio.Utilities.Extensions;
 using SoundTouch;
+using System;
+using System.Collections.Concurrent;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Ownaudio.Sources;
 
@@ -166,12 +167,14 @@ public partial class Source : ISource
     public void Seek(TimeSpan position)
     {
         if (!IsLoaded || CurrentDecoder == null)
-        {
             return;
-        }
 
         while (Queue.TryDequeue(out _)) { }
-        while (SourceSampleData.TryDequeue(out _)) { }
+        while (SourceSampleData.TryDequeue(out var buffer))
+        {
+            SimpleAudioBufferPool.Return(buffer);
+        }
+
         soundTouch.Clear();
 
         Logger?.LogInfo($"Seeking to: {position}.");
@@ -184,7 +187,6 @@ public partial class Source : ISource
         }
 
         SetAndRaisePositionChanged(position);
-
         Logger?.LogInfo($"Successfully seeks to {position}.");
     }
 
@@ -196,7 +198,6 @@ public partial class Source : ISource
     /// <returns>A new <see cref="FFmpegDecoder"/> instance.</returns>
     protected virtual IAudioDecoder CreateDecoder(string url)
     {
-        // Egységes formátum beállítások használata
         var decoderOptions = SourceManager.GetUnifiedDecoderOptions();
         if(OwnAudio.IsFFmpegInitialized)
             return new FFmpegDecoder(url, decoderOptions);
@@ -212,7 +213,6 @@ public partial class Source : ISource
     /// <returns>A new <see cref="FFmpegDecoder"/> instance.</returns>
     protected virtual IAudioDecoder CreateDecoder(Stream stream)
     {
-        // Egységes formátum beállítások használata
         var decoderOptions = SourceManager.GetUnifiedDecoderOptions();
         return new FFmpegDecoder(stream, decoderOptions);
     }

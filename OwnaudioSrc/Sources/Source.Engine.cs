@@ -1,17 +1,22 @@
+using Ownaudio.Decoders;
+using Ownaudio.Engines;
+using Ownaudio.Sources.Extensions;
+using Ownaudio.Utilities.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Ownaudio.Decoders;
-using Ownaudio.Engines;
-using Ownaudio.Utilities.Extensions;
 
 namespace Ownaudio.Sources;
 
 public partial class Source : ISource
 {
+    // Egyszerû pre-allocated buffer
+    private float[]? _processedSamples;
+    private int _lastProcessedSize = 0;
+
     /// <summary>
     /// Handles audio decoder error, returns <c>true</c> to continue decoder thread, <c>false</c> will
     /// break the thread. By default, this will try to re-initializes <see cref="CurrentDecoder"/>
@@ -22,7 +27,11 @@ public partial class Source : ISource
     protected virtual bool HandleDecoderError(AudioDecoderResult result)
     {
         while (Queue.TryDequeue(out _)) { }
-        while (SourceSampleData.TryDequeue(out _)) { }
+        while (SourceSampleData.TryDequeue(out var buffer))
+        {
+            SimpleAudioBufferPool.Return(buffer);
+        }
+
         Logger?.LogWarning($"Failed to decode audio frame, retrying: {result.ErrorMessage}");
 
         CurrentDecoder?.Dispose();
@@ -38,9 +47,7 @@ public partial class Source : ISource
 
             try
             {
-    #nullable disable
                 CurrentDecoder = CurrentUrl != null ? CreateDecoder(CurrentUrl) : CreateDecoder(CurrentStream);
-    #nullable restore
                 break;
             }
             catch (Exception ex)
@@ -52,7 +59,6 @@ public partial class Source : ISource
 
         Logger?.LogInfo($"Audio decoder has been recreated, seeking to the last position ({Position}).");
         Seek(Position);
-
         return true;
     }
 
@@ -135,20 +141,25 @@ public partial class Source : ISource
     private void RunEngine()
     {
         Logger?.LogInfo("Engine thread is started.");
-        List<float> soundTouchBuffer = new List<float>();
+
         double calculateTime = 0;
         int numSamples = 0;
-        bool isSoundtouch = true;
-        
+        bool isSoundtouch = Pitch != 0 || Tempo != 0;
+
+        // Ensure processed samples buffer
+        EnsureProcessedSamplesBuffer();
+
         soundTouch.Clear();
         soundTouch.SampleRate = SourceManager.OutputEngineOptions.SampleRate;
         soundTouch.Channels = (int)SourceManager.OutputEngineOptions.Channels;
+
+        List<float> soundTouchBuffer = new List<float>();
 
         while (State != SourceState.Idle)
         {
             if (State == SourceState.Paused || IsSeeking)
             {
-                Thread.Sleep(10);
+                Thread.Sleep(10); 
                 continue;
             }
 
@@ -165,81 +176,86 @@ public partial class Source : ISource
                 continue;
             }
 
-            if (soundTouchBuffer.Count >= FixedBufferSize)  
+            if (soundTouchBuffer.Count >= FixedBufferSize)
             {
-                SendDataEngine(soundTouchBuffer, calculateTime);
+                SendDataEngineSimple(soundTouchBuffer, calculateTime);
             }
             else
             {
-                if (Queue.TryDequeue(out var frame)) 
+                if (Queue.TryDequeue(out var frame))
                 {
                     Span<float> samples = MemoryMarshal.Cast<byte, float>(frame.Data);
                     calculateTime = frame.PresentationTime;
-                    if(isSoundtouch)
+
+                    if (isSoundtouch)
                     {
                         lock (lockObject)
                         {
                             soundTouch.PutSamples(samples.ToArray(), samples.Length / soundTouch.Channels);
 
-                            float[] processedSamples = new float[FixedBufferSize];
-                            numSamples = soundTouch.ReceiveSamples(processedSamples, FixedBufferSize / soundTouch.Channels); //We request the processed data
+                            Array.Clear(_processedSamples, 0, FixedBufferSize);
+                            numSamples = soundTouch.ReceiveSamples(_processedSamples, FixedBufferSize / soundTouch.Channels);
 
                             if (numSamples > 0)
                             {
-                                soundTouchBuffer.AddRange(processedSamples.Take(numSamples * soundTouch.Channels));
+                                soundTouchBuffer.AddRange(_processedSamples.Take(numSamples * soundTouch.Channels));
                             }
                         }
                     }
                     else
                     {
                         soundTouchBuffer.AddRange(samples.ToArray());
-                    } 
+                    }
                 }
                 else
                 {
-                    if (IsEOF) 
+                    if (IsEOF)
                     {
-                        numSamples = 0;
-                        float[] processedSamples = new float[FixedBufferSize];
-                        
-                        if (Pitch != 0 || Tempo != 0)
-                            numSamples = soundTouch.ReceiveSamples(processedSamples, FixedBufferSize / soundTouch.Channels); //If there is no more data from the decoder, empty the buffer of the SoundTouch
-
-                        if (numSamples > 0)
+                        // Flush SoundTouch
+                        if (isSoundtouch)
                         {
                             do
                             {
-                                soundTouchBuffer.AddRange(processedSamples.Take(numSamples * soundTouch.Channels));
-                                SendDataEngine(soundTouchBuffer, calculateTime);
+                                Array.Clear(_processedSamples, 0, FixedBufferSize);
+                                numSamples = soundTouch.ReceiveSamples(_processedSamples, FixedBufferSize / soundTouch.Channels);
 
-                                numSamples = soundTouch.ReceiveSamples(processedSamples, FixedBufferSize / soundTouch.Channels);
-                            }while (numSamples > 0);
-
-                            Logger?.LogInfo("End of audio data and SoundTouch buffer is empty.");
-                            break;
+                                if (numSamples > 0)
+                                {
+                                    soundTouchBuffer.AddRange(_processedSamples.Take(numSamples * soundTouch.Channels));
+                                    SendDataEngineSimple(soundTouchBuffer, calculateTime);
+                                }
+                            } while (numSamples > 0);
                         }
                         else if (soundTouchBuffer.Count > 0)
-                            SendDataEngine(soundTouchBuffer, calculateTime);
+                        {
+                            SendDataEngineSimple(soundTouchBuffer, calculateTime);
+                        }
 
-                        Logger?.LogInfo("End of audio data and SoundTouch buffer is empty."); //The SoundTouch buffer is also empty, let's end the playback
+                        Logger?.LogInfo("End of audio data.");
                         break;
                     }
                     else
                     {
-                        Logger?.LogInfo("Waiting for more data from the decoder...");  //If we have not reached the end of the file, wait for the decoder to provide new data.
                         Thread.Sleep(10);
                         continue;
                     }
                 }
             }
         }
-        
-        SetAndRaisePositionChanged(TimeSpan.Zero);
 
-        // Just fire and forget, and it should be non-blocking event.
-        Task.Run(() => SetAndRaiseStateChanged(SourceState.Idle)); 
+        SetAndRaisePositionChanged(TimeSpan.Zero);
+        Task.Run(() => SetAndRaiseStateChanged(SourceState.Idle));
 
         Logger?.LogInfo("Engine thread is completed.");
+    }
+
+    private void EnsureProcessedSamplesBuffer()
+    {
+        if (_processedSamples == null || _lastProcessedSize != FixedBufferSize)
+        {
+            _processedSamples = new float[FixedBufferSize];
+            _lastProcessedSize = FixedBufferSize;
+        }
     }
 
     /// <summary>
@@ -247,27 +263,41 @@ public partial class Source : ISource
     /// </summary>
     /// <param name="soundTouchBuffer">List of processed data</param>
     /// <param name="calculateTime">Time calculated from the data</param>
-#nullable disable
-    private void SendDataEngine(List<float> soundTouchBuffer, double calculateTime)
+    private void SendDataEngineSimple(List<float> soundTouchBuffer, double calculateTime)
     {
         int samplesSize = FramesPerBuffer * CurrentDecoder.StreamInfo.Channels;
-        float[] samples;        
 
-        for (int i = 0; i < (soundTouchBuffer.Count / samplesSize) ; i++)
+        for (int i = 0; i < (soundTouchBuffer.Count / samplesSize); i++)
         {
-            samples = soundTouchBuffer.Take(samplesSize).ToArray();
+            float[] samples = samplesSize > 512
+                ? SimpleAudioBufferPool.Rent(samplesSize)
+                : new float[samplesSize];
 
-            if (soundTouchBuffer.Count >= samplesSize)
-                soundTouchBuffer.RemoveRange(0, samplesSize);
+            try
+            {
+                for (int j = 0; j < samplesSize && j < soundTouchBuffer.Count; j++)
+                {
+                    samples[j] = soundTouchBuffer[j];
+                }
 
-            ProcessSampleProcessors(samples);
+                if (soundTouchBuffer.Count >= samplesSize)
+                    soundTouchBuffer.RemoveRange(0, samplesSize);
 
-            SourceSampleData.Enqueue(samples);
+                ProcessSampleProcessors(samples.AsSpan(0, samplesSize));
+                SourceSampleData.Enqueue(samples);
 
-            if (CurrentDecoder is not null)
-                calculateTime += (samples.Length / CurrentDecoder.StreamInfo.SampleRate * CurrentDecoder.StreamInfo.Channels) * 1000;
+                if (CurrentDecoder is not null)
+                    calculateTime += (samplesSize / (double)(CurrentDecoder.StreamInfo.SampleRate * CurrentDecoder.StreamInfo.Channels)) * 1000;
 
-            SetAndRaisePositionChanged(TimeSpan.FromMilliseconds(calculateTime));
+                SetAndRaisePositionChanged(TimeSpan.FromMilliseconds(calculateTime));
+
+                samples = null;
+            }
+            finally
+            {
+                if (samples != null && samplesSize > 512)
+                    SimpleAudioBufferPool.Return(samples);
+            }
         }
     }
 
