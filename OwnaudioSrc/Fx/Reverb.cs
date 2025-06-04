@@ -1,5 +1,6 @@
 ﻿using Ownaudio.Processors;
 using System;
+using System.Runtime.CompilerServices;
 
 namespace Ownaudio.Fx
 {
@@ -147,7 +148,7 @@ namespace Ownaudio.Fx
             {
                 lock (parametersLock)
                 {
-                    roomSize = Math.Clamp(value, 0.0f, 1.0f);
+                    roomSize = FastClamp(value);
                     UpdateCombFilters();
                 }
             }
@@ -163,7 +164,7 @@ namespace Ownaudio.Fx
             {
                 lock (parametersLock)
                 {
-                    damping = Math.Clamp(value, 0.0f, 1.0f);
+                    damping = FastClamp(value);
                     UpdateDamping();
                 }
             }
@@ -175,7 +176,7 @@ namespace Ownaudio.Fx
         public float Width
         {
             get { lock (parametersLock) return width; }
-            set { lock (parametersLock) width = Math.Clamp(value, 0.0f, 1.0f); }
+            set { lock (parametersLock) width = FastClamp(value); }
         }
 
         /// <summary>
@@ -184,7 +185,7 @@ namespace Ownaudio.Fx
         public float WetLevel
         {
             get { lock (parametersLock) return wetLevel; }
-            set { lock (parametersLock) wetLevel = Math.Clamp(value, 0.0f, 1.0f); }
+            set { lock (parametersLock) wetLevel = FastClamp(value); }
         }
 
         /// <summary>
@@ -193,7 +194,7 @@ namespace Ownaudio.Fx
         public float DryLevel
         {
             get { lock (parametersLock) return dryLevel; }
-            set { lock (parametersLock) dryLevel = Math.Clamp(value, 0.0f, 1.0f); }
+            set { lock (parametersLock) dryLevel = FastClamp(value); }
         }
 
         /// <summary>
@@ -351,6 +352,27 @@ namespace Ownaudio.Fx
             {
                 allPass.Clear();
             }
+        }
+
+        /// <summary>
+        /// Fast audio clamping function that constrains values to the valid audio range [-1.0, 1.0].
+        /// </summary>
+        /// <param name="value">The audio sample value to clamp.</param>
+        /// <returns>The clamped value within the range [-1.0, 1.0].</returns>
+        /// <remarks>
+        /// This method is aggressively inlined for maximum performance in audio processing loops.
+        /// Audio clamping is essential to prevent:
+        /// - Digital audio clipping and distortion
+        /// - Hardware damage from excessive signal levels
+        /// - Unwanted artifacts in the audio output
+        /// 
+        /// Values below -1.0 are clamped to -1.0, values above 1.0 are clamped to 1.0,
+        /// and values within the valid range are passed through unchanged.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float FastClamp(float value)
+        {
+            return value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
         }
     }
 }

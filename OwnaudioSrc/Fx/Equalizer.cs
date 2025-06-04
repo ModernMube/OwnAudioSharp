@@ -1,5 +1,6 @@
-using System;
 using Ownaudio.Processors;
+using System;
+using System.Runtime.CompilerServices;
 
 namespace Ownaudio.Fx
 {
@@ -76,7 +77,7 @@ namespace Ownaudio.Fx
             // Checking and limiting values
             frequency = Math.Max(20.0f, Math.Min(20000.0f, frequency));  // 20Hz - 20kHz
             q = Math.Max(0.1f, Math.Min(10.0f, q));                      // Q: 0.1 - 10
-            gainDB = Math.Clamp(gainDB, -12.0f, 12.0f);                  // -12dB - +12dB
+            gainDB = FastClamp(gainDB);                  // -12dB - +12dB
 
             // Saving values
             _frequencies[band] = frequency;
@@ -124,6 +125,27 @@ namespace Ownaudio.Fx
                     _filters[band][i].Reset();
                 }
             }
+        }
+
+        /// <summary>
+        /// Fast audio clamping function that constrains values to the valid audio range [-1.0, 1.0].
+        /// </summary>
+        /// <param name="value">The audio sample value to clamp.</param>
+        /// <returns>The clamped value within the range [-1.0, 1.0].</returns>
+        /// <remarks>
+        /// This method is aggressively inlined for maximum performance in audio processing loops.
+        /// Audio clamping is essential to prevent:
+        /// - Digital audio clipping and distortion
+        /// - Hardware damage from excessive signal levels
+        /// - Unwanted artifacts in the audio output
+        /// 
+        /// Values below -1.0 are clamped to -1.0, values above 1.0 are clamped to 1.0,
+        /// and values within the valid range are passed through unchanged.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float FastClamp(float value)
+        {
+            return value < -12.0f ? -12.0f : (value > 12.0f ? 12.0f : value);
         }
     }
 
