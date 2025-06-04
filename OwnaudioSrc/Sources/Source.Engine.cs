@@ -1,5 +1,4 @@
 using Ownaudio.Decoders;
-using Ownaudio.Engines;
 using Ownaudio.Sources.Extensions;
 using Ownaudio.Utilities.Extensions;
 using System;
@@ -13,17 +12,32 @@ namespace Ownaudio.Sources;
 
 public partial class Source : ISource
 {
-    // Egyszerû pre-allocated buffer
+    /// <summary>
+    /// Pre-allocated buffer for processed audio samples to avoid frequent allocations.
+    /// </summary>
     private float[]? _processedSamples;
+    
+    /// <summary>
+    /// Tracks the last processed buffer size to determine when reallocation is needed.
+    /// </summary>
     private int _lastProcessedSize = 0;
 
     /// <summary>
-    /// Handles audio decoder error, returns <c>true</c> to continue decoder thread, <c>false</c> will
-    /// break the thread. By default, this will try to re-initializes <see cref="CurrentDecoder"/>
-    /// and seeks to the last position.
+    /// Handles audio decoder errors and attempts recovery by reinitializing the decoder.
     /// </summary>
-    /// <param name="result">Failed audio decoder result.</param>
-    /// <returns><c>true</c> will continue decoder thread, <c>false</c> will break the thread.</returns>
+    /// <param name="result">The failed audio decoder result containing error information.</param>
+    /// <returns>
+    /// <c>true</c> to continue the decoder thread after successful recovery; 
+    /// <c>false</c> to break the thread if recovery fails or the source is idle.
+    /// </returns>
+    /// <remarks>
+    /// This method performs the following recovery steps:
+    /// 1. Clears all queued data and returns buffers to the pool
+    /// 2. Logs the error and disposes the current decoder
+    /// 3. Attempts to recreate the decoder using the original URL or stream
+    /// 4. Seeks to the last known position after successful recreation
+    /// If the source state becomes idle during recovery, the method returns false to terminate the thread.
+    /// </remarks>
     protected virtual bool HandleDecoderError(AudioDecoderResult result)
     {
         while (Queue.TryDequeue(out _)) { }
@@ -63,8 +77,17 @@ public partial class Source : ISource
     }
 
     /// <summary>
-    /// It continuously decodes data during playback.
+    /// Continuously decodes audio data during playback in a background thread.
     /// </summary>
+    /// <remarks>
+    /// This method runs in the decoder thread and performs the following operations:
+    /// - Continuously decodes audio frames from the current decoder
+    /// - Handles seeking operations by clearing queues and waiting
+    /// - Manages end-of-file conditions and decoder errors
+    /// - Controls queue size to prevent excessive memory usage
+    /// - Coordinates with the engine thread for proper shutdown
+    /// The thread continues until the source state becomes idle or an unrecoverable error occurs.
+    /// </remarks>
     private void RunDecoder()
     {
         Logger?.LogInfo("Decoder thread is started.");
@@ -134,10 +157,19 @@ public partial class Source : ISource
     }
 
     /// <summary>
-    /// Continuous processing and preparation of data for the output audio engine
-    /// <see cref="SoundTouch"/>
-    /// <see cref="CurrentDecoder"/>
+    /// Continuously processes and prepares audio data for the output engine with SoundTouch effects.
     /// </summary>
+    /// <remarks>
+    /// This method runs in the engine thread and performs the following operations:
+    /// - Configures SoundTouch for pitch and tempo modifications
+    /// - Processes decoded audio frames from the queue
+    /// - Applies SoundTouch effects when pitch or tempo changes are active
+    /// - Manages buffering states and coordinates with the decoder thread
+    /// - Handles end-of-file conditions and flushes remaining data
+    /// - Sends processed audio data to the source manager for output
+    /// The thread processes data in chunks based on the fixed buffer size and maintains
+    /// proper synchronization between decoding and output operations.
+    /// </remarks>
     private void RunEngine()
     {
         Logger?.LogInfo("Engine thread is started.");
@@ -193,7 +225,7 @@ public partial class Source : ISource
                         {
                             soundTouch.PutSamples(samples.ToArray(), samples.Length / soundTouch.Channels);
 
-                            Array.Clear(_processedSamples, 0, FixedBufferSize);
+                            FastClear(_processedSamples, FixedBufferSize);
                             numSamples = soundTouch.ReceiveSamples(_processedSamples, FixedBufferSize / soundTouch.Channels);
 
                             if (numSamples > 0)
@@ -216,7 +248,7 @@ public partial class Source : ISource
                         {
                             do
                             {
-                                Array.Clear(_processedSamples, 0, FixedBufferSize);
+                                FastClear(_processedSamples, FixedBufferSize);
                                 numSamples = soundTouch.ReceiveSamples(_processedSamples, FixedBufferSize / soundTouch.Channels);
 
                                 if (numSamples > 0)
@@ -249,6 +281,14 @@ public partial class Source : ISource
         Logger?.LogInfo("Engine thread is completed.");
     }
 
+    /// <summary>
+    /// Ensures the processed samples buffer is allocated and sized correctly for the current buffer requirements.
+    /// </summary>
+    /// <remarks>
+    /// This method checks if the buffer needs to be reallocated based on the current fixed buffer size.
+    /// Reallocation occurs when the buffer is null or when the buffer size has changed since the last allocation.
+    /// This approach minimizes memory allocations during audio processing.
+    /// </remarks>
     private void EnsureProcessedSamplesBuffer()
     {
         if (_processedSamples == null || _lastProcessedSize != FixedBufferSize)
@@ -259,10 +299,19 @@ public partial class Source : ISource
     }
 
     /// <summary>
-    /// Prepares the data for the source manager
+    /// Prepares processed audio data for the source manager and updates playback position.
     /// </summary>
-    /// <param name="soundTouchBuffer">List of processed data</param>
-    /// <param name="calculateTime">Time calculated from the data</param>
+    /// <param name="soundTouchBuffer">List containing processed audio samples ready for output.</param>
+    /// <param name="calculateTime">Current presentation time in milliseconds for position tracking.</param>
+    /// <remarks>
+    /// This method performs the following operations:
+    /// - Splits the buffer into chunks based on frames per buffer and channel count
+    /// - Uses buffer pooling for larger sample arrays to reduce garbage collection
+    /// - Applies sample processors (volume, custom effects) to each chunk
+    /// - Calculates and updates the current playback position
+    /// - Enqueues processed samples for output to the audio engine
+    /// The method ensures proper buffer management by returning pooled buffers in the finally block.
+    /// </remarks>
     private void SendDataEngineSimple(List<float> soundTouchBuffer, double calculateTime)
     {
         int samplesSize = FramesPerBuffer * CurrentDecoder.StreamInfo.Channels;
@@ -302,16 +351,41 @@ public partial class Source : ISource
     }
 
     /// <summary>
-    /// Returns the contents of the audio file loaded into the source in a byte array.
+    /// Efficiently clears a float array buffer using optimized methods based on buffer size.
+    /// </summary>
+    /// <param name="buffer">The float array buffer to clear.</param>
+    /// <param name="length">The number of elements to clear from the start of the buffer.</param>
+    /// <remarks>
+    /// This method uses size-based optimization:
+    /// - For buffers â‰¤1024 elements: Uses Span.Clear() which is optimized for smaller buffers
+    /// - For larger buffers: Uses Array.Clear() which is more efficient for larger memory blocks
+    /// This approach provides better performance across different buffer sizes.
+    /// </remarks>
+    private static void FastClear(float[] buffer, int length)
+    {
+        if (length <= 1024)
+            buffer.AsSpan(0, length).Clear(); // Span.Clear - optimized for smaller buffers
+        else
+            Array.Clear(buffer, 0, length); // Array.Clear - more efficient for larger buffers
+    }
+
+    /// <summary>
+    /// Decodes and returns the complete audio content as a byte array.
     /// </summary>
     /// <param name="position">
-    /// Jumps to the position specified in the parameter after decoding all the data. 
-    /// The most typical is zero (the beginning of the file).
+    /// The position to seek to after decoding all data, typically TimeSpan.Zero for the beginning of the file.
     /// </param>
-    /// <returns>The array containing the data.</returns>
+    /// <returns>
+    /// A byte array containing the complete decoded audio data, or null if no audio is loaded.
+    /// </returns>
+    /// <remarks>
+    /// This method decodes the entire audio file into memory at once. Use with caution for large files
+    /// as it may consume significant memory. The position parameter allows seeking to a specific
+    /// position after the decoding operation is complete.
+    /// </remarks>
     public byte[] GetByteAudioData(TimeSpan position)
     {
-        if(IsLoaded)
+        if (IsLoaded)
         {
             AudioDecoderResult result = CurrentDecoder.DecodeAllFrames(position);
             return result.Frame.Data;
@@ -324,13 +398,19 @@ public partial class Source : ISource
     }
 
     /// <summary>
-    /// Returns the contents of the audio file loaded into the source in a float array.
+    /// Decodes and returns the complete audio content as a float array.
     /// </summary>
     /// <param name="position">
-    /// Jumps to the position specified in the parameter after decoding all the data. 
-    /// The most typical is zero (the beginning of the file).
+    /// The position to seek to after decoding all data, typically TimeSpan.Zero for the beginning of the file.
     /// </param>
-    /// <returns>The array containing the data.</returns>
+    /// <returns>
+    /// A float array containing the complete decoded audio data converted from bytes, or null if no audio is loaded.
+    /// </returns>
+    /// <remarks>
+    /// This method decodes the entire audio file into memory and converts the byte data to float samples.
+    /// Use with caution for large files as it may consume significant memory. The returned float array
+    /// contains the raw audio samples that can be used for direct audio processing or analysis.
+    /// </remarks>
     public float[] GetFloatAudioData(TimeSpan position)
     {
         if (IsLoaded)
