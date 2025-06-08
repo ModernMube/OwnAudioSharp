@@ -1,7 +1,5 @@
 ﻿using Ownaudio.Processors;
-using Ownaudio.Sources.Extensions;
-using System;
-using System.Threading;
+using Ownaudio.Utilities.Extensions;
 
 namespace Ownaudio.Sources
 {
@@ -76,16 +74,8 @@ namespace Ownaudio.Sources
                         Array.Copy(samples, i * InputDataChannels, buffer, 0, framesPerBuffer * InputDataChannels);
                     }
 
-                    ProcessSampleProcessors(buffer.AsSpan());
-                    SourceSampleData.Enqueue(buffer);
-
-                    buffer = null;
-                }
-                finally
-                {
-                    if (buffer != null && outputBufferSize > 512)
-                        SimpleAudioBufferPool.Return(buffer);
-                }
+                ProcessSampleProcessors(buffer.AsSpan());
+                SourceSampleData.Enqueue(buffer);
             }
         }
 

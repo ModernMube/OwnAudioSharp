@@ -2,7 +2,6 @@ using Ownaudio.Engines;
 using Ownaudio.Sources.Extensions;
 using System;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -11,40 +10,21 @@ namespace Ownaudio.Sources;
 public unsafe partial class SourceManager
 {
     /// <summary>
-    /// Pre-allocated buffer for audio mixing operations to avoid frequent memory allocations.
-    /// </summary>
-    private float[] _mixBuffer;
-
-    /// <summary>
-    /// Tracks the last allocated mix buffer size to determine when reallocation is needed.
-    /// </summary>
-    private int _lastMixBufferSize = 0;
-
-    /// <summary>
-    /// The main mixing engine that combines multiple audio sources into a single output stream.
-    /// </summary>
-    /// <remarks>
-    /// This method performs the core audio mixing operations:
-    /// - Manages seeking operations and source synchronization
-    /// - Mixes multiple output sources using scalar operations
-    /// - Processes input recording and mixing
-    /// - Applies sample processors (volume, custom effects)
-    /// - Sends mixed audio to the output engine
-    /// - Updates playback position based on processed samples
-    /// - Handles end-of-stream conditions and playback reset
-    /// - Writes recorded data to file when configured
-    /// 
-    /// The mixing process uses pre-allocated buffers for optimal performance
-    /// and includes comprehensive synchronization logic for multi-source playback.
-    /// </remarks>
+    /// Mix output sources into a stream. Considering the state of the source manager.
+    /// </summary> 
     private void MixEngine()
     {
         bool useSources = false;
         TimeSpan lastKnownPosition = Position;
         bool seekJustHappened = false;
 
-        int maxLength = CalculateMaxBufferLength();
-        EnsureMixBufferAllocated(maxLength);
+        int maxLength = Sources.Max(src => 
+            src.SourceSampleData.TryPeek(out float[]? peekedSamples) && peekedSamples != null 
+            ? peekedSamples.Length 
+            : 0);
+                
+        if (maxLength > 0)
+            mixedBuffer.Capacity = maxLength;
 
         double sampleDurationMs = 1000.0 / OutputEngineOptions.SampleRate;
         int channelCount = (int)OutputEngineOptions.Channels;
@@ -54,8 +34,9 @@ public unsafe partial class SourceManager
             if (IsSeeking)
             {
                 seekJustHappened = true;
-                Thread.Yield();
-                FastClear(_mixBuffer, maxLength);
+
+                Thread.Sleep(1);
+                mixedBuffer.Clear();
                 continue;
             }
 
@@ -67,12 +48,12 @@ public unsafe partial class SourceManager
                 bool allSourcesReady = Sources.All(src => src.SourceSampleData.Count > 0 || src.State == SourceState.Idle);
                 if (!allSourcesReady)
                 {
-                    Thread.Yield();
-                    continue;
+                    Thread.Sleep(5);
                 }
             }
 
-            FastClear(_mixBuffer, maxLength);
+            for (int i = 0; i < maxLength; i++)
+                mixedBuffer.Add(0.0f);
 
             if (!Sources.Any(p => p.SourceSampleData.Count() > 0))
             {
@@ -83,12 +64,8 @@ public unsafe partial class SourceManager
 
                 if (!IsRecorded)
                 {
-                    if (!Sources.Any(p => p.SourceSampleData.Count() > 0))
-                    {
-                        Engine?.Send(_mixBuffer.AsSpan(0, maxLength));
-                        Thread.Yield();
-                        continue;
-                    }
+                    Thread.Sleep(10);
+                    continue;
                 }
                 else
                 {
@@ -115,70 +92,27 @@ public unsafe partial class SourceManager
 
             if (maxLength > 0)
             {
-                if (Sources.Count() > 0 && useSources && State == SourceState.Playing)
+                float[] _mixedBuffer = new float[mixedBuffer.Count];
+                
+                for (int i = 0; i < maxLength; i++)
+                    _mixedBuffer[i] = 0.0f;
+
+                if (Sources.Count() > 0 && useSources)
                 {
-                    ProcessSourceMixingSimple(lastKnownPosition);
-                }
-
-                if (IsRecorded && Engine is not null)
-                {
-                    ProcessInputMixingSimple();
-                }
-
-                ProcessSampleProcessors(_mixBuffer.AsSpan(0, maxLength));
-
-                Engine?.Send(_mixBuffer.AsSpan(0, maxLength));
-
-                if (State == SourceState.Playing)
-                {
-                    double processedTimeMs = (maxLength / channelCount) * sampleDurationMs;
-                    lastKnownPosition = lastKnownPosition.Add(TimeSpan.FromMilliseconds(processedTimeMs));
-
-                    if (Math.Abs((lastKnownPosition - Position).TotalMilliseconds) > 20)
+                    if (State == SourceState.Playing)
                     {
-                        SetAndRaisePositionChanged(lastKnownPosition);
-                    }
-                }
+                        bool needToResync = false;
 
-                if (Position.TotalMilliseconds >= Duration.TotalMilliseconds)
-                {
-                    SetAndRaisePositionChanged(Duration);
-                    ResetPlayback();
-                    break;
-                }
-            }
-        }
-
-        writeDataToFile();
-    }
-
-    /// <summary>
-    /// Processes and mixes multiple output sources with synchronization checking.
-    /// </summary>
-    /// <param name="lastKnownPosition">The last known playback position for synchronization purposes.</param>
-    /// <remarks>
-    /// This method performs the following operations:
-    /// - Synchronization check for multiple sources (only when more than one source exists)
-    /// - Detects time drift between sources and corrects by seeking
-    /// - Mixes audio samples using simple scalar addition
-    /// - Applies audio clamping to prevent clipping
-    /// - Returns buffers to the pool for memory efficiency
-    /// 
-    /// The synchronization tolerance is set to 200ms for detection and 100ms for correction,
-    /// providing a balance between accuracy and stability.
-    /// </remarks>
-    private void ProcessSourceMixingSimple(TimeSpan lastKnownPosition)
-    {
-        if (Sources.Count > 1)
-        {
-            TimeSpan minPos = TimeSpan.MaxValue;
-            TimeSpan maxPos = TimeSpan.MinValue;
-
-            foreach (ISource src in Sources)
-            {
-                if (src.Position < minPos) minPos = src.Position;
-                if (src.Position > maxPos) maxPos = src.Position;
-            }
+                        if (Sources.Count > 1)
+                        {
+                            TimeSpan minPos = TimeSpan.MaxValue;
+                            TimeSpan maxPos = TimeSpan.MinValue;
+                            
+                            foreach (ISource src in Sources)
+                            {
+                                if (src.Position < minPos) minPos = src.Position;
+                                if (src.Position > maxPos) maxPos = src.Position;
+                            }
 
             if ((maxPos - minPos).TotalMilliseconds > 200)
             {
@@ -192,27 +126,18 @@ public unsafe partial class SourceManager
             }
         }
 
-        foreach (ISource src in Sources)
-        {
-            if (src.SourceSampleData.TryDequeue(out float[]? samples))
-            {
-                try
-                {
-                    int mixLength = Math.Min(samples.Length, _mixBuffer.Length);
-
-                    for (int i = 0; i < mixLength; i++)
+                    foreach (ISource src in Sources)
                     {
-                        _mixBuffer[i] += samples[i];
-                        _mixBuffer[i] = FastClamp(_mixBuffer[i]);
+                        if (src.SourceSampleData.TryDequeue(out float[]? samples))
+                        {
+                            for (int i = 0; i < samples.Length; i++)
+                            {
+                                _mixedBuffer[i] += samples[i];
+                                _mixedBuffer[i] = Math.Clamp(_mixedBuffer[i], -1.0f, 1.0f);
+                            }
+                        }
                     }
                 }
-                finally
-                {
-                    SimpleAudioBufferPool.Return(samples);
-                }
-            }
-        }
-    }
 
     /// <summary>
     /// Processes input audio recording and mixes it with the output stream.
@@ -234,28 +159,28 @@ public unsafe partial class SourceManager
         {
             int inputBufferSize = EngineFramesPerBuffer * (int)InputEngineOptions.Channels;
 
-            ((SourceInput)SourcesInput[0]).ReceivesData(out var inputBuffer, Engine);
+                    MixInput(
+                        inputBuffer: inputBuffer,
+                        mixedBuffer: _mixedBuffer,
+                        inputChannels: (int)InputEngineOptions.Channels,
+                        outputChannels: (int)OutputEngineOptions.Channels,
+                        mixingGain: 0.8f
+                    );
 
-            try
-            {
-                MixInputSimple(
-                    inputBuffer: inputBuffer.AsSpan(),
-                    mixedBuffer: _mixBuffer.AsSpan(),
-                    inputChannels: (int)InputEngineOptions.Channels,
-                    outputChannels: (int)OutputEngineOptions.Channels,
-                    mixingGain: 0.8f
-                );
+                    InputLevels = InputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
+                        ? CalculateAverageStereoLevels(inputBuffer)
+                        : CalculateAverageMonoLevel(inputBuffer);
+                }
 
-                InputLevels = InputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
-                    ? CalculateAverageStereoLevels(inputBuffer)
-                    : CalculateAverageMonoLevel(inputBuffer);
-            }
-            finally
-            {
-                SimpleAudioBufferPool.Return(inputBuffer);
-            }
-        }
-    }
+                Span<float> mixedSpan = CollectionsMarshal.AsSpan(_mixedBuffer.ToList());
+
+                ProcessSampleProcessors(mixedSpan);
+
+                Engine?.Send(mixedSpan);
+
+                if (State == SourceState.Playing)
+                {
+                    double processedTimeMs = (mixedBuffer.Count / channelCount) * sampleDurationMs;
 
     /// <summary>
     /// Ensures the mix buffer is allocated with the correct size.
@@ -308,7 +233,7 @@ public unsafe partial class SourceManager
 
         return maxLength > 0 ? maxLength : EngineFramesPerBuffer * (int)OutputEngineOptions.Channels;
     }
-
+    
     /// <summary>
     /// Optimized mixing function for different channel configurations.
     /// </summary>
@@ -335,12 +260,9 @@ public unsafe partial class SourceManager
             int frames = inputBuffer.Length;
             for (int frame = 0; frame < frames && frame * 2 + 1 < mixedBuffer.Length; frame++)
             {
-                float sample = FastClamp(inputBuffer[frame] * mixingGain);
-                mixedBuffer[frame * 2] += sample;
-                mixedBuffer[frame * 2 + 1] += sample;
-
-                mixedBuffer[frame * 2] = FastClamp(mixedBuffer[frame * 2]);
-                mixedBuffer[frame * 2 + 1] = FastClamp(mixedBuffer[frame * 2 + 1]);
+                float sample = Math.Clamp(inputBuffer[frame] * mixingGain, -1.0f, 1.0f);
+                mixedBuffer[frame * 2] += sample;     // Left
+                mixedBuffer[frame * 2 + 1] += sample; // Right
             }
         }
         else if (inputChannels == 2 && outputChannels == 1)
@@ -358,8 +280,8 @@ public unsafe partial class SourceManager
         }
         else if (inputChannels == outputChannels)
         {
-            int length = Math.Min(inputBuffer.Length, mixedBuffer.Length);
-            for (int i = 0; i < length; i++)
+            // Identical channels
+            for (int i = 0; i < inputBuffer.Length; i++)
             {
                 mixedBuffer[i] += FastClamp(inputBuffer[i] * mixingGain);
                 mixedBuffer[i] = FastClamp(mixedBuffer[i]);
@@ -443,6 +365,7 @@ public unsafe partial class SourceManager
             return (0f, 0f);
         }
 
+        // We use absolute values ​​because the signal level can be negative.
         float leftChannelSum = 0;
         float rightChannelSum = 0;
         int leftSampleCount = 0;
@@ -548,7 +471,7 @@ public unsafe partial class SourceManager
     /// </remarks>
     private bool InitializeEngine()
     {
-        if (OwnAudio.IsPortAudioInitialized && Engine is null)
+        if (OwnAudio.IsPortAudioInitialized && Engine is null)  // Portaudio engine initialze
         {
             if (OwnAudio.DefaultInputDevice.MaxInputChannels > 0 && IsRecorded)
                 Engine = new OwnAudioEngine(InputEngineOptions, OutputEngineOptions, EngineFramesPerBuffer);
@@ -574,50 +497,7 @@ public unsafe partial class SourceManager
     }
 
     /// <summary>
-    /// Fast audio clamping function that constrains values to the valid audio range [-1.0, 1.0].
-    /// </summary>
-    /// <param name="value">The audio sample value to clamp.</param>
-    /// <returns>The clamped value within the range [-1.0, 1.0].</returns>
-    /// <remarks>
-    /// This method is aggressively inlined for maximum performance in audio processing loops.
-    /// Audio clamping is essential to prevent:
-    /// - Digital audio clipping and distortion
-    /// - Hardware damage from excessive signal levels
-    /// - Unwanted artifacts in the audio output
-    /// 
-    /// Values below -1.0 are clamped to -1.0, values above 1.0 are clamped to 1.0,
-    /// and values within the valid range are passed through unchanged.
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static float FastClamp(float value)
-    {
-        return value < -1.0f ? -1.0f : (value > 1.0f ? 1.0f : value);
-    }
-
-    /// <summary>
-    /// Efficiently clears a float array buffer using size-optimized methods.
-    /// </summary>
-    /// <param name="buffer">The float array buffer to clear.</param>
-    /// <param name="length">The number of elements to clear from the start of the buffer.</param>
-    /// <remarks>
-    /// This method uses size-based optimization for best performance:
-    /// - For buffers ≤1024 elements: Uses Span.Clear() which is optimized for smaller buffers
-    /// - For larger buffers: Uses Array.Clear() which is more efficient for larger memory blocks
-    /// 
-    /// This approach provides optimal clearing performance across different buffer sizes,
-    /// which is important for real-time audio processing where clearing operations
-    /// occur frequently in the mixing loop.
-    /// </remarks>
-    private static void FastClear(float[] buffer, int length)
-    {
-        if (length <= 1024)
-            buffer.AsSpan(0, length).Clear();
-        else
-            Array.Clear(buffer, 0, length);
-    }
-
-    /// <summary>
-    /// Terminates and disposes the audio engine, freeing all associated resources.
+    /// We will kill the audio engine
     /// </summary>
     /// <remarks>
     /// This method safely shuts down the audio engine:

@@ -25,23 +25,19 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
 
     /// <summary>
     /// Maximum number of buffers that can be queued before dropping audio data.
-    /// Platform-specific values for optimal performance.
     /// </summary>
-    private static int MaxQueueSize => (OperatingSystem.IsMacOS() || OperatingSystem.IsIOS()) ? 80 : 16;
-
+    private const int MaxQueueSize = 10;
+    
     /// <summary>
     /// Maximum number of milliseconds to wait when trying to dequeue input data.
-    /// Platform-specific values for optimal performance.
     /// </summary>
-    private static int MaxInputWaitTime => (OperatingSystem.IsMacOS() || OperatingSystem.IsIOS()) ? 10 : 2;
-
+    private const int MaxInputWaitTime = 5;
+    
     /// <summary>
     /// Sleep duration in milliseconds when output buffer queue is full.
-    /// Platform-specific values for optimal performance.
     /// </summary>
-    private static int OutputBufferWaitTime => (OperatingSystem.IsMacOS() || OperatingSystem.IsIOS()) ? 10 : 2;
-
-
+    private const int OutputBufferWaitTime = 5;
+    
     #endregion
 
     #region Private Fields
@@ -63,7 +59,7 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     private GCHandle? _playbackEngineHandle;
     private GCHandle? _captureEngineHandle;
 
-    // Performance monitoring
+    // Performance monitoring (can be removed in release builds)
     private readonly Stopwatch _performanceStopwatch = new();
 
     #endregion
@@ -135,7 +131,7 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
         if (_outputOptions.Channels <= 0) return;
 
         _playbackEngine = new MiniAudioEngine(
-            sampleRate: (int)_outputOptions.SampleRate,
+            sampleRate: _outputOptions.SampleRate,
             deviceType: EngineDeviceType.Playback,
             sampleFormat: EngineAudioFormat.F32,
             channels: (int)_outputOptions.Channels
@@ -152,7 +148,7 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
         if (_inputOptions.Channels <= 0) return;
 
         _captureEngine = new MiniAudioEngine(
-            sampleRate: (int)_inputOptions.SampleRate,
+            sampleRate: _inputOptions.SampleRate,
             deviceType: EngineDeviceType.Capture,
             sampleFormat: EngineAudioFormat.F32,
             channels: (int)_inputOptions.Channels
@@ -171,14 +167,15 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     private void InitializeBufferPools()
     {
         int outputBufferSize = _framesPerBuffer * (int)_outputOptions.Channels;
-        int inputBufferSize = _framesPerBuffer * (int)_inputOptions.Channels * 4;
+        // Input buffer size is dynamic, but we can pre-allocate a few common sizes if needed.
+        // For now, we rely on GetOrCreateInputBuffer to handle allocation/pooling.
 
-        LogBufferPoolInitialization(outputBufferSize, inputBufferSize);
+        LogBufferPoolInitialization(outputBufferSize);
 
         // Pre-allocate output buffers
         if (_outputOptions.Channels > 0)
         {
-            for (int i = 0; i < MaxQueueSize * 2; i++)
+            for (int i = 0; i < MaxQueueSize * 2; i++) // Allocate more than max queue size to reduce initial allocations
             {
                 _outputBufferPool.Add(new float[outputBufferSize]);
             }
@@ -189,12 +186,11 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// Logs buffer pool initialization details for debugging purposes.
     /// </summary>
     /// <param name="outputBufferSize">Size of output buffers in samples.</param>
-    /// <param name="inputBufferSize">Size of input buffers in samples.</param>
-    private static void LogBufferPoolInitialization(int outputBufferSize, int inputBufferSize)
+    private static void LogBufferPoolInitialization(int outputBufferSize)
     {
         Debug.WriteLine("Initializing audio buffer pools:");
         Debug.WriteLine($"  Output buffers: {outputBufferSize} samples");
-        Debug.WriteLine($"  Input buffer pool size: {inputBufferSize} samples (dynamic sizing)");
+        Debug.WriteLine($"  Input buffer pool size: dynamic (handled by GetOrCreateInputBuffer)");
     }
 
     #endregion
@@ -384,8 +380,17 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
             return; 
         }
 
-        EnqueueOutputBuffer(samples);
-
+        WaitForOutputQueueSpace();
+        
+        if (_outputBufferQueue.Count < MaxQueueSize)
+        {
+            EnqueueOutputBuffer(samples);
+        }
+        else
+        {
+            Debug.WriteLine("Output buffer queue full after wait period. Dropping audio samples.");
+        }
+        
         _performanceStopwatch.Restart();
     }
 
@@ -536,9 +541,8 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     {
         int expectedSize = _framesPerBuffer * (int)_inputOptions.Channels;
         float[] silentBuffer = new float[expectedSize];
-        //Array.Clear(silentBuffer, 0, silentBuffer.Length);
-        FastClear(silentBuffer, silentBuffer.Length);
-
+        Array.Clear(silentBuffer, 0, silentBuffer.Length);
+        
         Debug.WriteLine($"No input data available - returning silence ({expectedSize} samples)");
         return silentBuffer;
     }
@@ -590,16 +594,13 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     }
 
     /// <summary>
-    /// Checks whether any audio engines are currently active and running.
+    /// Returns a numeric value about the activity of the audio engine
     /// </summary>
     /// <returns>
-    /// 1 if at least one engine (playback or capture) is running;
-    /// 0 if all engines are stopped or no engines are available.
+    /// 0 - the engine not playing or recording
+    /// 1 - the engine plays or records
+    /// negative value if there is an error
     /// </returns>
-    /// <remarks>
-    /// This method provides a simple integer return value for compatibility with C-style APIs
-    /// that expect integer status codes rather than boolean values.
-    /// </remarks>
     public int OwnAudioEngineActivate()
     {
         bool isAnyEngineRunning = IsPlaybackEngineRunning() || IsCaptureEngineRunning();
@@ -607,16 +608,13 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     }
 
     /// <summary>
-    /// Checks whether all audio engines are currently stopped.
+    /// It returns a value whether the motor is stopped or running
     /// </summary>
     /// <returns>
-    /// 1 if all engines are stopped or no engines are available;
-    /// 0 if at least one engine is currently running.
+    /// 0 - the engine running
+    /// 1 - the engine stopped
+    /// negative value if there is an error
     /// </returns>
-    /// <remarks>
-    /// This method provides a simple integer return value for compatibility with C-style APIs.
-    /// It returns the inverse of the OwnAudioEngineActivate method.
-    /// </remarks>
     public int OwnAudioEngineStopped()
     {
         bool isAnyEngineRunning = IsPlaybackEngineRunning() || IsCaptureEngineRunning();
@@ -789,7 +787,7 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
                 return false;
             }
 
-            DeviceInfo? targetDevice = FindDeviceByName(engine, deviceName, isInputDevice);
+            DeviceInfo targetDevice = FindDeviceByName(engine, deviceName, isInputDevice);
             if (targetDevice == null)
             {
                 return false;
@@ -912,7 +910,7 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// - Unmanaged GC handles used for engine interoperability
     /// 
     /// The method is safe to call multiple times and will only perform cleanup on the first call.
-    /// Any errors during disposal are logged but do not prevent the cleanup process from completing.
+    /// Any errors during disposal are logged but do not prevent the method from completing.
     /// </remarks>
     /// <example>
     /// <code>
