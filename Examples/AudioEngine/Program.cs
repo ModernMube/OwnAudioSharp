@@ -58,7 +58,7 @@ namespace Simpleplayer
 
                 SourceManager manager = SourceManager.Instance;
 
-                await manager.AddOutputSource("D:\\Sogorock\\Ocam\\2025\\Szep julia\\Szép Júlia - Beszkid József (cover)_audio_music.wav");
+                await manager.AddOutputSource("path/audio.mp3");
                 int track1Number = manager.Sources.Count - 1;
 
                 manager.Play();
@@ -81,7 +81,6 @@ namespace Simpleplayer
                 if (!OwnAudio.IsFFmpegInitialized || !OwnAudio.IsPortAudioInitialized)
                 {
                     Console.WriteLine("library initialization failed!");
-                    Console.WriteLine("Unpack the files in the LIB directory!");
                 }
             }
         }

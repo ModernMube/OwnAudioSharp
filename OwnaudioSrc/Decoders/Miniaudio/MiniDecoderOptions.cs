@@ -1,5 +1,5 @@
 ﻿
-namespace Ownaudio.Decoders.Miniaudio;
+namespace Ownaudio.Decoders.MiniAudio;
 
 /// <summary>
 /// Options for decoding (and, or) resampling specified audio source that can be passed

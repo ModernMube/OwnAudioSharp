@@ -11,9 +11,9 @@ namespace Simpleplayer
             {
                 SourceManager manager = SourceManager.Instance;
 
-                await manager.AddOutputSource("D:\\Sogorock\\Ocam\\2025\\Szepjulia\\SzepJulia_audio_music.wav");
+                await manager.AddOutputSource("/path/audio1.mp3");
                 int track1Number = manager.Sources.Count - 1;
-                await manager.AddOutputSource("D:\\Sogorock\\Ocam\\2025\\Szepjulia\\SzepJulia_audio_vocal.wav");
+                await manager.AddOutputSource("/path/audio2.mp3");
                 int track2Number = manager.Sources.Count - 1;
 
                 manager.Play();
