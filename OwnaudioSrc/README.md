@@ -229,17 +229,17 @@ waveformDisplay.PlaybackPositionChanged += OnPlaybackPositionChanged;
 
 ```csharp
 // MiniAudio preferred (default)
-waveDisplay.LoadFromAudioFile("audio.mp3");
+waveformDisplayLoadFromAudioFile("audio.mp3");
 
 // FFmpeg preferred
-waveDisplay.LoadFromAudioFile("audio.mp3", preferFFmpeg: true);
+waveformDisplay.LoadFromAudioFile("audio.mp3", preferFFmpeg: true);
 
 // Asynchronous loading
-await waveDisplay.LoadFromAudioFileAsync("large_audio.wav");
+await waveformDisplay.LoadFromAudioFileAsync("large_audio.wav");
 
 // Loading from stream
 using var fileStream = File.OpenRead("audio.mp3");
-waveDisplay.LoadFromAudioStream(fileStream);
+waveformDisplay.LoadFromAudioStream(fileStream);
 ```
 
 ## Properties
