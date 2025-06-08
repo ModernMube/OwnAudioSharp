@@ -2,6 +2,7 @@ using Ownaudio.Engines;
 using Ownaudio.Sources.Extensions;
 using System;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -10,21 +11,57 @@ namespace Ownaudio.Sources;
 public unsafe partial class SourceManager
 {
     /// <summary>
-    /// Mix output sources into a stream. Considering the state of the source manager.
-    /// </summary> 
+    /// Pre-allocated buffer for audio mixing operations to avoid frequent memory allocations.
+    /// </summary>
+    private float[]? _mixBuffer;
+
+    /// <summary>
+    /// Tracks the last allocated mix buffer size to determine when reallocation is needed.
+    /// </summary>
+    private int _lastMixBufferSize = 0;
+
+    /// <summary>
+    /// Pre-allocated buffer for level calculations to avoid Task allocations.
+    /// </summary>
+    private float[]? _levelCalculationBuffer;
+
+    /// <summary>
+    /// Reusable Task for level calculations to avoid Task allocations.
+    /// </summary>
+    private Task _levelCalculationTask = Task.CompletedTask;
+
+    /// <summary>
+    /// Reusable Task for file saving operations to avoid Task allocations.
+    /// </summary>
+    private Task _fileSaveTask = Task.CompletedTask;
+
+    /// <summary>
+    /// The main mixing engine that combines multiple audio sources into a single output stream.
+    /// Runs continuously while the SourceManager is in an active state.
+    /// </summary>
+    /// <remarks>
+    /// This method performs the core audio mixing operations:
+    /// - Manages seeking operations and source synchronization
+    /// - Mixes multiple output sources using scalar operations
+    /// - Processes input recording and mixing
+    /// - Applies sample processors (volume, custom effects)
+    /// - Sends mixed audio to the output engine
+    /// - Updates playback position based on processed samples
+    /// - Handles end-of-stream conditions and playback reset
+    /// - Writes recorded data to file when configured
+    /// 
+    /// The mixing process uses pre-allocated buffers for optimal performance
+    /// and includes comprehensive synchronization logic for multi-source playback.
+    /// </remarks>
     private void MixEngine()
     {
         bool useSources = false;
         TimeSpan lastKnownPosition = Position;
         bool seekJustHappened = false;
 
-        int maxLength = Sources.Max(src => 
-            src.SourceSampleData.TryPeek(out float[]? peekedSamples) && peekedSamples != null 
-            ? peekedSamples.Length 
-            : 0);
-                
-        if (maxLength > 0)
-            mixedBuffer.Capacity = maxLength;
+        int maxLength = CalculateMaxBufferLength();
+        EnsureMixBufferAllocated(maxLength);
+        EnsureLevelCalculationBufferAllocated(maxLength);
 
         double sampleDurationMs = 1000.0 / OutputEngineOptions.SampleRate;
         int channelCount = (int)OutputEngineOptions.Channels;
@@ -34,9 +71,8 @@ public unsafe partial class SourceManager
             if (IsSeeking)
             {
                 seekJustHappened = true;
-
-                Thread.Sleep(1);
-                mixedBuffer.Clear();
+                Thread.Yield(); 
+                FastClear(_mixBuffer, maxLength);
                 continue;
             }
 
@@ -48,12 +84,12 @@ public unsafe partial class SourceManager
                 bool allSourcesReady = Sources.All(src => src.SourceSampleData.Count > 0 || src.State == SourceState.Idle);
                 if (!allSourcesReady)
                 {
-                    Thread.Sleep(5);
+                    Thread.Yield();
+                    continue;
                 }
             }
 
-            for (int i = 0; i < maxLength; i++)
-                mixedBuffer.Add(0.0f);
+            FastClear(_mixBuffer, maxLength);
 
             if (!Sources.Any(p => p.SourceSampleData.Count() > 0))
             {
@@ -64,8 +100,12 @@ public unsafe partial class SourceManager
 
                 if (!IsRecorded)
                 {
-                    Thread.Sleep(10);
-                    continue;
+                    if (!Sources.Any(p => p.SourceSampleData.Count() > 0))
+                    {
+                        Engine?.Send(_mixBuffer.AsSpan(0, maxLength)); // Silence
+                        Thread.Yield();
+                        continue;
+                    }
                 }
                 else
                 {
@@ -92,27 +132,71 @@ public unsafe partial class SourceManager
 
             if (maxLength > 0)
             {
-                float[] _mixedBuffer = new float[mixedBuffer.Count];
-                
-                for (int i = 0; i < maxLength; i++)
-                    _mixedBuffer[i] = 0.0f;
-
-                if (Sources.Count() > 0 && useSources)
+                if (Sources.Count() > 0 && useSources && State == SourceState.Playing)
                 {
-                    if (State == SourceState.Playing)
-                    {
-                        bool needToResync = false;
+                    ProcessSourceMixingSimple(lastKnownPosition);
+                }
 
-                        if (Sources.Count > 1)
-                        {
-                            TimeSpan minPos = TimeSpan.MaxValue;
-                            TimeSpan maxPos = TimeSpan.MinValue;
-                            
-                            foreach (ISource src in Sources)
-                            {
-                                if (src.Position < minPos) minPos = src.Position;
-                                if (src.Position > maxPos) maxPos = src.Position;
-                            }
+                if (IsRecorded && Engine is not null)
+                {
+                    ProcessInputMixingSimple();
+                }
+
+                ProcessSampleProcessors(_mixBuffer.AsSpan(0, maxLength));
+
+                Engine?.Send(_mixBuffer.AsSpan(0, maxLength));
+
+                if (State == SourceState.Playing)
+                {
+                    double processedTimeMs = (maxLength / channelCount) * sampleDurationMs;
+                    lastKnownPosition = lastKnownPosition.Add(TimeSpan.FromMilliseconds(processedTimeMs));
+
+                    if (Math.Abs((lastKnownPosition - Position).TotalMilliseconds) > 20)
+                    {
+                        SetAndRaisePositionChanged(lastKnownPosition);
+                    }
+                }
+
+                if (Position.TotalMilliseconds >= Duration.TotalMilliseconds)
+                {
+                    SetAndRaisePositionChanged(Duration);
+                    ResetPlayback();
+                    break;
+                }
+            }
+        }
+
+        writeDataToFile();
+    }
+
+#nullable disable
+    /// <summary>
+    /// Processes and mixes multiple output sources with synchronization checking.
+    /// </summary>
+    /// <param name="lastKnownPosition">The last known playback position for synchronization purposes.</param>
+    /// <remarks>
+    /// This method performs the following operations:
+    /// - Synchronization check for multiple sources (only when more than one source exists)
+    /// - Detects time drift between sources and corrects by seeking
+    /// - Mixes audio samples using simple scalar addition
+    /// - Applies audio clamping to prevent clipping
+    /// - Returns buffers to the pool for memory efficiency
+    /// 
+    /// The synchronization tolerance is set to 200ms for detection and 100ms for correction,
+    /// providing a balance between accuracy and stability.
+    /// </remarks>
+    private void ProcessSourceMixingSimple(TimeSpan lastKnownPosition)
+    {
+        if (Sources.Count > 1)
+        {
+            TimeSpan minPos = TimeSpan.MaxValue;
+            TimeSpan maxPos = TimeSpan.MinValue;
+
+            foreach (ISource src in Sources)
+            {
+                if (src.Position < minPos) minPos = src.Position;
+                if (src.Position > maxPos) maxPos = src.Position;
+            }
 
             if ((maxPos - minPos).TotalMilliseconds > 200)
             {
@@ -126,18 +210,27 @@ public unsafe partial class SourceManager
             }
         }
 
-                    foreach (ISource src in Sources)
+        foreach (ISource src in Sources)
+        {
+            if (src.SourceSampleData.TryDequeue(out float[] samples))
+            {
+                try
+                {
+                    int mixLength = Math.Min(samples.Length, _mixBuffer.Length);
+
+                    for (int i = 0; i < mixLength; i++)
                     {
-                        if (src.SourceSampleData.TryDequeue(out float[]? samples))
-                        {
-                            for (int i = 0; i < samples.Length; i++)
-                            {
-                                _mixedBuffer[i] += samples[i];
-                                _mixedBuffer[i] = Math.Clamp(_mixedBuffer[i], -1.0f, 1.0f);
-                            }
-                        }
+                        _mixBuffer[i] += samples[i];
+                        _mixBuffer[i] = FastClamp(_mixBuffer[i]);
                     }
                 }
+                finally
+                {
+                    SimpleAudioBufferPool.Return(samples);
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Processes input audio recording and mixes it with the output stream.
@@ -159,28 +252,29 @@ public unsafe partial class SourceManager
         {
             int inputBufferSize = EngineFramesPerBuffer * (int)InputEngineOptions.Channels;
 
-                    MixInput(
-                        inputBuffer: inputBuffer,
-                        mixedBuffer: _mixedBuffer,
-                        inputChannels: (int)InputEngineOptions.Channels,
-                        outputChannels: (int)OutputEngineOptions.Channels,
-                        mixingGain: 0.8f
-                    );
+            ((SourceInput)SourcesInput[0]).ReceivesData(out var inputBuffer, Engine);
 
-                    InputLevels = InputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
-                        ? CalculateAverageStereoLevels(inputBuffer)
-                        : CalculateAverageMonoLevel(inputBuffer);
-                }
+            try
+            {
+                MixInputSimple(
+                    inputBuffer: inputBuffer.AsSpan(),
+                    mixedBuffer: _mixBuffer.AsSpan(),
+                    inputChannels: (int)InputEngineOptions.Channels,
+                    outputChannels: (int)OutputEngineOptions.Channels,
+                    mixingGain: 0.8f
+                );
 
-                Span<float> mixedSpan = CollectionsMarshal.AsSpan(_mixedBuffer.ToList());
-
-                ProcessSampleProcessors(mixedSpan);
-
-                Engine?.Send(mixedSpan);
-
-                if (State == SourceState.Playing)
-                {
-                    double processedTimeMs = (mixedBuffer.Count / channelCount) * sampleDurationMs;
+                InputLevels = InputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
+                    ? CalculateAverageStereoLevels(inputBuffer)
+                    : CalculateAverageMonoLevel(inputBuffer);
+            }
+            finally
+            {
+                SimpleAudioBufferPool.Return(inputBuffer);
+            }
+        }
+    }
+#nullable restore
 
     /// <summary>
     /// Ensures the mix buffer is allocated with the correct size.
@@ -201,6 +295,18 @@ public unsafe partial class SourceManager
         {
             _mixBuffer = new float[size];
             _lastMixBufferSize = size;
+        }
+    }
+
+    /// <summary>
+    /// Ensures the level calculation buffer is allocated with the correct size.
+    /// </summary>
+    /// <param name="size">The required buffer size in samples.</param>
+    private void EnsureLevelCalculationBufferAllocated(int size)
+    {
+        if (_levelCalculationBuffer == null || _levelCalculationBuffer.Length < size)
+        {
+            _levelCalculationBuffer = new float[size];
         }
     }
 
@@ -233,7 +339,7 @@ public unsafe partial class SourceManager
 
         return maxLength > 0 ? maxLength : EngineFramesPerBuffer * (int)OutputEngineOptions.Channels;
     }
-    
+
     /// <summary>
     /// Optimized mixing function for different channel configurations.
     /// </summary>
@@ -260,9 +366,12 @@ public unsafe partial class SourceManager
             int frames = inputBuffer.Length;
             for (int frame = 0; frame < frames && frame * 2 + 1 < mixedBuffer.Length; frame++)
             {
-                float sample = Math.Clamp(inputBuffer[frame] * mixingGain, -1.0f, 1.0f);
+                float sample = FastClamp(inputBuffer[frame] * mixingGain);
                 mixedBuffer[frame * 2] += sample;     // Left
                 mixedBuffer[frame * 2 + 1] += sample; // Right
+
+                mixedBuffer[frame * 2] = FastClamp(mixedBuffer[frame * 2]);
+                mixedBuffer[frame * 2 + 1] = FastClamp(mixedBuffer[frame * 2 + 1]);
             }
         }
         else if (inputChannels == 2 && outputChannels == 1)
@@ -280,8 +389,8 @@ public unsafe partial class SourceManager
         }
         else if (inputChannels == outputChannels)
         {
-            // Identical channels
-            for (int i = 0; i < inputBuffer.Length; i++)
+            int length = Math.Min(inputBuffer.Length, mixedBuffer.Length);
+            for (int i = 0; i < length; i++)
             {
                 mixedBuffer[i] += FastClamp(inputBuffer[i] * mixingGain);
                 mixedBuffer[i] = FastClamp(mixedBuffer[i]);
@@ -302,11 +411,11 @@ public unsafe partial class SourceManager
     /// This method performs the following operations in order:
     /// 1. Applies custom sample processor if enabled
     /// 2. Applies volume processor if volume is not at 100%
-    /// 3. Calculates output audio levels asynchronously for monitoring
+    /// 3. Calculates output audio levels synchronously for better performance
     /// 4. Writes sample data to file if recording is enabled
     /// 
-    /// Audio level calculation and file writing operations are performed asynchronously
-    /// to minimize impact on real-time audio processing performance.
+    /// Audio level calculation is performed synchronously to avoid Task allocations.
+    /// File writing operations use reusable Tasks to minimize GC pressure.
     /// </remarks>
     protected virtual void ProcessSampleProcessors(Span<float> samples)
     {
@@ -324,22 +433,113 @@ public unsafe partial class SourceManager
 
         lock (_lock)
         {
-            float[] samplesArray = samples.ToArray();
-            Task.Run(() =>
-            {
-                if (OutputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo)
-                    OutputLevels = CalculateAverageStereoLevels(samplesArray);
-                else
-                    OutputLevels = CalculateAverageMonoLevel(samplesArray);
-            });
+#nullable disable
+            int sampleCount = Math.Min(samples.Length, _levelCalculationBuffer.Length);
+            samples.Slice(0, sampleCount).CopyTo(_levelCalculationBuffer.AsSpan(0, sampleCount));
 
+            if (OutputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo)
+                OutputLevels = CalculateAverageStereoLevelsSpan(_levelCalculationBuffer.AsSpan(0, sampleCount));
+            else
+                OutputLevels = CalculateAverageMonoLevelSpan(_levelCalculationBuffer.AsSpan(0, sampleCount));
+#nullable restore
         }
 
-        if (IsWriteData)
+        if (IsWriteData) // Save data to file
         {
-            var samplesArray = samples.ToArray();
-            Task.Run(() => { SaveSamplesToFile(samplesArray, writefilePath); });
+            if (!_fileSaveTask.IsCompleted)
+                _fileSaveTask.Wait();
+
+            int sampleCount = Math.Min(samples.Length, _levelCalculationBuffer.Length);
+            samples.Slice(0, sampleCount).CopyTo(_levelCalculationBuffer.AsSpan(0, sampleCount));
+
+            var samplesForFile = new float[sampleCount];
+            _levelCalculationBuffer.AsSpan(0, sampleCount).CopyTo(samplesForFile);
+
+            _fileSaveTask = Task.Run(() => { SaveSamplesToFile(samplesForFile, writefilePath); });
         }
+    }
+
+    /// <summary>
+    /// Calculates the average signal levels for a stereo audio signal using Span.
+    /// </summary>
+    /// <param name="stereoAudioData">The stereo audio data span where even indices are left channel and odd indices are right channel.</param>
+    /// <returns>A tuple containing the average levels for (left channel, right channel).</returns>
+    /// <remarks>
+    /// This method processes stereo audio data by:
+    /// - Separating left channel (even indices: 0, 2, 4, ...) and right channel (odd indices: 1, 3, 5, ...)
+    /// - Using absolute values to measure signal amplitude regardless of polarity
+    /// - Calculating separate averages for each channel
+    /// - Returning (0, 0) if no data is available for processing
+    /// 
+    /// The returned values represent the average amplitude levels which can be used
+    /// for audio level monitoring, VU meters, or automatic gain control.
+    /// </remarks>
+    private (float, float) CalculateAverageStereoLevelsSpan(ReadOnlySpan<float> stereoAudioData)
+    {
+        if (stereoAudioData.Length == 0)
+        {
+            return (0f, 0f);
+        }
+
+        float leftChannelSum = 0;
+        float rightChannelSum = 0;
+        int leftSampleCount = 0;
+        int rightSampleCount = 0;
+
+        // Left channel: 0, 2, 4, ...
+        // Right channel: 1, 3, 5, ...
+        for (int i = 0; i < stereoAudioData.Length; i++)
+        {
+            if (i % 2 == 0) 
+            {
+                leftChannelSum += Math.Abs(stereoAudioData[i]);
+                leftSampleCount++;
+            }
+            else 
+            {
+                rightChannelSum += Math.Abs(stereoAudioData[i]);
+                rightSampleCount++;
+            }
+        }
+
+        // Calculating averages
+        float leftAverage = leftSampleCount > 0 ? leftChannelSum / leftSampleCount : 0;
+        float rightAverage = rightSampleCount > 0 ? rightChannelSum / rightSampleCount : 0;
+
+        return (leftAverage, rightAverage);
+    }
+
+    /// <summary>
+    /// Calculates the average signal level for a mono audio signal using Span.
+    /// </summary>
+    /// <param name="monoAudioData">The mono audio data span.</param>
+    /// <returns>A tuple where the first value is the mono level and the second value is always 0 (for consistency with stereo format).</returns>
+    /// <remarks>
+    /// This method processes mono audio data by:
+    /// - Using absolute values to measure signal amplitude regardless of polarity
+    /// - Calculating the average amplitude across all samples
+    /// - Returning the result in stereo-compatible format (mono level, 0)
+    /// - Handling empty data gracefully
+    /// 
+    /// The returned format maintains consistency with stereo level calculations
+    /// while providing meaningful mono audio level information.
+    /// </remarks>
+    private (float, float) CalculateAverageMonoLevelSpan(ReadOnlySpan<float> monoAudioData)
+    {
+        if (monoAudioData.Length == 0)
+        {
+            return (0f, 0f);
+        }
+
+        float leftChannelSum = 0;
+
+        for (int i = 0; i < monoAudioData.Length; i++)
+        {
+            leftChannelSum += Math.Abs(monoAudioData[i]);
+        }
+
+        float leftAverage = monoAudioData.Length > 0 ? leftChannelSum / monoAudioData.Length : 0;
+        return (leftAverage, 0f);
     }
 
     /// <summary>
@@ -365,30 +565,7 @@ public unsafe partial class SourceManager
             return (0f, 0f);
         }
 
-        // We use absolute values ​​because the signal level can be negative.
-        float leftChannelSum = 0;
-        float rightChannelSum = 0;
-        int leftSampleCount = 0;
-        int rightSampleCount = 0;
-
-        for (int i = 0; i < stereoAudioData.Length; i++)
-        {
-            if (i % 2 == 0)
-            {
-                leftChannelSum += Math.Abs(stereoAudioData[i]);
-                leftSampleCount++;
-            }
-            else
-            {
-                rightChannelSum += Math.Abs(stereoAudioData[i]);
-                rightSampleCount++;
-            }
-        }
-
-        float leftAverage = leftSampleCount > 0 ? leftChannelSum / leftSampleCount : 0;
-        float rightAverage = rightSampleCount > 0 ? rightChannelSum / rightSampleCount : 0;
-
-        return (leftAverage, rightAverage);
+        return CalculateAverageStereoLevelsSpan(stereoAudioData.AsSpan());
     }
 
     /// <summary>
@@ -413,15 +590,7 @@ public unsafe partial class SourceManager
             return (0f, 0f);
         }
 
-        float leftChannelSum = 0;
-
-        for (int i = 0; i < monoAudioData.Length; i++)
-        {
-            leftChannelSum += Math.Abs(monoAudioData[i]);
-        }
-
-        float leftAverage = monoAudioData.Length > 0 ? leftChannelSum / monoAudioData.Length : 0;
-        return (leftAverage, 0f);
+        return CalculateAverageMonoLevelSpan(monoAudioData.AsSpan());
     }
 
     /// <summary>
@@ -471,14 +640,14 @@ public unsafe partial class SourceManager
     /// </remarks>
     private bool InitializeEngine()
     {
-        if (OwnAudio.IsPortAudioInitialized && Engine is null)  // Portaudio engine initialze
+        if (OwnAudio.IsPortAudioInitialized && Engine is null)  // Portaudio engine initialize
         {
             if (OwnAudio.DefaultInputDevice.MaxInputChannels > 0 && IsRecorded)
                 Engine = new OwnAudioEngine(InputEngineOptions, OutputEngineOptions, EngineFramesPerBuffer);
             else
                 Engine = new OwnAudioEngine(OutputEngineOptions, EngineFramesPerBuffer);
         }
-        else if (!OwnAudio.IsPortAudioInitialized && OwnAudio.IsMiniAudioInitialized && Engine is null)
+        else if (!OwnAudio.IsPortAudioInitialized && OwnAudio.IsMiniAudioInitialized && Engine is null)  // Miniaudio engine initialize
         {
             if (OwnAudio.DefaultInputDevice.MaxInputChannels > 0 && IsRecorded)
             {
@@ -497,7 +666,51 @@ public unsafe partial class SourceManager
     }
 
     /// <summary>
-    /// We will kill the audio engine
+    /// Fast audio clamping function that constrains values to the valid audio range [-1.0, 1.0].
+    /// </summary>
+    /// <param name="value">The audio sample value to clamp.</param>
+    /// <returns>The clamped value within the range [-1.0, 1.0].</returns>
+    /// <remarks>
+    /// This method is aggressively inlined for maximum performance in audio processing loops.
+    /// Audio clamping is essential to prevent:
+    /// - Digital audio clipping and distortion
+    /// - Hardware damage from excessive signal levels
+    /// - Unwanted artifacts in the audio output
+    /// 
+    /// Values below -1.0 are clamped to -1.0, values above 1.0 are clamped to 1.0,
+    /// and values within the valid range are passed through unchanged.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static float FastClamp(float value)
+    {
+        return value < -1.0f ? -1.0f : (value > 1.0f ? 1.0f : value);
+    }
+
+    /// <summary>
+    /// Efficiently clears a float array buffer using size-optimized methods.
+    /// </summary>
+    /// <param name="buffer">The float array buffer to clear.</param>
+    /// <param name="length">The number of elements to clear from the start of the buffer.</param>
+    /// <remarks>
+    /// This method uses size-based optimization for best performance:
+    /// - For buffers ≤1024 elements: Uses Span.Clear() which is optimized for smaller buffers
+    /// - For larger buffers: Uses Array.Clear() which is more efficient for larger memory blocks
+    /// 
+    /// This approach provides optimal clearing performance across different buffer sizes,
+    /// which is important for real-time audio processing where clearing operations
+    /// occur frequently in the mixing loop.
+    /// </remarks>
+    private static void FastClear(float[]? buffer, int length)
+    {
+        if (length <= 1024)
+            buffer.AsSpan(0, length).Clear();
+        else
+            if(buffer != null)
+                Array.Clear(buffer, 0, length);
+    }
+
+    /// <summary>
+    /// Terminates and disposes the audio engine, freeing all associated resources.
     /// </summary>
     /// <remarks>
     /// This method safely shuts down the audio engine:
