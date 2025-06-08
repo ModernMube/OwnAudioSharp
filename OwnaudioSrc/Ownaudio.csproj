@@ -4,9 +4,9 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Authors>ModernMube</Authors>
-    <Copyright>Copyright (c) 2025 LSXPrime</Copyright>
+    <Copyright>Copyright (c) 2025 ModernMube</Copyright>
     <Description>A cross platform audio library for .NET with PortAudio, Miniaudio and FFmpeg.</Description>
-    <FileVersion>0.25.90</FileVersion>
+    <FileVersion>0.25.91</FileVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <LangVersion>11</LangVersion>
@@ -24,7 +24,7 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <Version>0.25.90</Version>
+    <Version>0.25.91</Version>
     <Authors>ModernMube</Authors>
     <Company>Modernbit</Company>
     <PlatformTarget>AnyCPU</PlatformTarget>
