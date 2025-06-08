@@ -427,7 +427,7 @@ public partial class Source : ISource
         State = SourceState.Idle;
         EnsureThreadsDone();
 
-        DisposeEngineResources();
+        //DisposeEngineResources();
 
         CurrentDecoder?.Dispose();
         while (Queue.TryDequeue(out _)) { }

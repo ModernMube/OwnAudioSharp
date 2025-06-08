@@ -1,5 +1,8 @@
 ﻿using Ownaudio.Processors;
+using Ownaudio.Sources.Extensions;
 using Ownaudio.Utilities.Extensions;
+using System;
+using System.Diagnostics;
 
 namespace Ownaudio.Sources
 {
@@ -74,8 +77,13 @@ namespace Ownaudio.Sources
                         Array.Copy(samples, i * InputDataChannels, buffer, 0, framesPerBuffer * InputDataChannels);
                     }
 
-                ProcessSampleProcessors(buffer.AsSpan());
-                SourceSampleData.Enqueue(buffer);
+                    ProcessSampleProcessors(buffer.AsSpan());
+                    SourceSampleData.Enqueue(buffer);
+                }
+                catch (Exception ex) 
+                {
+                    Debug.WriteLine($"ERROR: Source Sound submitsample: {ex.Message}");
+                }
             }
         }
 

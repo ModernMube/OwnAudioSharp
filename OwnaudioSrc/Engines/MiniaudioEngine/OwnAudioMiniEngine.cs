@@ -787,11 +787,13 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
                 return false;
             }
 
+#nullable disable
             DeviceInfo targetDevice = FindDeviceByName(engine, deviceName, isInputDevice);
             if (targetDevice == null)
             {
                 return false;
             }
+#nullable restore
 
             var deviceType = isInputDevice ? EngineDeviceType.Capture : EngineDeviceType.Playback;
             engine.SwitchDevice(targetDevice, deviceType);
