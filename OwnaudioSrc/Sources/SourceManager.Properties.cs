@@ -34,7 +34,7 @@ public unsafe partial class SourceManager
     /// <summary>
     /// Audio Engine Frames per Buffer
     /// </summary>
-    public static int EngineFramesPerBuffer { get; set; } = 512;
+    public static int EngineFramesPerBuffer { get; set; } = 256;
 
     /// <summary>
     /// List of added sources
@@ -189,4 +189,9 @@ public class DefaultProcessor : SampleProcessorBase
     /// </summary>
     /// <param name="sample"></param>
     public override void Process(Span<float> sample) { }
+
+    /// <summary>
+    /// Processor reset
+    /// </summary>
+    public override void Reset() { }
 }

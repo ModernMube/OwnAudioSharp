@@ -203,6 +203,23 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
+        /// Resets the dynamic amplifier's internal state by clearing the RMS window, 
+        /// resetting gain and envelope values. Does not modify any settings or parameters.
+        /// </summary>
+        public override void Reset()
+        {
+            currentGain = 1.0f;
+            lastRms = 0.0f;
+            windowSumSquares = 0.0f;
+
+            rmsWindow.Clear();
+            for (int i = 0; i < rmsWindowLength; i++)
+            {
+                rmsWindow.Enqueue(0.0f);
+            }
+        }
+
+        /// <summary>
         /// Updates the RMS window and calculates the current RMS value
         /// </summary>
         /// <param name="samples">New samples to add to the window</param>

@@ -8,7 +8,7 @@ namespace Microphone
     internal class Program
     {
         static async Task Main(string[] args)
-        {        
+        {
 
             if (OwnAudio.Initialize())
             {
@@ -60,7 +60,7 @@ namespace Microphone
 
         Delay delay = new Delay
         (
-            time: 310,      // Delay time 310 ms
+            time: 210,      // Delay time 310 ms
             repeat: 0.4f,   // Rate of delayed signal feedback to the input 40%
             mix: 0.15f,     // Delayed signal ratio in the mix 15%
             sampleRate: SourceManager.OutputEngineOptions.SampleRate
@@ -70,6 +70,12 @@ namespace Microphone
         {
             reverb.Process(sample);
             delay.Process(sample);
+        }
+
+        public override void Reset()
+        {
+            reverb.Reset();
+            delay.Reset();
         }
     }
 
@@ -88,6 +94,11 @@ namespace Microphone
         public override void Process(Span<float> sample)
         {
             compressor.Process(sample);
+        }
+
+        public override void Reset()
+        {
+            compressor.Reset();
         }
     }
 }

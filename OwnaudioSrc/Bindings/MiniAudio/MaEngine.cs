@@ -157,8 +157,19 @@ namespace Ownaudio.MiniAudio
                 }
                 else if (OperatingSystem.IsMacOS() || OperatingSystem.IsIOS())
                 {
+                    var contextConfig = new MaContextConfig
+                    {
+                        coreaudio_sessionCategory = false,
+                        coreaudio_sessionCategoryOptions = false,
+                        coreaudio_noAudioSessionActivate = true,
+                        coreaudio_noAudioSessionDeactivate = true,
+                        threadPrioritiesEnabled = false,
+                        threadPriority = 0
+                    };
+                    
                     var backends = new[] { MaBackend.CoreAudio };
-                    result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _context);
+                    result = MaBinding.ma_context_init(backends, (uint)backends.Length, 
+                        Marshal.AllocHGlobal(Marshal.SizeOf<MaContextConfig>()), _context);
                 }
                 else if (OperatingSystem.IsAndroid())
                 {

@@ -81,7 +81,7 @@ internal static partial class MaBinding
     }
 #nullable disable
     #region Context Operations
-    public static unsafe MaResult ma_context_init(MaBackend[]? backends, uint backendCount, IntPtr contextConfig, IntPtr context)
+    public static unsafe MaResult ma_context_init(MaBackend[] backends, uint backendCount, IntPtr contextConfig, IntPtr context)
     {
         if (backends == null || backends.Length == 0)
         {
@@ -209,7 +209,7 @@ internal static partial class MaBinding
         config.dataCallback = dataCallback;
         config.playback.pDeviceID = playbackDeviceId;
         config.capture.pDeviceID = captureDeviceId;
-        config.periodSizeInFrames = 512;
+        config.periodSizeInFrames = 256;
 
         IntPtr ptr = ma_malloc((ulong)Marshal.SizeOf<MaDeviceConfig>(), IntPtr.Zero);
         if (ptr != IntPtr.Zero)
