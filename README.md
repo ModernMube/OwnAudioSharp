@@ -285,6 +285,23 @@ waveformDisplay.SetAudioData(SourceManager.Instance.Sources[0].GetFloatAudioData
 waveformDisplay.PlaybackPositionChanged += OnPlaybackPositionChanged;
 ```
 
+## Display audio from file
+
+```csharp
+// MiniAudio preferred (default)
+waveDisplay.LoadFromAudioFile("audio.mp3");
+
+// FFmpeg preferred
+waveDisplay.LoadFromAudioFile("audio.mp3", preferFFmpeg: true);
+
+// Asynchronous loading
+await waveDisplay.LoadFromAudioFileAsync("large_audio.wav");
+
+// Loading from stream
+using var fileStream = File.OpenRead("audio.mp3");
+waveDisplay.LoadFromAudioStream(fileStream);
+```
+
 ## Properties
 
 | Property | Type | Description |

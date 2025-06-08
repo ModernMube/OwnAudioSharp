@@ -57,6 +57,11 @@ namespace Ownaudio.Decoders.MiniAudio
         private readonly ArrayPool<float> _bufferPool = ArrayPool<float>.Shared;
 
         /// <summary>
+        /// Shared array pool for byte buffers.
+        /// </summary>
+        private readonly ArrayPool<byte> _byteBufferPool = ArrayPool<byte>.Shared;
+
+        /// <summary>
         /// Size of the decoding buffer.
         /// </summary>
         private readonly int _bufferSize = 4096;
@@ -70,6 +75,28 @@ namespace Ownaudio.Decoders.MiniAudio
         /// Flag indicating whether the end of the audio stream has been reached.
         /// </summary>
         private bool _endOfStreamReached = false;
+
+        /// <summary>
+        /// Pre-allocated byte buffer for frame data to avoid repeated allocations.
+        /// </summary>
+        private byte[]? _frameDataBuffer;
+
+        /// <summary>
+        /// Cached AudioDecoderResult for EOF to avoid repeated allocations.
+        /// </summary>
+        private static readonly AudioDecoderResult _cachedEofResult =
+            new AudioDecoderResult(null, false, true, "End of stream reached");
+
+        /// <summary>
+        /// Cached AudioDecoderResult for disposed state to avoid repeated allocations.
+        /// </summary>
+        private static readonly AudioDecoderResult _cachedDisposedResult =
+            new AudioDecoderResult(null, false, true, "Decoder disposed");
+
+        /// <summary>
+        /// Reusable StringBuilder for error messages to avoid string concatenations.
+        /// </summary>
+        private readonly System.Text.StringBuilder _errorMessageBuilder = new System.Text.StringBuilder(256);
 
         /// <summary>
         /// Gets the audio stream information.
@@ -105,7 +132,12 @@ namespace Ownaudio.Decoders.MiniAudio
             catch (Exception ex)
             {
                 localInputStream?.Dispose();
-                throw new Exception($"Failed to initialize MiniAudio decoder from URL: {ex.Message}", ex);
+
+                _errorMessageBuilder.Clear();
+                _errorMessageBuilder.Append("Failed to initialize MiniAudio decoder from URL: ");
+                _errorMessageBuilder.Append(ex.Message);
+
+                throw new Exception(_errorMessageBuilder.ToString(), ex);
             }
         }
 
@@ -147,6 +179,10 @@ namespace Ownaudio.Decoders.MiniAudio
 
                 _decodingBuffer = _bufferPool.Rent(_bufferSize);
 
+                // Pre-allocate frame data buffer for maximum expected size
+                int maxFrameSize = _bufferSize * _bytesPerSample;
+                _frameDataBuffer = _byteBufferPool.Rent(maxFrameSize);
+
                 double totalSeconds = (_decoder.Length / (double)options.Channels) / options.SampleRate;
                 StreamInfo = new AudioStreamInfo(
                     options.Channels,
@@ -156,7 +192,12 @@ namespace Ownaudio.Decoders.MiniAudio
             catch (Exception ex)
             {
                 _decoder?.Dispose();
-                throw new Exception($"Failed to initialize internal MiniAudioDecoder: {ex.Message}", ex);
+
+                _errorMessageBuilder.Clear();
+                _errorMessageBuilder.Append("Failed to initialize internal MiniAudioDecoder: ");
+                _errorMessageBuilder.Append(ex.Message);
+
+                throw new Exception(_errorMessageBuilder.ToString(), ex);
             }
         }
 
@@ -182,12 +223,12 @@ namespace Ownaudio.Decoders.MiniAudio
             {
                 if (_endOfStreamReached)
                 {
-                    return new AudioDecoderResult(null, false, true, "End of stream reached (already at EOF)");
+                    return _cachedEofResult;
                 }
 
                 if (_disposed || _decoder == null || _decoder.IsDisposed)
                 {
-                    return new AudioDecoderResult(null, false, true, "Decoder disposed");
+                    return _cachedDisposedResult;
                 }
 
                 try
@@ -207,7 +248,7 @@ namespace Ownaudio.Decoders.MiniAudio
                     if (framesRead <= 0)
                     {
                         _endOfStreamReached = true;
-                        return new AudioDecoderResult(null, false, true, "End of stream reached (no frames read)");
+                        return _cachedEofResult;
                     }
 
                     int samplesRead = (int)(framesRead * _channels);
@@ -216,11 +257,25 @@ namespace Ownaudio.Decoders.MiniAudio
                     if (dataSize <= 0)
                     {
                         _endOfStreamReached = true;
-                        return new AudioDecoderResult(null, false, true, "End of stream reached (no data)");
+                        return _cachedEofResult;
                     }
 
+                    // Ensure frame buffer is large enough
+                    if (_frameDataBuffer == null || _frameDataBuffer.Length < dataSize)
+                    {
+                        if (_frameDataBuffer != null)
+                            _byteBufferPool.Return(_frameDataBuffer);
+                        _frameDataBuffer = _byteBufferPool.Rent(dataSize);
+                    }
+
+                    // Use Span<T> for efficient copying without additional allocations
+                    var sourceSpan = new ReadOnlySpan<float>(_decodingBuffer, 0, samplesRead);
+                    var targetSpan = new Span<byte>(_frameDataBuffer, 0, dataSize);
+                    System.Runtime.InteropServices.MemoryMarshal.AsBytes(sourceSpan).CopyTo(targetSpan);
+
+                    // Create a new array only for the actual data size needed
                     var data = new byte[dataSize];
-                    Buffer.BlockCopy(_decodingBuffer, 0, data, 0, dataSize);
+                    targetSpan.Slice(0, dataSize).CopyTo(data);
 
                     double presentationTime = (double)framesRead / _sampleRate * 1000;
                     var lastFrame = new AudioFrame(presentationTime, data);
@@ -235,12 +290,22 @@ namespace Ownaudio.Decoders.MiniAudio
                 }
                 catch (Exception ex)
                 {
-                    if (ex.Message.Contains("At end") || ex.Message.Contains("end of stream") ||
-                        ex.Message.Contains("EOF") || ex.Message.Contains("No data available"))
+                    // Use ReadOnlySpan for string comparison to avoid allocations
+                    ReadOnlySpan<char> message = ex.Message.AsSpan();
+                    if (message.Contains("At end".AsSpan(), StringComparison.OrdinalIgnoreCase) ||
+                        message.Contains("end of stream".AsSpan(), StringComparison.OrdinalIgnoreCase) ||
+                        message.Contains("EOF".AsSpan(), StringComparison.OrdinalIgnoreCase) ||
+                        message.Contains("No data available".AsSpan(), StringComparison.OrdinalIgnoreCase))
                     {
                         Debug.WriteLine($"EOF detected from exception: {ex.Message}");
                         _endOfStreamReached = true;
-                        return new AudioDecoderResult(null, false, true, $"End of stream reached (exception: {ex.Message})");
+
+                        _errorMessageBuilder.Clear();
+                        _errorMessageBuilder.Append("End of stream reached (exception: ");
+                        _errorMessageBuilder.Append(ex.Message);
+                        _errorMessageBuilder.Append(')');
+
+                        return new AudioDecoderResult(null, false, true, _errorMessageBuilder.ToString());
                     }
                     Debug.WriteLine($"DecodeNextFrame exception: {ex.Message}");
                     return new AudioDecoderResult(null, false, false, ex.Message);
@@ -312,12 +377,14 @@ namespace Ownaudio.Decoders.MiniAudio
             {
                 if (_disposed || _decoder == null || _decoder.IsDisposed)
                 {
-                    return new AudioDecoderResult(null, false, true, "Decoder disposed");
+                    return _cachedDisposedResult;
                 }
 
                 try
                 {
+                    // Use regular MemoryStream - ArrayPool buffer caused issues
                     using var accumulatedData = new MemoryStream();
+
                     double lastPresentationTime = 0;
 
                     if (position != default)
@@ -336,7 +403,7 @@ namespace Ownaudio.Decoders.MiniAudio
                     }
 
                     bool anyFrameProcessed = false;
-                    int maxIterations = 100000;
+                    const int maxIterations = 100000;
                     int iteration = 0;
 
                     while (iteration < maxIterations)
@@ -364,8 +431,12 @@ namespace Ownaudio.Decoders.MiniAudio
                         else
                         {
                             Debug.WriteLine($"Decoder error during DecodeAllFrames: {frameResult.ErrorMessage ?? "Unknown error"}");
-                            return new AudioDecoderResult(null, false, false,
-                                $"Decoder error: {frameResult.ErrorMessage ?? "Unknown error"}");
+
+                            _errorMessageBuilder.Clear();
+                            _errorMessageBuilder.Append("Decoder error: ");
+                            _errorMessageBuilder.Append(frameResult.ErrorMessage ?? "Unknown error");
+
+                            return new AudioDecoderResult(null, false, false, _errorMessageBuilder.ToString());
                         }
                     }
 
@@ -374,16 +445,16 @@ namespace Ownaudio.Decoders.MiniAudio
                         return new AudioDecoderResult(null, false, true, "No frames were processed or no audio data available (EOF or error).");
                     }
 
+                    var frameData = accumulatedData.ToArray();
+
                     if (iteration >= maxIterations)
                     {
                         return new AudioDecoderResult(
-                            new AudioFrame(lastPresentationTime, accumulatedData.ToArray()),
+                            new AudioFrame(lastPresentationTime, frameData),
                             true,
                             false,
                             "Warning: Maximum iteration count reached - possible infinite loop prevented");
                     }
-
-                    var frameData = accumulatedData.ToArray();
 
                     return new AudioDecoderResult(
                         new AudioFrame(lastPresentationTime, frameData),
@@ -434,6 +505,12 @@ namespace Ownaudio.Decoders.MiniAudio
                 {
                     _bufferPool.Return(_decodingBuffer, clearArray: false);
                     _decodingBuffer = null;
+                }
+
+                if (_frameDataBuffer != null)
+                {
+                    _byteBufferPool.Return(_frameDataBuffer, clearArray: false);
+                    _frameDataBuffer = null;
                 }
 
                 _inputStreamToDispose?.Dispose();

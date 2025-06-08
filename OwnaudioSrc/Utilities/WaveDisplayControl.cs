@@ -11,7 +11,7 @@ namespace Ownaudio.Utilities
     /// A control for displaying audio waveforms with zoom and scroll capabilities.
     /// Provides different display styles and interactive features for audio visualization.
     /// </summary>
-    public class WaveAvaloniaDisplay : Avalonia.Controls.Control
+    public partial class WaveAvaloniaDisplay : Avalonia.Controls.Control
     {
         private float[] _audioData;
 
