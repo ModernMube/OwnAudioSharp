@@ -19,4 +19,9 @@ public interface ISampleProcessor
     /// <param name="samples">Audio sample to be processed.</param>
     /// <returns>Processed sample in <c>Float32</c> format.</returns>
     void Process(Span<float> samples);
+
+    /// <summary>
+    /// It clears temporary storage but does not change parameters.
+    /// </summary>
+    void Reset();
 }

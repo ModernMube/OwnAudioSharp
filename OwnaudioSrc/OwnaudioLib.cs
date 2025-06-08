@@ -27,7 +27,7 @@ public static partial class OwnAudio
         public const PaBinding.PaSampleFormat PaSampleFormat = PaBinding.PaSampleFormat.paFloat32;
     }
 
-/// <summary>
+    /// <summary>
     /// Initialize and register the PortAudio library and initialize and 
     /// register the FFmpeg functions with the FFmpeg native libraries, 
     /// the system default directory.
@@ -88,8 +88,6 @@ public static partial class OwnAudio
                 string sourceFrameworkFolderInBundle = Path.Combine("runtimes", ridext.Item1, "native", "miniaudio.framework");
                 string targetFrameworkSubFolder = Path.Combine(ridext.Item1, "native_copied", "miniaudio.framework");
 
-                Console.WriteLine($"[INFO] IOS: Attempting to copy '{sourceFrameworkFolderInBundle}' from bundle to '{targetFrameworkSubFolder}' in app data.");
-
                 try
                 {
                     Ownaudio.Utilities.PlatformUtils.IOSBundleCopier.CopyBundleFolderToAppData(
@@ -100,34 +98,31 @@ public static partial class OwnAudio
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[ERROR] OwnAudio.Initialize (iOS): Exception during IOSBundleCopier.CopyBundleFolderToAppData. {ex.Message}");
-                    Console.WriteLine($"[ERROR] OwnAudio.Initialize (iOS): Exception during IOSBundleCopier.CopyBundleFolderToAppData. {ex.Message}");
+                    Debug.WriteLine($"[ERROR] OwnAudio.Initialize (iOS): Exception during IOSBundleCopier.CopyBundleFolderToAppData. {ex.Message}");                      
                 }
 
-                string? appSpecificDataPath = Ownaudio.Utilities.PlatformUtils.GetAppSpecificBasePath(); //
+                string? appSpecificDataPath = Ownaudio.Utilities.PlatformUtils.GetAppSpecificBasePath();
                 if (!string.IsNullOrEmpty(appSpecificDataPath))
                 {
-                    pathMiniAudio = Path.Combine(appSpecificDataPath, targetFrameworkSubFolder, "miniaudio");
+                    // Correct path to the actual static library inside the framework
+                    pathMiniAudio = Path.Combine(appSpecificDataPath, targetFrameworkSubFolder, "miniaudio"); 
 
                     if (!File.Exists(pathMiniAudio))
                     {
                         Debug.WriteLine($"[ERROR] OwnAudio.Initialize (iOS): miniaudio binary not found at '{pathMiniAudio}' after copy attempt.");
-                        Console.WriteLine($"[ERROR] OwnAudio.Initialize (iOS): miniaudio binary not found at '{pathMiniAudio}' after copy attempt.");
                         pathMiniAudio = null; 
                     }
                     else
                     {
                         Debug.WriteLine($"[INFO] OwnAudio.Initialize (iOS): miniaudio path set to '{pathMiniAudio}'");
-                        Console.WriteLine($"[INFO] OwnAudio.Initialize (iOS): miniaudio path set to '{pathMiniAudio}'");
                     }
                 }
                 else
                 {
                     Debug.WriteLine("[ERROR] OwnAudio.Initialize (iOS): Failed to get app specific data path.");
-                    Console.WriteLine("[ERROR] OwnAudio.Initialize (iOS): Failed to get app specific data path.");
                     pathMiniAudio = null;
                 }
-                pathPortAudio = "";
+                pathPortAudio = ""; // PortAudio is not used on iOS with miniaudio
 #endif
             }
             //Android system
@@ -265,9 +260,14 @@ public static partial class OwnAudio
         }
         else if (OperatingSystem.IsIOS())
         {
+            // For iOS, miniaudio is a framework, which contains a static library.
+            // The file extension for static libraries on iOS is typically '.a' (archive).
+            // However, when using a framework, the linker handles the underlying static library.
+            // For `LibraryLoader.LoadFunc`, we usually just need the framework name or the binary name within it.
+            // In this case, 'miniaudio' (without extension) for the binary inside the framework should suffice.
             return RuntimeInformation.ProcessArchitecture switch
             {
-                Architecture.Arm64 => ("ios-arm64", ""),
+                Architecture.Arm64 => ("ios-arm64", ""), // No direct extension needed for framework binary loading
                 _ => throw new PlatformNotSupportedException(
                         $"unsupported IOS architecture: {RuntimeInformation.ProcessArchitecture}"),
             };
@@ -284,7 +284,7 @@ public static partial class OwnAudio
     /// <returns>Relative base path</returns>
     private static string? DetermineDesktopRelativeBase()
     {
-        string? appCtxBaseDir = Ownaudio.Utilities.PlatformUtils.tGetAppSpecificBasePah();
+        string? appCtxBaseDir = Ownaudio.Utilities.PlatformUtils.GetAppSpecificBasePath();
 
         if (!string.IsNullOrEmpty(appCtxBaseDir))
         {

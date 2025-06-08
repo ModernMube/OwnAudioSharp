@@ -22,26 +22,30 @@ namespace Ownaudio.Engines;
 public sealed class OwnAudioMiniEngine : IAudioEngine
 {
     #region Constants and Configuration
-    
+
     /// <summary>
     /// Maximum number of buffers that can be queued before dropping audio data.
+    /// Platform-specific values for optimal performance.
     /// </summary>
-    private const int MaxQueueSize = 10;
-    
+    private static int MaxQueueSize => (OperatingSystem.IsMacOS() || OperatingSystem.IsIOS()) ? 80 : 16;
+
     /// <summary>
     /// Maximum number of milliseconds to wait when trying to dequeue input data.
+    /// Platform-specific values for optimal performance.
     /// </summary>
-    private const int MaxInputWaitTime = 5;
-    
+    private static int MaxInputWaitTime => (OperatingSystem.IsMacOS() || OperatingSystem.IsIOS()) ? 10 : 2;
+
     /// <summary>
     /// Sleep duration in milliseconds when output buffer queue is full.
+    /// Platform-specific values for optimal performance.
     /// </summary>
-    private const int OutputBufferWaitTime = 5;
-    
+    private static int OutputBufferWaitTime => (OperatingSystem.IsMacOS() || OperatingSystem.IsIOS()) ? 10 : 2;
+
+
     #endregion
 
     #region Private Fields
-    
+
     private readonly AudioEngineOutputOptions _outputOptions;
     private readonly AudioEngineInputOptions _inputOptions;
     private MiniAudioEngine? _playbackEngine;
@@ -61,7 +65,7 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
 
     // Performance monitoring
     private readonly Stopwatch _performanceStopwatch = new();
-    
+
     #endregion
 
     #region Constructors
@@ -96,8 +100,8 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// This constructor creates a full-duplex audio engine capable of both recording and playback.
     /// Engines are only created for configurations where the channel count is greater than zero.
     /// </remarks>
-    public OwnAudioMiniEngine(AudioEngineInputOptions? inputOptions = default, 
-                             AudioEngineOutputOptions? outputOptions = default, 
+    public OwnAudioMiniEngine(AudioEngineInputOptions? inputOptions = default,
+                             AudioEngineOutputOptions? outputOptions = default,
                              int framesPerBuffer = 512)
     {
         _inputOptions = inputOptions ?? new AudioEngineInputOptions();
@@ -266,7 +270,8 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
         else
         {
             // Fill with silence when no data is available
-            Array.Clear(args.Buffer, 0, args.SampleCount);
+            //Array.Clear(args.Buffer, 0, args.SampleCount);
+            FastClear(args.Buffer, args.SampleCount);
         }
     }
 
@@ -326,7 +331,7 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
         {
             return buffer;
         }
-        
+
         return new float[sampleCount];
     }
 
@@ -370,28 +375,17 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// </example>
     public void Send(Span<float> samples)
     {
-        if (_playbackEngine == null)
+        if (_playbackEngine == null) return;
+        if (!ValidateSampleSize(samples)) return;
+
+        if (!WaitForOutputQueueSpace(50)) 
         {
-            Debug.WriteLine("Warning: Cannot send audio data - no playback engine available.");
-            return;
+            Debug.WriteLine("Dropping audio samples due to queue overflow");
+            return; 
         }
 
-        if (!ValidateSampleSize(samples))
-        {
-            return;
-        }
+        EnqueueOutputBuffer(samples);
 
-        WaitForOutputQueueSpace();
-        
-        if (_outputBufferQueue.Count < MaxQueueSize)
-        {
-            EnqueueOutputBuffer(samples);
-        }
-        else
-        {
-            Debug.WriteLine("Output buffer queue full after wait period. Dropping audio samples.");
-        }
-        
         _performanceStopwatch.Restart();
     }
 
@@ -414,12 +408,22 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// <summary>
     /// Waits briefly if the output buffer queue is at capacity.
     /// </summary>
-    private void WaitForOutputQueueSpace()
+    private bool WaitForOutputQueueSpace(int timeoutMs = 50) // Max 50ms várakozás
     {
-        if (_outputBufferQueue.Count >= MaxQueueSize)
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        while (_outputBufferQueue.Count >= MaxQueueSize)
         {
-            Thread.Sleep(OutputBufferWaitTime);
+            if (stopwatch.ElapsedMilliseconds >= timeoutMs)
+            {
+                Debug.WriteLine($"Queue wait timeout after {timeoutMs}ms - dropping samples");
+                return false; 
+            }
+
+            Thread.Sleep(1);
         }
+
+        return true;
     }
 
     /// <summary>
@@ -461,7 +465,7 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     private static bool ValidatePooledBufferSize(float[] buffer, int expectedSize)
     {
         if (buffer.Length == expectedSize) return true;
-        
+
         Debug.WriteLine($"Warning: Pooled buffer size mismatch - expected {expectedSize}, got {buffer.Length}. Creating new buffer.");
         return false;
     }
@@ -489,7 +493,7 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
         }
 
         WaitForInputData(out samples);
-        
+
         if (samples == null)
         {
             samples = CreateSilentInputBuffer();
@@ -515,11 +519,13 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
         samples = null!;
         int waitCount = 0;
 
+#nullable disable
         while (!_inputBufferQueue.TryDequeue(out samples) && waitCount < MaxInputWaitTime)
         {
             Thread.Sleep(1);
             waitCount++;
         }
+#nullable restore
     }
 
     /// <summary>
@@ -530,8 +536,9 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     {
         int expectedSize = _framesPerBuffer * (int)_inputOptions.Channels;
         float[] silentBuffer = new float[expectedSize];
-        Array.Clear(silentBuffer, 0, silentBuffer.Length);
-        
+        //Array.Clear(silentBuffer, 0, silentBuffer.Length);
+        FastClear(silentBuffer, silentBuffer.Length);
+
         Debug.WriteLine($"No input data available - returning silence ({expectedSize} samples)");
         return silentBuffer;
     }
@@ -557,7 +564,7 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
         {
             return GetOrCreateEngineHandle(ref _playbackEngineHandle, _playbackEngine);
         }
-        
+
         if (_captureEngine != null)
         {
             return GetOrCreateEngineHandle(ref _captureEngineHandle, _captureEngine);
@@ -782,7 +789,7 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
                 return false;
             }
 
-            DeviceInfo targetDevice = FindDeviceByName(engine, deviceName, isInputDevice);
+            DeviceInfo? targetDevice = FindDeviceByName(engine, deviceName, isInputDevice);
             if (targetDevice == null)
             {
                 return false;
@@ -829,7 +836,7 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     private static DeviceInfo? FindDeviceByName(MiniAudioEngine engine, string deviceName, bool isInputDevice)
     {
         var devices = isInputDevice ? engine.CaptureDevices : engine.PlaybackDevices;
-        
+
         return devices.FirstOrDefault(device =>
         {
             // Assuming devices have a Name property - adjust based on actual device object structure
@@ -979,8 +986,8 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// <param name="pool">Buffer pool to clear.</param>
     private static void ClearBufferPool(ConcurrentBag<float[]> pool)
     {
-        while (pool.TryTake(out _)) 
-        { 
+        while (pool.TryTake(out _))
+        {
             // Continue until pool is empty
         }
     }
@@ -1005,6 +1012,25 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
             handleField.Value.Free();
             handleField = null;
         }
+    }
+
+    /// <summary>
+    /// Efficiently clears a float array buffer using optimized methods based on buffer size.
+    /// </summary>
+    /// <param name="buffer">The float array buffer to clear.</param>
+    /// <param name="length">The number of elements to clear from the start of the buffer.</param>
+    /// <remarks>
+    /// This method uses size-based optimization:
+    /// - For buffers ≤1024 elements: Uses Span.Clear() which is optimized for smaller buffers
+    /// - For larger buffers: Uses Array.Clear() which is more efficient for larger memory blocks
+    /// This approach provides better performance across different buffer sizes.
+    /// </remarks>
+    private static void FastClear(float[] buffer, int length)
+    {
+        if (length <= 1024)
+            buffer.AsSpan(0, length).Clear(); // Span.Clear - optimized for smaller buffers
+        else
+            Array.Clear(buffer, 0, length); // Array.Clear - more efficient for larger buffers
     }
 
     #endregion

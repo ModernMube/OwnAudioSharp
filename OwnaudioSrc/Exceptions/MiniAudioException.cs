@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Runtime.InteropServices;
-using Ownaudio.Bindings.Miniaudio;
 using static Ownaudio.Bindings.Miniaudio.MaBinding;
 
 namespace Ownaudio.Exceptions;
@@ -23,7 +22,7 @@ public class MiniaudioException : Exception
     /// <summary>
     /// Initializes a new instance of the <see cref="MiniaudioException"/> class.
     /// </summary>
-    public MiniaudioException() : base("Hiba történt a miniaudio művelet során.")
+    public MiniaudioException() : base("An error occurred during miniaudio operation.")
     {
         MaResultCode = MaResult.Error;
     }
@@ -79,7 +78,7 @@ public class MiniaudioException : Exception
     private static string FormatMessage(string message, MaResult resultCode)
     {
         string errorDescription = GetErrorDescription(resultCode);
-        return $"{message} (Miniaudio hiba: {(int)resultCode} - {errorDescription})";
+        return $"{message} (Miniaudio error: {(int)resultCode} - {errorDescription})";
     }
 
     /// <summary>
@@ -92,9 +91,9 @@ public class MiniaudioException : Exception
         IntPtr errorStringPtr = ma_result_description(resultCode);
 
         if (errorStringPtr == IntPtr.Zero)
-            return "Ismeretlen hiba";
+            return "Unknown error";
 
-        return Marshal.PtrToStringAnsi(errorStringPtr) ?? "Ismeretlen hiba";
+        return Marshal.PtrToStringAnsi(errorStringPtr) ?? "Unknown error";
     }
 
     /// <summary>

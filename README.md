@@ -67,7 +67,7 @@ The table below summarizes the supported operating systems, the APIs used, and t
 | System     | APIs                           | Status       |
 |------------|--------------------------------|--------------|
 | Windows    | Portaudio 2, Miniaudio, Ffmpeg 6 | Tested       |
-| Linux      | Portaudio 2, Miniaudio, Ffmpeg 6 | Tested   |
+| Linux      | Portaudio 2, Miniaudio, Ffmpeg 6 | Tested       |
 | MacOs      | Portaudio 2, Miniaudio, Ffmpeg 6 | Tested       |
 | Android    | Miniaudio                      | Not tested   |
 | Ios        | Miniaudio                      | Not tested   |

@@ -3,44 +3,95 @@ using System.Buffers;
 using System.IO;
 using System.Diagnostics;
 using Ownaudio.MiniAudio;
- using Ownaudio.Decoders.FFmpeg;
+using Ownaudio.Decoders.FFmpeg;
 
 namespace Ownaudio.Decoders.MiniAudio
 {
     /// <summary>
     /// A class that uses MiniAudio for decoding and demuxing specified audio source.
     /// This class cannot be inherited.
-    /// <para>Implements: <see cref="IAudioDecoder"/>.</para>
     /// </summary>
+    /// <remarks>
+    /// Implements: <see cref="IAudioDecoder"/>.
+    /// </remarks>
     public sealed class MiniDecoder : IAudioDecoder
     {
+        /// <summary>
+        /// The internal MiniAudio decoder instance.
+        /// </summary>
         private MiniAudioDecoder? _decoder;
+
+        /// <summary>
+        /// Synchronization lock object for thread-safe operations.
+        /// </summary>
         private readonly object _syncLock = new object();
+
+        /// <summary>
+        /// Input stream that needs to be disposed when the decoder is disposed.
+        /// </summary>
         private Stream? _inputStreamToDispose;
+
+        /// <summary>
+        /// Flag indicating whether the decoder has been disposed.
+        /// </summary>
         private bool _disposed;
+
+        /// <summary>
+        /// Number of audio channels.
+        /// </summary>
         private readonly int _channels;
+
+        /// <summary>
+        /// Audio sample rate in Hz.
+        /// </summary>
         private readonly int _sampleRate;
+
+        /// <summary>
+        /// Buffer used for decoding audio data.
+        /// </summary>
         private float[]? _decodingBuffer;
+
+        /// <summary>
+        /// Shared array pool for efficient buffer management.
+        /// </summary>
         private readonly ArrayPool<float> _bufferPool = ArrayPool<float>.Shared;
+
+        /// <summary>
+        /// Size of the decoding buffer.
+        /// </summary>
         private readonly int _bufferSize = 4096;
+
+        /// <summary>
+        /// Number of bytes per audio sample.
+        /// </summary>
         private readonly int _bytesPerSample = sizeof(float);
+
+        /// <summary>
+        /// Flag indicating whether the end of the audio stream has been reached.
+        /// </summary>
         private bool _endOfStreamReached = false;
 
         /// <summary>
-        /// Audio stream info <see cref="AudioStreamInfo"/>
+        /// Gets the audio stream information.
         /// </summary>
-        public AudioStreamInfo StreamInfo { get; private set; } //
+        /// <value>
+        /// An <see cref="AudioStreamInfo"/> object containing stream details.
+        /// </value>
+        public AudioStreamInfo StreamInfo { get; private set; }
 
         /// <summary>
-        /// Initializes <see cref="MiniDecoder"/> by providing audio URL.
-        /// The audio URL can be URL or path to local audio file.
+        /// Initializes a new instance of the <see cref="MiniDecoder"/> class using an audio URL.
         /// </summary>
+        /// <param name="url">The audio URL, which can be a URL or path to a local audio file.</param>
+        /// <param name="options">Optional decoder configuration options. If null, default options will be used.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="url"/> is null or empty.</exception>
+        /// <exception cref="Exception">Thrown when the decoder initialization fails.</exception>
         public MiniDecoder(string url, FFmpegDecoderOptions? options = default)
         {
             if (string.IsNullOrEmpty(url))
                 throw new ArgumentNullException(nameof(url));
 
-            options ??= new FFmpegDecoderOptions(2, OwnAudio.DefaultOutputDevice.DefaultSampleRate); //
+            options ??= new FFmpegDecoderOptions(2, OwnAudio.DefaultOutputDevice.DefaultSampleRate);
             _channels = options.Channels;
             _sampleRate = options.SampleRate;
 
@@ -59,8 +110,11 @@ namespace Ownaudio.Decoders.MiniAudio
         }
 
         /// <summary>
-        /// Initializes <see cref="MiniDecoder"/> by providing source audio stream.
+        /// Initializes a new instance of the <see cref="MiniDecoder"/> class using a source audio stream.
         /// </summary>
+        /// <param name="stream">The source audio stream to decode.</param>
+        /// <param name="options">Optional decoder configuration options. If null, default options will be used.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="stream"/> is null.</exception>
         public MiniDecoder(Stream stream, FFmpegDecoderOptions? options = default)
         {
             var inputStream = stream ?? throw new ArgumentNullException(nameof(stream));
@@ -73,6 +127,12 @@ namespace Ownaudio.Decoders.MiniAudio
             InitializeDecoder(inputStream, options);
         }
 
+        /// <summary>
+        /// Initializes the internal decoder with the provided stream and options.
+        /// </summary>
+        /// <param name="streamToDecode">The stream containing audio data to decode.</param>
+        /// <param name="options">The decoder configuration options.</param>
+        /// <exception cref="Exception">Thrown when the internal MiniAudioDecoder initialization fails.</exception>
         private void InitializeDecoder(Stream streamToDecode, FFmpegDecoderOptions options)
         {
             try
@@ -96,10 +156,15 @@ namespace Ownaudio.Decoders.MiniAudio
             catch (Exception ex)
             {
                 _decoder?.Dispose();
-                throw new Exception($"Failed to initialize internal MiniAudioDecoder: {ex.Message}", ex); //
+                throw new Exception($"Failed to initialize internal MiniAudioDecoder: {ex.Message}", ex);
             }
         }
 
+        /// <summary>
+        /// Handles the end of stream event from the internal decoder.
+        /// </summary>
+        /// <param name="sender">The event sender.</param>
+        /// <param name="e">The event arguments.</param>
         private void OnDecoderEndOfStreamReached(object? sender, EventArgs e)
         {
             _endOfStreamReached = true;
@@ -108,9 +173,12 @@ namespace Ownaudio.Decoders.MiniAudio
         /// <summary>
         /// Decodes the next available audio frame.
         /// </summary>
+        /// <returns>
+        /// An <see cref="AudioDecoderResult"/> containing the decoded frame data and operation status.
+        /// </returns>
         public AudioDecoderResult DecodeNextFrame()
         {
-            lock (_syncLock) //
+            lock (_syncLock)
             {
                 if (_endOfStreamReached)
                 {
@@ -159,7 +227,7 @@ namespace Ownaudio.Decoders.MiniAudio
 
                     return new AudioDecoderResult(lastFrame, true, false);
                 }
-                catch (ObjectDisposedException) 
+                catch (ObjectDisposedException)
                 {
                     _disposed = true;
                     _endOfStreamReached = true;
@@ -168,11 +236,11 @@ namespace Ownaudio.Decoders.MiniAudio
                 catch (Exception ex)
                 {
                     if (ex.Message.Contains("At end") || ex.Message.Contains("end of stream") ||
-                        ex.Message.Contains("EOF") || ex.Message.Contains("No data available")) 
+                        ex.Message.Contains("EOF") || ex.Message.Contains("No data available"))
                     {
                         Debug.WriteLine($"EOF detected from exception: {ex.Message}");
                         _endOfStreamReached = true;
-                        return new AudioDecoderResult(null, false, true, $"End of stream reached (exception: {ex.Message})"); 
+                        return new AudioDecoderResult(null, false, true, $"End of stream reached (exception: {ex.Message})");
                     }
                     Debug.WriteLine($"DecodeNextFrame exception: {ex.Message}");
                     return new AudioDecoderResult(null, false, false, ex.Message);
@@ -181,9 +249,13 @@ namespace Ownaudio.Decoders.MiniAudio
         }
 
         /// <summary>
-        /// Try to seeks audio stream to the specified position and returns <c>true</c> if successfully seeks,
-        /// otherwise, <c>false</c>.
+        /// Attempts to seek the audio stream to the specified position.
         /// </summary>
+        /// <param name="position">The position to seek to in the audio stream.</param>
+        /// <param name="error">When this method returns, contains the error message if the seek operation failed, or an empty string if it succeeded.</param>
+        /// <returns>
+        /// <c>true</c> if the seek operation was successful; otherwise, <c>false</c>.
+        /// </returns>
         public bool TrySeek(TimeSpan position, out string error)
         {
             lock (_syncLock)
@@ -203,7 +275,7 @@ namespace Ownaudio.Decoders.MiniAudio
 
                     if (result)
                     {
-                        _endOfStreamReached = false; 
+                        _endOfStreamReached = false;
                     }
                     else
                     {
@@ -228,8 +300,12 @@ namespace Ownaudio.Decoders.MiniAudio
         }
 
         /// <summary>
-        /// It processes all the frames. And returns them in an AudioDecoderResult
+        /// Processes and decodes all frames from the audio stream and returns them in a single result.
         /// </summary>
+        /// <param name="position">The starting position in the audio stream. If default, starts from the current position or beginning.</param>
+        /// <returns>
+        /// An <see cref="AudioDecoderResult"/> containing all decoded frame data combined into a single frame.
+        /// </returns>
         public AudioDecoderResult DecodeAllFrames(TimeSpan position = default)
         {
             lock (_syncLock)
@@ -242,20 +318,20 @@ namespace Ownaudio.Decoders.MiniAudio
                 try
                 {
                     using var accumulatedData = new MemoryStream();
-                    double lastPresentationTime = 0; 
+                    double lastPresentationTime = 0;
 
                     if (position != default)
                     {
                         if (!TrySeek(position, out var seekError))
                         {
-                            return new AudioDecoderResult(null, false, false, seekError ?? "Seek failed"); //
+                            return new AudioDecoderResult(null, false, false, seekError ?? "Seek failed");
                         }
                     }
                     else
                     {
                         if (!TrySeek(TimeSpan.Zero, out var seekError))
                         {
-                            return new AudioDecoderResult(null, false, false, seekError ?? "Seek to zero failed"); //
+                            return new AudioDecoderResult(null, false, false, seekError ?? "Seek to zero failed");
                         }
                     }
 
@@ -322,15 +398,19 @@ namespace Ownaudio.Decoders.MiniAudio
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"DecodeAllFrames exception: {ex.Message}"); //
-                    return new AudioDecoderResult(null, false, false, ex.Message); //
+                    Debug.WriteLine($"DecodeAllFrames exception: {ex.Message}");
+                    return new AudioDecoderResult(null, false, false, ex.Message);
                 }
             }
         }
 
         /// <summary>
-        /// Disposes of resources used by the decoder.
+        /// Releases all resources used by the <see cref="MiniDecoder"/>.
         /// </summary>
+        /// <remarks>
+        /// This method disposes of the internal decoder, returns buffers to the pool, 
+        /// and disposes of any streams that were created by this instance.
+        /// </remarks>
         public void Dispose()
         {
             if (_disposed)
