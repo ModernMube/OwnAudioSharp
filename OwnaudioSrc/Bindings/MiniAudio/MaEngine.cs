@@ -21,6 +21,7 @@ namespace Ownaudio.MiniAudio
         private readonly int _channels;
         private readonly MaFormat _sampleFormat;
         private readonly MaDeviceType _deviceType;
+        private readonly int _sizeInFrame;
 
         private MaBinding.MaDataCallback? _audioCallback;
         private IntPtr _context;
@@ -124,13 +125,15 @@ namespace Ownaudio.MiniAudio
         /// <param name="deviceType">Type of audio device.</param>
         /// <param name="sampleFormat">Sample format.</param>
         /// <param name="channels">Number of channels.</param>
+        /// <param name="sizeInFrame">Period size in frame</param>
         public MiniAudioEngine(int sampleRate = 44100, EngineDeviceType deviceType = EngineDeviceType.Playback,
-            EngineAudioFormat sampleFormat = EngineAudioFormat.F32, int channels = 2)
+            EngineAudioFormat sampleFormat = EngineAudioFormat.F32, int channels = 2, int sizeInFrame = 512)
         {
             _sampleRate = sampleRate;
             _deviceType = (MaDeviceType)deviceType;
             _sampleFormat = (MaFormat)sampleFormat;
             _channels = channels;
+            _sizeInFrame = sizeInFrame;
 
             InitializeAudioDevice();
         }
@@ -207,7 +210,8 @@ namespace Ownaudio.MiniAudio
                     (uint)_sampleRate,
                     _audioCallback = _audioCallback ?? new MaBinding.MaDataCallback(AudioCallback),
                     type == MaDeviceType.Playback || type == MaDeviceType.Duplex ? deviceId : IntPtr.Zero,
-                    type == MaDeviceType.Capture || type == MaDeviceType.Duplex ? deviceId : IntPtr.Zero);
+                    type == MaDeviceType.Capture || type == MaDeviceType.Duplex ? deviceId : IntPtr.Zero,
+                    (uint)_sizeInFrame);
 
                 _device = MaBinding.allocate_device();
                 var result = MaBinding.ma_device_init(_context, deviceConfig, _device);

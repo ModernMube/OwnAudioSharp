@@ -34,7 +34,7 @@ public unsafe partial class SourceManager
     /// <summary>
     /// Audio Engine Frames per Buffer
     /// </summary>
-    public static int EngineFramesPerBuffer { get; set; } = 256;
+    public static int EngineFramesPerBuffer { get; set; } = 512;
 
     /// <summary>
     /// List of added sources
