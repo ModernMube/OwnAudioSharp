@@ -60,6 +60,12 @@ Check out the sample application [OwnAudioSharpDemo](https://github.com/ModernMu
   <img src="https://img.shields.io/badge/Wiki-Real%20time%20source-darkgreen" alt="Wiki Source documentation">
 </a>
 
+### Effects documentation
+
+<a href="../../wiki/OwnAudio-effects-library">
+  <img src="https://img.shields.io/badge/Wiki-Effects%20library%20documentation-brown" alt="Wiki Effects documentation">
+</a>
+
 ## Supported Systems
 
 The table below summarizes the supported operating systems, the APIs used, and their testing status.
