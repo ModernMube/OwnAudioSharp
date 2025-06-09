@@ -4,16 +4,20 @@ using System;
 namespace Ownaudio.Fx
 {
     /// <summary>
-    /// Delay fx
+    /// Professional delay fx with improved audio quality and stability
     /// </summary>
     public class Delay : SampleProcessorBase
     {
-        private readonly float[] _delayBuffer;  // A buffer for storing delayed samples
-        private int _bufferIndex;               // The current index of the buffer
-        private readonly int _sampleRate;       // Sample rate
+        private float[]? _delayBuffer;
+        private int _writeIndex;
+        private int _readIndex;
+        private readonly int _sampleRate;
+        private int _delaySamples;
+        private int _time;
 
-        private int _delaySamples;              // The length of the delay in samples
-        private int _time;                      // A Time backing field
+        // High-frequency damping for more natural sound
+        private float _dampingCoeff = 0.2f;
+        private float _lastOutput = 0.0f;
 
         /// <summary>
         /// The delay time is in milliseconds.
@@ -28,7 +32,7 @@ namespace Ownaudio.Fx
                     throw new ArgumentException("The delay time must be positive.", nameof(Time));
 
                 _time = value;
-                UpdateDelayTime();  // Automatic update
+                UpdateDelayTime();
             }
         }
 
@@ -63,32 +67,38 @@ namespace Ownaudio.Fx
             if (mix < 0.0f || mix > 1.0f)
                 throw new ArgumentException("The Mix value must be between 0.0 and 1.0.", nameof(mix));
 
+            _sampleRate = sampleRate;
             Time = time;
             Repeat = repeat;
             Mix = mix;
-            _sampleRate = sampleRate;
 
-            _delaySamples = (int)((time / 1000.0) * sampleRate); // Delay in samples
-            _delayBuffer = new float[_delaySamples];
-            _bufferIndex = 0;
+            InitializeBuffer();
         }
 
         /// <summary>
         /// Sample processing with delay.
         /// </summary>
         /// <param name="samples">The input samples</param>
-        /// <returns>A kevert minta.</returns>
         public override void Process(Span<float> samples)
         {
-            for(int i = 0; i < samples.Length; i++)
+#nullable disable
+            for (int i = 0; i < samples.Length; i++)
             {
-                
-                float delayedSample = _delayBuffer[_bufferIndex];       // Retrieve the delayed pattern
-                _delayBuffer[_bufferIndex] = samples[i] + (delayedSample * Repeat);     // New sample in buffer with feedback                 
-                _bufferIndex = (_bufferIndex + 1) % _delaySamples;      // Increasing the buffer index (circular operation)
-                samples[i] = (samples[i] * (1.0f - Mix)) + (delayedSample * Mix);       // Mix original and delayed signal
+                float delayedSample = _delayBuffer[_readIndex];
+
+                delayedSample = _lastOutput + _dampingCoeff * (delayedSample - _lastOutput);
+                _lastOutput = delayedSample;
+
+                float feedbackSample = SoftClip(samples[i] + (delayedSample * Repeat));
+
+                _delayBuffer[_writeIndex] = feedbackSample;
+
+                samples[i] = (samples[i] * (1.0f - Mix)) + (delayedSample * Mix);
+
+                _writeIndex = (_writeIndex + 1) % _delaySamples;
+                _readIndex = (_readIndex + 1) % _delaySamples;
             }
-            
+#nullable restore
         }
 
         /// <summary>
@@ -97,8 +107,13 @@ namespace Ownaudio.Fx
         /// </summary>
         public override void Reset()
         {
-            Array.Clear(_delayBuffer, 0, _delayBuffer.Length);
-            _bufferIndex = 0;
+            if (_delayBuffer != null)
+            {
+                Array.Clear(_delayBuffer, 0, _delayBuffer.Length);
+            }
+            _writeIndex = 0;
+            _readIndex = 0;
+            _lastOutput = 0.0f;
         }
 
         /// <summary>
@@ -106,11 +121,48 @@ namespace Ownaudio.Fx
         /// </summary>
         private void UpdateDelayTime()
         {
-            if (_delayBuffer is not null)
+            _delaySamples = Math.Max(1, (int)((Time / 1000.0) * _sampleRate));
+            InitializeBuffer();
+        }
+
+        /// <summary>
+        /// Initialize or reinitialize the delay buffer
+        /// </summary>
+        private void InitializeBuffer()
+        {
+            int bufferSize = Math.Max(_delaySamples, 64);
+
+            if (_delayBuffer == null || _delayBuffer.Length != bufferSize)
             {
-                _delaySamples = (int)((Time / 1000.0) * _sampleRate);
-                Array.Clear(_delayBuffer, 0, _delayBuffer.Length); // Clear buffer for stable operation
+                _delayBuffer = new float[bufferSize];
             }
+            else
+            {
+                Array.Clear(_delayBuffer, 0, _delayBuffer.Length);
+            }
+
+            _writeIndex = 0;
+            _readIndex = 0;
+            _lastOutput = 0.0f;
+        }
+
+        /// <summary>
+        /// Soft clipping function to prevent harsh distortion
+        /// </summary>
+        /// <param name="input">Input sample</param>
+        /// <returns>Soft-clipped sample</returns>
+        private static float SoftClip(float input)
+        {
+            const float threshold = 0.7f;
+
+            if (Math.Abs(input) <= threshold)
+                return input;
+
+            float sign = Math.Sign(input);
+            float abs = Math.Abs(input);
+
+            // Smooth saturation curve
+            return sign * (threshold + (1.0f - threshold) * (1.0f - 1.0f / (1.0f + (abs - threshold) * 2.0f)));
         }
     }
 }

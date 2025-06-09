@@ -60,9 +60,9 @@ namespace Microphone
 
         Delay delay = new Delay
         (
-            time: 210,      // Delay time 310 ms
+            time: 410,      // Delay time 410 ms
             repeat: 0.4f,   // Rate of delayed signal feedback to the input 40%
-            mix: 0.15f,     // Delayed signal ratio in the mix 15%
+            mix: 0.35f,     // Delayed signal ratio in the mix 35%
             sampleRate: SourceManager.OutputEngineOptions.SampleRate
         );
 
