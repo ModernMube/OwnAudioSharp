@@ -134,7 +134,8 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
             sampleRate: _outputOptions.SampleRate,
             deviceType: EngineDeviceType.Playback,
             sampleFormat: EngineAudioFormat.F32,
-            channels: (int)_outputOptions.Channels
+            channels: (int)_outputOptions.Channels,
+            sizeInFrame: _framesPerBuffer
         );
 
         SetupPlaybackProcessing();
@@ -151,7 +152,8 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
             sampleRate: _inputOptions.SampleRate,
             deviceType: EngineDeviceType.Capture,
             sampleFormat: EngineAudioFormat.F32,
-            channels: (int)_inputOptions.Channels
+            channels: (int)_inputOptions.Channels,
+            sizeInFrame: _framesPerBuffer
         );
 
         SetupCaptureProcessing();

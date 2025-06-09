@@ -197,7 +197,7 @@ internal static partial class MaBinding
     }
 
     public static IntPtr ma_device_config_alloc(MaDeviceType deviceType, MaFormat format, uint channels, uint sampleRate,
-                                           MaDataCallback dataCallback, IntPtr playbackDeviceId, IntPtr captureDeviceId)
+                                           MaDataCallback dataCallback, IntPtr playbackDeviceId, IntPtr captureDeviceId, uint sizeinframe)
     {
         MaDeviceConfig config = ma_device_config_init(deviceType);
 
@@ -209,7 +209,7 @@ internal static partial class MaBinding
         config.dataCallback = dataCallback;
         config.playback.pDeviceID = playbackDeviceId;
         config.capture.pDeviceID = captureDeviceId;
-        config.periodSizeInFrames = 256;
+        config.periodSizeInFrames = sizeinframe;
 
         IntPtr ptr = ma_malloc((ulong)Marshal.SizeOf<MaDeviceConfig>(), IntPtr.Zero);
         if (ptr != IntPtr.Zero)
@@ -248,9 +248,9 @@ internal static partial class MaBinding
     }
 
     public static IntPtr allocate_device_config(MaDeviceType deviceType, MaFormat format, uint channels, uint sampleRate,
-                                           MaDataCallback dataCallback, IntPtr playbackDeviceId, IntPtr captureDeviceId)
+                                           MaDataCallback dataCallback, IntPtr playbackDeviceId, IntPtr captureDeviceId, uint sizeinframe = 512)
     {
-        return ma_device_config_alloc(deviceType, format, channels, sampleRate, dataCallback, playbackDeviceId, captureDeviceId);
+        return ma_device_config_alloc(deviceType, format, channels, sampleRate, dataCallback, playbackDeviceId, captureDeviceId, sizeinframe);
     }
 
     #endregion
