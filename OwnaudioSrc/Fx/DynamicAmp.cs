@@ -1,6 +1,5 @@
 ﻿using Ownaudio.Processors;
 using System;
-using System.Collections.Generic;
 
 namespace Ownaudio.Fx
 {
@@ -11,9 +10,9 @@ namespace Ownaudio.Fx
     public class DynamicAmp : SampleProcessorBase
     {
         /// <summary>
-        /// The target RMS volume level (between -20.0 - 0.0)
+        /// The target RMS volume level in dB (between -40.0 - 0.0)
         /// </summary>
-        private float targetRmsLevel;
+        private float targetRmsLevelDb;
 
         /// <summary>
         /// Attack time in seconds - how long it takes for the volume increase to respond
@@ -53,7 +52,12 @@ namespace Ownaudio.Fx
         /// <summary>
         /// Circular buffer for RMS calculation over a longer window
         /// </summary>
-        private Queue<float> rmsWindow;
+        private float[] rmsBuffer;
+
+        /// <summary>
+        /// Current index in the circular buffer
+        /// </summary>
+        private int rmsBufferIndex = 0;
 
         /// <summary>
         /// Length of the RMS window in samples
@@ -66,9 +70,14 @@ namespace Ownaudio.Fx
         private float windowSumSquares = 0.0f;
 
         /// <summary>
+        /// Flag to track if buffer is filled
+        /// </summary>
+        private bool bufferFilled = false;
+
+        /// <summary>
         /// Creates a new DynamicAmp instance with the given parameters
         /// </summary>
-        /// <param name="targetLevel">Target RMS level (between -20.0 - 0.0)</param>
+        /// <param name="targetLevel">Target RMS level in dB (between -40.0 - 0.0)</param>
         /// <param name="attackTimeSeconds">Attack time in seconds (minimum 0.001)</param>
         /// <param name="releaseTimeSeconds">Release time in seconds (minimum 0.001)</param>
         /// <param name="noiseThreshold">Noise threshold value (between 0.0 - 1.0)</param>
@@ -78,32 +87,35 @@ namespace Ownaudio.Fx
         /// <exception cref="ArgumentException">If any parameter value is invalid</exception>
         public DynamicAmp(float targetLevel = -9.0f, float attackTimeSeconds = 0.2f,
                          float releaseTimeSeconds = 0.8f, float noiseThreshold = 0.005f,
-                         float maxGainValue = 1.2f, float sampleRateHz = 44100.0f,
-                         float rmsWindowSeconds = 0.5f)
+                         float maxGainValue = 10.0f, float sampleRateHz = 44100.0f,
+                         float rmsWindowSeconds = 0.3f)
         {
             ValidateAndSetTargetLevel(targetLevel);
             ValidateAndSetAttackTime(attackTimeSeconds);
-            ValidateAndSetReleaseTime(releaseTimeSeconds);                        
+            ValidateAndSetReleaseTime(releaseTimeSeconds);
             ValidateAndSetNoiseGate(noiseThreshold);
             ValidateAndSetMaxGain(maxGainValue);
             ValidateAndSetSampleRate(sampleRateHz);
 
-            rmsWindowLength = (int)(sampleRateHz * rmsWindowSeconds);
-            rmsWindow = new Queue<float>(rmsWindowLength);
-
-            for (int i = 0; i < rmsWindowLength; i++)
-            {
-                rmsWindow.Enqueue(0.0f);
-            }
+            InitializeRmsBuffer(rmsWindowSeconds);
         }
 
-        private void ValidateAndSetTargetLevel(float level)
+        private void InitializeRmsBuffer(float windowSeconds)
         {
-            if (level < -20.0f || level > 0.0f)
+            rmsWindowLength = Math.Max(1, (int)(sampleRate * windowSeconds));
+            rmsBuffer = new float[rmsWindowLength];
+            rmsBufferIndex = 0;
+            windowSumSquares = 0.0f;
+            bufferFilled = false;
+        }
+
+        private void ValidateAndSetTargetLevel(float levelDb)
+        {
+            if (levelDb < -40.0f || levelDb > 0.0f)
             {
-                throw new ArgumentException($"The target level value must be between 0 and 1. Resulting value: {level}");
+                throw new ArgumentException($"The target level value must be between -40.0 and 0.0 dB. Resulting value: {levelDb}");
             }
-            targetRmsLevel = level;
+            targetRmsLevelDb = levelDb;
         }
 
         private void ValidateAndSetAttackTime(float timeInSeconds)
@@ -152,13 +164,13 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Sets the target volume level
+        /// Sets the target volume level in dB
         /// </summary>
-        /// <param name="level">Target RMS level (between 0.0 - 1.0)</param>
+        /// <param name="levelDb">Target RMS level in dB (between -40.0 - 0.0)</param>
         /// <exception cref="ArgumentException">If the value is invalid</exception>
-        public void SetTargetLevel(float level)
+        public void SetTargetLevel(float levelDb)
         {
-            ValidateAndSetTargetLevel(level);
+            ValidateAndSetTargetLevel(levelDb);
         }
 
         /// <summary>
@@ -167,39 +179,72 @@ namespace Ownaudio.Fx
         /// <param name="samples">Array of stereo audio samples</param>
         public override void Process(Span<float> samples)
         {
-            float bufferRms = UpdateRmsWindow(samples);
-            float _targetRMSLevel = (float)Math.Pow(10, targetRmsLevel / 20);
+            if (samples.Length == 0) return;
 
+            float bufferRms = UpdateRmsWindow(samples);
+
+            // Convert dB to linear
+            float targetRmsLinear = DbToLinear(targetRmsLevelDb);
+
+            // Apply noise gate
             if (bufferRms < noiseGate)
             {
                 return;
             }
 
-            float targetGain = Math.Min(_targetRMSLevel / Math.Max(bufferRms, noiseGate), maxGain);
+            // Calculate target gain with safety check
+            float targetGain = Math.Min(targetRmsLinear / Math.Max(bufferRms, 1e-10f), maxGain);
 
+            // Smooth gain changes
             float timeConstant = (targetGain > currentGain) ? attackTime : releaseTime;
-            float alpha = MathF.Exp(-1.0f / (timeConstant * sampleRate / samples.Length));
+            float alpha = CalculateAlpha(timeConstant, samples.Length);
 
+            // Fast attack for sudden level increases
             if (targetGain < currentGain && bufferRms > lastRms * 1.5f)
             {
-                alpha = MathF.Exp(-1.0f / (0.5f * attackTime * sampleRate / samples.Length));
+                alpha = CalculateAlpha(0.5f * attackTime, samples.Length);
             }
 
             currentGain = alpha * currentGain + (1.0f - alpha) * targetGain;
-            
+
+            // Apply gain and soft limiting
             for (int i = 0; i < samples.Length; i++)
             {
-                float amplifiedSample = samples[i] * currentGain;
-
-                if (Math.Abs(amplifiedSample) > 0.9f)
-                {
-                    amplifiedSample = Math.Sign(amplifiedSample) * (0.9f + 0.1f * MathF.Tanh((Math.Abs(amplifiedSample) - 0.9f) / 0.1f));
-                }
-
-                samples[i] = amplifiedSample;
+                samples[i] = SoftLimit(samples[i] * currentGain);
             }
 
             lastRms = bufferRms;
+        }
+
+        /// <summary>
+        /// Converts dB to linear value
+        /// </summary>
+        private static float DbToLinear(float db)
+        {
+            return MathF.Pow(10.0f, db / 20.0f);
+        }
+
+        /// <summary>
+        /// Calculates the alpha value for exponential smoothing
+        /// </summary>
+        private float CalculateAlpha(float timeConstant, int bufferLength)
+        {
+            return MathF.Exp(-bufferLength / (timeConstant * sampleRate));
+        }
+
+        /// <summary>
+        /// Applies soft limiting to prevent harsh clipping
+        /// </summary>
+        private static float SoftLimit(float input, float threshold = 0.9f)
+        {
+            float absInput = Math.Abs(input);
+            if (absInput <= threshold)
+                return input;
+
+            float sign = Math.Sign(input);
+            float excess = absInput - threshold;
+            float softPart = excess / (1.0f + excess * 2.0f);
+            return sign * (threshold + softPart * 0.1f);
         }
 
         /// <summary>
@@ -211,37 +256,57 @@ namespace Ownaudio.Fx
             currentGain = 1.0f;
             lastRms = 0.0f;
             windowSumSquares = 0.0f;
+            rmsBufferIndex = 0;
+            bufferFilled = false;
 
-            rmsWindow.Clear();
-            for (int i = 0; i < rmsWindowLength; i++)
+            if (rmsBuffer != null)
             {
-                rmsWindow.Enqueue(0.0f);
+                Array.Clear(rmsBuffer, 0, rmsBuffer.Length);
             }
         }
 
         /// <summary>
-        /// Updates the RMS window and calculates the current RMS value
+        /// Updates the RMS window and calculates the current RMS value using circular buffer
         /// </summary>
         /// <param name="samples">New samples to add to the window</param>
         /// <returns>Current RMS value over the window</returns>
         private float UpdateRmsWindow(Span<float> samples)
         {
+            // Calculate mean square for this buffer
             float bufferSumSquares = 0.0f;
             for (int i = 0; i < samples.Length; i++)
             {
-                bufferSumSquares += samples[i] * samples[i];
+                float sample = samples[i];
+                bufferSumSquares += sample * sample;
             }
             float bufferMeanSquare = bufferSumSquares / samples.Length;
 
-            rmsWindow.Enqueue(bufferMeanSquare);
-            windowSumSquares += bufferMeanSquare;
-
-            if (rmsWindow.Count > rmsWindowLength)
+            // Update circular buffer
+            if (bufferFilled)
             {
-                windowSumSquares -= rmsWindow.Dequeue();
+                windowSumSquares -= rmsBuffer[rmsBufferIndex];
             }
 
-            return MathF.Sqrt(windowSumSquares / rmsWindow.Count);
+            rmsBuffer[rmsBufferIndex] = bufferMeanSquare;
+            windowSumSquares += bufferMeanSquare;
+
+            rmsBufferIndex = (rmsBufferIndex + 1) % rmsWindowLength;
+            if (rmsBufferIndex == 0)
+            {
+                bufferFilled = true;
+            }
+
+            // Calculate RMS
+            int validSamples = bufferFilled ? rmsWindowLength : rmsBufferIndex;
+            float meanSquare = windowSumSquares / validSamples;
+
+            // Safety check for NaN/Infinity
+            if (float.IsNaN(meanSquare) || float.IsInfinity(meanSquare) || meanSquare < 0)
+            {
+                return 0.0f;
+            }
+
+            return MathF.Sqrt(meanSquare);
         }
 
         /// <summary>
@@ -291,8 +356,19 @@ namespace Ownaudio.Fx
         /// <exception cref="ArgumentException">If the value is invalid</exception>
         public void SetSampleRate(float rate)
         {
+            float oldWindowSeconds = rmsWindowLength / sampleRate;
             ValidateAndSetSampleRate(rate);
-            rmsWindowLength = (int)(sampleRate * (rmsWindowLength / (float)rmsWindow.Count));
+            InitializeRmsBuffer(oldWindowSeconds);
         }
+
+        /// <summary>
+        /// Gets the current gain value
+        /// </summary>
+        public float CurrentGain => currentGain;
+
+        /// <summary>
+        /// Gets the last calculated RMS value
+        /// </summary>
+        public float LastRms => lastRms;
     }
 }
