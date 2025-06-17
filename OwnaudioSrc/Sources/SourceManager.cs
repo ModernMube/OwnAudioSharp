@@ -673,7 +673,7 @@ namespace Ownaudio.Sources
             {
                 Task.Run(() =>
                 {
-                    WriteWaveFile.WriteFile(
+                    WaveFile.WriteFile(
                         filePath: SaveWaveFileName,
                         rawFilePath: writefilePath,
                         sampleRate: OwnAudio.DefaultOutputDevice.DefaultSampleRate,
