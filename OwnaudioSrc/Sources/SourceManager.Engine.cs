@@ -435,7 +435,7 @@ public unsafe partial class SourceManager
         {
 #nullable disable
             int sampleCount = Math.Min(samples.Length, _levelCalculationBuffer.Length);
-            samples.Slice(0, sampleCount).CopyTo(_levelCalculationBuffer.AsSpan(0, sampleCount));
+            samples.Slice(0, sampleCount).SafeCopyTo(_levelCalculationBuffer.AsSpan(0, sampleCount));
 
             if (OutputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo)
                 OutputLevels = CalculateAverageStereoLevelsSpan(_levelCalculationBuffer.AsSpan(0, sampleCount));
@@ -450,10 +450,10 @@ public unsafe partial class SourceManager
                 _fileSaveTask.Wait();
 
             int sampleCount = Math.Min(samples.Length, _levelCalculationBuffer.Length);
-            samples.Slice(0, sampleCount).CopyTo(_levelCalculationBuffer.AsSpan(0, sampleCount));
+            samples.Slice(0, sampleCount).SafeCopyTo(_levelCalculationBuffer.AsSpan(0, sampleCount));
 
             var samplesForFile = new float[sampleCount];
-            _levelCalculationBuffer.AsSpan(0, sampleCount).CopyTo(samplesForFile);
+            _levelCalculationBuffer.AsSpan(0, sampleCount).SafeCopyTo(samplesForFile);
 
             _fileSaveTask = Task.Run(() => { SaveSamplesToFile(samplesForFile, writefilePath); });
         }
@@ -702,11 +702,14 @@ public unsafe partial class SourceManager
     /// </remarks>
     private static void FastClear(float[]? buffer, int length)
     {
-        if (length <= 1024)
-            buffer.AsSpan(0, length).Clear();
+        if (buffer == null) return;
+
+        int clearLength = Math.Min(buffer.Length, length);
+
+        if (clearLength <= 1024)
+            buffer.AsSpan(0, clearLength).Clear();
         else
-            if(buffer != null)
-                Array.Clear(buffer, 0, length);
+            Array.Clear(buffer, 0, clearLength);
     }
 
     /// <summary>

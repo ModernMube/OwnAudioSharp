@@ -42,7 +42,7 @@ namespace Ownaudio.Utilities
                 return false;
 
             // Reset current state
-            _audioData = null;
+            _audioData = null!;
             _zoomFactor = 1.0;
             _scrollOffset = 0.0;
             InvalidateVisual();
