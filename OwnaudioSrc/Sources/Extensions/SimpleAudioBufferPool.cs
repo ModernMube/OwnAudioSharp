@@ -144,12 +144,16 @@ namespace Ownaudio.Sources.Extensions
         /// - For larger buffers: Uses Array.Clear() which is more efficient for larger memory blocks
         /// This approach provides better performance across different buffer sizes.
         /// </remarks>
-        private static void FastClear(float[] buffer, int length)
+        private static void FastClear(float[]? buffer, int length)
         {
-            if (length <= 1024)
-                buffer.AsSpan(0, length).Clear(); // Span.Clear - optimalized
+            if (buffer == null) return;
+
+            int clearLength = Math.Min(buffer.Length, length);
+
+            if (clearLength <= 1024)
+                buffer.AsSpan(0, clearLength).Clear();
             else
-                Array.Clear(buffer, 0, buffer.Length); // Array.Clear - nagyobb buffer-eknél
+                Array.Clear(buffer, 0, clearLength);
         }
     }
 }

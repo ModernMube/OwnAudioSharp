@@ -238,7 +238,7 @@ public partial class Source : ISource
                 Thread.Sleep(2);
                 continue;
             }
-
+            
             if (_soundTouchBufferCount >= FixedBufferSize)
             {
                 SendDataEngineSimple(calculateTime);
@@ -257,16 +257,39 @@ public partial class Source : ISource
                             // SoundTouch requires float[] array, so we need to convert Span to array
                             // But we can reuse a pre-allocated buffer for this
                             EnsureSoundTouchInputBuffer(samples.Length);
-                            samples.CopyTo(_soundTouchInputBuffer.AsSpan(0, samples.Length));
+                            samples.SafeCopyTo(_soundTouchInputBuffer.AsSpan(0, samples.Length));
 
                             soundTouch.PutSamples(_soundTouchInputBuffer, samples.Length / soundTouch.Channels);
 
                             FastClear(_processedSamples, FixedBufferSize);
-                            numSamples = soundTouch.ReceiveSamples(_processedSamples, FixedBufferSize / soundTouch.Channels);
-
-                            if (numSamples > 0)
+                            
+                            int maxFrames = FixedBufferSize / soundTouch.Channels;
+                            int actualBufferSize = maxFrames * soundTouch.Channels;
+                        
+                            if (_processedSamples?.Length < actualBufferSize)
                             {
-                                AddToSoundTouchBuffer(_processedSamples.AsSpan(0, numSamples * soundTouch.Channels));
+                                _processedSamples = new float[actualBufferSize];
+                                _lastProcessedSize = actualBufferSize;
+                            }
+
+                            try
+                            {
+                               Span<float> outputSpan = _processedSamples.AsSpan(0, actualBufferSize);
+                                numSamples = soundTouch.ReceiveSamples(outputSpan, maxFrames);
+
+                                if (numSamples > 0)
+                                {
+                                    int actualSamples = numSamples * soundTouch.Channels;
+                                    AddToSoundTouchBuffer(_processedSamples.AsSpan(0, actualSamples));
+                                }
+                            }
+                            catch (ArgumentException ex)
+                            {
+                                Logger?.LogError($"SoundTouch ReceiveSamples error: {ex.Message}");
+                                Logger?.LogError($"Buffer size: {actualBufferSize}, Max frames: {maxFrames}, Channels: {soundTouch.Channels}");
+                            
+                                // Fallback: bypass SoundTouch
+                                AddToSoundTouchBuffer(samples);
                             }
                         }
                     }
@@ -372,6 +395,13 @@ public partial class Source : ISource
     /// <param name="samples">The audio samples to add to the buffer.</param>
     private void AddToSoundTouchBuffer(ReadOnlySpan<float> samples)
     {
+        int availableSpace = _soundTouchBufferCapacity - _soundTouchBufferCount;
+        if (samples.Length > availableSpace)
+        {
+            EnsureSoundTouchBuffers(); 
+            return;
+        }
+
         if (_soundTouchBufferCount + samples.Length > _soundTouchBufferCapacity)
         {
             int newCapacity = Math.Max(_soundTouchBufferCapacity * 2, _soundTouchBufferCount + samples.Length);
@@ -379,14 +409,14 @@ public partial class Source : ISource
 
             if (_soundTouchBufferCount > 0)
             {
-                _soundTouchBuffer.AsSpan(0, _soundTouchBufferCount).CopyTo(newBuffer);
+                _soundTouchBuffer.AsSpan(0, _soundTouchBufferCount).SafeCopyTo(newBuffer);
             }
 
             _soundTouchBuffer = newBuffer;
             _soundTouchBufferCapacity = newCapacity;
         }
 
-        samples.CopyTo(_soundTouchBuffer.AsSpan(_soundTouchBufferCount, samples.Length));
+        samples.SafeCopyTo(_soundTouchBuffer.AsSpan(_soundTouchBufferCount, samples.Length));
         _soundTouchBufferCount += samples.Length;
     }
 
@@ -418,17 +448,26 @@ public partial class Source : ISource
             try
             {
                 int sourceIndex = i * samplesSize;
-                _soundTouchBuffer.AsSpan(sourceIndex, samplesSize).CopyTo(samples.AsSpan(0, samplesSize));
 
-                ProcessSampleProcessors(samples.AsSpan(0, samplesSize));
-                SourceSampleData.Enqueue(samples);
+                if (sourceIndex + samplesSize <= _soundTouchBufferCount &&
+                    samplesSize <= samples.Length)
+                {
+                    _soundTouchBuffer.AsSpan(sourceIndex, samplesSize).SafeCopyTo(samples.AsSpan(0, samplesSize));
 
-                if (CurrentDecoder is not null)
-                    calculateTime += (samplesSize / (double)(CurrentDecoder.StreamInfo.SampleRate * CurrentDecoder.StreamInfo.Channels)) * 1000;
+                    ProcessSampleProcessors(samples.AsSpan(0, samplesSize));
+                    SourceSampleData.Enqueue(samples);
 
-                SetAndRaisePositionChanged(TimeSpan.FromMilliseconds(calculateTime));
+                    if (CurrentDecoder is not null)
+                        calculateTime += (samplesSize / (double)(CurrentDecoder.StreamInfo.SampleRate * CurrentDecoder.StreamInfo.Channels)) * 1000;
 
-                samples = null; // Will be managed by the pool or GC
+                    SetAndRaisePositionChanged(TimeSpan.FromMilliseconds(calculateTime));
+
+                    samples = null; // Will be managed by the pool or GC
+                }
+                else
+                {
+                    Logger?.LogWarning($"SoundTouch buffer underflow: {sourceIndex + samplesSize} > {_soundTouchBufferCount}");
+                }
             }
             finally
             {
@@ -444,7 +483,7 @@ public partial class Source : ISource
             if (remainingSamples > 0)
             {
                 _soundTouchBuffer.AsSpan(processedSamples, remainingSamples)
-                    .CopyTo(_soundTouchBuffer.AsSpan(0, remainingSamples));
+                    .SafeCopyTo(_soundTouchBuffer.AsSpan(0, remainingSamples));
             }
             _soundTouchBufferCount = remainingSamples;
         }
@@ -461,12 +500,16 @@ public partial class Source : ISource
     /// - For larger buffers: Uses Array.Clear() which is more efficient for larger memory blocks
     /// This approach provides better performance across different buffer sizes.
     /// </remarks>
-    private static void FastClear(float[] buffer, int length)
+    private static void FastClear(float[]? buffer, int length)
     {
-        if (length <= 1024)
-            buffer.AsSpan(0, length).Clear(); // Span.Clear - optimized for smaller buffers
+        if (buffer == null) return;
+
+        int clearLength = Math.Min(buffer.Length, length);
+
+        if (clearLength <= 1024)
+            buffer.AsSpan(0, clearLength).Clear();
         else
-            Array.Clear(buffer, 0, length); // Array.Clear - more efficient for larger buffers
+            Array.Clear(buffer, 0, clearLength);
     }
 
     /// <summary>
