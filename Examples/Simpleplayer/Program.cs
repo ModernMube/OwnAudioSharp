@@ -1,5 +1,7 @@
 ﻿using Ownaudio;
+using Ownaudio.Processors;
 using Ownaudio.Sources;
+using System.Diagnostics;
 
 namespace Simpleplayer
 {
@@ -13,7 +15,7 @@ namespace Simpleplayer
                 {
                     SourceManager manager = SourceManager.Instance;
 
-                    string audioFilePath = @"input/audio.mp3";
+                    string audioFilePath = @"path/audio.mp3";
 
                     // Check if file exists
                     if (!File.Exists(audioFilePath))

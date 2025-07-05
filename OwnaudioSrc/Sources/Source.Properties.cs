@@ -48,6 +48,11 @@ public partial class Source : ISource
     public SourceState State { get; protected set; }
 
     /// <summary>
+    /// Source name, which is used to identify the source.
+    /// </summary>
+    public string? Name { get; set; }
+
+    /// <summary>
     /// The source is being searched
     /// </summary>
     public bool IsSeeking { get; set; }

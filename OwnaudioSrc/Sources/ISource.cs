@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
-
+using MathNet.Numerics.Interpolation;
 using Ownaudio.Common;
 using Ownaudio.Processors;
 
@@ -58,6 +58,11 @@ public interface ISource : IDisposable
     /// This can be a positive or negative value.
     /// </summary>
     double Tempo { get; set; }
+
+    /// <summary>
+    /// Gets or sets the name associated with the source.
+    /// </summary>
+    string? Name { get; set; }
 
     /// <summary>
     /// Gets or sets custom sample processor.

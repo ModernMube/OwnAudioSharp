@@ -14,9 +14,10 @@ namespace Microphone
             {
                 SourceManager manager = SourceManager.Instance;
 
-                await manager.AddInputSource(inputVolume: 1.0f); //Input volume value 0.0f silence - 1.0f maximum
-                int inputNumber = manager.SourcesInput.Count - 1;
-                manager.SourcesInput[inputNumber].CustomSampleProcessor = new InputProcessor() { IsEnabled = true }; //Fx input
+                await manager.AddInputSource(inputVolume: 1.0f, "InputTrack"); //Input volume value 0.0f silence - 1.0f maximum
+
+                //input FX
+                manager["InputTrack"].CustomSampleProcessor = new InputProcessor() { IsEnabled = true };
 
                 //master FX
                 manager.CustomSampleProcessor = new MasterProcessor() { IsEnabled = true };
@@ -40,7 +41,6 @@ namespace Microphone
                 if (!OwnAudio.IsFFmpegInitialized || !OwnAudio.IsPortAudioInitialized)
                 {
                     Console.WriteLine("library initialization failed!");
-                    Console.WriteLine("Unpack the files in the LIB directory!");
                 }
             }
         }

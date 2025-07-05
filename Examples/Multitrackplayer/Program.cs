@@ -11,8 +11,11 @@ namespace Simpleplayer
             {
                 SourceManager manager = SourceManager.Instance;
 
-                await manager.AddOutputSource("path/track1audio.mp3");
-                await manager.AddOutputSource("path/track2audio.mp3");
+                await manager.AddOutputSource(@"path/audio1.mp3", "First");
+                await manager.AddOutputSource(@"path/audio2.mp3", "Last");
+
+                manager["First"].Volume = 0.85f;
+                manager["Last"].Volume = 0.35f;
 
                 manager.Play();
 
@@ -35,7 +38,6 @@ namespace Simpleplayer
                 if (!OwnAudio.IsFFmpegInitialized || !OwnAudio.IsPortAudioInitialized)
                 {
                     Console.WriteLine("library initialization failed!");
-                    Console.WriteLine("Unpack the files in the LIB directory!");
                 }
             }
         }

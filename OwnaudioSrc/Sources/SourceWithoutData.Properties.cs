@@ -53,6 +53,11 @@ public partial class SourceWithoutData : ISource
     public bool IsSeeking { get; set; }
 
     /// <summary>
+    /// Source name, which is used to identify the source.
+    /// </summary>
+    public string? Name { get; set; }
+
+    /// <summary>
     /// Adjusts and stores the volume of the source.
     /// </summary>
     public float Volume { get => VolumeProcessor.Volume; set => VolumeProcessor.Volume = value.VerifyVolume(); }

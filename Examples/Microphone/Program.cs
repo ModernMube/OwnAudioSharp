@@ -11,9 +11,9 @@ namespace Microphone
             {
                 SourceManager manager = SourceManager.Instance;
 
-                await manager.AddInputSource( inputVolume: 1.0f ); //Input volume value 0.0f silence - 1.0f maximum
-                int inputNumber = manager.SourcesInput.Count - 1;
-                manager.SourcesInput[inputNumber].Volume = 0.8f; //Input volume 80%
+                await manager.AddInputSource( inputVolume: 1.0f, "Input"); //Input volume value 0.0f silence - 1.0f maximum
+
+                manager["Input"].Volume = 0.8f; //Input volume 80%
 
                 manager.Play();
 

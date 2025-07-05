@@ -500,7 +500,7 @@ public partial class Source : ISource
     /// - For larger buffers: Uses Array.Clear() which is more efficient for larger memory blocks
     /// This approach provides better performance across different buffer sizes.
     /// </remarks>
-    private static void FastClear(float[]? buffer, int length)
+    private static void FastClear(float[] buffer, int length)
     {
         if (buffer == null) return;
 
