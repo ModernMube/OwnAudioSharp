@@ -12,7 +12,7 @@ namespace RealTimeData
             {
                 SourceManager manager = SourceManager.Instance;
 
-                SourceSound source = manager.AddRealTimeSource(initialVolume: 0.8f, dataChannels: 1);
+                SourceSound source = manager.AddRealTimeSource(initialVolume: 0.8f, dataChannels: 1, "RealtimeSource");
 
                 float[] samples = GetAudioSamples(100, 10000, SourceManager.OutputEngineOptions.SampleRate, 20); // Your method to obtain audio samples
 

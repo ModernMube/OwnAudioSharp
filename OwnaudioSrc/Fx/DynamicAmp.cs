@@ -52,7 +52,7 @@ namespace Ownaudio.Fx
         /// <summary>
         /// Circular buffer for RMS calculation over a longer window
         /// </summary>
-        private float[] rmsBuffer;
+        private float[]? rmsBuffer;
 
         /// <summary>
         /// Current index in the circular buffer
@@ -281,6 +281,7 @@ namespace Ownaudio.Fx
             }
             float bufferMeanSquare = bufferSumSquares / samples.Length;
 
+#nullable disable
             // Update circular buffer
             if (bufferFilled)
             {
@@ -289,6 +290,7 @@ namespace Ownaudio.Fx
 
             rmsBuffer[rmsBufferIndex] = bufferMeanSquare;
             windowSumSquares += bufferMeanSquare;
+#nullable restore
 
             rmsBufferIndex = (rmsBufferIndex + 1) % rmsWindowLength;
             if (rmsBufferIndex == 0)

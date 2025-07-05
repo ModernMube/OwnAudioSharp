@@ -98,6 +98,7 @@ namespace Ownaudio.Sources
         /// Adds a new output source from the specified URL or file path.
         /// </summary>
         /// <param name="url">The URL or file path of the audio source to add.</param>
+        /// <param name="name">Optional name for the source (default is "Output").</param>
         /// <returns>A task that represents the asynchronous operation. The task result indicates whether the source was successfully loaded.</returns>
         /// <exception cref="ArgumentNullException">Thrown when the URL parameter is null.</exception>
         /// <exception cref="OwnaudioException">Thrown when the playback thread is currently running.</exception>
@@ -109,13 +110,14 @@ namespace Ownaudio.Sources
         /// - Automatically adds an input source if the load is successful
         /// - Resets the position to zero and logs the operation
         /// </remarks>
-        public Task<bool> AddOutputSource(string url)
+        public Task<bool> AddOutputSource(string url, string? name = "Output")
         {
             Ensure.NotNull(url, nameof(url));
             Ensure.That<OwnaudioException>(State == SourceState.Idle, "Playback thread is currently running.");
 
             Source _source = new Source();
             _source.LoadAsync(url).Wait();
+            _source.Name = name ?? "Output";
             Sources.Add(_source);
 
             if (_source.Duration.TotalMilliseconds > Duration.TotalMilliseconds)
@@ -139,6 +141,7 @@ namespace Ownaudio.Sources
         /// <summary>
         /// Adds an empty output source without any audio content.
         /// </summary>
+        /// <param name="name">Optional name for the empty source (default is "WithoutData").</param>
         /// <returns>A task that represents the asynchronous operation. The task result indicates whether the empty source was successfully added.</returns>
         /// <exception cref="OwnaudioException">Thrown when the playback thread is currently running.</exception>
         /// <remarks>
@@ -146,11 +149,12 @@ namespace Ownaudio.Sources
         /// when no actual audio file is needed. It updates the duration and sets the loaded state to true.
         /// This is useful for scenarios where only input sources or real-time sources are being used.
         /// </remarks>
-        public Task<bool> AddEmptyOutputSource()
+        public Task<bool> AddEmptyOutputSource(string? name = "WithoutData")
         {
             Ensure.That<OwnaudioException>(State == SourceState.Idle, "Playback thread is currently running.");
 
             SourceWithoutData _sourceWithoutData = new SourceWithoutData();
+            _sourceWithoutData.Name = name ?? "WithoutData";
             Sources.Add(_sourceWithoutData);
 
             if(Duration.TotalMilliseconds < _sourceWithoutData.Duration.TotalMilliseconds)
@@ -167,6 +171,7 @@ namespace Ownaudio.Sources
         /// Adds an input source for recording or real-time audio input.
         /// </summary>
         /// <param name="inputVolume">The initial volume level for the input source (default: 0.0f).</param>
+        /// <param name="name">Optional name for the input source (default: "Input").</param>
         /// <returns>A task that represents the asynchronous operation. The task result indicates whether the input source was successfully added.</returns>
         /// <remarks>
         /// This method creates an input source only if:
@@ -176,13 +181,14 @@ namespace Ownaudio.Sources
         /// If an input source already exists, this method updates the volume of the most recently added input source.
         /// The method sets the IsRecorded flag to true when a valid input source is created.
         /// </remarks>
-        public Task<bool> AddInputSource(float inputVolume = 0f)
+        public Task<bool> AddInputSource(float inputVolume = 0f, string? name = "Input")
         {
             if(!IsRecorded)
             {
                 if(InputEngineOptions.Device.MaxInputChannels > 0)
                 {
                     SourceInput _inputSource = new SourceInput(InputEngineOptions);
+                    _inputSource.Name = name ?? "Input";
                     SourcesInput.Add(_inputSource);
                     if (_inputSource is not null)
                     {
@@ -204,6 +210,7 @@ namespace Ownaudio.Sources
         /// </summary>
         /// <param name="initialVolume">The initial volume level for the source (default: 1.0f).</param>
         /// <param name="dataChannels">The number of audio channels for the input data (default: 2 for stereo).</param>
+        /// <param name="name">Optional name for the source (default: "Realtime").</param>
         /// <returns>The created <see cref="SourceSound"/> instance that can be used to feed real-time audio data.</returns>
         /// <remarks>
         /// This method creates a real-time audio source that can accept live audio samples.
@@ -217,12 +224,13 @@ namespace Ownaudio.Sources
         /// Real-time sources are useful for applications that need to inject live audio data
         /// into the mix, such as synthesizers, live audio effects, or streaming applications.
         /// </remarks>
-        public SourceSound AddRealTimeSource(float initialVolume = 1.0f, int dataChannels = 2)
+        public SourceSound AddRealTimeSource(float initialVolume = 1.0f, int dataChannels = 2, string? name = "Realtime")
         {
             var source = new SourceSound(dataChannels)
             {
                 Volume = initialVolume,
-                Logger = Logger
+                Logger = Logger,
+                Name = name ?? "Realtime"
             };
 
             Sources.Add(source);
@@ -320,6 +328,31 @@ namespace Ownaudio.Sources
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Retrieves the <see cref="ISource"/> instance with the given name by name.
+        /// </summary>
+        /// <param name="name">The name of the source to retrieve. Cannot be null or empty.</param>
+        /// <returns></returns>
+        public ISource this[string name]
+        {
+            get
+            {
+                return Sources.FirstOrDefault(s => s.Name?.Equals(name, StringComparison.OrdinalIgnoreCase) == true)
+                    ?? throw new ArgumentException($"Source with name '{name}' not found.", nameof(name));
+
+            }
+        }
+
+        /// <summary>
+        /// Retrieves the index of the first source in the collection whose name matches the specified value.
+        /// </summary>
+        /// <param name="name">The name of the source to search for. The comparison is case-insensitive.</param>
+        /// <returns>The zero-based index of the first matching source, or -1 if no source with the specified name is found.</returns>
+        public int GetSourceIndex(string name)
+        {
+            return Sources.FindIndex(s => s.Name?.Equals(name, StringComparison.OrdinalIgnoreCase) == true);
         }
 
         /// <summary>

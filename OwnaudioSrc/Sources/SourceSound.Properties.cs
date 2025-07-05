@@ -42,6 +42,11 @@ namespace Ownaudio.Sources
         public bool IsSeeking { get; set; }
 
         /// <summary>
+        /// Source name, which is used to identify the source.
+        /// </summary>
+        public string? Name { get; set; }
+
+        /// <summary>
         /// Gets or sets the playback volume multiplier. Validated between 0.0 and 1.0.
         /// </summary>
         public float Volume

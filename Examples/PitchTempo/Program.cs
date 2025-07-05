@@ -11,9 +11,9 @@ namespace Simpleplayer
             {
                 SourceManager manager = SourceManager.Instance;
 
-                await manager.AddOutputSource("/path/audio1.mp3");
+                await manager.AddOutputSource("/path/audio1.mp3", "Track1");
                 int track1Number = manager.Sources.Count - 1;
-                await manager.AddOutputSource("/path/audio2.mp3");
+                await manager.AddOutputSource("/path/audio2.mp3", "Track2");
                 int track2Number = manager.Sources.Count - 1;
 
                 manager.Play();
@@ -23,11 +23,11 @@ namespace Simpleplayer
                 Console.WriteLine("Default output device: " + OwnAudio.DefaultOutputDevice.Name);
 
                 Console.WriteLine("Audio pitch -2 semitone, and tempo 4%");
-                manager.SetPitch(track1Number, -2);
-                manager.SetPitch(track2Number, 1);
+                manager["Track1"].Pitch = -2;
+                manager["Track1"].Tempo = 4;
 
-                manager.SetTempo(track1Number, 4);
-                manager.SetTempo(track2Number, 4);
+                manager["Track2"].Pitch = 1;
+                manager["Track2"].Tempo = 4;
 
                 Console.WriteLine("Press any key to stop playback...");
                 Console.Read();

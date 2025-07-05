@@ -13,7 +13,7 @@ namespace Ownaudio.Utilities
     /// </summary>
     public partial class WaveAvaloniaDisplay : Avalonia.Controls.Control
     {
-        private float[] _audioData;
+        private float[]? _audioData;
 
         // Using ArrayPool for more efficient memory usage
         private readonly ArrayPool<Point> _pointPool = ArrayPool<Point>.Shared;
@@ -366,6 +366,8 @@ namespace Ownaudio.Utilities
             }
         }
 
+
+#nullable disable
         /// <summary>
         /// Renders the waveform using the MinMax display style.
         /// </summary>
@@ -495,6 +497,7 @@ namespace Ownaudio.Utilities
                 _pointCache[_pointCacheSize++] = new Point(x, centerY - rms * vScale);
             }
         }
+#nullable restore
 
         private bool _isDraggingPlayhead = false;
 
