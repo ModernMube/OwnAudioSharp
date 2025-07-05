@@ -31,6 +31,13 @@ OwnAudio is a cross-platform C# audio library that provides a high-level API for
 - **Audio data visualization** customizable waveform display
 - **Built-in audio effects** (Reverb, Delay, Distortion, Equalizer, Compressor, etc.)
 
+## 🚧 Work in Progress
+- [ ] Extracting musical sounds from the audio source.
+- [ ] Recognizing chords
+
+## Upcoming Features
+- Developing and testing mobile application support
+
 ## Sample Application
 
 Check out the sample application [OwnAudioSharpDemo](https://github.com/ModernMube/OwnAudioSharpDemo) that demonstrates the capabilities of the OwnAudioSharp audio library through an Avalonia MVVM application using ReactiveUI. MainWindowViewModel.cs contains the core logic for audio processing, playback, effects application, and UI control.
