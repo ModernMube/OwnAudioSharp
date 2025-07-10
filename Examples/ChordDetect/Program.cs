@@ -1,4 +1,7 @@
-﻿using Ownaudio;
+// **********************************************************************
+// FEATURE UNDER DEVELOPMENT. THIS CODE IS CURRENTLY THROWING AN ERROR!!!
+// **********************************************************************
+using Ownaudio;
 using Ownaudio.Fx;
 using Ownaudio.Sources;
 using System.Diagnostics;
@@ -15,7 +18,7 @@ namespace ChordDetect
                 {
                     SourceManager manager = SourceManager.Instance;
 
-                    string audioFilePath = @"D:\Sogorock\Ocam\2025\Szepjulia\Szép Júlia - Beszkid József (cover)_audio.flac";
+                    string audioFilePath = @"path/to/audio.mp3";
 
                     if (!File.Exists(audioFilePath))
                     {
@@ -37,16 +40,16 @@ namespace ChordDetect
 
                     var chordDetector = new RealtimeChordDetector(
                         sampleRate: SourceManager.OutputEngineOptions.SampleRate,
-                        bufferDurationMs: 500,    // 2 másodperc elemzési puffer
-                        detectionIntervalMs: 100,  // 500ms-ként új detektálás
-                        minConfidence: 0.6f        // 60% minimum megbízhatóság
+                        bufferDurationMs: 500,    
+                        detectionIntervalMs: 100,  
+                        minConfidence: 0.6f        
                     );
 
                     // Event feliratkozás
                     chordDetector.ChordDetected += (chord) =>
                     {
-                        Debug.WriteLine($"Akkord: {chord.ChordName} ({chord.Confidence:P1})");
-                        Debug.WriteLine($"Hangok: {string.Join(", ", chord.Notes)}");
+                        Debug.WriteLine($"Chord: {chord.ChordName} ({chord.Confidence:P1})");
+                        Debug.WriteLine($"Notes: {string.Join(", ", chord.Notes)}");
                     };
 
                     manager.CustomSampleProcessor = chordDetector;
