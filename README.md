@@ -445,7 +445,7 @@ float[] audioFloat = sourceManager.Sources[0].GetFloatAudioData(TimeSpan.Zero);
 ```
 # Chord Detection
 
-Real-time and offline chord detection from musical notes.
+Real-time or offline chord detection from musical notes.
 
 ## Core Components
 
