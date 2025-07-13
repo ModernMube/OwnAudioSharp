@@ -121,16 +121,16 @@ public partial class Source : ISource
     /// Gets queue object that holds queued audio frames.
     /// </summary>
     public ConcurrentQueue<float[]> SourceSampleData { get; }
-    
-    /// <summary>
-    /// Gets or sets current <see cref="IAudioDecoder"/> instance.
-    /// </summary>
-    protected IAudioDecoder? CurrentDecoder { get; set; }
 
     /// <summary>
     /// Gets or sets current specified audio URL.
     /// </summary>
-    protected string? CurrentUrl { get; set; }
+    public string? CurrentUrl { get; private set; }
+
+    /// <summary>
+    /// Gets or sets current <see cref="IAudioDecoder"/> instance.
+    /// </summary>
+    protected IAudioDecoder? CurrentDecoder { get; set; }
 
     /// <summary>
     /// Gets or sets current specified audio stream.

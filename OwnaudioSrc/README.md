@@ -60,8 +60,8 @@ The table below summarizes the supported operating systems, the APIs used, and t
 | Windows    | PortAudio 2, MiniAudio, FFmpeg 6 | Tested       |
 | Linux      | PortAudio 2, MiniAudio, FFmpeg 6 | Tested       |
 | macOS      | PortAudio 2, MiniAudio, FFmpeg 6 | Tested       |
-| Android    | MiniAudio                      | This project is tested with BrowserStack   |
-| iOS        | MiniAudio                      | This project is tested with BrowserStack   |
+| Android    | MiniAudio                      | This project is tested with BrowserStack  |
+| iOS        | MiniAudio                      | This project is tested with BrowserStack  |
 
 The library will attempt to find these dependencies in standard system locations but also supports specifying custom paths.
 
@@ -420,6 +420,64 @@ byte[] audioByte = sourceManager.Sources[0].GetByteAudioData(TimeSpan.Zero);
 // Load source audio data into a float array
 float[] audioFloat = sourceManager.Sources[0].GetFloatAudioData(TimeSpan.Zero);
 ```
+# Chord Detection
+
+Real-time and offline chord detection from musical notes.
+
+## Core Components
+
+### Detectors
+- **BaseChordDetector** - Basic chord detection with major, minor, and 7th chords
+- **ExtendedChordDetector** - Adds suspended, diminished, augmented, and add9 chords
+- **OptimizedChordDetector** - Advanced detection with ambiguity handling and alternatives
+- **RealTimeChordDetector** - Continuous analysis with stability filtering
+
+### Analysis
+- **SongChordAnalyzer** - Full song analysis with timed chord progressions
+- **ChordAnalysis** - Detailed analysis results with confidence scores and explanations
+
+## Quick Start
+
+```csharp
+// Basic chord detection
+var detector = new BaseChordDetector(confidenceThreshold: 0.7f);
+var analysis = detector.AnalyzeChord(notes);
+Console.WriteLine($"Detected: {analysis.ChordName} (confidence: {analysis.Confidence})");
+
+// Extended chord detection with alternatives
+var extendedDetector = new OptimizedChordDetector();
+var (chord, confidence, isAmbiguous, alternatives) = extendedDetector.DetectChordAdvanced(notes);
+
+// Real-time analysis
+var realtimeDetector = new RealTimeChordDetector(bufferSize: 5);
+var (stableChord, stability) = realtimeDetector.ProcessNotes(newNotes);
+
+// Full song analysis
+var songAnalyzer = new SongChordAnalyzer(windowSize: 1.0f, hopSize: 0.5f);
+var timedChords = songAnalyzer.AnalyzeSong(allSongNotes);
+```
+
+## Input Format
+
+The library expects `Note` objects with:
+- `Pitch` - MIDI pitch number
+- `Amplitude` - Note volume (0.0-1.0)
+- `StartTime` / `EndTime` - Timing in seconds
+
+## Key Features
+
+- **Template Matching** - Uses chromagram analysis and cosine similarity
+- **Ambiguity Detection** - Identifies uncertain chord matches
+- **Temporal Stability** - Real-time filtering for consistent results
+- **Extensible Templates** - Add custom chord definitions
+- **Song-level Analysis** - Extract complete chord progressions with timing
+
+## Confidence Thresholds
+
+- **0.9+** - Very confident detection
+- **0.7+** - Likely correct
+- **0.5+** - Possible but uncertain
+- **Below 0.5** - Marked as "Unknown"
 
 ## WaveAvaloniaDisplay - Audio Visualization
 

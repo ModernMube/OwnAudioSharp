@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Ownaudio.Sources;
 
-public unsafe partial class SourceManager
+public partial class SourceManager
 {
     /// <summary>
     /// Pre-allocated buffer for audio mixing operations to avoid frequent memory allocations.

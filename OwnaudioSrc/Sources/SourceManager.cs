@@ -1,16 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-
+﻿using Melanchall.DryWetMidi.MusicTheory;
+using Ownaudio.Decoders.FFmpeg;
 using Ownaudio.Exceptions;
 using Ownaudio.Processors;
 using Ownaudio.Utilities;
 using Ownaudio.Utilities.Extensions;
+using Ownaudio.Utilities.OwnChordDetect.Analysis;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
-using Ownaudio.Decoders.FFmpeg;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Ownaudio.Sources
 {
@@ -353,6 +354,67 @@ namespace Ownaudio.Sources
         public int GetSourceIndex(string name)
         {
             return Sources.FindIndex(s => s.Name?.Equals(name, StringComparison.OrdinalIgnoreCase) == true);
+        }
+
+        /// <summary>
+        /// Detects musical chords based on the specified audio source. 
+        /// It also records the timing associated with the chord.
+        /// </summary>
+        /// <param name="sourceName"></param>
+        /// <param name="intervalSecond"> The time interval in seconds for chord detection (default is 1.0 second)</param>
+        /// <returns></returns>
+        public List<TimedChord> DetectChords(
+            string sourceName,
+            float intervalSecond = 1.0f)
+        {
+
+            TimeSpan _pos = this[sourceName].Position;
+
+            if (!File.Exists(this[sourceName].CurrentUrl))
+                throw new OwnaudioException("Source is not loaded.");
+
+            if (this[sourceName].State != SourceState.Idle)
+                throw new OwnaudioException("Source is not in idle state. Cannot detect chords while playing or buffering.");
+
+            var audioReader = new AudioReader(this[sourceName].CurrentUrl);
+            var _waveBuffer = audioReader.ReadAll();
+
+            using var model = new Model();
+            var modelOutput = model.Predict(_waveBuffer, progress =>
+            {
+                /* Handle progress updates if needed */
+                Console.Write($"\rRecognizing musical notes: {progress:P1}");
+            });
+
+            var convertOptions = new NotesConvertOptions
+            {
+                OnsetThreshold = 0.5f,      // Sound onset sensitivity
+                FrameThreshold = 0.2f,      // Sound detection threshold
+                MinNoteLength = 15,         // Minimum sound length (ms)
+                MinFreq = 90f,              // Min frequency (Hz)
+                MaxFreq = 2800f,            // Max frequency (Hz)
+                IncludePitchBends = false,   // Pitch bend detection
+                MelodiaTrick = true      // Harmonic detection
+            };
+
+            var converter = new NotesConverter(modelOutput);
+            List<Utilities.Extensions.Note> rawNotes = converter.Convert(convertOptions);
+
+            string outputPath = "output.mid";
+            MidiWriter.GenerateMidiFile(rawNotes, outputPath, 120);
+
+            var analyzer = new SongChordAnalyzer(
+                    windowSize: 1.0f,        // 1 second windows
+                    hopSize: 0.25f,           // 0.25 steps per second
+                    minimumChordDuration: 1.0f, // Min 1.0 second chord
+                    confidence: 0.82f       // Minimum 82% reliability
+                );
+
+            var chords = analyzer.AnalyzeSong(rawNotes);
+
+            this[sourceName].Seek(_pos);
+            return chords;
+
         }
 
         /// <summary>
