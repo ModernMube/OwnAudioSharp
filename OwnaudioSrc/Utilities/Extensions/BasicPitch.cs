@@ -1644,19 +1644,43 @@ public class ModelOutput
 }
 
 /// <summary>
-/// Audio data storage
+/// Represents a buffer for storing wave data as floating-point values.
 /// </summary>
 public class WaveBuffer
 {
+    /// <summary>
+    /// Gets or sets the number of elements in the float buffer.
+    /// </summary>
     public int FloatBufferCount { get; set; }
+
+    /// <summary>
+    /// Gets or sets the array of floating-point values representing the wave data.
+    /// </summary>
     public float[]? FloatBuffer { get; set; }
 
+    /// <summary>
+    /// Initializes a new instance of the WaveBuffer class.
+    /// </summary>
     public WaveBuffer() { }
 
+    /// <summary>
+    /// Initializes a new instance of the WaveBuffer class with the specified float array.
+    /// </summary>
+    /// <param name="_buffer">The float array to initialize the buffer with.</param>
     public WaveBuffer(float[] _buffer)
     {
         FloatBuffer = _buffer;
         FloatBufferCount = _buffer.Length;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the WaveBuffer class with the specified span of floats.
+    /// </summary>
+    /// <param name="_buffer">The span of floats to initialize the buffer with.</param>
+    public WaveBuffer(Span<float> _buffer)
+    {
+        FloatBufferCount = _buffer.Length;
+        FloatBuffer = _buffer.ToArray();
     }
 }
 #endregion
