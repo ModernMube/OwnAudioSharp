@@ -30,6 +30,7 @@ OwnAudio is a cross-platform C# audio library that provides a high-level API for
 - **Real-time audio processing** with custom sample processors
 - **Audio data visualization** customizable waveform display
 - **Built-in audio effects** (Reverb, Delay, Distortion, Equalizer, Compressor, etc.)
+- **Detecting musical chords from audio data** Real-time or offline chord detection from musical notes
 
 ## 🚧 Work in Progress
 - [x] Extracting musical sounds from the audio source.
