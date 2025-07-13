@@ -17,7 +17,7 @@ namespace Ownaudio.Utilities.Extensions;
 /// <summary>
 /// Provides audio file reading and resampling functionality for BasicPitch audio processing.
 /// </summary>
-public class PitchReader : IDisposable
+public class AudioReader : IDisposable
 {
     private readonly SourceManager? _manager;
     private readonly string? _audioFilePath;
@@ -31,7 +31,7 @@ public class PitchReader : IDisposable
     /// Initializes a new instance of the AudioReader class.
     /// </summary>
     /// <param name="pathAudio">Path to the audio file to read.</param>
-    public PitchReader(string pathAudio)
+    public AudioReader(string pathAudio)
     {
         if (OwnAudio.Initialize() && File.Exists(pathAudio))
         {
@@ -59,10 +59,10 @@ public class PitchReader : IDisposable
     {
         if (_manager is not null && _audioFilePath is not null)
         {
-            if (_manager.AddOutputSource(_audioFilePath).Result)
+            if (_manager.AddOutputSource(_audioFilePath, "PitchSource").Result)
             {
-                WaveBuffer _waveBuffer = new WaveBuffer(_manager.Sources.Last().GetFloatAudioData(new TimeSpan(0)));
-                AudioDuration = _manager.Sources.Last().Duration;
+                WaveBuffer _waveBuffer = new WaveBuffer(_manager["PitchSource"].GetFloatAudioData(new TimeSpan(0)));
+                AudioDuration = _manager["PitchSource"].Duration;
                 return _waveBuffer;
             }
         }
@@ -705,14 +705,8 @@ public sealed class Note : IComparable<Note>
 
 #region MIDI Generation
 
-/// <summary>
-/// MidiWriter is responsible for generating MIDI files from detected notes.
-/// </summary>
 public static class MidiWriter
 {
-    /// <summary>
-    /// Detected tempo in beats per minute (BPM).
-    /// </summary>
     public static int DetectedTempo = 120;
 
     /// <summary>
@@ -734,7 +728,6 @@ public static class MidiWriter
     /// </summary>
     /// <param name="notes">List of detected notes</param>
     /// <param name="outputPath">Path for the output MIDI file</param>
-    /// <param name="bpm">Beats per minute (default is 120)</param>
     public static void GenerateMidiFile(List<Note> notes, string outputPath, int bpm = 120)
     {
         if (notes.Count > 10)
@@ -1308,16 +1301,29 @@ public class NotesHelper
     /// </summary>
     /// <param name="n">Frame index.</param>
     /// <returns>Time in seconds.</returns>
+    //public static float ModelFrameToTime(int n)
+    //{
+    //    if (n < 1) return 0f;
+
+    //    var oriTime = (n * Constants.FFT_HOP) / (float)Constants.AUDIO_SAMPLE_RATE;
+    //    var windowOffset = (float)Constants.FFT_HOP / (float)Constants.AUDIO_SAMPLE_RATE
+    //        * ((float)Constants.ANNOT_N_FRAMES - (float)Constants.AUDIO_N_SAMPLES / (float)Constants.FFT_HOP)
+    //        + 0.0018f;
+    //    var v = (float)Math.Floor(n / (float)Constants.ANNOT_N_FRAMES) * windowOffset;
+    //    return oriTime - v;
+    //}
+
+    /// <summary>
+    /// Converts model frame index to time in seconds.
+    /// </summary>
+    /// <param name="n">Frame index.</param>
+    /// <returns>Time in seconds.</returns>
     public static float ModelFrameToTime(int n)
     {
         if (n < 1) return 0f;
 
-        var oriTime = (n * Constants.FFT_HOP) / (float)Constants.AUDIO_SAMPLE_RATE;
-        var windowOffset = (float)Constants.FFT_HOP / (float)Constants.AUDIO_SAMPLE_RATE
-            * ((float)Constants.ANNOT_N_FRAMES - (float)Constants.AUDIO_N_SAMPLES / (float)Constants.FFT_HOP)
-            + 0.0018f;
-        var v = (float)Math.Floor(n / (float)Constants.ANNOT_N_FRAMES) * windowOffset;
-        return oriTime - v;
+        // Egyszerű, lineáris konverzió
+        return (n * Constants.FFT_HOP) / (float)Constants.AUDIO_SAMPLE_RATE;
     }
 
     /// <summary>
@@ -1642,25 +1648,11 @@ public class ModelOutput
 /// </summary>
 public class WaveBuffer
 {
-    /// <summary>
-    /// Buffer count for float data.
-    /// </summary>
     public int FloatBufferCount { get; set; }
-
-    /// <summary>
-    /// Buffer containing audio data as float samples.
-    /// </summary>
     public float[]? FloatBuffer { get; set; }
 
-    /// <summary>
-    /// wave buffer constructor.
-    /// </summary>
     public WaveBuffer() { }
 
-    /// <summary>
-    /// wave buffer constructor with float array.
-    /// </summary>
-    /// <param name="_buffer"></param>
     public WaveBuffer(float[] _buffer)
     {
         FloatBuffer = _buffer;

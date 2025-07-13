@@ -15,7 +15,7 @@ namespace Simpleplayer
                 {
                     SourceManager manager = SourceManager.Instance;
 
-                    string audioFilePath = @"path/audio.mp3";
+                    string audioFilePath = @"\path\to\audio.mp3";
 
                     // Check if file exists
                     if (!File.Exists(audioFilePath))
@@ -24,7 +24,7 @@ namespace Simpleplayer
                         return;
                     }
 
-                    bool loaded = await manager.AddOutputSource(audioFilePath);
+                    bool loaded = await manager.AddOutputSource(audioFilePath, "outputSource");
 
                     if (!loaded)
                     {

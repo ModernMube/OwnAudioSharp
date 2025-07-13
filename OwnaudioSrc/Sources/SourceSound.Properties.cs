@@ -81,6 +81,11 @@ namespace Ownaudio.Sources
         public ConcurrentQueue<float[]> SourceSampleData { get; } = new();
 
         /// <summary>
+        /// Gets or sets the current URL of the source sound.
+        /// </summary>
+        public string? CurrentUrl { get; private set; }
+
+        /// <summary>
         /// Number of channels in the incoming audio (1 = mono, 2 = stereo)
         /// </summary>
         public int InputDataChannels { get; }

@@ -91,6 +91,11 @@ public interface ISource : IDisposable
     void ChangeState(SourceState state);
 
     /// <summary>
+    /// Gets or sets current specified audio URL.
+    /// </summary>
+    string? CurrentUrl { get; }
+
+    /// <summary>
     /// Returns the contents of the audio file loaded into the source in a byte array.
     /// </summary>
     /// <returns></returns>

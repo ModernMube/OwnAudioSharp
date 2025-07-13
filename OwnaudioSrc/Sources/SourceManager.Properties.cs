@@ -9,7 +9,7 @@ using Ownaudio.Utilities.Extensions;
 
 namespace Ownaudio.Sources;
 
-public unsafe partial class SourceManager
+public partial class SourceManager
 {
    /// <summary>
     /// Status change event

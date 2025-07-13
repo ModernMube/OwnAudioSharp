@@ -43,8 +43,8 @@ namespace Ownaudio.Utilities
 
             // Reset current state
             _audioData = null!;
-            _zoomFactor = 1.0;
-            _scrollOffset = 0.0;
+            ZoomFactor = 1.0;
+            ScrollOffset = 0.0;
             InvalidateVisual();
 
             // Try decoders in preferred order
@@ -295,8 +295,8 @@ namespace Ownaudio.Utilities
 
             // Reset current state
             _audioData = null;
-            _zoomFactor = 1.0;
-            _scrollOffset = 0.0;
+            ZoomFactor = 1.0;
+            ScrollOffset = 0.0;
             InvalidateVisual();
 
             // Try decoders in preferred order

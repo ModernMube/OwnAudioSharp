@@ -66,6 +66,11 @@ public partial class SourceInput : ISource
     public ILogger? Logger { get; set; }
 
     /// <summary>
+    /// Gets or sets the current URL of the source input.
+    /// </summary>
+    public string? CurrentUrl { get; private set; }
+
+    /// <summary>
     /// Gets queue object that holds queued audio frames.
     /// </summary>
     public ConcurrentQueue<float[]> SourceSampleData { get; }
