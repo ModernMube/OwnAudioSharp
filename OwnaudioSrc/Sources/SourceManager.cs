@@ -1,6 +1,9 @@
 ﻿using Melanchall.DryWetMidi.MusicTheory;
+using Ownaudio.Decoders;
 using Ownaudio.Decoders.FFmpeg;
+using Ownaudio.Decoders.MiniAudio;
 using Ownaudio.Exceptions;
+using Ownaudio.MiniAudio;
 using Ownaudio.Processors;
 using Ownaudio.Utilities;
 using Ownaudio.Utilities.Extensions;
@@ -10,6 +13,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -376,8 +380,11 @@ namespace Ownaudio.Sources
             if (this[sourceName].State != SourceState.Idle)
                 throw new OwnaudioException("Source is not in idle state. Cannot detect chords while playing or buffering.");
 
-            var audioReader = new AudioReader(this[sourceName].CurrentUrl);
-            var _waveBuffer = audioReader.ReadAll();
+            
+            FFmpegDecoderOptions _decoderOptions = new FFmpegDecoderOptions(1, 22050);
+            MiniDecoder _miniDecoder = new MiniDecoder(this[sourceName].CurrentUrl, _decoderOptions);
+            var _result = _miniDecoder.DecodeAllFrames(new TimeSpan(0));
+            var _waveBuffer = new WaveBuffer(MemoryMarshal.Cast<byte, float>(_result.Frame.Data));
 
             using var model = new Model();
             var modelOutput = model.Predict(_waveBuffer, progress =>
@@ -386,6 +393,7 @@ namespace Ownaudio.Sources
                 Console.Write($"\rRecognizing musical notes: {progress:P1}");
             });
 
+            //Fine-tuning musical note recognition
             var convertOptions = new NotesConvertOptions
             {
                 OnsetThreshold = 0.5f,      // Sound onset sensitivity
@@ -403,18 +411,19 @@ namespace Ownaudio.Sources
             string outputPath = "output.mid";
             MidiWriter.GenerateMidiFile(rawNotes, outputPath, 120);
 
+            //Fine - tuning musical chord recognition
             var analyzer = new SongChordAnalyzer(
                     windowSize: 1.0f,        // 1 second windows
                     hopSize: 0.25f,           // 0.25 steps per second
                     minimumChordDuration: 1.0f, // Min 1.0 second chord
-                    confidence: 0.82f       // Minimum 82% reliability
+                    confidence: 0.90f       // Minimum 90% reliability
                 );
 
             var chords = analyzer.AnalyzeSong(rawNotes);
 
             this[sourceName].Seek(_pos);
+            _miniDecoder.Dispose();
             return chords;
-
         }
 
         /// <summary>
