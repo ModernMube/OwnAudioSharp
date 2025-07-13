@@ -38,7 +38,8 @@ namespace ChordDetect
                     var chords = manager.DetectChords("CHORDSOURCE");
                     foreach (var chord in chords)
                     {
-                        Console.WriteLine($"Start time: {chord.StartTime}s     Chord name: {chord.ChordName}     Confidence: {chord.Confidence * 100}%");
+                        if(chord.ChordName.Trim() != "Unknown")
+                            Console.WriteLine($"Start time: {chord.StartTime}s     Chord: {chord.ChordName}     Confidence: {chord.Confidence * 100}%");
                     }
 
                     manager.Play();
