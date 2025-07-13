@@ -60,8 +60,8 @@ The table below summarizes the supported operating systems, the APIs used, and t
 | Windows    | PortAudio 2, MiniAudio, FFmpeg 6 | Tested       |
 | Linux      | PortAudio 2, MiniAudio, FFmpeg 6 | Tested       |
 | macOS      | PortAudio 2, MiniAudio, FFmpeg 6 | Tested       |
-| Android    | MiniAudio                      | This project is tested with BrowserStack  |
-| iOS        | MiniAudio                      | This project is tested with BrowserStack  |
+| Android    | MiniAudio                      | This project is tested with BrowserStack   |
+| iOS        | MiniAudio                      | This project is tested with BrowserStack   |
 
 The library will attempt to find these dependencies in standard system locations but also supports specifying custom paths.
 

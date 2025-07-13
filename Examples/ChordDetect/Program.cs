@@ -1,4 +1,7 @@
-﻿using Ownaudio;
+// **********************************************************************
+// FEATURE UNDER DEVELOPMENT. THIS CODE IS CURRENTLY THROWING AN ERROR!!!
+// **********************************************************************
+using Ownaudio;
 using Ownaudio.Fx;
 using Ownaudio.Sources;
 using System.Diagnostics;
@@ -15,7 +18,7 @@ namespace ChordDetect
                 {
                     SourceManager manager = SourceManager.Instance;
 
-                    string audioFilePath = @"path\to\audio.mp3";
+                    string audioFilePath = @"D:\Sogorock\Ocam\2025\Szepjulia\Szép Júlia - Beszkid József (cover)_audio.flac";
 
                     if (!File.Exists(audioFilePath))
                     {
@@ -35,14 +38,22 @@ namespace ChordDetect
                     Console.WriteLine($"Duration: {manager.Duration}");
                     Console.WriteLine($"Sources: {manager.Sources.Count}");
 
-                    // Detect chords in the audio source
-                    var chords = manager.DetectChords("CHORDSOURCE");
-                    Console.WriteLine("Detected chords:");
-                    foreach (var chord in chords)
+                    var chordDetector = new RealtimeChordDetector(
+                        sampleRate: SourceManager.OutputEngineOptions.SampleRate,
+                        bufferDurationMs: 500,    // 2 másodperc elemzési puffer
+                        detectionIntervalMs: 100,  // 500ms-ként új detektálás
+                        minConfidence: 0.6f        // 60% minimum megbízhatóság
+                    );
+
+                    // Event feliratkozás
+                    chordDetector.ChordDetected += (chord) =>
                     {
-                        if (chord.ChordName.Trim() != "Unknown")
-                            Console.WriteLine($"Start: {chord.StartTime}s     Chord: {chord.ChordName}     Confidence: {(chord.Confidence * 100)}%");
-                    }
+                        Debug.WriteLine($"Akkord: {chord.ChordName} ({chord.Confidence:P1})");
+                        Debug.WriteLine($"Hangok: {string.Join(", ", chord.Notes)}");
+                    };
+
+                    manager.CustomSampleProcessor = chordDetector;
+                    chordDetector.IsEnabled = true;
 
                     manager.Play();
                     Console.WriteLine("Play() called successfully");
