@@ -8,6 +8,7 @@ using Ownaudio.Processors;
 using Ownaudio.Utilities;
 using Ownaudio.Utilities.Extensions;
 using Ownaudio.Utilities.OwnChordDetect.Analysis;
+using Ownaudio.Utilities.OwnChordDetect.Core;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -367,7 +368,7 @@ namespace Ownaudio.Sources
         /// <param name="sourceName"></param>
         /// <param name="intervalSecond"> The time interval in seconds for chord detection (default is 1.0 second)</param>
         /// <returns></returns>
-        public List<TimedChord> DetectChords(
+        public (List<TimedChord>, MusicalKey, int) DetectChords(
             string sourceName,
             float intervalSecond = 1.0f)
         {
@@ -392,6 +393,7 @@ namespace Ownaudio.Sources
                 /* Handle progress updates if needed */
                 Console.Write($"\rRecognizing musical notes: {progress:P1}");
             });
+            Console.WriteLine(" ");
 
             //Fine-tuning musical note recognition
             var convertOptions = new NotesConvertOptions
@@ -408,22 +410,22 @@ namespace Ownaudio.Sources
             var converter = new NotesConverter(modelOutput);
             List<Utilities.Extensions.Note> rawNotes = converter.Convert(convertOptions);
 
-            string outputPath = "output.mid";
-            MidiWriter.GenerateMidiFile(rawNotes, outputPath, 120);
+            int detectTempo = MidiWriter.DetectTempo(rawNotes);
 
             //Fine - tuning musical chord recognition
             var analyzer = new SongChordAnalyzer(
-                    windowSize: 1.0f,        // 1 second windows
-                    hopSize: 0.25f,           // 0.25 steps per second
+                    windowSize: intervalSecond,        // 1 second windows
+                    hopSize: 0.5f,           // 0.25 steps per second
                     minimumChordDuration: 1.0f, // Min 1.0 second chord
                     confidence: 0.90f       // Minimum 90% reliability
                 );
 
             var chords = analyzer.AnalyzeSong(rawNotes);
+            MusicalKey? detectedKey = analyzer.DetectedKey;
 
             this[sourceName].Seek(_pos);
             _miniDecoder.Dispose();
-            return chords;
+            return (chords, detectedKey, detectTempo);
         }
 
         /// <summary>

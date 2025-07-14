@@ -503,9 +503,7 @@ public class ModelInput
             waveBuffer.FloatBuffer.AsSpan().Slice(j, n).CopyTo(tensorData.AsSpan().Slice(offset, n));
             offset += n;
 
-            //Debug.WriteLine($"ModelInput processed: [{cursor}, {cursor + inputInfo.Count}]");
             cursor += Constants.HOP_SIZE;
-            //Debug.WriteLine($"ModelInput progress: {cursor}/{totalFrames} = {(double)cursor / (double)totalFrames}");
 
             if (offset == inputInfo.Count)
             {
@@ -705,8 +703,14 @@ public sealed class Note : IComparable<Note>
 
 #region MIDI Generation
 
+/// <summary>
+/// Manages MIDI file generation from detected musical notes.
+/// </summary>
 public static class MidiWriter
 {
+    /// <summary>
+    /// Detected tempo in beats per minute (BPM).
+    /// </summary>
     public static int DetectedTempo = 120;
 
     /// <summary>
@@ -771,12 +775,6 @@ public static class MidiWriter
             long startTicks = (long)(note.StartTime * 480 * quarterNotesPerSecond);
             long endTicks = (long)(note.EndTime * 480 * quarterNotesPerSecond);
 
-            // if (noteIndex < 5) // Log first 5 notes for debugging
-            // {
-            //     Console.WriteLine($"Note {noteIndex}: MIDI {note.Pitch}, " +
-            //         $"Start: {note.StartTime:F3}s -> {startTicks} ticks, " +
-            //         $"End: {note.EndTime:F3}s -> {endTicks} ticks");
-            // }
             noteIndex++;
 
             // Create a "Note On" event (start playing the note)
@@ -832,7 +830,12 @@ public static class MidiWriter
         Console.WriteLine($"Tempo: {bpm} BPM ({microsecondsPerQuarterNote} μs per quarter note)");
     }
 
-    private static int DetectTempo(List<Note> notes)
+    /// <summary>
+    /// Detects the tempo of a list of musical notes based on their onset times.
+    /// </summary>
+    /// <param name="notes"></param>
+    /// <returns></returns>
+    public static int DetectTempo(List<Note> notes)
     {
         if (notes.Count < 2)
             return 120; // Default tempo
@@ -895,12 +898,12 @@ public static class MidiWriter
         {
             if (Math.Abs(detectedBpm - commonTempo) <= 3)
             {
-                Console.WriteLine($"Tempo detection: {detectedBpm} BPM -> snapped to common tempo {commonTempo} BPM");
+                //Console.WriteLine($"Tempo detection: {detectedBpm} BPM -> snapped to common tempo {commonTempo} BPM");
                 return commonTempo;
             }
         }
 
-        Console.WriteLine($"Tempo detection: {detectedBpm} BPM (confidence: {beatCandidates[detectedBpm]} votes)");
+        //Console.WriteLine($"Tempo detection: {detectedBpm} BPM (confidence: {beatCandidates[detectedBpm]} votes)");
         return detectedBpm;
     }
 }
@@ -1301,28 +1304,11 @@ public class NotesHelper
     /// </summary>
     /// <param name="n">Frame index.</param>
     /// <returns>Time in seconds.</returns>
-    //public static float ModelFrameToTime(int n)
-    //{
-    //    if (n < 1) return 0f;
-
-    //    var oriTime = (n * Constants.FFT_HOP) / (float)Constants.AUDIO_SAMPLE_RATE;
-    //    var windowOffset = (float)Constants.FFT_HOP / (float)Constants.AUDIO_SAMPLE_RATE
-    //        * ((float)Constants.ANNOT_N_FRAMES - (float)Constants.AUDIO_N_SAMPLES / (float)Constants.FFT_HOP)
-    //        + 0.0018f;
-    //    var v = (float)Math.Floor(n / (float)Constants.ANNOT_N_FRAMES) * windowOffset;
-    //    return oriTime - v;
-    //}
-
-    /// <summary>
-    /// Converts model frame index to time in seconds.
-    /// </summary>
-    /// <param name="n">Frame index.</param>
-    /// <returns>Time in seconds.</returns>
     public static float ModelFrameToTime(int n)
     {
         if (n < 1) return 0f;
 
-        // Egyszerű, lineáris konverzió
+        // Linear conversion from frame index to time in seconds
         return (n * Constants.FFT_HOP) / (float)Constants.AUDIO_SAMPLE_RATE;
     }
 
@@ -1489,10 +1475,10 @@ public class NotesHelper
         {
             return [1.0f];
         }
-        // n = np.arange(0, M) - (M - 1.0) / 2.0
+
         var n = MathTool.ARange(-0.5f * (count - 1), 1.0f, count);
         var sig2 = (float)(std * std * 2);
-        // w = np.exp(-n ** 2 / sig2)
+
         TensorPrimitives.Multiply(n, n, n);
         TensorPrimitives.Divide(n, -sig2, n);
         TensorPrimitives.Exp(n, n);

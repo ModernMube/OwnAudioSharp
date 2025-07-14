@@ -48,11 +48,11 @@ namespace Ownaudio.Utilities.OwnChordDetect.Analysis
         public float[] Chromagram { get; set; } = new float[0];
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="ChordAnalysis"/> class.
+        /// Initializes a new instance of the ChordAnalysis class.
         /// </summary>
         /// <param name="chordName">The name of the detected chord.</param>
-        /// <param name="confidence">The confidence level of the detection (0.0 to 1.0).</param>
-        /// <param name="explanation">The detailed explanation of the analysis.</param>
+        /// <param name="confidence">The confidence level of the chord detection (0.0 to 1.0).</param>
+        /// <param name="explanation">The detailed explanation of the chord analysis.</param>
         /// <param name="noteNames">The array of note names that form the chord.</param>
         public ChordAnalysis(string chordName, float confidence, string explanation, string[] noteNames)
         {
@@ -63,9 +63,9 @@ namespace Ownaudio.Utilities.OwnChordDetect.Analysis
         }
 
         /// <summary>
-        /// Returns a string representation of the chord analysis including alternatives if ambiguous.
+        /// Returns a string representation of the chord analysis.
         /// </summary>
-        /// <returns>A formatted string containing chord name, confidence, explanation, and alternatives.</returns>
+        /// <returns>A string containing the chord name, confidence level, explanation, and alternatives if ambiguous.</returns>
         public override string ToString()
         {
             var result = $"{ChordName} (confidence: {Confidence:F3})\n{Explanation}";
