@@ -1,7 +1,5 @@
 using Ownaudio;
-using Ownaudio.Fx;
 using Ownaudio.Sources;
-using System.Diagnostics;
 
 namespace ChordDetect
 {
@@ -33,13 +31,15 @@ namespace ChordDetect
 
                     Console.WriteLine($"Audio loaded successfully!");
                     Console.WriteLine($"Duration: {manager.Duration}");
-                    Console.WriteLine($"Sources: {manager.Sources.Count}");
 
-                    var chords = manager.DetectChords("CHORDSOURCE");
+                    var (chords, detectedKey, detectedTempo) = manager.DetectChords("CHORDSOURCE");
+                    Console.WriteLine($"Detected key: {detectedKey}");
+                    Console.WriteLine($"Tempo detection: {detectedTempo} BPM ");
+
                     foreach (var chord in chords)
                     {
                         if(chord.ChordName.Trim() != "Unknown")
-                            Console.WriteLine($"Start time: {chord.StartTime}s     Chord: {chord.ChordName}     Confidence: {chord.Confidence * 100}%");
+                            Console.WriteLine($"Start time: {chord.StartTime}s     Chord: {chord.ChordName}     Confidence: {chord.Confidence * 100}%     Notes:{chord.Notes.Count()}");
                     }
 
                     manager.Play();

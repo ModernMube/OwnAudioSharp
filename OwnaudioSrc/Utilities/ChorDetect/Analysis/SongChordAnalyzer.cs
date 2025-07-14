@@ -1,4 +1,5 @@
 ﻿using Ownaudio.Utilities.Extensions;
+using Ownaudio.Utilities.OwnChordDetect.Core;
 using Ownaudio.Utilities.OwnChordDetect.Detectors;
 using System;
 using System.Collections.Generic;
@@ -37,12 +38,12 @@ namespace Ownaudio.Utilities.OwnChordDetect.Analysis
         public string[] Notes { get; }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="TimedChord"/> class.
+        /// Initializes a new instance of the TimedChord class.
         /// </summary>
         /// <param name="startTime">The start time of the chord in seconds.</param>
         /// <param name="endTime">The end time of the chord in seconds.</param>
         /// <param name="chordName">The name of the detected chord.</param>
-        /// <param name="confidence">The confidence level of the detection (0.0 to 1.0).</param>
+        /// <param name="confidence">The confidence level of the chord detection (0.0 to 1.0).</param>
         /// <param name="notes">The array of note names that form the chord.</param>
         public TimedChord(float startTime, float endTime, string chordName, float confidence, string[] notes)
         {
@@ -54,9 +55,9 @@ namespace Ownaudio.Utilities.OwnChordDetect.Analysis
         }
 
         /// <summary>
-        /// Returns a string representation of the timed chord including timing, name, confidence, and notes.
+        /// Returns a string representation of the timed chord.
         /// </summary>
-        /// <returns>A formatted string containing all chord information.</returns>
+        /// <returns>A formatted string containing timing, chord name, confidence, and notes.</returns>
         public override string ToString()
         {
             return $"{StartTime:F1}s-{EndTime:F1}s: {ChordName} ({Confidence:F2}) [{string.Join(", ", Notes)}]";
@@ -64,14 +65,14 @@ namespace Ownaudio.Utilities.OwnChordDetect.Analysis
     }
 
     /// <summary>
-    /// Analyzes a complete song and extracts timed chord progressions.
+    /// Analyzes a complete song and extracts timed chord progressions with key awareness.
     /// </summary>
     public class SongChordAnalyzer
     {
         /// <summary>
         /// The chord detector used for analyzing individual chord segments.
         /// </summary>
-        private readonly BaseChordDetector _detector;
+        private readonly ChordDetector _detector;
 
         /// <summary>
         /// The size of the analysis window in seconds.
@@ -89,25 +90,30 @@ namespace Ownaudio.Utilities.OwnChordDetect.Analysis
         private readonly float _minimumChordDuration;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="SongChordAnalyzer"/> class.
+        /// Gets the detected musical key of the song.
+        /// </summary>
+        public MusicalKey? DetectedKey { get; private set; }
+
+        /// <summary>
+        /// Initializes a new instance of the SongChordAnalyzer class.
         /// </summary>
         /// <param name="windowSize">The size of the analysis window in seconds. Default is 1.0f.</param>
         /// <param name="hopSize">The hop size between analysis windows in seconds. Default is 0.5f.</param>
-        /// <param name="minimumChordDuration">The minimum duration for a chord to be included. Default is 0.8f.</param>
-        /// <param name="confidence">The confidence threshold for chord detection. Default is 0.6f.</param>
+        /// <param name="minimumChordDuration">The minimum duration required for a chord to be included in the result. Default is 0.8f.</param>
+        /// <param name="confidence">The minimum confidence threshold for chord detection. Default is 0.6f.</param>
         public SongChordAnalyzer(float windowSize = 1.0f, float hopSize = 0.5f, float minimumChordDuration = 0.8f, float confidence = 0.6f)
         {
-            _detector = new OptimizedChordDetector(confidenceThreshold: confidence);
+            _detector = new ChordDetector(DetectionMode.KeyAware, confidence);
             _windowSize = windowSize;
             _hopSize = hopSize;
             _minimumChordDuration = minimumChordDuration;
         }
 
         /// <summary>
-        /// Analyzes a complete song and returns timed chord progression.
+        /// Analyzes a complete song and returns timed chord progression with key-appropriate naming.
         /// </summary>
-        /// <param name="songNotes">All notes from the song to be analyzed.</param>
-        /// <returns>A list of timed chords representing the chord progression.</returns>
+        /// <param name="songNotes">The list of notes that make up the song.</param>
+        /// <returns>A list of timed chords representing the chord progression of the song.</returns>
         public List<TimedChord> AnalyzeSong(List<Note> songNotes)
         {
             if (!songNotes.Any())
@@ -115,57 +121,57 @@ namespace Ownaudio.Utilities.OwnChordDetect.Analysis
 
             var sortedNotes = songNotes.OrderBy(n => n.StartTime).ToList();
 
-            var songDuration = sortedNotes.Max(n => n.EndTime);
+            // First, detect the key of the entire song
+            DetectedKey = _detector.DetectKeyFromNotes(sortedNotes);
+            _detector.SetKey(DetectedKey);
 
-            // Analyze in windows
-            var rawChords = AnalyzeInWindows(sortedNotes, songDuration);
+            var chords = AnalyzeWindows(sortedNotes);
+            return MergeAdjacentChords(chords);
+        }
 
-            // Post-process to merge similar adjacent chords
-            var mergedChords = MergeAdjacentChords(rawChords, songDuration);
+        /// <summary>
+        /// Analyzes a song with a manually specified key instead of auto-detection.
+        /// </summary>
+        /// <param name="songNotes">The list of notes that make up the song.</param>
+        /// <param name="key">The musical key to use for chord analysis.</param>
+        /// <returns>A list of timed chords representing the chord progression of the song in the specified key.</returns>
+        public List<TimedChord> AnalyzeSongInKey(List<Note> songNotes, MusicalKey key)
+        {
+            if (!songNotes.Any())
+                return new List<TimedChord>();
 
-            return mergedChords;
+            var sortedNotes = songNotes.OrderBy(n => n.StartTime).ToList();
+
+            // Use the specified key
+            DetectedKey = key;
+            _detector.SetKey(key);
+
+            var chords = AnalyzeWindows(sortedNotes);
+            return MergeAdjacentChords(chords);
         }
 
         /// <summary>
         /// Analyzes the song in sliding windows to detect chords at different time positions.
         /// </summary>
-        /// <param name="sortedNotes">The notes sorted by start time.</param>
-        /// <param name="songDuration">The total duration of the song in seconds.</param>
-        /// <returns>A list of raw timed chords before merging.</returns>
-        private List<TimedChord> AnalyzeInWindows(List<Note> sortedNotes, float songDuration)
+        /// <param name="notes">The list of notes to analyze.</param>
+        /// <returns>A list of timed chords detected in each analysis window.</returns>
+        private List<TimedChord> AnalyzeWindows(List<Note> notes)
         {
             var chords = new List<TimedChord>();
+            var songDuration = notes.Max(n => n.EndTime);
 
-            // Use integer-based iteration to avoid float precision issues
-            var totalSteps = (int)Math.Ceiling(songDuration / _hopSize);
-
-            for (int step = 0; step < totalSteps; step++)
+            for (float time = 0; time < songDuration; time += _hopSize)
             {
-                var time = step * _hopSize;
-
-                // Safety check - don't exceed song duration
-                if (time >= songDuration)
-                    break;
-
                 var windowEnd = Math.Min(time + _windowSize, songDuration);
+                var windowNotes = GetNotesInWindow(notes, time, windowEnd);
 
-                // Get the most characteristic notes for this window
-                var characteristicNotes = GetCharacteristicNotes(sortedNotes, time, windowEnd);
-
-                if (characteristicNotes.Any())
+                if (windowNotes.Count >= 2)
                 {
-                    var analysis = _detector.AnalyzeChord(characteristicNotes);
-
-                    // Only add if confidence is reasonable
+                    var analysis = _detector.AnalyzeChord(windowNotes);
                     if (analysis.Confidence > 0.4f)
                     {
-                        chords.Add(new TimedChord(
-                            time,
-                            windowEnd,
-                            analysis.ChordName,
-                            analysis.Confidence,
-                            analysis.NoteNames
-                        ));
+                        chords.Add(new TimedChord(time, windowEnd, analysis.ChordName,
+                                                analysis.Confidence, analysis.NoteNames));
                     }
                 }
             }
@@ -174,127 +180,38 @@ namespace Ownaudio.Utilities.OwnChordDetect.Analysis
         }
 
         /// <summary>
-        /// Extracts the most characteristic notes from a time window for chord analysis.
+        /// Gets notes that are active in the specified time window.
         /// </summary>
-        /// <param name="sortedNotes">The notes sorted by start time.</param>
-        /// <param name="startTime">The start time of the window in seconds.</param>
-        /// <param name="endTime">The end time of the window in seconds.</param>
-        /// <returns>A list of the most characteristic notes for the window.</returns>
-        private List<Note> GetCharacteristicNotes(List<Note> sortedNotes, float startTime, float endTime)
+        /// <param name="notes">The complete list of notes to filter from.</param>
+        /// <param name="start">The start time of the window in seconds.</param>
+        /// <param name="end">The end time of the window in seconds.</param>
+        /// <returns>A list of notes that are active during the specified time window, ordered by relevance.</returns>
+        private List<Note> GetNotesInWindow(List<Note> notes, float start, float end)
         {
-            // Get notes that are active in this time window
-            var windowNotes = sortedNotes
-                .Where(note => note.StartTime < endTime && note.EndTime > startTime)
-                .ToList();
-
-            if (!windowNotes.Any())
-                return new List<Note>();
-
-            // Calculate characteristics for each note
-            var noteCharacteristics = windowNotes.Select(note => new
-            {
-                Note = note,
-                Duration = Math.Min(note.EndTime, endTime) - Math.Max(note.StartTime, startTime),
-                Amplitude = note.Amplitude,
-                Score = CalculateNoteScore(note, startTime, endTime)
-            }).ToList();
-
-            // Sort by score (descending) and select top 3-5
-            var selectedNotes = noteCharacteristics
-                .OrderByDescending(nc => nc.Score)
-                .Take(5)
-                .Select(nc => nc.Note)
-                .ToList();
-
-            // If we have less than 3 notes, supplement from adjacent windows
-            if (selectedNotes.Count < 3)
-            {
-                var additionalNotes = GetAdditionalNotes(sortedNotes, startTime, endTime, selectedNotes);
-                selectedNotes.AddRange(additionalNotes);
-            }
-
-            return selectedNotes.Take(5).ToList();
+            return notes.Where(n => n.StartTime < end && n.EndTime > start)
+                       .OrderByDescending(n => n.Amplitude * GetOverlap(n, start, end))
+                       .Take(5)
+                       .ToList();
         }
 
         /// <summary>
-        /// Calculates a score for a note based on its relevance to the analysis window.
+        /// Calculates the overlap duration between a note and a time window.
         /// </summary>
-        /// <param name="note">The note to score.</param>
-        /// <param name="windowStart">The start time of the analysis window.</param>
-        /// <param name="windowEnd">The end time of the analysis window.</param>
-        /// <returns>A score value representing the note's importance in the window.</returns>
-        private float CalculateNoteScore(Note note, float windowStart, float windowEnd)
+        /// <param name="note">The note to calculate overlap for.</param>
+        /// <param name="windowStart">The start time of the window in seconds.</param>
+        /// <param name="windowEnd">The end time of the window in seconds.</param>
+        /// <returns>The duration of overlap between the note and the window in seconds.</returns>
+        private float GetOverlap(Note note, float windowStart, float windowEnd)
         {
-            // Calculate overlap duration with window
-            var overlapDuration = Math.Min(note.EndTime, windowEnd) - Math.Max(note.StartTime, windowStart);
-
-            // Calculate relative overlap (0-1)
-            var relativeOverlap = overlapDuration / (windowEnd - windowStart);
-
-            // Amplitude is already normalized (0.0-1.0)
-            var normalizedAmplitude = note.Amplitude;
-
-            // Combined score (weighted sum)
-            return (relativeOverlap * 0.7f) + (normalizedAmplitude * 0.3f);
-        }
-
-        /// <summary>
-        /// Gets additional notes from adjacent windows when the current window has insufficient notes.
-        /// </summary>
-        /// <param name="sortedNotes">The notes sorted by start time.</param>
-        /// <param name="windowStart">The start time of the current window.</param>
-        /// <param name="windowEnd">The end time of the current window.</param>
-        /// <param name="existingNotes">The notes already selected for the current window.</param>
-        /// <returns>A list of additional notes from adjacent windows.</returns>
-        private List<Note> GetAdditionalNotes(List<Note> sortedNotes, float windowStart, float windowEnd, List<Note> existingNotes)
-        {
-            var additionalNotes = new List<Note>();
-            var neededCount = 3 - existingNotes.Count;
-
-            if (neededCount <= 0)
-                return additionalNotes;
-
-            // Get existing pitches to avoid duplicates
-            var existingPitches = existingNotes.Select(n => n.Pitch).ToHashSet();
-
-            // Look in previous window
-            var prevWindowStart = windowStart - _hopSize;
-            var prevWindowEnd = windowStart;
-            var prevNotes = sortedNotes
-                .Where(note => note.StartTime < prevWindowEnd && note.EndTime > prevWindowStart)
-                .Where(note => !existingPitches.Contains(note.Pitch))
-                .OrderByDescending(note => CalculateNoteScore(note, prevWindowStart, prevWindowEnd))
-                .Take(neededCount)
-                .ToList();
-
-            additionalNotes.AddRange(prevNotes);
-
-            // If still need more, look in next window
-            if (additionalNotes.Count < neededCount)
-            {
-                var nextWindowStart = windowEnd;
-                var nextWindowEnd = windowEnd + _hopSize;
-                var nextNotes = sortedNotes
-                    .Where(note => note.StartTime < nextWindowEnd && note.EndTime > nextWindowStart)
-                    .Where(note => !existingPitches.Contains(note.Pitch) &&
-                                   !additionalNotes.Any(an => an.Pitch == note.Pitch))
-                    .OrderByDescending(note => CalculateNoteScore(note, nextWindowStart, nextWindowEnd))
-                    .Take(neededCount - additionalNotes.Count)
-                    .ToList();
-
-                additionalNotes.AddRange(nextNotes);
-            }
-
-            return additionalNotes;
+            return Math.Min(note.EndTime, windowEnd) - Math.Max(note.StartTime, windowStart);
         }
 
         /// <summary>
         /// Merges adjacent chords with the same name to create longer, more stable chord segments.
         /// </summary>
-        /// <param name="rawChords">The raw list of detected chords before merging.</param>
-        /// <param name="songDuration">The maximum duration of the song to prevent time overflow.</param>
-        /// <returns>A list of merged chords with minimum duration requirements applied.</returns>
-        private List<TimedChord> MergeAdjacentChords(List<TimedChord> rawChords, float songDuration)
+        /// <param name="rawChords">The list of raw chord detections to merge.</param>
+        /// <returns>A list of merged chord segments with minimum duration filtering applied.</returns>
+        private List<TimedChord> MergeAdjacentChords(List<TimedChord> rawChords)
         {
             if (!rawChords.Any())
                 return new List<TimedChord>();
@@ -310,16 +227,10 @@ namespace Ownaudio.Utilities.OwnChordDetect.Analysis
                 if (current.ChordName == next.ChordName &&
                     Math.Abs(current.EndTime - next.StartTime) <= _hopSize * 1.5f)
                 {
-                    // Create merged chord with clamped end time
+                    // Create merged chord
                     var avgConfidence = (current.Confidence + next.Confidence) / 2;
-                    var endTime = Math.Min(next.EndTime, songDuration);
-                    current = new TimedChord(
-                        current.StartTime,
-                        endTime,
-                        current.ChordName,
-                        avgConfidence,
-                        current.Notes
-                    );
+                    current = new TimedChord(current.StartTime, next.EndTime, current.ChordName,
+                                           avgConfidence, current.Notes);
                 }
                 else
                 {
@@ -332,19 +243,10 @@ namespace Ownaudio.Utilities.OwnChordDetect.Analysis
                 }
             }
 
-            // Don't forget the last chord - clamp its end time to song duration
-            var finalEndTime = Math.Min(current.EndTime, songDuration);
-            var finalChord = new TimedChord(
-                current.StartTime,
-                finalEndTime,
-                current.ChordName,
-                current.Confidence,
-                current.Notes
-            );
-
-            if (finalChord.EndTime - finalChord.StartTime >= _minimumChordDuration)
+            // Don't forget the last chord
+            if (current.EndTime - current.StartTime >= _minimumChordDuration)
             {
-                merged.Add(finalChord);
+                merged.Add(current);
             }
 
             return merged;

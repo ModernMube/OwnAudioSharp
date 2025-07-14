@@ -1,23 +1,28 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 
 namespace Ownaudio.Utilities.OwnChordDetect.Core
 {
     /// <summary>
-    /// Manages chord templates and note name conversion.
+    /// Manages chord templates and note name conversion with key-aware naming.
     /// </summary>
     public static class ChordTemplates
     {
         /// <summary>
-        /// Array of note names in chromatic order starting from C.
+        /// Array of note names in chromatic order starting from C (default with sharps).
         /// </summary>
-        private static readonly string[] NoteNames = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+        private static readonly string[] DefaultNoteNames = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
 
         /// <summary>
-        /// Converts a pitch class number to its corresponding note name.
+        /// Converts a pitch class number to its corresponding note name using the specified key context.
         /// </summary>
         /// <param name="pitchClass">The pitch class number (0-11, where 0=C, 1=C#, etc.)</param>
+        /// <param name="key">The musical key context for appropriate note naming. If null, uses default sharp notation.</param>
         /// <returns>The note name as a string (e.g., "C", "F#", "Bb")</returns>
-        public static string GetNoteName(int pitchClass) => NoteNames[pitchClass % 12];
+        public static string GetNoteName(int pitchClass, MusicalKey? key = null)
+        {
+            return key?.PreferredNoteNames[pitchClass % 12] ?? DefaultNoteNames[pitchClass % 12];
+        }
 
         /// <summary>
         /// Creates a chord template array from an array of pitch classes.
@@ -38,99 +43,77 @@ namespace Ownaudio.Utilities.OwnChordDetect.Core
         }
 
         /// <summary>
-        /// Creates a dictionary of basic chord templates including major, minor, and 7th chords.
+        /// Creates all chord templates with key-aware naming.
         /// </summary>
-        /// <returns>A dictionary mapping chord names to their template arrays for all 12 root notes</returns>
-        public static Dictionary<string, float[]> CreateBasicTemplates()
+        /// <param name="key">The musical key context for appropriate chord naming</param>
+        /// <param name="includeExtended">Whether to include extended chords (9th, 11th, 13th)</param>
+        /// <returns>A dictionary mapping chord names to their template arrays</returns>
+        public static Dictionary<string, float[]> CreateAllTemplates(MusicalKey? key = null, bool includeExtended = true)
         {
             var templates = new Dictionary<string, float[]>();
+            var chordDefinitions = includeExtended ? GetAllChordDefinitions() : GetBasicChordDefinitions();
 
             for (int root = 0; root < 12; root++)
             {
-                var noteName = GetNoteName(root);
+                var noteName = GetNoteName(root, key);
 
-                // Major triads (root, major third, perfect fifth)
-                templates[noteName] = CreateTemplate(new[] { root, (root + 4) % 12, (root + 7) % 12 });
-
-                // Minor triads (root, minor third, perfect fifth)
-                templates[noteName + "m"] = CreateTemplate(new[] { root, (root + 3) % 12, (root + 7) % 12 });
-
-                // Dominant 7th (root, major third, perfect fifth, minor seventh)
-                templates[noteName + "7"] = CreateTemplate(new[] { root, (root + 4) % 12, (root + 7) % 12, (root + 10) % 12 });
-
-                // Major 7th (root, major third, perfect fifth, major seventh)
-                templates[noteName + "maj7"] = CreateTemplate(new[] { root, (root + 4) % 12, (root + 7) % 12, (root + 11) % 12 });
-
-                // Minor 7th (root, minor third, perfect fifth, minor seventh)
-                templates[noteName + "m7"] = CreateTemplate(new[] { root, (root + 3) % 12, (root + 7) % 12, (root + 10) % 12 });
+                foreach (var (suffix, intervals) in chordDefinitions)
+                {
+                    var pitchClasses = intervals.Select(interval => (root + interval) % 12).ToArray();
+                    templates[noteName + suffix] = CreateTemplate(pitchClasses);
+                }
             }
 
             return templates;
         }
 
         /// <summary>
-        /// Creates a dictionary of extended chord templates including suspended, diminished, augmented, and add9 chords.
+        /// Gets basic chord definitions (triads and 7th chords).
         /// </summary>
-        /// <returns>A dictionary mapping extended chord names to their template arrays for all 12 root notes</returns>
-        public static Dictionary<string, float[]> CreateExtendedTemplates()
+        /// <returns>An array of tuples containing chord suffixes and their corresponding interval patterns</returns>
+        private static (string suffix, int[] intervals)[] GetBasicChordDefinitions() => new[]
         {
-            var templates = new Dictionary<string, float[]>();
+            ("", new[] { 0, 4, 7 }),           // Major
+            ("m", new[] { 0, 3, 7 }),          // Minor
+            ("7", new[] { 0, 4, 7, 10 }),      // Dominant 7th
+            ("maj7", new[] { 0, 4, 7, 11 }),   // Major 7th
+            ("m7", new[] { 0, 3, 7, 10 })      // Minor 7th
+        };
 
-            for (int root = 0; root < 12; root++)
-            {
-                var noteName = GetNoteName(root);
+        /// <summary>
+        /// Gets all chord definitions including extended chords.
+        /// </summary>
+        /// <returns>An array of tuples containing chord suffixes and their corresponding interval patterns for all chord types</returns>
+        private static (string suffix, int[] intervals)[] GetAllChordDefinitions() => new[]
+        {
+            ("", new[] { 0, 4, 7 }),           // Major
+            ("m", new[] { 0, 3, 7 }),          // Minor
+            ("7", new[] { 0, 4, 7, 10 }),      // Dominant 7th
+            ("maj7", new[] { 0, 4, 7, 11 }),   // Major 7th
+            ("m7", new[] { 0, 3, 7, 10 }),     // Minor 7th
+            ("sus2", new[] { 0, 2, 7 }),       // Sus2
+            ("sus4", new[] { 0, 5, 7 }),       // Sus4
+            ("dim", new[] { 0, 3, 6 }),        // Diminished
+            ("aug", new[] { 0, 4, 8 }),        // Augmented
+            ("add9", new[] { 0, 4, 7, 2 }),    // Add9
+            ("6", new[] { 0, 4, 7, 9 }),       // 6th
+            ("m6", new[] { 0, 3, 7, 9 }),      // Minor 6th
+            ("9", new[] { 0, 4, 7, 10, 2 }),   // 9th
+            ("m9", new[] { 0, 3, 7, 10, 2 }),  // Minor 9th
+            ("maj9", new[] { 0, 4, 7, 11, 2 }), // Major 9th
+            ("11", new[] { 0, 4, 7, 10, 2, 5 }), // 11th
+            ("m11", new[] { 0, 3, 7, 10, 2, 5 }), // Minor 11th
+            ("13", new[] { 0, 4, 7, 10, 2, 9 }), // 13th
+            ("m13", new[] { 0, 3, 7, 10, 2, 9 }) // Minor 13th
 
-                // Suspended chords
-                // Sus2: root, major second, perfect fifth
-                templates[noteName + "sus2"] = CreateTemplate(new[] { root, (root + 2) % 12, (root + 7) % 12 });
-                // Sus4: root, perfect fourth, perfect fifth
-                templates[noteName + "sus4"] = CreateTemplate(new[] { root, (root + 5) % 12, (root + 7) % 12 });
-
-                // Diminished and augmented
-                // Diminished: root, minor third, diminished fifth
-                templates[noteName + "dim"] = CreateTemplate(new[] { root, (root + 3) % 12, (root + 6) % 12 });
-                // Augmented: root, major third, augmented fifth
-                templates[noteName + "aug"] = CreateTemplate(new[] { root, (root + 4) % 12, (root + 8) % 12 });
-
-                // Add9: root, major third, perfect fifth, major ninth
-                templates[noteName + "add9"] = CreateTemplate(new[] { root, (root + 4) % 12, (root + 7) % 12, (root + 2) % 12 });
-
-                /*
-               // 6th chords
-               templates[noteName + "6"] = CreateTemplate(new[] { root, (root + 4) % 12, (root + 7) % 12, (root + 9) % 12 });
-               templates[noteName + "m6"] = CreateTemplate(new[] { root, (root + 3) % 12, (root + 7) % 12, (root + 9) % 12 });
-
-               // 9th chords
-               templates[noteName + "9"] = CreateTemplate(new[] { root, (root + 4) % 12, (root + 7) % 12, (root + 10) % 12, (root + 2) % 12 });
-               templates[noteName + "m9"] = CreateTemplate(new[] { root, (root + 3) % 12, (root + 7) % 12, (root + 10) % 12, (root + 2) % 12 });
-               templates[noteName + "maj9"] = CreateTemplate(new[] { root, (root + 4) % 12, (root + 7) % 12, (root + 11) % 12, (root + 2) % 12 });
-
-               // 11th chords
-               templates[noteName + "11"] = CreateTemplate(new[] { root, (root + 4) % 12, (root + 7) % 12, (root + 10) % 12, (root + 2) % 12, (root + 5) % 12 });
-               templates[noteName + "m11"] = CreateTemplate(new[] { root, (root + 3) % 12, (root + 7) % 12, (root + 10) % 12, (root + 2) % 12, (root + 5) % 12 });
-
-               // 13th chords
-               templates[noteName + "13"] = CreateTemplate(new[] { root, (root + 4) % 12, (root + 7) % 12, (root + 10) % 12, (root + 2) % 12, (root + 9) % 12 });
-               templates[noteName + "m13"] = CreateTemplate(new[] { root, (root + 3) % 12, (root + 7) % 12, (root + 10) % 12, (root + 2) % 12, (root + 9) % 12 });
-
-               // Altered chords
-               templates[noteName + "7b5"] = CreateTemplate(new[] { root, (root + 4) % 12, (root + 6) % 12, (root + 10) % 12 });
-               templates[noteName + "7#5"] = CreateTemplate(new[] { root, (root + 4) % 12, (root + 8) % 12, (root + 10) % 12 });
-               templates[noteName + "7b9"] = CreateTemplate(new[] { root, (root + 4) % 12, (root + 7) % 12, (root + 10) % 12, (root + 1) % 12 });
-               templates[noteName + "7#9"] = CreateTemplate(new[] { root, (root + 4) % 12, (root + 7) % 12, (root + 10) % 12, (root + 3) % 12 });
-
-               // Half-diminished
-               templates[noteName + "m7b5"] = CreateTemplate(new[] { root, (root + 3) % 12, (root + 6) % 12, (root + 10) % 12 });
-
-               // Diminished 7th
-               templates[noteName + "dim7"] = CreateTemplate(new[] { root, (root + 3) % 12, (root + 6) % 12, (root + 9) % 12 });
-
-               // Add2 variations
-               templates[noteName + "madd9"] = CreateTemplate(new[] { root, (root + 3) % 12, (root + 7) % 12, (root + 2) % 12 });
-                */
-            }
-
-            return templates;
-        }
+            /* Uncomment for extended chord definitions
+            ("7b5", new[] { 0, 4, 6, 10 })   // Altered chords
+            ("7#5", new[] { 0, 4, 8, 10 })
+            ("7#9", new[] { 0, 4, 7, 10, 3 })
+            ("m7b5", new[] { 0, 3, 6, 10 })    // Half-diminished
+            ("dim7", new[] { 0, 3, 6, 9 })     // Diminished 7th
+            ("madd9", new[] { 0, 3, 7, 2 })    // Add2 variations
+            */
+        };
     }
 }
