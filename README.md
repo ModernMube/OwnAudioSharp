@@ -186,12 +186,12 @@ OwnAudio.Free();
 
 ```csharp
 // Add multiple audio files
-await sourceManager.AddOutputSource("path/to/audio1.mp3");
-await sourceManager.AddOutputSource("path/to/audio2.mp3");
+await sourceManager.AddOutputSource("path/to/audio1.mp3", "Track1Name");
+await sourceManager.AddOutputSource("path/to/audio2.mp3", "Track2Name");
 
 // Adjust volume for individual sources
-sourceManager.SetVolume(0, 0.8f);  // 80% volume for first source
-sourceManager.SetVolume(1, 0.6f);  // 60% volume for second source
+sourceManager["Track1Name"|.Volume(0.8f);  // 80% volume for first source
+sourceManager["Track2Name"].Volume(0.6f);  // 60% volume for second source
 
 // Play mixed audio
 sourceManager.Play();
@@ -211,10 +211,10 @@ sourceManager.Play("output.wav", 16);  // 16-bit recording
 
 ```csharp
 // Change tempo without affecting pitch (value range -20 to +20)
-sourceManager.SetTempo(0, 10.0);  // Speed up by 10%
+sourceManager["Track1Name"].Tempo(10.0);  // Speed up by 10%
 
 // Change pitch without affecting tempo (value range -6 to +6 semitones)
-sourceManager.SetPitch(0, 2.0);  // Raise pitch by 2 semitones
+sourceManager["Track1Name"].Pitch(2.0);  // Raise pitch by 2 semitones
 ```
 
 ### Seeking Within Audio
