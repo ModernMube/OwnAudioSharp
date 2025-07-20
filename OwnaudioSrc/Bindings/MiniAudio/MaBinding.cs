@@ -55,13 +55,8 @@ internal static partial class MaBinding
         _encoderWrite = loader.LoadFunc<EncoderWrite>(nameof(ma_encoder_write_pcm_frames));
 
         // Allocation functions
-        _allocateDecoder = loader.LoadFunc<AllocateDecoder>(nameof(sf_allocate_decoder));
-        _allocateEncoder = loader.LoadFunc<AllocateEncoder>(nameof(sf_allocate_encoder));
-        _allocateContext = loader.LoadFunc<AllocateContext>(nameof(sf_allocate_context));
-        _allocateDevice = loader.LoadFunc<AllocateDevice>(nameof(sf_allocate_device));
-        _allocateDecoderConfig = loader.LoadFunc<AllocateDecoderConfig>(nameof(sf_allocate_decoder_config));
-        _allocateEncoderConfig = loader.LoadFunc<AllocateEncoderConfig>(nameof(sf_allocate_encoder_config));
-        _allocateDeviceConfig = loader.LoadFunc<AllocateDeviceConfig>(nameof(sf_allocate_device_config));
+         _allocateDecoder = loader.LoadFunc<AllocateDecoder>(nameof(sf_allocate_decoder));
+         _allocateDecoderConfig = loader.LoadFunc<AllocateDecoderConfig>(nameof(sf_allocate_decoder_config));
 
         // Resampler functions
         _resamplerInit = loader.LoadFunc<ResamplerInit>(nameof(ma_resampler_init));
@@ -129,17 +124,17 @@ internal static partial class MaBinding
     {
         if (_getDevices == null)
             throw new NotSupportedException("Getting devices list is not supported.");
-
+    
         return _getDevices(context, out pPlaybackDevices, out pCaptureDevices, out playbackDeviceCount, out captureDeviceCount);
     }
 
-    public static IntPtr sf_allocate_context()
-    {
-        if (_allocateContext == null)
-            throw new NotSupportedException("Context allocation is not supported.");
-
-        return _allocateContext();
-    }
+    // public static IntPtr sf_allocate_context()
+    // {
+    //     if (_allocateContext == null)
+    //         throw new NotSupportedException("Context allocation is not supported.");
+    //
+    //     return _allocateContext();
+    // }
 
     public static IntPtr allocate_context()
     {
@@ -220,13 +215,13 @@ internal static partial class MaBinding
         return ptr;
     }
 
-    public static IntPtr sf_allocate_device()
-    {
-        if (_allocateDevice == null)
-            throw new NotSupportedException("Device allocation is not supported.");
-
-        return _allocateDevice();
-    }
+    // public static IntPtr sf_allocate_device()
+    // {
+    //     if (_allocateDevice == null)
+    //         throw new NotSupportedException("Device allocation is not supported.");
+    //
+    //     return _allocateDevice();
+    // }
 
     public static IntPtr allocate_device()
     {
@@ -239,13 +234,13 @@ internal static partial class MaBinding
         return ptr;
     }
 
-    public static IntPtr sf_allocate_device_config(MaDeviceType capabilityType, MaFormat format, uint channels, uint sampleRate, MaDataCallback dataCallback, IntPtr playbackDevice, IntPtr captureDevice)
-    {
-        if (_allocateDeviceConfig == null)
-            throw new NotSupportedException("Device config allocation is not supported.");
-
-        return _allocateDeviceConfig(capabilityType, format, channels, sampleRate, dataCallback, playbackDevice, captureDevice);
-    }
+    // public static IntPtr sf_allocate_device_config(MaDeviceType capabilityType, MaFormat format, uint channels, uint sampleRate, MaDataCallback dataCallback, IntPtr playbackDevice, IntPtr captureDevice)
+    // {
+    //     if (_allocateDeviceConfig == null)
+    //         throw new NotSupportedException("Device config allocation is not supported.");
+    //
+    //     return _allocateDeviceConfig(capabilityType, format, channels, sampleRate, dataCallback, playbackDevice, captureDevice);
+    // }
 
     public static IntPtr allocate_device_config(MaDeviceType deviceType, MaFormat format, uint channels, uint sampleRate,
                                            MaDataCallback dataCallback, IntPtr playbackDeviceId, IntPtr captureDeviceId, uint sizeinframe = 512)
@@ -436,7 +431,16 @@ internal static partial class MaBinding
 
     public static IntPtr allocate_decoder_config(MaFormat format, uint channels, uint sampleRate)
     {
-        return ma_decoder_config_alloc(format, channels, sampleRate);
+        ulong size = (ulong)Marshal.SizeOf<MaDecoderConfig>();
+        IntPtr ptr = ma_malloc(size, IntPtr.Zero);
+
+        if (ptr != IntPtr.Zero)
+        {
+            MaDecoderConfig config = ma_decoder_config_init(format, channels, sampleRate);
+            Marshal.StructureToPtr(config, ptr, false);
+        }
+
+        return ptr;
     }
 
     #endregion
@@ -467,14 +471,6 @@ internal static partial class MaBinding
         return _encoderWrite(pEncoder, pFramesIn, frameCount, out pFramesWritten);
     }
 
-    public static IntPtr sf_allocate_encoder()
-    {
-        if (_allocateEncoder == null)
-            throw new NotSupportedException("Encoder allocation is not supported.");
-
-        return _allocateEncoder();
-    }
-
     public static IntPtr allocate_encoder()
     {
         ulong size = (ulong)Marshal.SizeOf<MaEncoder>();
@@ -484,14 +480,6 @@ internal static partial class MaBinding
             ZeroMemory(ptr, size);
 
         return ptr;
-    }
-
-    public static IntPtr sf_allocate_encoder_config(MaFormat encodingFormat, MaFormat format, uint channels, uint sampleRate)
-    {
-        if (_allocateEncoderConfig == null)
-            throw new NotSupportedException("Encoder config allocation is not supported.");
-
-        return _allocateEncoderConfig(encodingFormat, format, channels, sampleRate);
     }
 
     public static IntPtr allocate_encoder_config(MaEncodingFormat encodingFormat, MaFormat format, uint channels, uint sampleRate)
