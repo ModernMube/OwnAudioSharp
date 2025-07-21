@@ -33,7 +33,7 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 - **Detecting musical chords from audio data** Real-time or offline chord detection from musical notes
 
 ## 🚧 Work in Progress
-- [ ] Load an unlimited number of audio files, which can be played at any time during playback, even in a loop.
+- [ ] Load an unlimited number of audio files (sound effects, noises, etc.), which can be played at any time during playback, even in a loop.
 
 ## Upcoming Features
 - Developing and testing mobile application support
