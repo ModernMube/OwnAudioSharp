@@ -44,34 +44,8 @@ Check out the sample application [OwnAudioSharpDemo](https://github.com/ModernMu
 
 ## Documentation
 
- <a href="../../wiki/OwnAudio-first-steps">
-  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20first%20step-blue" alt="Wiki OwnAudio first steps">
-</a>
-
-<a href="../../wiki/How-to-use-OwnAudio's-built‐in-effects">
-  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20FX%20processor-blue" alt="Wiki OwnAudio FX processor">
-</a>
-
-<a href="../../wiki/OwnAudio-Library-Documentation">
-  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20library-darkgreen" alt="Wiki OwnAudio Library Documentation">
-</a>
-
-<a href="../../wiki/Ownaudio-SourceManager-Class-Documentation">
-  <img src="https://img.shields.io/badge/Wiki-SourceManager-darkgreen" alt="Wiki Source manager documentation">
-</a>
-
-<a href="../../wiki/Ownaudio-Source-Class-Documentation">
-  <img src="https://img.shields.io/badge/Wiki-Source-darkgreen" alt="Wiki Source documentation">
-</a>
-
-<a href="../../wiki/Ownaudio-Real-Time-Source-Class-Documentation">
-  <img src="https://img.shields.io/badge/Wiki-Real%20time%20source-darkgreen" alt="Wiki Source documentation">
-</a>
-
-### Effects documentation
-
-<a href="../../wiki/OwnAudio-effects-library">
-  <img src="https://img.shields.io/badge/Wiki-Effects%20library%20documentation-brown" alt="Wiki Effects documentation">
+ <a href="../../wiki">
+  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20documentation%20step-blue" alt="Wiki OwnAudio documentation">
 </a>
 
 ## Supported Systems
