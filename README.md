@@ -234,6 +234,8 @@ sourceManager.CustomSampleProcessor = equalizer;
 - **Rotary**: Rotary speaker simulation
 - **DynamicAmp**: Adaptive volume control
 - **Enhancer**: Harmonic enhancement
+- **Overdrive**: effect with tube-like saturation
+- **Limiter**: with look-ahead and smooth gain reduction
 
 ## Custom Audio Processing
 
