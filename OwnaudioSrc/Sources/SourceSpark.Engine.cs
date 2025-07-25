@@ -4,6 +4,7 @@ using System;
 using System.Threading;
 
 namespace Ownaudio.Sources;
+
 /// <summary>
 /// A simplified audio source for sound effects and short audio clips.
 /// Supports looping, real-time playback, and audio effects.

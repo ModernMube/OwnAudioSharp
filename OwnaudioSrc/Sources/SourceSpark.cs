@@ -14,9 +14,59 @@ using System.Threading.Tasks;
 namespace Ownaudio.Sources;
 
 /// <summary>
-/// A simplified audio source for sound effects and short audio clips.
-/// Supports looping, real-time playback, and audio effects.
+/// High-performance audio source implementation that loads complete audio files into memory for fast playback.
 /// </summary>
+/// <remarks>
+/// <para>
+/// The <see cref="SourceSpark"/> class is a specialized audio source implementation that loads the entire
+/// audio content into memory for the fastest possible access. This is particularly useful for short audio files,
+/// sound effects, or frequently played audio content.
+/// </para>
+/// <para>
+/// The class provides the following main features:
+/// <list type="bullet">
+/// <item><description>Complete audio file loading into memory</description></item>
+/// <item><description>Real-time audio processing with SoundTouch processor</description></item>
+/// <item><description>Multi-threaded playback management</description></item>
+/// <item><description>Volume control</description></item>
+/// <item><description>Position tracking and seeking</description></item>
+/// <item><description>Looping playback support</description></item>
+/// </list>
+/// </para>
+/// <para>
+/// The class supports both FFmpeg and MiniAudio decoders, automatically selecting
+/// the appropriate decoder based on availability.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create audio source from file
+/// using var source = new SourceSpark("audio.mp3", looping: true);
+/// 
+/// // Start playback
+/// source.Play();
+/// 
+/// // Seek to position
+/// source.Seek(TimeSpan.FromSeconds(30));
+/// 
+/// // Pause playback
+/// source.Pause();
+/// 
+/// // Resume playback
+/// source.Resume();
+/// 
+/// // Stop playback
+/// source.Stop();
+/// </code>
+/// </example>
+/// <threadsafety>
+/// This class is thread-safe for the following operations: Play, Stop, Pause, Resume, Seek.
+/// However, thread safety is not guaranteed for concurrent Dispose calls.
+/// </threadsafety>
+/// <seealso cref="ISource"/>
+/// <seealso cref="SourceManager"/>
+/// <seealso cref="VolumeProcessor"/>
+
 public partial class SourceSpark : ISource
 {
     #region Private Fields
