@@ -16,7 +16,7 @@
 
 ##
 
-OwnAudio is a platform-independent C# audio library that provides a high-level API for audio playback, recording, and processing. By default, it uses Miniaudio for audio I/O. If FFmpeg or PortAudio is installed, it automatically uses Portaudio and FFmpeg. This way, it can work with MiniAudio without any external dependencies. The implementation of MiniAudio also allowed the API to be used on mobile platforms. It is possible to manipulate audio data in real time (pitch change, tempo change, and various real-time effects). The API is able to detect musical chords from audio and create a timed list of chords.
+OwnAudio is a platform-independent C# audio library that provides a high-level API for audio playback, recording, and processing. By default, it uses Miniaudio for audio I/O. If FFmpeg or PortAudio is installed, it automatically uses Portaudio and FFmpeg. This way, it can work with MiniAudio without any external dependencies. The implementation of MiniAudio also allowed the API to be used on mobile platforms. It is possible to manipulate audio data in real time (pitch change, tempo change, and various real-time effects). The API is able to detect musical chords from audio and create a timed list of chords. A feature has been built in to help game developers manage sound effects.
 
 ## Features
 
@@ -31,9 +31,10 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 - **Audio data visualization** customizable waveform display
 - **Built-in audio effects** (Reverb, Delay, Distortion, Equalizer, Compressor, etc.)
 - **Detecting musical chords from audio data** Real-time or offline chord detection from musical notes
+- **New feature: SourceSpark**, a useful resource for game developers, is ready. See description below!
 
 ## 🚧 Work in Progress
-- [ ] Load an unlimited number of audio files (sound effects, noises, etc.), which can be played at any time during playback, even in a loop.
+- [x] Load an unlimited number of audio files (sound effects, noises, etc.), which can be played at any time during playback, even in a loop.
 
 ## Upcoming Features
 - Developing and testing mobile application support
@@ -261,6 +262,131 @@ public class MyAudioProcessor : SampleProcessorBase
 var processor = new MyAudioProcessor();
 sourceManager.CustomSampleProcessor = processor;
 ```
+
+## SourceSpark - Game-Optimized Audio Effects
+
+The `SourceSpark` class is a simplified audio source designed specifically for short audio clips and sound effects, making it perfect for game development. Unlike standard sources, **SourceSpark loads entire audio files into memory** for instant, zero-latency playback.
+
+### Key Features for Game Development
+
+- **Zero-latency playback** - Audio data stored in memory for instant access
+- **Looping support** - Perfect for ambient sounds like rain, wind, or engine noise
+- **Multiple simultaneous playback** - Same sound effect can play overlapping instances
+- **Automatic cleanup** - Non-looping sounds are automatically removed when finished
+- **Real-time effects** - Pitch, tempo, and volume can be modified during playback
+
+### Basic Usage
+
+```csharp
+// Add a simple sound effect
+var gunshot = sourceManager.AddSparkSource("sounds/gunshot.wav", looping: false, volume: 0.9f);
+sourceManager.PlaySparkSource(gunshot);
+
+// Add looping ambient sound
+var rainSound = sourceManager.AddSparkSource("ambient/rain.wav", looping: true, volume: 0.4f);
+sourceManager.PlaySparkSource(rainSound);
+```
+
+### Advanced Game Audio
+
+```csharp
+// Dynamic engine sound for vehicles
+var engineSound = sourceManager.AddSparkSource("car_engine.wav", looping: true, volume: 0.6f);
+sourceManager.PlaySparkSource(engineSound);
+
+// Real-time sound modification based on game state
+void UpdateEngineSound(float speed) {
+    engineSound.Pitch = speed * 0.01; // Higher pitch = faster speed
+    engineSound.Volume = Math.Min(0.8f, 0.3f + speed * 0.005f);
+}
+
+// Multiple overlapping gunshots
+var pistol = sourceManager.AddSparkSource("weapons/pistol.wav");
+sourceManager.PlaySparkSource(pistol); // First shot
+sourceManager.PlaySparkSource(pistol); // Second shot (overlapping)
+```
+
+### Loop Management for Ambient Audio
+
+```csharp
+// Weather system with looping sounds
+var currentWeather = sourceManager.AddSparkSource("weather/clear.wav", looping: true, volume: 0.2f);
+
+void ChangeWeather(WeatherType weather) {
+    // Stop current weather sound
+    currentWeather.Stop();
+    sourceManager.RemoveSparkSource(currentWeather);
+    
+    // Start new weather sound
+    string weatherFile = weather switch {
+        WeatherType.Rain => "weather/rain.wav",
+        WeatherType.Storm => "weather/thunder.wav",
+        WeatherType.Wind => "weather/wind.wav",
+        _ => "weather/clear.wav"
+    };
+    
+    currentWeather = sourceManager.AddSparkSource(weatherFile, looping: true, volume: 0.4f);
+    sourceManager.PlaySparkSource(currentWeather);
+}
+```
+
+### Runtime Control
+
+```csharp
+// Loop control during gameplay
+sparkSource.IsLooping = true;  // Enable looping
+sparkSource.IsLooping = false; // Disable looping
+
+// State management
+sparkSource.Play();   // Start playback
+sparkSource.Pause();  // Pause playback
+sparkSource.Resume(); // Resume from pause
+sparkSource.Stop();   // Stop and reset
+
+// Real-time audio effects
+sparkSource.Volume = 0.5f;     // Adjust volume
+sparkSource.Pitch = 2.0;       // Raise pitch by 2 semitones
+sparkSource.Tempo = 1.5;       // Speed up by 50%
+```
+
+### Memory-Based Advantages
+
+**Perfect for:**
+- UI sounds (button clicks, menu navigation)
+- Weapon effects (gunshots, explosions)
+- Short ambient loops (rain, wind, machinery)
+- Game event sounds (collectibles, notifications)
+
+**Benefits:**
+- **Instant response** - No file I/O during gameplay
+- **Reliable playback** - No streaming errors or stuttering  
+- **Flexible manipulation** - Real-time pitch/tempo changes
+- **Concurrent playbook** - Multiple instances of same sound
+
+**Memory Guidelines:**
+- Ideal for clips under 10 seconds
+- Best suited for frequently used sounds
+- Perfect for looping ambient audio
+- Excellent for rapid-fire sound effects
+
+### Lifecycle Management
+
+```csharp
+// Automatic cleanup for one-shot sounds
+sparkSource.StateChanged += (sender, e) => {
+    if (sparkSource.HasFinished && !sparkSource.IsLooping) {
+        // Non-looping sounds are automatically removed
+        sourceManager.RemoveSparkSource(sparkSource);
+    }
+};
+
+// Manual cleanup for persistent sounds
+if (sparkSource.IsLooping) {
+    sparkSource.Stop();
+    sourceManager.RemoveSparkSource(sparkSource);
+}
+```
+The memory-based approach makes SourceSpark ideal for games where audio responsiveness and reliability are crucial, trading memory usage for guaranteed performance and zero-latency audio playback.
 
 ## Real-time Audio Sources
 
@@ -594,4 +720,4 @@ Special thanks to the creators of the following repositories, whose code was ins
 - [FFmpeg.AutoGen](https://github.com/Ruslan-B/FFmpeg.AutoGen) - FFmpeg auto generated unsafe bindings for C#/.NET
 - [soundtouch.net](https://github.com/owoudenberg/soundtouch.net) - .NET wrapper for the SoundTouch audio processing library
 - [Avalonia](https://github.com/AvaloniaUI/Avalonia) - Cross-platform .NET UI framework
-- [SukiUI](https://github.com/kikipoulet/SukiUI) - Modern UI toolkit for Avalonia
+- [SoundFlow](https://github.com/LSXPrime/SoundFlow) - A powerful and extensible cross-platform .NET audio engine. 
