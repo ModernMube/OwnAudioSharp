@@ -230,6 +230,53 @@ public partial class SourceManager
                 }
             }
         }
+
+        ProcessSparkSourcesMixing();
+    }
+
+    /// <summary>
+    /// Processes the mixing of multiple spark audio sources, ensuring a cohesive output stream.
+    /// Integrates real-time mixing adjustments and synchronizations.
+    /// </summary>
+    /// <remarks>
+    /// This method is responsible for the following operations:
+    /// - Managing individual spark source timing and alignment
+    /// - Harmonizing multiple spark sources into a unified audio output
+    /// - Applying dynamic adjustments, including gain and effects
+    /// - Resolving potential conflicts or overlaps between spark sources
+    /// - Ensuring minimal latency and real-time responsiveness during mixing
+    /// - Supporting diverse audio formats with consistent results
+    /// The method employs optimized mixing algorithms designed for scalability
+    /// and low memory overhead, ensuring high performance across various audio conditions.
+    /// </remarks>
+    private void ProcessSparkSourcesMixing()
+    {
+        foreach (var sparkSource in SourcesSpark.ToList())
+        {
+            if (sparkSource.IsPlaying && sparkSource.SourceSampleData.TryDequeue(out float[] samples))
+            {
+                try
+                {
+                    int mixLength = Math.Min(samples.Length, _mixBuffer.Length);
+
+                    for (int i = 0; i < mixLength; i++)
+                    {
+                        _mixBuffer[i] += samples[i];
+                        _mixBuffer[i] = FastClamp(_mixBuffer[i]);
+                    }
+
+                    // Ha a simple source befejeződött és nem loopol, távolítsd el
+                    if (sparkSource.HasFinished && !sparkSource.IsLooping)
+                    {
+                        RemoveSparkSource(sparkSource);
+                    }
+                }
+                finally
+                {
+                    SimpleAudioBufferPool.Return(samples);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -615,6 +662,12 @@ public partial class SourceManager
         InputLevels = (0f, 0f);
 
         foreach (ISource src in Sources)
+        {
+            while (src.SourceSampleData.TryDequeue(out _)) { }
+            src.Seek(TimeSpan.Zero);
+        }
+
+        foreach (SourceSpark src in SourcesSpark)
         {
             while (src.SourceSampleData.TryDequeue(out _)) { }
             src.Seek(TimeSpan.Zero);

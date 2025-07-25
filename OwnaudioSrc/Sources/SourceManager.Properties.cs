@@ -47,6 +47,11 @@ public partial class SourceManager
     public List<ISource> SourcesInput { get; protected set; } = new List<ISource>();
 
     /// <summary>
+    /// List of simple effect sources
+    /// </summary>
+    public List<SourceSpark> SourcesSpark { get; protected set; } = new List<SourceSpark>();
+
+    /// <summary>
     /// The resources have been loaded successfully
     /// </summary>
     public bool IsLoaded { get; protected set; } = false;

@@ -1,9 +1,6 @@
-﻿using Melanchall.DryWetMidi.MusicTheory;
-using Ownaudio.Decoders;
-using Ownaudio.Decoders.FFmpeg;
+﻿using Ownaudio.Decoders.FFmpeg;
 using Ownaudio.Decoders.MiniAudio;
 using Ownaudio.Exceptions;
-using Ownaudio.MiniAudio;
 using Ownaudio.Processors;
 using Ownaudio.Utilities;
 using Ownaudio.Utilities.Extensions;
@@ -155,7 +152,7 @@ namespace Ownaudio.Sources
         /// when no actual audio file is needed. It updates the duration and sets the loaded state to true.
         /// This is useful for scenarios where only input sources or real-time sources are being used.
         /// </remarks>
-        public Task<bool> AddEmptyOutputSource(string? name = "WithoutData")
+        public Task<bool> AddEmptySource(string? name = "WithoutData")
         {
             Ensure.That<OwnaudioException>(State == SourceState.Idle, "Playback thread is currently running.");
 
@@ -250,9 +247,30 @@ namespace Ownaudio.Sources
             Logger?.LogInfo("Real-time source added.");
 
             if (!IsLoaded)
-                AddEmptyOutputSource().Wait();
+                AddEmptySource().Wait();
 
             return source;
+        }
+
+        // <summary>
+        /// Adds a new simple source for sound effects
+        /// </summary>
+        /// <param name="filePath">Path to the audio file</param>
+        /// <param name="looping">Whether the source should loop</param>
+        /// <param name="volume">Initial volume level</param>
+        /// <returns>The created SimpleSource instance</returns>
+        public SourceSpark AddSparkSource(string filePath, bool looping = false, float volume = 1.0f)
+        {
+            var sparkSource = new SourceSpark(filePath, looping)
+            {
+                Volume = volume,
+                Logger = Logger
+            };
+
+            SourcesSpark.Add(sparkSource);
+            Logger?.LogInfo($"Simple source added: {filePath}");
+
+            return sparkSource;
         }
 
         /// <summary>
@@ -333,6 +351,23 @@ namespace Ownaudio.Sources
                 return true;
             }
 
+            return false;
+        }
+
+        /// <summary>
+        /// Removes a simple source
+        /// </summary>
+        /// <param name="sparkSource">The spark source to remove</param>
+        /// <returns>True if successfully removed</returns>
+        public bool RemoveSparkSource(SourceSpark sparkSource)
+        {
+            if (SourcesSpark.Contains(sparkSource))
+            {
+                sparkSource.Stop();
+                sparkSource.Dispose();
+                SourcesSpark.Remove(sparkSource);
+                return true;
+            }
             return false;
         }
 
@@ -495,10 +530,13 @@ namespace Ownaudio.Sources
                 SetAndRaisePositionChanged(TimeSpan.Zero);
             }
 
-            if (SourcesInput.Count > 0 && Sources.Count < 1)
+            if (Sources.Count < 1)
             {
-                AddEmptyOutputSource(); 
-            }
+               if (SourcesInput.Count > 0 || SourcesSpark.Count > 0)
+                {
+                    AddEmptySource();
+                } 
+            }  
 
             if (InitializeEngine())
             {
@@ -524,6 +562,18 @@ namespace Ownaudio.Sources
             {
                 Debug.WriteLine("Engine Initialization Error!");
                 return;
+            }
+        }
+
+        /// <summary>
+        /// Plays a simple source immediately
+        /// </summary>
+        /// <param name="sparkSource">The spark source to play</param>
+        public void PlaySparkSource(SourceSpark sparkSource)
+        {
+            if (SourcesSpark.Contains(sparkSource))
+            {
+                sparkSource.Play();
             }
         }
 
@@ -686,6 +736,11 @@ namespace Ownaudio.Sources
                 foreach (ISource inputSrc in SourcesInput)
                 {
                     inputSrc.Dispose();
+                }
+
+                foreach (SourceSpark spark in SourcesSpark)
+                {
+                    spark.Dispose();
                 }
 
                 Sources.Clear();
