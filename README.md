@@ -31,7 +31,7 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 - **Audio data visualization** customizable waveform display
 - **Built-in audio effects** (Reverb, Delay, Distortion, Equalizer, Compressor, etc.)
 - **Detecting musical chords from audio data** Real-time or offline chord detection from musical notes
-- **New feature: SourceSpark**, a useful resource for game developers, is ready. See description below!
+- **New feature: SourceSpark**, a useful resource for game developers, is ready. [See description below!](#sourcespark)
 
 ## 🚧 Work in Progress
 - [x] Load an unlimited number of audio files (sound effects, noises, etc.), which can be played at any time during playback, even in a loop.
@@ -265,7 +265,8 @@ var processor = new MyAudioProcessor();
 sourceManager.CustomSampleProcessor = processor;
 ```
 
-## SourceSpark - Game-Optimized Audio Effects
+## SourceSpark 
+**Game-Optimized Audio Effects**
 
 The `SourceSpark` class is a simplified audio source designed specifically for short audio clips and sound effects, making it perfect for game development. Unlike standard sources, **SourceSpark loads entire audio files into memory** for instant, zero-latency playback.
 
