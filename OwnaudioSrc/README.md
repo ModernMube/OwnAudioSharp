@@ -5,7 +5,7 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 ## Features
 
 - **Cross-platform** compatibility (Windows, macOS, Linux, Android, iOS)
-- **Audio playback** with support for various formats via FFmpeg, or MiniAudio (mp3, wav, flac) formats
+- **Audio playbook** with support for various formats via FFmpeg, or MiniAudio (mp3, wav, flac) formats
 - **Audio recording** capabilities through input devices
 - **Time stretching and pitch shifting** using SoundTouch
 - **Mixing** multiple audio sources
@@ -15,7 +15,10 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 - **Audio data visualization** customizable waveform display
 - **Built-in audio effects** (Reverb, Delay, Distortion, Equalizer, Compressor, etc.)
 - **Detecting musical chords from audio data** Real-time or offline chord detection from musical notes
-- **New feature: SourceSpark**, a useful resource for game developers, is ready. See description below!
+- **New feature: SourceSpark**, a useful resource for game developers, is ready. [See description below!](#sourcespark)
+
+## 🚧 Work in Progress
+- [x] Load an unlimited number of audio files (sound effects, noises, etc.), which can be played at any time during playback, even in a loop.
 
 ## Upcoming Features
 - Developing and testing mobile application support
@@ -112,27 +115,37 @@ Here's a quick example of how to use OwnAudio to play an audio file:
 using Ownaudio;
 using Ownaudio.Sources;
 using System;
-using System.Threading;
+using System.Threading.Tasks;
 
-// Initialize OwnAudio
-OwnAudio.Initialize();
+try 
+{
+    // Initialize OwnAudio
+    OwnAudio.Initialize();
 
-// Create a source manager
-var sourceManager = SourceManager.Instance;
+    // Create a source manager
+    var sourceManager = SourceManager.Instance;
 
-// Add an audio file
-await sourceManager.AddOutputSource("path/to/audio.mp3");
+    // Add an audio file
+    await sourceManager.AddOutputSource("path/to/audio.mp3");
 
-// Play the audio
-sourceManager.Play();
+    // Play the audio
+    sourceManager.Play();
 
-// Wait for the audio to finish
-Console.WriteLine("Press any key to stop playback...");
-Console.ReadKey();
+    // Wait for the audio to finish
+    Console.WriteLine("Press any key to stop playback...");
+    Console.ReadKey();
 
-// Stop playback and clean up
-sourceManager.Stop();
-OwnAudio.Free();
+    // Stop playback and clean up
+    sourceManager.Stop();
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Audio error: {ex.Message}");
+}
+finally
+{
+    OwnAudio.Free();
+}
 ```
 
 ## Advanced Features
@@ -140,13 +153,16 @@ OwnAudio.Free();
 ### Mixing Multiple Audio Sources
 
 ```csharp
+using Ownaudio;
+using Ownaudio.Sources;
+
 // Add multiple audio files
 await sourceManager.AddOutputSource("path/to/audio1.mp3", "Track1Name");
 await sourceManager.AddOutputSource("path/to/audio2.mp3", "Track2Name");
 
 // Adjust volume for individual sources
-sourceManager["Track1Name"|.Volume(0.8f);  // 80% volume for first source
-sourceManager["Track2Name"].Volume(0.6f);  // 60% volume for second source
+sourceManager["Track1Name"].Volume = 0.8f;  // 80% volume for first source
+sourceManager["Track2Name"].Volume = 0.6f;  // 60% volume for second source
 
 // Play mixed audio
 sourceManager.Play();
@@ -158,7 +174,7 @@ sourceManager.Play();
 // Add an input source
 await sourceManager.AddInputSource();
 
-// Start recording
+// Start recording to file
 sourceManager.Play("output.wav", 16);  // 16-bit recording
 ```
 
@@ -166,10 +182,10 @@ sourceManager.Play("output.wav", 16);  // 16-bit recording
 
 ```csharp
 // Change tempo without affecting pitch (value range -20 to +20)
-sourceManager["Track1Name"].Tempo(10.0);  // Speed up by 10%
+sourceManager["Track1Name"].Tempo = 10.0;  // Speed up by 10%
 
 // Change pitch without affecting tempo (value range -6 to +6 semitones)
-sourceManager["Track1Name"].Pitch(2.0);  // Raise pitch by 2 semitones
+sourceManager["Track1Name"].Pitch = 2.0;  // Raise pitch by 2 semitones
 ```
 
 ### Seeking Within Audio
@@ -184,6 +200,8 @@ sourceManager.Seek(TimeSpan.FromSeconds(30));  // Seek to 30 seconds
 OwnAudio includes a comprehensive effects library:
 
 ```csharp
+using Ownaudio.Effects;
+
 // Apply reverb effect
 var reverb = new Reverb(0.5f, 0.3f, 0.4f, 0.7f);
 sourceManager.CustomSampleProcessor = reverb;
@@ -215,12 +233,16 @@ sourceManager.CustomSampleProcessor = equalizer;
 - **Rotary**: Rotary speaker simulation
 - **DynamicAmp**: Adaptive volume control
 - **Enhancer**: Harmonic enhancement
+- **Overdrive**: effect with tube-like saturation
+- **Limiter**: with look-ahead and smooth gain reduction
 
 ## Custom Audio Processing
 
 You can implement custom audio processing by implementing the `SampleProcessorBase` class:
 
 ```csharp
+using Ownaudio.Processors;
+
 public class MyAudioProcessor : SampleProcessorBase
 {
     public override void Process(Span<float> samples)
@@ -244,7 +266,8 @@ var processor = new MyAudioProcessor();
 sourceManager.CustomSampleProcessor = processor;
 ```
 
-## SourceSpark - Game-Optimized Audio Effects
+## SourceSpark 
+**Game-Optimized Audio Effects**
 
 The `SourceSpark` class is a simplified audio source designed specifically for short audio clips and sound effects, making it perfect for game development. Unlike standard sources, **SourceSpark loads entire audio files into memory** for instant, zero-latency playback.
 
@@ -252,20 +275,26 @@ The `SourceSpark` class is a simplified audio source designed specifically for s
 
 - **Zero-latency playback** - Audio data stored in memory for instant access
 - **Looping support** - Perfect for ambient sounds like rain, wind, or engine noise
-- **Multiple simultaneous playback** - Same sound effect can play overlapping instances
+- **Multiple simultaneous playback** - Create multiple instances for overlapping sounds
 - **Automatic cleanup** - Non-looping sounds are automatically removed when finished
 - **Real-time effects** - Pitch, tempo, and volume can be modified during playback
 
 ### Basic Usage
 
 ```csharp
+using Ownaudio;
+using Ownaudio.Sources;
+
 // Add a simple sound effect
 var gunshot = sourceManager.AddSparkSource("sounds/gunshot.wav", looping: false, volume: 0.9f);
-sourceManager.PlaySparkSource(gunshot);
+gunshot.Play(); // Direct playback
 
 // Add looping ambient sound
 var rainSound = sourceManager.AddSparkSource("ambient/rain.wav", looping: true, volume: 0.4f);
-sourceManager.PlaySparkSource(rainSound);
+rainSound.Play(); // Start looping
+
+// Start the source manager to handle all sources
+sourceManager.Play();
 ```
 
 ### Advanced Game Audio
@@ -273,7 +302,7 @@ sourceManager.PlaySparkSource(rainSound);
 ```csharp
 // Dynamic engine sound for vehicles
 var engineSound = sourceManager.AddSparkSource("car_engine.wav", looping: true, volume: 0.6f);
-sourceManager.PlaySparkSource(engineSound);
+engineSound.Play();
 
 // Real-time sound modification based on game state
 void UpdateEngineSound(float speed) {
@@ -281,10 +310,11 @@ void UpdateEngineSound(float speed) {
     engineSound.Volume = Math.Min(0.8f, 0.3f + speed * 0.005f);
 }
 
-// Multiple overlapping gunshots
-var pistol = sourceManager.AddSparkSource("weapons/pistol.wav");
-sourceManager.PlaySparkSource(pistol); // First shot
-sourceManager.PlaySparkSource(pistol); // Second shot (overlapping)
+// Multiple overlapping gunshots - create separate instances
+var pistol1 = sourceManager.AddSparkSource("weapons/pistol.wav");
+var pistol2 = sourceManager.AddSparkSource("weapons/pistol.wav");
+pistol1.Play(); // First shot
+pistol2.Play(); // Second shot (overlapping)
 ```
 
 ### Loop Management for Ambient Audio
@@ -292,6 +322,7 @@ sourceManager.PlaySparkSource(pistol); // Second shot (overlapping)
 ```csharp
 // Weather system with looping sounds
 var currentWeather = sourceManager.AddSparkSource("weather/clear.wav", looping: true, volume: 0.2f);
+currentWeather.Play();
 
 void ChangeWeather(WeatherType weather) {
     // Stop current weather sound
@@ -307,7 +338,7 @@ void ChangeWeather(WeatherType weather) {
     };
     
     currentWeather = sourceManager.AddSparkSource(weatherFile, looping: true, volume: 0.4f);
-    sourceManager.PlaySparkSource(currentWeather);
+    currentWeather.Play();
 }
 ```
 
@@ -342,7 +373,7 @@ sparkSource.Tempo = 1.5;       // Speed up by 50%
 - **Instant response** - No file I/O during gameplay
 - **Reliable playback** - No streaming errors or stuttering  
 - **Flexible manipulation** - Real-time pitch/tempo changes
-- **Concurrent playbook** - Multiple instances of same sound
+- **Concurrent playback** - Multiple instances of same sound
 
 **Memory Guidelines:**
 - Ideal for clips under 10 seconds
@@ -374,6 +405,8 @@ The memory-based approach makes SourceSpark ideal for games where audio responsi
 OwnAudio supports real-time audio sources for live audio generation and streaming:
 
 ```csharp
+using System.Threading.Tasks;
+
 // Add a real-time source
 var realtimeSource = sourceManager.AddRealTimeSource(1.0f, 2); // Volume 1.0, stereo
 
@@ -391,11 +424,16 @@ The `SourceSound` class enables real-time audio streaming, perfect for:
 - Dynamic audio generation
 
 ```csharp
+using Ownaudio;
+using Ownaudio.Sources;
+using System;
+using System.Threading.Tasks;
+
 // Create a real-time audio source
 var liveSource = sourceManager.AddRealTimeSource(1.0f, 2); // Volume, channels
 
 // Example: Generate and stream sine wave in real-time
-Task.Run(async () =>
+await Task.Run(async () =>
 {
     int sampleRate = 44100;
     int frequency = 440; // A4 note
@@ -454,6 +492,9 @@ sourceManager.Play();
 ### Custom Audio Generator
 
 ```csharp
+using System;
+using System.Threading.Tasks;
+
 public class AudioGenerator
 {
     private SourceSound _source;
@@ -524,6 +565,7 @@ byte[] audioByte = sourceManager.Sources[0].GetByteAudioData(TimeSpan.Zero);
 // Load source audio data into a float array
 float[] audioFloat = sourceManager.Sources[0].GetFloatAudioData(TimeSpan.Zero);
 ```
+
 # Chord Detection
 
 Real-time or offline chord detection from musical notes.
@@ -543,6 +585,10 @@ Real-time or offline chord detection from musical notes.
 ## Quick Start
 
 ```csharp
+using Ownaudio.Utilities.OwnChordDetect.Detectors;
+using Ownaudio.Utilities.OwnChordDetect.Analysis;
+using Ownaudio.Utilities.Extensions;
+
 // Basic chord detection
 var detector = new BaseChordDetector(confidenceThreshold: 0.7f);
 var analysis = detector.AnalyzeChord(notes);
@@ -559,6 +605,21 @@ var (stableChord, stability) = realtimeDetector.ProcessNotes(newNotes);
 // Full song analysis
 var songAnalyzer = new SongChordAnalyzer(windowSize: 1.0f, hopSize: 0.5f);
 var timedChords = songAnalyzer.AnalyzeSong(allSongNotes);
+
+// Complete example with SourceManager
+var sourceManager = SourceManager.Instance;
+await sourceManager.AddOutputSource("music.mp3", "MusicTrack");
+
+// Detect chords from the loaded audio
+var (timedChords, detectedKey, tempo) = sourceManager.DetectChords("MusicTrack", intervalSecond: 1.0f);
+
+Console.WriteLine($"Detected Key: {detectedKey}");
+Console.WriteLine($"Detected Tempo: {tempo} BPM");
+
+foreach (var chord in timedChords)
+{
+    Console.WriteLine($"{chord.StartTime:F1}s-{chord.EndTime:F1}s: {chord.ChordName} ({chord.Confidence:F2})");
+}
 ```
 
 ## Input Format
@@ -620,8 +681,13 @@ The following example demonstrates how to use the `WaveAvaloniaDisplay` componen
 ### C# Code
 
 ```csharp
+using Ownaudio.Utilities;
+using System;
+using System.IO;
+using System.Threading.Tasks;
+
 // Set audio data from existing float array
-waveformDisplay.SetAudioData(SourceManager.Instance.Sources[0].GetFloatAudioData(TimeSpan.Zero));
+waveformDisplay.SetAudioData(sourceManager.Sources[0].GetFloatAudioData(TimeSpan.Zero));
 
 // Handle playback position changes
 waveformDisplay.PlaybackPositionChanged += OnPlaybackPositionChanged;
@@ -638,6 +704,12 @@ await waveformDisplay.LoadFromAudioFileAsync("large_audio.wav");
 // Loading from stream
 using var fileStream = File.OpenRead("audio.mp3");
 waveformDisplay.LoadFromAudioStream(fileStream);
+
+private void OnPlaybackPositionChanged(object sender, double position)
+{
+    // Update the actual audio playback position
+    sourceManager.Seek(TimeSpan.FromSeconds(position * sourceManager.Duration.TotalSeconds));
+}
 ```
 
 ### Properties
@@ -675,6 +747,11 @@ The library follows a layered architecture:
 You can configure the audio engine with specific parameters:
 
 ```csharp
+using Ownaudio.Engines;
+
+// Initialize first
+OwnAudio.Initialize();
+
 // Configure output engine options
 SourceManager.OutputEngineOptions = new AudioEngineOutputOptions(
     OwnAudioEngine.EngineChannels.Stereo, 
@@ -701,4 +778,4 @@ Special thanks to the creators of the following repositories, whose code was ins
 - [FFmpeg.AutoGen](https://github.com/Ruslan-B/FFmpeg.AutoGen) - FFmpeg auto generated unsafe bindings for C#/.NET
 - [soundtouch.net](https://github.com/owoudenberg/soundtouch.net) - .NET wrapper for the SoundTouch audio processing library
 - [Avalonia](https://github.com/AvaloniaUI/Avalonia) - Cross-platform .NET UI framework
-- [SoundFlow](https://github.com/LSXPrime/SoundFlow) - A powerful and extensible cross-platform .NET audio engine. 
+- [SoundFlow](https://github.com/LSXPrime/SoundFlow) - A powerful and extensible cross-platform .NET audio engine.
