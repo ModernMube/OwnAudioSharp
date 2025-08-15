@@ -15,7 +15,7 @@ namespace Microphone
 
                 manager["Input"].Volume = 0.8f; //Input volume 80%
 
-                manager.Play();
+                manager.Play(@"D:\output.wav", 16);
 
                 Console.Clear();
                 Console.WriteLine("Hi! Ownaudio user");
@@ -28,13 +28,6 @@ namespace Microphone
 
                 manager.Reset();
                 OwnAudio.Free();
-            }
-            else
-            {
-                if (!OwnAudio.IsFFmpegInitialized || !OwnAudio.IsPortAudioInitialized)
-                {
-                    Console.WriteLine("library initialization failed!");
-                }
             }
         }
     }

@@ -380,8 +380,23 @@ namespace Ownaudio.Sources
         {
             get
             {
-                return Sources.FirstOrDefault(s => s.Name?.Equals(name, StringComparison.OrdinalIgnoreCase) == true)
-                    ?? throw new ArgumentException($"Source with name '{name}' not found.", nameof(name));
+
+                // Search in Sources collection
+                var source = Sources.FirstOrDefault(s => s.Name?.Equals(name, StringComparison.OrdinalIgnoreCase) == true);
+                if (source != null)
+                    return source;
+
+                // Search in SourcesInput collection
+                source = SourcesInput.FirstOrDefault(s => s.Name?.Equals(name, StringComparison.OrdinalIgnoreCase) == true);
+                if (source != null)
+                    return source;
+
+                // Search in SourcesSpark collection
+                var sparkSource = SourcesSpark.FirstOrDefault(s => s.Name?.Equals(name, StringComparison.OrdinalIgnoreCase) == true);
+                if (sparkSource != null)
+                    return sparkSource;
+
+                throw new ArgumentException($"Source with name '{name}' not found.", nameof(name));
 
             }
         }
