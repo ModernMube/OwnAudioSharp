@@ -26,7 +26,10 @@ public static partial class OwnAudio
         {
             PaBinding.Pa_Terminate();
             IsPortAudioInitialized = false;
-        }      
+        }   
+        
+        if(IsMiniAudioInitialized)
+            IsMiniAudioInitialized = false;
     }
 
     /// <summary>
@@ -115,9 +118,9 @@ public static partial class OwnAudio
 
             IsPortAudioInitialized = true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            Debug.WriteLine("Portaudio initialize error.");
+            Debug.WriteLine($"Portaudio initialize error: {ex.Message}");
         }
     }
 }

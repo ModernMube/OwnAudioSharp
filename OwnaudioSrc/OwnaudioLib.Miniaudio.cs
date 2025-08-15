@@ -20,7 +20,10 @@ public static partial class OwnAudio
     /// <summary>
     /// Terminates processes and frees memory.
     /// </summary>
-    public static void FreeMiniAudio() { }
+    public static void FreeMiniAudio() 
+    { 
+        
+    }
 
     /// <summary>
     /// Initialize and register MiniAudio functions by providing the path to MiniAudio's native library. 
@@ -42,6 +45,7 @@ public static partial class OwnAudio
         try
         {
             MaBinding.InitializeBindings(new LibraryLoader(miniAudioPath));
+            //MaBinding.InitializeBindings(miniAudioPath);
             _outputDevices.Clear();
             _inputDevices.Clear();
 

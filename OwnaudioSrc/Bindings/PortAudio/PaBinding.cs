@@ -35,7 +35,7 @@ internal static partial class PaBinding
         _readStream = loader.LoadFunc<ReadStream>(nameof(Pa_ReadStream));
     }
 
-    #nullable disable
+#nullable disable
     public static int Pa_Initialize()
     {
         return _initialize();

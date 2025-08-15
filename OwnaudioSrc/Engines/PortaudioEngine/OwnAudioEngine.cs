@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Ownaudio.Exceptions;
@@ -21,21 +22,13 @@ namespace Ownaudio.Engines;
 public sealed partial class OwnAudioEngine : IAudioEngine
 {
     #region Constants
-
     /// <summary>
     /// Default stream flags used for PortAudio stream configuration.
     /// </summary>
     private const PaStreamFlags StreamFlags = PaStreamFlags.paPrimeOutputBuffersUsingStreamCallback | PaStreamFlags.paClipOff;
-
-    /// <summary>
-    /// Maximum number of buffers that can be queued for processing.
-    /// </summary>
-    private readonly int _maxQueueSize = 10;
-
     #endregion
 
     #region Fields
-
     // Configuration
     private readonly AudioEngineOutputOptions _outputOptions;
     private readonly AudioEngineInputOptions _inputOptions;
@@ -57,15 +50,18 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     private readonly ConcurrentBag<float[]> _inputBufferPool = new ConcurrentBag<float[]>();
     private readonly ConcurrentBag<float[]> _outputBufferPool = new ConcurrentBag<float[]>();
     private float[]? _silenceBuffer;
+    private int _maxQueueSize;
+    private int _poolInitialSize;
+    private int _expectedOutputSizeConst;
+    private int _expectedInputSizeConst;
+    private SpinLock _outputQueueSpinLock = new SpinLock();
 
     // State management
     private bool _disposed;
     private readonly Stopwatch _stopwatch = new Stopwatch();
-
     #endregion
 
     #region Properties
-
     /// <summary>
     /// Gets the number of frames processed per buffer.
     /// </summary>
@@ -74,11 +70,9 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// Higher values increase latency but may improve performance.
     /// </value>
     public int FramesPerBuffer { get; private set; } = 512;
-
     #endregion
 
     #region Constructors
-
     /// <summary>
     /// Initializes a new instance of the <see cref="OwnAudioEngine"/> class with output-only capabilities.
     /// </summary>
@@ -116,14 +110,13 @@ public sealed partial class OwnAudioEngine : IAudioEngine
         _outputOptions = outputOptions ?? new AudioEngineOutputOptions();
         FramesPerBuffer = framesPerBuffer;
 
+        CalculateOptimalSizes();
         InitializeBufferPools();
         InitializePortAudioEngine();
     }
-
     #endregion
 
     #region Initialization Methods
-
     /// <summary>
     /// Initializes the buffer pools used for efficient memory management during audio processing.
     /// </summary>
@@ -139,8 +132,8 @@ public sealed partial class OwnAudioEngine : IAudioEngine
 
         _silenceBuffer = new float[outputBufferSize];
 
-        // Pre-allocate buffers to avoid allocations during real-time processing
-        for (int i = 0; i < _maxQueueSize * 2; i++)
+        // Pre-allocate buffers with optimized pool size
+        for (int i = 0; i < _poolInitialSize; i++)
         {
             if (_outputOptions.Channels > 0)
                 _outputBufferPool.Add(new float[outputBufferSize]);
@@ -165,10 +158,26 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     {
         unsafe
         {
+            // Calculate constants once
+            _expectedOutputSizeConst = FramesPerBuffer * (int)_outputOptions.Channels;
+            _expectedInputSizeConst = FramesPerBuffer * (int)_inputOptions.Channels;
+
             SetupAudioCallback();
             ConfigureStreamParameters();
             CreatePortAudioStream();
         }
+    }
+
+    /// <summary>
+    /// Calculates optimal buffer pool and queue sizes based on latency requirements.
+    /// </summary>
+    private void CalculateOptimalSizes()
+    {
+        double latencyMs = Math.Max(_inputOptions.Latency, _outputOptions.Latency) * 1000;
+        double bufferDurationMs = (FramesPerBuffer * 1000.0) / _outputOptions.SampleRate;
+        
+        _maxQueueSize = Math.Max(3, (int)(latencyMs / bufferDurationMs) + 2);
+        _poolInitialSize = _maxQueueSize * 3; // 3x reserve for safety
     }
 
     /// <summary>
@@ -180,9 +189,9 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// </remarks>
     private unsafe void SetupAudioCallback()
     {
-#nullable disable
+        #nullable disable
         _paCallback = CreateAudioProcessingCallback();
-#nullable restore
+        #nullable restore
         _callbackHandle = GCHandle.Alloc(_paCallback);
     }
 
@@ -194,11 +203,9 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     {
         return (void* inputBuffer, void* outputBuffer, long frameCount, IntPtr timeInfo, PaStreamCallbackFlags statusFlags, void* userData) =>
         {
-            int expectedOutputSize = (int)(frameCount * (int)_outputOptions.Channels);
-            int expectedInputSize = (int)(frameCount * (int)_inputOptions.Channels);
-
-            ProcessOutputBuffer(outputBuffer, expectedOutputSize);
-            ProcessInputBuffer(inputBuffer, expectedInputSize);
+            // Use pre-calculated constants instead of runtime multiplication
+            ProcessOutputBuffer(outputBuffer, _expectedOutputSizeConst);
+            ProcessInputBuffer(inputBuffer, _expectedInputSizeConst);
 
             return PaStreamCallbackResult.paContinue;
         };
@@ -225,7 +232,15 @@ public sealed partial class OwnAudioEngine : IAudioEngine
                 needsReturn = false;
             }
 
-            Marshal.Copy(outputData, 0, (IntPtr)outputBuffer, outputData.Length);
+            // Optimized SIMD copy for large buffers
+            if (outputData.Length >= Vector<float>.Count * 4)
+            {
+                OptimizedBufferCopy(outputData, (float*)outputBuffer, outputData.Length);
+            }
+            else
+            {
+                Marshal.Copy(outputData, 0, (IntPtr)outputBuffer, outputData.Length);
+            }
 
             if (needsReturn)
                 _outputBufferPool.Add(outputData);
@@ -233,8 +248,25 @@ public sealed partial class OwnAudioEngine : IAudioEngine
         else
         {
             // Use silence when no data is available
-            Marshal.Copy(_silenceBuffer!, 0, (IntPtr)outputBuffer, expectedOutputSize);
+            if (expectedOutputSize >= Vector<float>.Count * 4)
+            {
+                OptimizedBufferCopy(_silenceBuffer!, (float*)outputBuffer, expectedOutputSize);
+            }
+            else
+            {
+                Marshal.Copy(_silenceBuffer!, 0, (IntPtr)outputBuffer, expectedOutputSize);
+            }
         }
+    }
+
+    /// <summary>
+    /// SIMD optimized buffer copy for better performance with large buffers.
+    /// </summary>
+    private unsafe void OptimizedBufferCopy(float[] source, float* dest, int length)
+    {
+        // Use built-in optimized copy which already uses SIMD internally
+        var destSpan = new Span<float>(dest, length);
+        source.AsSpan(0, length).CopyTo(destSpan);
     }
 
     /// <summary>
@@ -246,9 +278,7 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     private float[] ResizeOutputBuffer(float[] originalBuffer, int expectedSize)
     {
         if (!_outputBufferPool.TryTake(out float[]? correctSizeBuffer))
-        {
             correctSizeBuffer = new float[expectedSize];
-        }
 
         int copyLength = Math.Min(originalBuffer.Length, expectedSize);
         Array.Copy(originalBuffer, correctSizeBuffer, copyLength);
@@ -375,7 +405,7 @@ public sealed partial class OwnAudioEngine : IAudioEngine
         var outputParametersPtr = new IntPtr(&tempOutputParameters);
         Marshal.StructureToPtr(_outputParameters, outputParametersPtr, false);
 
-#nullable disable
+        #nullable disable
         var result = Pa_OpenStream(
             out _stream,
             inputParametersPtr,
@@ -385,15 +415,13 @@ public sealed partial class OwnAudioEngine : IAudioEngine
             StreamFlags,
             _paCallback,
             IntPtr.Zero).PaGuard();
-#nullable restore
+        #nullable restore
 
         Debug.WriteLine(result.PaErrorToText());
     }
-
     #endregion
 
     #region Host-Specific Configuration Methods
-
     /// <summary>
     /// Creates a WASAPI host API specific stream information structure.
     /// </summary>
@@ -449,11 +477,9 @@ public sealed partial class OwnAudioEngine : IAudioEngine
 
         return streamInfoPtr;
     }
-
     #endregion
 
     #region Public Methods
-
     /// <summary>
     /// Gets the PortAudio stream pointer for low-level operations.
     /// </summary>
@@ -579,7 +605,7 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// </remarks>
     public void Receives(out float[] samples)
     {
-#nullable disable
+        #nullable disable
         if (_inputBufferQueue.TryDequeue(out samples))
         {
             return;
@@ -593,13 +619,11 @@ public sealed partial class OwnAudioEngine : IAudioEngine
 
         // Return empty buffer if no data received
         samples = GetEmptyInputBuffer();
-#nullable restore
+        #nullable restore
     }
-
     #endregion
 
     #region Private Helper Methods
-
     /// <summary>
     /// Clears all buffer queues and returns buffers to their pools.
     /// </summary>
@@ -628,20 +652,50 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// <returns>True if the buffer was successfully enqueued, false if the queue is full.</returns>
     private bool TryEnqueueOutputBuffer(Span<float> samples)
     {
-        if (_outputBufferQueue.Count >= _maxQueueSize)
-            return false;
-
-        if (!_outputBufferPool.TryTake(out float[]? buffer) || buffer.Length != samples.Length)
+        bool lockTaken = false;
+        try
         {
-            if (buffer != null)
-                _outputBufferPool.Add(buffer);
+            // Try to acquire lock with minimal wait
+            _outputQueueSpinLock.TryEnter(100, ref lockTaken); // 100 microseconds timeout
+            
+            if (!lockTaken || _outputBufferQueue.Count >= _maxQueueSize)
+                return false;
 
-            buffer = new float[samples.Length];
+            if (!_outputBufferPool.TryTake(out float[]? buffer) || buffer.Length != samples.Length)
+            {
+                if (buffer != null)
+                    _outputBufferPool.Add(buffer);
+
+                buffer = new float[samples.Length];
+            }
+
+            // Use SIMD copy for larger buffers
+            if (samples.Length >= Vector<float>.Count * 2)
+            {
+                CopyWithSIMD(samples, buffer);
+            }
+            else
+            {
+                samples.CopyTo(buffer);
+            }
+
+            _outputBufferQueue.Enqueue(buffer);
+            return true;
         }
+        finally
+        {
+            if (lockTaken)
+                _outputQueueSpinLock.Exit();
+        }
+    }
 
-        samples.CopyTo(buffer);
-        _outputBufferQueue.Enqueue(buffer);
-        return true;
+    /// <summary>
+    /// SIMD optimized span to array copy.
+    /// </summary>
+    private void CopyWithSIMD(Span<float> source, float[] destination)
+    {
+        // Modern .NET already optimizes Span.CopyTo with SIMD
+        source.CopyTo(destination.AsSpan());
     }
 
     /// <summary>
@@ -685,11 +739,9 @@ public sealed partial class OwnAudioEngine : IAudioEngine
         Array.Clear(buffer, 0, buffer.Length);
         return buffer;
     }
-
     #endregion
 
     #region IDisposable Implementation
-
     /// <summary>
     /// Releases all resources used by the audio engine.
     /// </summary>
@@ -707,6 +759,7 @@ public sealed partial class OwnAudioEngine : IAudioEngine
         DisposePortAudioStream();
         DisposeHostSpecificResources();
         DisposeCallbackHandle();
+        DisposeSpinLocks();
         DisposeBufferResources();
 
         _disposed = true;
@@ -756,10 +809,33 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// <summary>
     /// Disposes of the callback GC handle.
     /// </summary>
+    // private void DisposeCallbackHandle()
+    // {
+    //     if (_callbackHandle.IsAllocated)
+    //         _callbackHandle.Free();
+    // }
     private void DisposeCallbackHandle()
     {
         if (_callbackHandle.IsAllocated)
             _callbackHandle.Free();
+    }
+
+    /// <summary>
+    /// Disposes SpinLock resources safely.
+    /// </summary>
+    private void DisposeSpinLocks()
+    {
+        // SpinLock doesn't require explicit disposal, but ensure no threads are waiting
+        bool lockTaken = false;
+        try
+        {
+            _outputQueueSpinLock.TryEnter(0, ref lockTaken);
+        }
+        finally
+        {
+            if (lockTaken)
+                _outputQueueSpinLock.Exit();
+        }
     }
 
     /// <summary>

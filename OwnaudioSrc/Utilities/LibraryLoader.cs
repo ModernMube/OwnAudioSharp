@@ -24,7 +24,7 @@ internal sealed class LibraryLoader : IDisposable
         {
             _handle = NativeLibrary.Load(libraryName);
         }
-        catch(DllNotFoundException ex)
+        catch (DllNotFoundException ex)
         {
             Console.WriteLine($"[ERROR] DllNotFoundException when loading native library: {ex.Message}");
         }
@@ -45,7 +45,7 @@ internal sealed class LibraryLoader : IDisposable
     public TDelegate LoadFunc<TDelegate>(string name)
     {
         var ptr = NativeLibrary.GetExport(_handle, name);
-        
+
         Ensure.That<Exception>(ptr != IntPtr.Zero, $"Could not load function name: {name}.");
 
         return Marshal.GetDelegateForFunctionPointer<TDelegate>(ptr);
