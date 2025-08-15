@@ -55,8 +55,8 @@ internal static partial class MaBinding
         _encoderWrite = loader.LoadFunc<EncoderWrite>(nameof(ma_encoder_write_pcm_frames));
 
         // Allocation functions
-         _allocateDecoder = loader.LoadFunc<AllocateDecoder>(nameof(sf_allocate_decoder));
-         _allocateDecoderConfig = loader.LoadFunc<AllocateDecoderConfig>(nameof(sf_allocate_decoder_config));
+        _allocateDecoder = loader.LoadFunc<AllocateDecoder>(nameof(sf_allocate_decoder));
+        _allocateDecoderConfig = loader.LoadFunc<AllocateDecoderConfig>(nameof(sf_allocate_decoder_config));
 
         // Resampler functions
         _resamplerInit = loader.LoadFunc<ResamplerInit>(nameof(ma_resampler_init));
@@ -124,17 +124,9 @@ internal static partial class MaBinding
     {
         if (_getDevices == null)
             throw new NotSupportedException("Getting devices list is not supported.");
-    
+
         return _getDevices(context, out pPlaybackDevices, out pCaptureDevices, out playbackDeviceCount, out captureDeviceCount);
     }
-
-    // public static IntPtr sf_allocate_context()
-    // {
-    //     if (_allocateContext == null)
-    //         throw new NotSupportedException("Context allocation is not supported.");
-    //
-    //     return _allocateContext();
-    // }
 
     public static IntPtr allocate_context()
     {
@@ -604,10 +596,24 @@ internal static partial class MaBinding
         _free(ptr);
     }
 
-    private static void ZeroMemory(IntPtr ptr, ulong size)
+    private static unsafe void ZeroMemory(IntPtr ptr, ulong size)
     {
-        byte[] zeroBytes = new byte[size];
-        Marshal.Copy(zeroBytes, 0, ptr, (int)size);
+        //byte[] zeroBytes = new byte[size];
+        //Marshal.Copy(zeroBytes, 0, ptr, (int)size);
+
+        //Using native memset - much faster
+        byte* p = (byte*)ptr.ToPointer();
+        ulong i = 0;
+
+        //Zeroing 8-byte blocks (faster)
+        ulong* p64 = (ulong*)p;
+        for (; i + 8 <= size; i += 8)
+            *p64++ = 0;
+
+        //Remaining bytes
+        p = (byte*)p64;
+        for (; i < size; i++)
+            *p++ = 0;
     }
 
     #endregion

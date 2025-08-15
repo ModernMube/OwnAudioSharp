@@ -12,6 +12,9 @@ namespace Ownaudio.MiniAudio
     /// </summary>
     public sealed unsafe class MiniAudioDecoder : IDisposable
     {
+        private const int MIN_BUFFER_SIZE = 4096;
+        private const int MAX_BUFFER_SIZE = 65536;
+
         private readonly IntPtr _decoder;
         private readonly Stream _stream;
         private readonly DecoderReadProc _readCallback;
@@ -256,30 +259,15 @@ namespace Ownaudio.MiniAudio
                     return MaResult.Error;
                 }
 
-                if (!_stream.CanRead || _endOfStreamReached)
-                {
-                    pBytesRead = 0;
-                    return _endOfStreamReached ? MaResult.AtEnd : MaResult.NoDataAvailable;
-                }
+                var size = (int)Math.Min(bytesToRead, MAX_BUFFER_SIZE);
 
-                var size = (int)bytesToRead;
-                if (_readBuffer == null)
+                // Only replace the buffer when absolutely necessary.
+                if (_readBuffer == null || _readBuffer.Length < size)
                 {
-                    pBytesRead = 0;
-                    return MaResult.Error;
-                }
-
-                if (_readBuffer.Length < size)
-                {
-                    try
-                    {
-                        ArrayPool<byte>.Shared.Return(_readBuffer, clearArray: false);
-                    }
-                    catch (ArgumentException ex)
-                    {
-                        Debug.WriteLine($"ArrayPool.Return failed in ReadCallback (buffer may have been returned concurrently or is not from pool): {ex.Message}");
-                    }
-                    _readBuffer = ArrayPool<byte>.Shared.Rent(size);
+                    var newSize = Math.Max(size, MIN_BUFFER_SIZE);
+                    if (_readBuffer != null)
+                        ArrayPool<byte>.Shared.Return(_readBuffer, false);
+                    _readBuffer = ArrayPool<byte>.Shared.Rent(newSize);
                 }
 
                 var read = 0;

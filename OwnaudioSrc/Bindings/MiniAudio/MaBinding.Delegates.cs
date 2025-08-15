@@ -66,7 +66,7 @@ internal static partial class MaBinding
     private static MaFree? _maFree;
 
     public const int MA_MAX_DEVICE_NAME_LENGTH = 256;
-    public const int MA_MAX_DEVICE_ID_LENGTH = 256; 
+    public const int MA_MAX_DEVICE_ID_LENGTH = 256;
     public const int MA_MAX_NATIVE_DATA_FORMATS_PER_DEVICE = 256;
     public const int MA_DEVICE_INFO_NATIVE_DATA_FORMAT_ARRAY_SIZE = 64;
 
