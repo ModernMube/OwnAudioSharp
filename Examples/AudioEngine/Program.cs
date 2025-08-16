@@ -61,7 +61,7 @@ namespace Simpleplayer
 
                 SourceManager manager = SourceManager.Instance;
 
-                await manager.AddOutputSource("E:\\AI\\MelBand\\VocalModel\\audiooutput\\Kamazlakteged_instrumental.wav");
+                await manager.AddOutputSource("path/to/audio.mp3");
                 int track1Number = manager.Sources.Count - 1;
 
                 manager.Play();
