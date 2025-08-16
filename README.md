@@ -46,7 +46,11 @@ Check out the sample application [OwnAudioSharpDemo](https://github.com/ModernMu
 ## Documentation
 
  <a href="../../wiki">
-  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20documentation%20step-blue" alt="Wiki OwnAudio documentation">
+  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20documentation-blue" alt="Wiki OwnAudioSharp documentation">
+</a>
+
+<a href="../../wiki/OwnAudioSharp-Beginner's-Guide">
+  <img src="https://img.shields.io/badge/Wiki-OwnAudioSharp%20Beginner's%20Guide-blue" alt="Wiki OwnAudioSharp Beginner`s Guide">
 </a>
 
 ## Supported Systems
