@@ -17,7 +17,7 @@ namespace Ownaudio.Sources;
 /// </summary>
 public partial class SourceWithoutData : ISource
 {
-    /// <summary>
+   /// <summary>
     /// Event that is raised when source state has been changed.
     /// </summary>
     public event EventHandler? StateChanged;
@@ -65,12 +65,10 @@ public partial class SourceWithoutData : ISource
     /// <summary>
     /// Sets the playback tempo of the sources as a percentage.
     /// </summary>
-    public double Tempo { get; set; }
 
     /// <summary>
     /// Adjusts the pitch of the sources in semitone steps. 
     /// </summary>
-    public double Pitch { get; set; }
 
     /// <summary>
     /// Processing unit connected to the sourceinput <see cref="ISampleProcessor"/>
@@ -82,7 +80,7 @@ public partial class SourceWithoutData : ISource
     /// Gets or sets logger instance.
     /// </summary>
     [NotNull]
-    public ILogger? Logger { get; set; }
+    public ILogger? Logger { get; set; }  
 
     /// <summary>
     /// Gets queue object that holds queued audio frames.

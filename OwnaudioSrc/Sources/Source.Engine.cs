@@ -1,7 +1,3 @@
-using Ownaudio.Decoders;
-using Ownaudio.Engines;
-using Ownaudio.Sources.Extensions;
-using Ownaudio.Utilities.Extensions;
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -337,8 +333,8 @@ public partial class Source : ISource
 
         SetAndRaisePositionChanged(TimeSpan.Zero);
 
-        if (!_stateChangeTask.IsCompleted)
-            _stateChangeTask.Wait();
+        // Just fire and forget, and it should be non-blocking event.
+        Task.Run(() => SetAndRaiseStateChanged(SourceState.Idle)); 
 
         _stateChangeTask = Task.Run(() => SetAndRaiseStateChanged(SourceState.Idle));
 
@@ -348,79 +344,8 @@ public partial class Source : ISource
     /// <summary>
     /// Ensures the processed samples buffer is allocated and sized correctly for the current buffer requirements.
     /// </summary>
-    /// <remarks>
-    /// This method checks if the buffer needs to be reallocated based on the current fixed buffer size.
-    /// Reallocation occurs when the buffer is null or when the buffer size has changed since the last allocation.
-    /// This approach minimizes memory allocations during audio processing.
-    /// </remarks>
-    private void EnsureProcessedSamplesBuffer()
-    {
-        if (_processedSamples == null || _lastProcessedSize != FixedBufferSize)
-        {
-            _processedSamples = new float[FixedBufferSize];
-            _lastProcessedSize = FixedBufferSize;
-        }
-    }
-
-    /// <summary>
-    /// Ensures the SoundTouch input buffer is allocated with sufficient size.
-    /// </summary>
-    /// <param name="requiredSize">The minimum required size for the buffer.</param>
-    private void EnsureSoundTouchInputBuffer(int requiredSize)
-    {
-        if (_soundTouchInputBuffer == null || _lastSoundTouchInputSize < requiredSize)
-        {
-            _soundTouchInputBuffer = new float[requiredSize];
-            _lastSoundTouchInputSize = requiredSize;
-        }
-    }
-
-    /// <summary>
-    /// Ensures the SoundTouch buffer array is allocated with sufficient capacity.
-    /// </summary>
-    private void EnsureSoundTouchBuffers()
-    {
-        int requiredCapacity = FixedBufferSize * 4; // Allow for multiple frames
-
-        if (_soundTouchBuffer == null || _soundTouchBufferCapacity < requiredCapacity)
-        {
-            _soundTouchBuffer = new float[requiredCapacity];
-            _soundTouchBufferCapacity = requiredCapacity;
-            _soundTouchBufferCount = 0;
-        }
-    }
-
-    /// <summary>
-    /// Adds samples to the SoundTouch buffer using array operations instead of List operations.
-    /// </summary>
-    /// <param name="samples">The audio samples to add to the buffer.</param>
-    private void AddToSoundTouchBuffer(ReadOnlySpan<float> samples)
-    {
-        int availableSpace = _soundTouchBufferCapacity - _soundTouchBufferCount;
-        if (samples.Length > availableSpace)
-        {
-            EnsureSoundTouchBuffers();
-            return;
-        }
-
-        if (_soundTouchBufferCount + samples.Length > _soundTouchBufferCapacity)
-        {
-            int newCapacity = Math.Max(_soundTouchBufferCapacity * 2, _soundTouchBufferCount + samples.Length);
-            var newBuffer = new float[newCapacity];
-
-            if (_soundTouchBufferCount > 0)
-            {
-                _soundTouchBuffer.AsSpan(0, _soundTouchBufferCount).SafeCopyTo(newBuffer);
-            }
-
-            _soundTouchBuffer = newBuffer;
-            _soundTouchBufferCapacity = newCapacity;
-        }
-
-        samples.SafeCopyTo(_soundTouchBuffer.AsSpan(_soundTouchBufferCount, samples.Length));
-        _soundTouchBufferCount += samples.Length;
-    }
-
+    /// <param name="soundTouchBuffer">List of processed data</param>
+    /// <param name="calculateTime">Time calculated from the data</param>
 #nullable disable
     /// <summary>
     /// Prepares processed audio data for the source manager and updates playback position.
