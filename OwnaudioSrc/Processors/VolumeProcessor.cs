@@ -32,4 +32,9 @@ public sealed class VolumeProcessor : SampleProcessorBase
         for (int i = 0; i < samples.Length; i++)
             samples[i] = samples[i] * Volume;
     }
+
+    /// <summary>
+    /// No activity
+    /// </summary>
+    public override void Reset() { }
 }

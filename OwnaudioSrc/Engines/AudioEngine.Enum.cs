@@ -43,7 +43,7 @@ public sealed partial class OwnAudioEngine
         /// <summary>
         /// Default audio API for macos
         /// </summary>
-        CoreAudio,
+        COREAUDIO,
 
         /// <summary>
         /// Audio API used on Linux
@@ -66,5 +66,20 @@ public sealed partial class OwnAudioEngine
         /// Only on Windows systems.
         /// </summary>
         WASAPI,
+
+        /// <summary>
+        /// Only on Android systems.
+        /// </summary>
+        AAUDIO,
+
+        /// <summary>
+        /// Only on Android systems.
+        /// </summary>
+        OPENSL,
+
+        /// <summary>
+        /// Only on Web.
+        /// </summary>
+        WEBAUDIO
     }
 }

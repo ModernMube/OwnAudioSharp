@@ -27,22 +27,32 @@ public static partial class OwnAudio
    /// <summary>
    /// It stores FFmpeg's default or specified path.
    /// </summary>
-   public static string? FFmpegPath { get; private set; }
+   public static string? LibraryPath { get; private set; }
 
    /// <summary>
    /// Boolean variable in which we store the value of whether the PortAudio library is initialized or not.
    /// </summary>
    public static bool IsPortAudioInitialized { get; private set; }
 
+    /// <summary>
+    /// Boolean variable in which we store the value of whether the MiniAudio library is initialized or not.
+    /// </summary>
+    public static bool IsMiniAudioInitialized { get; private set; }
+
    /// <summary>
    /// Stores the default or specified path of PortAudio
    /// </summary>
    public static string? PortAudioPath { get; private set; }
 
-   /// <summary>
-   /// The api id of the selected system
-   /// </summary>
-   public static int  HostID { get; private set; }
+    /// <summary>
+    /// Stores the default or specified path of PortAudio
+    /// </summary>
+    public static string? MiniAudioPath { get; private set; }
+
+    /// <summary>
+    /// The api id of the selected system
+    /// </summary>
+    public static int  HostID { get; private set; }
 
    /// <summary>
    /// AudioDevice is the default output device used by the current system.
@@ -52,7 +62,7 @@ public static partial class OwnAudio
    {
       get
       {
-         Ensure.That<OwnaudioException>(IsPortAudioInitialized, "PortAudio is not initialized.");
+         Ensure.That<OwnaudioException>(IsPortAudioInitialized || IsMiniAudioInitialized, "Audio engine is not initialized.");
          return _defaultOutputDevice;
       }
    }
@@ -65,7 +75,7 @@ public static partial class OwnAudio
    {
       get
       {
-         Ensure.That<OwnaudioException>(IsPortAudioInitialized, "PortAudio is not initialized.");
+         Ensure.That<OwnaudioException>(IsPortAudioInitialized || IsMiniAudioInitialized, "Audio engine is not initialized.");
          return _defaultInputDevice;
       }
    }
@@ -78,7 +88,7 @@ public static partial class OwnAudio
    {
       get
       {
-         Ensure.That<OwnaudioException>(IsPortAudioInitialized, "PortAudio is not initialized.");
+         Ensure.That<OwnaudioException>(IsPortAudioInitialized || IsMiniAudioInitialized, "Audio engine is not initialized.");
          return _inputDevices;
       }
    }
@@ -91,7 +101,7 @@ public static partial class OwnAudio
    {
       get
       {
-         Ensure.That<OwnaudioException>(IsPortAudioInitialized, "PortAudio is not initialized.");
+         Ensure.That<OwnaudioException>(IsPortAudioInitialized || IsMiniAudioInitialized, "Audio engine is not initialized.");
          return _outputDevices;
       }
    }

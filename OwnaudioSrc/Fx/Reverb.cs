@@ -1,8 +1,75 @@
 ﻿using Ownaudio.Processors;
 using System;
+using System.Runtime.CompilerServices;
 
 namespace Ownaudio.Fx
 {
+    /// <summary>
+    /// Reverb presets for different acoustic environments and audio processing scenarios
+    /// </summary>
+    public enum ReverbPreset
+    {
+        /// <summary>
+        /// Small room reverb - intimate acoustic space simulation
+        /// Short decay, minimal damping, suitable for vocals and intimate recordings
+        /// </summary>
+        SmallRoom,
+
+        /// <summary>
+        /// Large hall reverb - spacious concert hall simulation
+        /// Long decay, moderate damping, creates sense of grandeur and space
+        /// </summary>
+        LargeHall,
+
+        /// <summary>
+        /// Cathedral reverb - Gothic cathedral acoustic simulation
+        /// Very long decay, low damping, ethereal and majestic sound
+        /// </summary>
+        Cathedral,
+
+        /// <summary>
+        /// Plate reverb - vintage studio plate reverb emulation
+        /// Medium decay, bright character, classic studio sound from the 60s-80s
+        /// </summary>
+        Plate,
+
+        /// <summary>
+        /// Spring reverb - vintage spring tank reverb emulation
+        /// Short to medium decay, characteristic metallic resonance, surf guitar classic
+        /// </summary>
+        Spring,
+
+        /// <summary>
+        /// Ambient pad - lush atmospheric reverb
+        /// Very long decay, wide stereo image, perfect for pads and ambient textures
+        /// </summary>
+        AmbientPad,
+
+        /// <summary>
+        /// Vocal booth - controlled vocal reverb
+        /// Short decay, balanced tone, professional vocal enhancement without muddiness
+        /// </summary>
+        VocalBooth,
+
+        /// <summary>
+        /// Drum room - punchy drum reverb
+        /// Medium decay, quick attack, adds space without losing transient impact
+        /// </summary>
+        DrumRoom,
+
+        /// <summary>
+        /// Gated reverb - 80s style gated reverb effect
+        /// Abrupt cutoff, dramatic effect, classic 80s drum sound
+        /// </summary>
+        Gated,
+
+        /// <summary>
+        /// Subtle enhancement - minimal natural reverb
+        /// Very short decay, natural sound, adds life without obvious reverb effect
+        /// </summary>
+        Subtle
+    }
+
     /// <summary>
     /// Professional quality reverb effect implementation based on the Freeverb algorithm.
     /// Suitable for real-time audio processing and professional sound quality production.
@@ -147,7 +214,7 @@ namespace Ownaudio.Fx
             {
                 lock (parametersLock)
                 {
-                    roomSize = Math.Clamp(value, 0.0f, 1.0f);
+                    roomSize = FastClamp(value);
                     UpdateCombFilters();
                 }
             }
@@ -163,7 +230,7 @@ namespace Ownaudio.Fx
             {
                 lock (parametersLock)
                 {
-                    damping = Math.Clamp(value, 0.0f, 1.0f);
+                    damping = FastClamp(value);
                     UpdateDamping();
                 }
             }
@@ -175,7 +242,7 @@ namespace Ownaudio.Fx
         public float Width
         {
             get { lock (parametersLock) return width; }
-            set { lock (parametersLock) width = Math.Clamp(value, 0.0f, 1.0f); }
+            set { lock (parametersLock) width = FastClamp(value); }
         }
 
         /// <summary>
@@ -184,7 +251,7 @@ namespace Ownaudio.Fx
         public float WetLevel
         {
             get { lock (parametersLock) return wetLevel; }
-            set { lock (parametersLock) wetLevel = Math.Clamp(value, 0.0f, 1.0f); }
+            set { lock (parametersLock) wetLevel = FastClamp(value); }
         }
 
         /// <summary>
@@ -193,7 +260,7 @@ namespace Ownaudio.Fx
         public float DryLevel
         {
             get { lock (parametersLock) return dryLevel; }
-            set { lock (parametersLock) dryLevel = Math.Clamp(value, 0.0f, 1.0f); }
+            set { lock (parametersLock) dryLevel = FastClamp(value); }
         }
 
         /// <summary>
@@ -228,7 +295,7 @@ namespace Ownaudio.Fx
         /// <param name="stereoWidth">Width of the stereo space</param>
         /// <param name="gainLevel">Input gain</param>
         /// <param name="sampleRate">Sampling rate in Hz.</param>
-        public Reverb(float size = 0.5f, float damp = 0.5f, float wet = 0.33f, float dry = 0.7f, float stereoWidth = 1.0f,float gainLevel = 0.015f, float sampleRate = 44100)
+        public Reverb(float size = 0.5f, float damp = 0.5f, float wet = 0.33f, float dry = 0.7f, float stereoWidth = 1.0f, float gainLevel = 0.015f, float sampleRate = 44100)
         {
             this.sampleRate = sampleRate;
             combFilters = new CombFilter[NUM_COMBS];
@@ -243,6 +310,105 @@ namespace Ownaudio.Fx
             gain = gainLevel;
 
             InitializeFilters();
+        }
+
+        /// <summary>
+        /// Set reverb parameters using predefined presets
+        /// </summary>
+        public void SetPreset(ReverbPreset preset)
+        {
+            switch (preset)
+            {
+                case ReverbPreset.SmallRoom:
+                    // Intimate room sound - cozy acoustic space
+                    RoomSize = 0.3f;      // Small space simulation
+                    Damping = 0.4f;       // Moderate high frequency absorption
+                    WetLevel = 0.25f;     // Subtle reverb presence
+                    DryLevel = 0.85f;     // Strong dry signal
+                    Width = 0.7f;         // Moderate stereo width
+                    break;
+
+                case ReverbPreset.LargeHall:
+                    // Concert hall acoustics - spacious and grand
+                    RoomSize = 0.85f;     // Large space simulation
+                    Damping = 0.3f;       // Less damping for brightness
+                    WetLevel = 0.5f;      // Significant reverb presence
+                    DryLevel = 0.6f;      // Balanced dry signal
+                    Width = 1.0f;         // Full stereo width
+                    break;
+
+                case ReverbPreset.Cathedral:
+                    // Gothic cathedral - ethereal and majestic
+                    RoomSize = 0.95f;     // Very large space
+                    Damping = 0.15f;      // Minimal damping for long decay
+                    WetLevel = 0.6f;      // Strong reverb presence
+                    DryLevel = 0.5f;      // Balanced for ethereal effect
+                    Width = 1.0f;         // Full stereo width
+                    break;
+
+                case ReverbPreset.Plate:
+                    // Vintage plate reverb - bright studio classic
+                    RoomSize = 0.6f;      // Medium decay time
+                    Damping = 0.2f;       // Bright, less damped character
+                    WetLevel = 0.4f;      // Classic studio reverb amount
+                    DryLevel = 0.7f;      // Professional balance
+                    Width = 0.8f;         // Wide but controlled
+                    break;
+
+                case ReverbPreset.Spring:
+                    // Spring tank reverb - surf guitar classic
+                    RoomSize = 0.4f;      // Shorter decay typical of springs
+                    Damping = 0.1f;       // Very bright, metallic character
+                    WetLevel = 0.35f;     // Characteristic spring reverb amount
+                    DryLevel = 0.75f;     // Guitar amp style balance
+                    Width = 0.6f;         // Moderate stereo spread
+                    break;
+
+                case ReverbPreset.AmbientPad:
+                    // Lush atmospheric reverb - perfect for pads
+                    RoomSize = 0.9f;      // Very long decay
+                    Damping = 0.25f;      // Smooth high frequency roll-off
+                    WetLevel = 0.7f;      // Heavily processed for atmosphere
+                    DryLevel = 0.4f;      // Less dry signal for ambience
+                    Width = 1.0f;         // Maximum stereo width
+                    break;
+
+                case ReverbPreset.VocalBooth:
+                    // Professional vocal reverb - controlled enhancement
+                    RoomSize = 0.35f;     // Short to medium decay
+                    Damping = 0.5f;       // Balanced frequency response
+                    WetLevel = 0.3f;      // Subtle enhancement
+                    DryLevel = 0.8f;      // Clear vocal presence
+                    Width = 0.5f;         // Focused stereo image
+                    break;
+
+                case ReverbPreset.DrumRoom:
+                    // Drum room acoustics - punchy with space
+                    RoomSize = 0.5f;      // Medium room size
+                    Damping = 0.6f;       // Control reflections for punch
+                    WetLevel = 0.35f;     // Add space without mud
+                    DryLevel = 0.8f;      // Preserve transient impact
+                    Width = 0.9f;         // Wide drum image
+                    break;
+
+                case ReverbPreset.Gated:
+                    // 80s gated reverb - dramatic cutoff effect
+                    RoomSize = 0.7f;      // Medium-large for dramatic effect
+                    Damping = 0.8f;       // Heavy damping for gated character
+                    WetLevel = 0.6f;      // Strong effect presence
+                    DryLevel = 0.7f;      // Balanced for dramatic impact
+                    Width = 1.0f;         // Full width for 80s sound
+                    break;
+
+                case ReverbPreset.Subtle:
+                    // Minimal natural enhancement - adds life
+                    RoomSize = 0.2f;      // Very short decay
+                    Damping = 0.7f;       // Natural absorption
+                    WetLevel = 0.15f;     // Very subtle presence
+                    DryLevel = 0.95f;     // Mostly dry signal
+                    Width = 0.4f;         // Narrow, natural width
+                    break;
+            }
         }
 
         /// <summary>
@@ -340,7 +506,7 @@ namespace Ownaudio.Fx
         /// <summary>
         /// Resets the effect, clearing all internal states.
         /// </summary>
-        public void Reset()
+        public override void Reset()
         {
             foreach (var comb in combFilters)
             {
@@ -351,6 +517,27 @@ namespace Ownaudio.Fx
             {
                 allPass.Clear();
             }
+        }
+
+        /// <summary>
+        /// Fast audio clamping function that constrains values to the valid audio range [0.0, 1.0].
+        /// </summary>
+        /// <param name="value">The audio parameter value to clamp.</param>
+        /// <returns>The clamped value within the range [0.0, 1.0].</returns>
+        /// <remarks>
+        /// This method is aggressively inlined for maximum performance in audio processing loops.
+        /// Parameter clamping is essential to prevent:
+        /// - Invalid parameter states
+        /// - Unexpected audio artifacts
+        /// - Filter instability
+        /// 
+        /// Values below 0.0 are clamped to 0.0, values above 1.0 are clamped to 1.0,
+        /// and values within the valid range are passed through unchanged.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float FastClamp(float value)
+        {
+            return value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
         }
     }
 }

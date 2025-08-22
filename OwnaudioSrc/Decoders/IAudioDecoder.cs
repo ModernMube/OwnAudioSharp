@@ -17,7 +17,7 @@ public interface IAudioDecoder : IDisposable
     /// Decode next available audio frame from loaded audio source.
     /// </summary>
     /// <returns>A new <see cref="AudioDecoderResult"/> data.</returns>
-    AudioDecoderResult DecodeNextFrame(int? frameByteNumber);
+    AudioDecoderResult DecodeNextFrame();
 
     /// <summary>
     /// Try to seeks audio stream to the specified position and returns <c>true</c> if successfully seeks,

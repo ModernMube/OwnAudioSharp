@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
-
+using MathNet.Numerics.Interpolation;
 using Ownaudio.Common;
 using Ownaudio.Processors;
 
@@ -60,14 +60,19 @@ public interface ISource : IDisposable
     double Tempo { get; set; }
 
     /// <summary>
+    /// Gets or sets the name associated with the source.
+    /// </summary>
+    string? Name { get; set; }
+
+    /// <summary>
     /// Gets or sets custom sample processor.
     /// </summary>
-    SampleProcessorBase CustomSampleProcessor { get; set; }
+    SampleProcessorBase? CustomSampleProcessor { get; set; }
 
     /// <summary>
     /// Gets or sets logger instance.
     /// </summary>
-    ILogger Logger { get; set; }
+    ILogger? Logger { get; set; }
 
     /// <summary>
     /// Gets queue object that holds queued audio frames.
@@ -86,6 +91,11 @@ public interface ISource : IDisposable
     void ChangeState(SourceState state);
 
     /// <summary>
+    /// Gets or sets current specified audio URL.
+    /// </summary>
+    string? CurrentUrl { get; }
+
+    /// <summary>
     /// Returns the contents of the audio file loaded into the source in a byte array.
     /// </summary>
     /// <returns></returns>
@@ -96,4 +106,10 @@ public interface ISource : IDisposable
     /// </summary>
     /// <returns></returns>
     float[] GetFloatAudioData(TimeSpan position);
+
+    /// <summary>
+    /// Stereo audio output level. 
+    /// In the case of mono signal, only the left channel value changes.
+    /// </summary>
+    (float, float)? OutputLevels { get; } 
 }

@@ -1,5 +1,7 @@
 ﻿using Ownaudio;
+using Ownaudio.Processors;
 using Ownaudio.Sources;
+using System.Diagnostics;
 
 namespace Simpleplayer
 {
@@ -7,36 +9,73 @@ namespace Simpleplayer
     {
         static async Task Main(string[] args)
         {
-            if(OwnAudio.Initialize())
+            if (OwnAudio.Initialize())
             {
-                SourceManager sourceManager = SourceManager.Instance;
+                try
+                {
+                    SourceManager manager = SourceManager.Instance;
 
-                await sourceManager.AddOutputSource("path/audio.mp3");
+                    string audioFilePath = @"\path\to\audio.mp3";
 
-                sourceManager.Play();
+                    // Check if file exists
+                    if (!File.Exists(audioFilePath))
+                    {
+                        Console.WriteLine($"Audio file not found: {audioFilePath}");
+                        return;
+                    }
 
-                Console.Clear();
-                Console.WriteLine("Hi! Ownaudio user");
-                Console.WriteLine("Default output device: " + OwnAudio.DefaultOutputDevice.Name);
+                    bool loaded = await manager.AddOutputSource(audioFilePath, "outputSource");
 
-                Console.WriteLine("Press any key to stop playback...");
-                Console.ReadKey();
+                    if (!loaded)
+                    {
+                        Console.WriteLine("Failed to load audio file!");
+                        return;
+                    }
 
-                sourceManager.Stop();
-                OwnAudio.Free();
+                    manager.Play();
+
+                    Console.Clear();
+                    Console.WriteLine("Hi! Ownaudio user");
+                    Console.WriteLine($"Default output device: {OwnAudio.DefaultOutputDevice.Name}");
+                    Console.WriteLine($"Audio duration: {manager.Duration}");
+                    Console.WriteLine("Press any key to stop playback...");
+
+                    Console.Read();
+
+                    manager.Stop();
+                    manager.Reset();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error during playback: {ex.Message}");
+                }
+                finally
+                {
+                    OwnAudio.Free();
+                }
             }
             else
             {
+                Console.WriteLine("Library initialization failed!");
+
                 if (!OwnAudio.IsFFmpegInitialized)
                 {
-                    Console.WriteLine("FFMPEG library initialization failed!");
+                    Console.WriteLine("- FFmpeg initialization failed");
                 }
 
-                if(!OwnAudio.IsPortAudioInitialized)
+                if (!OwnAudio.IsPortAudioInitialized)
                 {
-                    Console.WriteLine("PORTAUDIO library initialization failed!");
+                    Console.WriteLine("- PortAudio initialization failed");
+                }
+
+                if (!OwnAudio.IsMiniAudioInitialized)
+                {
+                    Console.WriteLine("- MiniAudio initialization failed");
                 }
             }
+
+            Console.WriteLine("Press any key to exit...");
+            Console.Read();
         }
     }
 }

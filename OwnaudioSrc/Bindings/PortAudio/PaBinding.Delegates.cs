@@ -7,7 +7,6 @@ internal static partial class PaBinding
 {
     private static Initialize? _initialize;
     private static Terminate? _terminate;
-    //private static GetVersionInfo? _getVersionInfo;
     private static GetErrorText? _getErrorText;
     private static GetDefaultOutputDevice? _getDefaultOutputDevice;
     private static GetDeviceInfo? _getDeviceInfo;
@@ -42,9 +41,6 @@ internal static partial class PaBinding
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int Terminate();
 
-    //[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    //private delegate IntPtr GetVersionInfo();
-
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate IntPtr GetErrorText(int code);
 
@@ -59,7 +55,7 @@ internal static partial class PaBinding
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int OpenStream(
-        IntPtr stream,
+        out IntPtr stream,
         IntPtr inputParameters,
         IntPtr outputParameters,
         double sampleRate,

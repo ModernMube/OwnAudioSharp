@@ -11,7 +11,6 @@ internal static partial class PaBinding
         _initialize = loader.LoadFunc<Initialize>(nameof(Pa_Initialize));
         _terminate = loader.LoadFunc<Terminate>(nameof(Pa_Terminate));
 
-        //_getVersionInfo = loader.LoadFunc<GetVersionInfo>(nameof(Pa_GetVersionInfo));
         _getErrorText = loader.LoadFunc<GetErrorText>(nameof(Pa_GetErrorText));
 
         _getDefaultOutputDevice = loader.LoadFunc<GetDefaultOutputDevice>(nameof(Pa_GetDefaultOutputDevice));
@@ -36,7 +35,7 @@ internal static partial class PaBinding
         _readStream = loader.LoadFunc<ReadStream>(nameof(Pa_ReadStream));
     }
 
-    #nullable disable
+#nullable disable
     public static int Pa_Initialize()
     {
         return _initialize();
@@ -46,11 +45,6 @@ internal static partial class PaBinding
     {
         return _terminate();
     }
-
-    //public static IntPtr Pa_GetVersionInfo()
-    //{
-    //    return _getVersionInfo();
-    //}
 
     public static IntPtr Pa_GetErrorText(int code)
     {
@@ -73,7 +67,7 @@ internal static partial class PaBinding
     }
 
     public static int Pa_OpenStream(
-        IntPtr stream,
+        out IntPtr stream,
         IntPtr inputParameters,
         IntPtr outputParameters,
         double sampleRate,
@@ -83,7 +77,7 @@ internal static partial class PaBinding
         IntPtr userData)
     {
         return _openStream(
-            stream,
+            out stream,
             inputParameters,
             outputParameters,
             sampleRate,

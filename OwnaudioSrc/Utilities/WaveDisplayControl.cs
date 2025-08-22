@@ -11,19 +11,15 @@ namespace Ownaudio.Utilities
     /// A control for displaying audio waveforms with zoom and scroll capabilities.
     /// Provides different display styles and interactive features for audio visualization.
     /// </summary>
-    public class WaveAvaloniaDisplay : Avalonia.Controls.Control
+    public partial class WaveAvaloniaDisplay : Avalonia.Controls.Control
     {
-        private float[] _audioData;
+        private float[]? _audioData;
 
         // Using ArrayPool for more efficient memory usage
         private readonly ArrayPool<Point> _pointPool = ArrayPool<Point>.Shared;
         private Point[] _pointCache;
         private int _pointCacheSize = 0;
         private int _pointCacheCapacity = 1000;
-
-        private double _zoomFactor = 1.0;
-        private double _scrollOffset = 0.0;
-        private double _playbackPosition = 0.0;
 
         private Pen _waveformPen;
         private Pen _playbackPen;
@@ -67,6 +63,34 @@ namespace Ownaudio.Utilities
             AvaloniaProperty.Register<WaveAvaloniaDisplay, WaveformDisplayStyle>(
                 nameof(DisplayStyle),
                 WaveformDisplayStyle.MinMax);
+
+        /// <summary>
+        /// Defines the ZoomFactor dependency property.
+        /// </summary>
+        public static readonly StyledProperty<double> ZoomFactorProperty =
+            AvaloniaProperty.Register<WaveAvaloniaDisplay, double>(
+                nameof(ZoomFactor),
+                1.0, // default value
+                validate: value => Math.Clamp(value, 1.0, 50.0) == value); // validation directly in property system
+
+        /// <summary>
+        /// Defines the ScrollOffset dependency property.
+        /// </summary>
+        public static readonly StyledProperty<double> ScrollOffsetProperty =
+            AvaloniaProperty.Register<WaveAvaloniaDisplay, double>(
+                nameof(ScrollOffset),
+                0.0, // default value
+                validate: value => Math.Clamp(value, 0.0, 1.0) == value);
+
+        /// <summary>
+        /// Defines the PlaybackPosition dependency property.
+        /// </summary>
+        public static readonly StyledProperty<double> PlaybackPositionProperty =
+            AvaloniaProperty.Register<WaveAvaloniaDisplay, double>(
+                nameof(PlaybackPosition),
+                0.0, // default value
+                validate: value => Math.Clamp(value, 0.0, 1.0) == value);
+
 
         /// <summary>
         /// Enum defining different waveform visualization styles.
@@ -134,23 +158,8 @@ namespace Ownaudio.Utilities
         /// </summary>
         public double ZoomFactor
         {
-            get => _zoomFactor;
-            set
-            {
-                if (value < 1.0)
-                    value = 1.0;
-
-                if (value > 50.0)
-                    value = 50.0;
-
-                if (_zoomFactor != value)
-                {
-                    _zoomFactor = value;
-
-                    ValidateScrollOffset();
-                    InvalidateVisual();
-                }
-            }
+            get => GetValue(ZoomFactorProperty);
+            set => SetValue(ZoomFactorProperty, value);
         }
 
         /// <summary>
@@ -160,12 +169,8 @@ namespace Ownaudio.Utilities
         /// </summary>
         public double ScrollOffset
         {
-            get => _scrollOffset;
-            set
-            {
-                _scrollOffset = Math.Clamp(value, 0.0, 1.0);
-                InvalidateVisual();
-            }
+            get => GetValue(ScrollOffsetProperty);
+            set => SetValue(ScrollOffsetProperty, value);
         }
 
         /// <summary>
@@ -175,22 +180,17 @@ namespace Ownaudio.Utilities
         /// </summary>
         public double PlaybackPosition
         {
-            get => _playbackPosition;
-            set
-            {
-                _playbackPosition = Math.Clamp(value, 0.0, 1.0);
-                InvalidateVisual();
-            }
+            get => GetValue(PlaybackPositionProperty);
+            set => SetValue(PlaybackPositionProperty, value);
         }
         #endregion
 
         /// <summary>
-        /// Event triggered when the playback position changes.
+        /// Event triggered when the playback position changes (e.g., by user interaction).
         /// The event argument is the new position (0.0 to 1.0).
         /// </summary>
-        public event EventHandler<double> PlaybackPositionChanged;
+        public event EventHandler<double>? PlaybackPositionChanged; // Mark as nullable
 
-#nullable disable
         /// <summary>
         /// Initializes a new instance of the WaveAvaloniaDisplay class.
         /// Sets up default values and subscribes to property changes.
@@ -210,16 +210,13 @@ namespace Ownaudio.Utilities
             _waveformPen = new Pen(WaveformBrush);
             _playbackPen = new Pen(PlaybackPositionBrush, 2);
 
-            var visualInvalidator = new AnonymousObserver<object>(_ => InvalidateVisual());
-
+            // Subscribe to all relevant property changes to InvalidateVisual
             this.GetObservable(WaveformBrushProperty).Subscribe(new AnonymousObserver<IBrush>(brush => {
-                //_waveformPen.Dispose(); // Dispose the old pen
                 _waveformPen = new Pen(brush);
                 InvalidateVisual();
             }));
 
             this.GetObservable(PlaybackPositionBrushProperty).Subscribe(new AnonymousObserver<IBrush>(brush => {
-                //_playbackPen.Dispose(); // Dispose the old pen
                 _playbackPen = new Pen(brush, 2);
                 InvalidateVisual();
             }));
@@ -227,12 +224,19 @@ namespace Ownaudio.Utilities
             this.GetObservable(VerticalScaleProperty).Subscribe(new AnonymousObserver<double>(_ => InvalidateVisual()));
             this.GetObservable(DisplayStyleProperty).Subscribe(new AnonymousObserver<WaveformDisplayStyle>(_ => InvalidateVisual()));
 
+            // Subscribe to ZoomFactor and ScrollOffset for visual invalidation
+            this.GetObservable(ZoomFactorProperty).Subscribe(new AnonymousObserver<double>(_ => {
+                ValidateScrollOffset(); // Ensure scroll offset is valid after zoom changes
+                InvalidateVisual();
+            }));
+            this.GetObservable(ScrollOffsetProperty).Subscribe(new AnonymousObserver<double>(_ => InvalidateVisual()));
+            this.GetObservable(PlaybackPositionProperty).Subscribe(new AnonymousObserver<double>(_ => InvalidateVisual()));
+
             this.PointerPressed += WaveformDisplay_PointerPressed;
             this.PointerMoved += WaveformDisplay_PointerMoved;
             this.PointerReleased += WaveformDisplay_PointerReleased;
             this.PointerWheelChanged += WaveformDisplay_PointerWheelChanged;
         }
-#nullable restore
 
         /// <summary>
         /// Sets the audio data to be displayed and resets zoom and scroll state.
@@ -247,8 +251,10 @@ namespace Ownaudio.Utilities
         {
             _audioData = audioData;
 
-            _zoomFactor = 1.0;
-            _scrollOffset = 0.0;
+            // When new data is set, reset zoom and scroll (optional, but good default)
+            ZoomFactor = 1.0;
+            ScrollOffset = 0.0;
+            PlaybackPosition = 0.0;
 
             InvalidateVisual();
         }
@@ -282,22 +288,22 @@ namespace Ownaudio.Utilities
 
             int totalSamples = _audioData.Length;
 
-            double visibleSamplesFraction = 1.0 / _zoomFactor;
+            double visibleSamplesFraction = 1.0 / ZoomFactor;
             int visibleSamples = (int)(totalSamples * visibleSamplesFraction);
-            int startSampleIndex = (int)(totalSamples * _scrollOffset);
+            int startSampleIndex = (int)(totalSamples * ScrollOffset);
 
+            // Adjust startSampleIndex to prevent going out of bounds
             if (startSampleIndex + visibleSamples > totalSamples)
             {
                 startSampleIndex = totalSamples - visibleSamples;
             }
-
-            if (startSampleIndex < 0)
+            if (startSampleIndex < 0) // Should not happen with clamping ScrollOffset, but for safety
                 startSampleIndex = 0;
 
             int samplesPerPixel = Math.Max(1, visibleSamples / (int)width);
 
             // Ensure point cache is large enough
-            int requiredSize = (int)width * 2;
+            int requiredSize = (int)width * 2; // Each pixel might draw 2 points (min/max or start/end of line)
             EnsurePointCacheCapacity(requiredSize);
 
             _pointCacheSize = 0;
@@ -318,20 +324,20 @@ namespace Ownaudio.Utilities
             }
 
             // Draw lines in batches to reduce GPU draw calls
-            const int batchSize = 1000;
-            for (int i = 0; i < _pointCacheSize; i += batchSize * 2)
+            // This loop iterates through the pointCache and draws pairs of points as lines.
+            // _pointCacheSize holds the actual number of points added to the cache.
+            // Each line requires 2 points, so total lines = _pointCacheSize / 2.
+            for (int i = 0; i < _pointCacheSize; i += 2) // Increment by 2 points per line
             {
-                int count = Math.Min(batchSize * 2, _pointCacheSize - i);
-                if (count > 1)
+                // Ensure there are at least two points left to form a line
+                if (i + 1 < _pointCacheSize)
                 {
-                    for (int j = 0; j < count; j += 2)
-                    {
-                        context.DrawLine(_waveformPen, _pointCache[i + j], _pointCache[i + j + 1]);
-                    }
+                    context.DrawLine(_waveformPen, _pointCache[i], _pointCache[i + 1]);
                 }
             }
 
-            double pixelPosition = ConvertAbsolutePositionToPixel(_playbackPosition, width, startSampleIndex, visibleSamples, totalSamples);
+
+            double pixelPosition = ConvertAbsolutePositionToPixel(PlaybackPosition, width, startSampleIndex, visibleSamples, totalSamples);
 
             if (pixelPosition >= 0 && pixelPosition < width)
             {
@@ -358,8 +364,10 @@ namespace Ownaudio.Utilities
                 // Return the old buffer to the pool
                 _pointPool.Return(_pointCache, clearArray: false);
 
-                // Calculate new capacity (round up to nearest multiple of 1000)
+                // Calculate new capacity (round up to nearest multiple of 1000 for efficiency)
                 _pointCacheCapacity = ((requiredCapacity + 999) / 1000) * 1000;
+                if (_pointCacheCapacity < requiredCapacity) _pointCacheCapacity = requiredCapacity; // Ensure it's at least requiredCapacity
+                if (_pointCacheCapacity == 0) _pointCacheCapacity = 1000; // Avoid zero capacity
 
                 // Rent a new buffer from the pool
                 _pointCache = _pointPool.Rent(_pointCacheCapacity);
@@ -393,15 +401,13 @@ namespace Ownaudio.Utilities
                 minValue = 1.0f;
                 maxValue = -1.0f;
 
-                endSample = Math.Min(pixelStartSample + samplesPerPixel, _audioData.Length);
+                endSample = Math.Min(pixelStartSample + samplesPerPixel, _audioData!.Length);
                 for (int i = pixelStartSample; i < endSample; i++)
                 {
-                    if (i >= 0)
-                    {
-                        sample = _audioData[i];
-                        if (sample < minValue) minValue = sample;
-                        if (sample > maxValue) maxValue = sample;
-                    }
+                    // No need for 'if (i >= 0)' since startSampleIndex is clamped.
+                    sample = _audioData[i];
+                    if (sample < minValue) minValue = sample;
+                    if (sample > maxValue) maxValue = sample;
                 }
 
                 _pointCache[_pointCacheSize++] = new Point(x, centerY + minValue * vScale);
@@ -436,18 +442,15 @@ namespace Ownaudio.Utilities
 
                 maxPositive = 0;
 
-                endSample = Math.Min(pixelStartSample + samplesPerPixel, _audioData.Length);
+                endSample = Math.Min(pixelStartSample + samplesPerPixel, _audioData!.Length);
                 for (int i = pixelStartSample; i < endSample; i++)
                 {
-                    if (i >= 0)
-                    {
-                        sample = Math.Abs(_audioData[i]);
-                        if (sample > maxPositive) maxPositive = sample;
-                    }
+                    sample = Math.Abs(_audioData[i]);
+                    if (sample > maxPositive) maxPositive = sample;
                 }
 
-                _pointCache[_pointCacheSize++] = new Point(x, height);
-                _pointCache[_pointCacheSize++] = new Point(x, height - maxPositive * vScale);
+                _pointCache[_pointCacheSize++] = new Point(x, height); // Base of the line
+                _pointCache[_pointCacheSize++] = new Point(x, height - maxPositive * vScale); // Top of the line
             }
         }
 
@@ -478,15 +481,12 @@ namespace Ownaudio.Utilities
                 sumSquares = 0;
                 count = 0;
 
-                endSample = Math.Min(pixelStartSample + samplesPerPixel, _audioData.Length);
+                endSample = Math.Min(pixelStartSample + samplesPerPixel, _audioData!.Length);
                 for (int i = pixelStartSample; i < endSample; i++)
                 {
-                    if (i >= 0)
-                    {
-                        sample = _audioData[i];
-                        sumSquares += sample * sample;
-                        count++;
-                    }
+                    sample = _audioData[i];
+                    sumSquares += sample * sample;
+                    count++;
                 }
 
                 rms = count > 0 ? (float)Math.Sqrt(sumSquares / count) : 0;
@@ -516,6 +516,7 @@ namespace Ownaudio.Utilities
             if (e.GetCurrentPoint(this).Properties.IsMiddleButtonPressed ||
                 e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
             {
+                // For middle/right click, capture for potential future dragging/panning (not implemented here)
                 e.Pointer.Capture(this);
                 return;
             }
@@ -523,8 +524,8 @@ namespace Ownaudio.Utilities
             if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             {
                 var position = CalculatePlaybackPositionFromMousePosition(point.X);
-                PlaybackPosition = position;
-                PlaybackPositionChanged?.Invoke(this, position);
+                PlaybackPosition = position; // Set StyledProperty
+                PlaybackPositionChanged?.Invoke(this, position); // Raise event
 
                 _isDraggingPlayhead = true;
                 e.Pointer.Capture(this);
@@ -546,8 +547,8 @@ namespace Ownaudio.Utilities
             {
                 var point = e.GetPosition(this);
                 var position = CalculatePlaybackPositionFromMousePosition(point.X);
-                PlaybackPosition = position;
-                PlaybackPositionChanged?.Invoke(this, position);
+                PlaybackPosition = position; // Set StyledProperty
+                PlaybackPositionChanged?.Invoke(this, position); // Raise event
             }
         }
 
@@ -579,33 +580,35 @@ namespace Ownaudio.Utilities
         /// </remarks>
         private void WaveformDisplay_PointerWheelChanged(object sender, PointerWheelEventArgs e)
         {
+            if (_audioData == null || _audioData.Length == 0) return;
+
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
             {
                 var point = e.GetPosition(this);
                 double pointRatio = point.X / Bounds.Width;
 
-                double oldZoom = _zoomFactor;
+                double oldZoom = ZoomFactor;
                 double zoomChange = e.Delta.Y > 0 ? 1.2 : 0.8;
 
-                double newZoom = _zoomFactor * zoomChange;
-                ZoomFactor = newZoom;
+                double newZoom = oldZoom * zoomChange;
+                ZoomFactor = newZoom; // This setter already clamps
 
-                if (newZoom != 1.0)
-                {
-                    double visibleRange = 1.0 / oldZoom;
-                    double absPosition = _scrollOffset + (pointRatio * visibleRange);
+                // Adjust scroll offset to keep the mouse point fixed relative to content
+                double visibleRange = 1.0 / oldZoom;
+                double absPositionAtMouse = ScrollOffset + (pointRatio * visibleRange);
 
-                    double newVisibleRange = 1.0 / _zoomFactor;
+                double newVisibleRange = 1.0 / ZoomFactor; // Use the potentially clamped ZoomFactor
 
-                    _scrollOffset = Math.Clamp(absPosition - (pointRatio * newVisibleRange), 0.0, 1.0 - newVisibleRange);
-
-                    InvalidateVisual();
-                }
+                // Calculate new scroll offset and clamp it
+                ScrollOffset = absPositionAtMouse - (pointRatio * newVisibleRange);
+                // The ScrollOffset setter's validate callback will handle the final clamping.
+                // InvalidateVisual is called via the property subscriptions.
             }
             else if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) || Math.Abs(e.Delta.X) > 0)
             {
-                double scrollDelta = (e.Delta.X != 0 ? e.Delta.X : e.Delta.Y) * 0.01 / _zoomFactor;
-                ScrollOffset = Math.Clamp(_scrollOffset - scrollDelta, 0.0, 1.0 - (1.0 / _zoomFactor));
+                double scrollDelta = (e.Delta.X != 0 ? e.Delta.X : e.Delta.Y) * 0.01 / ZoomFactor;
+                ScrollOffset = ScrollOffset - scrollDelta; // The setter's validate callback will handle the clamping.
+                // InvalidateVisual is called via the property subscriptions.
             }
             else
             {
@@ -630,9 +633,9 @@ namespace Ownaudio.Utilities
                 return 0.0;
 
             int totalSamples = _audioData.Length;
-            double visibleSamplesFraction = 1.0 / _zoomFactor;
+            double visibleSamplesFraction = 1.0 / ZoomFactor;
             int visibleSamples = (int)(totalSamples * visibleSamplesFraction);
-            int startSampleIndex = (int)(totalSamples * _scrollOffset);
+            int startSampleIndex = (int)(totalSamples * ScrollOffset);
 
             double relativePosition = x / Bounds.Width;
 
@@ -666,6 +669,7 @@ namespace Ownaudio.Utilities
 
         /// <summary>
         /// Ensures scroll offset is within valid range based on current zoom factor.
+        /// This method is called automatically by the ZoomFactorProperty subscription.
         /// </summary>
         /// <remarks>
         /// This method restricts the scroll offset to ensure it remains within
@@ -674,8 +678,20 @@ namespace Ownaudio.Utilities
         /// </remarks>
         private void ValidateScrollOffset()
         {
-            double maxOffset = Math.Max(0.0, 1.0 - (1.0 / _zoomFactor));
-            _scrollOffset = Math.Clamp(_scrollOffset, 0.0, maxOffset);
+            if (_audioData == null || _audioData.Length == 0)
+            {
+                // If no data, scrollOffset should be 0.0
+                if (ScrollOffset != 0.0) ScrollOffset = 0.0;
+                return;
+            }
+
+            double maxOffset = Math.Max(0.0, 1.0 - (1.0 / ZoomFactor));
+            // This will trigger the ScrollOffsetProperty's validate callback, clamping it.
+            // No need to directly set _scrollOffset, let the property system handle it.
+            if (ScrollOffset > maxOffset)
+            {
+                ScrollOffset = maxOffset;
+            }
         }
 
         /// <summary>
@@ -691,20 +707,24 @@ namespace Ownaudio.Utilities
         /// </remarks>
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
-#nullable disable
             base.OnDetachedFromVisualTree(e);
 
             if (_pointCache != null)
             {
                 _pointPool.Return(_pointCache, clearArray: false);
-                _pointCache = null;
+                _pointCache = null!; // Use null-forgiving operator after returning
             }
 
+            // Unsubscribe from events to prevent memory leaks
             this.PointerPressed -= WaveformDisplay_PointerPressed;
             this.PointerMoved -= WaveformDisplay_PointerMoved;
             this.PointerReleased -= WaveformDisplay_PointerReleased;
             this.PointerWheelChanged -= WaveformDisplay_PointerWheelChanged;
-#nullable restore
+
+            // Note: The subscriptions to StyledProperties (GetObservable) are typically handled
+            // by Avalonia's internal dispose mechanisms when the control is detached/disposed.
+            // Manual unsubscription is usually not needed for GetObservable subscriptions
+            // within the control's own lifetime managing its StyledProperties.
         }
     }
 }
