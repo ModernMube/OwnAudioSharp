@@ -3,10 +3,10 @@
     <TargetFrameworks>net8.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Authors>Modernbit</Authors>
-    <Copyright>Modernbit 2024</Copyright>
-    <Description>A cross platform audio library for .NET with PortAudio and FFmpeg.</Description>
-    <FileVersion>0.25.03</FileVersion>
+    <Authors>ModernMube</Authors>
+    <Copyright>Copyright (c) 2025 ModernMube</Copyright>
+    <Description>A cross platform audio library for .NET with PortAudio, Miniaudio and FFmpeg.</Description>
+    <FileVersion>0.94.56</FileVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <LangVersion>12</LangVersion>
@@ -20,7 +20,12 @@
     <PackageTags>audio,player,ffmpeg,portaudio,miniaudio,sound,multitrack,cross-platform</PackageTags>
     <Product>Ownaudio</Product>
     <RepositoryUrl>https://github.com/ModernMube/OwnAudioSharp</RepositoryUrl>
-    <Version>0.25.03</Version>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Version>0.94.56</Version>
     <Authors>ModernMube</Authors>
     <Company>Modernbit</Company>
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -40,11 +45,25 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.2.6" />
-    <PackageReference Include="FFmpeg.AutoGen" Version="7.0.0" />
+    <PackageReference Include="Avalonia" Version="11.3.2" />
+    <PackageReference Include="FFmpeg.AutoGen" Version="6.1.0.1" />
+    <PackageReference Include="FftSharp" Version="2.2.0" />
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
+    <PackageReference Include="Melanchall.DryWetMidi" Version="8.0.1" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.22.0" />
     <PackageReference Include="SoundTouch.Net" Version="2.3.2" />
-    <PackageReference Include="System.Memory" Version="4.6.2" />
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+    <PackageReference Include="System.Numerics.Tensors" Version="9.0.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="runtimes\**\*.*">
+      <Link>runtimes\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <PackagePath>runtimes</PackagePath>
+      <Pack>true</Pack>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

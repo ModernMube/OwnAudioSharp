@@ -539,26 +539,5 @@ namespace Ownaudio.Fx
         {
             return value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
         }
-
-        /// <summary>
-        /// Fast audio clamping function that constrains values to the valid audio range [-1.0, 1.0].
-        /// </summary>
-        /// <param name="value">The audio sample value to clamp.</param>
-        /// <returns>The clamped value within the range [-1.0, 1.0].</returns>
-        /// <remarks>
-        /// This method is aggressively inlined for maximum performance in audio processing loops.
-        /// Audio clamping is essential to prevent:
-        /// - Digital audio clipping and distortion
-        /// - Hardware damage from excessive signal levels
-        /// - Unwanted artifacts in the audio output
-        /// 
-        /// Values below -1.0 are clamped to -1.0, values above 1.0 are clamped to 1.0,
-        /// and values within the valid range are passed through unchanged.
-        /// </remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float FastClamp(float value)
-        {
-            return value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
-        }
     }
 }

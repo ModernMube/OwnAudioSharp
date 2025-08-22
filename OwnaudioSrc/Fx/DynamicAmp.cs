@@ -125,11 +125,24 @@ namespace Ownaudio.Fx
             ValidateAndSetAttackTime(attackTimeSeconds);
             ValidateAndSetReleaseTime(releaseTimeSeconds);
             ValidateAndSetNoiseGate(noiseThreshold);
+            ValidateAndSetMaxGain(maxGainValue);
+            ValidateAndSetSampleRate(sampleRateHz);
+
+            InitializeRmsBuffer(rmsWindowSeconds);
         }
 
-        private void ValidateAndSetTargetLevel(float level)
+        private void InitializeRmsBuffer(float windowSeconds)
         {
-            if (level < 0.0f || level > 1.0f)
+            rmsWindowLength = Math.Max(1, (int)(sampleRate * windowSeconds));
+            rmsBuffer = new float[rmsWindowLength];
+            rmsBufferIndex = 0;
+            windowSumSquares = 0.0f;
+            bufferFilled = false;
+        }
+
+        private void ValidateAndSetTargetLevel(float levelDb)
+        {
+            if (levelDb < -40.0f || levelDb > 0.0f)
             {
                 throw new ArgumentException($"The target level value must be between -40.0 and 0.0 dB. Resulting value: {levelDb}");
             }
@@ -228,27 +241,128 @@ namespace Ownaudio.Fx
             // Apply gain and soft limiting
             for (int i = 0; i < samples.Length; i++)
             {
-                sumSquares += samples[i] * samples[i];
+                samples[i] = SoftLimit(samples[i] * currentGain);
             }
-            float rms = MathF.Sqrt(sumSquares / samples.Length);
 
-            // Noise threshold management
-            if (rms < noiseGate)
+            lastRms = bufferRms;
+        }
+
+        /// <summary>
+        /// Sets predefined preset configurations for different use cases
+        /// </summary>
+        /// <param name="preset">The preset configuration to apply</param>
+        public void SetPreset(DynamicAmpPreset preset)
+        {
+            switch (preset)
             {
-                return;
+                case DynamicAmpPreset.Speech:
+                    targetRmsLevelDb = -12.0f;
+                    attackTime = 0.003f;
+                    releaseTime = 0.1f;
+                    noiseGate = 0.01f;
+                    maxGain = 6.0f;
+                    break;
+
+                case DynamicAmpPreset.Music:
+                    targetRmsLevelDb = -14.0f;
+                    attackTime = 0.01f;
+                    releaseTime = 0.3f;
+                    noiseGate = 0.002f;
+                    maxGain = 4.0f;
+                    break;
+
+                case DynamicAmpPreset.Broadcast:
+                    targetRmsLevelDb = -16.0f;
+                    attackTime = 0.001f;
+                    releaseTime = 0.05f;
+                    noiseGate = 0.008f;
+                    maxGain = 8.0f;
+                    break;
+
+                case DynamicAmpPreset.Mastering:
+                    targetRmsLevelDb = -8.0f;
+                    attackTime = 0.0001f;
+                    releaseTime = 0.02f;
+                    noiseGate = 0.001f;
+                    maxGain = 12.0f;
+                    break;
+
+                case DynamicAmpPreset.Live:
+                    targetRmsLevelDb = -18.0f;
+                    attackTime = 0.005f;
+                    releaseTime = 0.2f;
+                    noiseGate = 0.015f;
+                    maxGain = 3.0f;
+                    break;
+
+                case DynamicAmpPreset.Transparent:
+                    targetRmsLevelDb = -20.0f;
+                    attackTime = 0.02f;
+                    releaseTime = 0.5f;
+                    noiseGate = 0.001f;
+                    maxGain = 2.0f;
+                    break;
             }
+        }
 
-            // Calculate target gain
-            float targetGain = targetRmsLevel / Math.Max(rms, noiseGate);
+        /// <summary>
+        /// Converts dB to linear value
+        /// </summary>
+        private static float DbToLinear(float db)
+        {
+            return MathF.Pow(10.0f, db / 20.0f);
+        }
 
-            // Using time constants for smoother transitions
-            float timeConstant = (targetGain > currentGain) ? attackTime : releaseTime;
-            float alpha = MathF.Exp(-1.0f / (timeConstant * 44100.0f / samples.Length));
+        /// <summary>
+        /// Calculates the alpha value for exponential smoothing
+        /// </summary>
+        private float CalculateAlpha(float timeConstant, int bufferLength)
+        {
+            return MathF.Exp(-bufferLength / (timeConstant * sampleRate));
+        }
 
-            // Update reinforcement
-            currentGain = alpha * currentGain + (1.0f - alpha) * targetGain;
+        /// <summary>
+        /// Applies soft limiting to prevent harsh clipping
+        /// </summary>
+        private static float SoftLimit(float input, float threshold = 0.9f)
+        {
+            float absInput = Math.Abs(input);
+            if (absInput <= threshold)
+                return input;
 
-            // Modify samples
+            float sign = Math.Sign(input);
+            float excess = absInput - threshold;
+            float softPart = excess / (1.0f + excess * 2.0f);
+            return sign * (threshold + softPart * 0.1f);
+        }
+
+        /// <summary>
+        /// Resets the dynamic amplifier's internal state by clearing the RMS window, 
+        /// resetting gain and envelope values. Does not modify any settings or parameters.
+        /// </summary>
+        public override void Reset()
+        {
+            currentGain = 1.0f;
+            lastRms = 0.0f;
+            windowSumSquares = 0.0f;
+            rmsBufferIndex = 0;
+            bufferFilled = false;
+
+            if (rmsBuffer != null)
+            {
+                Array.Clear(rmsBuffer, 0, rmsBuffer.Length);
+            }
+        }
+
+        /// <summary>
+        /// Updates the RMS window and calculates the current RMS value using circular buffer
+        /// </summary>
+        /// <param name="samples">New samples to add to the window</param>
+        /// <returns>Current RMS value over the window</returns>
+        private float UpdateRmsWindow(Span<float> samples)
+        {
+            // Calculate mean square for this buffer
+            float bufferSumSquares = 0.0f;
             for (int i = 0; i < samples.Length; i++)
             {
                 float sample = samples[i];
