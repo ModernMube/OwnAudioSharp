@@ -268,158 +268,91 @@ public partial class SourceManager
                     // Ha a simple source befejeződött és nem loopol, távolítsd el
                     if (sparkSource.HasFinished && !sparkSource.IsLooping)
                     {
-                        RemoveSparkSource(sparkSource);
+                        for (int i = 0; i < inputBuffer.Length; i++)
+                        {
+                            _mixedBuffer[i * 2] += Math.Clamp(inputBuffer[i], -1.0f, 1.0f);     //Left channel
+                            _mixedBuffer[i * 2 + 1] += inputBuffer[i]; //Right channel
+                            _mixedBuffer[i * 2] = Math.Clamp(_mixedBuffer[i * 2], -1.0f, 1.0f);
+                            _mixedBuffer[i * 2 + 1] = Math.Clamp(_mixedBuffer[i * 2 + 1], -1.0f, 1.0f);
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < inputBuffer.Length; i++)
+                        {
+                            _mixedBuffer[i] += inputBuffer[i];
+                            _mixedBuffer[i] = Math.Clamp(_mixedBuffer[i], -1.0f, 1.0f);
+                        }
+                    }
+
+                    if(InputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo)
+                        InputLevels = CalculateAverageStereoLevels(_mixedBuffer);
+                    else
+                        InputLevels = CalculateAverageMonoLevel(_mixedBuffer);
+                }
+
+                Span<float> mixedSpan = CollectionsMarshal.AsSpan(_mixedBuffer.ToList());
+
+                ProcessSampleProcessors(mixedSpan);
+
+                Engine?.Send(mixedSpan);
+
+                if (State == SourceState.Playing)
+                {
+                    double processedTimeMs = (mixedBuffer.Count / channelCount) * sampleDurationMs;
+
+                    lastKnownPosition = lastKnownPosition.Add(TimeSpan.FromMilliseconds(processedTimeMs));
+
+                    if (Math.Abs((lastKnownPosition - Position).TotalMilliseconds) > 20)
+                    {
+                        SetAndRaisePositionChanged(lastKnownPosition);
                     }
                 }
-                finally
+
+                mixedBuffer.Clear();
+
+                if (Position.TotalMilliseconds >= Duration.TotalMilliseconds)
                 {
-                    SimpleAudioBufferPool.Return(samples);
+                    SetAndRaisePositionChanged(Duration);
+                    ResetPlayback();
+                    break;
                 }
             }
         }
-    }
 
-    /// <summary>
-    /// Processes input audio recording and mixes it with the output stream.
-    /// </summary>
-    /// <remarks>
-    /// This method handles input audio processing:
-    /// - Receives audio data from the input source
-    /// - Performs channel configuration mixing (mono to stereo, stereo to mono, etc.)
-    /// - Calculates input audio levels for monitoring
-    /// - Applies appropriate mixing gain (0.8f default)
-    /// - Returns input buffers to the pool for memory efficiency
-    /// 
-    /// The method supports both stereo and mono input configurations and automatically
-    /// calculates appropriate audio levels for real-time monitoring.
-    /// </remarks>
-    private void ProcessInputMixingSimple()
-    {
-        if (SourcesInput.Count > 0)
+        if (IsWriteData && File.Exists(writefilePath) && SaveWaveFileName is not null)
         {
-            int inputBufferSize = EngineFramesPerBuffer * (int)InputEngineOptions.Channels;
-
-            ((SourceInput)SourcesInput[0]).ReceivesData(out var inputBuffer, Engine);
-
-            try
+            Task.Run(() =>
             {
-                MixInputSimple(
-                    inputBuffer: inputBuffer.AsSpan(),
-                    mixedBuffer: _mixBuffer.AsSpan(),
-                    inputChannels: (int)InputEngineOptions.Channels,
-                    outputChannels: (int)OutputEngineOptions.Channels,
-                    mixingGain: 0.8f
-                );
-
-                // InputLevels = InputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
-                //     ? CalculateAverageStereoLevels(inputBuffer)
-                //     : CalculateAverageMonoLevel(inputBuffer);
-
-                 InputLevels = InputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
-                    ? CalculateLevels.CalculateAverageStereoLevelsSpan(inputBuffer)
-                    : CalculateLevels.CalculateAverageMonoLevelDbSpan(inputBuffer);
-            }
-            finally
-            {
-                SimpleAudioBufferPool.Return(inputBuffer);
-            }
-        }
-    }
-#nullable restore
-
-    /// <summary>
-    /// Ensures the mix buffer is allocated with the correct size.
-    /// </summary>
-    /// <param name="size">The required buffer size in samples.</param>
-    /// <remarks>
-    /// This method implements lazy buffer allocation:
-    /// - Only allocates when the buffer is null or size has changed
-    /// - Tracks the last allocated size to avoid unnecessary reallocations
-    /// - Minimizes memory allocations during mixing operations
-    /// 
-    /// This approach provides optimal performance by avoiding frequent allocations
-    /// while ensuring the buffer is always the correct size.
-    /// </remarks>
-    private void EnsureMixBufferAllocated(int size)
-    {
-        if (_mixBuffer == null || _lastMixBufferSize != size)
-        {
-            _mixBuffer = new float[size];
-            _lastMixBufferSize = size;
+                WriteWaveFile.WriteFile(
+                    filePath: SaveWaveFileName,
+                    rawFilePath: writefilePath,
+                    sampleRate: OwnAudio.DefaultOutputDevice.DefaultSampleRate,
+                    channels: 2,
+                    bitPerSamples: BitPerSamples);
+            });
+            IsWriteData = false;
         }
     }
 
     /// <summary>
-    /// Ensures the level calculation buffer is allocated with the correct size.
+    /// Calculates the average signal level of a stereo audio signal for the left and right channels.
     /// </summary>
-    /// <param name="size">The required buffer size in samples.</param>
-    private void EnsureLevelCalculationBufferAllocated(int size)
+    /// <param name="stereoAudioData">Stereo audio data</param>
+    /// <returns>Average data left and righ channel</returns>
+    private (float, float) CalculateAverageStereoLevels(float[] stereoAudioData)
     {
-        if (_levelCalculationBuffer == null || _levelCalculationBuffer.Length < size)
+        if (stereoAudioData == null || stereoAudioData.Length == 0)
         {
-            _levelCalculationBuffer = new float[size];
-        }
-    }
-
-    /// <summary>
-    /// Calculates the maximum buffer length needed for mixing operations.
-    /// </summary>
-    /// <returns>The maximum buffer length in samples based on available sources and engine configuration.</returns>
-    /// <remarks>
-    /// This method determines the optimal buffer size by:
-    /// - Checking all sources for their current buffer sizes
-    /// - Using the engine's frames per buffer as a fallback
-    /// - Accounting for channel configuration in the calculation
-    /// 
-    /// The buffer size affects both memory usage and latency, so this method
-    /// ensures an appropriate balance based on current source requirements.
-    /// </remarks>
-    private int CalculateMaxBufferLength()
-    {
-        if (Sources.Count == 0)
-            return EngineFramesPerBuffer * (int)OutputEngineOptions.Channels;
-
-        int maxLength = 0;
-        foreach (var src in Sources)
-        {
-            if (src.SourceSampleData.TryPeek(out float[]? peekedSamples) && peekedSamples != null)
-            {
-                maxLength = Math.Max(maxLength, peekedSamples.Length);
-            }
+            Console.WriteLine("Nincs feldolgozandó adat.");
+            return (0f, 0f);
         }
 
-        return maxLength > 0 ? maxLength : EngineFramesPerBuffer * (int)OutputEngineOptions.Channels;
-    }
-
-    /// <summary>
-    /// Optimized mixing function for different channel configurations.
-    /// </summary>
-    /// <param name="inputBuffer">The input audio data to be mixed.</param>
-    /// <param name="mixedBuffer">The output buffer that already contains data to be mixed into.</param>
-    /// <param name="inputChannels">The number of input channels (1 for mono, 2 for stereo).</param>
-    /// <param name="outputChannels">The number of output channels (1 for mono, 2 for stereo).</param>
-    /// <param name="mixingGain">The mixing gain factor (0.0f to 1.0f, default: 1.0f).</param>
-    /// <exception cref="NotSupportedException">Thrown when the input/output channel combination is not supported.</exception>
-    /// <remarks>
-    /// This method supports the following channel conversions:
-    /// - Mono to Stereo: Duplicates mono signal to both left and right channels
-    /// - Stereo to Mono: Averages left and right channels into a single mono signal
-    /// - Same channels: Direct mixing without conversion
-    /// 
-    /// All mixing operations include audio clamping to prevent clipping and maintain
-    /// signal integrity. The mixing gain allows for volume control during the mixing process.
-    /// </remarks>
-    public static void MixInputSimple(ReadOnlySpan<float> inputBuffer, Span<float> mixedBuffer,
-                                     int inputChannels, int outputChannels, float mixingGain = 1.0f)
-    {
-        if (inputChannels == 1 && outputChannels == 2)
-        {
-            int frames = inputBuffer.Length;
-            for (int frame = 0; frame < frames && frame * 2 + 1 < mixedBuffer.Length; frame++)
-            {
-                float sample = FastClamp(inputBuffer[frame] * mixingGain);
-                mixedBuffer[frame * 2] += sample;     // Left
-                mixedBuffer[frame * 2 + 1] += sample; // Right
+        // We use absolute values ​​because the signal level can be negative.
+        float leftChannelSum = 0;
+        float rightChannelSum = 0;
+        int leftSampleCount = 0;
+        int rightSampleCount = 0;
 
                 mixedBuffer[frame * 2] = FastClamp(mixedBuffer[frame * 2]);
                 mixedBuffer[frame * 2 + 1] = FastClamp(mixedBuffer[frame * 2 + 1]);
@@ -427,21 +360,12 @@ public partial class SourceManager
         }
         else if (inputChannels == 2 && outputChannels == 1)
         {
-            int frames = inputBuffer.Length / 2;
-            for (int frame = 0; frame < frames && frame < mixedBuffer.Length; frame++)
+            if (i % 2 == 0) // Left channel (even indices)
             {
-                float left = inputBuffer[frame * 2] * mixingGain;
-                float right = inputBuffer[frame * 2 + 1] * mixingGain;
-                float monoSample = FastClamp((left + right) * 0.5f);
-
-                mixedBuffer[frame] += monoSample;
-                mixedBuffer[frame] = FastClamp(mixedBuffer[frame]);
+                leftChannelSum += Math.Abs(stereoAudioData[i]);
+                leftSampleCount++;
             }
-        }
-        else if (inputChannels == outputChannels)
-        {
-            int length = Math.Min(inputBuffer.Length, mixedBuffer.Length);
-            for (int i = 0; i < length; i++)
+            else // Right channel (odd indices)
             {
                 mixedBuffer[i] += FastClamp(inputBuffer[i] * mixingGain);
                 mixedBuffer[i] = FastClamp(mixedBuffer[i]);
@@ -454,199 +378,33 @@ public partial class SourceManager
     }
 
     /// <summary>
-    /// Applies audio processing to the specified samples using volume and custom sample processors.
-    /// Also handles audio level calculation and file recording operations.
+    /// Calculates the average signal level of a mono audio signal.
     /// </summary>
-    /// <param name="samples">The audio samples to process.</param>
-    /// <remarks>
-    /// This method performs the following operations in order:
-    /// 1. Applies custom sample processor if enabled
-    /// 2. Applies volume processor if volume is not at 100%
-    /// 3. Calculates output audio levels synchronously for better performance
-    /// 4. Writes sample data to file if recording is enabled
-    /// 
-    /// Audio level calculation is performed synchronously to avoid Task allocations.
-    /// File writing operations use reusable Tasks to minimize GC pressure.
-    /// </remarks>
-    protected virtual void ProcessSampleProcessors(Span<float> samples)
+    /// <param name="monoAudioData">Stereo audio data</param>
+    /// <returns>Average data left and righ channel</returns>
+    private (float, float) CalculateAverageMonoLevel(float[] monoAudioData)
     {
-        bool useCustomProcessor = CustomSampleProcessor is { IsEnabled: true };
-        bool useVolumeProcessor = VolumeProcessor.Volume != 1.0f;
-
-        if (useCustomProcessor || useVolumeProcessor)
+        if (monoAudioData == null || monoAudioData.Length == 0)
         {
-            if (useCustomProcessor && CustomSampleProcessor is not null)
-                CustomSampleProcessor.Process(samples);
-
-            if (useVolumeProcessor)
-                VolumeProcessor.Process(samples);
+            Console.WriteLine("Nincs feldolgozandó adat.");
+            return (0f, 0f);
         }
 
-        lock (_lock)
+        // We use absolute values ​​because the signal level can be negative.
+        float leftChannelSum = 0;
+        int leftSampleCount = 0;
+
+        // Mono channel data
+        for (int i = 0; i < monoAudioData.Length; i++)
         {
-#nullable disable
-            // int sampleCount = Math.Min(samples.Length, _levelCalculationBuffer.Length);
-            // samples.Slice(0, sampleCount).SafeCopyTo(_levelCalculationBuffer.AsSpan(0, sampleCount));
-
-            // if (OutputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo)
-            //     OutputLevels = CalculateAverageStereoLevelsSpan(_levelCalculationBuffer.AsSpan(0, sampleCount));
-            // else
-            //     OutputLevels = CalculateAverageMonoLevelSpan(_levelCalculationBuffer.AsSpan(0, sampleCount));
-
-            OutputLevels = OutputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
-                ? OutputLevels = CalculateLevels.CalculateAverageStereoLevelsSpan(samples)
-                : OutputLevels = CalculateLevels.CalculateAverageMonoLevelSpan(samples);
-#nullable restore
+                leftChannelSum += Math.Abs(monoAudioData[i]);
         }
 
-        if (IsWriteData) // Save data to file
-        {
-            if (!_fileSaveTask.IsCompleted)
-                _fileSaveTask.Wait();
+        // Calculating averages
+        float leftAverage = leftSampleCount > 0 ? leftChannelSum / leftSampleCount : 0;
 
-            int sampleCount = Math.Min(samples.Length, _levelCalculationBuffer.Length);
-            samples.Slice(0, sampleCount).SafeCopyTo(_levelCalculationBuffer.AsSpan(0, sampleCount));
-
-            var samplesForFile = new float[sampleCount];
-            _levelCalculationBuffer.AsSpan(0, sampleCount).SafeCopyTo(samplesForFile);
-
-            _fileSaveTask = Task.Run(() => { SaveSamplesToFile(samplesForFile, writefilePath); });
-        }
+        return (leftAverage, 0f);
     }
-
-    // /// <summary>
-    // /// Calculates the average signal levels for a stereo audio signal using Span.
-    // /// </summary>
-    // /// <param name="stereoAudioData">The stereo audio data span where even indices are left channel and odd indices are right channel.</param>
-    // /// <returns>A tuple containing the average levels for (left channel, right channel).</returns>
-    // /// <remarks>
-    // /// This method processes stereo audio data by:
-    // /// - Separating left channel (even indices: 0, 2, 4, ...) and right channel (odd indices: 1, 3, 5, ...)
-    // /// - Using absolute values to measure signal amplitude regardless of polarity
-    // /// - Calculating separate averages for each channel
-    // /// - Returning (0, 0) if no data is available for processing
-    // /// 
-    // /// The returned values represent the average amplitude levels which can be used
-    // /// for audio level monitoring, VU meters, or automatic gain control.
-    // /// </remarks>
-    // private (float, float) CalculateAverageStereoLevelsSpan(ReadOnlySpan<float> stereoAudioData)
-    // {
-    //     if (stereoAudioData.Length == 0)
-    //     {
-    //         return (0f, 0f);
-    //     }
-
-    //     float leftChannelSum = 0;
-    //     float rightChannelSum = 0;
-    //     int leftSampleCount = 0;
-    //     int rightSampleCount = 0;
-
-    //     // Left channel: 0, 2, 4, ...
-    //     // Right channel: 1, 3, 5, ...
-    //     for (int i = 0; i < stereoAudioData.Length; i++)
-    //     {
-    //         if (i % 2 == 0) 
-    //         {
-    //             leftChannelSum += Math.Abs(stereoAudioData[i]);
-    //             leftSampleCount++;
-    //         }
-    //         else 
-    //         {
-    //             rightChannelSum += Math.Abs(stereoAudioData[i]);
-    //             rightSampleCount++;
-    //         }
-    //     }
-
-    //     // Calculating averages
-    //     float leftAverage = leftSampleCount > 0 ? leftChannelSum / leftSampleCount : 0;
-    //     float rightAverage = rightSampleCount > 0 ? rightChannelSum / rightSampleCount : 0;
-
-    //     return (leftAverage, rightAverage);
-    // }
-
-    // /// <summary>
-    // /// Calculates the average signal level for a mono audio signal using Span.
-    // /// </summary>
-    // /// <param name="monoAudioData">The mono audio data span.</param>
-    // /// <returns>A tuple where the first value is the mono level and the second value is always 0 (for consistency with stereo format).</returns>
-    // /// <remarks>
-    // /// This method processes mono audio data by:
-    // /// - Using absolute values to measure signal amplitude regardless of polarity
-    // /// - Calculating the average amplitude across all samples
-    // /// - Returning the result in stereo-compatible format (mono level, 0)
-    // /// - Handling empty data gracefully
-    // /// 
-    // /// The returned format maintains consistency with stereo level calculations
-    // /// while providing meaningful mono audio level information.
-    // /// </remarks>
-    // private (float, float) CalculateAverageMonoLevelSpan(ReadOnlySpan<float> monoAudioData)
-    // {
-    //     if (monoAudioData.Length == 0)
-    //     {
-    //         return (0f, 0f);
-    //     }
-
-    //     float leftChannelSum = 0;
-
-    //     for (int i = 0; i < monoAudioData.Length; i++)
-    //     {
-    //         leftChannelSum += Math.Abs(monoAudioData[i]);
-    //     }
-
-    //     float leftAverage = monoAudioData.Length > 0 ? leftChannelSum / monoAudioData.Length : 0;
-    //     return (leftAverage, 0f);
-    // }
-
-    // /// <summary>
-    // /// Calculates the average signal levels for a stereo audio signal.
-    // /// </summary>
-    // /// <param name="stereoAudioData">The stereo audio data array where even indices are left channel and odd indices are right channel.</param>
-    // /// <returns>A tuple containing the average levels for (left channel, right channel).</returns>
-    // /// <remarks>
-    // /// This method processes stereo audio data by:
-    // /// - Separating left channel (even indices: 0, 2, 4, ...) and right channel (odd indices: 1, 3, 5, ...)
-    // /// - Using absolute values to measure signal amplitude regardless of polarity
-    // /// - Calculating separate averages for each channel
-    // /// - Returning (0, 0) if no data is available for processing
-    // /// 
-    // /// The returned values represent the average amplitude levels which can be used
-    // /// for audio level monitoring, VU meters, or automatic gain control.
-    // /// </remarks>
-    // private (float, float) CalculateAverageStereoLevels(float[] stereoAudioData)
-    // {
-    //     if (stereoAudioData == null || stereoAudioData.Length == 0)
-    //     {
-    //         Console.WriteLine("No data available for processing.");
-    //         return (0f, 0f);
-    //     }
-
-    //     return CalculateAverageStereoLevelsSpan(stereoAudioData.AsSpan());
-    // }
-
-    // /// <summary>
-    // /// Calculates the average signal level for a mono audio signal.
-    // /// </summary>
-    // /// <param name="monoAudioData">The mono audio data array.</param>
-    // /// <returns>A tuple where the first value is the mono level and the second value is always 0 (for consistency with stereo format).</returns>
-    // /// <remarks>
-    // /// This method processes mono audio data by:
-    // /// - Using absolute values to measure signal amplitude regardless of polarity
-    // /// - Calculating the average amplitude across all samples
-    // /// - Returning the result in stereo-compatible format (mono level, 0)
-    // /// - Handling empty or null data gracefully
-    // /// 
-    // /// The returned format maintains consistency with stereo level calculations
-    // /// while providing meaningful mono audio level information.
-    // /// </remarks>
-    // private (float, float) CalculateAverageMonoLevel(float[] monoAudioData)
-    // {
-    //     if (monoAudioData == null || monoAudioData.Length == 0)
-    //     {
-    //         return (0f, 0f);
-    //     }
-
-    //     return CalculateAverageMonoLevelSpan(monoAudioData.AsSpan());
-    // }
 
     /// <summary>
     /// Resets the audio playback state after completion, preparing the system for reuse.

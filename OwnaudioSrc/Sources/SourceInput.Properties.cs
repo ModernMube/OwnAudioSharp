@@ -34,21 +34,16 @@ public partial class SourceInput : ISource
     /// <inheritdoc />
     public bool IsSeeking { get; set; }
 
-    /// <summary>
-    /// Source name, which is used to identify the source.
-    /// </summary>
-    public string? Name { get; set; }
-
-    /// <summary>
-    /// Adjusts and stores the volume of the sourceInput.
-    /// </summary>
-    public float Volume { get => VolumeProcessor.Volume; set => VolumeProcessor.Volume = value.VerifyVolume(); }
+        /// <summary>
+        /// Adjusts and stores the volume of the sourceInput.
+        /// </summary>
+        public float Volume  { get => VolumeProcessor.Volume; set => VolumeProcessor.Volume = value.VerifyVolume(); }
 
     /// <inheritdoc />
     public double Tempo { get; set; }
 
-    /// <inheritdoc />
-    public double Pitch { get; set; }
+        /// <inheritdoc />
+        public double Pitch {  get; set; }
 
     /// <summary>
     /// Processing unit connected to the sourceinput <see cref="ISampleProcessor"/>
@@ -75,14 +70,8 @@ public partial class SourceInput : ISource
     /// </summary>
     public ConcurrentQueue<float[]> SourceSampleData { get; }
 
-    /// <summary>
-    /// Gets <see cref="IAudioEngine"/> instance.
-    /// </summary>
-    protected IAudioEngine Engine { get; set; }
-    
-    /// <summary>
-    /// Stereo audio output level. 
-    /// In the case of mono signal, only the left channel value changes. 
-    /// </summary>
-    public (float, float)? OutputLevels { get; private set; }
+        /// <summary>
+        /// Gets <see cref="IAudioEngine"/> instance.
+        /// </summary>
+        protected IAudioEngine Engine { get; set; }
 }

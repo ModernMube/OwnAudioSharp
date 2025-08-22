@@ -17,13 +17,10 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 - **Detecting musical chords from audio data** Real-time or offline chord detection from musical notes
 - **New feature: SourceSpark**, a useful resource for game developers, is ready. [See description below!](#sourcespark)
 
-## 🚧 Work in Progress
-- [x] Load an unlimited number of audio files (sound effects, noises, etc.), which can be played at any time during playback, even in a loop.
+## Prerequisites
 
-## Upcoming Features
-- Developing and testing mobile application support
-
-## Sample Application
+- FFmpeg libraries
+- PortAudio libraries
 
 Check out the sample application [OwnAudioSharpDemo](https://github.com/ModernMube/OwnAudioSharpDemo) that demonstrates the capabilities of the OwnAudioSharp audio library through an Avalonia MVVM application using ReactiveUI. MainWindowViewModel.cs contains the core logic for audio processing, playback, effects application, and UI control.
 
@@ -49,57 +46,25 @@ The library will attempt to find these dependencies in standard system locations
 
 ## Installation
 
-You can add this library to your project via NuGet or by directly referencing the project.
-```bash
-NuGet\Install-Package OwnAudioSharp
-```
+You can add this library to your project via NuGet (when published) or by directly referencing the project.
 
-## Optional dependencies: PortAudio and FFmpeg
+### Required Libraries
 
-By default, our code includes **MiniAudio**, which is ready to use for all systems, so you can get started right away!
+You will find the required files in the LIBS folder in a compressed file. 
+Extract the package appropriate for your operating system into the folder containing the compressed file.
+Depending on your operating system, you will need the following:
 
-If you want to use **PortAudio** and **FFmpeg** on certain platforms for extended functionality, you can configure them as follows:
+#### Windows
+- FFmpeg libraries (avcodec, avformat, avutil, etc.)
+- portaudio.dll
 
-### Windows
+#### macOS
+- FFmpeg libraries (libavcodec.dylib, libavformat.dylib, libavutil.dylib, etc.)
+- libportaudio.dylib
 
-1. Grab the **FFmpeg 6** files and extract them to a folder.
-
-2. Copy the **PortAudio 2** DLL file to the same folder.
-
-3. When you initialize `OwnAudio` in your code, just point to the folder path.
-
-### Linux
-
-1. Use Synaptic package manager (or your distribution's equivalent) to install `portaudio19-dev` (this usually provides PortAudio v2) and `ffmpeg` (version 6 or compatible).
-* For example, on Debian/Ubuntu based systems:
-
-```bash
-sudo apt update
-sudo apt install portaudio19-dev ffmpeg
-```
-(Note: Package names may vary slightly depending on your Linux distribution. Make sure you get libraries compatible with FFmpeg version 6.)
-
-2. `OwnAudio` is smart and will automatically find and use them if they are installed systemwide.
-
-### macOS
-
-1. Launch the terminal and use Homebrew:
-
-```bash
-brew install portaudio
-brew install ffmpeg@6
-```
-2. After installation, the code will automatically detect and prioritize PortAudio and FFmpeg.
-
-### Android and iOS
-
-* Good news! **MiniAudio** works out of the box on Android and iOS. These platforms don't require any additional steps to handle audio.
-
----
-
-## Support My Work
-
-If you find this project helpful, consider buying me a coffee!
+#### Linux
+- FFmpeg libraries (libavcodec.so, libavformat.so, libavutil.so, etc.)
+- libportaudio.so.2
 
 <a href="https://www.buymeacoffee.com/ModernMube" 
     target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" 
@@ -400,9 +365,7 @@ if (sparkSource.IsLooping) {
 ```
 The memory-based approach makes SourceSpark ideal for games where audio responsiveness and reliability are crucial, trading memory usage for guaranteed performance and zero-latency audio playback.
 
-## Real-time Audio Sources
-
-OwnAudio supports real-time audio sources for live audio generation and streaming:
+## Audio Data Read
 
 ```csharp
 using System.Threading.Tasks;

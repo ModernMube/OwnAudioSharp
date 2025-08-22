@@ -28,28 +28,7 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 - **Volume control** and custom audio processing
 - **Seeking** within audio files
 - **Real-time audio processing** with custom sample processors
-- **Audio data visualization** customizable waveform display
-- **Built-in audio effects** (Reverb, Delay, Distortion, Equalizer, Compressor, etc.)
-- **Detecting musical chords from audio data** Real-time or offline chord detection from musical notes
-- **New feature: SourceSpark**, a useful resource for game developers, is ready. [See description below!](#sourcespark)
-
-## 🚧 Work in Progress
-- [x] Load an unlimited number of audio files (sound effects, noises, etc.), which can be played at any time during playback, even in a loop.
-
-## Upcoming Features
-- Developing and testing mobile application support
-
-## Sample Application
-
-Check out the sample application [OwnAudioSharpDemo](https://github.com/ModernMube/OwnAudioSharpDemo) that demonstrates the capabilities of the OwnAudioSharp audio library through an Avalonia MVVM application using ReactiveUI. MainWindowViewModel.cs contains the core logic for audio processing, playback, effects application, and UI control.
-
-## Documentation
-
- <a href="../../wiki">
-  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20documentation%20step-blue" alt="Wiki OwnAudio documentation">
-</a>
-
-## Supported Systems
+- **Audio data visualize** customizable waveform display
 
 The table below summarizes the supported operating systems, the APIs used, and their testing status.
 
@@ -65,51 +44,25 @@ The library will attempt to find these dependencies in standard system locations
 
 ## Installation
 
-You can add this library to your project via NuGet or by directly referencing the project.
-```bash
-NuGet\Install-Package OwnAudioSharp
-```
+You can add this library to your project via NuGet (when published) or by directly referencing the project.
 
-## Optional dependencies: PortAudio and FFmpeg
+### Required Libraries
 
-By default, our code includes **MiniAudio**, which is ready to use for all systems, so you can get started right away!
+You will find the required files in the LIBS folder in a compressed file. 
+Extract the package appropriate for your operating system into the folder containing the compressed file.
+Depending on your operating system, you will need the following:
 
-If you want to use **PortAudio** and **FFmpeg** on certain platforms for extended functionality, you can configure them as follows:
+#### Windows
+- FFmpeg libraries (avcodec, avformat, avutil, etc.)
+- portaudio.dll
 
-### Windows
+#### macOS
+- FFmpeg libraries (libavcodec.dylib, libavformat.dylib, libavutil.dylib, etc.)
+- libportaudio.dylib
 
-1. Grab the **FFmpeg 6** files and extract them to a folder.
-
-2. Copy the **PortAudio 2** DLL file to the same folder.
-
-3. When you initialize `OwnAudio` in your code, just point to the folder path.
-
-### Linux
-
-1. Use Synaptic package manager (or your distribution's equivalent) to install `portaudio19-dev` (this usually provides PortAudio v2) and `ffmpeg` (version 6 or compatible).
-* For example, on Debian/Ubuntu based systems:
-
-```bash
-sudo apt update
-sudo apt install portaudio19-dev ffmpeg
-```
-(Note: Package names may vary slightly depending on your Linux distribution. Make sure you get libraries compatible with FFmpeg version 6.)
-
-2. `OwnAudio` is smart and will automatically find and use them if they are installed systemwide.
-
-### macOS
-
-1. Launch the terminal and use Homebrew:
-
-```bash
-brew install portaudio
-brew install ffmpeg@6
-```
-2. After installation, the code will automatically detect and prioritize PortAudio and FFmpeg.
-
-### Android and iOS
-
-* Good news! **MiniAudio** works out of the box on Android and iOS. These platforms don't require any additional steps to handle audio.
+#### Linux
+- FFmpeg libraries (libavcodec.so, libavformat.so, libavutil.so, etc.)
+- libportaudio.so.2
 
 ---
 
@@ -211,32 +164,7 @@ sourceManager["Track1Name"].Pitch = 2.0;  // Raise pitch by 2 semitones
 sourceManager.Seek(TimeSpan.FromSeconds(30));  // Seek to 30 seconds
 ```
 
-## Audio Processing with Built-in Effects
-
-OwnAudio includes a comprehensive effects library:
-
-```csharp
-using Ownaudio.Effects;
-
-// Apply reverb effect
-var reverb = new Reverb(0.5f, 0.3f, 0.4f, 0.7f);
-sourceManager.CustomSampleProcessor = reverb;
-
-// Apply delay effect
-var delay = new Delay(500, 0.4f, 0.3f, 44100);
-sourceManager.CustomSampleProcessor = delay;
-
-// Apply compressor
-var compressor = new Compressor(0.5f, 4.0f, 100f, 200f, 1.0f, 44100f);
-sourceManager.CustomSampleProcessor = compressor;
-
-// Apply equalizer
-var equalizer = new Equalizer(44100);
-equalizer.SetBandGain(0, 100f, 1.4f, 3.0f);  // Boost bass
-sourceManager.CustomSampleProcessor = equalizer;
-```
-
-### Available Effects
+## Audio Processing
 
 - **Reverb**: Professional quality reverb based on Freeverb algorithm
 - **Delay**: Echo effect with feedback control
@@ -275,6 +203,11 @@ public class MyAudioProcessor : SampleProcessorBase
     {
         // Reset internal state if needed
     }
+    
+    public override void Reset()
+    {
+        // Reset internal state if needed
+    }
 }
 
 // Apply the processor to source manager
@@ -282,143 +215,7 @@ var processor = new MyAudioProcessor();
 sourceManager.CustomSampleProcessor = processor;
 ```
 
-## SourceSpark 
-**Game-Optimized Audio Effects**
-
-The `SourceSpark` class is a simplified audio source designed specifically for short audio clips and sound effects, making it perfect for game development. Unlike standard sources, **SourceSpark loads entire audio files into memory** for instant, zero-latency playback.
-
-### Key Features for Game Development
-
-- **Zero-latency playback** - Audio data stored in memory for instant access
-- **Looping support** - Perfect for ambient sounds like rain, wind, or engine noise
-- **Multiple simultaneous playback** - Create multiple instances for overlapping sounds
-- **Automatic cleanup** - Non-looping sounds are automatically removed when finished
-- **Real-time effects** - Pitch, tempo, and volume can be modified during playback
-
-### Basic Usage
-
-```csharp
-using Ownaudio;
-using Ownaudio.Sources;
-
-// Add a simple sound effect
-var gunshot = sourceManager.AddSparkSource("sounds/gunshot.wav", looping: false, volume: 0.9f);
-gunshot.Play(); // Direct playback
-
-// Add looping ambient sound
-var rainSound = sourceManager.AddSparkSource("ambient/rain.wav", looping: true, volume: 0.4f);
-rainSound.Play(); // Start looping
-
-// Start the source manager to handle all sources
-sourceManager.Play();
-```
-
-### Advanced Game Audio
-
-```csharp
-// Dynamic engine sound for vehicles
-var engineSound = sourceManager.AddSparkSource("car_engine.wav", looping: true, volume: 0.6f);
-engineSound.Play();
-
-// Real-time sound modification based on game state
-void UpdateEngineSound(float speed) {
-    engineSound.Pitch = speed * 0.01; // Higher pitch = faster speed
-    engineSound.Volume = Math.Min(0.8f, 0.3f + speed * 0.005f);
-}
-
-// Multiple overlapping gunshots - create separate instances
-var pistol1 = sourceManager.AddSparkSource("weapons/pistol.wav");
-var pistol2 = sourceManager.AddSparkSource("weapons/pistol.wav");
-pistol1.Play(); // First shot
-pistol2.Play(); // Second shot (overlapping)
-```
-
-### Loop Management for Ambient Audio
-
-```csharp
-// Weather system with looping sounds
-var currentWeather = sourceManager.AddSparkSource("weather/clear.wav", looping: true, volume: 0.2f);
-currentWeather.Play();
-
-void ChangeWeather(WeatherType weather) {
-    // Stop current weather sound
-    currentWeather.Stop();
-    sourceManager.RemoveSparkSource(currentWeather);
-    
-    // Start new weather sound
-    string weatherFile = weather switch {
-        WeatherType.Rain => "weather/rain.wav",
-        WeatherType.Storm => "weather/thunder.wav",
-        WeatherType.Wind => "weather/wind.wav",
-        _ => "weather/clear.wav"
-    };
-    
-    currentWeather = sourceManager.AddSparkSource(weatherFile, looping: true, volume: 0.4f);
-    currentWeather.Play();
-}
-```
-
-### Runtime Control
-
-```csharp
-// Loop control during gameplay
-sparkSource.IsLooping = true;  // Enable looping
-sparkSource.IsLooping = false; // Disable looping
-
-// State management
-sparkSource.Play();   // Start playback
-sparkSource.Pause();  // Pause playback
-sparkSource.Resume(); // Resume from pause
-sparkSource.Stop();   // Stop and reset
-
-// Real-time audio effects
-sparkSource.Volume = 0.5f;     // Adjust volume
-sparkSource.Pitch = 2.0;       // Raise pitch by 2 semitones
-sparkSource.Tempo = 1.5;       // Speed up by 50%
-```
-
-### Memory-Based Advantages
-
-**Perfect for:**
-- UI sounds (button clicks, menu navigation)
-- Weapon effects (gunshots, explosions)
-- Short ambient loops (rain, wind, machinery)
-- Game event sounds (collectibles, notifications)
-
-**Benefits:**
-- **Instant response** - No file I/O during gameplay
-- **Reliable playback** - No streaming errors or stuttering  
-- **Flexible manipulation** - Real-time pitch/tempo changes
-- **Concurrent playback** - Multiple instances of same sound
-
-**Memory Guidelines:**
-- Ideal for clips under 10 seconds
-- Best suited for frequently used sounds
-- Perfect for looping ambient audio
-- Excellent for rapid-fire sound effects
-
-### Lifecycle Management
-
-```csharp
-// Automatic cleanup for one-shot sounds
-sparkSource.StateChanged += (sender, e) => {
-    if (sparkSource.HasFinished && !sparkSource.IsLooping) {
-        // Non-looping sounds are automatically removed
-        sourceManager.RemoveSparkSource(sparkSource);
-    }
-};
-
-// Manual cleanup for persistent sounds
-if (sparkSource.IsLooping) {
-    sparkSource.Stop();
-    sourceManager.RemoveSparkSource(sparkSource);
-}
-```
-The memory-based approach makes SourceSpark ideal for games where audio responsiveness and reliability are crucial, trading memory usage for guaranteed performance and zero-latency audio playback.
-
-## Real-time Audio Sources
-
-OwnAudio supports real-time audio sources for live audio generation and streaming:
+## Audio Data Read
 
 ```csharp
 using System.Threading.Tasks;
