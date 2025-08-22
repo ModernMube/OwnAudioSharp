@@ -20,10 +20,18 @@ internal sealed class LibraryLoader : IDisposable
     {
         Ensure.NotNull(libraryName, nameof(libraryName));
 
-        if (PlatformInfo.IsWindows || PlatformInfo.IsLinux || PlatformInfo.IsOSX)
+        try
+        {
             _handle = NativeLibrary.Load(libraryName);
-        else
-            throw new NotSupportedException("Platform is not supported.");
+        }
+        catch (DllNotFoundException ex)
+        {
+            Console.WriteLine($"[ERROR] DllNotFoundException when loading native library: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            throw new NotSupportedException($"Platform is not supported. ERROR: {ex.Message}");
+        }
 
         Ensure.That<Exception>(_handle != IntPtr.Zero, $"Could not load native libary: {libraryName}.");
     }
@@ -37,7 +45,7 @@ internal sealed class LibraryLoader : IDisposable
     public TDelegate LoadFunc<TDelegate>(string name)
     {
         var ptr = NativeLibrary.GetExport(_handle, name);
-        
+
         Ensure.That<Exception>(ptr != IntPtr.Zero, $"Could not load function name: {name}.");
 
         return Marshal.GetDelegateForFunctionPointer<TDelegate>(ptr);

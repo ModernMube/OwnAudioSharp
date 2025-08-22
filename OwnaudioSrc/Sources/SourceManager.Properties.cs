@@ -9,7 +9,7 @@ using Ownaudio.Utilities.Extensions;
 
 namespace Ownaudio.Sources;
 
-public unsafe partial class SourceManager
+public partial class SourceManager
 {
    /// <summary>
     /// Status change event
@@ -45,6 +45,11 @@ public unsafe partial class SourceManager
     /// List of added sources
     /// </summary>
     public List<ISource> SourcesInput { get; protected set; } = new List<ISource>();
+
+    /// <summary>
+    /// List of simple effect sources
+    /// </summary>
+    public List<SourceSpark> SourcesSpark { get; protected set; } = new List<SourceSpark>();
 
     /// <summary>
     /// The resources have been loaded successfully
@@ -189,4 +194,9 @@ public class DefaultProcessor : SampleProcessorBase
     /// </summary>
     /// <param name="sample"></param>
     public override void Process(Span<float> sample) { }
+
+    /// <summary>
+    /// Processor reset
+    /// </summary>
+    public override void Reset() { }
 }

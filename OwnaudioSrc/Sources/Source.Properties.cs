@@ -17,7 +17,7 @@ namespace Ownaudio.Sources;
 /// </summary>
 public partial class Source : ISource
 {
-   /// <summary>
+    /// <summary>
     /// Event that is raised when source state has been changed.
     /// </summary>
     public event EventHandler? StateChanged;
@@ -46,6 +46,11 @@ public partial class Source : ISource
     /// It stores the current activity and status of the source <see cref="SourceState"/>
     /// </summary>
     public SourceState State { get; protected set; }
+
+    /// <summary>
+    /// Source name, which is used to identify the source.
+    /// </summary>
+    public string? Name { get; set; }
 
     /// <summary>
     /// The source is being searched
@@ -110,22 +115,22 @@ public partial class Source : ISource
     /// Gets or sets logger instance.
     /// </summary>
     [NotNull]
-    public ILogger? Logger { get; set; }  
+    public ILogger? Logger { get; set; }
 
     /// <summary>
     /// Gets queue object that holds queued audio frames.
     /// </summary>
     public ConcurrentQueue<float[]> SourceSampleData { get; }
-    
-    /// <summary>
-    /// Gets or sets current <see cref="IAudioDecoder"/> instance.
-    /// </summary>
-    protected IAudioDecoder? CurrentDecoder { get; set; }
 
     /// <summary>
     /// Gets or sets current specified audio URL.
     /// </summary>
-    protected string? CurrentUrl { get; set; }
+    public string? CurrentUrl { get; private set; }
+
+    /// <summary>
+    /// Gets or sets current <see cref="IAudioDecoder"/> instance.
+    /// </summary>
+    protected IAudioDecoder? CurrentDecoder { get; set; }
 
     /// <summary>
     /// Gets or sets current specified audio stream.
@@ -140,7 +145,7 @@ public partial class Source : ISource
     /// <summary>
     /// Gets queue object that holds queued audio frames.
     /// </summary>
-    protected ConcurrentQueue<AudioFrame> Queue { get; }    
+    protected ConcurrentQueue<AudioFrame> Queue { get; }
 
     /// <summary>
     /// Gets current audio decoder thread.
@@ -156,4 +161,10 @@ public partial class Source : ISource
     /// Gets whether or not the decoder thread reach end of file.
     /// </summary>
     protected bool IsEOF { get; private set; }
+    
+    /// <summary>
+    /// Stereo audio output level. 
+    /// In the case of mono signal, only the left channel value changes. 
+    /// </summary>
+    public (float, float)? OutputLevels { get; private set; }
 }

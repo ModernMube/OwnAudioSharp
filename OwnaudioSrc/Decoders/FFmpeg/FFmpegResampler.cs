@@ -37,12 +37,11 @@ internal sealed unsafe class FFmpegResampler : IDisposable
 
         fixed (SwrContext** swrCtxPtr = &_swrCtx)
         {
-            // Beállítja a konverziós paramétereket az új API szerint
             int ret = ffmpeg.swr_alloc_set_opts2(
-            swrCtxPtr, // SwrContext referencia
-            _dstChannelLayout, OwnAudio.Constants.FFmpegSampleFormat, _dstSampleRate, // Cél paraméterek
-            srcChannelLayout, srcSampleFormat, srcSampleRate, // Forrás paraméterek
-            LogOffset, null // Extra paraméterek
+            swrCtxPtr,
+            _dstChannelLayout, OwnAudio.Constants.FFmpegSampleFormat, _dstSampleRate,
+            srcChannelLayout, srcSampleFormat, srcSampleRate,
+            LogOffset, null
             );
         }
 

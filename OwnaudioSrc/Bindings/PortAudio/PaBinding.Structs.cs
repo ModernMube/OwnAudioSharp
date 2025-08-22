@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using Ownaudio.Engines;
+using static Ownaudio.Bindings.Miniaudio.MaBinding;
 
 namespace Ownaudio.Bindings.PortAudio;
 

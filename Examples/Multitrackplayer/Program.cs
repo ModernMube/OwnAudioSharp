@@ -9,35 +9,35 @@ namespace Simpleplayer
         {
             if (OwnAudio.Initialize())
             {
-                SourceManager sourceManager = SourceManager.Instance;
+                SourceManager manager = SourceManager.Instance;
 
-                await sourceManager.AddOutputSource("path/track1audio.mp3");
-                await sourceManager.AddOutputSource("path/track2audio.mp3");
+                await manager.AddOutputSource(@"path/audio1.mp3", "First");
+                await manager.AddOutputSource(@"path/audio2.mp3", "Last");
 
-                sourceManager.Play();
+                manager["First"].Volume = 0.85f;
+                manager["Last"].Volume = 0.35f;
+
+                manager.Play();
 
                 Console.Clear();
                 Console.WriteLine("Hi! Ownaudio user");
                 Console.WriteLine("Default output device: " + OwnAudio.DefaultOutputDevice.Name);
 
-                Console.WriteLine(sourceManager.Sources.Count.ToString() + " track player...");
+                Console.WriteLine(manager.Sources.Count.ToString() + " track player...");
 
                 Console.WriteLine("Press any key to stop playback...");
-                Console.ReadKey();
+                Console.Read();
 
-                sourceManager.Stop();
+                manager.Stop();
+
+                manager.Reset();
                 OwnAudio.Free();
             }
             else
             {
-                if (!OwnAudio.IsFFmpegInitialized)
+                if (!OwnAudio.IsFFmpegInitialized || !OwnAudio.IsPortAudioInitialized)
                 {
-                    Console.WriteLine("FFMPEG library initialization failed!");
-                }
-
-                if (!OwnAudio.IsPortAudioInitialized)
-                {
-                    Console.WriteLine("PORTAUDIO library initialization failed!");
+                    Console.WriteLine("library initialization failed!");
                 }
             }
         }
