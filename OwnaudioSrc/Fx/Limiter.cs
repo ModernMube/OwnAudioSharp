@@ -83,7 +83,6 @@ namespace Ownaudio.Fx
         private const float DEFAULT_CEILING = -0.1f;    // dB
         private const float DEFAULT_RELEASE = 50.0f;    // ms
         private const float DEFAULT_LOOKAHEAD = 5.0f;   // ms
-
         public bool IsEnabled { get; set; } = true;
 
         /// <summary>

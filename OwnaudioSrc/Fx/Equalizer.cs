@@ -144,10 +144,10 @@ namespace Ownaudio.Fx
             if (band < 0 || band >= BANDS)
                 throw new ArgumentOutOfRangeException(nameof(band), "Band index must be between 0 and 9");
 
-            // Checking and limiting values
-            frequency = Math.Max(20.0f, Math.Min(20000.0f, frequency));  // 20Hz - 20kHz
-            q = Math.Max(0.1f, Math.Min(10.0f, q));                      // Q: 0.1 - 10
-            gainDB = Math.Clamp(gainDB, -12.0f, 12.0f);                  // -12dB - +12dB
+            // Constrain parameters to safe audio ranges
+            frequency = Math.Max(20.0f, Math.Min(20000.0f, frequency));
+            q = Math.Max(0.1f, Math.Min(10.0f, q));
+            gainDB = FastClamp(gainDB);
 
             // Store validated parameters
             _frequencies[band] = frequency;
@@ -304,24 +304,11 @@ namespace Ownaudio.Fx
         {
             return value < -12.0f ? -12.0f : (value > 12.0f ? 12.0f : value);
         }
-
-        /// <summary>
-        /// Resets the equalizer by clearing all internal filter states.
-        /// Does not modify any band settings or parameters.
-        /// </summary>
-        public override void Reset()
-        {
-            for (int band = 0; band < BANDS; band++)
-            {
-                for (int i = 0; i < 2; i++)
-                {
-                    _filters[band][i].Reset();
-                }
-            }
-        }
+    }
 
     /// <summary>
-    /// EQ band class
+    /// High-quality biquad filter implementation for parametric EQ applications
+    /// Uses Direct Form II transposed structure for improved numerical stability
     /// </summary>
     public class BiquadFilter
     {
@@ -386,6 +373,16 @@ namespace Ownaudio.Fx
             _z2 = _b2 * input - _a2 * output;
 
             return output;
+        }
+
+        /// <summary>
+        /// Resets filter state variables to zero
+        /// Call when starting new audio stream or after processing gaps
+        /// </summary>
+        public void Reset()
+        {
+            _z1 = 0.0f;
+            _z2 = 0.0f;
         }
     }
 }

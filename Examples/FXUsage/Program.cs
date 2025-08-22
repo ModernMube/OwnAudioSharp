@@ -48,7 +48,17 @@ namespace Microphone
 
     public class InputProcessor : SampleProcessorBase
     {
+        Reverb reverb = new Reverb();
+        Delay delay = new Delay();
 
+        public InputProcessor()
+        {
+            reverb.SampleRate = SourceManager.OutputEngineOptions.SampleRate;
+            reverb.SetPreset(ReverbPreset.VocalBooth);
+
+            delay.SampleRate = SourceManager.OutputEngineOptions.SampleRate;
+            delay.SetPreset(DelayPreset.Ambient);
+        }
 
         public override void Process(Span<float> sample)
         {
@@ -65,6 +75,13 @@ namespace Microphone
 
     public class MasterProcessor : SampleProcessorBase
     {
+        Compressor compressor = new Compressor();
+
+        public MasterProcessor()
+        {
+            compressor.SampleRate = SourceManager.OutputEngineOptions.SampleRate;
+            compressor.SetPreset(CompressorPreset.VocalGentle);
+        }
 
         public override void Process(Span<float> sample)
         {

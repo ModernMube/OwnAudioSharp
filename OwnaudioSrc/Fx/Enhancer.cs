@@ -100,6 +100,50 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
+        /// Apply a preset configuration optimized for specific use cases
+        /// </summary>
+        /// <param name="preset">The preset configuration to apply</param>
+        public void SetPreset(EnhancerPreset preset)
+        {
+            switch (preset)
+            {
+                case EnhancerPreset.VocalClarity:
+                    SetParameters(mix: 0.15f, cutFreq: 5000f, gain: 2.0f);
+                    break;
+
+                case EnhancerPreset.RockEdge:
+                    SetParameters(mix: 0.25f, cutFreq: 3000f, gain: 4.0f);
+                    break;
+
+                case EnhancerPreset.AcousticSparkle:
+                    SetParameters(mix: 0.10f, cutFreq: 6000f, gain: 2.5f);
+                    break;
+
+                case EnhancerPreset.MixCutter:
+                    SetParameters(mix: 0.30f, cutFreq: 4000f, gain: 3.5f);
+                    break;
+
+                case EnhancerPreset.Broadcast:
+                    SetParameters(mix: 0.20f, cutFreq: 4500f, gain: 3.0f);
+                    break;
+
+                default:
+                    SetParameters(); // Default parameters
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Resets the enhancer's internal filter state by clearing previous sample values.
+        /// Does not modify any settings or parameters.
+        /// </summary>
+        public override void Reset()
+        {
+            _xPrev = 0.0f;
+            _yPrev = 0.0f;
+        }
+
+        /// <summary>
         /// Set Compressor parameters
         /// </summary>
         /// <param name="mix">mix(0-1) : Controls the amount of processed signal blended with the original</param>
