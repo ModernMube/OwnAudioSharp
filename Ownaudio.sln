@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RealTimeData", "Examples\Re
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChordDetect", "Examples\ChordDetect\ChordDetect.csproj", "{E0AB12B4-2E5E-6898-4693-2A94E08B8BF7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudiotest", "Ownaudiotest\Ownaudiotest.csproj", "{D007A00B-44DF-4A94-9D78-2282C32E1E1B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -63,6 +65,10 @@ Global
 		{E0AB12B4-2E5E-6898-4693-2A94E08B8BF7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E0AB12B4-2E5E-6898-4693-2A94E08B8BF7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E0AB12B4-2E5E-6898-4693-2A94E08B8BF7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D007A00B-44DF-4A94-9D78-2282C32E1E1B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D007A00B-44DF-4A94-9D78-2282C32E1E1B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D007A00B-44DF-4A94-9D78-2282C32E1E1B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D007A00B-44DF-4A94-9D78-2282C32E1E1B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

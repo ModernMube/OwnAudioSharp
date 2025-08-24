@@ -33,7 +33,7 @@ namespace Ownaudio.Sources
         /// - Thread-safe queue for audio sample data
         /// - Input configuration based on the provided options
         /// </remarks>
-#nullable disable
+        #nullable disable
         public SourceInput(AudioEngineInputOptions inOptions)
         {
             _inputoptions = inOptions;
@@ -96,8 +96,8 @@ namespace Ownaudio.Sources
             }
 
             OutputLevels = SourceManager.InputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
-                ? CalculateLevels.CalculateAverageStereoLevelsSpan(samples)
-                : CalculateLevels.CalculateAverageMonoLevelSpan(samples);
+                ? Extensions.CalculateLevels.CalculateAverageStereoLevelsSpan(samples)
+                : Extensions.CalculateLevels.CalculateAverageMonoLevelSpan(samples);
         }
 
         /// <summary>

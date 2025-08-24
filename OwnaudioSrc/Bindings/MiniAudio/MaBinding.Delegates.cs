@@ -11,7 +11,7 @@ internal static partial class MaBinding
     private static ContextGetDeviceInfo? _contextGetDeviceInfo;
     private static ContextGetDevices? _contextGetDevices;
     private static ContextEnumerateDevices? _contextEnumerateDevices;
-    private static AllocateContext? _allocateContext;
+    //private static AllocateContext? _allocateContext;
 
     private static DeviceInit? _deviceInit;
     private static DeviceUninit? _deviceUninit;
@@ -21,8 +21,8 @@ internal static partial class MaBinding
     private static DeviceGetInfo? _deviceGetInfo;
     private static DeviceGetContext? _deviceGetContext;
     private static GetDevices? _getDevices;
-    private static AllocateDevice? _allocateDevice;
-    private static AllocateDeviceConfig? _allocateDeviceConfig;
+    //private static AllocateDevice? _allocateDevice;
+    //private static AllocateDeviceConfig? _allocateDeviceConfig;
     private static MaDeviceConfigInit? _maDeviceConfigInit;
 
     private static EngineInit? _engineInit;
@@ -51,8 +51,8 @@ internal static partial class MaBinding
     private static EncoderInit? _encoderInit;
     private static EncoderUninit? _encoderUninit;
     private static EncoderWrite? _encoderWrite;
-    private static AllocateEncoder? _allocateEncoder;
-    private static AllocateEncoderConfig? _allocateEncoderConfig;
+    //private static AllocateEncoder? _allocateEncoder;
+    //private static AllocateEncoderConfig? _allocateEncoderConfig;
 
     private static ResamplerInit? _resamplerInit;
     private static ResamplerUninit? _resamplerUninit;
@@ -127,8 +127,8 @@ internal static partial class MaBinding
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate MaResult ContextEnumerateDevices(IntPtr context, MaEnumDevicesCallback callback, IntPtr pUserData);
 
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate IntPtr AllocateContext();
+    //[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    //private delegate IntPtr AllocateContext();
     #endregion
 
     #region Device delegates
@@ -156,11 +156,11 @@ internal static partial class MaBinding
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate MaResult GetDevices(IntPtr context, out IntPtr pPlaybackDevices, out IntPtr pCaptureDevices, out IntPtr playbackDeviceCount, out IntPtr captureDeviceCount);
 
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate IntPtr AllocateDevice();
+    //[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    //private delegate IntPtr AllocateDevice();
 
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate IntPtr AllocateDeviceConfig(MaDeviceType capabilityType, MaFormat format, uint channels, uint sampleRate, MaDataCallback dataCallback, IntPtr playbackDevice, IntPtr captureDevice);
+    //[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    //private delegate IntPtr AllocateDeviceConfig(MaDeviceType capabilityType, MaFormat format, uint channels, uint sampleRate, MaDataCallback dataCallback, IntPtr playbackDevice, IntPtr captureDevice);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate MaDeviceConfig MaDeviceConfigInit(MaDeviceType deviceType);
@@ -252,11 +252,11 @@ internal static partial class MaBinding
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate MaResult EncoderWrite(IntPtr pEncoder, IntPtr pFramesIn, ulong frameCount, out ulong pFramesWritten);
 
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate IntPtr AllocateEncoder();
+    //[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    //private delegate IntPtr AllocateEncoder();
 
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate IntPtr AllocateEncoderConfig(MaFormat encodingFormat, MaFormat format, uint channels, uint sampleRate);
+    //[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    //private delegate IntPtr AllocateEncoderConfig(MaFormat encodingFormat, MaFormat format, uint channels, uint sampleRate);
     #endregion
 
     #region Resampler delegates  

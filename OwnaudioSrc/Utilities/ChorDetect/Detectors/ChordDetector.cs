@@ -85,6 +85,7 @@ namespace Ownaudio.Utilities.OwnChordDetect.Detectors
         /// <param name="confidenceThreshold">The minimum confidence threshold for chord detection (0.0 to 1.0).</param>
         /// <param name="ambiguityThreshold">The threshold for determining chord ambiguity in optimized mode.</param>
         /// <param name="bufferSize">The maximum size of the note buffer for real-time processing.</param>
+        #nullable disable
         public ChordDetector(DetectionMode mode = DetectionMode.Extended,
                             float confidenceThreshold = 0.6f,
                             float ambiguityThreshold = 0.1f,
@@ -98,6 +99,7 @@ namespace Ownaudio.Utilities.OwnChordDetect.Detectors
             _bufferSize = bufferSize;
             UpdateTemplates();
         }
+        #nullable restore
 
         /// <summary>
         /// Analyzes a list of notes and returns the detected chord with analysis details.
@@ -275,9 +277,11 @@ namespace Ownaudio.Utilities.OwnChordDetect.Detectors
         /// <returns>A tuple containing the chord name, confidence, ambiguity flag, and alternative chord names.</returns>
         protected (string chord, float confidence, bool isAmbiguous, string[] alternatives) DetectChordAdvancedBase(float[]? chromagram)
         {
+            #nullable disable
             var similarities = AnalyzeAllSimilarities(chromagram);
             var topMatches = similarities.Take(5).ToArray();
             var bestMatch = topMatches.First();
+            #nullable restore
 
             // Check for ambiguity if in optimized mode
             if (_mode == DetectionMode.Optimized)

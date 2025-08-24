@@ -311,13 +311,9 @@ public partial class SourceManager
                     mixingGain: 0.8f
                 );
 
-                // InputLevels = InputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
-                //     ? CalculateAverageStereoLevels(inputBuffer)
-                //     : CalculateAverageMonoLevel(inputBuffer);
-
                  InputLevels = InputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
-                    ? CalculateLevels.CalculateAverageStereoLevelsSpan(inputBuffer)
-                    : CalculateLevels.CalculateAverageMonoLevelDbSpan(inputBuffer);
+                    ? Extensions.CalculateLevels.CalculateAverageStereoLevelsSpan(inputBuffer)
+                    : Extensions.CalculateLevels.CalculateAverageMonoLevelDbSpan(inputBuffer);
             }
             finally
             {
@@ -485,17 +481,9 @@ public partial class SourceManager
         lock (_lock)
         {
 #nullable disable
-            // int sampleCount = Math.Min(samples.Length, _levelCalculationBuffer.Length);
-            // samples.Slice(0, sampleCount).SafeCopyTo(_levelCalculationBuffer.AsSpan(0, sampleCount));
-
-            // if (OutputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo)
-            //     OutputLevels = CalculateAverageStereoLevelsSpan(_levelCalculationBuffer.AsSpan(0, sampleCount));
-            // else
-            //     OutputLevels = CalculateAverageMonoLevelSpan(_levelCalculationBuffer.AsSpan(0, sampleCount));
-
             OutputLevels = OutputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
-                ? OutputLevels = CalculateLevels.CalculateAverageStereoLevelsSpan(samples)
-                : OutputLevels = CalculateLevels.CalculateAverageMonoLevelSpan(samples);
+                ? OutputLevels = Extensions.CalculateLevels.CalculateAverageStereoLevelsSpan(samples)
+                : OutputLevels = Extensions.CalculateLevels.CalculateAverageMonoLevelSpan(samples);
 #nullable restore
         }
 
@@ -504,8 +492,10 @@ public partial class SourceManager
             if (!_fileSaveTask.IsCompleted)
                 _fileSaveTask.Wait();
 
+            #nullable disable
             int sampleCount = Math.Min(samples.Length, _levelCalculationBuffer.Length);
             samples.Slice(0, sampleCount).SafeCopyTo(_levelCalculationBuffer.AsSpan(0, sampleCount));
+            #nullable restore
 
             var samplesForFile = new float[sampleCount];
             _levelCalculationBuffer.AsSpan(0, sampleCount).SafeCopyTo(samplesForFile);
@@ -513,140 +503,6 @@ public partial class SourceManager
             _fileSaveTask = Task.Run(() => { SaveSamplesToFile(samplesForFile, writefilePath); });
         }
     }
-
-    // /// <summary>
-    // /// Calculates the average signal levels for a stereo audio signal using Span.
-    // /// </summary>
-    // /// <param name="stereoAudioData">The stereo audio data span where even indices are left channel and odd indices are right channel.</param>
-    // /// <returns>A tuple containing the average levels for (left channel, right channel).</returns>
-    // /// <remarks>
-    // /// This method processes stereo audio data by:
-    // /// - Separating left channel (even indices: 0, 2, 4, ...) and right channel (odd indices: 1, 3, 5, ...)
-    // /// - Using absolute values to measure signal amplitude regardless of polarity
-    // /// - Calculating separate averages for each channel
-    // /// - Returning (0, 0) if no data is available for processing
-    // /// 
-    // /// The returned values represent the average amplitude levels which can be used
-    // /// for audio level monitoring, VU meters, or automatic gain control.
-    // /// </remarks>
-    // private (float, float) CalculateAverageStereoLevelsSpan(ReadOnlySpan<float> stereoAudioData)
-    // {
-    //     if (stereoAudioData.Length == 0)
-    //     {
-    //         return (0f, 0f);
-    //     }
-
-    //     float leftChannelSum = 0;
-    //     float rightChannelSum = 0;
-    //     int leftSampleCount = 0;
-    //     int rightSampleCount = 0;
-
-    //     // Left channel: 0, 2, 4, ...
-    //     // Right channel: 1, 3, 5, ...
-    //     for (int i = 0; i < stereoAudioData.Length; i++)
-    //     {
-    //         if (i % 2 == 0) 
-    //         {
-    //             leftChannelSum += Math.Abs(stereoAudioData[i]);
-    //             leftSampleCount++;
-    //         }
-    //         else 
-    //         {
-    //             rightChannelSum += Math.Abs(stereoAudioData[i]);
-    //             rightSampleCount++;
-    //         }
-    //     }
-
-    //     // Calculating averages
-    //     float leftAverage = leftSampleCount > 0 ? leftChannelSum / leftSampleCount : 0;
-    //     float rightAverage = rightSampleCount > 0 ? rightChannelSum / rightSampleCount : 0;
-
-    //     return (leftAverage, rightAverage);
-    // }
-
-    // /// <summary>
-    // /// Calculates the average signal level for a mono audio signal using Span.
-    // /// </summary>
-    // /// <param name="monoAudioData">The mono audio data span.</param>
-    // /// <returns>A tuple where the first value is the mono level and the second value is always 0 (for consistency with stereo format).</returns>
-    // /// <remarks>
-    // /// This method processes mono audio data by:
-    // /// - Using absolute values to measure signal amplitude regardless of polarity
-    // /// - Calculating the average amplitude across all samples
-    // /// - Returning the result in stereo-compatible format (mono level, 0)
-    // /// - Handling empty data gracefully
-    // /// 
-    // /// The returned format maintains consistency with stereo level calculations
-    // /// while providing meaningful mono audio level information.
-    // /// </remarks>
-    // private (float, float) CalculateAverageMonoLevelSpan(ReadOnlySpan<float> monoAudioData)
-    // {
-    //     if (monoAudioData.Length == 0)
-    //     {
-    //         return (0f, 0f);
-    //     }
-
-    //     float leftChannelSum = 0;
-
-    //     for (int i = 0; i < monoAudioData.Length; i++)
-    //     {
-    //         leftChannelSum += Math.Abs(monoAudioData[i]);
-    //     }
-
-    //     float leftAverage = monoAudioData.Length > 0 ? leftChannelSum / monoAudioData.Length : 0;
-    //     return (leftAverage, 0f);
-    // }
-
-    // /// <summary>
-    // /// Calculates the average signal levels for a stereo audio signal.
-    // /// </summary>
-    // /// <param name="stereoAudioData">The stereo audio data array where even indices are left channel and odd indices are right channel.</param>
-    // /// <returns>A tuple containing the average levels for (left channel, right channel).</returns>
-    // /// <remarks>
-    // /// This method processes stereo audio data by:
-    // /// - Separating left channel (even indices: 0, 2, 4, ...) and right channel (odd indices: 1, 3, 5, ...)
-    // /// - Using absolute values to measure signal amplitude regardless of polarity
-    // /// - Calculating separate averages for each channel
-    // /// - Returning (0, 0) if no data is available for processing
-    // /// 
-    // /// The returned values represent the average amplitude levels which can be used
-    // /// for audio level monitoring, VU meters, or automatic gain control.
-    // /// </remarks>
-    // private (float, float) CalculateAverageStereoLevels(float[] stereoAudioData)
-    // {
-    //     if (stereoAudioData == null || stereoAudioData.Length == 0)
-    //     {
-    //         Console.WriteLine("No data available for processing.");
-    //         return (0f, 0f);
-    //     }
-
-    //     return CalculateAverageStereoLevelsSpan(stereoAudioData.AsSpan());
-    // }
-
-    // /// <summary>
-    // /// Calculates the average signal level for a mono audio signal.
-    // /// </summary>
-    // /// <param name="monoAudioData">The mono audio data array.</param>
-    // /// <returns>A tuple where the first value is the mono level and the second value is always 0 (for consistency with stereo format).</returns>
-    // /// <remarks>
-    // /// This method processes mono audio data by:
-    // /// - Using absolute values to measure signal amplitude regardless of polarity
-    // /// - Calculating the average amplitude across all samples
-    // /// - Returning the result in stereo-compatible format (mono level, 0)
-    // /// - Handling empty or null data gracefully
-    // /// 
-    // /// The returned format maintains consistency with stereo level calculations
-    // /// while providing meaningful mono audio level information.
-    // /// </remarks>
-    // private (float, float) CalculateAverageMonoLevel(float[] monoAudioData)
-    // {
-    //     if (monoAudioData == null || monoAudioData.Length == 0)
-    //     {
-    //         return (0f, 0f);
-    //     }
-
-    //     return CalculateAverageMonoLevelSpan(monoAudioData.AsSpan());
-    // }
 
     /// <summary>
     /// Resets the audio playback state after completion, preparing the system for reuse.

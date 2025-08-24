@@ -809,11 +809,6 @@ public sealed partial class OwnAudioEngine : IAudioEngine
     /// <summary>
     /// Disposes of the callback GC handle.
     /// </summary>
-    // private void DisposeCallbackHandle()
-    // {
-    //     if (_callbackHandle.IsAllocated)
-    //         _callbackHandle.Free();
-    // }
     private void DisposeCallbackHandle()
     {
         if (_callbackHandle.IsAllocated)

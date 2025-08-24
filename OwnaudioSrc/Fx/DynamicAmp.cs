@@ -9,6 +9,10 @@ namespace Ownaudio.Fx
     public enum DynamicAmpPreset
     {
         /// <summary>
+        /// Default settings with balanced parameters
+        /// </summary>
+        Default,
+        /// <summary>
         /// Gentle compression for speech processing
         /// </summary>
         Speech,
@@ -131,6 +135,19 @@ namespace Ownaudio.Fx
             InitializeRmsBuffer(rmsWindowSeconds);
         }
 
+        /// <summary>
+        /// Creates a new DynamicAmp instance with a predefined preset
+        /// </summary>
+        /// <param name="preset">The preset configuration to apply</param>
+        /// <param name="sampleRateHz">Sample rate in Hz (default: 44100)</param>
+        /// <param name="rmsWindowSeconds">RMS calculation window in seconds (default: 0.3)</param>
+        public DynamicAmp(DynamicAmpPreset preset, float sampleRateHz = 44100.0f, float rmsWindowSeconds = 0.3f)
+        {
+            ValidateAndSetSampleRate(sampleRateHz);
+            InitializeRmsBuffer(rmsWindowSeconds);
+            SetPreset(preset);
+        }
+
         private void InitializeRmsBuffer(float windowSeconds)
         {
             rmsWindowLength = Math.Max(1, (int)(sampleRate * windowSeconds));
@@ -195,13 +212,62 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Sets the target volume level in dB
+        /// Gets or sets the target volume level in dB (between -40.0 - 0.0)
         /// </summary>
-        /// <param name="levelDb">Target RMS level in dB (between -40.0 - 0.0)</param>
-        /// <exception cref="ArgumentException">If the value is invalid</exception>
-        public void SetTargetLevel(float levelDb)
+        public float TargetLevel
         {
-            ValidateAndSetTargetLevel(levelDb);
+            get => targetRmsLevelDb;
+            set => ValidateAndSetTargetLevel(value);
+        }
+
+        /// <summary>
+        /// Gets or sets the attack time in seconds (minimum 0.001)
+        /// </summary>
+        public float AttackTime
+        {
+            get => attackTime;
+            set => ValidateAndSetAttackTime(value);
+        }
+
+        /// <summary>
+        /// Gets or sets the release time in seconds (minimum 0.001)
+        /// </summary>
+        public float ReleaseTime
+        {
+            get => releaseTime;
+            set => ValidateAndSetReleaseTime(value);
+        }
+
+        /// <summary>
+        /// Gets or sets the noise threshold value (between 0.0 - 1.0)
+        /// </summary>
+        public float NoiseGate
+        {
+            get => noiseGate;
+            set => ValidateAndSetNoiseGate(value);
+        }
+
+        /// <summary>
+        /// Gets or sets the maximum allowed gain (must be greater than 0)
+        /// </summary>
+        public float MaxGain
+        {
+            get => maxGain;
+            set => ValidateAndSetMaxGain(value);
+        }
+
+        /// <summary>
+        /// Gets or sets the sample rate in Hz (must be greater than 0)
+        /// </summary>
+        public float SampleRate
+        {
+            get => sampleRate;
+            set
+            {
+                float oldWindowSeconds = rmsWindowLength / sampleRate;
+                ValidateAndSetSampleRate(value);
+                InitializeRmsBuffer(oldWindowSeconds);
+            }
         }
 
         /// <summary>
@@ -255,6 +321,14 @@ namespace Ownaudio.Fx
         {
             switch (preset)
             {
+                case DynamicAmpPreset.Default:
+                    targetRmsLevelDb = -9.0f;
+                    attackTime = 0.2f;
+                    releaseTime = 0.8f;
+                    noiseGate = 0.005f;
+                    maxGain = 10.0f;
+                    break;
+
                 case DynamicAmpPreset.Speech:
                     targetRmsLevelDb = -12.0f;
                     attackTime = 0.003f;
@@ -398,58 +472,6 @@ namespace Ownaudio.Fx
             }
 
             return MathF.Sqrt(meanSquare);
-        }
-
-        /// <summary>
-        /// Sets the attack time
-        /// </summary>
-        /// <param name="timeInSeconds">Attack time in seconds</param>
-        /// <exception cref="ArgumentException">If the value is invalid</exception>
-        public void SetAttackTime(float timeInSeconds)
-        {
-            ValidateAndSetAttackTime(timeInSeconds);
-        }
-
-        /// <summary>
-        /// Sets the release time
-        /// </summary>
-        /// <param name="timeInSeconds">Release time in seconds</param>
-        /// <exception cref="ArgumentException">If the value is invalid</exception>
-        public void SetReleaseTime(float timeInSeconds)
-        {
-            ValidateAndSetReleaseTime(timeInSeconds);
-        }
-
-        /// <summary>
-        /// Sets the noise threshold value
-        /// </summary>
-        /// <param name="threshold">Noise threshold value (between 0.0 - 1.0)</param>
-        /// <exception cref="ArgumentException">If the value is invalid</exception>
-        public void SetNoiseGate(float threshold)
-        {
-            ValidateAndSetNoiseGate(threshold);
-        }
-
-        /// <summary>
-        /// Sets the maximum allowed gain
-        /// </summary>
-        /// <param name="gain">Maximum gain value (must be greater than 0)</param>
-        /// <exception cref="ArgumentException">If the value is invalid</exception>
-        public void SetMaxGain(float gain)
-        {
-            ValidateAndSetMaxGain(gain);
-        }
-
-        /// <summary>
-        /// Sets the sample rate of the audio being processed
-        /// </summary>
-        /// <param name="rate">Sample rate in Hz</param>
-        /// <exception cref="ArgumentException">If the value is invalid</exception>
-        public void SetSampleRate(float rate)
-        {
-            float oldWindowSeconds = rmsWindowLength / sampleRate;
-            ValidateAndSetSampleRate(rate);
-            InitializeRmsBuffer(oldWindowSeconds);
         }
 
         /// <summary>

@@ -424,7 +424,7 @@ public class ModelOutputHelper
             return new Tensor(null, null);
         }
 
-#nullable disable
+        #nullable disable
         var nOlap = Constants.N_OVERLAPPING_FRAMES / 2;
         var nOutputFramesOri = totalFrames * Constants.ANNOTATIONS_FPS / Constants.AUDIO_SAMPLE_RATE;
         var step = (int)t[0].Shape![t[0].Shape.Length - 1]; // Last dimension
@@ -432,7 +432,7 @@ public class ModelOutputHelper
         var shape0 = Math.Min(oriShape[0] * oriShape[1] - nOlap * 2, nOutputFramesOri);
         var rangeStart = nOlap * step;
         var rangeCount = (oriShape[1] - nOlap) * step - rangeStart;
-#nullable restore
+        #nullable restore
 
         // Determine shape and required memory
         var shape = new nint[] { shape0, step };
@@ -732,6 +732,7 @@ public static class MidiWriter
     /// </summary>
     /// <param name="notes">List of detected notes</param>
     /// <param name="outputPath">Path for the output MIDI file</param>
+    /// <param name="bpm">Beats Per Minute</param>
     public static void GenerateMidiFile(List<Note> notes, string outputPath, int bpm = 120)
     {
         if (notes.Count > 10)

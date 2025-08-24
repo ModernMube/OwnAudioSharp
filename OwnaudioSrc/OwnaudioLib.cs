@@ -188,22 +188,35 @@ public static partial class OwnAudio
 
                 if (IsMiniAudioInitialized)
                 {
-                    return true;
+                    Debug.WriteLine("AUDIO ENGINE: Miniaudio.");
+                    Debug.WriteLine("AUDIO DECODER: Miniaudio");
+                    IsInitialized = true;
+                    return IsInitialized;
                 }
                 else
                 {
                     if (IsPortAudioInitialized && IsFFmpegInitialized)
-                        return true;
+                    {
+                        IsInitialized = true;
+                        Debug.WriteLine("AUDIO ENGINE: Portaudio.");
+                        Debug.WriteLine("AUDIO DECODER: FFmpeg");
+                    }
                     else
-                        return false;
+                    {
+                        Debug.WriteLine("AUDIO ENGINE: Not found.");
+                        Debug.WriteLine("AUDIO DECODER: Not found");
+                        IsInitialized = false;
+                    }
+
+                    return IsInitialized;
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("An error occurred while initializing the audio libraries.");
-                Debug.WriteLine(ex.Message);
+                Debug.WriteLine($"An error occurred while initializing the audio libraries: {ex.Message}");
 
-                return false;
+                IsInitialized = false;
+                return IsInitialized;
             }
         }
     }

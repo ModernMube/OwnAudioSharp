@@ -1,6 +1,5 @@
 ﻿using Ownaudio.Processors;
 using System;
-using System.Runtime.CompilerServices;
 
 namespace Ownaudio.Fx
 {
@@ -9,6 +8,11 @@ namespace Ownaudio.Fx
     /// </summary>
     public enum EnhancerPreset
     {
+        /// <summary>
+        /// Default preset with balanced settings for general use
+        /// </summary>
+        Default,
+
         /// <summary>
         /// Subtle enhancement for vocals - adds gentle presence without harshness
         /// Uses moderate gain (2.0x) and higher cutoff (5kHz) to enhance vocal clarity
@@ -52,27 +56,94 @@ namespace Ownaudio.Fx
     {
         private float _mix;
         private float _gain;
+        private float _cutFreq;
+        private float _sampleRate;
         private float _alpha;
-        private float _samplerate = 44100f;
         private float _xPrev;
         private float _yPrev;
 
         /// <summary>
-        /// KConstructor
+        /// Constructor with all parameters
         /// </summary>
         /// <param name="mix">mix(0-1) : Controls the amount of processed signal blended with the original</param>
         /// <param name="cutFreq">cutoffFrequency: High-pass filter cutoff(typical 2-6kHz)</param>
-        /// <param name="sampleRate">sampleRate: Audio system sample rate(typically 44.1kHz)</param>
         /// <param name="gain">gain: Pre-saturation amplification(typically 2-4x)</param>
+        /// <param name="sampleRate">sampleRate: Audio system sample rate(typically 44.1kHz)</param>
         public Enhancer(float mix = 0.2f, float cutFreq = 4000f, float gain = 2.5f, float sampleRate = 44100f)
         {
-            _mix = FastClamp(mix);
-            _gain = gain;
-            _samplerate = sampleRate;
+            Mix = mix;
+            CutoffFrequency = cutFreq;
+            Gain = gain;
+            SampleRate = sampleRate;
+            Reset();
+        }
 
-            // Calculate high-pass filter coefficient using RC time constant approximation
-            float rc = 1f / (2f * MathF.PI * cutFreq);
-            _alpha = rc / (rc + 1f / (2f * MathF.PI * cutFreq * sampleRate));
+        /// <summary>
+        /// Constructor with preset selection
+        /// </summary>
+        /// <param name="preset">Preset configuration to apply</param>
+        /// <param name="sampleRate">sampleRate: Audio system sample rate(typically 44.1kHz)</param>
+        public Enhancer(EnhancerPreset preset, float sampleRate = 44100f)
+        {
+            SampleRate = sampleRate;
+            SetPreset(preset);
+            Reset();
+        }
+
+        /// <summary>
+        /// Gets or sets the mix amount (0-1). Controls the amount of processed signal blended with the original.
+        /// </summary>
+        public float Mix
+        {
+            get => _mix;
+            set => _mix = Math.Clamp(value, 0.0f, 1.0f);
+        }
+
+        /// <summary>
+        /// Gets or sets the gain amount (0.1-10). Pre-saturation amplification.
+        /// </summary>
+        public float Gain
+        {
+            get => _gain;
+            set => _gain = Math.Clamp(value, 0.1f, 10.0f);
+        }
+
+        /// <summary>
+        /// Gets or sets the cutoff frequency (100-20000 Hz). High-pass filter cutoff frequency.
+        /// </summary>
+        public float CutoffFrequency
+        {
+            get => _cutFreq;
+            set
+            {
+                _cutFreq = Math.Clamp(value, 100.0f, 20000.0f);
+                UpdateFilterCoefficient();
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the sample rate (8000-192000 Hz). Audio system sample rate.
+        /// </summary>
+        public float SampleRate
+        {
+            get => _sampleRate;
+            set
+            {
+                _sampleRate = Math.Clamp(value, 8000.0f, 192000.0f);
+                UpdateFilterCoefficient();
+            }
+        }
+
+        /// <summary>
+        /// Updates the filter coefficient based on current cutoff frequency and sample rate
+        /// </summary>
+        private void UpdateFilterCoefficient()
+        {
+            if (_cutFreq > 0 && _sampleRate > 0)
+            {
+                float rc = 1f / (2f * MathF.PI * _cutFreq);
+                _alpha = rc / (rc + 1f / (2f * MathF.PI * _cutFreq * _sampleRate));
+            }
         }
 
         /// <summary>
@@ -107,28 +178,46 @@ namespace Ownaudio.Fx
         {
             switch (preset)
             {
+                case EnhancerPreset.Default:
+                    Mix = 0.2f;
+                    CutoffFrequency = 4000f;
+                    Gain = 2.5f;
+                    break;
+
                 case EnhancerPreset.VocalClarity:
-                    SetParameters(mix: 0.15f, cutFreq: 5000f, gain: 2.0f);
+                    Mix = 0.15f;
+                    CutoffFrequency = 5000f;
+                    Gain = 2.0f;
                     break;
 
                 case EnhancerPreset.RockEdge:
-                    SetParameters(mix: 0.25f, cutFreq: 3000f, gain: 4.0f);
+                    Mix = 0.25f;
+                    CutoffFrequency = 3000f;
+                    Gain = 4.0f;
                     break;
 
                 case EnhancerPreset.AcousticSparkle:
-                    SetParameters(mix: 0.10f, cutFreq: 6000f, gain: 2.5f);
+                    Mix = 0.10f;
+                    CutoffFrequency = 6000f;
+                    Gain = 2.5f;
                     break;
 
                 case EnhancerPreset.MixCutter:
-                    SetParameters(mix: 0.30f, cutFreq: 4000f, gain: 3.5f);
+                    Mix = 0.30f;
+                    CutoffFrequency = 4000f;
+                    Gain = 3.5f;
                     break;
 
                 case EnhancerPreset.Broadcast:
-                    SetParameters(mix: 0.20f, cutFreq: 4500f, gain: 3.0f);
+                    Mix = 0.20f;
+                    CutoffFrequency = 4500f;
+                    Gain = 3.0f;
                     break;
 
                 default:
-                    SetParameters(); // Default parameters
+                    Mix = 0.2f;
+                    CutoffFrequency = 4000f;
+                    Gain = 2.5f;
                     break;
             }
         }
@@ -142,46 +231,5 @@ namespace Ownaudio.Fx
             _xPrev = 0.0f;
             _yPrev = 0.0f;
         }
-
-        /// <summary>
-        /// Set Compressor parameters
-        /// </summary>
-        /// <param name="mix">mix(0-1) : Controls the amount of processed signal blended with the original</param>
-        /// <param name="cutFreq">cutoffFrequency: High-pass filter cutoff(typical 2-6kHz)</param>
-        /// <param name="gain">gain: Pre-saturation amplification(typically 2-4x)</param>
-        /// <param name="sampleRate">sampleRate: Audio system sample rate(typically 44.1kHz)</param>
-        public void SetParameters(float mix = 0.2f, float cutFreq = 4000f, float gain = 2.5f, float sampleRate = 44100f)
-        {
-            _mix = FastClamp(mix);
-            _gain = gain;
-            _samplerate = sampleRate;
-
-            // Calculate high-pass filter coefficient using RC time constant approximation
-            float rc = 1f / (2f * MathF.PI * cutFreq);
-            _alpha = rc / (rc + 1f / (2f * MathF.PI * cutFreq * _samplerate));
-        }
-
-        /// <summary>
-        /// Fast audio clamping function that constrains values to the valid audio range [-1.0, 1.0].
-        /// </summary>
-        /// <param name="value">The audio sample value to clamp.</param>
-        /// <returns>The clamped value within the range [-1.0, 1.0].</returns>
-        /// <remarks>
-        /// This method is aggressively inlined for maximum performance in audio processing loops.
-        /// Audio clamping is essential to prevent:
-        /// - Digital audio clipping and distortion
-        /// - Hardware damage from excessive signal levels
-        /// - Unwanted artifacts in the audio output
-        /// 
-        /// Values below -1.0 are clamped to -1.0, values above 1.0 are clamped to 1.0,
-        /// and values within the valid range are passed through unchanged.
-        /// </remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float FastClamp(float value)
-        {
-            return value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
-        }
     }
 }
-
-

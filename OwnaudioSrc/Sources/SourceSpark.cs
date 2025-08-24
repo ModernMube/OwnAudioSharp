@@ -38,31 +38,6 @@ namespace Ownaudio.Sources;
 /// the appropriate decoder based on availability.
 /// </para>
 /// </remarks>
-/// <example>
-/// <code>
-/// // Create audio source from file
-/// using var source = new SourceSpark("audio.mp3", looping: true);
-/// 
-/// // Start playback
-/// source.Play();
-/// 
-/// // Seek to position
-/// source.Seek(TimeSpan.FromSeconds(30));
-/// 
-/// // Pause playback
-/// source.Pause();
-/// 
-/// // Resume playback
-/// source.Resume();
-/// 
-/// // Stop playback
-/// source.Stop();
-/// </code>
-/// </example>
-/// <threadsafety>
-/// This class is thread-safe for the following operations: Play, Stop, Pause, Resume, Seek.
-/// However, thread safety is not guaranteed for concurrent Dispose calls.
-/// </threadsafety>
 /// <seealso cref="ISource"/>
 /// <seealso cref="SourceManager"/>
 /// <seealso cref="VolumeProcessor"/>
@@ -306,8 +281,10 @@ public partial class SourceSpark : ISource
     /// or <c>null</c> if the source is not loaded or the decoder is unavailable.</returns>
     public byte[] GetByteAudioData(TimeSpan position)
     {
+        #nullable disable
         if (!IsLoaded || CurrentDecoder == null)
             return null;
+        #nullable restore
 
         var result = CurrentDecoder.DecodeAllFrames(position);
         return result.Frame.Data;
@@ -320,8 +297,10 @@ public partial class SourceSpark : ISource
     /// <returns>A float array containing the audio data from the specified position, or <c>null</c> if the source is not loaded or audio data is unavailable.</returns>
     public float[] GetFloatAudioData(TimeSpan position)
     {
+        #nullable disable
         if (!IsLoaded || AudioData == null)
             return null;
+        #nullable restore
 
         return (float[])AudioData.Clone();
     }

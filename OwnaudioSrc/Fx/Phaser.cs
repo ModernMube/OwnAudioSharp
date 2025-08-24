@@ -9,6 +9,12 @@ namespace Ownaudio.Fx
     public enum PhaserPreset
     {
         /// <summary>
+        /// Default phaser settings - balanced parameters for general use
+        /// Medium rate, moderate depth, balanced feedback and mix
+        /// </summary>
+        Default,
+
+        /// <summary>
         /// Classic vintage phaser - warm, musical sweep reminiscent of 70s rock
         /// Moderate rate, deep modulation, medium feedback for that classic "swoosh"
         /// </summary>
@@ -113,7 +119,7 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Initialize Phaser Processor.
+        /// Initialize Phaser Processor with all parameters.
         /// </summary>
         /// <param name="rate">LFO rate in Hz (0.1 - 10.0)</param>
         /// <param name="depth">Modulation depth (0.0 - 1.0)</param>
@@ -141,12 +147,42 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
+        /// Initialize Phaser Processor with preset selection.
+        /// </summary>
+        /// <param name="preset">Preset to use</param>
+        /// <param name="sampleRate">Sample rate</param>
+        public Phaser(PhaserPreset preset, int sampleRate = 44100)
+        {
+            if (sampleRate <= 0)
+                throw new ArgumentException("Sample rate must be positive.", nameof(sampleRate));
+
+            _sampleRate = sampleRate;
+
+            _allPassFilters = new AllPassFilter[8]; // Maximum stages
+            for (int i = 0; i < _allPassFilters.Length; i++)
+            {
+                _allPassFilters[i] = new AllPassFilter();
+            }
+
+            SetPreset(preset);
+        }
+
+        /// <summary>
         /// Set phaser parameters using predefined presets
         /// </summary>
         public void SetPreset(PhaserPreset preset)
         {
             switch (preset)
             {
+                case PhaserPreset.Default:
+                    // Default balanced settings for general use
+                    Rate = 0.5f;        // 0.5 Hz - moderate sweep speed
+                    Depth = 0.7f;       // Good depth for noticeable effect
+                    Feedback = 0.5f;    // Balanced feedback
+                    Mix = 0.5f;         // Equal dry/wet mix
+                    Stages = 4;         // Standard 4-stage configuration
+                    break;
+
                 case PhaserPreset.Vintage:
                     // Classic 70s rock phaser sound - warm and musical
                     // Medium rate for that classic sweep, good depth for character

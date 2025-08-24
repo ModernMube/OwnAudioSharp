@@ -9,6 +9,12 @@ namespace Ownaudio.Fx
     public enum DistortionPreset
     {
         /// <summary>
+        /// Default preset with basic distortion settings
+        /// Standard moderate drive and mix values for general use
+        /// </summary>
+        Default,
+
+        /// <summary>
         /// Subtle warm overdrive - gentle saturation for adding character
         /// Low drive, balanced mix for musical warmth without harshness
         /// </summary>
@@ -62,7 +68,7 @@ namespace Ownaudio.Fx
     /// </summary>
     public class Distortion : SampleProcessorBase
     {
-        private float _drive = 1.0f;
+        private float _drive = 2.0f;
         private float _mix = 1.0f;
         private float _outputGain = 0.5f;
 
@@ -94,7 +100,7 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Initialize Distortion Processor.
+        /// Initialize Distortion Processor with all parameters.
         /// </summary>
         /// <param name="drive">Drive amount (1.0 - 10.0)</param>
         /// <param name="mix">Dry/wet mix (0.0 - 1.0)</param>
@@ -107,12 +113,29 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
+        /// Initialize Distortion Processor with preset selection.
+        /// </summary>
+        /// <param name="preset">Distortion preset to use</param>
+        public Distortion(DistortionPreset preset)
+        {
+            SetPreset(preset);
+        }
+
+        /// <summary>
         /// Set distortion parameters using predefined presets
         /// </summary>
         public void SetPreset(DistortionPreset preset)
         {
             switch (preset)
             {
+                case DistortionPreset.Default:
+                    // Default preset with basic distortion settings
+                    // Standard moderate values matching the default constructor parameters
+                    Drive = 2.0f;         // Basic drive amount
+                    Mix = 1.0f;           // Full wet signal
+                    OutputGain = 0.5f;    // Standard output compensation
+                    break;
+
                 case DistortionPreset.WarmOverdrive:
                     // Subtle warm saturation for adding musical character
                     // Low drive for gentle saturation, partial mix to retain clarity

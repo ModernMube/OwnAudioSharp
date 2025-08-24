@@ -8,6 +8,7 @@ using Ownaudio.Utilities.Extensions;
 using Ownaudio.Engines;
 using System.IO;
 using System.Diagnostics;
+using Avalonia.Logging;
 
 namespace Ownaudio;
 
@@ -118,9 +119,9 @@ public static partial class OwnAudio
 
             IsPortAudioInitialized = true;
         }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Portaudio initialize error: {ex.Message}");
+        catch (Exception)
+        { 
+            Debug.WriteLine($"Portaudio is not initialized.");
         }
     }
 }

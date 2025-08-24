@@ -10,9 +10,9 @@ namespace Ownaudio.Fx
     public enum EqualizerPreset
     {
         /// <summary>
-        /// Flat response - no EQ applied
+        /// Default flat response - no EQ applied
         /// </summary>
-        Flat,
+        Default,
 
         /// <summary>
         /// Enhanced bass response for modern music
@@ -79,10 +79,22 @@ namespace Ownaudio.Fx
         };
 
         /// <summary>
-        /// Initializes a new instance of the Equalizer with professional-grade settings
+        /// Initializes a new instance of the Equalizer with all parameters and default values
         /// </summary>
         /// <param name="sampleRate">Audio sample rate in Hz (typically 44100 or 48000)</param>
-        public Equalizer(float sampleRate = 44100)
+        /// <param name="band0Gain">Band 0 (31.25Hz) gain in dB (-12 to +12)</param>
+        /// <param name="band1Gain">Band 1 (62.5Hz) gain in dB (-12 to +12)</param>
+        /// <param name="band2Gain">Band 2 (125Hz) gain in dB (-12 to +12)</param>
+        /// <param name="band3Gain">Band 3 (250Hz) gain in dB (-12 to +12)</param>
+        /// <param name="band4Gain">Band 4 (500Hz) gain in dB (-12 to +12)</param>
+        /// <param name="band5Gain">Band 5 (1000Hz) gain in dB (-12 to +12)</param>
+        /// <param name="band6Gain">Band 6 (2000Hz) gain in dB (-12 to +12)</param>
+        /// <param name="band7Gain">Band 7 (4000Hz) gain in dB (-12 to +12)</param>
+        /// <param name="band8Gain">Band 8 (8000Hz) gain in dB (-12 to +12)</param>
+        /// <param name="band9Gain">Band 9 (16000Hz) gain in dB (-12 to +12)</param>
+        public Equalizer(float sampleRate = 44100,
+                        float band0Gain = 0.0f, float band1Gain = 0.0f, float band2Gain = 0.0f, float band3Gain = 0.0f, float band4Gain = 0.0f,
+                        float band5Gain = 0.0f, float band6Gain = 0.0f, float band7Gain = 0.0f, float band8Gain = 0.0f, float band9Gain = 0.0f)
         {
             _sampleRate = sampleRate;
             _gains = new float[BANDS];
@@ -91,8 +103,135 @@ namespace Ownaudio.Fx
             _filters = new BiquadFilter[BANDS][];
 
             InitializeFilters();
-            SetPreset(EqualizerPreset.Flat);
+
+            // Set individual band gains with validation
+            Band0Gain = band0Gain;
+            Band1Gain = band1Gain;
+            Band2Gain = band2Gain;
+            Band3Gain = band3Gain;
+            Band4Gain = band4Gain;
+            Band5Gain = band5Gain;
+            Band6Gain = band6Gain;
+            Band7Gain = band7Gain;
+            Band8Gain = band8Gain;
+            Band9Gain = band9Gain;
         }
+
+        /// <summary>
+        /// Initializes a new instance of the Equalizer with a preset configuration
+        /// </summary>
+        /// <param name="preset">The preset configuration to apply</param>
+        /// <param name="sampleRate">Audio sample rate in Hz (typically 44100 or 48000)</param>
+        public Equalizer(EqualizerPreset preset, float sampleRate = 44100)
+        {
+            _sampleRate = sampleRate;
+            _gains = new float[BANDS];
+            _frequencies = new float[BANDS];
+            _qFactors = new float[BANDS];
+            _filters = new BiquadFilter[BANDS][];
+
+            InitializeFilters();
+            SetPreset(preset);
+        }
+
+        #region Band Properties - Read/Write for real-time control
+
+        /// <summary>
+        /// Gets or sets the gain for band 0 (31.25Hz) in dB
+        /// </summary>
+        public float Band0Gain
+        {
+            get => _gains[0];
+            set => SetBandGain(0, StandardFrequencies[0], _qFactors[0], value);
+        }
+
+        /// <summary>
+        /// Gets or sets the gain for band 1 (62.5Hz) in dB
+        /// </summary>
+        public float Band1Gain
+        {
+            get => _gains[1];
+            set => SetBandGain(1, StandardFrequencies[1], _qFactors[1], value);
+        }
+
+        /// <summary>
+        /// Gets or sets the gain for band 2 (125Hz) in dB
+        /// </summary>
+        public float Band2Gain
+        {
+            get => _gains[2];
+            set => SetBandGain(2, StandardFrequencies[2], _qFactors[2], value);
+        }
+
+        /// <summary>
+        /// Gets or sets the gain for band 3 (250Hz) in dB
+        /// </summary>
+        public float Band3Gain
+        {
+            get => _gains[3];
+            set => SetBandGain(3, StandardFrequencies[3], _qFactors[3], value);
+        }
+
+        /// <summary>
+        /// Gets or sets the gain for band 4 (500Hz) in dB
+        /// </summary>
+        public float Band4Gain
+        {
+            get => _gains[4];
+            set => SetBandGain(4, StandardFrequencies[4], _qFactors[4], value);
+        }
+
+        /// <summary>
+        /// Gets or sets the gain for band 5 (1000Hz) in dB
+        /// </summary>
+        public float Band5Gain
+        {
+            get => _gains[5];
+            set => SetBandGain(5, StandardFrequencies[5], _qFactors[5], value);
+        }
+
+        /// <summary>
+        /// Gets or sets the gain for band 6 (2000Hz) in dB
+        /// </summary>
+        public float Band6Gain
+        {
+            get => _gains[6];
+            set => SetBandGain(6, StandardFrequencies[6], _qFactors[6], value);
+        }
+
+        /// <summary>
+        /// Gets or sets the gain for band 7 (4000Hz) in dB
+        /// </summary>
+        public float Band7Gain
+        {
+            get => _gains[7];
+            set => SetBandGain(7, StandardFrequencies[7], _qFactors[7], value);
+        }
+
+        /// <summary>
+        /// Gets or sets the gain for band 8 (8000Hz) in dB
+        /// </summary>
+        public float Band8Gain
+        {
+            get => _gains[8];
+            set => SetBandGain(8, StandardFrequencies[8], _qFactors[8], value);
+        }
+
+        /// <summary>
+        /// Gets or sets the gain for band 9 (16000Hz) in dB
+        /// </summary>
+        public float Band9Gain
+        {
+            get => _gains[9];
+            set => SetBandGain(9, StandardFrequencies[9], _qFactors[9], value);
+        }
+
+        /// <summary>
+        /// Gets or sets the sample rate for the equalizer
+        /// </summary>
+        public float SampleRate => _sampleRate;
+
+        #endregion
 
         /// <summary>
         /// Initializes filter arrays and sets up default frequency bands
@@ -165,7 +304,7 @@ namespace Ownaudio.Fx
         {
             switch (preset)
             {
-                case EqualizerPreset.Flat:
+                case EqualizerPreset.Default:
                     // Flat response - no coloration, reference monitoring
                     ApplyPresetGains(new float[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 });
                     break;
@@ -229,7 +368,7 @@ namespace Ownaudio.Fx
 
             for (int i = 0; i < BANDS; i++)
             {
-                _gains[i] = gains[i];
+                _gains[i] = FastClamp(gains[i]); // Validate gain values
                 _qFactors[i] = optimizedQ[i];
                 UpdateFilters(i);
             }

@@ -526,13 +526,13 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
         samples = null!;
         int waitCount = 0;
 
-#nullable disable
+        #nullable disable
         while (!_inputBufferQueue.TryDequeue(out samples) && waitCount < MaxInputWaitTime)
         {
             Thread.Sleep(1);
             waitCount++;
         }
-#nullable restore
+        #nullable restore
     }
 
     /// <summary>
@@ -646,19 +646,6 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// Before starting the engines, this method clears any existing buffers in the queues
     /// and returns them to their respective pools. This ensures a clean state for audio processing.
     /// </remarks>
-    /// <example>
-    /// <code>
-    /// int result = audioEngine.Start();
-    /// if (result == 0)
-    /// {
-    ///     Console.WriteLine("Audio engines started successfully");
-    /// }
-    /// else
-    /// {
-    ///     Console.WriteLine("Failed to start audio engines");
-    /// }
-    /// </code>
-    /// </example>
     public int Start()
     {
         try
@@ -716,12 +703,6 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// buffer queues and returns the buffers to their respective pools for reuse.
     /// Any errors during shutdown are logged but do not prevent the method from completing.
     /// </remarks>
-    /// <example>
-    /// <code>
-    /// int result = audioEngine.Stop();
-    /// Console.WriteLine("Audio engines stopped");
-    /// </code>
-    /// </example>
     public int Stop()
     {
         try
@@ -769,15 +750,6 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// The device switching operation searches through available devices using case-insensitive
     /// partial matching. The first device whose name contains the specified deviceName will be selected.
     /// </remarks>
-    /// <example>
-    /// <code>
-    /// // Switch to a USB headset for output
-    /// bool success = engine.SwitchToDevice("USB Headset", false);
-    /// 
-    /// // Switch to built-in microphone for input
-    /// bool success = engine.SwitchToDevice("Built-in Microphone", true);
-    /// </code>
-    /// </example>
     public bool SwitchToDevice(string deviceName, bool isInputDevice = false)
     {
         try
@@ -789,13 +761,13 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
                 return false;
             }
 
-#nullable disable
+            #nullable disable
             DeviceInfo targetDevice = FindDeviceByName(engine, deviceName, isInputDevice);
             if (targetDevice == null)
             {
                 return false;
             }
-#nullable restore
+            #nullable restore
 
             var deviceType = isInputDevice ? EngineDeviceType.Capture : EngineDeviceType.Playback;
             engine.SwitchDevice(targetDevice, deviceType);
@@ -860,15 +832,6 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// underlying MiniAudio implementation. These objects can be used for device enumeration
     /// and selection purposes.
     /// </remarks>
-    /// <example>
-    /// <code>
-    /// var playbackDevices = engine.GetPlaybackDevices();
-    /// foreach (var device in playbackDevices)
-    /// {
-    ///     Console.WriteLine($"Available playback device: {device}");
-    /// }
-    /// </code>
-    /// </example>
     public IEnumerable<object> GetPlaybackDevices()
     {
         return _playbackEngine?.PlaybackDevices ?? Enumerable.Empty<object>();
@@ -886,15 +849,6 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// underlying MiniAudio implementation. These objects can be used for device enumeration
     /// and microphone selection purposes.
     /// </remarks>
-    /// <example>
-    /// <code>
-    /// var captureDevices = engine.GetCaptureDevices();
-    /// foreach (var device in captureDevices)
-    /// {
-    ///     Console.WriteLine($"Available capture device: {device}");
-    /// }
-    /// </code>
-    /// </example>
     public IEnumerable<object> GetCaptureDevices()
     {
         return _captureEngine?.CaptureDevices ?? Enumerable.Empty<object>();
@@ -916,17 +870,6 @@ public sealed class OwnAudioMiniEngine : IAudioEngine
     /// The method is safe to call multiple times and will only perform cleanup on the first call.
     /// Any errors during disposal are logged but do not prevent the method from completing.
     /// </remarks>
-    /// <example>
-    /// <code>
-    /// using (var audioEngine = new OwnAudioMiniEngine(outputOptions))
-    /// {
-    ///     // Use the audio engine...
-    /// } // Dispose is called automatically
-    /// 
-    /// // Or call explicitly:
-    /// audioEngine.Dispose();
-    /// </code>
-    /// </example>
     public void Dispose()
     {
         if (_disposed)

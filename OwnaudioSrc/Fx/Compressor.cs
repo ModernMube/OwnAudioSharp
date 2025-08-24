@@ -10,6 +10,11 @@ namespace Ownaudio.Fx
     public enum CompressorPreset
     {
         /// <summary>
+        /// Default preset with balanced settings suitable for general use
+        /// </summary>
+        Default,
+
+        /// <summary>
         /// Gentle vocal compression - subtle control for spoken word and vocals
         /// Soft knee, moderate ratio, medium attack/release for natural sound
         /// </summary>
@@ -60,22 +65,32 @@ namespace Ownaudio.Fx
         private float sampleRate = 44100f;
 
         /// <summary>
-        /// Constructor with customizable parameters
+        /// Constructor with all parameters - initializes compressor with specified settings
         /// </summary>
         /// <param name="threshold">Threshold level in range [0,1]</param>
-        /// <param name="ratio">Compression ratio</param>
-        /// <param name="attackTime">Attack time in seconds</param>
-        /// <param name="releaseTime">Release time in seconds</param>
-        /// <param name="makeupGain">Envelope follower state</param>
-        /// <param name="sampleRate">Sample rate</param>
-        public Compressor(float threshold = 0.5f, float ratio = 4.0f, float attackTime = 100f, float releaseTime = 200f, float makeupGain = 1.0f, float sampleRate = 44100f)
+        /// <param name="ratio">Compression ratio (N:1)</param>
+        /// <param name="attackTime">Attack time in milliseconds</param>
+        /// <param name="releaseTime">Release time in milliseconds</param>
+        /// <param name="makeupGain">Makeup gain as linear amplitude multiplier</param>
+        /// <param name="sampleRate">Sample rate in Hz</param>
+        public Compressor(float threshold = 0.5f, float ratio = 4.0f, float attackTime = 100f,
+                         float releaseTime = 200f, float makeupGain = 1.0f, float sampleRate = 44100f)
         {
-            this.threshold = threshold;
-            this.ratio = ratio;
-            this.attackTime = attackTime / 1000f;
-            this.releaseTime = releaseTime / 1000f;
-            this.makeupGain = makeupGain;
-            this.sampleRate = sampleRate;
+            Threshold = threshold;
+            Ratio = ratio;
+            AttackTime = attackTime;
+            ReleaseTime = releaseTime;
+            MakeupGain = makeupGain;
+            SampleRate = sampleRate;
+        }
+
+        /// <summary>
+        /// Constructor with preset selection
+        /// </summary>
+        /// <param name="preset">Compressor preset to apply</param>
+        public Compressor(CompressorPreset preset)
+        {
+            SetPreset(preset);
         }
 
         /// <summary>
@@ -92,12 +107,10 @@ namespace Ownaudio.Fx
             {
                 float inputLevel = Math.Abs(samples[i]);  // Get absolute value of sample for level detection
 
-
                 if (inputLevel > envelope)   // Envelope follower
                     envelope = attackCoeff * envelope + (1 - attackCoeff) * inputLevel;
                 else
                     envelope = releaseCoeff * envelope + (1 - releaseCoeff) * inputLevel;
-
 
                 float gainReduction = 1.0f;   // Calculate gain reduction
                 if (envelope > threshold)
@@ -118,10 +131,20 @@ namespace Ownaudio.Fx
         /// <summary>
         /// Set compressor parameters using predefined presets
         /// </summary>
+        /// <param name="preset">The preset to apply</param>
         public void SetPreset(CompressorPreset preset)
         {
             switch (preset)
             {
+                case CompressorPreset.Default:
+                    // Default balanced settings for general use
+                    Threshold = 0.5f;     // -6 dB - moderate threshold
+                    Ratio = 4.0f;         // 4:1 - standard compression ratio
+                    AttackTime = 100f;    // 100ms - balanced attack time
+                    ReleaseTime = 200f;   // 200ms - balanced release time
+                    MakeupGain = 1.0f;    // 0 dB - no makeup gain by default
+                    break;
+
                 case CompressorPreset.VocalGentle:
                     // Gentle vocal processing for natural sound
                     // Higher threshold to catch only louder parts, moderate ratio for musicality
@@ -185,11 +208,11 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Resets the compressor's internal state by clearing the envelope follower.
-        /// Does not modify any settings or parameters.
+        /// Resets internal state but preserves current parameter settings
         /// </summary>
         public override void Reset()
         {
+            // Clear internal state but keep current parameter values
             envelope = 0.0f;
         }
 
@@ -202,7 +225,7 @@ namespace Ownaudio.Fx
         public float Threshold
         {
             get => threshold;
-            set => threshold = FastClamp(value);
+            set => threshold = FastClamp(value, 0.0f, 1.0f);
         }
 
         /// <summary>
@@ -214,23 +237,23 @@ namespace Ownaudio.Fx
         public float Ratio
         {
             get => ratio;
-            set => ratio = Math.Max(1f, value);
+            set => ratio = FastClamp(value, 1.0f, 100.0f);
         }
 
         /// <summary>
-        /// Attack time in seconds
-        /// Minimum: 1 ms
+        /// Attack time in milliseconds
+        /// Minimum: 0.1 ms
         /// Maximum: 1000 ms
         /// Default: 100 ms
         /// </summary>
         public float AttackTime
         {
             get => attackTime * 1000f;
-            set => attackTime = Math.Max(1f, value) / 1000f;
+            set => attackTime = FastClamp(value, 0.1f, 1000f) / 1000f;
         }
 
         /// <summary>
-        /// Release time in seconds
+        /// Release time in milliseconds
         /// Minimum: 1 ms
         /// Maximum: 2000 ms
         /// Default: 200 ms
@@ -238,28 +261,31 @@ namespace Ownaudio.Fx
         public float ReleaseTime
         {
             get => releaseTime * 1000f;
-            set => releaseTime = Math.Max(1f, value) / 1000f;
+            set => releaseTime = FastClamp(value, 1f, 2000f) / 1000f;
         }
 
         /// <summary>
         /// Makeup gain as linear amplitude multiplier
-        /// Minimum: 0.0 (-infinity dB)
+        /// Minimum: 0.1 (approximately -20 dB)
         /// Maximum: 10.0 (+20 dB)
         /// Default: 1.0 (0 dB)
         /// </summary>
         public float MakeupGain
         {
             get => makeupGain;
-            set => makeupGain = Math.Max(0f, value);
+            set => makeupGain = FastClamp(value, 0.1f, 10.0f);
         }
 
         /// <summary>
-        /// Sample rate
+        /// Sample rate in Hz
+        /// Minimum: 8000 Hz
+        /// Maximum: 192000 Hz
+        /// Default: 44100 Hz
         /// </summary>
         public float SampleRate
         {
             get => sampleRate;
-            set => sampleRate = Math.Max(1f, value);
+            set => sampleRate = FastClamp(value, 8000f, 192000f);
         }
 
         /// <summary>
@@ -279,24 +305,16 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Fast audio clamping function that constrains values to the valid audio range [-1.0, 1.0].
+        /// Fast clamping function that constrains values to a specified range.
         /// </summary>
-        /// <param name="value">The audio sample value to clamp.</param>
-        /// <returns>The clamped value within the range [-1.0, 1.0].</returns>
-        /// <remarks>
-        /// This method is aggressively inlined for maximum performance in audio processing loops.
-        /// Audio clamping is essential to prevent:
-        /// - Digital audio clipping and distortion
-        /// - Hardware damage from excessive signal levels
-        /// - Unwanted artifacts in the audio output
-        /// 
-        /// Values below -1.0 are clamped to -1.0, values above 1.0 are clamped to 1.0,
-        /// and values within the valid range are passed through unchanged.
-        /// </remarks>
+        /// <param name="value">The value to clamp.</param>
+        /// <param name="min">Minimum allowed value.</param>
+        /// <param name="max">Maximum allowed value.</param>
+        /// <returns>The clamped value within the specified range.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float FastClamp(float value)
+        private static float FastClamp(float value, float min, float max)
         {
-            return value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
+            return value < min ? min : (value > max ? max : value);
         }
     }
 }

@@ -36,7 +36,7 @@ public static partial class OwnAudio
         }
         catch (Exception)
         {
-            Debug.WriteLine("Ffmpeg initialize error.");
+            Debug.WriteLine("FFmpeg is not initialized.");
         }
     }
 
