@@ -9,6 +9,12 @@ namespace Ownaudio.Fx
     public enum RotaryPreset
     {
         /// <summary>
+        /// Default preset - Classic Hammond organ sound
+        /// Traditional Leslie cabinet emulation with balanced parameters
+        /// </summary>
+        Default,
+
+        /// <summary>
         /// Classic Hammond organ sound - traditional Leslie cabinet emulation
         /// Medium speeds, balanced intensity for authentic organ tones
         /// </summary>
@@ -127,14 +133,15 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Initialize Rotary Processor.
+        /// Initialize Rotary Processor with all parameters and default values.
         /// </summary>
         /// <param name="hornSpeed">Horn speed in Hz (2.0 - 15.0)</param>
         /// <param name="rotorSpeed">Rotor speed in Hz (0.5 - 5.0)</param>
         /// <param name="intensity">Effect intensity (0.0 - 1.0)</param>
         /// <param name="mix">Dry/wet mix (0.0 - 1.0)</param>
+        /// <param name="isFast">Fast/slow speed switch</param>
         /// <param name="sampleRate">Sample rate</param>
-        public Rotary(float hornSpeed = 6.0f, float rotorSpeed = 1.0f, float intensity = 0.7f, float mix = 1.0f, int sampleRate = 44100)
+        public Rotary(float hornSpeed = 6.0f, float rotorSpeed = 1.0f, float intensity = 0.7f, float mix = 1.0f, bool isFast = false, int sampleRate = 44100)
         {
             if (sampleRate <= 0)
                 throw new ArgumentException("Sample rate must be positive.", nameof(sampleRate));
@@ -144,6 +151,7 @@ namespace Ownaudio.Fx
             RotorSpeed = rotorSpeed;
             Intensity = intensity;
             Mix = mix;
+            IsFast = isFast;
 
             int maxDelay = (int)(0.01 * sampleRate); // 10ms max delay
             _hornDelayBuffer = new float[maxDelay];
@@ -154,12 +162,51 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
+        /// Initialize Rotary Processor with preset selection.
+        /// </summary>
+        /// <param name="preset">Rotary preset to use</param>
+        /// <param name="sampleRate">Sample rate</param>
+        public Rotary(RotaryPreset preset, int sampleRate = 44100)
+        {
+            if (sampleRate <= 0)
+                throw new ArgumentException("Sample rate must be positive.", nameof(sampleRate));
+
+            _sampleRate = sampleRate;
+
+            // Initialize with default values first
+            _hornSpeed = 6.0f;
+            _rotorSpeed = 1.0f;
+            _intensity = 0.7f;
+            _mix = 1.0f;
+            _isFast = false;
+
+            int maxDelay = (int)(0.01 * sampleRate); // 10ms max delay
+            _hornDelayBuffer = new float[maxDelay];
+            _rotorDelayBuffer = new float[maxDelay];
+
+            _lowPassFilter = new LowPassFilter(800.0f, sampleRate);
+            _highPassFilter = new HighPassFilter(800.0f, sampleRate);
+
+            // Apply the selected preset
+            SetPreset(preset);
+        }
+
+        /// <summary>
         /// Set rotary parameters using predefined presets
         /// </summary>
         public void SetPreset(RotaryPreset preset)
         {
             switch (preset)
             {
+                case RotaryPreset.Default:
+                    // Default preset - Classic Hammond organ sound with balanced parameters
+                    HornSpeed = 6.0f;      // Default horn speed
+                    RotorSpeed = 1.0f;     // Default rotor speed  
+                    Intensity = 0.7f;      // Default modulation depth
+                    Mix = 1.0f;            // Full wet signal
+                    IsFast = false;        // Start in slow mode
+                    break;
+
                 case RotaryPreset.Hammond:
                     // Classic Hammond organ Leslie cabinet sound
                     // Authentic speeds and balanced intensity for traditional organ tones
@@ -303,7 +350,7 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Reset rotary effect state.
+        /// Reset rotary effect state without changing parameters.
         /// </summary>
         public override void Reset()
         {

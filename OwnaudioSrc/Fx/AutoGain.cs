@@ -9,6 +9,11 @@ namespace Ownaudio.Fx;
 public enum AutoGainPreset
 {
     /// <summary>
+    /// Default AGC settings - balanced for general use
+    /// </summary>
+    Default,
+
+    /// <summary>
     /// Gentle AGC for music playback - preserves dynamics
     /// Ideal for: Background music, streaming, acoustic content
     /// </summary>
@@ -46,12 +51,21 @@ public class AutoGain : SampleProcessorBase
     private float minGain = 0.25f;       // Minimum gain
 
     private float currentGain = 1.0f;    // Current gain
-    private float level = 0.0f;          // Signal level detector
+    private float currentLevel = 0.0f;   // Signal level detector
 
     /// <summary>
-    /// Creates AGC with default settings
+    /// Creates AGC with all parameters specified with default settings
     /// </summary>
-    public AutoGain() { }
+    public AutoGain(float targetLevel = 0.25f, float attackCoeff = 0.99f, float releaseCoeff = 0.999f,
+                   float gateThreshold = 0.001f, float maxGain = 4.0f, float minGain = 0.25f)
+    {
+        this.targetLevel = Math.Max(0.01f, Math.Min(1.0f, targetLevel));
+        this.attackCoeff = Math.Max(0.9f, Math.Min(0.999f, attackCoeff));
+        this.releaseCoeff = Math.Max(0.9f, Math.Min(0.9999f, releaseCoeff));
+        this.gateThreshold = Math.Max(0.0001f, Math.Min(0.01f, gateThreshold));
+        this.maxGain = Math.Max(1.0f, Math.Min(10.0f, maxGain));
+        this.minGain = Math.Max(0.1f, Math.Min(1.0f, minGain));
+    }
 
     /// <summary>
     /// Creates AGC with preset
@@ -71,19 +85,19 @@ public class AutoGain : SampleProcessorBase
             float input = Math.Abs(samples[i]);
 
             // Simple level detector
-            level = (input > level) ?
-                attackCoeff * level + (1.0f - attackCoeff) * input :
-                releaseCoeff * level + (1.0f - releaseCoeff) * input;
+            currentLevel = (input > currentLevel) ?
+                attackCoeff * currentLevel + (1.0f - attackCoeff) * input :
+                releaseCoeff * currentLevel + (1.0f - releaseCoeff) * input;
 
             // Gate check
-            if (level < gateThreshold)
+            if (currentLevel < gateThreshold)
             {
                 samples[i] *= currentGain;
                 continue;
             }
 
             // Calculate needed gain
-            float targetGain = targetLevel / Math.Max(level, 0.0001f);
+            float targetGain = targetLevel / Math.Max(currentLevel, 0.0001f);
             targetGain = Math.Max(minGain, Math.Min(maxGain, targetGain));
 
             // Smooth gain changes
@@ -105,6 +119,15 @@ public class AutoGain : SampleProcessorBase
     {
         switch (preset)
         {
+            case AutoGainPreset.Default:
+                targetLevel = 0.25f;     // Balanced default level
+                attackCoeff = 0.99f;     // Standard attack
+                releaseCoeff = 0.999f;   // Standard release
+                maxGain = 4.0f;          // Standard max gain (+12dB)
+                minGain = 0.25f;         // Standard min gain (-12dB)
+                gateThreshold = 0.001f;  // Standard gate
+                break;
+
             case AutoGainPreset.Music:
                 targetLevel = 0.2f;      // Moderate level to preserve dynamics
                 attackCoeff = 0.995f;    // Very slow attack preserves transients
@@ -144,45 +167,75 @@ public class AutoGain : SampleProcessorBase
     }
 
     /// <summary>
-    /// Reset processor state
+    /// Reset processor state - clears temporary storage but keeps parameters
     /// </summary>
     public override void Reset()
     {
         currentGain = 1.0f;
-        level = 0.0f;
+        currentLevel = 0.0f;
     }
 
     /// <summary>
-    /// Set target level (0.0 to 1.0)
+    /// Get or set target level (0.01 to 1.0)
     /// </summary>
-    public void SetTargetLevel(float level)
+    public float TargetLevel
     {
-        targetLevel = Math.Max(0.01f, Math.Min(1.0f, level));
+        get => targetLevel;
+        set => targetLevel = Math.Max(0.01f, Math.Min(1.0f, value));
     }
 
     /// <summary>
-    /// Set attack speed (0.0 to 1.0, higher = slower)
+    /// Get or set attack coefficient (0.9 to 0.999, higher = slower)
     /// </summary>
-    public void SetAttackSpeed(float speed)
+    public float AttackCoefficient
     {
-        attackCoeff = Math.Max(0.9f, Math.Min(0.999f, speed));
+        get => attackCoeff;
+        set => attackCoeff = Math.Max(0.9f, Math.Min(0.999f, value));
     }
 
     /// <summary>
-    /// Set release speed (0.0 to 1.0, higher = slower)
+    /// Get or set release coefficient (0.9 to 0.9999, higher = slower)
     /// </summary>
-    public void SetReleaseSpeed(float speed)
+    public float ReleaseCoefficient
     {
-        releaseCoeff = Math.Max(0.9f, Math.Min(0.9999f, speed));
+        get => releaseCoeff;
+        set => releaseCoeff = Math.Max(0.9f, Math.Min(0.9999f, value));
     }
 
     /// <summary>
-    /// Current gain value
+    /// Get or set gate threshold (0.0001 to 0.01)
+    /// </summary>
+    public float GateThreshold
+    {
+        get => gateThreshold;
+        set => gateThreshold = Math.Max(0.0001f, Math.Min(0.01f, value));
+    }
+
+    /// <summary>
+    /// Get or set maximum gain (1.0 to 10.0)
+    /// </summary>
+    public float MaximumGain
+    {
+        get => maxGain;
+        set => maxGain = Math.Max(1.0f, Math.Min(10.0f, value));
+    }
+
+    /// <summary>
+    /// Get or set minimum gain (0.1 to 1.0)
+    /// </summary>
+    public float MinimumGain
+    {
+        get => minGain;
+        set => minGain = Math.Max(0.1f, Math.Min(1.0f, value));
+    }
+
+    /// <summary>
+    /// Current gain value (read-only)
     /// </summary>
     public float CurrentGain => currentGain;
 
     /// <summary>
-    /// Current input level
+    /// Current input level (read-only)
     /// </summary>
-    public float InputLevel => level;
+    public float InputLevel => currentLevel;
 }

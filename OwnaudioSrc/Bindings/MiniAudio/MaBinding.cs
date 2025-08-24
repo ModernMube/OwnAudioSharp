@@ -207,14 +207,6 @@ internal static partial class MaBinding
         return ptr;
     }
 
-    // public static IntPtr sf_allocate_device()
-    // {
-    //     if (_allocateDevice == null)
-    //         throw new NotSupportedException("Device allocation is not supported.");
-    //
-    //     return _allocateDevice();
-    // }
-
     public static IntPtr allocate_device()
     {
         ulong size = (ulong)Marshal.SizeOf<MaDevice>();
@@ -225,14 +217,6 @@ internal static partial class MaBinding
 
         return ptr;
     }
-
-    // public static IntPtr sf_allocate_device_config(MaDeviceType capabilityType, MaFormat format, uint channels, uint sampleRate, MaDataCallback dataCallback, IntPtr playbackDevice, IntPtr captureDevice)
-    // {
-    //     if (_allocateDeviceConfig == null)
-    //         throw new NotSupportedException("Device config allocation is not supported.");
-    //
-    //     return _allocateDeviceConfig(capabilityType, format, channels, sampleRate, dataCallback, playbackDevice, captureDevice);
-    // }
 
     public static IntPtr allocate_device_config(MaDeviceType deviceType, MaFormat format, uint channels, uint sampleRate,
                                            MaDataCallback dataCallback, IntPtr playbackDeviceId, IntPtr captureDeviceId, uint sizeinframe = 512)

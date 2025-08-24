@@ -10,6 +10,12 @@ namespace Ownaudio.Fx
     public enum ReverbPreset
     {
         /// <summary>
+        /// Default preset - balanced reverb settings suitable for general use
+        /// Medium room size, moderate damping, professional balance
+        /// </summary>
+        Default,
+
+        /// <summary>
         /// Small room reverb - intimate acoustic space simulation
         /// Short decay, minimal damping, suitable for vocals and intimate recordings
         /// </summary>
@@ -264,6 +270,15 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
+        /// Input gain level.
+        /// </summary>
+        public float Gain
+        {
+            get { lock (parametersLock) return gain; }
+            set { lock (parametersLock) gain = Math.Max(0.0f, value); } // Gain can be > 1.0
+        }
+
+        /// <summary>
         /// Set the sampling frequency in Hz.
         /// </summary>
         public float SampleRate
@@ -286,30 +301,55 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Creates a new Professional Reverb effect.
+        /// Creates a new Professional Reverb effect with all parameters.
         /// </summary>
-        /// <param name="size">Room size</param>
-        /// <param name="damp">Treble damping</param>
-        /// <param name="wet">Color of the effected signal</param>
-        /// <param name="dry">Original signal level</param>
-        /// <param name="stereoWidth">Width of the stereo space</param>
-        /// <param name="gainLevel">Input gain</param>
-        /// <param name="sampleRate">Sampling rate in Hz.</param>
+        /// <param name="size">Room size (0.0 - 1.0)</param>
+        /// <param name="damp">Treble damping (0.0 - 1.0)</param>
+        /// <param name="wet">Wet signal level (0.0 - 1.0)</param>
+        /// <param name="dry">Dry signal level (0.0 - 1.0)</param>
+        /// <param name="stereoWidth">Stereo width (0.0 - 1.0)</param>
+        /// <param name="gainLevel">Input gain (>= 0.0)</param>
+        /// <param name="sampleRate">Sampling rate in Hz</param>
         public Reverb(float size = 0.5f, float damp = 0.5f, float wet = 0.33f, float dry = 0.7f, float stereoWidth = 1.0f, float gainLevel = 0.015f, float sampleRate = 44100)
         {
             this.sampleRate = sampleRate;
             combFilters = new CombFilter[NUM_COMBS];
             allPassFilters = new AllPassFilter[NUM_ALLPASSES];
 
-            // Setting default parameters
-            roomSize = size;
-            damping = damp;
-            width = stereoWidth;
-            wetLevel = wet;
-            dryLevel = dry;
-            gain = gainLevel;
+            // Setting parameters with validation
+            roomSize = FastClamp(size);
+            damping = FastClamp(damp);
+            width = FastClamp(stereoWidth);
+            wetLevel = FastClamp(wet);
+            dryLevel = FastClamp(dry);
+            gain = Math.Max(0.0f, gainLevel);
 
             InitializeFilters();
+        }
+
+        /// <summary>
+        /// Creates a new Professional Reverb effect using a preset.
+        /// </summary>
+        /// <param name="preset">The reverb preset to use</param>
+        /// <param name="sampleRate">Sampling rate in Hz</param>
+        public Reverb(ReverbPreset preset, float sampleRate = 44100)
+        {
+            this.sampleRate = sampleRate;
+            combFilters = new CombFilter[NUM_COMBS];
+            allPassFilters = new AllPassFilter[NUM_ALLPASSES];
+
+            // Initialize with default values first
+            roomSize = 0.5f;
+            damping = 0.5f;
+            width = 1.0f;
+            wetLevel = 0.33f;
+            dryLevel = 0.7f;
+            gain = 0.015f;
+
+            InitializeFilters();
+
+            // Apply the preset
+            SetPreset(preset);
         }
 
         /// <summary>
@@ -319,6 +359,16 @@ namespace Ownaudio.Fx
         {
             switch (preset)
             {
+                case ReverbPreset.Default:
+                    // Balanced professional reverb settings
+                    RoomSize = 0.5f;      // Medium room size
+                    Damping = 0.5f;       // Balanced damping
+                    WetLevel = 0.33f;     // Moderate reverb presence
+                    DryLevel = 0.7f;      // Clear dry signal
+                    Width = 1.0f;         // Full stereo width
+                    Gain = 0.015f;        // Standard input gain
+                    break;
+
                 case ReverbPreset.SmallRoom:
                     // Intimate room sound - cozy acoustic space
                     RoomSize = 0.3f;      // Small space simulation
@@ -326,6 +376,7 @@ namespace Ownaudio.Fx
                     WetLevel = 0.25f;     // Subtle reverb presence
                     DryLevel = 0.85f;     // Strong dry signal
                     Width = 0.7f;         // Moderate stereo width
+                    Gain = 0.015f;        // Standard input gain
                     break;
 
                 case ReverbPreset.LargeHall:
@@ -335,6 +386,7 @@ namespace Ownaudio.Fx
                     WetLevel = 0.5f;      // Significant reverb presence
                     DryLevel = 0.6f;      // Balanced dry signal
                     Width = 1.0f;         // Full stereo width
+                    Gain = 0.015f;        // Standard input gain
                     break;
 
                 case ReverbPreset.Cathedral:
@@ -344,6 +396,7 @@ namespace Ownaudio.Fx
                     WetLevel = 0.6f;      // Strong reverb presence
                     DryLevel = 0.5f;      // Balanced for ethereal effect
                     Width = 1.0f;         // Full stereo width
+                    Gain = 0.015f;        // Standard input gain
                     break;
 
                 case ReverbPreset.Plate:
@@ -353,6 +406,7 @@ namespace Ownaudio.Fx
                     WetLevel = 0.4f;      // Classic studio reverb amount
                     DryLevel = 0.7f;      // Professional balance
                     Width = 0.8f;         // Wide but controlled
+                    Gain = 0.015f;        // Standard input gain
                     break;
 
                 case ReverbPreset.Spring:
@@ -362,6 +416,7 @@ namespace Ownaudio.Fx
                     WetLevel = 0.35f;     // Characteristic spring reverb amount
                     DryLevel = 0.75f;     // Guitar amp style balance
                     Width = 0.6f;         // Moderate stereo spread
+                    Gain = 0.015f;        // Standard input gain
                     break;
 
                 case ReverbPreset.AmbientPad:
@@ -371,6 +426,7 @@ namespace Ownaudio.Fx
                     WetLevel = 0.7f;      // Heavily processed for atmosphere
                     DryLevel = 0.4f;      // Less dry signal for ambience
                     Width = 1.0f;         // Maximum stereo width
+                    Gain = 0.015f;        // Standard input gain
                     break;
 
                 case ReverbPreset.VocalBooth:
@@ -380,6 +436,7 @@ namespace Ownaudio.Fx
                     WetLevel = 0.3f;      // Subtle enhancement
                     DryLevel = 0.8f;      // Clear vocal presence
                     Width = 0.5f;         // Focused stereo image
+                    Gain = 0.015f;        // Standard input gain
                     break;
 
                 case ReverbPreset.DrumRoom:
@@ -389,6 +446,7 @@ namespace Ownaudio.Fx
                     WetLevel = 0.35f;     // Add space without mud
                     DryLevel = 0.8f;      // Preserve transient impact
                     Width = 0.9f;         // Wide drum image
+                    Gain = 0.015f;        // Standard input gain
                     break;
 
                 case ReverbPreset.Gated:
@@ -398,6 +456,7 @@ namespace Ownaudio.Fx
                     WetLevel = 0.6f;      // Strong effect presence
                     DryLevel = 0.7f;      // Balanced for dramatic impact
                     Width = 1.0f;         // Full width for 80s sound
+                    Gain = 0.015f;        // Standard input gain
                     break;
 
                 case ReverbPreset.Subtle:
@@ -407,6 +466,7 @@ namespace Ownaudio.Fx
                     WetLevel = 0.15f;     // Very subtle presence
                     DryLevel = 0.95f;     // Mostly dry signal
                     Width = 0.4f;         // Narrow, natural width
+                    Gain = 0.015f;        // Standard input gain
                     break;
             }
         }
@@ -466,22 +526,22 @@ namespace Ownaudio.Fx
         /// <param name="samples">Buffer of audio samples.</param>
         public override void Process(Span<float> samples)
         {
-            float currentWet, currentDry, currentWidth;
+            float currentWet, currentDry, currentWidth, currentGain;
             lock (parametersLock)
             {
                 currentWet = wetLevel;
                 currentDry = dryLevel;
                 currentWidth = width;
+                currentGain = gain;
             }
 
             for (int i = 0; i < samples.Length; i++)
             {
                 float input = samples[i];
                 float dry = input;
-                float wet = 0;
 
                 // Apply input gain
-                input *= gain;
+                input *= currentGain;
 
                 // Freeverb algorithm
                 float mono = 0;
@@ -496,7 +556,7 @@ namespace Ownaudio.Fx
                 }
 
                 // Applying stereo width and mixing
-                wet = mono * currentWidth;
+                float wet = mono * currentWidth;
 
                 // Final mixing
                 samples[i] = wet * currentWet + dry * currentDry;
@@ -504,7 +564,7 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Resets the effect, clearing all internal states.
+        /// Resets the effect, clearing all internal states but preserving parameters.
         /// </summary>
         public override void Reset()
         {

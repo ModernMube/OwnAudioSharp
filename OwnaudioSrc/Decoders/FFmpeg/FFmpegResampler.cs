@@ -6,17 +6,61 @@ using FFmpeg.AutoGen;
 
 namespace Ownaudio.Decoders.FFmpeg;
 
+/// <summary>
+/// Provides audio resampling functionality using FFmpeg's libswresample library.
+/// This class handles sample rate conversion, channel layout changes, and audio format conversion.
+/// </summary>
 internal sealed unsafe class FFmpegResampler : IDisposable
 {
+    /// <summary>
+    /// Log offset used for FFmpeg operations.
+    /// </summary>
     private const int LogOffset = 0;
+
+    /// <summary>
+    /// Pointer to the FFmpeg software resampler context.
+    /// </summary>
     private readonly SwrContext* _swrCtx;
+
+    /// <summary>
+    /// Pointer to the destination audio frame used for resampling operations.
+    /// </summary>
     private readonly AVFrame* _dstFrame;
+
+    /// <summary>
+    /// Pointer to the destination channel layout configuration.
+    /// </summary>
     private readonly AVChannelLayout* _dstChannelLayout;
+
+    /// <summary>
+    /// Number of channels in the destination audio format.
+    /// </summary>
     private readonly int _dstChannels;
+
+    /// <summary>
+    /// Sample rate of the destination audio format in Hz.
+    /// </summary>
     private readonly int _dstSampleRate;
+
+    /// <summary>
+    /// Number of bytes per audio sample in the destination format.
+    /// </summary>
     private readonly int _bytesPerSample;
+
+    /// <summary>
+    /// Indicates whether this instance has been disposed.
+    /// </summary>
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the FFmpegResampler class with the specified audio format parameters.
+    /// </summary>
+    /// <param name="srcChannelLayout">Pointer to the source channel layout configuration.</param>
+    /// <param name="srcSampleRate">Source sample rate in Hz.</param>
+    /// <param name="srcSampleFormat">Source audio sample format.</param>
+    /// <param name="dstChannels">Destination number of channels.</param>
+    /// <param name="dstSampleRate">Destination sample rate in Hz.</param>
+    /// <exception cref="FFmpegException">Thrown when FFmpeg context allocation or initialization fails.</exception>
     public FFmpegResampler(
         AVChannelLayout* srcChannelLayout,
         int srcSampleRate,
@@ -52,6 +96,18 @@ internal sealed unsafe class FFmpegResampler : IDisposable
     }
 
 #nullable disable
+    /// <summary>
+    /// Attempts to convert an audio frame from the source format to the destination format.
+    /// </summary>
+    /// <param name="source">Pointer to the source audio frame to convert.</param>
+    /// <param name="result">When this method returns, contains the converted audio data as a byte array if conversion succeeded; otherwise, null.</param>
+    /// <param name="error">When this method returns, contains an error message if conversion failed; otherwise, null.</param>
+    /// <returns>true if the conversion succeeded; otherwise, false.</returns>
+    /// <remarks>
+    /// This method performs sample rate conversion, channel layout transformation, and format conversion
+    /// as specified during resampler initialization. The output is always in the destination format
+    /// configured in the constructor.
+    /// </remarks>
     public bool TryConvert(AVFrame* source, out byte[] result, out string error)
     {
         result = null;
@@ -103,6 +159,13 @@ internal sealed unsafe class FFmpegResampler : IDisposable
 
 #nullable restore
 
+    /// <summary>
+    /// Releases all resources used by the FFmpegResampler instance.
+    /// </summary>
+    /// <remarks>
+    /// This method frees the allocated FFmpeg contexts and frames. It's safe to call this method multiple times.
+    /// After disposal, the resampler instance should not be used for further operations.
+    /// </remarks>
     public void Dispose()
     {
         if (_disposed)

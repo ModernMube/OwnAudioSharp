@@ -10,6 +10,11 @@ namespace Ownaudio.Fx
     public enum LimiterPreset
     {
         /// <summary>
+        /// Default preset with balanced settings
+        /// </summary>
+        Default,
+
+        /// <summary>
         /// Mastering limiter - transparent peak control for final mix
         /// Conservative threshold, brick wall ceiling, medium release for transparent limiting
         /// </summary>
@@ -63,8 +68,8 @@ namespace Ownaudio.Fx
     /// </summary>
     public class Limiter : SampleProcessorBase
     {
-        private readonly float[] _delayBuffer;
-        private readonly float[] _envelopeBuffer;
+        private float[] _delayBuffer;
+        private float[] _envelopeBuffer;
         private int _delayIndex;
         private int _envelopeIndex;
         private float _currentGain;
@@ -83,10 +88,19 @@ namespace Ownaudio.Fx
         private const float DEFAULT_CEILING = -0.1f;    // dB
         private const float DEFAULT_RELEASE = 50.0f;    // ms
         private const float DEFAULT_LOOKAHEAD = 5.0f;   // ms
-        public bool IsEnabled { get; set; } = true;
+
+        // Parameter limits
+        private const float MIN_THRESHOLD = -20.0f;     // dB
+        private const float MAX_THRESHOLD = 0.0f;       // dB
+        private const float MIN_CEILING = -2.0f;        // dB
+        private const float MAX_CEILING = 0.0f;         // dB
+        private const float MIN_RELEASE = 1.0f;         // ms
+        private const float MAX_RELEASE = 1000.0f;      // ms
+        private const float MIN_LOOKAHEAD = 1.0f;       // ms
+        private const float MAX_LOOKAHEAD = 20.0f;      // ms
 
         /// <summary>
-        /// Professional limiter constructor
+        /// Professional limiter constructor with all parameters
         /// </summary>
         /// <param name="sampleRate">Sample rate</param>
         /// <param name="threshold">Threshold in dB (default: -3dB)</param>
@@ -98,11 +112,12 @@ namespace Ownaudio.Fx
             float lookAheadMs = DEFAULT_LOOKAHEAD)
         {
             _sampleRate = sampleRate;
-            _threshold = DbToLinear(threshold);
-            _ceiling = DbToLinear(ceiling);
-            _release = CalculateReleaseCoeff(release, sampleRate);
-            _lookAheadMs = lookAheadMs;
-            _lookAheadSamples = (int)(lookAheadMs * sampleRate / 1000.0f);
+
+            // Set parameters with validation
+            Threshold = threshold;
+            Ceiling = ceiling;
+            Release = release;
+            LookAheadMs = lookAheadMs;
 
             // Initialize buffers
             _delayBuffer = new float[_lookAheadSamples];
@@ -115,16 +130,94 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Set limiter parameters
+        /// Professional limiter constructor with preset selection
         /// </summary>
-        /// <param name="threshold">Threshold in dB</param>
-        /// <param name="ceiling">Output ceiling in dB</param>
-        /// <param name="release">Release time in ms</param>
-        public void SetParameters(float threshold, float ceiling, float release)
+        /// <param name="sampleRate">Sample rate</param>
+        /// <param name="preset">Preset to use</param>
+        public Limiter(float sampleRate, LimiterPreset preset)
         {
-            _threshold = DbToLinear(threshold);
-            _ceiling = DbToLinear(ceiling);
-            _release = CalculateReleaseCoeff(release, _sampleRate);
+            _sampleRate = sampleRate;
+
+            // Initialize with default values first
+            _threshold = DbToLinear(DEFAULT_THRESHOLD);
+            _ceiling = DbToLinear(DEFAULT_CEILING);
+            _release = CalculateReleaseCoeff(DEFAULT_RELEASE, sampleRate);
+            _lookAheadMs = DEFAULT_LOOKAHEAD;
+            _lookAheadSamples = (int)(DEFAULT_LOOKAHEAD * sampleRate / 1000.0f);
+
+            // Initialize buffers
+            _delayBuffer = new float[_lookAheadSamples];
+            _envelopeBuffer = new float[_lookAheadSamples];
+
+            _currentGain = 1.0f;
+            _targetGain = 1.0f;
+            _delayIndex = 0;
+            _envelopeIndex = 0;
+
+            // Apply preset
+            SetPreset(preset);
+        }
+
+        /// <summary>
+        /// Gets or sets the threshold in dB
+        /// </summary>
+        public float Threshold
+        {
+            get => LinearToDb(_threshold);
+            set
+            {
+                float clampedValue = Math.Clamp(value, MIN_THRESHOLD, MAX_THRESHOLD);
+                _threshold = DbToLinear(clampedValue);
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the ceiling in dB
+        /// </summary>
+        public float Ceiling
+        {
+            get => LinearToDb(_ceiling);
+            set
+            {
+                float clampedValue = Math.Clamp(value, MIN_CEILING, MAX_CEILING);
+                _ceiling = DbToLinear(clampedValue);
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the release time in ms
+        /// </summary>
+        public float Release
+        {
+            get => -1000.0f / MathF.Log(1.0f - _release) / _sampleRate;
+            set
+            {
+                float clampedValue = Math.Clamp(value, MIN_RELEASE, MAX_RELEASE);
+                _release = CalculateReleaseCoeff(clampedValue, _sampleRate);
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the look-ahead time in ms
+        /// </summary>
+        public float LookAheadMs
+        {
+            get => _lookAheadMs;
+            set
+            {
+                float clampedValue = Math.Clamp(value, MIN_LOOKAHEAD, MAX_LOOKAHEAD);
+                _lookAheadMs = clampedValue;
+                int newLookAheadSamples = (int)(clampedValue * _sampleRate / 1000.0f);
+
+                if (newLookAheadSamples != _lookAheadSamples)
+                {
+                    _lookAheadSamples = newLookAheadSamples;
+                    // Reinitialize buffers with new size
+                    Array.Resize(ref _delayBuffer, _lookAheadSamples);
+                    Array.Resize(ref _envelopeBuffer, _lookAheadSamples);
+                    Reset();
+                }
+            }
         }
 
         /// <summary>
@@ -133,9 +226,6 @@ namespace Ownaudio.Fx
         /// <param name="samples">Audio samples to process</param>
         public override void Process(Span<float> samples)
         {
-            if (!IsEnabled)
-                return;
-
             for (int i = 0; i < samples.Length; i++)
             {
                 float inputSample = samples[i];
@@ -190,107 +280,87 @@ namespace Ownaudio.Fx
         {
             switch (preset)
             {
+                case LimiterPreset.Default:
+                    // Default balanced settings
+                    Threshold = DEFAULT_THRESHOLD;
+                    Ceiling = DEFAULT_CEILING;
+                    Release = DEFAULT_RELEASE;
+                    LookAheadMs = DEFAULT_LOOKAHEAD;
+                    break;
+
                 case LimiterPreset.Mastering:
                     // Transparent mastering limiting - catches only the peaks
                     // High threshold for minimal processing, conservative ceiling
-                    SetParameters(
-                        threshold: -1.0f,    // -1 dB - only catches true peaks
-                        ceiling: -0.1f,      // -0.1 dB - safe digital ceiling
-                        release: 100f        // 100ms - smooth, transparent release
-                    );
+                    Threshold = -1.0f;    // -1 dB - only catches true peaks
+                    Ceiling = -0.1f;      // -0.1 dB - safe digital ceiling
+                    Release = 100f;       // 100ms - smooth, transparent release
+                    LookAheadMs = 8.0f;   // Longer lookahead for transparency
                     break;
 
                 case LimiterPreset.Broadcast:
                     // Aggressive broadcast limiting for consistent loudness
                     // Lower threshold for tighter control, fast release to avoid pumping
-                    SetParameters(
-                        threshold: -6.0f,    // -6 dB - catches more of the signal
-                        ceiling: -0.3f,      // -0.3 dB - extra safety margin for broadcast
-                        release: 25f         // 25ms - fast release for consistency
-                    );
+                    Threshold = -6.0f;    // -6 dB - catches more of the signal
+                    Ceiling = -0.3f;      // -0.3 dB - extra safety margin for broadcast
+                    Release = 25f;        // 25ms - fast release for consistency
+                    LookAheadMs = 5.0f;   // Standard lookahead
                     break;
 
                 case LimiterPreset.Live:
                     // Live performance protection - reliable peak limiting
                     // Balanced settings for real-time protection without artifacts
-                    SetParameters(
-                        threshold: -3.0f,    // -3 dB - good balance of control and transparency
-                        ceiling: -0.5f,      // -0.5 dB - extra safety for live systems
-                        release: 50f         // 50ms - medium release for stability
-                    );
+                    Threshold = -3.0f;    // -3 dB - good balance of control and transparency
+                    Ceiling = -0.5f;      // -0.5 dB - extra safety for live systems
+                    Release = 50f;        // 50ms - medium release for stability
+                    LookAheadMs = 3.0f;   // Shorter lookahead for live use
                     break;
 
                 case LimiterPreset.DrumBus:
                     // Drum bus limiting - preserves transient punch
                     // Higher threshold to preserve drum transients, quick response
-                    SetParameters(
-                        threshold: -2.0f,    // -2 dB - allows drum punch through
-                        ceiling: -0.1f,      // -0.1 dB - standard ceiling
-                        release: 15f         // 15ms - fast release to avoid sustain limiting
-                    );
+                    Threshold = -2.0f;    // -2 dB - allows drum punch through
+                    Ceiling = -0.1f;      // -0.1 dB - standard ceiling
+                    Release = 15f;        // 15ms - fast release to avoid sustain limiting
+                    LookAheadMs = 2.0f;   // Short lookahead to maintain punch
                     break;
 
                 case LimiterPreset.VocalSafety:
                     // Vocal safety limiting - gentle peak control for vocals
                     // High threshold for natural sound, longer release for smoothness
-                    SetParameters(
-                        threshold: -4.0f,    // -4 dB - gentle vocal limiting
-                        ceiling: -0.2f,      // -0.2 dB - safe ceiling
-                        release: 200f        // 200ms - smooth, natural release for vocals
-                    );
+                    Threshold = -4.0f;    // -4 dB - gentle vocal limiting
+                    Ceiling = -0.2f;      // -0.2 dB - safe ceiling
+                    Release = 200f;       // 200ms - smooth, natural release for vocals
+                    LookAheadMs = 10.0f;  // Longer lookahead for smooth vocal processing
                     break;
 
                 case LimiterPreset.Bass:
                     // Bass limiting - specialized for low-frequency content
                     // Prevents bass from causing system overload, controlled release
-                    SetParameters(
-                        threshold: -5.0f,    // -5 dB - controls bass dynamics
-                        ceiling: -0.1f,      // -0.1 dB - standard ceiling
-                        release: 150f        // 150ms - prevents pumping on bass content
-                    );
+                    Threshold = -5.0f;    // -5 dB - controls bass dynamics
+                    Ceiling = -0.1f;      // -0.1 dB - standard ceiling
+                    Release = 150f;       // 150ms - prevents pumping on bass content
+                    LookAheadMs = 6.0f;   // Medium lookahead for bass control
                     break;
 
                 case LimiterPreset.Podcast:
                     // Podcast/dialog limiting - optimized for speech
                     // Conservative settings that maintain speech intelligibility
-                    SetParameters(
-                        threshold: -8.0f,    // -8 dB - gentle limiting for speech
-                        ceiling: -0.5f,      // -0.5 dB - extra safety for dialog
-                        release: 300f        // 300ms - slow, smooth release for natural speech
-                    );
+                    Threshold = -8.0f;    // -8 dB - gentle limiting for speech
+                    Ceiling = -0.5f;      // -0.5 dB - extra safety for dialog
+                    Release = 300f;       // 300ms - slow, smooth release for natural speech
+                    LookAheadMs = 12.0f;  // Longer lookahead for smooth speech processing
                     break;
 
                 case LimiterPreset.Aggressive:
                     // Aggressive limiting for electronic/dance music
                     // Heavy limiting for maximum loudness and consistency
-                    SetParameters(
-                        threshold: -10.0f,   // -10 dB - heavy limiting
-                        ceiling: -0.1f,      // -0.1 dB - standard ceiling
-                        release: 10f         // 10ms - very fast release for aggressive sound
-                    );
+                    Threshold = -10.0f;   // -10 dB - heavy limiting
+                    Ceiling = -0.1f;      // -0.1 dB - standard ceiling
+                    Release = 10f;        // 10ms - very fast release for aggressive sound
+                    LookAheadMs = 3.0f;   // Short lookahead for aggressive response
                     break;
             }
         }
-
-        /// <summary>
-        /// Get current threshold in dB for UI display
-        /// </summary>
-        public float ThresholdDb => LinearToDb(_threshold);
-
-        /// <summary>
-        /// Get current ceiling in dB for UI display  
-        /// </summary>
-        public float CeilingDb => LinearToDb(_ceiling);
-
-        /// <summary>
-        /// Get current release time in ms for UI display
-        /// </summary>
-        public float ReleaseMs => -1000.0f / MathF.Log(1.0f - _release) * _sampleRate;
-
-        /// <summary>
-        /// Get current look-ahead time in ms
-        /// </summary>
-        public float LookAheadMs => _lookAheadMs;
 
         /// <summary>
         /// Convert linear amplitude to decibels

@@ -232,10 +232,12 @@ namespace Ownaudio.Utilities
             this.GetObservable(ScrollOffsetProperty).Subscribe(new AnonymousObserver<double>(_ => InvalidateVisual()));
             this.GetObservable(PlaybackPositionProperty).Subscribe(new AnonymousObserver<double>(_ => InvalidateVisual()));
 
+            #nullable disable
             this.PointerPressed += WaveformDisplay_PointerPressed;
             this.PointerMoved += WaveformDisplay_PointerMoved;
             this.PointerReleased += WaveformDisplay_PointerReleased;
             this.PointerWheelChanged += WaveformDisplay_PointerWheelChanged;
+            #nullable restore
         }
 
         /// <summary>
@@ -715,11 +717,13 @@ namespace Ownaudio.Utilities
                 _pointCache = null!; // Use null-forgiving operator after returning
             }
 
+            #nullable disable
             // Unsubscribe from events to prevent memory leaks
             this.PointerPressed -= WaveformDisplay_PointerPressed;
             this.PointerMoved -= WaveformDisplay_PointerMoved;
             this.PointerReleased -= WaveformDisplay_PointerReleased;
             this.PointerWheelChanged -= WaveformDisplay_PointerWheelChanged;
+            #nullable restore
 
             // Note: The subscriptions to StyledProperties (GetObservable) are typically handled
             // by Avalonia's internal dispose mechanisms when the control is detached/disposed.

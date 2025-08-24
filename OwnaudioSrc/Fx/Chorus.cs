@@ -9,6 +9,11 @@ namespace Ownaudio.Fx
     public enum ChorusPreset
     {
         /// <summary>
+        /// Default chorus settings - balanced parameters for general use
+        /// </summary>
+        Default,
+
+        /// <summary>
         /// Subtle vocal doubling - gentle thickening for lead vocals
         /// Slow modulation, shallow depth, moderate mix for natural enhancement
         /// </summary>
@@ -111,14 +116,53 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Initialize Chorus Processor.
+        /// Initialize Chorus Processor with default settings.
+        /// </summary>
+        public Chorus() : this(1.0f, 0.5f, 0.5f, 3, 44100)
+        {
+        }
+
+        /// <summary>
+        /// Initialize Chorus Processor with preset.
+        /// </summary>
+        /// <param name="preset">Chorus preset to use</param>
+        /// <param name="sampleRate">Sample rate</param>
+        public Chorus(ChorusPreset preset, int sampleRate = 44100)
+        {
+            if (sampleRate <= 0)
+                throw new ArgumentException("Sample rate must be positive.", nameof(sampleRate));
+
+            _sampleRate = sampleRate;
+
+            // Initialize with default values first
+            _rate = 1.0f;
+            _depth = 0.5f;
+            _mix = 0.5f;
+            _voices = 3;
+
+            int maxDelaySamples = (int)(0.05 * sampleRate);
+            _delayBuffer = new float[maxDelaySamples];
+            _bufferIndex = 0;
+
+            _voicePhases = new float[6]; // Max voices
+            for (int i = 0; i < _voicePhases.Length; i++)
+            {
+                _voicePhases[i] = (float)(i * 2.0 * Math.PI / 6.0);
+            }
+
+            // Apply preset
+            SetPreset(preset);
+        }
+
+        /// <summary>
+        /// Initialize Chorus Processor with custom parameters.
         /// </summary>
         /// <param name="rate">LFO rate in Hz (0.1 - 10.0)</param>
         /// <param name="depth">Modulation depth (0.0 - 1.0)</param>
         /// <param name="mix">Dry/wet mix (0.0 - 1.0)</param>
         /// <param name="voices">Number of voices (2 - 6)</param>
         /// <param name="sampleRate">Sample rate</param>
-        public Chorus(float rate = 1.0f, float depth = 0.5f, float mix = 0.5f, int voices = 3, int sampleRate = 44100)
+        public Chorus(float rate, float depth, float mix, int voices, int sampleRate)
         {
             if (sampleRate <= 0)
                 throw new ArgumentException("Sample rate must be positive.", nameof(sampleRate));
@@ -143,10 +187,19 @@ namespace Ownaudio.Fx
         /// <summary>
         /// Set chorus parameters using predefined presets
         /// </summary>
+        /// <param name="preset">Chorus preset to apply</param>
         public void SetPreset(ChorusPreset preset)
         {
             switch (preset)
             {
+                case ChorusPreset.Default:
+                    // Default balanced settings for general use
+                    Rate = 1.0f;      // 1.0 Hz - moderate speed
+                    Depth = 0.5f;     // 50% - balanced modulation
+                    Mix = 0.5f;       // 50% - equal dry/wet balance
+                    Voices = 3;       // 3 voices - good complexity
+                    break;
+
                 case ChorusPreset.VocalSubtle:
                     // Gentle vocal doubling for natural enhancement
                     // Very slow modulation preserves vocal intelligibility
@@ -263,13 +316,17 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Reset chorus effect state.
+        /// Reset chorus effect state but preserve current parameter settings.
         /// </summary>
         public override void Reset()
         {
+            // Clear delay buffer and reset internal state
             Array.Clear(_delayBuffer, 0, _delayBuffer.Length);
             _bufferIndex = 0;
             _lfoPhase = 0.0f;
+
+            // Do NOT reset parameters - preserve current settings
+            // as per OwnEffectsDescription requirements
         }
     }
 }

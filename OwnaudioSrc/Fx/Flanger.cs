@@ -9,6 +9,12 @@ namespace Ownaudio.Fx
     public enum FlangerPreset
     {
         /// <summary>
+        /// Default flanger settings - balanced all-purpose flanging effect
+        /// Moderate rate and depth with controlled feedback for general use
+        /// </summary>
+        Default,
+
+        /// <summary>
         /// Classic flanger - vintage tape-style flanging effect
         /// Moderate rate and depth with balanced feedback for that classic swoosh
         /// </summary>
@@ -104,7 +110,7 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Initialize Flanger Processor.
+        /// Initialize Flanger Processor with specific parameters.
         /// </summary>
         /// <param name="rate">LFO rate in Hz (0.1 - 5.0)</param>
         /// <param name="depth">Modulation depth (0.0 - 1.0)</param>
@@ -128,12 +134,40 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
+        /// Initialize Flanger Processor with a preset.
+        /// </summary>
+        /// <param name="preset">Flanger preset to use</param>
+        /// <param name="sampleRate">Sample rate</param>
+        public Flanger(FlangerPreset preset, int sampleRate = 44100)
+        {
+            if (sampleRate <= 0)
+                throw new ArgumentException("Sample rate must be positive.", nameof(sampleRate));
+
+            _sampleRate = sampleRate;
+
+            int maxDelaySamples = (int)(0.02 * sampleRate);
+            _delayBuffer = new float[maxDelaySamples];
+            _bufferIndex = 0;
+
+            SetPreset(preset);
+        }
+
+        /// <summary>
         /// Set flanger parameters using predefined presets
         /// </summary>
         public void SetPreset(FlangerPreset preset)
         {
             switch (preset)
             {
+                case FlangerPreset.Default:
+                    // Default balanced flanger settings - good starting point
+                    // Moderate settings that work well for most applications
+                    Rate = 0.5f;         // Default moderate sweep speed
+                    Depth = 0.8f;        // Default good modulation depth
+                    Feedback = 0.6f;     // Default balanced feedback
+                    Mix = 0.5f;          // Default 50/50 mix
+                    break;
+
                 case FlangerPreset.Classic:
                     // Classic tape flanger sound - balanced and musical
                     // Medium rate for classic swoosh, good depth for character

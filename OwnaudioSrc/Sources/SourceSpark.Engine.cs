@@ -45,7 +45,9 @@ public partial class SourceSpark : ISource
             }
 
             var samplesNeeded = FramesPerBuffer * channels;
+            #nullable disable
             var availableSamples = AudioData.Length - CurrentSampleIndex;
+            #nullable restore
 
             if (availableSamples <= 0)
             {
@@ -114,7 +116,9 @@ public partial class SourceSpark : ISource
             soundTouch.PutSamples(samples.ToArray(), samples.Length / soundTouch.Channels);
 
             EnsureProcessedSamplesBuffer();
+            #nullable disable
             FastClear(_processedSamples, FixedBufferSize);
+            #nullable restore
 
             int numSamples = soundTouch.ReceiveSamples(_processedSamples, FixedBufferSize / soundTouch.Channels);
 
@@ -145,8 +149,8 @@ public partial class SourceSpark : ISource
             VolumeProcessor.Process(samples);
 
         OutputLevels = SourceManager.OutputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
-            ? CalculateLevels.CalculateAverageStereoLevelsSpan(samples)
-            : CalculateLevels.CalculateAverageMonoLevelSpan(samples);
+            ? Extensions.CalculateLevels.CalculateAverageStereoLevelsSpan(samples)
+            : Extensions.CalculateLevels.CalculateAverageMonoLevelSpan(samples);
     }
 
     /// <summary>

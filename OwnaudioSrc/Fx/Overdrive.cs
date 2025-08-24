@@ -9,6 +9,12 @@ namespace Ownaudio.Fx
     public enum OverdrivePreset
     {
         /// <summary>
+        /// Default overdrive settings - balanced parameters for general use
+        /// Medium gain, neutral tone, standard mix and output levels
+        /// </summary>
+        Default,
+
+        /// <summary>
         /// Clean boost - subtle warmth and presence without heavy distortion
         /// Low gain, balanced tone, maintains natural character
         /// </summary>
@@ -102,7 +108,7 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Initialize Overdrive Processor.
+        /// Initialize Overdrive Processor with individual parameters.
         /// </summary>
         /// <param name="gain">Input gain (1.0 - 5.0)</param>
         /// <param name="tone">Tone control (0.0 - 1.0)</param>
@@ -117,12 +123,31 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
+        /// Initialize Overdrive Processor with a preset.
+        /// </summary>
+        /// <param name="preset">Preset to use for initialization</param>
+        public Overdrive(OverdrivePreset preset)
+        {
+            SetPreset(preset);
+        }
+
+        /// <summary>
         /// Set overdrive parameters using predefined presets
         /// </summary>
+        /// <param name="preset">The preset to apply</param>
         public void SetPreset(OverdrivePreset preset)
         {
             switch (preset)
             {
+                case OverdrivePreset.Default:
+                    // Default overdrive settings - balanced parameters for general use
+                    // Medium gain, neutral tone, standard mix and output levels
+                    Gain = 2.0f;        // Default medium gain
+                    Tone = 0.5f;        // Neutral tone
+                    Mix = 1.0f;         // Full wet signal
+                    OutputLevel = 0.7f; // Standard output level
+                    break;
+
                 case OverdrivePreset.CleanBoost:
                     // Subtle warmth and presence boost without heavy distortion
                     // Low gain for transparency, balanced tone, full mix

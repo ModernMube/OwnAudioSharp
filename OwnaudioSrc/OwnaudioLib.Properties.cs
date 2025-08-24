@@ -19,10 +19,15 @@ public static partial class OwnAudio
    private static List<AudioDevice> _outputDevices = new List<AudioDevice>();
    private static List<AudioDevice> _inputDevices = new List<AudioDevice>();
 
-   /// <summary>
-   /// Boolean variable in which we store the value of whether FFmpeg is initialized or not.
-   /// </summary>
-   public static bool IsFFmpegInitialized { get; private set; }
+    /// <summary>
+    /// Boolean variable in which we store the value of whether FFmpeg is initialized or not.
+    /// </summary>
+    public static bool IsInitialized { get; private set; }
+
+    /// <summary>
+    /// Boolean variable in which we store the value of whether FFmpeg is initialized or not.
+    /// </summary>
+    public static bool IsFFmpegInitialized { get; private set; }
 
    /// <summary>
    /// It stores FFmpeg's default or specified path.

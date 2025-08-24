@@ -94,7 +94,6 @@ public partial class SourceManager
     /// <summary>
     /// A process that modifies data
     /// </summary>
-    //public ISampleProcessor? CustomSampleProcessor { get; set; }
     public SampleProcessorBase? CustomSampleProcessor { get; set; } = new DefaultProcessor();
 
     /// <summary>

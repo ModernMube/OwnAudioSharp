@@ -190,8 +190,8 @@ namespace Ownaudio.Sources
                 VolumeProcessor.Process(samples);
 
             OutputLevels = SourceManager.OutputEngineOptions.Channels == OwnAudioEngine.EngineChannels.Stereo
-            ? CalculateLevels.CalculateAverageStereoLevelsSpan(samples)
-            : CalculateLevels.CalculateAverageMonoLevelSpan(samples);
+            ? Extensions.CalculateLevels.CalculateAverageStereoLevelsSpan(samples)
+            : Extensions.CalculateLevels.CalculateAverageMonoLevelSpan(samples);
         }
 
         /// <summary>

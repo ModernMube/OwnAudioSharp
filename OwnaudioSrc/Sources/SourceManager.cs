@@ -1,7 +1,9 @@
 ﻿using Ownaudio.Decoders.FFmpeg;
 using Ownaudio.Decoders.MiniAudio;
+using Ownaudio.Engines;
 using Ownaudio.Exceptions;
 using Ownaudio.Processors;
+using Ownaudio.Sources.Extensions;
 using Ownaudio.Utilities;
 using Ownaudio.Utilities.Extensions;
 using Ownaudio.Utilities.OwnChordDetect.Analysis;
@@ -98,74 +100,168 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
+        /// Ensures that source dependencies are maintained according to the defined rules.
+        /// </summary>
+        private void EnsureSourceDependencies()
+        {
+            bool hasOutputSources = Sources.Any(s => s is not SourceWithoutData);
+            bool hasInputSources = SourcesInput.Count > 0;
+            bool hasRealTimeSources = Sources.Any(s => s is SourceSound);
+            bool hasSparkSources = SourcesSpark.Count > 0;
+            bool hasEmptySource = Sources.Any(s => s is SourceWithoutData);
+
+            // If there are InputSource, RealTimeSource, or SparkSource but no Output source, then EmptySource is needed
+            if ((hasInputSources || hasRealTimeSources || hasSparkSources) && !hasOutputSources && !hasEmptySource)
+            {
+                var emptySource = new SourceWithoutData { Name = "WithoutData" };
+                Sources.Add(emptySource);
+                Logger?.LogInfo("EmptySource automatically added due to dependency rules.");
+            }
+
+            // If there are no InputSource, RealTimeSource, or SparkSource, but there is EmptySource, it should be removed
+            if (!hasInputSources && !hasRealTimeSources && !hasSparkSources && hasEmptySource && hasOutputSources)
+            {
+                var emptySource = Sources.FirstOrDefault(s => s is SourceWithoutData);
+                if (emptySource != null)
+                {
+                    Sources.Remove(emptySource);
+                    Logger?.LogInfo("EmptySource automatically removed as it's no longer needed.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Checks if a new source of the specified type can be added.
+        /// </summary>
+        /// <param name="sourceType">The type of source to be added</param>
+        /// <param name="errorMessage">Error message if addition is not possible</param>
+        /// <returns>True if the source can be added</returns>
+        private bool CanAddSource(Type sourceType, out string errorMessage)
+        {
+            errorMessage = string.Empty;
+
+            if (sourceType == typeof(Source))
+            {
+                int currentSourceCount = Sources.Count(s => s is Source);
+                if (currentSourceCount >= 10)
+                {
+                    errorMessage = "Maximum 10 Source instances can be added simultaneously.";
+                    return false;
+                }
+            }
+            else if (sourceType == typeof(SourceWithoutData))
+            {
+                if (Sources.Any(s => s is SourceWithoutData))
+                {
+                    errorMessage = "Only one EmptySource can exist at a time.";
+                    return false;
+                }
+            }
+            else if (sourceType == typeof(SourceInput))
+            {
+                if (SourcesInput.Count >= 1)
+                {
+                    errorMessage = "Only one InputSource can exist at a time.";
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Checks if a source can be removed without violating dependency rules.
+        /// </summary>
+        /// <param name="sourceToRemove">The source to be removed</param>
+        /// <param name="errorMessage">Error message if removal would be problematic</param>
+        /// <returns>True if the source can be safely removed</returns>
+        private bool CanRemoveSource(ISource sourceToRemove, out string errorMessage)
+        {
+            errorMessage = string.Empty;
+
+            // EmptySource cannot be removed manually - it's managed automatically
+            if (sourceToRemove is SourceWithoutData)
+            {
+                errorMessage = "EmptySource cannot be removed manually - it's managed automatically.";
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Checks if a SparkSource can be removed and handles EmptySource dependency.
+        /// </summary>
+        /// <param name="sparkToRemove">The SparkSource to be removed</param>
+        /// <returns>True if removal is successful</returns>
+        private bool HandleSparkSourceRemoval(SourceSpark sparkToRemove)
+        {
+            bool isLastSparkSource = SourcesSpark.Count == 1 && SourcesSpark.Contains(sparkToRemove);
+
+            if (isLastSparkSource)
+            {
+                // Check if EmptySource needs to be removed after this SparkSource removal
+                bool hasInputSources = SourcesInput.Count > 0;
+                bool hasRealTimeSources = Sources.Any(s => s is SourceSound);
+                bool hasEmptySource = Sources.Any(s => s is SourceWithoutData);
+                bool hasOutputSources = Sources.Any(s => s is not SourceWithoutData);
+
+                // If this is the last SparkSource and there are no other dependencies for EmptySource
+                if (!hasInputSources && !hasRealTimeSources && hasEmptySource && hasOutputSources)
+                {
+                    var emptySource = Sources.FirstOrDefault(s => s is SourceWithoutData);
+                    if (emptySource != null)
+                    {
+                        Sources.Remove(emptySource);
+                        Logger?.LogInfo("EmptySource automatically removed after last SparkSource removal.");
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
         /// Adds a new output source from the specified URL or file path.
         /// </summary>
         /// <param name="url">The URL or file path of the audio source to add.</param>
         /// <param name="name">Optional name for the source (default is "Output").</param>
         /// <returns>A task that represents the asynchronous operation. The task result indicates whether the source was successfully loaded.</returns>
         /// <exception cref="ArgumentNullException">Thrown when the URL parameter is null.</exception>
-        /// <exception cref="OwnaudioException">Thrown when the playback thread is currently running.</exception>
-        /// <remarks>
-        /// This method performs the following operations:
-        /// - Creates a new Source instance and loads the audio from the specified URL
-        /// - Updates the total duration to the longest source duration
-        /// - Adds the URL to the internal URL list
-        /// - Automatically adds an input source if the load is successful
-        /// - Resets the position to zero and logs the operation
-        /// </remarks>
+        /// <exception cref="OwnaudioException">Thrown when the playback thread is currently running or source limit is reached.</exception>
         public Task<bool> AddOutputSource(string url, string? name = "Output")
         {
             Ensure.NotNull(url, nameof(url));
             Ensure.That<OwnaudioException>(State == SourceState.Idle, "Playback thread is currently running.");
 
+            // Check if source can be added before creating it
+            if (!CanAddSource(typeof(Source), out string errorMessage))
+            {
+                throw new OwnaudioException(errorMessage);
+            }
+
             Source _source = new Source();
             _source.LoadAsync(url).Wait();
             _source.Name = name ?? "Output";
+
+            if (!_source.IsLoaded)
+            {
+                return Task.FromResult(false);
+            }
+
             Sources.Add(_source);
 
             if (_source.Duration.TotalMilliseconds > Duration.TotalMilliseconds)
                 Duration = _source.Duration;
 
             IsLoaded = _source.IsLoaded;
-            
-            if(IsLoaded)
-            {
-                UrlList.Add(url);
-                AddInputSource();
-            }                 
+            UrlList.Add(url);
 
-            SetAndRaisePositionChanged(TimeSpan.Zero);            
-
-            Logger?.LogInfo("Source add url.");
-
-            return Task.FromResult(IsLoaded);
-        }
-
-        /// <summary>
-        /// Adds an empty output source without any audio content.
-        /// </summary>
-        /// <param name="name">Optional name for the empty source (default is "WithoutData").</param>
-        /// <returns>A task that represents the asynchronous operation. The task result indicates whether the empty source was successfully added.</returns>
-        /// <exception cref="OwnaudioException">Thrown when the playback thread is currently running.</exception>
-        /// <remarks>
-        /// This method creates a placeholder source that can be used for mixing operations
-        /// when no actual audio file is needed. It updates the duration and sets the loaded state to true.
-        /// This is useful for scenarios where only input sources or real-time sources are being used.
-        /// </remarks>
-        public Task<bool> AddEmptySource(string? name = "WithoutData")
-        {
-            Ensure.That<OwnaudioException>(State == SourceState.Idle, "Playback thread is currently running.");
-
-            SourceWithoutData _sourceWithoutData = new SourceWithoutData();
-            _sourceWithoutData.Name = name ?? "WithoutData";
-            Sources.Add(_sourceWithoutData);
-
-            if(Duration.TotalMilliseconds < _sourceWithoutData.Duration.TotalMilliseconds)
-                Duration = _sourceWithoutData.Duration;
-
-            IsLoaded = true;
+            // Check and ensure source dependencies
+            EnsureSourceDependencies();
 
             SetAndRaisePositionChanged(TimeSpan.Zero);
+            Logger?.LogInfo($"Source added: {url}");
 
             return Task.FromResult(IsLoaded);
         }
@@ -175,36 +271,43 @@ namespace Ownaudio.Sources
         /// </summary>
         /// <param name="inputVolume">The initial volume level for the input source (default: 0.0f).</param>
         /// <param name="name">Optional name for the input source (default: "Input").</param>
-        /// <returns>A task that represents the asynchronous operation. The task result indicates whether the input source was successfully added.</returns>
-        /// <remarks>
-        /// This method creates an input source only if:
-        /// - No input is currently being recorded
-        /// - The input device has available input channels
-        /// 
-        /// If an input source already exists, this method updates the volume of the most recently added input source.
-        /// The method sets the IsRecorded flag to true when a valid input source is created.
-        /// </remarks>
+        /// <returns>A task that represents the asynchronous operation.</returns>
+        /// <exception cref="OwnaudioException">Thrown when input limit is reached or input device is not available.</exception>
         public Task<bool> AddInputSource(float inputVolume = 0f, string? name = "Input")
         {
-            if(!IsRecorded)
+            if (!CanAddSource(typeof(SourceInput), out string errorMessage))
             {
-                if(InputEngineOptions.Device.MaxInputChannels > 0)
+                throw new OwnaudioException(errorMessage);
+            }
+
+            if (!IsRecorded)
+            {
+                if (InputEngineOptions.Device.MaxInputChannels > 0)
                 {
                     SourceInput _inputSource = new SourceInput(InputEngineOptions);
                     _inputSource.Name = name ?? "Input";
                     SourcesInput.Add(_inputSource);
+
                     if (_inputSource is not null)
                     {
                         IsRecorded = true;
-                    } 
+                    }
+                }
+                else
+                {
+                    throw new OwnaudioException("No input device available or device has no input channels.");
                 }
             }
 
-            if(IsRecorded)
+            if (IsRecorded)
             {
                 SourcesInput[SourcesInput.Count - 1].Volume = inputVolume;
             }
 
+            // Check and ensure source dependencies
+            EnsureSourceDependencies();
+
+            Logger?.LogInfo("InputSource added.");
             return Task.FromResult(IsRecorded);
         }
 
@@ -214,19 +317,7 @@ namespace Ownaudio.Sources
         /// <param name="initialVolume">The initial volume level for the source (default: 1.0f).</param>
         /// <param name="dataChannels">The number of audio channels for the input data (default: 2 for stereo).</param>
         /// <param name="name">Optional name for the source (default: "Realtime").</param>
-        /// <returns>The created <see cref="SourceSound"/> instance that can be used to feed real-time audio data.</returns>
-        /// <remarks>
-        /// This method creates a real-time audio source that can accept live audio samples.
-        /// It performs the following operations:
-        /// - Creates a new SourceSound with the specified channel configuration
-        /// - Sets the initial volume and logger
-        /// - Adds the source to the mixing engine
-        /// - Updates the total duration (defaults to 10 seconds for real-time sources)
-        /// - Automatically adds an empty output source if none exist
-        /// 
-        /// Real-time sources are useful for applications that need to inject live audio data
-        /// into the mix, such as synthesizers, live audio effects, or streaming applications.
-        /// </remarks>
+        /// <returns>The created <see cref="SourceSound"/> instance.</returns>
         public SourceSound AddRealTimeSource(float initialVolume = 1.0f, int dataChannels = 2, string? name = "Realtime")
         {
             var source = new SourceSound(dataChannels)
@@ -238,21 +329,20 @@ namespace Ownaudio.Sources
 
             Sources.Add(source);
 
-            // Optionally, we can set the maximum Duration value to 10 seconds
+            // Optionally, set the maximum Duration value to 10 seconds
             if (Duration.TotalMilliseconds < 10000)
                 Duration = TimeSpan.FromMilliseconds(10000);
 
+            // Check and ensure source dependencies
+            EnsureSourceDependencies();
+
             SetAndRaisePositionChanged(TimeSpan.Zero);
-
             Logger?.LogInfo("Real-time source added.");
-
-            if (!IsLoaded)
-                AddEmptySource().Wait();
 
             return source;
         }
 
-        // <summary>
+        /// <summary>
         /// Adds a new simple source for sound effects
         /// </summary>
         /// <param name="filePath">Path to the audio file</param>
@@ -268,7 +358,11 @@ namespace Ownaudio.Sources
             };
 
             SourcesSpark.Add(sparkSource);
-            Logger?.LogInfo($"Simple source added: {filePath}");
+
+            // Check and ensure source dependencies after adding SparkSource
+            EnsureSourceDependencies();
+
+            Logger?.LogInfo($"Spark source added: {filePath}");
 
             return sparkSource;
         }
@@ -277,54 +371,71 @@ namespace Ownaudio.Sources
         /// Removes an output source by its index in the sources collection.
         /// </summary>
         /// <param name="SourceID">The zero-based index of the source to remove.</param>
-        /// <returns>A task that represents the asynchronous operation. The task result indicates whether the removal was successful.</returns>
+        /// <returns>A task that represents the asynchronous operation.</returns>
         /// <exception cref="ArgumentNullException">Thrown when the Sources collection is null.</exception>
-        /// <exception cref="OwnaudioException">Thrown when the specified source ID does not exist.</exception>
-        /// <remarks>
-        /// This method removes both the source from the Sources collection and its corresponding
-        /// URL from the UrlList. It resets the position to zero after successful removal.
-        /// The method includes error handling and will return false if the removal operation fails.
-        /// </remarks>
+        /// <exception cref="OwnaudioException">Thrown when the specified source ID does not exist or cannot be removed.</exception>
         public Task<bool> RemoveOutputSource(int SourceID)
         {
             Ensure.NotNull(Sources, nameof(Sources));
             Ensure.That<OwnaudioException>(SourceID < Sources.Count, "Output source id not exist.");
 
-            try 
+            var sourceToRemove = Sources[SourceID];
+
+            if (!CanRemoveSource(sourceToRemove, out string errorMessage))
+            {
+                throw new OwnaudioException(errorMessage);
+            }
+
+            try
             {
                 Sources.RemoveAt(SourceID);
-                UrlList?.RemoveAt(SourceID);
+
+                // Update URL list - only for Source type sources
+                if (sourceToRemove is Source && SourceID < UrlList.Count)
+                {
+                    UrlList.RemoveAt(SourceID);
+                }
+
+                // Check and ensure source dependencies after removal
+                EnsureSourceDependencies();
 
                 SetAndRaisePositionChanged(TimeSpan.Zero);
-
-                Logger?.LogInfo("Output source ID remove.");
+                Logger?.LogInfo($"Output source removed at index {SourceID}.");
 
                 return Task.FromResult(true);
             }
-            catch {  return  Task.FromResult(false); }
-            
+            catch (Exception ex)
+            {
+                Logger?.LogError($"Error removing output source: {ex.Message}");
+                return Task.FromResult(false);
+            }
         }
 
         /// <summary>
         /// Removes all input sources and resets the recording state.
         /// </summary>
-        /// <returns>A task that represents the asynchronous operation. The task result is always true.</returns>
-        /// <remarks>
-        /// This method performs the following operations:
-        /// - Clears all input sources from the SourcesInput collection
-        /// - Sets IsRecorded to false to indicate no input is being recorded
-        /// - Automatically adds a new input source to maintain system consistency
-        /// 
-        /// This is useful for resetting the input configuration or switching input devices.
-        /// </remarks>
+        /// <returns>A task that represents the asynchronous operation.</returns>
         public Task<bool> RemoveInputSource()
         {
-            if (IsRecorded)
-                SourcesInput.Clear();
+            try
+            {
+                if (IsRecorded)
+                {
+                    SourcesInput.Clear();
+                    IsRecorded = false;
+                }
 
-            IsRecorded = false;
-            AddInputSource();
-            return Task.FromResult(true);
+                // Check and ensure source dependencies after InputSource removal
+                EnsureSourceDependencies();
+
+                Logger?.LogInfo("Input source removed.");
+                return Task.FromResult(true);
+            }
+            catch (Exception ex)
+            {
+                Logger?.LogError($"Error removing input source: {ex.Message}");
+                return Task.FromResult(false);
+            }
         }
 
         /// <summary>
@@ -332,43 +443,203 @@ namespace Ownaudio.Sources
         /// </summary>
         /// <param name="source">The <see cref="SourceSound"/> instance to remove.</param>
         /// <returns>True if the source was found and removed successfully; otherwise, false.</returns>
-        /// <remarks>
-        /// This method safely removes a real-time source by:
-        /// - Checking if the source exists in the Sources collection
-        /// - Properly disposing of the source to free resources
-        /// - Removing it from the collection
-        /// - Logging the operation
-        /// 
-        /// If the source is not found in the collection, the method returns false without performing any action.
-        /// </remarks>
         public bool RemoveRealtimeSource(SourceSound source)
         {
-            if (Sources.Contains(source))
+            if (!Sources.Contains(source))
+            {
+                return false;
+            }
+
+            try
             {
                 source.Dispose();
                 Sources.Remove(source);
+
+                // Check and ensure source dependencies after RealTimeSource removal
+                EnsureSourceDependencies();
+
                 Logger?.LogInfo("Real-time source removed.");
                 return true;
             }
-
-            return false;
+            catch (Exception ex)
+            {
+                Logger?.LogError($"Error removing real-time source: {ex.Message}");
+                return false;
+            }
         }
 
         /// <summary>
-        /// Removes a simple source
+        /// Removes a spark source
         /// </summary>
         /// <param name="sparkSource">The spark source to remove</param>
         /// <returns>True if successfully removed</returns>
         public bool RemoveSparkSource(SourceSpark sparkSource)
         {
-            if (SourcesSpark.Contains(sparkSource))
+            if (!SourcesSpark.Contains(sparkSource))
+            {
+                return false;
+            }
+
+            try
             {
                 sparkSource.Stop();
                 sparkSource.Dispose();
                 SourcesSpark.Remove(sparkSource);
+
+                // Handle SparkSource removal dependencies
+                HandleSparkSourceRemoval(sparkSource);
+
+                // Check and ensure source dependencies after SparkSource removal
+                EnsureSourceDependencies();
+
+                Logger?.LogInfo("Spark source removed.");
                 return true;
             }
-            return false;
+            catch (Exception ex)
+            {
+                Logger?.LogError($"Error removing spark source: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Removes all real-time sources from the audio mix.
+        /// </summary>
+        /// <returns>The number of sources that were removed.</returns>
+        public int RemoveAllRealtimeSources()
+        {
+            var realTimeSources = Sources.OfType<SourceSound>().ToList();
+            int removedCount = 0;
+
+            foreach (var source in realTimeSources)
+            {
+                if (RemoveRealtimeSource(source))
+                {
+                    removedCount++;
+                }
+            }
+
+            return removedCount;
+        }
+
+        // New helper method: remove all Spark sources
+        /// <summary>
+        /// Removes all spark sources from the audio mix.
+        /// </summary>
+        /// <returns>The number of sources that were removed.</returns>
+        public int RemoveAllSparkSources()
+        {
+            var sparkSources = SourcesSpark.ToList();
+            int removedCount = 0;
+
+            foreach (var source in sparkSources)
+            {
+                if (RemoveSparkSource(source))
+                {
+                    removedCount++;
+                }
+            }
+
+            return removedCount;
+        }
+
+        /// <summary>
+        /// Gets a summary of current source configuration for debugging purposes.
+        /// </summary>
+        /// <returns>A string containing information about all current sources.</returns>
+        public string GetSourcesSummary()
+        {
+            var summary = new System.Text.StringBuilder();
+            summary.AppendLine("=== Source Manager Status ===");
+            summary.AppendLine($"Total Sources: {Sources.Count}");
+            summary.AppendLine($"Input Sources: {SourcesInput.Count}");
+            summary.AppendLine($"Spark Sources: {SourcesSpark.Count}");
+            summary.AppendLine($"Is Loaded: {IsLoaded}");
+            summary.AppendLine($"Is Recorded: {IsRecorded}");
+            summary.AppendLine($"State: {State}");
+            summary.AppendLine();
+
+            summary.AppendLine("Output Sources:");
+            for (int i = 0; i < Sources.Count; i++)
+            {
+                var source = Sources[i];
+                string sourceType = source.GetType().Name;
+                summary.AppendLine($"  [{i}] {sourceType}: {source.Name}");
+            }
+
+            if (SourcesInput.Count > 0)
+            {
+                summary.AppendLine();
+                summary.AppendLine("Input Sources:");
+                for (int i = 0; i < SourcesInput.Count; i++)
+                {
+                    var source = SourcesInput[i];
+                    summary.AppendLine($"  [{i}] {source.GetType().Name}: {source.Name}");
+                }
+            }
+
+            if (SourcesSpark.Count > 0)
+            {
+                summary.AppendLine();
+                summary.AppendLine("Spark Sources:");
+                for (int i = 0; i < SourcesSpark.Count; i++)
+                {
+                    var source = SourcesSpark[i];
+                    summary.AppendLine($"  [{i}] {source.GetType().Name}: {source.Name}");
+                }
+            }
+
+            return summary.ToString();
+        }
+
+        /// <summary>
+        /// Validates the current source configuration against the defined rules.
+        /// </summary>
+        /// <returns>A list of validation errors, empty if configuration is valid.</returns>
+        public List<string> ValidateSourceConfiguration()
+        {
+            var errors = new List<string>();
+
+            // Check Source count limit
+            int sourceCount = Sources.Count(s => s is Source);
+            if (sourceCount > 10)
+            {
+                errors.Add($"Too many Source instances: {sourceCount}/10 maximum allowed.");
+            }
+
+            // Check InputSource count limit
+            if (SourcesInput.Count > 1)
+            {
+                errors.Add($"Too many InputSource instances: {SourcesInput.Count}/1 maximum allowed.");
+            }
+
+            // Check EmptySource count limit
+            int emptySourceCount = Sources.Count(s => s is SourceWithoutData);
+            if (emptySourceCount > 1)
+            {
+                errors.Add($"Too many EmptySource instances: {emptySourceCount}/1 maximum allowed.");
+            }
+
+            // Check EmptySource dependency rules
+            bool hasInputSources = SourcesInput.Count > 0;
+            bool hasRealTimeSources = Sources.Any(s => s is SourceSound);
+            bool hasSparkSources = SourcesSpark.Count > 0;
+            bool hasOutputSources = Sources.Any(s => s is not SourceWithoutData);
+            bool hasEmptySource = Sources.Any(s => s is SourceWithoutData);
+
+            // EmptySource should exist if there are dependent sources but no output sources
+            if ((hasInputSources || hasRealTimeSources || hasSparkSources) && !hasOutputSources && !hasEmptySource)
+            {
+                errors.Add("EmptySource is required when InputSource, RealTimeSource, or SparkSource exists without output sources.");
+            }
+
+            // EmptySource should not exist if there are no dependent sources and there are output sources
+            if (!hasInputSources && !hasRealTimeSources && !hasSparkSources && hasEmptySource && hasOutputSources)
+            {
+                errors.Add("EmptySource should not exist when there are output sources but no dependent sources.");
+            }
+
+            return errors;
         }
 
         /// <summary>
@@ -380,7 +651,6 @@ namespace Ownaudio.Sources
         {
             get
             {
-
                 // Search in Sources collection
                 var source = Sources.FirstOrDefault(s => s.Name?.Equals(name, StringComparison.OrdinalIgnoreCase) == true);
                 if (source != null)
@@ -431,11 +701,13 @@ namespace Ownaudio.Sources
             if (this[sourceName].State != SourceState.Idle)
                 throw new OwnaudioException("Source is not in idle state. Cannot detect chords while playing or buffering.");
 
-            
+
+            #nullable disable
             FFmpegDecoderOptions _decoderOptions = new FFmpegDecoderOptions(1, 22050);
             MiniDecoder _miniDecoder = new MiniDecoder(this[sourceName].CurrentUrl, _decoderOptions);
             var _result = _miniDecoder.DecodeAllFrames(new TimeSpan(0));
             var _waveBuffer = new WaveBuffer(MemoryMarshal.Cast<byte, float>(_result.Frame.Data));
+            #nullable restore
 
             using var model = new Model();
             var modelOutput = model.Predict(_waveBuffer, progress =>
@@ -475,7 +747,9 @@ namespace Ownaudio.Sources
 
             this[sourceName].Seek(_pos);
             _miniDecoder.Dispose();
+            #nullable disable
             return (chords, detectedKey, detectTempo);
+            #nullable restore
         }
 
         /// <summary>
@@ -514,19 +788,6 @@ namespace Ownaudio.Sources
         /// <summary>
         /// Starts playback of all mixed audio sources.
         /// </summary>
-        /// <remarks>
-        /// This method handles the complete playback initialization process:
-        /// - Checks current state and handles paused/playing states appropriately
-        /// - Resets position if at the end of the audio
-        /// - Adds empty output source if only input sources exist
-        /// - Initializes the audio engine
-        /// - Creates and starts the mixing thread with above-normal priority
-        /// - Starts input recording if configured
-        /// - Starts the audio engine output
-        /// 
-        /// The method includes comprehensive error handling and will output debug information
-        /// if engine initialization fails. All mixing operations run on a dedicated background thread.
-        /// </remarks>
         public void Play()
         {
             if (State is SourceState.Playing or SourceState.Buffering)
@@ -536,7 +797,7 @@ namespace Ownaudio.Sources
 
             if (State == SourceState.Paused)
             {
-                SetAndRaiseStateChanged(SourceState.Playing);                
+                SetAndRaiseStateChanged(SourceState.Playing);
                 return;
             }
 
@@ -545,13 +806,8 @@ namespace Ownaudio.Sources
                 SetAndRaisePositionChanged(TimeSpan.Zero);
             }
 
-            if (Sources.Count < 1)
-            {
-               if (SourcesInput.Count > 0 || SourcesSpark.Count > 0)
-                {
-                    AddEmptySource();
-                } 
-            }  
+            // Automatically add EmptySource if needed
+            EnsureSourceDependencies();
 
             if (InitializeEngine())
             {
@@ -563,7 +819,12 @@ namespace Ownaudio.Sources
 
                 Thread.Sleep(100);
 
-                MixEngineThread = new Thread(MixEngine) { Name = "Mix Engine Thread", IsBackground = true, Priority = ThreadPriority.AboveNormal};
+                MixEngineThread = new Thread(MixEngine)
+                {
+                    Name = "Mix Engine Thread",
+                    IsBackground = true,
+                    Priority = ThreadPriority.AboveNormal
+                };
 
                 if (IsRecorded && SourcesInput.Count > 0)
                     SourcesInput.Any(i => i.State == SourceState.Recording);
@@ -708,84 +969,232 @@ namespace Ownaudio.Sources
         }
 
         /// <summary>
-        /// Completely resets the SourceManager to its initial state.
+        /// Completely resets the SourceManager and the entire OwnAudio API to its initial state.
         /// </summary>
+        /// <param name="resetGlobalSettings">If true, also resets global engine options to defaults.</param>
         /// <returns>True if the reset operation was successful; otherwise, false.</returns>
         /// <remarks>
         /// This method performs a comprehensive system reset:
         /// - Stops all playback and terminates threads
         /// - Stops and disposes the audio engine
-        /// - Disposes and clears all output and input sources
-        /// - Clears the URL list
+        /// - Disposes and clears all output, input, and spark sources
+        /// - Clears all URL lists and buffers
         /// - Resets all state variables (duration, position, flags)
         /// - Writes any pending recorded data to file
-        /// - Clears audio data buffers
-        /// - Resets volume and custom processors
-        /// - Raises state and position change events
+        /// - Clears audio data buffers and buffer pools
+        /// - Resets volume and custom processors to defaults
+        /// - Optionally resets global engine configuration
+        /// - Raises appropriate events
         /// 
         /// The audio engine is left in a state where it can be reinitialized for new operations.
         /// This method includes comprehensive error handling and logging.
         /// </remarks>
-        public bool Reset()
+        public bool Reset(bool resetGlobalSettings = false)
         {
             try
             {
-                Logger?.LogInfo("Resetting SourceManager to initial state...");
+                Logger?.LogInfo("Resetting SourceManager and OwnAudio API to initial state...");
 
+                // Stop all playback and ensure threads are done
                 if (State != SourceState.Idle)
                 {
                     SetAndRaiseStateChanged(SourceState.Idle);
                     EnsureThreadsDone();
                 }
 
+                // Stop and dispose audio engine
                 if (Engine?.OwnAudioEngineStopped() == 0)
                 {
                     Engine?.Stop();
                 }
 
-                foreach (ISource src in Sources)
+                // Dispose and clear all sources
+                foreach (ISource src in Sources.ToList())
                 {
-                    src.Dispose();
+                    try
+                    {
+                        src.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger?.LogWarning($"Error disposing source '{src.Name}': {ex.Message}");
+                    }
                 }
 
-                foreach (ISource inputSrc in SourcesInput)
+                foreach (ISource inputSrc in SourcesInput.ToList())
                 {
-                    inputSrc.Dispose();
+                    try
+                    {
+                        inputSrc.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger?.LogWarning($"Error disposing input source '{inputSrc.Name}': {ex.Message}");
+                    }
                 }
 
-                foreach (SourceSpark spark in SourcesSpark)
+                foreach (SourceSpark spark in SourcesSpark.ToList())
                 {
-                    spark.Dispose();
+                    try
+                    {
+                        spark.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger?.LogWarning($"Error disposing spark source '{spark.Name}': {ex.Message}");
+                    }
                 }
 
+                // Clear all collections
                 Sources.Clear();
                 SourcesInput.Clear();
+                SourcesSpark.Clear();
                 UrlList.Clear();
 
+                // Reset all state variables
                 Duration = TimeSpan.Zero;
                 Position = TimeSpan.Zero;
                 IsLoaded = false;
                 IsRecorded = false;
                 IsSeeking = false;
+                IsWriteData = false;
 
-                writeDataToFile();
-                writedDataBuffer.Clear();
+                // Write any pending recorded data to file and clear buffers
+                try
+                {
+                    writeDataToFile();
+                    writedDataBuffer.Clear();
+                }
+                catch (Exception ex)
+                {
+                    Logger?.LogWarning($"Error writing final recorded data: {ex.Message}");
+                }
 
+                // Clear audio buffer pool
+                try
+                {
+                    SimpleAudioBufferPool.Clear();
+                }
+                catch (Exception ex)
+                {
+                    Logger?.LogWarning($"Error clearing buffer pool: {ex.Message}");
+                }
+
+                // Reset processors to default values
                 Volume = 1.0f;
+                CustomSampleProcessor = new DefaultProcessor();
+                OutputLevels = (0f, 0f);
+                InputLevels = (0f, 0f);
 
-                CustomSampleProcessor = null;
+                // Reset engine-specific variables
+                SaveWaveFileName = null;
+                BitPerSamples = OutputEngineOptions.SampleRate;
 
+                // Dispose and nullify engine
+                Engine?.Dispose();
+                Engine = null;
+
+                // Reset global engine options if requested
+                if (resetGlobalSettings)
+                {
+                    OutputEngineOptions = new AudioEngineOutputOptions();
+                    InputEngineOptions = new AudioEngineInputOptions();
+                    EngineFramesPerBuffer = 512;
+
+                    Logger?.LogInfo("Global engine options reset to defaults.");
+                }
+
+                // Reset internal buffers and variables
+                _mixBuffer = null;
+                _lastMixBufferSize = 0;
+                _levelCalculationBuffer = null;
+
+                // Ensure tasks are completed
+                if (!_levelCalculationTask.IsCompleted)
+                {
+                    try
+                    {
+                        _levelCalculationTask.Wait(TimeSpan.FromSeconds(1));
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger?.LogWarning($"Error waiting for level calculation task: {ex.Message}");
+                    }
+                }
+
+                if (!_fileSaveTask.IsCompleted)
+                {
+                    try
+                    {
+                        _fileSaveTask.Wait(TimeSpan.FromSeconds(5));
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger?.LogWarning($"Error waiting for file save task: {ex.Message}");
+                    }
+                }
+
+                // Reset tasks to completed state
+                _levelCalculationTask = Task.CompletedTask;
+                _fileSaveTask = Task.CompletedTask;
+
+                // Clean up temporary files
+                try
+                {
+                    if (!string.IsNullOrEmpty(writefilePath) && File.Exists(writefilePath))
+                    {
+                        File.Delete(writefilePath);
+                        writefilePath = "";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger?.LogWarning($"Error cleaning up temporary files: {ex.Message}");
+                }
+
+                // Reset synchronization objects
+                lock (writeLock)
+                {
+                    isWriting = false;
+                }
+
+                // Raise final state and position change events
                 SetAndRaiseStateChanged(SourceState.Idle);
                 SetAndRaisePositionChanged(TimeSpan.Zero);
 
-                Logger?.LogInfo("SourceManager successfully reset to initial state.");
+                // Force garbage collection to clean up disposed objects
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+
+                Logger?.LogInfo("SourceManager and OwnAudio API successfully reset to initial state.");
                 return true;
             }
             catch (Exception ex)
             {
-                Logger?.LogError($"Error resetting SourceManager: {ex.Message}");
+                Logger?.LogError($"Error resetting SourceManager and OwnAudio API: {ex.Message}");
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Resets only the SourceManager without affecting global settings.
+        /// This is a convenience method that calls Reset(false).
+        /// </summary>
+        /// <returns>True if the reset operation was successful; otherwise, false.</returns>
+        public bool ResetSourceManager()
+        {
+            return Reset(false);
+        }
+
+        /// <summary>
+        /// Performs a full system reset including global engine settings.
+        /// This is a convenience method that calls Reset(true).
+        /// </summary>
+        /// <returns>True if the reset operation was successful; otherwise, false.</returns>
+        public bool ResetAll()
+        {
+            return Reset(true);
         }
 
         /// <summary>

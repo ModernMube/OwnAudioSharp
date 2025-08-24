@@ -36,10 +36,6 @@ namespace Ownaudio.MiniAudio
         private readonly ArrayPool<float> _arrayPool = ArrayPool<float>.Shared;
         private float[]? _outputBuffer;
         private float[]? _inputBuffer;
-        private AudioDataEventArgs? _outputEventArgs;
-        private AudioDataEventArgs? _inputEventArgs;
-        private int _lastOutputBufferSize;
-        private int _lastInputBufferSize;
 
         private const int BUFFER_POOL_SIZE = 4;
         private readonly Stack<float[]> _outputBufferPool = new();
@@ -330,9 +326,11 @@ namespace Ownaudio.MiniAudio
             Stack<float[]> bufferPool,
             Stack<AudioDataEventArgs> eventArgsPool)
         {
+            #nullable disable
             float[] buffer = null;
             AudioDataEventArgs eventArgs = null;
             bool fromPool = false;
+            #nullable restore
 
             // Thread-safe retrieval from pool
             lock (bufferPool)

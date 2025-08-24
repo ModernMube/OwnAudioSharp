@@ -90,10 +90,10 @@ public partial class Source : ISource
 
             try
             {
-#nullable disable
+                #nullable disable
                 CurrentDecoder = CurrentUrl != null ? CreateDecoder(CurrentUrl) : CreateDecoder(CurrentStream);
                 break;
-#nullable restore
+                #nullable restore
             }
             catch (Exception ex)
             {
@@ -139,7 +139,7 @@ public partial class Source : ISource
                 Thread.Sleep(10);
             }
 
-#nullable disable
+            #nullable disable
             AudioDecoderResult result = CurrentDecoder.DecodeNextFrame();
 
             if (result.IsEOF)
@@ -158,7 +158,7 @@ public partial class Source : ISource
 
                 break;
             }
-#nullable restore
+            #nullable restore
 
             if (!result.IsSucceeded)
             {

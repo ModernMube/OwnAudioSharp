@@ -9,6 +9,12 @@ namespace Ownaudio.Fx
     public enum DelayPreset
     {
         /// <summary>
+        /// Default delay settings - balanced delay with moderate parameters
+        /// Medium delay time with controlled feedback for general use
+        /// </summary>
+        Default,
+
+        /// <summary>
         /// Short slap-back delay - adds thickness and dimension to vocals
         /// Very short delay time with minimal feedback for natural doubling effect
         /// </summary>
@@ -67,6 +73,9 @@ namespace Ownaudio.Fx
         private int _readIndex;
         private int _delaySamples;
         private int _time;
+        private float _repeat;
+        private float _mix;
+        private int _sampleRate;
 
         // High-frequency damping for more natural sound
         private float _dampingCoeff = 0.2f;
@@ -81,10 +90,7 @@ namespace Ownaudio.Fx
             get => _time;
             set
             {
-                if (value <= 0)
-                    throw new ArgumentException("The delay time must be positive.", nameof(Time));
-
-                _time = value;
+                _time = Math.Max(1, Math.Min(5000, value)); // Min: 1ms, Max: 5000ms
                 UpdateDelayTime();
             }
         }
@@ -92,50 +98,82 @@ namespace Ownaudio.Fx
         /// <summary>
         /// The amount of feedback (value between 0.0 and 1.0).
         /// </summary>
-        public float Repeat { get; set; }
+        public float Repeat
+        {
+            get => _repeat;
+            set => _repeat = Math.Max(0.0f, Math.Min(1.0f, value));
+        }
 
         /// <summary>
         /// The mixing ratio of the original and delayed signal (value between 0.0 and 1.0).
         /// </summary>
-        public float Mix { get; set; }
+        public float Mix
+        {
+            get => _mix;
+            set => _mix = Math.Max(0.0f, Math.Min(1.0f, value));
+        }
 
         /// <summary>
         /// High-frequency damping coefficient (value between 0.0 and 1.0).
         /// Higher values create more dampening for warmer, more natural delays.
         /// </summary>
-        public float Damping 
-        { 
-            get => _dampingCoeff; 
-            set => _dampingCoeff = Math.Max(0.0f, Math.Min(1.0f, value)); 
+        public float Damping
+        {
+            get => _dampingCoeff;
+            set => _dampingCoeff = Math.Max(0.0f, Math.Min(1.0f, value));
         }
 
-        public int SampleRate { get; set; } = 44100;
+        /// <summary>
+        /// The sampling frequency (Hz)
+        /// </summary>
+        public int SampleRate
+        {
+            get => _sampleRate;
+            set
+            {
+                _sampleRate = Math.Max(8000, Math.Min(192000, value)); // Min: 8kHz, Max: 192kHz
+                UpdateDelayTime();
+            }
+        }
 
         /// <summary>
-        /// Initialize Delay Processor.
+        /// Initialize Delay Processor with default settings.
+        /// </summary>
+        public Delay()
+        {
+            _sampleRate = 44100;
+            _time = 375;
+            _repeat = 0.35f;
+            _mix = 0.3f;
+            _dampingCoeff = 0.25f;
+
+            InitializeBuffer();
+        }
+
+        /// <summary>
+        /// Initialize Delay Processor with a specific preset.
+        /// </summary>
+        /// <param name="preset">The delay preset to use</param>
+        public Delay(DelayPreset preset) : this()
+        {
+            SetPreset(preset);
+        }
+
+        /// <summary>
+        /// Initialize Delay Processor with custom parameters.
         /// </summary>
         /// <param name="time">The delay time is in milliseconds.</param>
         /// <param name="repeat">The feedback rate (0.0 - 1.0).</param>
         /// <param name="mix">The mixing ratio of the original and delayed signal (0.0 - 1.0).</param>
+        /// <param name="damping">High-frequency damping coefficient (0.0 - 1.0).</param>
         /// <param name="sampleRate">The sampling frequency (Hz).</param>
-        public Delay(int time = 650, float repeat = 0.55f, float mix = 0.45f, int sampleRate = 44100)
+        public Delay(int time, float repeat, float mix, float damping = 0.25f, int sampleRate = 44100)
         {
-            if (time <= 0)
-                throw new ArgumentException("The delay time must be positive.", nameof(time));
-
-            if (sampleRate <= 0)
-                throw new ArgumentException("The sampling frequency must be positive.", nameof(sampleRate));
-
-            if (repeat < 0.0f || repeat > 1.0f)
-                throw new ArgumentException("The value of Repeat must be between 0.0 and 1.0.", nameof(repeat));
-
-            if (mix < 0.0f || mix > 1.0f)
-                throw new ArgumentException("The Mix value must be between 0.0 and 1.0.", nameof(mix));
-
-            SampleRate = sampleRate;
+            _sampleRate = Math.Max(8000, Math.Min(192000, sampleRate));
             Time = time;
             Repeat = repeat;
             Mix = mix;
+            Damping = damping;
 
             InitializeBuffer();
         }
@@ -147,6 +185,14 @@ namespace Ownaudio.Fx
         {
             switch (preset)
             {
+                case DelayPreset.Default:
+                    // Default balanced delay settings
+                    Time = 375;         // 375ms - classic delay timing
+                    Repeat = 0.35f;     // 35% feedback - balanced repeats
+                    Mix = 0.3f;         // 30% mix - moderate blend
+                    Damping = 0.25f;    // Moderate damping for natural sound
+                    break;
+
                 case DelayPreset.SlapBack:
                     // Short slap-back delay for vocal thickening
                     // Very short timing with minimal feedback for natural doubling
@@ -237,12 +283,12 @@ namespace Ownaudio.Fx
                 _lastOutput = delayedSample;
 
                 // Create feedback with soft clipping to prevent harsh distortion
-                float feedbackSample = SoftClip(samples[i] + (delayedSample * Repeat));
+                float feedbackSample = SoftClip(samples[i] + (delayedSample * _repeat));
 
                 _delayBuffer[_writeIndex] = feedbackSample;
 
                 // Mix original and delayed signals
-                samples[i] = (samples[i] * (1.0f - Mix)) + (delayedSample * Mix);
+                samples[i] = (samples[i] * (1.0f - _mix)) + (delayedSample * _mix);
 
                 // Advance buffer pointers with wraparound
                 _writeIndex = (_writeIndex + 1) % _delaySamples;
@@ -252,11 +298,11 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Resets the delay effect by clearing the delay buffer and resetting the buffer index.
-        /// Does not modify any settings or parameters.
+        /// It clears temporary storage but does not change parameters.
         /// </summary>
         public override void Reset()
         {
+            // Clear buffer and reset indices - but keep current parameters!
             if (_delayBuffer != null)
             {
                 Array.Clear(_delayBuffer, 0, _delayBuffer.Length);
@@ -271,7 +317,7 @@ namespace Ownaudio.Fx
         /// </summary>
         private void UpdateDelayTime()
         {
-            _delaySamples = Math.Max(1, (int)((Time / 1000.0) * SampleRate));
+            _delaySamples = Math.Max(1, (int)((_time / 1000.0) * _sampleRate));
             InitializeBuffer();
         }
 
@@ -320,7 +366,7 @@ namespace Ownaudio.Fx
         /// </summary>
         public int MsToSamples(float milliseconds)
         {
-            return (int)((milliseconds / 1000.0f) * SampleRate);
+            return (int)((milliseconds / 1000.0f) * _sampleRate);
         }
 
         /// <summary>
@@ -328,7 +374,7 @@ namespace Ownaudio.Fx
         /// </summary>
         public float SamplesToMs(int samples)
         {
-            return (samples * 1000.0f) / SampleRate;
+            return (samples * 1000.0f) / _sampleRate;
         }
 
         /// <summary>
