@@ -2,7 +2,10 @@
 
 namespace Ownaudio.Sources.Extensions
 {
-    internal static class CalculateLevels
+    /// <summary>
+    /// 
+    /// </summary>
+    public static class Sources
     {
         /// <summary>
         /// Calculates the average signal levels for a stereo audio signal using Span.
