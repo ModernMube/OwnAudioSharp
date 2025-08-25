@@ -9,7 +9,7 @@ namespace Ownaudiotest
         [TestInitialize]
         public void Setup()
         {
-            // Próbáljuk inicializálni, de nem követeljük meg, hogy sikerüljön
+            // We try to initialize, but we don't require it to succeed.
             OwnAudio.Initialize();
         }
 
