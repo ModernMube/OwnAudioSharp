@@ -142,6 +142,11 @@ namespace Ownaudio.Utilities.Matchering
             gainDb = Math.Max(-60f, Math.Min(60f, gainDb));
             q = Math.Max(0.1f, Math.Min(20f, q));
 
+            if (frequency > 8000f)
+            {
+                gainDb = Math.Max(-60f, Math.Min(3.0f, gainDb));
+            }
+
             float w = 2.0f * (float)Math.PI * frequency / sampleRate;
             float cosw = (float)Math.Cos(w);
             float sinw = (float)Math.Sin(w);

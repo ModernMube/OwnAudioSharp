@@ -22,7 +22,19 @@ namespace Ownaudio.Utilities.Matchering
             {
                 float sourceLevel = 20 * (float)Math.Log10(Math.Max(source.FrequencyBands[i], 1e-10f));
                 float targetLevel = 20 * (float)Math.Log10(Math.Max(target.FrequencyBands[i], 1e-10f));
-                rawAdjustments[i] = targetLevel - sourceLevel;
+                float difference = targetLevel - sourceLevel;
+
+                rawAdjustments[i] = difference * 0.5f;
+
+                if (FrequencyBands[i] > 4000f)
+                {
+                    rawAdjustments[i] *= 0.7f;
+                }
+
+                if (FrequencyBands[i] > 8000f)
+                {
+                    rawAdjustments[i] *= 0.5f;
+                }
             }
 
             var smoothedAdjustments = ApplyIntelligentEQSmoothing(rawAdjustments, source);
@@ -141,15 +153,15 @@ namespace Ownaudio.Utilities.Matchering
         private float GetFrequencyImportanceWeight(float frequency)
         {
             var weights = new Dictionary<(float min, float max), float>
-            {
-                { (20, 80), 0.8f },
-                { (80, 250), 0.9f },
-                { (250, 500), 1.0f },
-                { (500, 2000), 1.1f },
-                { (2000, 5000), 1.0f },
-                { (5000, 10000), 0.9f },
-                { (10000, 20000), 0.7f }
-            };
+    {
+        { (20, 80), 0.8f },
+        { (80, 250), 0.9f },
+        { (250, 500), 1.0f },
+        { (500, 2000), 1.1f },
+        { (2000, 5000), 0.8f }, 
+        { (5000, 10000), 0.6f }, 
+        { (10000, 20000), 0.4f } 
+    };
 
             foreach (var range in weights)
             {
@@ -157,7 +169,7 @@ namespace Ownaudio.Utilities.Matchering
                     return range.Value;
             }
 
-            return 0.8f;
+            return 0.4f; 
         }
 
         /// <summary>
@@ -239,6 +251,16 @@ namespace Ownaudio.Utilities.Matchering
                 float maxBoost = GetMaxBoostForFrequency(frequency);
                 float maxCut = GetMaxCutForFrequency(frequency);
 
+                if (frequency > 2000f)
+                {
+                    maxBoost *= 0.6f;
+                }
+
+                if (frequency > 8000f)
+                {
+                    maxBoost *= 0.5f;
+                }
+
                 limited[i] = Math.Max(-maxCut, Math.Min(maxBoost, adjustments[i]));
             }
 
@@ -257,8 +279,9 @@ namespace Ownaudio.Utilities.Matchering
             if (frequency < 500) return 8.0f;
             if (frequency < 2000) return 10.0f;
             if (frequency < 5000) return 8.0f;
-            if (frequency < 10000) return 6.0f;
-            return 4.0f;
+            if (frequency < 8000) return 4.0f;  // 6.0f helyett
+            if (frequency < 10000) return 3.0f; // 6.0f helyett
+            return 2.0f; // 4.0f helyett - 10+ kHz
         }
 
         /// <summary>

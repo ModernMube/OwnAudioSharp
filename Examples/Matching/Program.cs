@@ -11,11 +11,10 @@ class Program
             {
                 var processor = new AudioAnalyzer();
 
-                string sourceFile = @"path/audio/sourceaudio.mp3";  // File to be processed
-                string targetFile = @"path/audio/targetaudio.mp3"; // Reference file
-                string outputFile = @"path/audio/outputaudio.mp3"; // Output file that we create
-
-                processor.ProcessEQMatching(sourceFile, targetFile, outputFile);
+                processor.ProcessEQMatching(
+                    sourceFile: @"path/audio/source.mp3",   // File to be processed
+                    targetFile: @"path/audio/target.mp3",   // Reference file
+                    outputFile: @"path/audio/output.mp3");  // Output file that we create
 
                 OwnAudio.Free();
             }

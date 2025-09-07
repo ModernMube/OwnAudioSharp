@@ -55,12 +55,14 @@ namespace Ownaudio.Utilities.Matchering
         {
             float loudnessDifference = target.Loudness - source.Loudness;
 
+            float adjustedDifference = loudnessDifference * 0.33f;
+
             return new DynamicAmpSettings
             {
-                TargetLevel = -9.0f + Math.Max(-6f, Math.Min(6f, loudnessDifference)),
-                AttackTime = 0.1f,
-                ReleaseTime = 0.5f,
-                MaxGain = 6.0f
+                TargetLevel = -12.0f + Math.Max(-4f, Math.Min(4f, adjustedDifference)),
+                AttackTime = 0.2f, 
+                ReleaseTime = 1.0f, 
+                MaxGain = 3.0f
             };
         }
 

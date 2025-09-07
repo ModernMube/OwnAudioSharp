@@ -49,20 +49,20 @@ namespace Ownaudio.Utilities.Matchering
             {
                 return new CompressionSettings
                 {
-                    Threshold = -8.0f,
-                    Ratio = 4.0f,
-                    AttackTime = 10.0f,
-                    ReleaseTime = 100.0f,
-                    MakeupGain = Math.Abs(dynamicDifference) * 0.5f
+                    Threshold = -10.0f, 
+                    Ratio = 3.0f, 
+                    AttackTime = 15.0f, 
+                    ReleaseTime = 150.0f, 
+                    MakeupGain = Math.Abs(dynamicDifference) * 0.3f 
                 };
             }
 
             return new CompressionSettings
             {
-                Threshold = -12.0f,
-                Ratio = 2.0f,
-                AttackTime = 20.0f,
-                ReleaseTime = 200.0f,
+                Threshold = -15.0f, 
+                Ratio = 1.8f, 
+                AttackTime = 25.0f,
+                ReleaseTime = 250.0f, 
                 MakeupGain = 0.0f
             };
         }
@@ -96,8 +96,8 @@ namespace Ownaudio.Utilities.Matchering
             {
                 0 => -0.5f, // Low: gentler ratio
                 1 => 0.0f,  // Low-mid: baseline
-                2 => 0.5f,  // High-mid: stronger ratio
-                3 => 1.0f,  // High: strongest ratio
+                2 => 0.2f,  // High-mid: kisebb erősítés (0.5f helyett)
+                3 => 0.0f,  // High: nincs extra ratio (1.0f helyett)
                 _ => 0.0f
             };
         }
@@ -114,7 +114,7 @@ namespace Ownaudio.Utilities.Matchering
                 0 => 2.0f,  // Low: slower attack
                 1 => 1.0f,  // Low-mid: baseline
                 2 => 0.5f,  // High-mid: faster attack
-                3 => 0.3f,  // High: fastest attack
+                3 => 0.5f,  // High: lassabb attack (0.3f helyett)
                 _ => 1.0f
             };
         }
