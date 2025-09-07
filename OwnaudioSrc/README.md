@@ -1,4 +1,4 @@
-##
+﻿##
 
 OwnAudio is a platform-independent C# audio library that provides a high-level API for audio playback, recording, and processing. By default, it uses Miniaudio for audio I/O. If FFmpeg or PortAudio is installed, it automatically uses Portaudio and FFmpeg. This way, it can work with MiniAudio without any external dependencies. The implementation of MiniAudio also allowed the API to be used on mobile platforms. It is possible to manipulate audio data in real time (pitch change, tempo change, and various real-time effects). The API is able to detect musical chords from audio and create a timed list of chords. A feature has been built in to help game developers manage sound effects.
 
@@ -17,11 +17,6 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 - **Detecting musical chords from audio data** Real-time or offline chord detection from musical notes
 - **New feature: SourceSpark**, a useful resource for game developers, is ready. [See description below!](#sourcespark)
 
-## Prerequisites
-
-- FFmpeg libraries
-- PortAudio libraries
-
 Check out the sample application [OwnAudioSharpDemo](https://github.com/ModernMube/OwnAudioSharpDemo) that demonstrates the capabilities of the OwnAudioSharp audio library through an Avalonia MVVM application using ReactiveUI. MainWindowViewModel.cs contains the core logic for audio processing, playback, effects application, and UI control.
 
 ## Documentation
@@ -29,6 +24,24 @@ Check out the sample application [OwnAudioSharpDemo](https://github.com/ModernMu
  <a href="../../wiki">
   <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20documentation%20step-blue" alt="Wiki OwnAudio documentation">
 </a>
+
+# 🎵 NEW: Audio Matchering in OwnAudioSharp!
+
+**Professional mastering automatically - single line of code!**
+
+```csharp
+analyzer.ProcessEQMatching("source.wav", "reference.wav", "mastered.wav");
+```
+
+⚡ **What you get:**
+- Intelligent 10-band EQ matching
+- Multiband compression across 4 frequency bands  
+- Psychoacoustic weighting and spectral masking
+- Distortion-protected automatic processing
+
+🎯 **Result:** Your source audio will sound exactly like the reference track - professional mastering studio quality.
+
+📖 [Documentation and examples](#matchering)
 
 ## Supported Systems
 
@@ -732,6 +745,119 @@ SourceManager.InputEngineOptions = new AudioEngineInputOptions(
 // Set frames per buffer
 SourceManager.EngineFramesPerBuffer = 512;
 ```
+
+# Matchering
+
+The professional audio matchering function built into OwnAudioSharp automatically analyzes and adjusts the spectral and dynamic properties of source audio to match the characteristics of a target audio file. This technology enables achieving consistent sound across musical masters or reproducing the sound of reference tracks.
+
+## Features
+
+- **Intelligent EQ matching**: 10-band frequency spectrum analysis and automatic equalization
+- **Multiband compression**: 4-band dynamic processing with frequency-specific settings
+- **Psychoacoustic weighting**: A-weighting and equal loudness contour consideration
+- **Dynamic amplification**: Automatic loudness level adjustment
+- **Distortion protection**: Built-in headroom calculation and safe boost limiting
+- **Spectral masking**: Analysis and compensation of frequency masking effects
+
+## Usage
+
+```csharp
+using Ownaudio.Utilities.Matchering;
+
+// Audio matchering example
+var analyzer = new AudioAnalyzer();
+
+// Process source and target audio files
+analyzer.ProcessEQMatching(
+    sourceFile: "input_track.wav",     // Audio to be processed
+    targetFile: "reference.wav",       // Reference audio
+    outputFile: "mastered_track.wav"   // Output
+);
+
+// The processing automatically:
+// 1. Analyzes spectral properties of both files
+// 2. Calculates optimal EQ settings
+// 3. Applies multiband compression
+// 4. Performs dynamic amplification
+// 5. Generates distortion-protected output
+```
+
+## Detailed Analysis
+
+```csharp
+// Individual audio spectrum analysis
+var sourceSpectrum = analyzer.AnalyzeAudioFile("source.wav");
+
+Console.WriteLine($"RMS level: {sourceSpectrum.RMSLevel:F3}");
+Console.WriteLine($"Peak level: {sourceSpectrum.PeakLevel:F3}");
+Console.WriteLine($"Dynamic range: {sourceSpectrum.DynamicRange:F1} dB");
+Console.WriteLine($"Loudness: {sourceSpectrum.Loudness:F1} LUFS");
+
+// Output frequency band energies
+for (int i = 0; i < sourceSpectrum.FrequencyBands.Length; i++)
+{
+    Console.WriteLine($"Band {i}: {sourceSpectrum.FrequencyBands[i]:F3}");
+}
+```
+
+## Technical Specifications
+
+### Frequency Bands
+- **10 octave bands**: 31.25 Hz - 16 kHz
+- **FFT analysis**: Optimized window size (4096-16384 samples)
+- **Blackman-Harris window**: Minimal spectral leakage
+- **87.5% overlap**: High-precision frequency resolution
+
+### Compression Settings
+- **4 frequency bands**: Low, low-mid, high-mid, high
+- **Adaptive parameters**: Band-specific threshold, ratio, attack/release times
+- **Makeup gain**: Automatic level compensation
+
+### Safety Features
+- **Frequency-specific boost limits**: 4-10 dB maximum depending on frequency
+- **Dynamic headroom calculation**: Crest factor and loudness-based protection
+- **EQ curve smoothing**: Natural-sounding transitions
+- **Clipping protection**: -0.1 dB ceiling limiter
+
+## Output Example
+
+```
+=== ANALYSIS RESULTS ===
+Source - RMS: 0.123, Peak: 0.876, Loudness: -14.2 LUFS
+Target - RMS: 0.187, Peak: 0.932, Loudness: -9.8 LUFS
+Crest Factor - Source: 15.1dB, Target: 13.9dB
+Distortion Risk: LOW (Total boost: 8.2dB)
+
+EQ Adjustments (with distortion protection):
+31Hz: +2.1 dB
+63Hz: +3.4 dB
+125Hz: +1.8 dB
+250Hz: -0.5 dB
+500Hz: +0.2 dB
+1kHz: -1.2 dB
+2kHz: +1.6 dB
+4kHz: +0.8 dB
+8kHz: -2.1 dB
+16kHz: +1.9 dB
+
+=== SAFETY FEATURES ACTIVE ===
+✓ Frequency-specific boost limits
+✓ Dynamic headroom calculation
+✓ Psychoacoustic weighting
+✓ EQ curve smoothing
+✓ Safety limiter (-0.1dB ceiling)
+✓ Real-time clipping detection
+```
+
+## Application Areas
+
+- **Mastering**: Achieving consistent sound across albums
+- **Remix/remaster**: Bringing classic recordings to modern sound standards
+- **Podcast/speech**: Applying professional audio techniques
+- **Game audio**: Ensuring consistent audio atmosphere
+- **Streaming**: Meeting platform-specific loudness standards
+
+Audio matchering automatically applies the most modern psychoacoustic algorithms and safe processing techniques to ensure professional-quality results for every use case.
 
 ## Acknowledgements
 

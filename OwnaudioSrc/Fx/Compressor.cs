@@ -99,32 +99,40 @@ namespace Ownaudio.Fx
         /// <param name="samples"></param>
         public override void Process(Span<float> samples)
         {
-            // Constants for envelope follower
             float attackCoeff = (float)Math.Exp(-1.0 / (sampleRate * attackTime));
             float releaseCoeff = (float)Math.Exp(-1.0 / (sampleRate * releaseTime));
 
             for (int i = 0; i < samples.Length; i++)
             {
-                float inputLevel = Math.Abs(samples[i]);  // Get absolute value of sample for level detection
+                float inputLevel = Math.Abs(samples[i]);
 
-                if (inputLevel > envelope)   // Envelope follower
+                // Envelope follower
+                if (inputLevel > envelope)
                     envelope = attackCoeff * envelope + (1 - attackCoeff) * inputLevel;
                 else
                     envelope = releaseCoeff * envelope + (1 - releaseCoeff) * inputLevel;
 
-                float gainReduction = 1.0f;   // Calculate gain reduction
-                if (envelope > threshold)
+                float gainReduction = 1.0f;
+
+                // Add minimum threshold to prevent log(0)
+                float safeEnvelope = Math.Max(envelope, 1e-6f);
+                float safeThreshold = Math.Max(threshold, 1e-6f);
+
+                if (safeEnvelope > safeThreshold)
                 {
-                    // Convert to dB for easier calculation
-                    float levelDb = 20 * (float)Math.Log10(envelope);
-                    float thresholdDb = 20 * (float)Math.Log10(threshold);
+                    float levelDb = 20 * (float)Math.Log10(safeEnvelope);
+                    float thresholdDb = 20 * (float)Math.Log10(safeThreshold);
 
-                    float compressedDb = thresholdDb + (levelDb - thresholdDb) / ratio; // Apply compression ratio
+                    float compressedDb = thresholdDb + (levelDb - thresholdDb) / ratio;
 
-                    gainReduction = (float)Math.Pow(10, (compressedDb - levelDb) / 20); // Convert back to linear gain
+                    // Limit extreme gain reduction
+                    float gainReductionDb = compressedDb - levelDb;
+                    gainReductionDb = Math.Max(gainReductionDb, -60f); // Max -60dB reduction
+
+                    gainReduction = (float)Math.Pow(10, gainReductionDb / 20);
                 }
 
-                samples[i] *= gainReduction * makeupGain; // Apply compression and makeup gain
+                samples[i] *= gainReduction * makeupGain;
             }
         }
 

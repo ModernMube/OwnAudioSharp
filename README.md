@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
   <img src="Ownaudiologo.png" alt="Logo" width="600"/>
 </div>
 
@@ -29,6 +29,22 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 - **Seeking** within audio files
 - **Real-time audio processing** with custom sample processors
 - **Audio data visualize** customizable waveform display
+
+# 🎵 NEW: Audio Matchering in OwnAudioSharp!
+
+**Professional mastering automatically - single line of code!**
+
+```csharp
+analyzer.ProcessEQMatching("source.wav", "reference.wav", "mastered.wav");
+```
+
+⚡ **What you get:**
+- Intelligent 10-band EQ matching
+- Multiband compression across 4 frequency bands  
+- Psychoacoustic weighting and spectral masking
+- Distortion-protected automatic processing
+
+🎯 **Result:** Your source audio will sound exactly like the reference track - professional mastering studio quality.
 
 The table below summarizes the supported operating systems, the APIs used, and their testing status.
 
