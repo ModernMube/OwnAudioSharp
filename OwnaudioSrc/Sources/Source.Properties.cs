@@ -130,7 +130,7 @@ public partial class Source : ISource
     /// <summary>
     /// Gets or sets current <see cref="IAudioDecoder"/> instance.
     /// </summary>
-    protected IAudioDecoder? CurrentDecoder { get; set; }
+    public IAudioDecoder? CurrentDecoder { get; set; }
 
     /// <summary>
     /// Gets or sets current specified audio stream.
