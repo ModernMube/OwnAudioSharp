@@ -332,8 +332,15 @@ namespace Ownaudio.Utilities.Matchering
                 float loudnessWeight = CalculateLoudnessWeighting(freq);
                 float masking = CalculateSpectralMasking(spectrum, i);
 
-                float totalWeight = (aWeight + loudnessWeight) / 2.0f;
-                totalWeight *= (1.0f - masking);
+                // Csökkentett súlyozás - kevésbé befolyásolja az eredményt
+                float totalWeight = (aWeight + loudnessWeight) / 4.0f; // 2.0f helyett 4.0f
+                totalWeight *= (1.0f - masking * 0.5f); // masking hatás csökkentése
+
+                // Magasak esetén még kisebb súlyozás
+                if (freq > 4000f)
+                {
+                    totalWeight *= 0.5f;
+                }
 
                 weightedSpectrum[i] = spectrum[i] * (float)Math.Pow(10, totalWeight / 20.0);
             }

@@ -141,10 +141,11 @@ namespace Ownaudio.Utilities.Matchering
                     adjusted.ReleaseTime *= 0.8f;
                     break;
 
-                case 3:
-                    adjusted.AttackTime *= 0.3f;
+                case 3: 
+                    adjusted.AttackTime *= 0.5f;  
                     adjusted.ReleaseTime *= 0.6f;
-                    adjusted.Ratio = Math.Min(adjusted.Ratio * 1.2f, 8.0f);
+                    adjusted.Ratio = Math.Min(adjusted.Ratio * 1.1f, 4.0f); 
+                    adjusted.Threshold += 1.0f; 
                     break;
             }
 
