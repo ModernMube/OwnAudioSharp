@@ -221,11 +221,6 @@ public class MyAudioProcessor : SampleProcessorBase
     {
         // Reset internal state if needed
     }
-    
-    public override void Reset()
-    {
-        // Reset internal state if needed
-    }
 }
 
 // Apply the processor to source manager
