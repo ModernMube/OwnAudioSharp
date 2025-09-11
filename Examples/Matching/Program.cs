@@ -1,5 +1,6 @@
 ﻿using Ownaudio;
 using Ownaudio.Utilities.Matchering;
+using System.Diagnostics;
 
 class Program
 {
@@ -12,9 +13,9 @@ class Program
                 var processor = new AudioAnalyzer();
 
                 processor.ProcessEQMatching(
-                    sourceFile: @"path/audio/source.mp3",   // File to be processed
-                    targetFile: @"path/audio/target.mp3",   // Reference file
-                    outputFile: @"path/audio/output.mp3");  // Output file that we create
+                    sourceFile: @"path\audio\source.wav",   // File to be processed
+                    targetFile: @"path\audio\target.wav",   // Reference file
+                    outputFile: @"path\output.wav");  // Output file that we create
 
                 OwnAudio.Free();
             }
