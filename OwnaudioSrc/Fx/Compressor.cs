@@ -52,7 +52,7 @@ namespace Ownaudio.Fx
     }
 
     /// <summary>
-    /// Compressor effekt
+    /// Professional compressor with startup protection against initial distortion
     /// </summary>
     public class Compressor : SampleProcessorBase
     {
@@ -64,8 +64,14 @@ namespace Ownaudio.Fx
         private float envelope = 0.0f;
         private float sampleRate = 44100f;
 
+        // Startup protection variables
+        private bool isInitialized = false;
+        private int startupSampleCount = 0;
+        private int startupProtectionSamples;
+        private float initialEnvelope = 0.0f;
+
         /// <summary>
-        /// Constructor with all parameters - initializes compressor with specified settings
+        /// Constructor with all parameters - initializes compressor with specified settings and startup protection
         /// </summary>
         /// <param name="threshold">Threshold level in range [0,1]</param>
         /// <param name="ratio">Compression ratio (N:1)</param>
@@ -82,6 +88,8 @@ namespace Ownaudio.Fx
             ReleaseTime = releaseTime;
             MakeupGain = makeupGain;
             SampleRate = sampleRate;
+
+            ResetStartupProtection();
         }
 
         /// <summary>
@@ -91,12 +99,13 @@ namespace Ownaudio.Fx
         public Compressor(CompressorPreset preset)
         {
             SetPreset(preset);
+            ResetStartupProtection();
         }
 
         /// <summary>
-        /// Compressor process
+        /// Compressor process with startup protection against initial distortion
         /// </summary>
-        /// <param name="samples"></param>
+        /// <param name="samples">Audio samples to process in-place</param>
         public override void Process(Span<float> samples)
         {
             float attackCoeff = (float)Math.Exp(-1.0 / (sampleRate * attackTime));
@@ -106,7 +115,15 @@ namespace Ownaudio.Fx
             {
                 float inputLevel = Math.Abs(samples[i]);
 
-                // Envelope follower
+                // Initialize envelope on first significant signal
+                if (!isInitialized && inputLevel > 0.001f)
+                {
+                    initialEnvelope = inputLevel * 0.5f; // Conservative initial value
+                    envelope = initialEnvelope;
+                    isInitialized = true;
+                }
+
+                // Envelope follower with startup protection
                 if (inputLevel > envelope)
                     envelope = attackCoeff * envelope + (1 - attackCoeff) * inputLevel;
                 else
@@ -114,26 +131,116 @@ namespace Ownaudio.Fx
 
                 float gainReduction = 1.0f;
 
-                // Add minimum threshold to prevent log(0)
-                float safeEnvelope = Math.Max(envelope, 1e-6f);
-                float safeThreshold = Math.Max(threshold, 1e-6f);
-
-                if (safeEnvelope > safeThreshold)
+                // Apply startup protection during first samples
+                if (startupSampleCount < startupProtectionSamples)
                 {
-                    float levelDb = 20 * (float)Math.Log10(safeEnvelope);
-                    float thresholdDb = 20 * (float)Math.Log10(safeThreshold);
-
-                    float compressedDb = thresholdDb + (levelDb - thresholdDb) / ratio;
-
-                    // Limit extreme gain reduction
-                    float gainReductionDb = compressedDb - levelDb;
-                    gainReductionDb = Math.Max(gainReductionDb, -60f); // Max -60dB reduction
-
-                    gainReduction = (float)Math.Pow(10, gainReductionDb / 20);
+                    gainReduction = ApplyStartupProtectedCompression(inputLevel);
+                    startupSampleCount++;
+                }
+                else
+                {
+                    // Normal compression after startup period
+                    gainReduction = ApplyNormalCompression();
                 }
 
                 samples[i] *= gainReduction * makeupGain;
             }
+        }
+
+        /// <summary>
+        /// Applies gentle compression during startup period with output range protection
+        /// </summary>
+        /// <param name="inputLevel">Current input signal level</param>
+        /// <returns>Gain reduction factor for startup protection with safe output limiting</returns>
+        private float ApplyStartupProtectedCompression(float inputLevel)
+        {
+            float protectionFactor = 1.0f - ((float)startupSampleCount / startupProtectionSamples);
+
+            // Very conservative compression during startup
+            float safeEnvelope = Math.Max(envelope, 1e-6f);
+            float safeThreshold = Math.Max(threshold * (1.0f + protectionFactor), 1e-6f);
+
+            if (safeEnvelope > safeThreshold)
+            {
+                float gentleRatio = 1.0f + ((ratio - 1.0f) * (1.0f - protectionFactor * 0.8f));
+
+                float levelDb = 20 * (float)Math.Log10(safeEnvelope);
+                float thresholdDb = 20 * (float)Math.Log10(safeThreshold);
+
+                float compressedDb = thresholdDb + (levelDb - thresholdDb) / gentleRatio;
+                float gainReductionDb = Math.Max(compressedDb - levelDb, -30f); // Limited reduction during startup
+
+                float baseGainReduction = (float)Math.Pow(10, gainReductionDb / 20);
+                
+                // Calculate maximum safe gain considering makeup gain during startup
+                // Even more conservative during startup - use 0.8 instead of 0.95
+                float maximumSafeGain = 0.8f / Math.Max(safeEnvelope, 1e-6f);
+                float totalGain = baseGainReduction * makeupGain;
+                
+                // Limit total gain to prevent clipping during startup
+                if (totalGain > maximumSafeGain)
+                {
+                    return maximumSafeGain;
+                }
+                
+                return baseGainReduction;
+            }
+
+            // When below threshold during startup, still check makeup gain safety
+            float noCompressionGain = 1.0f * makeupGain;
+            float maxSafeGain = 0.8f / Math.Max(safeEnvelope, 1e-6f);
+            
+            if (noCompressionGain > maxSafeGain)
+            {
+                return maxSafeGain;
+            }
+
+            return 1.0f;
+        }
+
+        /// <summary>
+        /// Applies normal compression after startup period with output range protection
+        /// </summary>
+        /// <returns>Gain reduction factor for normal operation with safe output limiting</returns>
+        private float ApplyNormalCompression()
+        {
+            float safeEnvelope = Math.Max(envelope, 1e-6f);
+            float safeThreshold = Math.Max(threshold, 1e-6f);
+
+            if (safeEnvelope > safeThreshold)
+            {
+                float levelDb = 20 * (float)Math.Log10(safeEnvelope);
+                float thresholdDb = 20 * (float)Math.Log10(safeThreshold);
+
+                float compressedDb = thresholdDb + (levelDb - thresholdDb) / ratio;
+                float gainReductionDb = Math.Max(compressedDb - levelDb, -60f);
+
+                float baseGainReduction = (float)Math.Pow(10, gainReductionDb / 20);
+                
+                // Calculate maximum safe gain considering makeup gain
+                // Ensure final output stays within [-0.95, 0.95] for safety margin
+                float maximumSafeGain = 0.95f / Math.Max(safeEnvelope, 1e-6f);
+                float totalGain = baseGainReduction * makeupGain;
+                
+                // Limit total gain to prevent clipping
+                if (totalGain > maximumSafeGain)
+                {
+                    return maximumSafeGain;
+                }
+                
+                return baseGainReduction;
+            }
+
+            // When below threshold, still check if makeup gain alone would cause clipping
+            float noCompressionGain = 1.0f * makeupGain;
+            float maxSafeGain = 0.95f / Math.Max(safeEnvelope, 1e-6f);
+            
+            if (noCompressionGain > maxSafeGain)
+            {
+                return maxSafeGain;
+            }
+
+            return 1.0f;
         }
 
         /// <summary>
@@ -216,12 +323,24 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
+        /// Resets startup protection state
+        /// </summary>
+        private void ResetStartupProtection()
+        {
+            isInitialized = false;
+            startupSampleCount = 0;
+            initialEnvelope = 0.0f;
+            startupProtectionSamples = (int)(sampleRate * 0.05f); // 50ms protection
+        }
+
+        /// <summary>
         /// Resets internal state but preserves current parameter settings
         /// </summary>
         public override void Reset()
         {
             // Clear internal state but keep current parameter values
             envelope = 0.0f;
+            ResetStartupProtection();
         }
 
         /// <summary>
@@ -257,7 +376,11 @@ namespace Ownaudio.Fx
         public float AttackTime
         {
             get => attackTime * 1000f;
-            set => attackTime = FastClamp(value, 0.1f, 1000f) / 1000f;
+            set
+            {
+                attackTime = FastClamp(value, 0.1f, 1000f) / 1000f;
+                ResetStartupProtection(); // Recalculate protection samples
+            }
         }
 
         /// <summary>
@@ -293,12 +416,18 @@ namespace Ownaudio.Fx
         public float SampleRate
         {
             get => sampleRate;
-            set => sampleRate = FastClamp(value, 8000f, 192000f);
+            set
+            {
+                sampleRate = FastClamp(value, 8000f, 192000f);
+                ResetStartupProtection(); // Recalculate protection samples
+            }
         }
 
         /// <summary>
         /// Converts linear amplitude to decibels
         /// </summary>
+        /// <param name="linear">Linear amplitude value</param>
+        /// <returns>Value in decibels</returns>
         public static float LinearToDb(float linear)
         {
             return 20f * (float)Math.Log10(Math.Max(linear, 1e-6f));
@@ -307,6 +436,8 @@ namespace Ownaudio.Fx
         /// <summary>
         /// Converts decibels to linear amplitude
         /// </summary>
+        /// <param name="dB">Value in decibels</param>
+        /// <returns>Linear amplitude value</returns>
         public static float DbToLinear(float dB)
         {
             return (float)Math.Pow(10f, dB / 20f);

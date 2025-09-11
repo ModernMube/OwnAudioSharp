@@ -317,12 +317,23 @@ namespace Ownaudio.Tests.Effects
 
         [TestMethod]
         [Priority(6)]
+        [TestCategory("Isolated")]
         public async Task Test6_EffectPerformanceAndStability()
         {
             Console.WriteLine("=== Testing Effect Performance and Stability ===");
 
             // Clear previous sources
-            _manager.ResetAll();
+            try
+            {
+                _manager.Stop();
+                _manager.ResetAll();
+
+                await Task.Delay(100);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Cleanup error: {ex.Message}");
+            }
 
             // Load test audio
             Console.WriteLine("Setting up performance test...");

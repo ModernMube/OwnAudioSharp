@@ -1,44 +1,36 @@
 using MathNet.Numerics.IntegralTransforms;
 using Ownaudio.Sources;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 
 namespace Ownaudio.Utilities.Matchering
 {
     /// <summary>
-    /// Audio spectrum analysis and EQ matching implementation
+    /// Provides audio spectrum analysis and EQ matching functionality for audio processing applications.
+    /// Implements advanced FFT-based frequency analysis and intelligent EQ adjustment algorithms.
     /// </summary>
     public partial class AudioAnalyzer
     {
         #region Constants and Fields
 
         /// <summary>
-        /// Center frequencies for frequency bands (Hz)
+        /// Standard ISO frequency bands used for 10-band equalizer analysis (Hz).
         /// </summary>
         private readonly float[] FrequencyBands = {
-            31.25f,
-            62.5f,
-            125f,
-            250f,
-            500f,
-            1000f,
-            2000f,
-            4000f,
-            8000f,
-            16000f
+            31.25f, 62.5f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f
         };
 
         #endregion
 
-        #region Public Methods
+        #region Public API Methods
 
         /// <summary>
-        /// Analyzes spectrum from an audio file
+        /// Analyzes the frequency spectrum and dynamics of an audio file.
         /// </summary>
-        /// <param name="filePath">Path to the audio file</param>
-        /// <returns>Audio spectrum analysis results</returns>
+        /// <param name="filePath">Full path to the audio file to analyze</param>
+        /// <returns>Complete spectrum analysis including frequency bands and dynamic range information</returns>
+        /// <exception cref="InvalidOperationException">Thrown when the audio file cannot be loaded</exception>
         public AudioSpectrum AnalyzeAudioFile(string filePath)
         {
             using var source = new Source();
@@ -52,7 +44,6 @@ namespace Ownaudio.Utilities.Matchering
             var sampleRate = source.CurrentDecoder?.StreamInfo.SampleRate ?? 44100;
 
             var monoData = ConvertToMono(audioData, channels);
-
             var frequencySpectrum = AnalyzeFrequencySpectrumAdvanced(monoData, sampleRate);
             var dynamics = AnalyzeDynamics(monoData);
 
@@ -67,11 +58,11 @@ namespace Ownaudio.Utilities.Matchering
         }
 
         /// <summary>
-        /// Performs EQ matching and processing
+        /// Performs complete EQ matching between source and target audio files with intelligent processing.
         /// </summary>
-        /// <param name="sourceFile">Source audio file path</param>
-        /// <param name="targetFile">Target audio file path</param>
-        /// <param name="outputFile">Output file path</param>
+        /// <param name="sourceFile">Path to the source audio file to be processed</param>
+        /// <param name="targetFile">Path to the target audio file to match</param>
+        /// <param name="outputFile">Path where the processed audio will be saved</param>
         public void ProcessEQMatching(string sourceFile, string targetFile, string outputFile)
         {
             Console.WriteLine("Analyzing source audio...");
@@ -80,12 +71,11 @@ namespace Ownaudio.Utilities.Matchering
             Console.WriteLine("Analyzing target audio...");
             var targetSpectrum = AnalyzeAudioFile(targetFile);
 
-            var eqAdjustments = CalculateEQAdjustments(sourceSpectrum, targetSpectrum);
-            var compressionSettings = CalculateMultibandCompressionSettings(sourceSpectrum, targetSpectrum);
+            var eqAdjustments = CalculateDirectEQAdjustments(sourceSpectrum, targetSpectrum);
             var ampSettings = CalculateDynamicAmpSettings(sourceSpectrum, targetSpectrum);
 
-            Console.WriteLine("Processing audio with calculated settings...");
-            ApplyProcessingOffline(sourceFile, outputFile, eqAdjustments, compressionSettings, ampSettings);
+            Console.WriteLine("Processing audio with direct EQ approach...");
+            ApplyDirectEQProcessing(sourceFile, outputFile, eqAdjustments, ampSettings);
 
             Console.WriteLine($"EQ matching completed. Output saved to: {outputFile}");
             PrintAnalysisResults(sourceSpectrum, targetSpectrum, eqAdjustments);
@@ -93,14 +83,14 @@ namespace Ownaudio.Utilities.Matchering
 
         #endregion
 
-        #region Audio Conversion
+        #region Audio Format Conversion
 
         /// <summary>
-        /// Converts stereo audio to mono
+        /// Converts multi-channel audio data to mono by averaging channels.
         /// </summary>
-        /// <param name="audioData">Input audio data</param>
-        /// <param name="channels">Number of channels</param>
-        /// <returns>Mono audio data</returns>
+        /// <param name="audioData">Input audio data array</param>
+        /// <param name="channels">Number of audio channels</param>
+        /// <returns>Mono audio data array</returns>
         private float[] ConvertToMono(float[] audioData, int channels)
         {
             if (channels == 1) return audioData;
@@ -115,14 +105,14 @@ namespace Ownaudio.Utilities.Matchering
 
         #endregion
 
-        #region Frequency Analysis
+        #region Frequency Spectrum Analysis
 
         /// <summary>
-        /// Advanced frequency spectrum analysis using FFT
+        /// Performs advanced frequency spectrum analysis using overlapped FFT with Blackman-Harris windowing.
         /// </summary>
-        /// <param name="audioData">Audio data to analyze</param>
-        /// <param name="sampleRate">Sample rate in Hz</param>
-        /// <returns>Frequency spectrum data</returns>
+        /// <param name="audioData">Audio samples to analyze</param>
+        /// <param name="sampleRate">Sample rate of the audio in Hz</param>
+        /// <returns>Normalized frequency spectrum energy values for each band</returns>
         private float[] AnalyzeFrequencySpectrumAdvanced(float[] audioData, int sampleRate)
         {
             int fftSize = GetOptimalFFTSize(sampleRate);
@@ -160,19 +150,14 @@ namespace Ownaudio.Utilities.Matchering
                 bandEnergies[i] /= windowCount;
             }
 
-            var rawSpectrum = NormalizeSpectrum(bandEnergies);
-
-            var sourceSpectrum = new AudioSpectrum { FrequencyBands = rawSpectrum };
-            var weightedSpectrum = ApplyPsychoacousticWeighting(rawSpectrum, sourceSpectrum);
-
-            return weightedSpectrum;
+            return NormalizeSpectrum(bandEnergies);
         }
 
         /// <summary>
-        /// Determines optimal FFT size based on sample rate
+        /// Determines the optimal FFT size based on the audio sample rate for best frequency resolution.
         /// </summary>
-        /// <param name="sampleRate">Audio sample rate</param>
-        /// <returns>Optimal FFT size</returns>
+        /// <param name="sampleRate">Audio sample rate in Hz</param>
+        /// <returns>Optimal FFT size as power of 2</returns>
         private int GetOptimalFFTSize(int sampleRate)
         {
             if (sampleRate >= 96000) return 16384;
@@ -181,14 +166,14 @@ namespace Ownaudio.Utilities.Matchering
         }
 
         /// <summary>
-        /// Calculates energy for a specific frequency band using advanced methods
+        /// Calculates weighted energy for a specific frequency band using advanced interpolation.
         /// </summary>
-        /// <param name="fftOutput">FFT output data</param>
-        /// <param name="centerFreq">Center frequency of the band</param>
-        /// <param name="sampleRate">Audio sample rate</param>
-        /// <param name="fftSize">FFT size used</param>
-        /// <param name="windowNormFactor">Window normalization factor</param>
-        /// <returns>Band energy value</returns>
+        /// <param name="fftOutput">Complex FFT output data</param>
+        /// <param name="centerFreq">Center frequency of the band in Hz</param>
+        /// <param name="sampleRate">Audio sample rate in Hz</param>
+        /// <param name="fftSize">Size of the FFT used</param>
+        /// <param name="windowNormFactor">Window function normalization factor</param>
+        /// <returns>Weighted RMS energy value for the frequency band</returns>
         private float CalculateBandEnergyAdvanced(Complex[] fftOutput, float centerFreq,
                                           int sampleRate, int fftSize, float windowNormFactor)
         {
@@ -214,7 +199,6 @@ namespace Ownaudio.Utilities.Matchering
                 if (binFreq < startFreq || binFreq > endFreq) continue;
 
                 double weight = CalculateFrequencyWeight(binFreq, centerFreq, bandwidth);
-
                 double magnitude = fftOutput[bin].Magnitude;
                 energySum += magnitude * magnitude * weight;
                 weightSum += weight;
@@ -223,19 +207,18 @@ namespace Ownaudio.Utilities.Matchering
             if (weightSum == 0) return 0;
 
             double weightedRMS = Math.Sqrt(energySum / weightSum);
-
             weightedRMS /= (windowNormFactor * fftSize / 2.0);
 
             return (float)weightedRMS;
         }
 
         /// <summary>
-        /// Calculates frequency weighting for band analysis
+        /// Calculates linear weighting for frequency bins within a band based on distance from center.
         /// </summary>
-        /// <param name="binFreq">Frequency of the FFT bin</param>
-        /// <param name="centerFreq">Center frequency of the band</param>
-        /// <param name="bandwidth">Bandwidth of the frequency band</param>
-        /// <returns>Weight value</returns>
+        /// <param name="binFreq">Frequency of the FFT bin in Hz</param>
+        /// <param name="centerFreq">Center frequency of the band in Hz</param>
+        /// <param name="bandwidth">Total bandwidth of the frequency band in Hz</param>
+        /// <returns>Linear weight value between 0 and 1</returns>
         private double CalculateFrequencyWeight(double binFreq, float centerFreq, float bandwidth)
         {
             double distance = Math.Abs(binFreq - centerFreq);
@@ -247,10 +230,10 @@ namespace Ownaudio.Utilities.Matchering
         }
 
         /// <summary>
-        /// Calculates bandwidth for a given center frequency
+        /// Calculates the bandwidth for a frequency band using proportional scaling.
         /// </summary>
-        /// <param name="centerFreq">Center frequency</param>
-        /// <returns>Bandwidth in Hz</returns>
+        /// <param name="centerFreq">Center frequency of the band in Hz</param>
+        /// <returns>Bandwidth in Hz proportional to center frequency</returns>
         private float GetBandwidth(float centerFreq)
         {
             return centerFreq * 0.23f;
@@ -261,10 +244,10 @@ namespace Ownaudio.Utilities.Matchering
         #region Window Functions
 
         /// <summary>
-        /// Generates Blackman-Harris window function
+        /// Generates a Blackman-Harris window function for FFT windowing with excellent sidelobe suppression.
         /// </summary>
-        /// <param name="size">Window size</param>
-        /// <returns>Window coefficients</returns>
+        /// <param name="size">Size of the window in samples</param>
+        /// <returns>Array of window coefficients</returns>
         private float[] GenerateBlackmanHarrisWindow(int size)
         {
             var window = new float[size];
@@ -284,12 +267,12 @@ namespace Ownaudio.Utilities.Matchering
         }
 
         /// <summary>
-        /// Prepares FFT input data with windowing and zero-padding
+        /// Prepares audio data for FFT analysis by applying windowing and zero-padding.
         /// </summary>
-        /// <param name="audioSegment">Audio data segment</param>
+        /// <param name="audioSegment">Audio data segment to process</param>
         /// <param name="window">Window function coefficients</param>
-        /// <param name="fftSize">Target FFT size</param>
-        /// <returns>Prepared complex array for FFT</returns>
+        /// <param name="fftSize">Target FFT size for zero-padding</param>
+        /// <returns>Complex array ready for FFT processing</returns>
         private Complex[] PrepareFFTInput(float[] audioSegment, float[] window, int fftSize)
         {
             var fftInput = new Complex[fftSize];
@@ -312,205 +295,13 @@ namespace Ownaudio.Utilities.Matchering
 
         #endregion
 
-        #region Psychoacoustic Processing
+        #region Signal Processing Utilities
 
         /// <summary>
-        /// Applies psychoacoustic weighting to frequency spectrum
+        /// Normalizes spectrum values to a 0-1 range based on the maximum energy value.
         /// </summary>
-        /// <param name="spectrum">Input frequency spectrum</param>
-        /// <param name="sourceSpectrum">Source audio spectrum for context</param>
-        /// <returns>Weighted spectrum</returns>
-        private float[] ApplyPsychoacousticWeighting(float[] spectrum, AudioSpectrum sourceSpectrum)
-        {
-            var weightedSpectrum = new float[spectrum.Length];
-
-            for (int i = 0; i < FrequencyBands.Length; i++)
-            {
-                float freq = FrequencyBands[i];
-
-                float aWeight = CalculateAWeighting(freq);
-                float loudnessWeight = CalculateLoudnessWeighting(freq);
-                float masking = CalculateSpectralMasking(spectrum, i);
-
-                // Csökkentett súlyozás - kevésbé befolyásolja az eredményt
-                float totalWeight = (aWeight + loudnessWeight) / 4.0f; // 2.0f helyett 4.0f
-                totalWeight *= (1.0f - masking * 0.5f); // masking hatás csökkentése
-
-                // Magasak esetén még kisebb súlyozás
-                if (freq > 4000f)
-                {
-                    totalWeight *= 0.5f;
-                }
-
-                weightedSpectrum[i] = spectrum[i] * (float)Math.Pow(10, totalWeight / 20.0);
-            }
-
-            return weightedSpectrum;
-        }
-
-        /// <summary>
-        /// Calculates A-weighting curve value for a frequency
-        /// </summary>
-        /// <param name="frequency">Frequency in Hz</param>
-        /// <returns>A-weighting value in dB</returns>
-        private float CalculateAWeighting(float frequency)
-        {
-            double f = frequency;
-            double f2 = f * f;
-            double f4 = f2 * f2;
-
-            const double c1 = 12194.0 * 12194.0;
-            const double c2 = 20.6 * 20.6;
-            const double c3 = 107.7 * 107.7;
-            const double c4 = 737.9 * 737.9;
-
-            double numerator = c1 * f4;
-            double denominator = (f2 + c2) * Math.Sqrt((f2 + c3) * (f2 + c4)) * (f2 + c1);
-
-            double aWeight = 20.0 * Math.Log10(numerator / denominator) + 2.0;
-
-            return (float)Math.Max(-50.0, Math.Min(10.0, aWeight));
-        }
-
-        /// <summary>
-        /// Calculates equal loudness contour weighting (ISO 226)
-        /// </summary>
-        /// <param name="frequency">Frequency in Hz</param>
-        /// <returns>Loudness weighting in dB</returns>
-        private float CalculateLoudnessWeighting(float frequency)
-        {
-            var loudnessTable = new Dictionary<float, float>
-            {
-                { 31.25f, -39.0f },   { 62.5f, -26.0f },    { 125f, -16.0f },
-                { 250f, -8.6f },      { 500f, -3.2f },      { 1000f, 0.0f },
-                { 2000f, 1.0f },      { 4000f, 1.0f },      { 8000f, -1.1f },
-                { 16000f, -6.6f }
-            };
-
-            var sortedKeys = loudnessTable.Keys.OrderBy(x => x).ToArray();
-
-            if (frequency <= sortedKeys[0]) return loudnessTable[sortedKeys[0]];
-            if (frequency >= sortedKeys.Last()) return loudnessTable[sortedKeys.Last()];
-
-            for (int i = 0; i < sortedKeys.Length - 1; i++)
-            {
-                if (frequency >= sortedKeys[i] && frequency <= sortedKeys[i + 1])
-                {
-                    float ratio = (frequency - sortedKeys[i]) / (sortedKeys[i + 1] - sortedKeys[i]);
-                    return loudnessTable[sortedKeys[i]] +
-                           ratio * (loudnessTable[sortedKeys[i + 1]] - loudnessTable[sortedKeys[i]]);
-                }
-            }
-
-            return 0.0f;
-        }
-
-        /// <summary>
-        /// Calculates spectral masking effects
-        /// </summary>
-        /// <param name="spectrum">Frequency spectrum</param>
-        /// <param name="bandIndex">Index of the band to analyze</param>
-        /// <returns>Masking factor (0-1)</returns>
-        private float CalculateSpectralMasking(float[] spectrum, int bandIndex)
-        {
-            float masking = 0.0f;
-
-            for (int i = 0; i < spectrum.Length; i++)
-            {
-                if (i == bandIndex) continue;
-
-                float freqDiff = Math.Abs(FrequencyBands[i] - FrequencyBands[bandIndex]);
-                float levelDiff = spectrum[i] - spectrum[bandIndex];
-
-                if (levelDiff > 0 && freqDiff < FrequencyBands[bandIndex] * 0.5f)
-                {
-                    float maskingStrength = levelDiff * (1.0f - freqDiff / (FrequencyBands[bandIndex] * 0.5f));
-                    masking = Math.Max(masking, Math.Min(0.8f, maskingStrength * 0.1f));
-                }
-            }
-
-            return masking;
-        }
-
-        #endregion
-         
-        #region Audio Processing
-
-        /// <summary>
-        /// Applies processing to audio file with calculated settings
-        /// </summary>
-        /// <param name="inputFile">Input file path</param>
-        /// <param name="outputFile">Output file path</param>
-        /// <param name="eqAdjustments">EQ adjustment values</param>
-        /// <param name="compression">Compression settings</param>
-        /// <param name="dynamicAmp">Dynamic amplification settings</param>
-        private void ApplyProcessingOffline(string inputFile, string outputFile,
-            float[] eqAdjustments, CompressionSettings[] compression, DynamicAmpSettings dynamicAmp)
-        {
-            try
-            {
-                Console.WriteLine($"Starting offline processing: {inputFile} -> {outputFile}");
-
-                using var source = new Source();
-                source.LoadAsync(inputFile).Wait();
-
-                if (!source.IsLoaded)
-                    throw new InvalidOperationException($"Cannot load audio file: {inputFile}");
-
-                var audioData = source.GetFloatAudioData(TimeSpan.Zero);
-                var channels = source.CurrentDecoder?.StreamInfo.Channels ?? 2;
-                var sampleRate = source.CurrentDecoder?.StreamInfo.SampleRate ?? 44100;
-                var totalDuration = source.Duration;
-
-                Console.WriteLine($"Audio loaded: {totalDuration}, {channels} channels, {sampleRate} Hz");
-
-                var processor = new MultibandProcessor(eqAdjustments, compression, dynamicAmp);
-
-                int chunkSize = 512 * channels;
-                var processedData = new List<float>();
-
-                int totalSamples = audioData.Length;
-                int processedSamples = 0;
-
-                for (int offset = 0; offset < totalSamples; offset += chunkSize)
-                {
-                    int samplesToProcess = Math.Min(chunkSize, totalSamples - offset);
-
-                    var chunk = new float[samplesToProcess];
-                    Array.Copy(audioData, offset, chunk, 0, samplesToProcess);
-
-                    processor.Process(chunk.AsSpan());
-
-                    processedData.AddRange(chunk);
-
-                    processedSamples += samplesToProcess;
-                    float progress = (float)processedSamples / totalSamples * 100f;
-
-                    Console.Write($"\rProcessing: {progress:F1}%");
-                }
-
-                Console.WriteLine("\nProcessing completed. Writing to file...");
-
-                Ownaudio.Utilities.WaveFile.WriteFile(outputFile, processedData.ToArray(), sampleRate, channels, 24);
-
-                Console.WriteLine($"Output file created: {outputFile}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error during offline processing: {ex.Message}");
-                throw;
-            }
-        }
-
-        #endregion
-
-        #region Utility Methods
-
-        /// <summary>
-        /// Normalizes frequency spectrum values
-        /// </summary>
-        /// <param name="spectrum">Input spectrum</param>
-        /// <returns>Normalized spectrum</returns>
+        /// <param name="spectrum">Input frequency spectrum array</param>
+        /// <returns>Normalized spectrum with values between 0 and 1</returns>
         private float[] NormalizeSpectrum(float[] spectrum)
         {
             float max = spectrum.Max();
@@ -524,12 +315,16 @@ namespace Ownaudio.Utilities.Matchering
             return spectrum;
         }
 
+        #endregion
+
+        #region Results and Diagnostics
+
         /// <summary>
-        /// Prints detailed analysis results to console
+        /// Prints comprehensive analysis results and safety information to the console.
         /// </summary>
-        /// <param name="source">Source spectrum analysis</param>
-        /// <param name="target">Target spectrum analysis</param>
-        /// <param name="eqAdjustments">Applied EQ adjustments</param>
+        /// <param name="source">Source audio spectrum analysis</param>
+        /// <param name="target">Target audio spectrum analysis</param>
+        /// <param name="eqAdjustments">Applied EQ adjustments in dB</param>
         private void PrintAnalysisResults(AudioSpectrum source, AudioSpectrum target, float[] eqAdjustments)
         {
             Console.WriteLine("\n=== ANALYSIS RESULTS ===");
