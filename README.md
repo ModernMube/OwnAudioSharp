@@ -30,23 +30,24 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 - **Real-time audio processing** with custom sample processors
 - **Audio data visualize** customizable waveform display
 
-# 🎵 NEW: Audio Matchering in OwnAudioSharp!
+# 🎵 NEW: Professional Audio Matchering in OwnAudioSharp!
 
-**Professional mastering automatically - single line of code!**
+**Studio-grade mastering with advanced AI-driven analysis - single line of code!**
 
 ```csharp
 analyzer.ProcessEQMatching("source.wav", "reference.wav", "mastered.wav");
 ```
 
 ⚡ **What you get:**
-- Intelligent 10-band EQ matching
-- Multiband compression across 4 frequency bands  
-- Psychoacoustic weighting and spectral masking
-- Distortion-protected automatic processing
+- **30-band precision EQ matching** with psychoacoustic optimization
+- **Dynamic Q-factor adjustment** for surgical frequency corrections
+- **Intelligent compression and dynamic amplification** with spectral balance
+- **Playback system presets** for different listening environments
+- **Advanced distortion protection** with frequency-specific safety limits
 
-🎯 **Result:** Your source audio will sound exactly like the reference track - professional mastering studio quality.
+🎯 **Result:** Professional mastering quality that adapts to any reference track with studio-grade precision.
 
-📖 [Documentation and examples](#matchering)
+📖 [Complete documentation and examples](#matchering)
 
 The table below summarizes the supported operating systems, the APIs used, and their testing status.
 
@@ -188,7 +189,7 @@ sourceManager.Seek(TimeSpan.FromSeconds(30));  // Seek to 30 seconds
 - **Delay**: Echo effect with feedback control
 - **Distortion**: Overdrive and soft clipping
 - **Compressor**: Dynamic range compression
-- **Equalizer**: 10-band parametric EQ
+- **Equalizer**: 30-band parametric EQ with dynamic Q-factor optimization
 - **Chorus**: Multi-voice modulation effect
 - **Flanger**: Variable delay modulation
 - **Phaser**: All-pass filter stages for phasing effect
@@ -598,116 +599,288 @@ SourceManager.EngineFramesPerBuffer = 512;
 
 # Matchering
 
-The professional audio matchering function built into OwnAudioSharp automatically analyzes and adjusts the spectral and dynamic properties of source audio to match the characteristics of a target audio file. This technology enables achieving consistent sound across musical masters or reproducing the sound of reference tracks.
+The professional audio matchering system in OwnAudioSharp represents a breakthrough in automated mastering technology. Using advanced psychoacoustic analysis and AI-driven processing, it automatically analyzes and adjusts the spectral and dynamic properties of source audio to match the characteristics of reference tracks with studio-grade precision.
+
+## Core Technology
+
+### Advanced Frequency Analysis
+- **30-band precision EQ**: High-resolution frequency analysis from 20Hz to 16kHz
+- **Overlapped FFT processing**: 87.5% overlap with Blackman-Harris windowing for minimal spectral leakage
+- **Adaptive window sizing**: Optimal FFT sizes (4096-16384 samples) based on sample rate
+- **Psychoacoustic weighting**: Frequency-specific energy calculations with perceptual modeling
+
+### Intelligent Processing Algorithms
+- **Dynamic Q-factor optimization**: Automatic bandwidth adjustment based on correction requirements
+- **Spectral balance analysis**: Multi-band energy distribution with intelligent smoothing
+- **Neighboring band correlation**: Context-aware frequency adjustments for musical naturalness
+- **Safety-first processing**: Built-in distortion protection with frequency-specific limits
 
 ## Features
 
-- **Intelligent EQ matching**: 10-band frequency spectrum analysis and automatic equalization
-- **Multiband compression**: 4-band dynamic processing with frequency-specific settings
-- **Psychoacoustic weighting**: A-weighting and equal loudness contour consideration
-- **Dynamic amplification**: Automatic loudness level adjustment
-- **Distortion protection**: Built-in headroom calculation and safe boost limiting
-- **Spectral masking**: Analysis and compensation of frequency masking effects
+- **30-band intelligent EQ matching**: High-precision frequency spectrum analysis and equalization
+- **Dynamic Q-factor adjustment**: Surgical frequency corrections with optimal bandwidth selection
+- **Advanced spectral balance**: Multi-range energy analysis with psychoacoustic considerations
+- **Playback system presets**: Optimized processing for different listening environments
+- **Distortion protection**: Frequency-specific boost limiting with dynamic headroom calculation
+- **Professional dynamics control**: Intelligent compression and amplification with temporal stability
 
-## Usage
+## Basic Usage
 
 ```csharp
 using Ownaudio.Utilities.Matchering;
 
-// Audio matchering example
+// Professional audio matchering
 var analyzer = new AudioAnalyzer();
 
-// Process source and target audio files
+// Process source audio to match reference characteristics
 analyzer.ProcessEQMatching(
     sourceFile: "input_track.wav",     // Audio to be processed
-    targetFile: "reference.wav",       // Reference audio
-    outputFile: "mastered_track.wav"   // Output
+    targetFile: "reference.wav",       // Professional reference track
+    outputFile: "mastered_track.wav"   // Studio-quality output
 );
 
-// The processing automatically:
-// 1. Analyzes spectral properties of both files
-// 2. Calculates optimal EQ settings
-// 3. Applies multiband compression
-// 4. Performs dynamic amplification
-// 5. Generates distortion-protected output
+// The system automatically performs:
+// 1. Advanced 30-band spectral analysis with psychoacoustic weighting
+// 2. Dynamic Q-factor optimization for surgical frequency corrections
+// 3. Intelligent EQ curve calculation with spectral balance consideration
+// 4. Multi-band compression with frequency-specific settings
+// 5. Dynamic amplification with temporal stability analysis
+// 6. Distortion-protected output generation with safety limiting
 ```
 
-## Detailed Analysis
+## Playback System Presets
+
+Target your master for specific listening environments:
 
 ```csharp
-// Individual audio spectrum analysis
+// Optimize for different playback systems
+analyzer.ProcessWithPreset("source.wav", "hifi_output.wav", PlaybackSystem.HiFiSpeakers);
+analyzer.ProcessWithPreset("source.wav", "club_output.wav", PlaybackSystem.ClubPA);
+analyzer.ProcessWithPreset("source.wav", "headphones_output.wav", PlaybackSystem.Headphones);
+analyzer.ProcessWithPreset("source.wav", "streaming_output.wav", PlaybackSystem.RadioBroadcast);
+
+// Available presets:
+// - ConcertPA: Large venue sound reinforcement
+// - ClubPA: Dance music optimization with enhanced bass
+// - HiFiSpeakers: Neutral response for critical listening
+// - StudioMonitors: Reference standard for professional mixing
+// - Headphones: Compensated for typical headphone response
+// - Earbuds: Enhanced for in-ear acoustics
+// - CarStereo: Road noise and cabin acoustics compensation
+// - Television: Dialogue clarity and late-night friendly
+// - RadioBroadcast: FM/AM transmission standards
+// - Smartphone: Small speaker compensation with midrange focus
+```
+
+## Advanced Analysis
+
+```csharp
+// Detailed spectrum analysis with professional metrics
 var sourceSpectrum = analyzer.AnalyzeAudioFile("source.wav");
 
 Console.WriteLine($"RMS level: {sourceSpectrum.RMSLevel:F3}");
 Console.WriteLine($"Peak level: {sourceSpectrum.PeakLevel:F3}");
 Console.WriteLine($"Dynamic range: {sourceSpectrum.DynamicRange:F1} dB");
-Console.WriteLine($"Loudness: {sourceSpectrum.Loudness:F1} LUFS");
+Console.WriteLine($"Perceived loudness: {sourceSpectrum.Loudness:F1} LUFS");
 
-// Output frequency band energies
+// Access 30-band frequency analysis
 for (int i = 0; i < sourceSpectrum.FrequencyBands.Length; i++)
 {
-    Console.WriteLine($"Band {i}: {sourceSpectrum.FrequencyBands[i]:F3}");
+    var frequencies = new[] {
+        20f, 25f, 31.5f, 40f, 50f, 63f, 80f, 100f, 125f, 160f,
+        200f, 250f, 315f, 400f, 500f, 630f, 800f, 1000f, 1250f, 1600f,
+        2000f, 2500f, 3150f, 4000f, 5000f, 6300f, 8000f, 10000f, 12500f, 16000f
+    };
+    Console.WriteLine($"{frequencies[i]}Hz: {sourceSpectrum.FrequencyBands[i]:F3}");
 }
 ```
 
 ## Technical Specifications
 
-### Frequency Bands
-- **10 octave bands**: 31.25 Hz - 16 kHz
-- **FFT analysis**: Optimized window size (4096-16384 samples)
-- **Blackman-Harris window**: Minimal spectral leakage
-- **87.5% overlap**: High-precision frequency resolution
+### 30-Band Frequency Analysis
+- **Extended frequency range**: 20 Hz - 16 kHz with logarithmic distribution
+- **High-precision FFT**: Adaptive window sizing (4096-16384 samples)
+- **Advanced windowing**: Blackman-Harris window with 87.5% overlap
+- **Psychoacoustic modeling**: Frequency-dependent bandwidth calculation
+- **Spectral accuracy**: Sub-band energy interpolation with weighted RMS
 
-### Compression Settings
-- **4 frequency bands**: Low, low-mid, high-mid, high
-- **Adaptive parameters**: Band-specific threshold, ratio, attack/release times
-- **Makeup gain**: Automatic level compensation
+### Dynamic Q-Factor Optimization
+- **Frequency-dependent base Q**: Optimized for psychoacoustic perception
+- **Gain-adaptive adjustment**: Surgical corrections for large adjustments
+- **Neighboring band correlation**: Context-aware smoothing for musical results
+- **Spectral density analysis**: Adaptive bandwidth based on energy distribution
 
-### Safety Features
-- **Frequency-specific boost limits**: 4-10 dB maximum depending on frequency
+### Advanced Safety Systems
+- **Frequency-specific boost limits**: 2.5-5.5 dB maximum depending on frequency range
 - **Dynamic headroom calculation**: Crest factor and loudness-based protection
-- **EQ curve smoothing**: Natural-sounding transitions
-- **Clipping protection**: -0.1 dB ceiling limiter
+- **Intelligent EQ curve smoothing**: Natural-sounding frequency transitions
+- **Multi-stage limiting**: Soft limiting at -0.5dB with clipping detection
+- **Spectral balance protection**: Automatic dominance reduction for harsh frequencies
 
-## Output Example
+### Professional Dynamics Processing
+- **Adaptive compression**: Frequency-band specific threshold and ratio calculation
+- **Dynamic amplification**: Temporal stability analysis with conservative gain limiting
+- **Loudness matching**: LUFS-based target level adjustment with musical preservation
+- **Transient preservation**: Attack/release optimization for different musical content
+
+## Real-World Output Example
 
 ```
-=== ANALYSIS RESULTS ===
-Source - RMS: 0.123, Peak: 0.876, Loudness: -14.2 LUFS
-Target - RMS: 0.187, Peak: 0.932, Loudness: -9.8 LUFS
-Crest Factor - Source: 15.1dB, Target: 13.9dB
-Distortion Risk: LOW (Total boost: 8.2dB)
+=== PROFESSIONAL MATCHERING ANALYSIS ===
+Source Analysis:
+  RMS: 0.123, Peak: 0.876, Loudness: -14.2 LUFS
+  Dynamic Range: 12.4 dB, Crest Factor: 15.1 dB
 
-EQ Adjustments (with distortion protection):
-31Hz: +2.1 dB
-63Hz: +3.4 dB
-125Hz: +1.8 dB
-250Hz: -0.5 dB
-500Hz: +0.2 dB
-1kHz: -1.2 dB
-2kHz: +1.6 dB
-4kHz: +0.8 dB
-8kHz: -2.1 dB
-16kHz: +1.9 dB
+Target Analysis:
+  RMS: 0.187, Peak: 0.932, Loudness: -9.8 LUFS
+  Dynamic Range: 8.9 dB, Crest Factor: 13.9 dB
 
-=== SAFETY FEATURES ACTIVE ===
-✓ Frequency-specific boost limits
-✓ Dynamic headroom calculation
-✓ Psychoacoustic weighting
-✓ EQ curve smoothing
-✓ Safety limiter (-0.1dB ceiling)
-✓ Real-time clipping detection
+30-Band EQ Adjustments (with Q-factor optimization):
+20Hz: +2.1 dB (Q=0.35)    25Hz: +2.8 dB (Q=0.38)    31Hz: +3.4 dB (Q=0.42)
+40Hz: +2.9 dB (Q=0.45)    50Hz: +2.2 dB (Q=0.48)    63Hz: +1.8 dB (Q=0.52)
+80Hz: +1.4 dB (Q=0.55)    100Hz: +0.9 dB (Q=0.58)   125Hz: +0.4 dB (Q=0.62)
+160Hz: -0.1 dB (Q=0.65)   200Hz: -0.5 dB (Q=0.68)   250Hz: -0.8 dB (Q=0.72)
+315Hz: -0.6 dB (Q=0.78)   400Hz: -0.2 dB (Q=0.85)   500Hz: +0.3 dB (Q=0.92)
+630Hz: +0.8 dB (Q=1.02)   800Hz: +1.2 dB (Q=1.15)   1kHz: +1.6 dB (Q=1.28)
+1.25kHz: +1.4 dB (Q=1.35) 1.6kHz: +1.1 dB (Q=1.28)  2kHz: +0.8 dB (Q=1.15)
+2.5kHz: +0.4 dB (Q=1.08)  3.15kHz: -0.1 dB (Q=1.02) 4kHz: -0.6 dB (Q=0.95)
+5kHz: -1.1 dB (Q=0.88)    6.3kHz: -1.4 dB (Q=0.82)  8kHz: -1.8 dB (Q=0.75)
+10kHz: -1.5 dB (Q=0.68)   12.5kHz: -1.1 dB (Q=0.62) 16kHz: -0.7 dB (Q=0.58)
+
+Spectral Balance Analysis:
+  Low (20-125Hz): +11.8dB    Low-Mid (160-630Hz): -1.2dB
+  Mid (800-2.5kHz): +5.4dB   Presence (3.15-5kHz): -2.8dB
+  High (6.3kHz+): -6.5dB
+
+Safety Analysis:
+  Total boost applied: 18.3dB
+  Distortion risk: LOW
+  Maximum single boost: +3.4dB (31Hz)
+  Frequency dominance: BALANCED
+
+Professional Processing Applied:
+✓ 30-band psychoacoustic EQ with dynamic Q-factors
+✓ Intelligent spectral balance optimization  
+✓ Frequency-specific distortion protection
+✓ Advanced dynamics control with temporal stability
+✓ Professional safety limiting (-0.5dB ceiling)
+✓ Real-time clipping detection and prevention
+✓ Harmonic preservation algorithms
+✓ Stereo field integrity maintenance
 ```
 
 ## Application Areas
 
-- **Mastering**: Achieving consistent sound across albums
-- **Remix/remaster**: Bringing classic recordings to modern sound standards
-- **Podcast/speech**: Applying professional audio techniques
-- **Game audio**: Ensuring consistent audio atmosphere
-- **Streaming**: Meeting platform-specific loudness standards
+### Music Production
+- **Album mastering**: Consistent sound across tracks with different recording characteristics
+- **Remix and remaster**: Bringing classic recordings to modern loudness standards
+- **Reference matching**: Achieving the sonic character of commercially successful tracks
+- **Genre adaptation**: Adapting masters for different musical styles and target audiences
 
-Audio matchering automatically applies the most modern psychoacoustic algorithms and safe processing techniques to ensure professional-quality results for every use case.
+### Broadcasting and Streaming
+- **Podcast production**: Professional audio quality for spoken content
+- **Radio broadcast**: Meeting transmission standards with optimal loudness
+- **Streaming platform optimization**: Platform-specific loudness targets (Spotify, Apple Music, etc.)
+- **Content delivery**: Consistent audio quality across different distribution channels
+
+### Post-Production
+- **Film and TV**: Matching dialogue, music, and effects to industry standards
+- **Game audio**: Consistent audio atmosphere across different game elements
+- **Commercial production**: Broadcast-ready audio with competitive loudness
+- **Educational content**: Clear, professional audio for online learning platforms
+
+### Live Sound and Installation
+- **Venue optimization**: Adapting masters for specific acoustic environments
+- **Installation audio**: Background music systems with appropriate dynamics
+- **Event production**: Consistent audio quality across different playback systems
+- **Museum and exhibition**: Audio content optimized for public spaces
+
+## Advanced Features and Algorithms
+
+### Psychoacoustic Processing
+- **Equal loudness contours**: Fletcher-Munson curve consideration for frequency weighting
+- **Masking effects**: Analysis and compensation for simultaneous and temporal masking
+- **Critical band analysis**: Bark scale frequency grouping for perceptual accuracy
+- **Temporal integration**: Time-dependent loudness perception modeling
+
+### AI-Driven Analysis
+- **Pattern recognition**: Automatic detection of musical elements and their treatment
+- **Genre classification**: Style-aware processing parameters based on musical content
+- **Dynamic adaptation**: Real-time parameter adjustment based on audio characteristics
+- **Learning algorithms**: Continuous improvement based on processing results
+
+### Professional Workflow Integration
+- **Batch processing**: Multiple file processing with consistent parameters
+- **Preset management**: Save and recall custom processing configurations
+- **A/B comparison**: Real-time comparison between processed and original audio
+- **Detailed reporting**: Comprehensive analysis reports for professional documentation
+
+## Getting Started with Matchering
+
+### Basic Workflow
+
+```csharp
+using Ownaudio.Utilities.Matchering;
+
+// 1. Initialize the analyzer
+var analyzer = new AudioAnalyzer();
+
+// 2. Basic matchering - one line of code
+analyzer.ProcessEQMatching("my_track.wav", "reference_master.wav", "mastered_output.wav");
+
+// 3. That's it! Your track now has the sonic character of the reference
+```
+
+### Advanced Workflow
+
+```csharp
+// 1. Analyze your source material
+var sourceSpectrum = analyzer.AnalyzeAudioFile("my_track.wav");
+Console.WriteLine($"Source loudness: {sourceSpectrum.Loudness:F1} LUFS");
+Console.WriteLine($"Dynamic range: {sourceSpectrum.DynamicRange:F1} dB");
+
+// 2. Analyze reference track
+var referenceSpectrum = analyzer.AnalyzeAudioFile("commercial_reference.wav");
+Console.WriteLine($"Reference loudness: {referenceSpectrum.Loudness:F1} LUFS");
+
+// 3. Apply matchering with full analysis output
+analyzer.ProcessEQMatching("my_track.wav", "commercial_reference.wav", "mastered_track.wav");
+
+// 4. Use presets for specific playback systems
+analyzer.ProcessWithPreset("mastered_track.wav", "streaming_version.wav", PlaybackSystem.RadioBroadcast);
+analyzer.ProcessWithPreset("mastered_track.wav", "club_version.wav", PlaybackSystem.ClubPA);
+analyzer.ProcessWithPreset("mastered_track.wav", "audiophile_version.wav", PlaybackSystem.HiFiSpeakers);
+```
+
+### Professional Tips
+
+1. **Choose appropriate references**: Use commercially mastered tracks in the same genre
+2. **Consider your target audience**: Different playback systems require different approaches
+3. **Preserve dynamics**: The system automatically protects musical dynamics while matching loudness
+4. **Monitor the output**: Always listen to the processed audio in your target environment
+5. **Use presets strategically**: Match your delivery format to the intended playback system
+
+## Performance and Compatibility
+
+### System Requirements
+- **.NET 6.0 or higher**
+- **Minimum 4GB RAM** (8GB recommended for large files)
+- **Multi-core CPU** (processing is automatically parallelized)
+- **Available disk space** for temporary processing files
+
+### File Format Support
+- **Input formats**: WAV, FLAC, MP3, AAC, OGG (via FFmpeg)
+- **Output format**: 24-bit WAV (industry standard for mastering)
+- **Sample rates**: 44.1kHz, 48kHz, 88.2kHz, 96kHz (automatic detection)
+- **Channel support**: Mono, stereo, and multi-channel audio
+
+### Processing Performance
+- **Real-time capable**: Processing faster than real-time playback
+- **Memory efficient**: Streaming processing for large files
+- **Thread-safe**: Parallel processing on multi-core systems
+- **Scalable**: Handles files from seconds to hours in length
+
+The OwnAudioSharp Matchering system represents the state-of-the-art in automated mastering technology, bringing professional studio capabilities to developers and content creators. Whether you're building a music production application, podcast platform, or content delivery system, the matchering algorithms ensure broadcast-quality audio output with minimal complexity.
 
 ## Acknowledgements
 

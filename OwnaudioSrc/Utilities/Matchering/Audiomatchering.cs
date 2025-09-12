@@ -17,8 +17,14 @@ namespace Ownaudio.Utilities.Matchering
         /// <summary>
         /// Standard ISO frequency bands used for 10-band equalizer analysis (Hz).
         /// </summary>
+
+        // private readonly float[] FrequencyBands = {
+        //     31.25f, 62.5f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f
+        // };
         private readonly float[] FrequencyBands = {
-            31.25f, 62.5f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f
+            20f, 25f, 31.5f, 40f, 50f, 63f, 80f, 100f, 125f, 160f,
+            200f, 250f, 315f, 400f, 500f, 630f, 800f, 1000f, 1250f, 1600f,
+            2000f, 2500f, 3150f, 4000f, 5000f, 6300f, 8000f, 10000f, 12500f, 16000f
         };
 
         #endregion
@@ -75,7 +81,8 @@ namespace Ownaudio.Utilities.Matchering
             var ampSettings = CalculateDynamicAmpSettings(sourceSpectrum, targetSpectrum);
 
             Console.WriteLine("Processing audio with direct EQ approach...");
-            ApplyDirectEQProcessing(sourceFile, outputFile, eqAdjustments, ampSettings);
+            //ApplyDirectEQProcessing(sourceFile, outputFile, eqAdjustments, ampSettings);
+            ApplyDirectEQProcessing(sourceFile, outputFile, eqAdjustments, ampSettings, sourceSpectrum, targetSpectrum);
 
             Console.WriteLine($"EQ matching completed. Output saved to: {outputFile}");
             PrintAnalysisResults(sourceSpectrum, targetSpectrum, eqAdjustments);
@@ -340,7 +347,12 @@ namespace Ownaudio.Utilities.Matchering
             Console.WriteLine($"Distortion Risk: {riskLevel} (Total boost: {totalBoost:F1}dB)");
 
             Console.WriteLine("\nEQ Adjustments (with distortion protection):");
-            var bandNames = new[] { "31Hz", "63Hz", "125Hz", "250Hz", "500Hz", "1kHz", "2kHz", "4kHz", "8kHz", "16kHz" };
+            //var bandNames = new[] { "31Hz", "63Hz", "125Hz", "250Hz", "500Hz", "1kHz", "2kHz", "4kHz", "8kHz", "16kHz" };
+            var bandNames = new[] { 
+                "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", "63Hz", "80Hz", "100Hz", "125Hz", "160Hz",
+                "200Hz", "250Hz", "315Hz", "400Hz", "500Hz", "630Hz", "800Hz", "1kHz", "1.25kHz", "1.6kHz",
+                "2kHz", "2.5kHz", "3.15kHz", "4kHz", "5kHz", "6.3kHz", "8kHz", "10kHz", "12.5kHz", "16kHz"
+            };
             for (int i = 0; i < eqAdjustments.Length; i++)
             {
                 string warning = Math.Abs(eqAdjustments[i]) > 8.0f ? " ⚠️" : "";
