@@ -39,13 +39,12 @@ analyzer.ProcessEQMatching("source.wav", "reference.wav", "mastered.wav");
 ```
 
 ⚡ **What you get:**
-- **30-band precision EQ matching** with psychoacoustic optimization
-- **Dynamic Q-factor adjustment** for surgical frequency corrections
-- **Intelligent compression and dynamic amplification** with spectral balance
-- **Playback system presets** for different listening environments
-- **Advanced distortion protection** with frequency-specific safety limits
+- Intelligent 10-band EQ matching
+- Multiband compression across 4 frequency bands  
+- Psychoacoustic weighting and spectral masking
+- Distortion-protected automatic processing
 
-🎯 **Result:** Professional mastering quality that adapts to any reference track with studio-grade precision.
+🎯 **Result:** Your source audio will sound exactly like the reference track - professional mastering studio quality.
 
 📖 [Complete documentation and examples](#matchering)
 
