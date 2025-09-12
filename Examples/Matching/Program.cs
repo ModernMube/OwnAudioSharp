@@ -17,6 +17,11 @@ class Program
                     targetFile: @"path\audio\target.wav",   // Reference file
                     outputFile: @"path\output.wav");  // Output file that we create
 
+                processor.ProcessWithPreset(
+                    sourceFile: @"path\audio\source.wav",
+                    outputFile: @"path\output_club.wav",
+                    PlaybackSystem.ClubPA);
+                                              
                 OwnAudio.Free();
             }
             catch (Exception ex)
