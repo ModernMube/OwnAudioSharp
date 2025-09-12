@@ -43,7 +43,7 @@ analyzer.ProcessEQMatching("source.wav", "reference.wav", "mastered.wav");
 - Intelligent compression and dynamic amplification 
 - Distortion-protected automatic processing
 
-🎯 **Result:** Your source audio will sound exactly like the reference track - professional mastering studio quality.
+🎯 **Result:** The source audio will sound like the reference track – professional, mastered in high quality.
 
 📖 [Documentation and examples](#matchering)
 
