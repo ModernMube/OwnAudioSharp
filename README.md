@@ -32,8 +32,8 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 
 ## You can find all the information on the website!
 
-<a href="../../wiki">
-  <img src="https://modernmube.github.io/OwnAudioSharp" alt="Website OwnAudioSharp" width="600">
+<a href="https://modernmube.github.io/OwnAudioSharp/">
+  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20documentation%20step-blue" alt="Website OwnAudioSharp" width="600">
 </a>
 
 # 🎵 NEW: Professional Audio Matchering in OwnAudioSharp!
