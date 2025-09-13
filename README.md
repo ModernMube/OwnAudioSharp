@@ -35,7 +35,11 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 **Studio-grade mastering with advanced AI-driven analysis - single line of code!**
 
 ```csharp
+// Process source audio to match reference characteristics
 analyzer.ProcessEQMatching("source.wav", "reference.wav", "mastered.wav");
+
+// Optimize for different playback systems
+analyzer.ProcessWithPreset("source.wav", "hifi_output.wav", PlaybackSystem.HiFiSpeakers);
 ```
 
 ⚡ **What you get:**
