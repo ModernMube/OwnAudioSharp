@@ -1,0 +1,617 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OwnAudioSharp - Modern C# Audio Library</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary-color: #ec4899;
+            --background: #0f0f23;
+            --surface: #1a1a2e;
+            --surface-light: #16213e;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --accent: #00d9ff;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --border: #334155;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--background);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Navigation */
+        .nav {
+            background: rgba(26, 26, 46, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            position: fixed;
+            top: 0;
+            width: 100%;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 70px;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary-color), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-links {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+
+            .nav-links a {
+                color: var(--text-secondary);
+                text-decoration: none;
+                font-weight: 500;
+                transition: color 0.3s ease;
+                position: relative;
+            }
+
+                .nav-links a:hover {
+                    color: var(--primary-color);
+                }
+
+                .nav-links a::after {
+                    content: '';
+                    position: absolute;
+                    bottom: -5px;
+                    left: 0;
+                    width: 0;
+                    height: 2px;
+                    background: var(--primary-color);
+                    transition: width 0.3s ease;
+                }
+
+                .nav-links a:hover::after {
+                    width: 100%;
+                }
+
+        /* Hero Section */
+        .hero {
+            padding: 120px 0 80px;
+            text-align: center;
+            background: linear-gradient(135deg, var(--background) 0%, var(--surface) 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+            .hero::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
+            }
+
+        .hero-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--text-primary), var(--primary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero .subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 3rem;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+        }
+
+            .btn-primary:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4);
+            }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-primary);
+            border: 2px solid var(--border);
+        }
+
+            .btn-secondary:hover {
+                border-color: var(--primary-color);
+                color: var(--primary-color);
+            }
+
+        /* Features Grid */
+        .features {
+            padding: 80px 0;
+            background: var(--background);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 3rem;
+            color: var(--text-primary);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .feature-card {
+            background: var(--surface);
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
+        }
+
+            .feature-card:hover {
+                transform: translateY(-5px);
+                border-color: var(--primary-color);
+                box-shadow: 0 10px 30px rgba(99, 102, 241, 0.2);
+            }
+
+        .feature-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--primary-color), var(--accent));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            color: white;
+            font-size: 1.5rem;
+        }
+
+        .feature-card h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: var(--text-primary);
+        }
+
+        .feature-card p {
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* Code Example Section */
+        .code-example {
+            padding: 80px 0;
+            background: var(--surface);
+        }
+
+        .code-container {
+            background: var(--surface-light);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        .code-header {
+            background: var(--background);
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .code-dots {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .code-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+            .code-dot:nth-child(1) {
+                background: #ff5f56;
+            }
+
+            .code-dot:nth-child(2) {
+                background: #ffbd2e;
+            }
+
+            .code-dot:nth-child(3) {
+                background: #27ca3f;
+            }
+
+        .code-title {
+            margin-left: 1rem;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        pre {
+            margin: 0;
+            padding: 1.5rem;
+            background: transparent !important;
+            overflow-x: auto;
+        }
+
+        /* Stats Section */
+        .stats {
+            padding: 60px 0;
+            background: var(--background);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            text-align: center;
+        }
+
+        .stat-item h3 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-item p {
+            color: var(--text-secondary);
+        }
+
+        /* Footer */
+        .footer {
+            background: var(--surface);
+            padding: 40px 0;
+            border-top: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+            .footer-links a {
+                color: var(--text-secondary);
+                text-decoration: none;
+                transition: color 0.3s ease;
+            }
+
+                .footer-links a:hover {
+                    color: var(--primary-color);
+                }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .cta-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in-up {
+            animation: fadeInUp 0.6s ease-out forwards;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-container">
+            <div class="logo">OwnAudioSharp</div>
+            <ul class="nav-links">
+                <li><a href="#features">Features</a></li>
+                <li><a href="documents/quickstart.html">Quick Start</a></li>
+                <li><a href="documents/api-reference.html">API Reference</a></li>
+                <li><a href="documents/examples.html">Examples</a></li>
+                <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-container">
+            <h1 class="fade-in-up">Modern C# Audio Library</h1>
+            <p class="subtitle fade-in-up">Cross-platform audio playback, recording, and processing with professional effects and real-time capabilities.</p>
+
+            <div class="cta-buttons fade-in-up">
+                <a href="documents/quickstart.html" class="btn btn-primary">
+                    🚀 Get Started
+                </a>
+                <a href="https://github.com/ModernMube/OwnAudioSharp" class="btn btn-secondary" target="_blank">
+                    📋 View on GitHub
+                </a>
+                <a href="https://www.nuget.org/packages/OwnAudioSharp" class="btn btn-secondary" target="_blank">
+                    📦 NuGet Package
+                </a>
+            </div>
+
+            <div class="code-container fade-in-up">
+                <div class="code-header">
+                    <div class="code-dots">
+                        <div class="code-dot"></div>
+                        <div class="code-dot"></div>
+                        <div class="code-dot"></div>
+                    </div>
+                    <div class="code-title">Program.cs</div>
+                </div>
+                <pre><code class="language-csharp">// Initialize OwnAudio
+OwnAudio.Initialize();
+
+// Create source manager
+var sourceManager = SourceManager.Instance;
+
+// Add and play audio file
+await sourceManager.AddOutputSource("audio.mp3");
+sourceManager.Play();
+
+// Apply professional effects
+var reverb = new Reverb(0.5f, 0.3f, 0.4f, 0.7f);
+sourceManager.CustomSampleProcessor = reverb;</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features" id="features">
+        <div class="container">
+            <h2 class="section-title">Powerful Features</h2>
+
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🌍</div>
+                    <h3>Cross-Platform</h3>
+                    <p>Works seamlessly on Windows, macOS, Linux, Android, and iOS with automatic dependency management.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🎵</div>
+                    <h3>Multiple Formats</h3>
+                    <p>Support for MP3, WAV, FLAC, AAC, OGG via FFmpeg or MiniAudio fallback for zero dependencies.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🎛️</div>
+                    <h3>Professional Effects</h3>
+                    <p>Built-in reverb, delay, distortion, compressor, 30-band EQ, chorus, flanger, and more.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Real-Time Processing</h3>
+                    <p>Live audio synthesis, network streaming, and real-time effects with minimal latency.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🎼</div>
+                    <h3>Chord Detection</h3>
+                    <p>Advanced musical chord detection with timed analysis and confidence scoring.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🎚️</div>
+                    <h3>Professional Mastering</h3>
+                    <p>Intelligent audio matchering with 30-band EQ and psychoacoustic analysis.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Audio Visualization</h3>
+                    <p>Avalonia waveform display component with zoom, seeking, and multiple display styles.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔧</div>
+                    <h3>Custom Processing</h3>
+                    <p>Extensible architecture for custom audio processors and effects chains.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="stats">
+        <div class="container">
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <h3>5+</h3>
+                    <p>Supported Platforms</p>
+                </div>
+                <div class="stat-item">
+                    <h3>15+</h3>
+                    <p>Built-in Effects</p>
+                </div>
+                <div class="stat-item">
+                    <h3>30</h3>
+                    <p>Band EQ System</p>
+                </div>
+                <div class="stat-item">
+                    <h3>Zero</h3>
+                    <p>Dependencies Required</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-links">
+                <a href="documents/quickstart.html">Quick Start</a>
+                <a href="documents/api-reference.html">API Reference</a>
+                <a href="documents/examples.html">Examples</a>
+                <a href="documents/effects.html">Effects</a>
+                <a href="documents/matchering.html">Matchering</a>
+                <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a>
+                <a href="https://www.nuget.org/packages/OwnAudioSharp" target="_blank">NuGet</a>
+            </div>
+            <p>&copy; 2025 OwnAudioSharp. Open source audio library for modern C# development.</p>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script>
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+        target.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+        });
+        }
+        });
+        });
+
+        // Navbar scroll effect
+        window.addEventListener('scroll', () => {
+        const nav = document.querySelector('.nav');
+        if (window.scrollY > 50) {
+        nav.style.background = 'rgba(26, 26, 46, 0.98)';
+        } else {
+        nav.style.background = 'rgba(26, 26, 46, 0.95)';
+        }
+        });
+
+        // Intersection Observer for animations
+        const observerOptions = {
+        threshold: 0.1,
+        rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+        if (entry.isIntersecting) {
+        entry.target.style.opacity = '1';
+        entry.target.style.transform = 'translateY(0)';
+        }
+        });
+        }, observerOptions);
+
+        // Observe feature cards
+        document.querySelectorAll('.feature-card').forEach(card => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(30px)';
+        card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+        observer.observe(card);
+        });
+    </script>
+</body>
+</html>
