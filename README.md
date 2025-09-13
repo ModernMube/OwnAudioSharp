@@ -33,7 +33,7 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 ## You can find all the information on the website!
 
 <a href="https://modernmube.github.io/OwnAudioSharp/">
-  <img src="https://img.shields.io/badge/Wiki-OwnAudio%20API%20documentation%20step-blue" alt="Website OwnAudioSharp" width="600">
+  <img src="https://img.shields.io/badge/WEB-OwnAudioSharp%20API%20website-blue" alt="OwnAudioSharp" width="400">
 </a>
 
 # 🎵 NEW: Professional Audio Matchering in OwnAudioSharp!
@@ -55,8 +55,6 @@ analyzer.ProcessWithPreset("source.wav", "hifi_output.wav", PlaybackSystem.HiFiS
 - Distortion-protected automatic processing
 
 🎯 **Result:** Your source audio will sound exactly like the reference track - professional mastering studio quality.
-
-📖 [Complete documentation and examples](#matchering)
 
 ## Support My Work
 
@@ -108,36 +106,6 @@ finally
     OwnAudio.Free();
 }
 ```
-
-### Professional Tips
-
-1. **Choose appropriate references**: Use commercially mastered tracks in the same genre
-2. **Consider your target audience**: Different playback systems require different approaches
-3. **Preserve dynamics**: The system automatically protects musical dynamics while matching loudness
-4. **Monitor the output**: Always listen to the processed audio in your target environment
-5. **Use presets strategically**: Match your delivery format to the intended playback system
-
-## Performance and Compatibility
-
-### System Requirements
-- **.NET 6.0 or higher**
-- **Minimum 4GB RAM** (8GB recommended for large files)
-- **Multi-core CPU** (processing is automatically parallelized)
-- **Available disk space** for temporary processing files
-
-### File Format Support
-- **Input formats**: WAV, FLAC, MP3 (via FFmpeg)
-- **Output format**: 24-bit WAV (industry standard for mastering)
-- **Sample rates**: 44.1kHz, 48kHz, 88.2kHz, 96kHz (automatic detection)
-- **Channel support**: Mono, stereo, and multi-channel audio
-
-### Processing Performance
-- **Real-time capable**: Processing faster than real-time playback
-- **Memory efficient**: Streaming processing for large files
-- **Thread-safe**: Parallel processing on multi-core systems
-- **Scalable**: Handles files from seconds to hours in length
-
-The OwnAudioSharp Matchering system represents the state-of-the-art in automated mastering technology, bringing professional studio capabilities to developers and content creators. Whether you're building a music production application, podcast platform, or content delivery system, the matchering algorithms ensure broadcast-quality audio output with minimal complexity.
 
 ## Acknowledgements
 
