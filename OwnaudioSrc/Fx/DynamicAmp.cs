@@ -40,7 +40,7 @@ namespace Ownaudio.Fx
 
     /// <summary>
     /// An adaptive volume control class that can dynamically manage volume in real time
-    /// while preserving audio dynamics and preventing startup distortion.
+    /// while preserving audio dynamics.
     /// </summary>
     public class DynamicAmp : SampleProcessorBase
     {
@@ -109,34 +109,8 @@ namespace Ownaudio.Fx
         /// </summary>
         private bool bufferFilled = false;
 
-        // Startup protection variables
         /// <summary>
-        /// Flag indicating if we're still in startup phase
-        /// </summary>
-        private bool startupPhase = true;
-
-        /// <summary>
-        /// Number of samples processed since initialization
-        /// </summary>
-        private int processedSamples = 0;
-
-        /// <summary>
-        /// Number of samples to apply startup protection
-        /// </summary>
-        private int startupProtectionSamples;
-
-        /// <summary>
-        /// Initial RMS estimate for startup protection
-        /// </summary>
-        private float initialRmsEstimate = 0.0f;
-
-        /// <summary>
-        /// Flag indicating if initial RMS estimate has been set
-        /// </summary>
-        private bool rmsEstimateSet = false;
-
-        /// <summary>
-        /// Creates a new DynamicAmp instance with the given parameters and startup protection
+        /// Creates a new DynamicAmp instance with the given parameters
         /// </summary>
         /// <param name="targetLevel">Target RMS level in dB (between -40.0 - 0.0)</param>
         /// <param name="attackTimeSeconds">Attack time in seconds (minimum 0.001)</param>
@@ -159,7 +133,6 @@ namespace Ownaudio.Fx
             ValidateAndSetSampleRate(sampleRateHz);
 
             InitializeRmsBuffer(rmsWindowSeconds);
-            InitializeStartupProtection();
         }
 
         /// <summary>
@@ -172,21 +145,8 @@ namespace Ownaudio.Fx
         {
             ValidateAndSetSampleRate(sampleRateHz);
             InitializeRmsBuffer(rmsWindowSeconds);
-            InitializeStartupProtection();
             SetPreset(preset);
-        }
-
-        /// <summary>
-        /// Initialize startup protection parameters
-        /// </summary>
-        private void InitializeStartupProtection()
-        {
-            // 100ms startup protection period
-            startupProtectionSamples = (int)(sampleRate * 0.1f);
-            startupPhase = true;
-            processedSamples = 0;
-            rmsEstimateSet = false;
-            initialRmsEstimate = 0.0f;
+            currentGain = 3.0f;
         }
 
         /// <summary>
@@ -197,9 +157,19 @@ namespace Ownaudio.Fx
         {
             rmsWindowLength = Math.Max(1, (int)(sampleRate * windowSeconds));
             rmsBuffer = new float[rmsWindowLength];
+
+            float estimatedInputRms = DbToLinear(-16.0f); 
+            float initialRmsSquared = estimatedInputRms * estimatedInputRms;
+
+            // Fill buffer with estimated value
+            for (int i = 0; i < rmsWindowLength; i++)
+            {
+                rmsBuffer[i] = initialRmsSquared;
+            }
+
             rmsBufferIndex = 0;
-            windowSumSquares = 0.0f;
-            bufferFilled = false;
+            windowSumSquares = initialRmsSquared * rmsWindowLength;
+            bufferFilled = true;
         }
 
         /// <summary>
@@ -342,69 +312,39 @@ namespace Ownaudio.Fx
                 float oldWindowSeconds = rmsWindowLength / sampleRate;
                 ValidateAndSetSampleRate(value);
                 InitializeRmsBuffer(oldWindowSeconds);
-                InitializeStartupProtection();
             }
         }
 
         /// <summary>
-        /// Processes incoming audio samples and adjusts the volume to the appropriate level with startup protection
+        /// Processes incoming audio samples and adjusts the volume to the appropriate level
         /// </summary>
         /// <param name="samples">Array of audio samples to process in-place</param>
         public override void Process(Span<float> samples)
         {
             if (samples.Length == 0) return;
 
-            // Get current RMS from buffer
             float bufferRms = UpdateRmsWindow(samples);
-            float targetRmsLinear = 0.0f;
 
-            // Set initial RMS estimate on first significant signal
-            if (!rmsEstimateSet && bufferRms > noiseGate)
-            {
-                initialRmsEstimate = bufferRms;
-                rmsEstimateSet = true;
-
-                // Set conservative initial gain
-                targetRmsLinear = DbToLinear(targetRmsLevelDb);
-                float conservativeGain = Math.Min(targetRmsLinear / Math.Max(bufferRms, 1e-10f), maxGain * 0.5f);
-                currentGain = Math.Max(0.3f, Math.Min(conservativeGain, 2.0f)); // Limit initial gain range
-            }
-
-            // Apply noise gate
             if (bufferRms < noiseGate)
             {
-                processedSamples += samples.Length;
                 return;
             }
 
-            // Calculate target gain
-            targetRmsLinear = DbToLinear(targetRmsLevelDb);
+            float targetRmsLinear = DbToLinear(targetRmsLevelDb);
             float targetGain = Math.Min(targetRmsLinear / Math.Max(bufferRms, 1e-10f), maxGain);
 
-            // Apply startup protection during initial period
-            if (startupPhase && processedSamples < startupProtectionSamples)
-            {
-                ApplyStartupProtectedGain(samples, targetGain, bufferRms);
-            }
-            else
-            {
-                startupPhase = false;
-                ApplyNormalGain(samples, targetGain, bufferRms);
-            }
-
-            processedSamples += samples.Length;
+            ApplyGain(samples, targetGain, bufferRms);
             lastRms = bufferRms;
         }
 
         /// <summary>
-        /// Applies protected gain during startup period with comprehensive signal integrity protection
+        /// Applies gain with signal integrity protection
         /// </summary>
         /// <param name="samples">Audio samples to process</param>
         /// <param name="targetGain">Target gain value</param>
         /// <param name="bufferRms">Current RMS level</param>
-        private void ApplyStartupProtectedGain(Span<float> samples, float targetGain, float bufferRms)
+        private void ApplyGain(Span<float> samples, float targetGain, float bufferRms)
         {
-            // Pre-analyze samples to predict peak levels during startup
             float maxPeak = 0.0f;
             for (int i = 0; i < samples.Length; i++)
             {
@@ -413,82 +353,19 @@ namespace Ownaudio.Fx
                     maxPeak = absValue;
             }
 
-            // Calculate protection factor (1.0 = full protection, 0.0 = no protection)
-            float protectionProgress = (float)processedSamples / startupProtectionSamples;
-            float protectionFactor = 1.0f - protectionProgress;
-
-            // Even more conservative during startup - use 0.8 instead of 1.5
-            float conservativeGain = Math.Min(targetGain, 0.8f); 
-            float blendedTargetGain = conservativeGain * (1.0f - protectionFactor) + 1.0f * protectionFactor;
-
-            // Additional peak-based protection during startup
-            float predictedPeak = maxPeak * blendedTargetGain;
-            if (predictedPeak > 0.8f) // Even more conservative than normal operation
-            {
-                float safePeakGain = 0.8f / Math.Max(maxPeak, 1e-10f);
-                blendedTargetGain = Math.Min(blendedTargetGain, safePeakGain);
-            }
-
-            // Slower gain changes during startup
-            float startupAttackTime = attackTime + (protectionFactor * attackTime * 2.0f);
-            float startupReleaseTime = releaseTime + (protectionFactor * releaseTime * 1.5f);
-
-            float timeConstant = (blendedTargetGain > currentGain) ? startupAttackTime : startupReleaseTime;
-            float alpha = CalculateAlpha(timeConstant, samples.Length);
-
-            currentGain = alpha * currentGain + (1.0f - alpha) * blendedTargetGain;
-
-            // Apply gain with enhanced protection during startup
-            for (int i = 0; i < samples.Length; i++)
-            {
-                float processedSample = samples[i] * currentGain;
-                
-                // Double protection: Soft limit + Hard limit
-                float softLimited = StartupSoftLimit(processedSample, 0.6f); // Even more conservative threshold
-                
-                // Final hard limit as backup
-                if (softLimited > 0.95f)
-                    samples[i] = 0.95f;
-                else if (softLimited < -0.95f)
-                    samples[i] = -0.95f;
-                else
-                    samples[i] = softLimited;
-            }
-        }
-
-        /// <summary>
-        /// Applies normal gain after startup period with signal integrity protection
-        /// </summary>
-        /// <param name="samples">Audio samples to process</param>
-        /// <param name="targetGain">Target gain value</param>
-        /// <param name="bufferRms">Current RMS level</param>
-        private void ApplyNormalGain(Span<float> samples, float targetGain, float bufferRms)
-        {
-            // Pre-analyze samples to predict peak levels after gain application
-            float maxPeak = 0.0f;
-            for (int i = 0; i < samples.Length; i++)
-            {
-                float absValue = Math.Abs(samples[i]);
-                if (absValue > maxPeak)
-                    maxPeak = absValue;
-            }
-
-            // Calculate safe gain to prevent clipping while preserving signal integrity
             float predictedPeak = maxPeak * targetGain;
             float safeGain = targetGain;
-            
+
             if (predictedPeak > 0.95f) // Leave 5% headroom
             {
                 safeGain = 0.95f / Math.Max(maxPeak, 1e-10f);
-                // Gradually approach safe gain to maintain smoothness
                 targetGain = Math.Min(targetGain, safeGain);
             }
 
-            // Normal gain smoothing
+            // Gain smoothing
             float timeConstant = (targetGain > currentGain) ? attackTime : releaseTime;
             float alpha = CalculateAlpha(timeConstant, samples.Length);
 
-            // Fast attack for sudden level increases
             if (targetGain < currentGain && bufferRms > lastRms * 1.5f)
             {
                 alpha = CalculateAlpha(0.5f * attackTime, samples.Length);
@@ -496,12 +373,10 @@ namespace Ownaudio.Fx
 
             currentGain = alpha * currentGain + (1.0f - alpha) * targetGain;
 
-            // Apply gain with intelligent clipping protection
             for (int i = 0; i < samples.Length; i++)
             {
                 float processedSample = samples[i] * currentGain;
-                
-                // Hard limit to prevent clipping while preserving signal shape
+
                 if (processedSample > 1.0f)
                     samples[i] = 1.0f;
                 else if (processedSample < -1.0f)
@@ -599,48 +474,12 @@ namespace Ownaudio.Fx
         }
 
         /// <summary>
-        /// Applies soft limiting to prevent harsh clipping
-        /// </summary>
-        /// <param name="input">Input sample value</param>
-        /// <param name="threshold">Limiting threshold (default: 0.9)</param>
-        /// <returns>Soft-limited sample value</returns>
-        private static float SoftLimit(float input, float threshold = 0.9f)
-        {
-            float absInput = Math.Abs(input);
-            if (absInput <= threshold)
-                return input;
-
-            float sign = Math.Sign(input);
-            float excess = absInput - threshold;
-            float softPart = excess / (1.0f + excess * 2.0f);
-            return sign * (threshold + softPart * 0.1f);
-        }
-
-        /// <summary>
-        /// Enhanced soft limiting for startup protection with more conservative threshold
-        /// </summary>
-        /// <param name="input">Input sample value</param>
-        /// <param name="threshold">Limiting threshold for startup protection</param>
-        /// <returns>Soft-limited sample value with startup protection</returns>
-        private static float StartupSoftLimit(float input, float threshold = 0.7f)
-        {
-            float absInput = Math.Abs(input);
-            if (absInput <= threshold)
-                return input;
-
-            float sign = Math.Sign(input);
-            float excess = absInput - threshold;
-            float softPart = excess / (1.0f + excess * 4.0f); // More aggressive softening
-            return sign * (threshold + softPart * 0.05f); // Very conservative headroom
-        }
-
-        /// <summary>
         /// Resets the dynamic amplifier's internal state by clearing the RMS window, 
         /// resetting gain and envelope values. Does not modify any settings or parameters.
         /// </summary>
         public override void Reset()
         {
-            currentGain = 1.0f;
+            currentGain = 3.0f;
             lastRms = 0.0f;
             windowSumSquares = 0.0f;
             rmsBufferIndex = 0;
@@ -650,9 +489,6 @@ namespace Ownaudio.Fx
             {
                 Array.Clear(rmsBuffer, 0, rmsBuffer.Length);
             }
-
-            // Reset startup protection
-            InitializeStartupProtection();
         }
 
         /// <summary>

@@ -12,8 +12,6 @@ namespace Ownaudio.Utilities.Matchering
         /// <summary>
         /// Frequency band energy levels
         /// </summary>
-
-        //public float[] FrequencyBands { get; set; } = new float[10];
         public float[] FrequencyBands { get; set; } = new float[30];
 
         /// <summary>
