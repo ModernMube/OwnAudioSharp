@@ -406,7 +406,7 @@ namespace Ownaudio.Utilities.Matchering
                     DynamicAmp = new DynamicAmpSettings
                     {
                         TargetLevel = -10f,
-                        AttackTime = 0.02f,
+                        AttackTime = 0.02f, 
                         ReleaseTime = 0.2f,
                         MaxGain = 8f
                     }
@@ -470,6 +470,8 @@ namespace Ownaudio.Utilities.Matchering
                 var sampleRate = source.CurrentDecoder?.StreamInfo.SampleRate ?? 44100;
 
                 Console.WriteLine($"Applying preset with distortion protection: {preset.Name}");
+                for (int i = 0; i < audioData.Length; i++)
+                    audioData[i] *= 0.85f;
 
                 // Apply intelligent scaling to preset curve to prevent distortion
                 var adjustedCurve = ApplyPresetIntelligentScaling(preset.FrequencyResponse, sourceSpectrum);
@@ -622,10 +624,10 @@ namespace Ownaudio.Utilities.Matchering
             // Print adjustment info
             Console.WriteLine("Preset curve adjustments:");
             var bandNames = new[] {
-        "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", "63Hz", "80Hz", "100Hz", "125Hz", "160Hz",
-        "200Hz", "250Hz", "315Hz", "400Hz", "500Hz", "630Hz", "800Hz", "1kHz", "1.25kHz", "1.6kHz",
-        "2kHz", "2.5kHz", "3.15kHz", "4kHz", "5kHz", "6.3kHz", "8kHz", "10kHz", "12.5kHz", "16kHz"
-    };
+                "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", "63Hz", "80Hz", "100Hz", "125Hz", "160Hz",
+                "200Hz", "250Hz", "315Hz", "400Hz", "500Hz", "630Hz", "800Hz", "1kHz", "1.25kHz", "1.6kHz",
+                "2kHz", "2.5kHz", "3.15kHz", "4kHz", "5kHz", "6.3kHz", "8kHz", "10kHz", "12.5kHz", "16kHz"
+            };
 
             for (int i = 0; i < adjustedCurve.Length; i++)
             {

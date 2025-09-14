@@ -17,10 +17,6 @@ namespace Ownaudio.Utilities.Matchering
         /// <summary>
         /// Standard ISO frequency bands used for 10-band equalizer analysis (Hz).
         /// </summary>
-
-        // private readonly float[] FrequencyBands = {
-        //     31.25f, 62.5f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f
-        // };
         private readonly float[] FrequencyBands = {
             20f, 25f, 31.5f, 40f, 50f, 63f, 80f, 100f, 125f, 160f,
             200f, 250f, 315f, 400f, 500f, 630f, 800f, 1000f, 1250f, 1600f,
@@ -48,6 +44,9 @@ namespace Ownaudio.Utilities.Matchering
             var audioData = source.GetFloatAudioData(TimeSpan.Zero);
             var channels = source.CurrentDecoder?.StreamInfo.Channels ?? 2;
             var sampleRate = source.CurrentDecoder?.StreamInfo.SampleRate ?? 44100;
+
+            for (int i = 0; i < audioData.Length; i++)
+                audioData[i] *= 0.85f;
 
             var monoData = ConvertToMono(audioData, channels);
             var frequencySpectrum = AnalyzeFrequencySpectrumAdvanced(monoData, sampleRate);
@@ -81,7 +80,6 @@ namespace Ownaudio.Utilities.Matchering
             var ampSettings = CalculateDynamicAmpSettings(sourceSpectrum, targetSpectrum);
 
             Console.WriteLine("Processing audio with direct EQ approach...");
-            //ApplyDirectEQProcessing(sourceFile, outputFile, eqAdjustments, ampSettings);
             ApplyDirectEQProcessing(sourceFile, outputFile, eqAdjustments, ampSettings, sourceSpectrum, targetSpectrum);
 
             Console.WriteLine($"EQ matching completed. Output saved to: {outputFile}");
