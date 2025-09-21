@@ -4,709 +4,442 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 
 namespace Ownaudio.Utilities.Matchering
 {
-    /// <summary>
-    /// Audio playback system presets based on audio engineering standards
-    /// </summary>
-    public enum PlaybackSystem
-    {
-        /// <summary>
-        /// Concert sound reinforcement system for large venues
-        /// </summary>
-        ConcertPA,
-
-        /// <summary>
-        /// Nightclub or DJ sound system optimized for dance music
-        /// </summary>
-        ClubPA,
-
-        /// <summary>
-        /// High-fidelity home speakers for critical listening
-        /// </summary>
-        HiFiSpeakers,
-
-        /// <summary>
-        /// Near-field studio monitors for professional mixing
-        /// </summary>
-        StudioMonitors,
-
-        /// <summary>
-        /// Over-ear headphones for personal listening
-        /// </summary>
-        Headphones,
-
-        /// <summary>
-        /// In-ear monitors or earbuds for portable listening
-        /// </summary>
-        Earbuds,
-
-        /// <summary>
-        /// Automotive audio system compensated for road noise
-        /// </summary>
-        CarStereo,
-
-        /// <summary>
-        /// Television or soundbar speakers optimized for dialogue
-        /// </summary>
-        Television,
-
-        /// <summary>
-        /// Radio transmission standards for FM/AM broadcast
-        /// </summary>
-        RadioBroadcast,
-
-        /// <summary>
-        /// Smartphone or tablet built-in speakers
-        /// </summary>
-        Smartphone
-    }
-
-    /// <summary>
-    /// Preset configuration for specific playback systems
-    /// </summary>
-    public class PlaybackPreset
-    {
-        /// <summary>
-        /// Human-readable name of the preset
-        /// </summary>
-        public string Name { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Detailed description of the preset's intended use
-        /// </summary>
-        public string Description { get; set; } = string.Empty;
-
-        /// <summary>
-        /// 30-band EQ frequency response curve in dB (20Hz to 16kHz)
-        /// </summary>
-        public float[] FrequencyResponse { get; set; } = new float[30];
-
-        /// <summary>
-        /// Target loudness level in LUFS for optimal playback
-        /// </summary>
-        public float TargetLoudness { get; set; }
-
-        /// <summary>
-        /// Recommended dynamic range in dB for the playback system
-        /// </summary>
-        public float DynamicRange { get; set; }
-
-        /// <summary>
-        /// Compression settings optimized for the playback system
-        /// </summary>
-        public CompressionSettings Compression { get; set; } = new();
-
-        /// <summary>
-        /// Dynamic amplifier settings for automatic level control
-        /// </summary>
-        public DynamicAmpSettings DynamicAmp { get; set; } = new();
-    }
-
     partial class AudioAnalyzer
     {
         /// <summary>
-        /// Predefined preset configurations for different playback systems
+        /// Enhanced preset processing using base sample as reference
+        /// First applies preset to base sample, then matches source to the processed base sample
         /// </summary>
-        private static readonly Dictionary<PlaybackSystem, PlaybackPreset> SystemPresets =
-            new Dictionary<PlaybackSystem, PlaybackPreset>
-            {
-                [PlaybackSystem.ConcertPA] = new PlaybackPreset
-                {
-                    Name = "Concert PA System",
-                    Description = "Large venue sound reinforcement with extended dynamics",
-                    FrequencyResponse = new float[]
-                    {
-                        // 20-16kHz: Concert PA characteristic curve
-                        -2f, -1f, 0f, +1f, +2f, +2f, +1f, +1f, 0f, 0f,     // 20-160Hz: Controlled low end
-                        +1f, +1f, +1f, 0f, 0f, -1f, -1f, 0f, +1f, +2f,     // 200-1.6kHz: Clear midrange
-                        +2f, +1f, 0f, +1f, +2f, +1f, 0f, -1f, -1f, -2f     // 2-16kHz: Controlled highs
-                    },
-                    TargetLoudness = -16f,  // Higher dynamic range for live music
-                    DynamicRange = 18f,
-                    Compression = new CompressionSettings
-                    {
-                        Threshold = -18f,
-                        Ratio = 2.5f,
-                        AttackTime = 10f,
-                        ReleaseTime = 100f,
-                        MakeupGain = 2f
-                    },
-                    DynamicAmp = new DynamicAmpSettings
-                    {
-                        TargetLevel = -16f,
-                        AttackTime = 0.1f,
-                        ReleaseTime = 0.5f,
-                        MaxGain = 6f
-                    }
-                },
-
-                [PlaybackSystem.ClubPA] = new PlaybackPreset
-                {
-                    Name = "Club/DJ Sound System",
-                    Description = "Dance music optimized with enhanced bass and presence",
-                    FrequencyResponse = new float[]
-                    {
-                        // Club sound: Enhanced bass and presence
-                        +3f, +4f, +4f, +3f, +2f, +2f, +1f, +1f, 0f, 0f,    // 20-160Hz: Strong bass
-                        0f, 0f, +1f, +1f, +1f, +1f, +2f, +2f, +3f, +3f,     // 200-1.6kHz: Forward mids
-                        +2f, +1f, +2f, +3f, +2f, +1f, +1f, 0f, 0f, -1f     // 2-16kHz: Dance presence
-                    },
-                    TargetLoudness = -11f,  // Loud for club environment
-                    DynamicRange = 8f,      // Compressed for dancefloor
-                    Compression = new CompressionSettings
-                    {
-                        Threshold = -15f,
-                        Ratio = 4f,
-                        AttackTime = 3f,
-                        ReleaseTime = 50f,
-                        MakeupGain = 3f
-                    },
-                    DynamicAmp = new DynamicAmpSettings
-                    {
-                        TargetLevel = -11f,
-                        AttackTime = 0.05f,
-                        ReleaseTime = 0.2f,
-                        MaxGain = 4f
-                    }
-                },
-
-                [PlaybackSystem.HiFiSpeakers] = new PlaybackPreset
-                {
-                    Name = "Hi-Fi Home Speakers",
-                    Description = "Neutral response for critical listening in treated rooms",
-                    FrequencyResponse = new float[]
-                    {
-                        // Hi-Fi: Neutral with slight warmth
-                        0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,           // 20-160Hz: Flat bass
-                        0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,            // 200-1.6kHz: Neutral mids
-                        0f, 0f, 0f, 0f, +0.5f, +1f, +1f, +0.5f, 0f, 0f    // 2-16kHz: Slight air boost
-                    },
-                    TargetLoudness = -18f,  // Audiophile dynamics
-                    DynamicRange = 20f,
-                    Compression = new CompressionSettings
-                    {
-                        Threshold = -25f,
-                        Ratio = 1.5f,
-                        AttackTime = 20f,
-                        ReleaseTime = 200f,
-                        MakeupGain = 1f
-                    },
-                    DynamicAmp = new DynamicAmpSettings
-                    {
-                        TargetLevel = -18f,
-                        AttackTime = 0.3f,
-                        ReleaseTime = 2f,
-                        MaxGain = 3f
-                    }
-                },
-
-                [PlaybackSystem.StudioMonitors] = new PlaybackPreset
-                {
-                    Name = "Studio Near-Field Monitors",
-                    Description = "Reference standard for professional mixing",
-                    FrequencyResponse = new float[]
-                    {
-                        // Studio monitors: True reference
-                        0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,           // 20-160Hz: Flat
-                        0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,            // 200-1.6kHz: Flat
-                        0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f             // 2-16kHz: Flat
-                    },
-                    TargetLoudness = -20f,  // Reference level
-                    DynamicRange = 22f,
-                    Compression = new CompressionSettings
-                    {
-                        Threshold = -30f,
-                        Ratio = 1.2f,
-                        AttackTime = 50f,
-                        ReleaseTime = 300f,
-                        MakeupGain = 0f
-                    },
-                    DynamicAmp = new DynamicAmpSettings
-                    {
-                        TargetLevel = -20f,
-                        AttackTime = 0.5f,
-                        ReleaseTime = 3f,
-                        MaxGain = 2f
-                    }
-                },
-
-                [PlaybackSystem.Headphones] = new PlaybackPreset
-                {
-                    Name = "Over-Ear Headphones",
-                    Description = "Compensated for typical headphone frequency response",
-                    FrequencyResponse = new float[]
-                    {
-                        // Headphone compensation curve
-                        +1f, +1f, +1f, +2f, +2f, +1f, +1f, 0f, 0f, -1f,    // 20-160Hz: Sub-bass boost
-                        -1f, -1f, 0f, +1f, +2f, +2f, +1f, 0f, -1f, -2f,     // 200-1.6kHz: Presence dip
-                        -1f, +1f, +2f, +1f, 0f, +1f, +2f, +3f, +2f, +1f     // 2-16kHz: Headphone curve
-                    },
-                    TargetLoudness = -16f,  // Personal listening level
-                    DynamicRange = 16f,
-                    Compression = new CompressionSettings
-                    {
-                        Threshold = -20f,
-                        Ratio = 2f,
-                        AttackTime = 5f,
-                        ReleaseTime = 80f,
-                        MakeupGain = 2f
-                    },
-                    DynamicAmp = new DynamicAmpSettings
-                    {
-                        TargetLevel = -16f,
-                        AttackTime = 0.2f,
-                        ReleaseTime = 1f,
-                        MaxGain = 4f
-                    }
-                },
-
-                [PlaybackSystem.Earbuds] = new PlaybackPreset
-                {
-                    Name = "In-Ear Monitors/Earbuds",
-                    Description = "Enhanced for in-ear acoustics and isolation",
-                    FrequencyResponse = new float[]
-                    {
-                        // IEM curve with bass compensation
-                        +2f, +3f, +3f, +2f, +1f, 0f, 0f, 0f, 0f, 0f,       // 20-160Hz: Bass boost for seal
-                        +1f, +2f, +2f, +2f, +2f, +1f, 0f, +1f, +2f, +3f,    // 200-1.6kHz: Clear vocals
-                        +3f, +2f, +1f, +2f, +3f, +2f, +1f, 0f, -1f, -2f     // 2-16kHz: Controlled highs
-                    },
-                    TargetLoudness = -14f,  // Mobile listening level
-                    DynamicRange = 12f,
-                    Compression = new CompressionSettings
-                    {
-                        Threshold = -18f,
-                        Ratio = 3f,
-                        AttackTime = 2f,
-                        ReleaseTime = 40f,
-                        MakeupGain = 3f
-                    },
-                    DynamicAmp = new DynamicAmpSettings
-                    {
-                        TargetLevel = -14f,
-                        AttackTime = 0.1f,
-                        ReleaseTime = 0.5f,
-                        MaxGain = 5f
-                    }
-                },
-
-                [PlaybackSystem.CarStereo] = new PlaybackPreset
-                {
-                    Name = "Car Stereo System",
-                    Description = "Optimized for road noise and cabin acoustics",
-                    FrequencyResponse = new float[]
-                    {
-                        // Car audio curve: Road noise compensation
-                        +2f, +2f, +1f, +1f, 0f, 0f, 0f, +1f, +2f, +3f,      // 20-160Hz: Engine compensation
-                        +3f, +2f, +1f, +2f, +3f, +4f, +4f, +3f, +2f, +1f,    // 200-1.6kHz: Vocal clarity
-                        +2f, +3f, +4f, +3f, +2f, +1f, +2f, +3f, +2f, +1f     // 2-16kHz: Wind noise comp
-                    },
-                    TargetLoudness = -12f,  // Loud environment
-                    DynamicRange = 10f,
-                    Compression = new CompressionSettings
-                    {
-                        Threshold = -16f,
-                        Ratio = 3.5f,
-                        AttackTime = 3f,
-                        ReleaseTime = 60f,
-                        MakeupGain = 4f
-                    },
-                    DynamicAmp = new DynamicAmpSettings
-                    {
-                        TargetLevel = -12f,
-                        AttackTime = 0.05f,
-                        ReleaseTime = 0.3f,
-                        MaxGain = 6f
-                    }
-                },
-
-                [PlaybackSystem.Television] = new PlaybackPreset
-                {
-                    Name = "Television/Soundbar",
-                    Description = "Dialogue clarity and late-night listening friendly",
-                    FrequencyResponse = new float[]
-                    {
-                        // TV curve: Dialogue focused
-                        -1f, -1f, 0f, +1f, +1f, +1f, +2f, +3f, +3f, +2f,    // 20-160Hz: Controlled bass
-                        +2f, +3f, +4f, +4f, +3f, +2f, +2f, +3f, +2f, +1f,    // 200-1.6kHz: Speech clarity
-                        +1f, +1f, +2f, +1f, 0f, 0f, +1f, +1f, 0f, -1f       // 2-16kHz: Soft highs
-                    },
-                    TargetLoudness = -15f,  // Living room level
-                    DynamicRange = 12f,
-                    Compression = new CompressionSettings
-                    {
-                        Threshold = -18f,
-                        Ratio = 4f,
-                        AttackTime = 1f,
-                        ReleaseTime = 30f,
-                        MakeupGain = 3f
-                    },
-                    DynamicAmp = new DynamicAmpSettings
-                    {
-                        TargetLevel = -15f,
-                        AttackTime = 0.1f,
-                        ReleaseTime = 0.8f,
-                        MaxGain = 4f
-                    }
-                },
-
-                [PlaybackSystem.RadioBroadcast] = new PlaybackPreset
-                {
-                    Name = "Radio Broadcast",
-                    Description = "FM/AM radio transmission standards",
-                    FrequencyResponse = new float[]
-                    {
-                        // Radio curve: Limited bandwidth, high compression
-                        0f, +1f, +2f, +2f, +2f, +2f, +2f, +2f, +2f, +1f,     // 20-160Hz: Controlled lows
-                        +2f, +3f, +4f, +4f, +4f, +3f, +3f, +4f, +3f, +2f,     // 200-1.6kHz: Forward mids
-                        +2f, +2f, +1f, +1f, 0f, 0f, +1f, 0f, -2f, -4f        // 2-16kHz: HF rolloff
-                    },
-                    TargetLoudness = -9f,   // Broadcast loudness
-                    DynamicRange = 6f,
-                    Compression = new CompressionSettings
-                    {
-                        Threshold = -12f,
-                        Ratio = 6f,
-                        AttackTime = 0.5f,
-                        ReleaseTime = 20f,
-                        MakeupGain = 6f
-                    },
-                    DynamicAmp = new DynamicAmpSettings
-                    {
-                        TargetLevel = -9f,
-                        AttackTime = 0.02f,
-                        ReleaseTime = 0.1f,
-                        MaxGain = 8f
-                    }
-                },
-
-                [PlaybackSystem.Smartphone] = new PlaybackPreset
-                {
-                    Name = "Smartphone/Tablet Speaker",
-                    Description = "Small speaker compensation with midrange focus",
-                    FrequencyResponse = new float[]
-                    {
-                        // Phone speaker curve: Limited bass, enhanced mids
-                        -6f, -4f, -2f, -1f, 0f, +1f, +2f, +3f, +4f, +4f,     // 20-160Hz: Bass limitation
-                        +5f, +6f, +6f, +5f, +4f, +4f, +5f, +6f, +5f, +4f,     // 200-1.6kHz: Strong mids
-                        +3f, +3f, +2f, +2f, +1f, +1f, +2f, +1f, 0f, -2f       // 2-16kHz: Controlled highs
-                    },
-                    TargetLoudness = -10f,  // Mobile environment
-                    DynamicRange = 8f,
-                    Compression = new CompressionSettings
-                    {
-                        Threshold = -14f,
-                        Ratio = 5f,
-                        AttackTime = 1f,
-                        ReleaseTime = 25f,
-                        MakeupGain = 5f
-                    },
-                    DynamicAmp = new DynamicAmpSettings
-                    {
-                        TargetLevel = -10f,
-                        AttackTime = 0.02f, 
-                        ReleaseTime = 0.2f,
-                        MaxGain = 8f
-                    }
-                }
-            };
-
-        /// <summary>
-        /// Processes audio file using playback system preset
-        /// </summary>
-        /// <param name="sourceFile">Input audio file path</param>
-        /// <param name="outputFile">Output audio file path</param>
-        /// <param name="system">Target playback system</param>
-        /// <exception cref="InvalidOperationException">Thrown when audio file cannot be loaded</exception>
-        /// <exception cref="ArgumentException">Thrown when file paths are invalid</exception>
-        public void ProcessWithPreset(string sourceFile, string outputFile, PlaybackSystem system)
+        /// <param name="sourceFile">Source audio file to process</param>
+        /// <param name="baseSampleFile">Base reference sample (20-30 sec FLAC)</param>
+        /// <param name="outputFile">Final output file path</param>
+        /// <param name="system">Playback system preset to apply</param>
+        /// <param name="tempDirectory">Directory for temporary files (optional)</param>
+        /// <param name="eqOnlyMode">If true, applies only EQ without compression/dynamics</param>
+        public void ProcessWithEnhancedPreset(string sourceFile, string outputFile, 
+            PlaybackSystem system, string tempDirectory = null, bool eqOnlyMode = true)
         {
-            Console.WriteLine($"Processing audio for {SystemPresets[system].Name}...");
-            Console.WriteLine($"Description: {SystemPresets[system].Description}");
+            if (string.IsNullOrEmpty(tempDirectory))
+                tempDirectory = Path.GetTempPath();
 
-            var preset = SystemPresets[system];
-            var sourceSpectrum = AnalyzeAudioFile(sourceFile);
+            // Generate temporary file paths
+            string processedBaseSample = Path.Combine(tempDirectory,
+                $"processed_base_{system}_{DateTime.Now.Ticks}.wav");
 
-            // Apply preset-based processing
-            ApplyPresetProcessing(sourceFile, outputFile, preset, sourceSpectrum);
+            string baseSampleFile = Path.Combine(tempDirectory,
+                $"base_sample_{system}_{DateTime.Now.Ticks}.wav");
 
-            Console.WriteLine($"Audio optimized for {preset.Name}");
-            PrintPresetResults(sourceSpectrum, preset);
-        }
+            if (!LoadBaseSample(baseSampleFile))
+                return;
 
-        /// <summary>
-        /// Gets available playback system presets
-        /// </summary>
-        /// <returns>Dictionary of available presets with their configurations</returns>
-        public static Dictionary<PlaybackSystem, PlaybackPreset> GetAvailablePresets()
-        {
-            return new Dictionary<PlaybackSystem, PlaybackPreset>(SystemPresets);
-        }
-
-        /// <summary>
-        /// Improved preset processing with distortion protection and Q-factor optimization
-        /// </summary>
-        /// <param name="inputFile">Input audio file path</param>
-        /// <param name="outputFile">Output audio file path</param>
-        /// <param name="preset">Playback preset configuration</param>
-        /// <param name="sourceSpectrum">Source audio spectrum analysis</param>
-        /// <exception cref="InvalidOperationException">Thrown when audio processing fails</exception>
-        /// <exception cref="ArgumentNullException">Thrown when preset is null</exception>
-        private void ApplyPresetProcessing(string inputFile, string outputFile,
-            PlaybackPreset preset, AudioSpectrum sourceSpectrum)
-        {
             try
             {
-                using var source = new Source();
-                source.LoadAsync(inputFile).Wait();
+                Console.WriteLine($"=== ENHANCED PRESET PROCESSING: {SystemPresets[system].Name} ===");
+                Console.WriteLine($"Mode: {(eqOnlyMode ? "EQ Only" : "Full Effects Chain")}");
 
-                if (!source.IsLoaded)
-                    throw new InvalidOperationException($"Cannot load audio file: {inputFile}");
+                // Step 1: Apply preset effects to base sample
+                ApplyPresetToBaseSample(baseSampleFile, processedBaseSample, system, eqOnlyMode);
 
-                var audioData = source.GetFloatAudioData(TimeSpan.Zero);
-                var channels = source.CurrentDecoder?.StreamInfo.Channels ?? 2;
-                var sampleRate = source.CurrentDecoder?.StreamInfo.SampleRate ?? 44100;
+                // Step 2: Use processed base sample as target for EQ matching
+                ProcessEQMatching(sourceFile, processedBaseSample, outputFile);
 
-                Console.WriteLine($"Applying preset with distortion protection: {preset.Name}");
-                for (int i = 0; i < audioData.Length; i++)
-                    audioData[i] *= 0.85f;
-
-                // Apply intelligent scaling to preset curve to prevent distortion
-                var adjustedCurve = ApplyPresetIntelligentScaling(preset.FrequencyResponse, sourceSpectrum);
-
-                // Calculate optimal Q factors for the preset curve
-                var optimizedQFactors = CalculatePresetQFactors(adjustedCurve, sourceSpectrum);
-
-                // Create 30-band EQ with optimized Q factors
-                var presetEQ = new Equalizer30Band(sampleRate);
-
-                // Set each band with optimized parameters
-                for (int i = 0; i < FrequencyBands.Length; i++)
-                {
-                    presetEQ.SetBandGain(i, FrequencyBands[i], optimizedQFactors[i], adjustedCurve[i]);
-                }
-
-                // More conservative compressor settings for preset processing
-                var compressor = new Compressor(
-                    Compressor.DbToLinear(Math.Max(-25f, preset.Compression.Threshold)), // More conservative threshold
-                    Math.Min(3f, preset.Compression.Ratio), // Limit ratio to prevent over-compression
-                    preset.Compression.AttackTime,
-                    preset.Compression.ReleaseTime,
-                    Math.Min(3f, preset.Compression.MakeupGain), // Limit makeup gain
-                    sampleRate
-                );
-
-                // Conservative dynamic amp settings
-                var dynamicAmp = new DynamicAmp(
-                    preset.DynamicAmp.TargetLevel + 2f, // Add headroom
-                    Math.Max(0.1f, preset.DynamicAmp.AttackTime), // Prevent too fast attack
-                    Math.Max(0.5f, preset.DynamicAmp.ReleaseTime), // Prevent too fast release
-                    0.003f,
-                    Math.Min(4f, preset.DynamicAmp.MaxGain), // Limit max gain
-                    sampleRate,
-                    0.25f
-                );
-
-                // Process audio in chunks with improved monitoring
-                int chunkSize = 512 * channels;
-                var processedData = new List<float>();
-                int totalSamples = audioData.Length;
-                float maxLevel = 0f;
-                int clippedSamples = 0;
-
-                for (int offset = 0; offset < totalSamples; offset += chunkSize)
-                {
-                    int samplesToProcess = Math.Min(chunkSize, totalSamples - offset);
-                    var chunk = new float[samplesToProcess];
-                    Array.Copy(audioData, offset, chunk, 0, samplesToProcess);
-
-                    // Apply processing chain
-                    presetEQ.Process(chunk.AsSpan());
-                    compressor.Process(chunk.AsSpan());
-                    dynamicAmp.Process(chunk.AsSpan());
-
-                    // Monitor levels and apply soft limiting
-                    for (int i = 0; i < chunk.Length; i++)
-                    {
-                        float sample = chunk[i];
-                        maxLevel = Math.Max(maxLevel, Math.Abs(sample));
-
-                        // Soft limiting at -0.5dB to prevent harsh clipping
-                        if (Math.Abs(sample) > 0.94f)
-                        {
-                            chunk[i] = sample > 0 ? 0.94f : -0.94f;
-                            clippedSamples++;
-                        }
-                    }
-
-                    processedData.AddRange(chunk);
-
-                    float progress = (float)(offset + samplesToProcess) / totalSamples * 100f;
-                    Console.Write($"\rProcessing: {progress:F1}%");
-                }
-
-                Console.WriteLine($"\nMax level: {20 * Math.Log10(maxLevel):F1}dB");
-                if (clippedSamples > 0)
-                {
-                    Console.WriteLine($"Warning: {clippedSamples} samples were soft-limited");
-                }
-
-                Console.WriteLine("Writing to file...");
-                Ownaudio.Utilities.WaveFile.WriteFile(outputFile, processedData.ToArray(), sampleRate, channels, 24);
+                Console.WriteLine($"Enhanced preset processing completed: {outputFile}");
+                PrintEnhancedPresetResults(sourceFile, baseSampleFile, processedBaseSample, outputFile, system);
             }
-            catch (Exception ex)
+            finally
             {
-                Console.WriteLine($"Error during preset processing: {ex.Message}");
-                throw;
+                try
+                {
+                    if (File.Exists(processedBaseSample))
+                        File.Delete(processedBaseSample);
+
+                    if (File.Exists(baseSampleFile))
+                        File.Delete(baseSampleFile);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Warning: Could not delete temporary file: {ex.Message}");
+                }
             }
         }
 
         /// <summary>
-        /// Applies intelligent scaling to preset frequency response curves to prevent distortion
+        /// Applies preset effects to the base sample to create enhanced target
         /// </summary>
-        /// <param name="presetCurve">Original preset frequency response curve</param>
-        /// <param name="sourceSpectrum">Source audio spectrum for analysis</param>
-        /// <returns>Scaled frequency response curve optimized for distortion-free processing</returns>
-        private float[] ApplyPresetIntelligentScaling(float[] presetCurve, AudioSpectrum sourceSpectrum)
+        /// <param name="baseSampleFile">Input base sample file</param>
+        /// <param name="processedBaseSample">Output processed base sample file</param>
+        /// <param name="system">Playback system preset</param>
+        /// <param name="eqOnlyMode">If true, applies only EQ without compression/dynamics</param>
+        private void ApplyPresetToBaseSample(string baseSampleFile, string processedBaseSample,
+            PlaybackSystem system, bool eqOnlyMode = false)
         {
-            var adjustedCurve = new float[presetCurve.Length];
+            var preset = SystemPresets[system];
 
-            // Calculate total boost in preset
-            float totalBoost = presetCurve.Where(x => x > 0).Sum();
+            using var source = new Source();
+            source.LoadAsync(baseSampleFile).Wait();
 
-            // Apply global scaling based on total boost
-            float globalScaling = totalBoost switch
+            if (!source.IsLoaded)
+                throw new InvalidOperationException($"Cannot load base sample file: {baseSampleFile}");
+
+            var audioData = source.GetFloatAudioData(TimeSpan.Zero);
+            var channels = source.CurrentDecoder?.StreamInfo.Channels ?? 2;
+            var sampleRate = source.CurrentDecoder?.StreamInfo.SampleRate ?? 44100;
+
+            Console.WriteLine($"Base sample loaded: {audioData.Length / channels / sampleRate:F1}s, {channels}ch, {sampleRate}Hz");
+
+            // Calculate current RMS for level matching later
+            float originalRMS = CalculateRMS(audioData);
+
+            // Minimal gain reduction for headroom
+            for (int i = 0; i < audioData.Length; i++)
+                audioData[i] *= 0.95f;
+
+            // Create CONSERVATIVE preset curve - much smaller adjustments
+            var enhancedCurve = CreateConservativePresetCurve(preset.FrequencyResponse);
+            var baseSpectrum = AnalyzeAudioFile(baseSampleFile);
+            var optimizedQFactors = CalculateEnhancedPresetQFactors(enhancedCurve, baseSpectrum);
+
+            // Apply MINIMAL gain reduction based on EQ boosts only
+            float totalBoosts = enhancedCurve.Where(x => x > 0).Sum();
+            float protectiveGain = Math.Max(0.7f, 1.0f - (totalBoosts * 0.03f)); // 3% reduction per dB boost
+
+            for (int i = 0; i < audioData.Length; i++)
+                audioData[i] *= protectiveGain;
+
+            Console.WriteLine($"Applied protective gain: {20 * Math.Log10(protectiveGain):F1}dB (total boosts: {totalBoosts:F1}dB)");
+
+            // Setup EQ (always applied)
+            var presetEQ = new Equalizer30Band(sampleRate);
+            for (int i = 0; i < FrequencyBands.Length; i++)
             {
-                > 30f => 0.4f,  // Very aggressive presets need heavy scaling
-                > 20f => 0.5f,  // Aggressive presets need moderate scaling
-                > 12f => 0.6f,  // Moderate presets need light scaling
-                > 6f => 0.75f,  // Conservative presets need minimal scaling
-                _ => 0.85f      // Minimal presets need almost no scaling
-            };
-
-            Console.WriteLine($"Preset scaling applied: {globalScaling:F2} (Total boost: {totalBoost:F1}dB)");
-
-            for (int i = 0; i < presetCurve.Length; i++)
-            {
-                float freq = FrequencyBands[i];
-                float originalGain = presetCurve[i];
-
-                // Apply frequency-specific scaling
-                float freqScaling = freq switch
-                {
-                    <= 50f => 0.6f,     // Conservative sub-bass
-                    <= 200f => 0.7f,    // Moderate bass
-                    <= 1000f => 0.8f,   // Good low-mid
-                    <= 4000f => 0.65f,  // Conservative presence
-                    <= 8000f => 0.75f,  // Moderate brilliance
-                    _ => 0.7f           // Conservative air
-                };
-
-                // Combine scalings
-                float scaledGain = originalGain * globalScaling * freqScaling;
-
-                // Apply per-frequency limits
-                float maxBoost = freq switch
-                {
-                    < 100f => 3f,
-                    < 500f => 4f,
-                    < 2000f => 4.5f,
-                    < 5000f => 3.5f,
-                    < 10000f => 4f,
-                    _ => 3f
-                };
-
-                adjustedCurve[i] = Math.Max(-6f, Math.Min(maxBoost, scaledGain));
+                presetEQ.SetBandGain(i, FrequencyBands[i], optimizedQFactors[i], enhancedCurve[i]);
             }
 
-            // Print adjustment info
-            Console.WriteLine("Preset curve adjustments:");
+            // Setup optional dynamics processing
+            Compressor? enhancedCompressor = null;
+
+            if (!eqOnlyMode)
+            {
+                // ONLY compressor, NO DynamicAmp to preserve level
+                enhancedCompressor = new Compressor(
+                    Compressor.DbToLinear(-15f), 
+                    1.8f, 
+                    50f, 
+                    200f,  
+                    2.0f, 
+                    sampleRate
+                );
+            }
+
+            // Process audio with effects chain
+            int chunkSize = 512 * channels;
+            var processedData = new List<float>();
+            int totalSamples = audioData.Length;
+            float maxLevel = 0f;
+
+            Console.WriteLine($"Applying {(eqOnlyMode ? "EQ-only" : "full")} {preset.Name} effects to base sample...");
+
+            for (int offset = 0; offset < totalSamples; offset += chunkSize)
+            {
+                int samplesToProcess = Math.Min(chunkSize, totalSamples - offset);
+                var chunk = new float[samplesToProcess];
+                Array.Copy(audioData, offset, chunk, 0, samplesToProcess);
+
+                // Always apply EQ
+                presetEQ.Process(chunk.AsSpan());
+
+                // Conditionally apply ONLY compression (NO DynamicAmp)
+                if (!eqOnlyMode && enhancedCompressor != null)
+                {
+                    enhancedCompressor.Process(chunk.AsSpan());
+                }
+
+                // Monitor levels with gentler limiting
+                for (int i = 0; i < chunk.Length; i++)
+                {
+                    float sample = chunk[i];
+                    maxLevel = Math.Max(maxLevel, Math.Abs(sample));
+
+                    // Very gentle soft limiting to preserve dynamics
+                    if (Math.Abs(sample) > 0.95f)
+                    {
+                        float sign = Math.Sign(sample);
+                        float limited = sign * (0.95f + 0.05f * MathF.Tanh((Math.Abs(sample) - 0.95f) * 4f));
+                        chunk[i] = limited;
+                    }
+                }
+
+                processedData.AddRange(chunk);
+
+                if ((offset / chunkSize) % 50 == 0)
+                {
+                    float progress = (float)(offset + samplesToProcess) / totalSamples * 100f;
+                    Console.Write($"\rProcessing base sample: {progress:F1}%");
+                }
+            }
+
+            Console.WriteLine($"\nBase sample processed. Max level: {20 * Math.Log10(maxLevel):F1}dB");
+
+            // AUTOMATIC LEVEL MATCHING - preserve original RMS level
+            float processedRMS = CalculateRMS(processedData.ToArray());
+            float levelCompensation = originalRMS / Math.Max(processedRMS, 1e-10f);
+
+            // Apply compensation gain to match original level
+            for (int i = 0; i < processedData.Count; i++)
+            {
+                processedData[i] *= levelCompensation;
+            }
+
+            float finalMaxLevel = processedData.Max(Math.Abs);
+            Console.WriteLine($"Level compensation applied: {20 * Math.Log10(levelCompensation):F1}dB");
+            Console.WriteLine($"Final max level: {20 * Math.Log10(finalMaxLevel):F1}dB");
+
+            // Write processed base sample
+            Ownaudio.Utilities.WaveFile.WriteFile(processedBaseSample, processedData.ToArray(), sampleRate, channels, 24);
+
+            Console.WriteLine($"Enhanced base sample created: {processedBaseSample}");
+        }
+
+        /// <summary>
+        /// Loads the embedded basesample audio from resources.
+        /// </summary>
+        private bool LoadBaseSample(string path)
+        {
+            bool isLoadSample = false;
+            
+            try
+            {
+                var assembly = Assembly.GetExecutingAssembly();
+                string resourceName = "basesample.bin";
+
+                foreach (var name in assembly.GetManifestResourceNames())
+                {
+                    if (name.EndsWith(resourceName))
+                    {
+                        resourceName = name;
+                        break;
+                    }
+                }
+
+                using Stream stream = assembly.GetManifestResourceStream(resourceName)!;
+                using var memoryStream = new MemoryStream();
+                stream.CopyTo(memoryStream);
+
+                Ownaudio.Utilities.WaveFile.WriteFile(path, memoryStream.ToArray(), 48000, 2, 24);
+
+                isLoadSample = true;    
+            }
+            catch
+            {
+                isLoadSample = false;
+                throw new Exception("Load error target audio data!");
+            }
+            
+            return isLoadSample;
+        }
+
+        /// <summary>
+        /// Creates CONSERVATIVE preset curve to avoid overdriving the matchering algorithm
+        /// </summary>
+        /// <param name="originalCurve">Original preset frequency response curve</param>
+        /// <returns>Conservative curve suitable for matchering target</returns>
+        private float[] CreateConservativePresetCurve(float[] originalCurve)
+        {
+            var conservativeCurve = new float[originalCurve.Length];
+
+            for (int i = 0; i < originalCurve.Length; i++)
+            {
+                float freq = FrequencyBands[i];
+                float originalGain = originalCurve[i];
+
+                // MUCH smaller scaling factors - we want subtle changes for matchering
+                float conservativeFactor = freq switch
+                {
+                    <= 63f => 0.6f,     // Reduce bass enhancement
+                    <= 250f => 0.7f,    // Reduce low-mid character
+                    <= 1000f => 0.8f,   // Minimal mid enhancement
+                    <= 4000f => 0.8f,   // Reduce presence changes
+                    <= 8000f => 0.7f,   // Reduce brilliance
+                    _ => 0.6f           // Reduce air changes
+                };
+
+                float conservativeGain = originalGain * conservativeFactor;
+
+                // Much tighter limits for matchering targets
+                float maxConservativeBoost = freq switch
+                {
+                    < 100f => 2f,   // Much lower bass limits
+                    < 500f => 2.5f,
+                    < 2000f => 3f,
+                    < 5000f => 3f,
+                    < 10000f => 2.5f,
+                    _ => 2f
+                };
+
+                conservativeCurve[i] = Math.Max(-4f, Math.Min(maxConservativeBoost, conservativeGain));
+            }
+
+            Console.WriteLine("Conservative preset curve created for matchering:");
             var bandNames = new[] {
                 "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", "63Hz", "80Hz", "100Hz", "125Hz", "160Hz",
                 "200Hz", "250Hz", "315Hz", "400Hz", "500Hz", "630Hz", "800Hz", "1kHz", "1.25kHz", "1.6kHz",
                 "2kHz", "2.5kHz", "3.15kHz", "4kHz", "5kHz", "6.3kHz", "8kHz", "10kHz", "12.5kHz", "16kHz"
             };
 
-            for (int i = 0; i < adjustedCurve.Length; i++)
+            for (int i = 0; i < conservativeCurve.Length; i++)
             {
-                if (Math.Abs(adjustedCurve[i]) > 0.5f)
+                if (Math.Abs(conservativeCurve[i]) > 0.5f)
                 {
-                    Console.WriteLine($"{bandNames[i]}: {adjustedCurve[i]:+0.1;-0.1}dB (was {presetCurve[i]:+0.1;-0.1}dB)");
+                    Console.WriteLine($"{bandNames[i]}: {conservativeCurve[i]:+0.1;-0.1}dB (was {originalCurve[i]:+0.1;-0.1}dB)");
                 }
             }
 
-            return adjustedCurve;
+            return conservativeCurve;
         }
 
         /// <summary>
-        /// Calculates optimal Q factors for preset curves based on frequency and gain characteristics
+        /// Calculates optimized Q factors for enhanced preset processing
         /// </summary>
-        /// <param name="adjustedCurve">Scaled frequency response curve</param>
-        /// <param name="sourceSpectrum">Source audio spectrum analysis</param>
-        /// <returns>Array of optimized Q factors for each frequency band</returns>
-        private float[] CalculatePresetQFactors(float[] adjustedCurve, AudioSpectrum sourceSpectrum)
+        /// <param name="enhancedCurve">Enhanced frequency response curve</param>
+        /// <param name="baseSpectrum">Base sample spectrum analysis</param>
+        /// <returns>Array of optimized Q factors</returns>
+        private float[] CalculateEnhancedPresetQFactors(float[] enhancedCurve, AudioSpectrum baseSpectrum)
         {
             var qFactors = new float[FrequencyBands.Length];
 
             for (int i = 0; i < FrequencyBands.Length; i++)
             {
                 float freq = FrequencyBands[i];
-                float gain = Math.Abs(adjustedCurve[i]);
+                float gain = Math.Abs(enhancedCurve[i]);
 
-                // Base Q for presets (wider than EQ matching for musicality)
+                // Base Q for enhanced processing (slightly wider for musicality)
                 float baseQ = freq switch
                 {
-                    <= 63f => 0.4f,     // Very wide for sub-bass
-                    <= 250f => 0.5f,    // Wide for bass
-                    <= 1000f => 0.7f,   // Moderate for low-mid
-                    <= 4000f => 0.8f,   // Standard for mid/presence
-                    <= 10000f => 0.7f,  // Moderate for brilliance
-                    _ => 0.6f           // Wide for air
+                    <= 63f => 0.5f,     // Wide for enhanced bass
+                    <= 250f => 0.6f,    // Moderate-wide for bass
+                    <= 1000f => 0.8f,   // Standard for low-mid
+                    <= 4000f => 0.9f,   // Slightly narrow for presence
+                    <= 10000f => 0.8f,  // Moderate for brilliance
+                    _ => 0.7f           // Wide for air frequencies
                 };
 
-                // Adjust Q based on gain amount (less aggressive than EQ matching)
+                // Gain-based adjustment (less aggressive than EQ matching)
                 float gainAdjustment = gain switch
                 {
                     <= 1f => 1.0f,
-                    <= 2f => 1.05f,
                     <= 3f => 1.1f,
-                    <= 4f => 1.2f,
+                    <= 5f => 1.2f,
                     _ => 1.3f
                 };
 
-                qFactors[i] = Math.Max(0.3f, Math.Min(2f, baseQ * gainAdjustment));
+                qFactors[i] = Math.Max(0.4f, Math.Min(2.5f, baseQ * gainAdjustment));
             }
 
             return qFactors;
         }
 
         /// <summary>
-        /// Prints detailed preset application results to console
+        /// Prints comprehensive results from enhanced preset processing
         /// </summary>
-        /// <param name="source">Source audio spectrum analysis</param>
-        /// <param name="preset">Applied preset configuration</param>
-        private void PrintPresetResults(AudioSpectrum source, PlaybackPreset preset)
+        /// <param name="sourceFile">Original source file</param>
+        /// <param name="baseSampleFile">Original base sample file</param>
+        /// <param name="processedBaseSample">Processed base sample file</param>
+        /// <param name="outputFile">Final output file</param>
+        /// <param name="system">Applied playback system</param>
+        private void PrintEnhancedPresetResults(string sourceFile, string baseSampleFile,
+            string processedBaseSample, string outputFile, PlaybackSystem system)
         {
-            Console.WriteLine("\n=== PRESET APPLICATION RESULTS ===");
-            Console.WriteLine($"Preset: {preset.Name}");
-            Console.WriteLine($"Target Loudness: {preset.TargetLoudness:F1} LUFS");
-            Console.WriteLine($"Target Dynamic Range: {preset.DynamicRange:F1} dB");
-            Console.WriteLine($"Source - RMS: {source.RMSLevel:F3}, Loudness: {source.Loudness:F1} LUFS");
+            Console.WriteLine("\n=== ENHANCED PRESET PROCESSING RESULTS ===");
+            Console.WriteLine($"Applied System: {SystemPresets[system].Name}");
+            Console.WriteLine($"Source: {Path.GetFileName(sourceFile)}");
+            Console.WriteLine($"Base Sample: {Path.GetFileName(baseSampleFile)}");
+            Console.WriteLine($"Output: {Path.GetFileName(outputFile)}");
 
-            Console.WriteLine("\nApplied EQ Curve:");
-            var bandNames = new[] {
-                "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", "63Hz", "80Hz", "100Hz", "125Hz", "160Hz",
-                "200Hz", "250Hz", "315Hz", "400Hz", "500Hz", "630Hz", "800Hz", "1kHz", "1.25kHz", "1.6kHz",
-                "2kHz", "2.5kHz", "3.15kHz", "4kHz", "5kHz", "6.3kHz", "8kHz", "10kHz", "12.5kHz", "16kHz"
-            };
-
-            for (int i = 0; i < preset.FrequencyResponse.Length; i++)
+            try
             {
-                if (Math.Abs(preset.FrequencyResponse[i]) > 0.1f)
+                var originalBaseSpectrum = AnalyzeAudioFile(baseSampleFile);
+                var processedBaseSpectrum = AnalyzeAudioFile(processedBaseSample);
+                var finalSpectrum = AnalyzeAudioFile(outputFile);
+
+                Console.WriteLine("\nSpectrum Analysis:");
+                Console.WriteLine($"Original Base - RMS: {originalBaseSpectrum.RMSLevel:F3}, Loudness: {originalBaseSpectrum.Loudness:F1}dBFS");
+                Console.WriteLine($"Enhanced Base - RMS: {processedBaseSpectrum.RMSLevel:F3}, Loudness: {processedBaseSpectrum.Loudness:F1}dBFS");
+                Console.WriteLine($"Final Output - RMS: {finalSpectrum.RMSLevel:F3}, Loudness: {finalSpectrum.Loudness:F1}dBFS");
+
+                float baseEnhancement = processedBaseSpectrum.Loudness - originalBaseSpectrum.Loudness;
+                Console.WriteLine($"Base Sample Enhancement: {baseEnhancement:+0.1;-0.1}dB");
+
+                Console.WriteLine("\n=== PROCESSING CHAIN SUMMARY ===");
+                Console.WriteLine("Step 1: Enhanced preset effects applied to base sample");
+                Console.WriteLine("Step 2: EQ matching applied from source to enhanced base");
+                Console.WriteLine("Result: Source audio with enhanced preset characteristics");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Analysis error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Batch processing for multiple sources with the same enhanced preset
+        /// </summary>
+        /// <param name="sourceFiles">Array of source files to process</param>
+        /// <param name="baseSampleFile">Base reference sample</param>
+        /// <param name="outputDirectory">Output directory for processed files</param>
+        /// <param name="system">Playback system preset</param>
+        /// <param name="fileNameSuffix">Suffix for output filenames</param>
+        public void BatchProcessWithEnhancedPreset(string[] sourceFiles, string baseSampleFile,
+            string outputDirectory, PlaybackSystem system, string fileNameSuffix = null)
+        {
+            if (!Directory.Exists(outputDirectory))
+                Directory.CreateDirectory(outputDirectory);
+
+            string suffix = fileNameSuffix ?? $"_{system.ToString().ToLower()}";
+            string tempDirectory = Path.Combine(Path.GetTempPath(), $"enhanced_preset_{DateTime.Now.Ticks}");
+            Directory.CreateDirectory(tempDirectory);
+
+            try
+            {
+                Console.WriteLine($"=== BATCH ENHANCED PRESET PROCESSING ===");
+                Console.WriteLine($"System: {SystemPresets[system].Name}");
+                Console.WriteLine($"Processing {sourceFiles.Length} files...");
+
+                for (int i = 0; i < sourceFiles.Length; i++)
                 {
-                    Console.WriteLine($"{bandNames[i]}: {preset.FrequencyResponse[i]:+0.1;-0.1} dB");
+                    string sourceFile = sourceFiles[i];
+                    string fileName = Path.GetFileNameWithoutExtension(sourceFile);
+                    string outputFile = Path.Combine(outputDirectory, $"{fileName}{suffix}.wav");
+
+                    Console.WriteLine($"\n[{i + 1}/{sourceFiles.Length}] Processing: {Path.GetFileName(sourceFile)}");
+
+                    try
+                    {
+                        ProcessWithEnhancedPreset(sourceFile, outputFile, system, tempDirectory);
+                        Console.WriteLine($"Completed: {Path.GetFileName(outputFile)}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error processing {Path.GetFileName(sourceFile)}: {ex.Message}");
+                    }
+                }
+
+                Console.WriteLine($"\nBatch processing completed. Files saved to: {outputDirectory}");
+            }
+            finally
+            {
+                // Cleanup temp directory
+                try
+                {
+                    if (Directory.Exists(tempDirectory))
+                        Directory.Delete(tempDirectory, true);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Warning: Could not delete temp directory: {ex.Message}");
                 }
             }
         }
