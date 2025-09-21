@@ -647,13 +647,13 @@ analyzer.ProcessEQMatching(
             <div class="code-block">
                 <div class="code-header">Playback System Optimization</div>
                 <pre><code class="language-csharp">// Optimize for different playback systems
-analyzer.ProcessWithPreset("source.wav", "hifi_output.wav", 
+analyzer.ProcessWithEnhancedPreset("source.wav", "hifi_output.wav", 
     PlaybackSystem.HiFiSpeakers);
     
-analyzer.ProcessWithPreset("source.wav", "club_output.wav", 
+analyzer.ProcessWithEnhancedPreset("source.wav", "club_output.wav", 
     PlaybackSystem.ClubPA);
     
-analyzer.ProcessWithPreset("source.wav", "streaming_output.wav", 
+analyzer.ProcessWithEnhancedPreset("source.wav", "streaming_output.wav", 
     PlaybackSystem.RadioBroadcast);</code></pre>
             </div>
 
@@ -775,11 +775,11 @@ Console.WriteLine($"Reference loudness: {referenceAnalysis.Loudness:F1} LUFS");
 analyzer.ProcessEQMatching("my_track.wav", "commercial_reference.wav", "mastered_track.wav");
 
 // Step 4: Create delivery versions for different platforms
-analyzer.ProcessWithPreset("mastered_track.wav", "streaming_version.wav", 
+analyzer.ProcessWithEnhancedPreset("mastered_track.wav", "streaming_version.wav", 
     PlaybackSystem.RadioBroadcast);
-analyzer.ProcessWithPreset("mastered_track.wav", "club_version.wav", 
+analyzer.ProcessWithEnhancedPreset("mastered_track.wav", "club_version.wav", 
     PlaybackSystem.ClubPA);
-analyzer.ProcessWithPreset("mastered_track.wav", "audiophile_version.wav", 
+analyzer.ProcessWithEnhancedPreset("mastered_track.wav", "audiophile_version.wav", 
     PlaybackSystem.HiFiSpeakers);
 
 Console.WriteLine("✅ Professional mastering workflow complete!");</code></pre>
@@ -947,7 +947,7 @@ analyzer.ProcessEQMatching("jazz_song.wav", "acoustic_reference.wav", "audiophil
             <div class="code-block">
                 <div class="code-header">Podcast Optimization</div>
                 <pre><code class="language-csharp">// Optimize podcast for streaming platforms
-analyzer.ProcessWithPreset("podcast_raw.wav", "podcast_final.wav", 
+analyzer.ProcessWithEnhancedPreset("podcast_raw.wav", "podcast_final.wav", 
     PlaybackSystem.RadioBroadcast);
 
 // Alternative: Match to professional podcast reference
@@ -959,13 +959,13 @@ analyzer.ProcessEQMatching("podcast_raw.wav", "pro_podcast_ref.wav", "podcast_pr
             <div class="code-block">
                 <div class="code-header">Streaming Platform Delivery</div>
                 <pre><code class="language-csharp">// Spotify (-14 LUFS target)
-analyzer.ProcessWithPreset("song.wav", "spotify_master.wav", PlaybackSystem.RadioBroadcast);
+analyzer.ProcessWithEnhancedPreset("song.wav", "spotify_master.wav", PlaybackSystem.RadioBroadcast);
 
 // Apple Music (-16 LUFS target)  
-analyzer.ProcessWithPreset("song.wav", "apple_master.wav", PlaybackSystem.HiFiSpeakers);
+analyzer.ProcessWithEnhancedPreset("song.wav", "apple_master.wav", PlaybackSystem.HiFiSpeakers);
 
 // YouTube (-13 LUFS target)
-analyzer.ProcessWithPreset("song.wav", "youtube_master.wav", PlaybackSystem.Television);</code></pre>
+analyzer.ProcessWithEnhancedPreset("song.wav", "youtube_master.wav", PlaybackSystem.Television);</code></pre>
             </div>
 
             <h2 id="post-production">Post-Production Applications</h2>
@@ -978,7 +978,7 @@ analyzer.ProcessWithPreset("song.wav", "youtube_master.wav", PlaybackSystem.Tele
 analyzer.ProcessEQMatching("film_score.wav", "hollywood_reference.wav", "final_score.wav");
 
 // TV broadcast preparation
-analyzer.ProcessWithPreset("tv_audio.wav", "broadcast_ready.wav", PlaybackSystem.Television);</code></pre>
+analyzer.ProcessWithEnhancedPreset("tv_audio.wav", "broadcast_ready.wav", PlaybackSystem.Television);</code></pre>
             </div>
 
             <h3>Game Audio</h3>
@@ -1086,9 +1086,9 @@ class ProfessionalMastering
             Console.WriteLine($"Source: {sourceAnalysis.Loudness:F1} LUFS, {sourceAnalysis.DynamicRange:F1} dB DR");
             
             // Create delivery versions
-            analyzer.ProcessWithPreset("mastered.wav", "streaming.wav", PlaybackSystem.RadioBroadcast);
-            analyzer.ProcessWithPreset("mastered.wav", "club.wav", PlaybackSystem.ClubPA);
-            analyzer.ProcessWithPreset("mastered.wav", "audiophile.wav", PlaybackSystem.HiFiSpeakers);
+            analyzer.ProcessWithEnhancedPreset("mastered.wav", "streaming.wav", PlaybackSystem.RadioBroadcast);
+            analyzer.ProcessWithEnhancedPreset("mastered.wav", "club.wav", PlaybackSystem.ClubPA);
+            analyzer.ProcessWithEnhancedPreset("mastered.wav", "audiophile.wav", PlaybackSystem.HiFiSpeakers);
             
             Console.WriteLine("🏆 Professional mastering workflow complete!");
             Console.WriteLine("Your audio now meets broadcast industry standards.");
