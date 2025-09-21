@@ -118,5 +118,123 @@ namespace Ownaudio.Utilities.Matchering
         public float MaxGain { get; set; }
     }
 
+    /// <summary>
+    /// Represents an audio segment with associated metadata for analysis.
+    /// Contains the audio data along with timing and energy information.
+    /// </summary>
+    public class AudioSegment
+    {
+        /// <summary>
+        /// Gets or sets the audio data for this segment.
+        /// </summary>
+        public float[] Data { get; set; }
+
+        /// <summary>
+        /// Gets or sets the start time of this segment in seconds.
+        /// </summary>
+        public float StartTime { get; set; }
+
+        /// <summary>
+        /// Gets or sets the duration of this segment in seconds.
+        /// </summary>
+        public float Duration { get; set; }
+
+        /// <summary>
+        /// Gets or sets the energy level of this segment in dBFS.
+        /// </summary>
+        public float EnergyLevel { get; set; }
+
+        /// <summary>
+        /// Gets or sets the sample rate for this segment in Hz.
+        /// </summary>
+        public int SampleRate { get; set; }
+    }
+
+    /// <summary>
+    /// Contains the analysis results for a single audio segment.
+    /// Includes frequency spectrum, dynamics, and weighting information.
+    /// </summary>
+    public class SegmentAnalysis
+    {
+        /// <summary>
+        /// Gets or sets the index of this segment in the original sequence.
+        /// </summary>
+        public int SegmentIndex { get; set; }
+
+        /// <summary>
+        /// Gets or sets the start time of this segment in seconds.
+        /// </summary>
+        public float StartTime { get; set; }
+
+        /// <summary>
+        /// Gets or sets the duration of this segment in seconds.
+        /// </summary>
+        public float Duration { get; set; }
+
+        /// <summary>
+        /// Gets or sets the energy level of this segment in dBFS.
+        /// </summary>
+        public float EnergyLevel { get; set; }
+
+        /// <summary>
+        /// Gets or sets the frequency spectrum analysis for this segment.
+        /// </summary>
+        public float[] FrequencySpectrum { get; set; }
+
+        /// <summary>
+        /// Gets or sets the dynamic analysis information for this segment.
+        /// </summary>
+        public DynamicsInfo Dynamics { get; set; }
+
+        /// <summary>
+        /// Gets or sets the calculated weight for this segment in final averaging.
+        /// </summary>
+        public float Weight { get; set; }
+
+        /// <summary>
+        /// Gets or sets the outlier score for this segment (used for filtering).
+        /// </summary>
+        public float OutlierScore { get; set; }
+    }
+
+    /// <summary>
+    /// Configuration parameters for segmented audio analysis approach.
+    /// Defines how audio files are divided into segments for more accurate analysis.
+    /// </summary>
+    public class SegmentedAnalysisConfig
+    {
+        /// <summary>
+        /// Gets or sets the length of each audio segment in seconds.
+        /// Default value is 10.0 seconds.
+        /// </summary>
+        public float SegmentLengthSeconds { get; set; } = 10.0f;
+
+        /// <summary>
+        /// Gets or sets the overlap ratio between consecutive segments.
+        /// Default value is 0.2 (20% overlap).
+        /// </summary>
+        public float OverlapRatio { get; set; } = 0.2f;
+
+        /// <summary>
+        /// Gets or sets the threshold for outlier detection in standard deviations.
+        /// Segments exceeding this threshold will be considered outliers.
+        /// Default value is 2.5 standard deviations.
+        /// </summary>
+        public float OutlierThreshold { get; set; } = 2.5f;
+
+        /// <summary>
+        /// Gets or sets whether to use weighted averaging for final spectrum calculation.
+        /// Default value is true.
+        /// </summary>
+        public bool UseWeightedAveraging { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets the minimum energy threshold in dBFS for segment inclusion.
+        /// Segments quieter than this threshold will be skipped.
+        /// Default value is -60.0 dBFS.
+        /// </summary>
+        public float MinSegmentEnergyThreshold { get; set; } = -60.0f;
+    }
+
     #endregion
 }

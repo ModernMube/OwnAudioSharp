@@ -15,7 +15,7 @@ namespace Ownaudio.Utilities.Matchering
         #region EQ Calculation and Smoothing
 
         /// <summary>
-        /// More aggressive EQ calculation for direct processing
+        /// Calculates aggressive EQ adjustments for direct audio processing by analyzing source and target spectrums.
         /// </summary>
         /// <param name="source">Source audio spectrum to analyze</param>
         /// <param name="target">Target audio spectrum to match</param>
@@ -39,15 +39,147 @@ namespace Ownaudio.Utilities.Matchering
             var adjustments = ApplyIntelligentScaling(rawAdjustments);
 
             Console.WriteLine("Balanced EQ Adjustments:");
-            var bandNames = new[] { 
+            var bandNames = new[] {
                 "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", "63Hz", "80Hz", "100Hz", "125Hz", "160Hz",
                 "200Hz", "250Hz", "315Hz", "400Hz", "500Hz", "630Hz", "800Hz", "1kHz", "1.25kHz", "1.6kHz",
                 "2kHz", "2.5kHz", "3.15kHz", "4kHz", "5kHz", "6.3kHz", "8kHz", "10kHz", "12.5kHz", "16kHz"
             };
 
-            for (int i = 0; i < adjustments.Length; i++)
+            //for (int i = 0; i < adjustments.Length; i++)
+            //{
+            //    Console.WriteLine($"{bandNames[i]}: {adjustments[i]:+0.1;-0.1} dB (raw: {rawAdjustments[i]:+0.1;-0.1} dB)");
+            //}
+
+            return adjustments;
+        }
+
+        /// <summary>
+        /// Applies intelligent scaling to raw EQ adjustments that maintains spectral balance and musicality.
+        /// </summary>
+        /// <param name="rawAdjustments">Raw EQ adjustment values calculated from spectrum differences</param>
+        /// <returns>Scaled and balanced EQ adjustment values optimized for musical content</returns>
+        /// <remarks>
+        /// Analyzes spectral energy distribution across low, mid, and high frequency ranges.
+        /// Applies dynamic global scaling based on total correction needed and frequency-specific 
+        /// scaling factors. Includes musical limiting to prevent excessive boosts/cuts and 
+        /// maintains spectral balance through refined correction algorithms.
+        /// </remarks>
+        private float[] ApplyIntelligentScaling(float[] rawAdjustments)
+        {
+            var adjustments = new float[rawAdjustments.Length];
+
+            float lowEnergy = rawAdjustments.Take(9).Sum();      // 20-125 Hz
+            float midEnergy = rawAdjustments.Skip(9).Take(11).Sum(); // 160-2000 Hz  
+            float highEnergy = rawAdjustments.Skip(20).Sum();     // 2.5kHz+
+
+            Console.WriteLine($"Raw energy distribution - Low:{lowEnergy:F1}dB Mid:{midEnergy:F1}dB High:{highEnergy:F1}dB");
+
+            float totalBoost = rawAdjustments.Where(x => x > 0).Sum();
+
+            float globalScaling = totalBoost switch
             {
-                Console.WriteLine($"{bandNames[i]}: {adjustments[i]:+0.1;-0.1} dB (raw: {rawAdjustments[i]:+0.1;-0.1} dB)");
+                > 40f => 0.3f,  // Very conservative for large corrections
+                > 25f => 0.4f,  // Conservative for moderate corrections  
+                > 15f => 0.5f,  // Moderate scaling
+                > 8f => 0.6f,   // Standard scaling
+                _ => 0.7f       // More aggressive for small corrections
+            };
+
+            for (int i = 0; i < rawAdjustments.Length; i++)
+            {
+                float freq = FrequencyBands[i];
+                float rawGain = rawAdjustments[i];
+
+                float freqScaling = freq switch
+                {
+                    <= 40f => 0.4f,
+                    <= 80f => 0.45f,
+                    <= 160f => 0.55f,
+                    <= 400f => 0.4f,
+                    <= 800f => 0.6f,
+                    <= 1600f => 0.65f,
+                    <= 2000f => 0.7f,   // New range: vocal fundamental frequencies
+                    <= 2500f => 0.8f,   // Increased from 0.55f to 0.8f (vocal presence)
+                    <= 3150f => 0.85f,  // Increased from 0.55f to 0.85f (critical clarity)
+                    <= 4000f => 0.8f,   // New: important intelligibility range
+                    <= 5000f => 0.7f,   // Increased from 0.6f to 0.7f
+                    <= 6300f => 0.8f,
+                    <= 8000f => 0.88f,
+                    <= 10000f => 0.95f,
+                    <= 12500f => 0.85f,
+                    _ => 0.8f
+                };
+
+                float scaledGain = rawGain * globalScaling * freqScaling;
+
+                float maxBoost = freq switch
+                {
+                    < 50f => 2.7f,
+                    < 125f => 3.3f,
+                    < 400f => 3.0f,
+                    < 1000f => 5.0f,
+                    < 2000f => 5.5f,    // New: vocal fundamental frequencies
+                    < 2500f => 6.5f,    // Increased from 4.5f to 6.5f (vocal presence)
+                    < 3200f => 7.0f,    // New: critical clarity range
+                    < 4000f => 6.5f,    // Increased from 4.0f to 6.5f (intelligibility)
+                    < 5000f => 5.5f,    // Increased from 4.0f to 5.5f
+                    < 6300f => 6.8f,
+                    < 8000f => 7.5f,
+                    < 10000f => 7.8f,
+                    < 12500f => 7.5f,
+                    _ => 6.5f
+                };
+
+                float maxCut = 8.0f; // Standard cut limit
+
+                adjustments[i] = Math.Max(-maxCut, Math.Min(maxBoost, scaledGain));
+            }
+
+            // Apply refined spectral balance correction
+            return ApplyRefinedSpectralBalance(adjustments);
+        }
+
+        /// <summary>
+        /// Applies refined spectral balance correction with specific 2-5kHz vocal presence control.
+        /// </summary>
+        /// <param name="adjustments">EQ adjustment values to balance</param>
+        /// <returns>Spectrally balanced EQ adjustment values with controlled mid-presence range</returns>
+        /// <remarks>
+        /// Analyzes detailed energy distribution across frequency ranges (low, low-mid, mid, presence, high).
+        /// Specifically controls 2-5kHz dominance to prevent harsh or fatiguing sound.
+        /// Applies proportional reduction to overly dominant frequency ranges while maintaining 
+        /// overall spectral coherence.
+        /// </remarks>
+        private float[] ApplyRefinedSpectralBalance(float[] adjustments)
+        {
+            float lowSum = adjustments.Take(9).Sum();            // 20-125 Hz
+            float lowMidSum = adjustments.Skip(9).Take(5).Sum();  // 160-630 Hz
+            float midSum = adjustments.Skip(14).Take(6).Sum();    // 800-2.5kHz
+            float vocalPresenceSum = adjustments.Skip(20).Take(4).Sum(); // 2.5-4kHz (vocal presence)
+            float highPresenceSum = adjustments.Skip(24).Take(2).Sum();  // 5-6.3kHz
+            float highSum = adjustments.Skip(26).Sum();          // 8kHz+
+
+            // Only intervene in extreme cases
+            if (vocalPresenceSum > 12.0f) // Higher threshold
+            {
+                Console.WriteLine("Limiting extreme vocal presence boost...");
+                for (int i = 20; i <= 23; i++) // 2.5kHz-4kHz range
+                {
+                    if (adjustments[i] > 5.0f) // Only for large boosts
+                    {
+                        adjustments[i] *= 0.9f; // Gentler limitation
+                    }
+                }
+            }
+
+            // Low frequency dominance control unchanged
+            if (lowSum > vocalPresenceSum + 6.0f) // Higher tolerance
+            {
+                Console.WriteLine("Reducing low frequency dominance...");
+                for (int i = 0; i < 9; i++)
+                {
+                    adjustments[i] *= 0.85f;
+                }
             }
 
             return adjustments;
@@ -55,9 +187,27 @@ namespace Ownaudio.Utilities.Matchering
 
         #endregion
 
+        #region Direct EQ Processing
+
+        /// <summary>
+        /// Applies direct EQ processing to an audio file with dynamic Q optimization and advanced audio processing chain.
+        /// </summary>
+        /// <param name="inputFile">Path to the input audio file</param>
+        /// <param name="outputFile">Path to the output processed audio file</param>
+        /// <param name="eqAdjustments">Array of EQ adjustment values in decibels for each frequency band</param>
+        /// <param name="dynamicAmp">Dynamic amplifier settings for level adjustment</param>
+        /// <param name="sourceSpectrum">Source audio spectrum for Q factor optimization</param>
+        /// <param name="targetSpectrum">Target audio spectrum for Q factor optimization</param>
+        /// <exception cref="InvalidOperationException">Thrown when the audio file cannot be loaded</exception>
+        /// <exception cref="Exception">Thrown when any processing error occurs</exception>
+        /// <remarks>
+        /// Loads the audio file, applies pre-gain reduction, calculates optimal Q factors for EQ bands,
+        /// processes the audio through a 30-band equalizer, global compressor, and dynamic amplifier.
+        /// Includes safety clipping and progress reporting during processing.
+        /// </remarks>
         private void ApplyDirectEQProcessing(string inputFile, string outputFile,
-            float[] eqAdjustments, DynamicAmpSettings dynamicAmp, 
-            AudioSpectrum sourceSpectrum, AudioSpectrum targetSpectrum) //new parameters
+            float[] eqAdjustments, DynamicAmpSettings dynamicAmp,
+            AudioSpectrum sourceSpectrum, AudioSpectrum targetSpectrum)
         {
             try
             {
@@ -75,51 +225,34 @@ namespace Ownaudio.Utilities.Matchering
 
                 Console.WriteLine($"Audio loaded: {channels} channels, {sampleRate} Hz");
                 for (int i = 0; i < audioData.Length; i++)
-                    audioData[i] *= 0.85f;
+                    audioData[i] *= 0.9f;
 
                 var optimizedQFactors = CalculateOptimalQFactors(eqAdjustments, sourceSpectrum, targetSpectrum);
 
                 var directEQ = new Equalizer30Band(sampleRate);
-                
+
                 for (int i = 0; i < FrequencyBands.Length; i++)
                 {
                     directEQ.SetBandGain(i, FrequencyBands[i], optimizedQFactors[i], eqAdjustments[i]);
                 }
 
                 var globalCompressor = new Compressor(
-                    Compressor.DbToLinear(-22.0f),
-                    1.3f,
-                    40.0f,
-                    300.0f,
+                    Compressor.DbToLinear(-26.0f),      
+                    1.1f,                               
+                    60.0f,                              
+                    500.0f,                             
                     1.0f,
                     sampleRate
                 );
-                //var globalCompressor = new Compressor(
-                //    Compressor.DbToLinear(-28.0f),  // Magasabb küszöb - kevesebb kompresszió
-                //    1.15f,                          // Alacsonyabb arány - természetesebb hang
-                //    60.0f,                          // Lassabb attack - simább átmenetek
-                //    500.0f,                         // Hosszabb release - természetesebb lecsengés
-                //    0.5f,                           // Kevesebb makeup gain - dinamika megőrzés
-                //    sampleRate
-                //);
 
-                //var dynamicAmplifier = new DynamicAmp(
-                //    dynamicAmp.TargetLevel + 1.0f,
-                //    dynamicAmp.AttackTime * 0.8f,
-                //    dynamicAmp.ReleaseTime * 1.2f,
-                //    0.003f,
-                //    dynamicAmp.MaxGain * 1.2f,
-                //    sampleRate,
-                //    0.25f
-                //);
                 var dynamicAmplifier = new DynamicAmp(
-                    dynamicAmp.TargetLevel + 3.0f,      // Több headroom a dinamikának
-                    dynamicAmp.AttackTime * 2.0f,       // Lassabb attack - kevésbé agresszív
-                    dynamicAmp.ReleaseTime * 2.5f,      // Sokkal lassabb release
-                    0.001f,                             // Kisebb threshold - finomabb működés
-                    dynamicAmp.MaxGain * 0.65f,          // Alacsonyabb max gain - biztonságosabb
+                    dynamicAmp.TargetLevel + 1.0f,      
+                    dynamicAmp.AttackTime * 0.8f,       
+                    dynamicAmp.ReleaseTime * 1.0f,      
+                    0.001f,                             
+                    dynamicAmp.MaxGain * 0.85f,         
                     sampleRate,
-                    0.15f                               // Kisebb mix - kevésbé drasztikus hatás
+                    0.15f                               
                 );
 
                 int chunkSize = 512 * channels;
@@ -159,143 +292,6 @@ namespace Ownaudio.Utilities.Matchering
             }
         }
 
-
-        /// <summary>
-        /// Intelligent scaling that maintains spectral balance and musicality
-        /// </summary>
-        /// <param name="rawAdjustments">Raw EQ adjustment values calculated from spectrum differences</param>
-        /// <returns>Scaled and balanced EQ adjustment values optimized for musical content</returns>
-        /// <remarks>
-        /// Analyzes spectral energy distribution across low, mid, and high frequency ranges.
-        /// Applies dynamic global scaling based on total correction needed and frequency-specific 
-        /// scaling factors. Includes musical limiting to prevent excessive boosts/cuts and 
-        /// maintains spectral balance through refined correction algorithms.
-        /// </remarks>
-        private float[] ApplyIntelligentScaling(float[] rawAdjustments)
-        {
-            var adjustments = new float[rawAdjustments.Length];
-
-            float lowEnergy = rawAdjustments.Take(9).Sum();      // 20-125 Hz
-            float midEnergy = rawAdjustments.Skip(9).Take(11).Sum(); // 160-2000 Hz  
-            float highEnergy = rawAdjustments.Skip(20).Sum();     // 2.5kHz+
-
-            Console.WriteLine($"Raw energy distribution - Low:{lowEnergy:F1}dB Mid:{midEnergy:F1}dB High:{highEnergy:F1}dB");
-
-            float totalBoost = rawAdjustments.Where(x => x > 0).Sum();
-
-            float globalScaling = totalBoost switch
-            {
-                > 40f => 0.3f,  // Very conservative for large corrections
-                > 25f => 0.4f,  // Conservative for moderate corrections  
-                > 15f => 0.5f,  // Moderate scaling
-                > 8f => 0.6f,   // Standard scaling
-                _ => 0.7f       // More aggressive for small corrections
-            };
-
-            for (int i = 0; i < rawAdjustments.Length; i++)
-            {
-                float freq = FrequencyBands[i];
-                float rawGain = rawAdjustments[i];
-
-                float freqScaling = freq switch
-                {
-                    <= 40f => 0.4f,    // Very conservative deep sub-bass
-                    <= 80f => 0.45f,     // Conservative sub-bass
-                    <= 160f => 0.55f,    // Moderate low-bass
-                    <= 400f => 0.4f,    // Good low-mid
-                    <= 800f => 0.6f,    // Good mid-bass
-                    <= 1600f => 0.65f,  // Moderate mid-range
-                    <= 3150f => 0.55f,  // Conservative upper-mid
-                    <= 6300f => 0.6f,   // Moderate presence
-                    <= 10000f => 0.7f,  // Good brilliance
-                    <= 12500f => 0.6f,  // Conservative upper brilliance
-                    _ => 0.5f           // Conservative air
-                };
-
-                float scaledGain = rawGain * globalScaling * freqScaling;
-
-                float maxBoost = freq switch
-                {
-                    < 50f => 2.7f,      // Very conservative deep sub-bass
-                    < 125f => 3.3f,     // Conservative sub-bass
-                    < 400f => 3.0f,     // Moderate bass boost
-                    < 1000f => 5.0f,    // Good low-mid boost
-                    < 2500f => 4.5f,    // Moderate mid boost
-                    < 5000f => 4.0f,    // Conservative presence boost
-                    < 8000f => 5.5f,    // Good upper presence boost
-                    < 12500f => 5.0f,   // Conservative brilliance boost
-                    _ => 4.0f           // Conservative air boost
-                };
-
-                float maxCut = 8.0f; // Standard cut limit
-
-                adjustments[i] = Math.Max(-maxCut, Math.Min(maxBoost, scaledGain));
-            }
-
-            // Apply refined spectral balance correction
-            return ApplyRefinedSpectralBalance(adjustments);
-        }
-
-        /// <summary>
-        /// Refined spectral balance with specific 2-5kHz control
-        /// </summary>
-        /// <param name="adjustments">EQ adjustment values to balance</param>
-        /// <returns>Spectrally balanced EQ adjustment values with controlled mid-presence range</returns>
-        /// <remarks>
-        /// Analyzes detailed energy distribution across frequency ranges (low, low-mid, mid, presence, high).
-        /// Specifically controls 2-5kHz dominance to prevent harsh or fatiguing sound.
-        /// Applies proportional reduction to overly dominant frequency ranges while maintaining 
-        /// overall spectral coherence.
-        /// </remarks>
-        private float[] ApplyRefinedSpectralBalance(float[] adjustments)
-        {
-            float lowSum = adjustments.Take(9).Sum();            // 20-125 Hz
-            float lowMidSum = adjustments.Skip(9).Take(5).Sum();  // 160-630 Hz
-            float midSum = adjustments.Skip(14).Take(6).Sum();    // 800-2.5kHz
-            float presenceSum = adjustments.Skip(20).Take(3).Sum(); // 3.15-5kHz
-            float highSum = adjustments.Skip(23).Sum();          // 6.3kHz+
-
-            Console.WriteLine($"Detailed energy - Low:{lowSum:F1} LowMid:{lowMidSum:F1} Mid:{midSum:F1} Presence:{presenceSum:F1} High:{highSum:F1}");
-
-            float midPresenceSum = midSum + presenceSum; // Combined 1-4kHz
-
-            if (midPresenceSum > 6.0f) // 2-5kHz range too strong
-            {
-                Console.WriteLine("Reducing 2-5kHz dominance...");
-                for (int i = 20; i <= 24; i++) // 2kHz-5kHz range
-                {
-                    if (adjustments[i] > 2.0f) adjustments[i] *= 0.8f;
-                }
-            }
-
-            // Standard checks for other ranges
-            if (highSum > midPresenceSum + 4.0f) // High frequencies too dominant
-            {
-                Console.WriteLine("Reducing high frequency dominance...");
-                for (int i = 23; i < adjustments.Length; i++) // 6.3kHz+
-                {
-                    adjustments[i] *= 0.9f;
-                }
-            }
-
-            if (lowSum > midPresenceSum + 4.0f) // Low frequencies too dominant
-            {
-                Console.WriteLine("Reducing low frequency dominance...");
-                for (int i = 0; i < 9; i++) // 20-125 Hz
-                {
-                    adjustments[i] *= 0.90f;
-                }
-            }
-
-            for (int i = 26; i <= 28; i++) // 8kHz, 10kHz, 12.5kHz
-            {
-                if (i < adjustments.Length && adjustments[i] > 0)
-                {
-                    adjustments[i] *= 0.77f;
-                }
-            }
-
-            return adjustments;
-        }
+        #endregion
     }
 }

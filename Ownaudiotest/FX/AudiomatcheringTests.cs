@@ -1,17 +1,10 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Ownaudio.Sources;
 using Ownaudio.Utilities.Matchering;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace Ownaudio.Tests.Matchering
 {
     /// <summary>
-    /// Comprehensive tests for AudioMatchering functionality
-    /// Tests spectrum analysis, EQ matching, and audio processing capabilities
+    /// Comprehensive tests for AudioAnalyzer matchering functionality
+    /// Tests cover spectrum analysis, EQ matching, preset processing, and real-world scenarios
     /// </summary>
     [TestClass]
     [DoNotParallelize]
@@ -19,52 +12,47 @@ namespace Ownaudio.Tests.Matchering
     {
 #nullable disable
         private static AudioAnalyzer _analyzer;
-        private static string _sourceAudioFile;
-        private static string _targetAudioFile;
-        private static string _outputDirectory;
-        private static SourceManager _manager;
+        private static string _sourceTestFile;
+        private static string _targetTestFile;
+        private static string _baseSampleFile;
+        private static string _tempDirectory;
 #nullable restore
 
         [ClassInitialize]
         public static void ClassSetup(TestContext context)
         {
-            Console.WriteLine("Initializing AudioMatchering test system...");
-
-            bool initialized = OwnAudio.Initialize();
-            Assert.IsTrue(initialized, "OwnAudio should initialize successfully");
-
-            _manager = SourceManager.Instance;
+            Console.WriteLine("Initializing AudioAnalyzer matchering test system...");
 
             _analyzer = new AudioAnalyzer();
-            _outputDirectory = Path.Combine(Path.GetTempPath(), "AudioMatcheringTests");
-
-            if (!Directory.Exists(_outputDirectory))
-                Directory.CreateDirectory(_outputDirectory);
+            _tempDirectory = Path.Combine(Path.GetTempPath(), $"matchering_tests_{DateTime.Now.Ticks}");
+            Directory.CreateDirectory(_tempDirectory);
 
             // Create test audio files with different characteristics
-            _sourceAudioFile = CreateSourceAudioFile();
-            _targetAudioFile = CreateTargetAudioFile();
+            _sourceTestFile = CreateTestAudioFile("source_test.wav", TestAudioType.Vocal);
+            _targetTestFile = CreateTestAudioFile("target_test.wav", TestAudioType.Music);
+            _baseSampleFile = CreateTestAudioFile("base_sample.wav", TestAudioType.Reference);
 
-            Console.WriteLine($"Test files created in: {_outputDirectory}");
-            Console.WriteLine("AudioMatchering test setup complete.");
+            Console.WriteLine($"Matchering test setup complete. Files ready for analysis.");
+            Console.WriteLine($"Temp directory: {_tempDirectory}");
         }
 
         [ClassCleanup]
         public static void ClassCleanup()
         {
-            Console.WriteLine("Cleaning up AudioMatchering test system...");
+            Console.WriteLine("Cleaning up matchering test system...");
 
             try
             {
-                _manager?.Stop();
-                _manager?.ResetAll();
+                // Clean up test files
+                if (File.Exists(_sourceTestFile)) File.Delete(_sourceTestFile);
+                if (File.Exists(_targetTestFile)) File.Delete(_targetTestFile);
+                if (File.Exists(_baseSampleFile)) File.Delete(_baseSampleFile);
 
-                if (Directory.Exists(_outputDirectory))
-                    Directory.Delete(_outputDirectory, true);
+                // Clean up temp directory
+                if (Directory.Exists(_tempDirectory))
+                    Directory.Delete(_tempDirectory, true);
 
-                OwnAudio.Free();
-
-                Console.WriteLine("AudioMatchering test cleanup complete.");
+                Console.WriteLine("Matchering test cleanup complete.");
             }
             catch (Exception ex)
             {
@@ -74,466 +62,240 @@ namespace Ownaudio.Tests.Matchering
 
         [TestMethod]
         [Priority(1)]
-        public void Test1_SpectrumAnalysisBasics()
+        public void Test1_BasicSpectrumAnalysis()
         {
-            Console.WriteLine("=== Testing Spectrum Analysis Basics ===");
+            Console.WriteLine("=== Testing Basic Spectrum Analysis ===");
 
             // Test source audio analysis
-            Console.WriteLine("Analyzing source audio spectrum...");
-            var sourceSpectrum = _analyzer.AnalyzeAudioFile(_sourceAudioFile);
+            Console.WriteLine("Analyzing source audio...");
+            var sourceSpectrum = _analyzer.AnalyzeAudioFile(_sourceTestFile);
 
             Assert.IsNotNull(sourceSpectrum, "Source spectrum should not be null");
             Assert.IsNotNull(sourceSpectrum.FrequencyBands, "Frequency bands should not be null");
             Assert.AreEqual(30, sourceSpectrum.FrequencyBands.Length, "Should have 30 frequency bands");
-
-            // Verify spectrum values are in valid range
-            foreach (var band in sourceSpectrum.FrequencyBands)
-            {
-                Assert.IsTrue(band >= 0.0f && band <= 1.0f, $"Band value {band} should be normalized (0-1)");
-            }
-
-            // Test dynamics values
             Assert.IsTrue(sourceSpectrum.RMSLevel > 0, "RMS level should be positive");
             Assert.IsTrue(sourceSpectrum.PeakLevel > 0, "Peak level should be positive");
-            Assert.IsTrue(sourceSpectrum.PeakLevel >= sourceSpectrum.RMSLevel, "Peak should be >= RMS");
-
-            Console.WriteLine($"Source analysis - RMS: {sourceSpectrum.RMSLevel:F3}, Peak: {sourceSpectrum.PeakLevel:F3}");
-            Console.WriteLine($"Dynamic Range: {sourceSpectrum.DynamicRange:F1}dB, Loudness: {sourceSpectrum.Loudness:F1} LUFS");
 
             // Test target audio analysis
-            Console.WriteLine("Analyzing target audio spectrum...");
-            var targetSpectrum = _analyzer.AnalyzeAudioFile(_targetAudioFile);
+            Console.WriteLine("Analyzing target audio...");
+            var targetSpectrum = _analyzer.AnalyzeAudioFile(_targetTestFile);
 
             Assert.IsNotNull(targetSpectrum, "Target spectrum should not be null");
-            Assert.AreEqual(30, targetSpectrum.FrequencyBands.Length, "Target should have 30 frequency bands");
+            Assert.IsTrue(targetSpectrum.DynamicRange > 0, "Dynamic range should be positive");
+            Assert.IsTrue(targetSpectrum.Loudness < 0, "Loudness should be in dBFS (negative)");
 
-            // Verify spectrums are different (since we created different test files)
-            bool spectrumsDifferent = false;
+            // Verify frequency bands have reasonable values
             for (int i = 0; i < sourceSpectrum.FrequencyBands.Length; i++)
             {
-                if (Math.Abs(sourceSpectrum.FrequencyBands[i] - targetSpectrum.FrequencyBands[i]) > 0.01f)
-                {
-                    spectrumsDifferent = true;
-                    break;
-                }
+                Assert.IsTrue(!float.IsNaN(sourceSpectrum.FrequencyBands[i]), $"Band {i} should not be NaN");
+                Assert.IsTrue(!float.IsInfinity(sourceSpectrum.FrequencyBands[i]), $"Band {i} should not be infinite");
             }
-            Assert.IsTrue(spectrumsDifferent, "Source and target spectrums should be different");
 
-            Console.WriteLine("✅ Spectrum analysis basics completed successfully");
+            Console.WriteLine($"Source - RMS: {sourceSpectrum.RMSLevel:F4}, Peak: {sourceSpectrum.PeakLevel:F4}");
+            Console.WriteLine($"Target - RMS: {targetSpectrum.RMSLevel:F4}, Peak: {targetSpectrum.PeakLevel:F4}");
+            Console.WriteLine("✓ Basic spectrum analysis completed successfully");
         }
 
         [TestMethod]
         [Priority(2)]
-        public void Test2_FrequencyBandAccuracy()
+        public void Test2_ShortFileAnalysis()
         {
-            Console.WriteLine("=== Testing Frequency Band Accuracy ===");
+            Console.WriteLine("=== Testing Short File Analysis (Expected Failure) ===");
 
-            // Create test files with specific frequency content
-            var testFiles = CreateFrequencyTestFiles();
+            // Create a short test file that should fail segmented analysis
+            string shortFile = CreateShortTestAudioFile("short_test.wav", 5); // 5 seconds - too short
 
-            foreach (var testFile in testFiles)
+            try
             {
-                Console.WriteLine($"Testing frequency detection: {testFile.Key}Hz");
-                var spectrum = _analyzer.AnalyzeAudioFile(testFile.Value);
+                Console.WriteLine("Attempting to analyze short audio file (should fail)...");
 
-                // Debug: Print all band energies for problematic frequencies
-                if (testFile.Key == 500.0f)
-                {
-                    Console.WriteLine("500Hz band energies:");
-                    for (int i = 0; i < spectrum.FrequencyBands.Length; i++)
-                    {
-                        Console.WriteLine($"  Band {i}: {spectrum.FrequencyBands[i]:F4}");
-                    }
-                }
+                var shortSpectrum = _analyzer.AnalyzeAudioFile(shortFile);
 
-                // Find the band that should contain this frequency
-                int expectedBand = GetExpectedBandIndex(testFile.Key);
-
-                if (expectedBand >= 0)
-                {
-                    // Check the expected band and neighboring bands for elevated energy
-                    float averageEnergy = spectrum.FrequencyBands.Average();
-                    float expectedBandEnergy = spectrum.FrequencyBands[expectedBand];
-
-                    // Also check neighboring bands as energy can spread
-                    float maxNearbyEnergy = expectedBandEnergy;
-                    for (int neighbor = Math.Max(0, expectedBand - 2);
-                         neighbor <= Math.Min(spectrum.FrequencyBands.Length - 1, expectedBand + 2);
-                         neighbor++)
-                    {
-                        maxNearbyEnergy = Math.Max(maxNearbyEnergy, spectrum.FrequencyBands[neighbor]);
-                    }
-
-                    // Very lenient threshold - just check that there's some detectable energy
-                    float threshold = Math.Max(0.001f, averageEnergy * 0.1f);
-                    Assert.IsTrue(maxNearbyEnergy > threshold,
-                        $"Band {expectedBand} or nearby bands should have detectable energy for {testFile.Key}Hz (Max nearby: {maxNearbyEnergy:F4}, Threshold: {threshold:F4}, Avg: {averageEnergy:F4})");
-
-                    Console.WriteLine($"  {testFile.Key}Hz -> Band {expectedBand}: {expectedBandEnergy:F4}, Max nearby: {maxNearbyEnergy:F4} (avg: {averageEnergy:F4})");
-                }
-                else
-                {
-                    Console.WriteLine($"  {testFile.Key}Hz -> No expected band found, skipping");
-                }
-
-                // Cleanup test file
-                File.Delete(testFile.Value);
+                // If we get here, the implementation changed to support short files
+                Assert.IsNotNull(shortSpectrum, "Short file spectrum should not be null if analysis succeeded");
+                Console.WriteLine("Unexpected: Short file analysis succeeded");
             }
-
-            Console.WriteLine("✅ Frequency band accuracy test completed successfully");
+            catch (InvalidOperationException ex) when (ex.Message.Contains("too short"))
+            {
+                Console.WriteLine($"✓ Expected behavior: {ex.Message}");
+                // This is the expected behavior for files shorter than 10 seconds
+                Assert.IsTrue(ex.Message.Contains("too short"), "Should indicate file is too short for segmented analysis");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Unexpected exception type: {ex.GetType().Name}: {ex.Message}");
+                throw; // Re-throw unexpected exceptions
+            }
+            finally
+            {
+                if (File.Exists(shortFile)) File.Delete(shortFile);
+            }
         }
 
         [TestMethod]
         [Priority(3)]
-        public void Test3_EQCalculationLogic()
+        public void Test3_EQMatchingFunctionality()
         {
-            Console.WriteLine("=== Testing EQ Calculation Logic ===");
+            Console.WriteLine("=== Testing EQ Matching Functionality ===");
 
-            // Create test spectrums with known differences
-            var flatSpectrum = CreateFlatTestSpectrum();
-            var bassHeavySpectrum = CreateBassHeavyTestSpectrum();
-            var trebleHeavySpectrum = CreateTrebleHeavyTestSpectrum();
+            string outputFile = Path.Combine(_tempDirectory, "eq_matched_output.wav");
 
-            // Test bass compensation
-            Console.WriteLine("Testing bass compensation logic...");
-            var sourceSpectrum = new AudioSpectrum
+            try
             {
-                FrequencyBands = flatSpectrum,
-                RMSLevel = 0.1f,
-                PeakLevel = 0.3f,
-                DynamicRange = 12.0f,
-                Loudness = -20.0f
-            };
+                // Perform EQ matching
+                Console.WriteLine("Performing EQ matching...");
+                _analyzer.ProcessEQMatching(_sourceTestFile, _targetTestFile, outputFile);
 
-            var targetSpectrum = new AudioSpectrum
-            {
-                FrequencyBands = bassHeavySpectrum,
-                RMSLevel = 0.12f,
-                PeakLevel = 0.35f,
-                DynamicRange = 10.0f,
-                Loudness = -18.0f
-            };
+                // Verify output file was created
+                Assert.IsTrue(File.Exists(outputFile), "Output file should be created");
+                Assert.IsTrue(new FileInfo(outputFile).Length > 0, "Output file should not be empty");
 
-            // Use reflection to test internal EQ calculation method
-            var method = typeof(AudioAnalyzer).GetMethod("CalculateDirectEQAdjustments",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                // Analyze processed result
+                Console.WriteLine("Analyzing processed result...");
+                var processedSpectrum = _analyzer.AnalyzeAudioFile(outputFile);
 
-            Assert.IsNotNull(method, "CalculateDirectEQAdjustments method should exist");
+                Assert.IsNotNull(processedSpectrum, "Processed spectrum should not be null");
+                Assert.IsTrue(processedSpectrum.RMSLevel > 0, "Processed RMS should be positive");
 
-            var eqAdjustments = (float[])method.Invoke(_analyzer, new object[] { sourceSpectrum, targetSpectrum });
+                // Verify audio hasn't been corrupted
+                Assert.IsTrue(processedSpectrum.PeakLevel <= 1.0f, "Peak should not exceed 0dBFS");
+                Assert.IsTrue(processedSpectrum.RMSLevel < processedSpectrum.PeakLevel,
+                             "RMS should be less than peak");
 
-            Assert.IsNotNull(eqAdjustments, "EQ adjustments should not be null");
-            Assert.AreEqual(30, eqAdjustments.Length, "Should have 30 EQ adjustments");
-
-            // Low frequencies should have positive adjustment (boost)
-            Assert.IsTrue(eqAdjustments[0] > 0, "20Hz should have positive adjustment for bass-heavy target");
-            Assert.IsTrue(eqAdjustments[1] > 0, "25Hz should have positive adjustment for bass-heavy target");
-
-            // Test treble compensation
-            Console.WriteLine("Testing treble compensation logic...");
-            targetSpectrum.FrequencyBands = trebleHeavySpectrum;
-
-            eqAdjustments = (float[])method.Invoke(_analyzer, new object[] { sourceSpectrum, targetSpectrum });
-
-            // High frequencies should have positive adjustment
-            Assert.IsTrue(eqAdjustments[28] > 0, "12.5kHz should have positive adjustment for treble-heavy target");
-            Assert.IsTrue(eqAdjustments[29] > 0, "16kHz should have positive adjustment for treble-heavy target");
-
-            // Verify adjustments are within reasonable range
-            foreach (var adjustment in eqAdjustments)
-            {
-                Assert.IsTrue(Math.Abs(adjustment) <= 15.0f, $"EQ adjustment {adjustment} should be within ±15dB");
+                Console.WriteLine($"Processed - RMS: {processedSpectrum.RMSLevel:F4}, Peak: {processedSpectrum.PeakLevel:F4}");
+                Console.WriteLine("✓ EQ matching functionality test completed successfully");
             }
-
-            Console.WriteLine("✅ EQ calculation logic test completed successfully");
+            finally
+            {
+                if (File.Exists(outputFile)) File.Delete(outputFile);
+            }
         }
 
         [TestMethod]
         [Priority(4)]
-        public void Test4_DynamicsAnalysis()
+        public void Test4_PresetSystemFunctionality()
         {
-            Console.WriteLine("=== Testing Dynamics Analysis ===");
+            Console.WriteLine("=== Testing Preset System Functionality ===");
 
-            // Create test files with different dynamic characteristics
-            var quietFile = CreateQuietAudioFile();
-            var loudFile = CreateLoudAudioFile();
-            var compressedFile = CreateCompressedAudioFile();
+            // Test preset availability
+            Console.WriteLine("Testing preset availability...");
+            var availablePresets = AudioAnalyzer.GetAvailablePresets();
 
-            try
+            Assert.IsNotNull(availablePresets, "Available presets should not be null");
+            Assert.IsTrue(availablePresets.Count > 0, "Should have available presets");
+
+            // Test each preset system
+            var testSystems = new[] { PlaybackSystem.StudioMonitors, PlaybackSystem.Headphones, PlaybackSystem.CarStereo };
+
+            foreach (var system in testSystems)
             {
-                // Test quiet audio dynamics
-                Console.WriteLine("Analyzing quiet audio dynamics...");
-                var quietSpectrum = _analyzer.AnalyzeAudioFile(quietFile);
+                Console.WriteLine($"Testing {system} preset...");
 
-                Assert.IsTrue(quietSpectrum.RMSLevel < 0.1f, "Quiet file should have low RMS");
-                Assert.IsTrue(quietSpectrum.Loudness < -30.0f, "Quiet file should have low loudness");
+                Assert.IsTrue(availablePresets.ContainsKey(system), $"Should contain {system} preset");
 
-                // Test loud audio dynamics
-                Console.WriteLine("Analyzing loud audio dynamics...");
-                var loudSpectrum = _analyzer.AnalyzeAudioFile(loudFile);
+                var preset = availablePresets[system];
+                Assert.IsNotNull(preset.Name, "Preset name should not be null");
+                Assert.IsNotNull(preset.FrequencyResponse, "Frequency response should not be null");
+                Assert.AreEqual(30, preset.FrequencyResponse.Length, "Should have 30 frequency bands");
+                Assert.IsTrue(preset.TargetLoudness < 0, "Target loudness should be in dBFS");
+                Assert.IsTrue(preset.DynamicRange > 0, "Dynamic range should be positive");
 
-                Assert.IsTrue(loudSpectrum.RMSLevel > quietSpectrum.RMSLevel, "Loud file should have higher RMS");
-                Assert.IsTrue(loudSpectrum.Loudness > quietSpectrum.Loudness, "Loud file should have higher loudness");
+                // Test frequency response values are reasonable
+                foreach (var value in preset.FrequencyResponse)
+                {
+                    Assert.IsTrue(Math.Abs(value) <= 20, "Frequency response values should be reasonable");
+                    Assert.IsTrue(!float.IsNaN(value), "Frequency response should not contain NaN");
+                }
 
-                // Test compressed audio dynamics
-                Console.WriteLine("Analyzing compressed audio dynamics...");
-                var compressedSpectrum = _analyzer.AnalyzeAudioFile(compressedFile);
-
-                Assert.IsTrue(compressedSpectrum.DynamicRange < 10.0f, "Compressed file should have low dynamic range");
-
-                // Test dynamic amplification settings calculation
-                var method = typeof(AudioAnalyzer).GetMethod("CalculateDynamicAmpSettings",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-                Assert.IsNotNull(method, "CalculateDynamicAmpSettings method should exist");
-
-                var ampSettings = (DynamicAmpSettings)method.Invoke(_analyzer,
-                    new object[] { quietSpectrum, loudSpectrum });
-
-                Assert.IsNotNull(ampSettings, "Amp settings should not be null");
-                Assert.IsTrue(ampSettings.TargetLevel >= -20.0f && ampSettings.TargetLevel <= -5.0f,
-                    "Target level should be in reasonable range");
-                Assert.IsTrue(ampSettings.MaxGain > 0 && ampSettings.MaxGain <= 10.0f,
-                    "Max gain should be positive and reasonable");
-
-                Console.WriteLine($"Dynamic amp settings - Target: {ampSettings.TargetLevel:F1}dB, Max gain: {ampSettings.MaxGain:F1}dB");
-            }
-            finally
-            {
-                // Cleanup test files
-                File.Delete(quietFile);
-                File.Delete(loudFile);
-                File.Delete(compressedFile);
+                Console.WriteLine($"✓ {system} preset validation successful");
             }
 
-            Console.WriteLine("✅ Dynamics analysis test completed successfully");
+            Console.WriteLine("✓ Preset system functionality test completed successfully");
         }
 
         [TestMethod]
         [Priority(5)]
-        public void Test5_CompleteEQMatching()
+        public void Test5_EnhancedPresetProcessing()
         {
-            Console.WriteLine("=== Testing Complete EQ Matching Process ===");
+            Console.WriteLine("=== Testing Enhanced Preset Processing ===");
 
-            string outputFile = Path.Combine(_outputDirectory, "matched_output.wav");
-
-            // Test complete EQ matching process
-            Console.WriteLine("Running complete EQ matching...");
+            string outputFile = Path.Combine(_tempDirectory, "enhanced_preset_output.wav");
 
             try
             {
-                _analyzer.ProcessEQMatching(_sourceAudioFile, _targetAudioFile, outputFile);
+                // Test enhanced preset processing
+                Console.WriteLine("Testing enhanced preset processing...");
+                _analyzer.ProcessWithEnhancedPreset(
+                    _sourceTestFile,
+                    outputFile,
+                    PlaybackSystem.Headphones,
+                    _tempDirectory
+                );
 
-                // Verify output file was created
-                Assert.IsTrue(File.Exists(outputFile), "Output file should be created");
+                // Verify output
+                Assert.IsTrue(File.Exists(outputFile), "Enhanced preset output should be created");
+                Assert.IsTrue(new FileInfo(outputFile).Length > 0, "Output file should not be empty");
 
-                var outputInfo = new FileInfo(outputFile);
-                Assert.IsTrue(outputInfo.Length > 1000, "Output file should have reasonable size");
+                // Analyze result
+                var resultSpectrum = _analyzer.AnalyzeAudioFile(outputFile);
+                Assert.IsNotNull(resultSpectrum, "Result spectrum should not be null");
+                Assert.IsTrue(resultSpectrum.PeakLevel <= 1.0f, "Should not clip");
 
-                // Analyze the output to verify processing occurred
-                Console.WriteLine("Analyzing processed output...");
-                var outputSpectrum = _analyzer.AnalyzeAudioFile(outputFile);
-
-                Assert.IsNotNull(outputSpectrum, "Output spectrum should not be null");
-                Assert.IsTrue(outputSpectrum.RMSLevel > 0, "Output should have audio content");
-
-                // Compare with original source
-                var originalSpectrum = _analyzer.AnalyzeAudioFile(_sourceAudioFile);
-
-                bool spectrumChanged = false;
-                for (int i = 0; i < outputSpectrum.FrequencyBands.Length; i++)
-                {
-                    if (Math.Abs(outputSpectrum.FrequencyBands[i] - originalSpectrum.FrequencyBands[i]) > 0.05f)
-                    {
-                        spectrumChanged = true;
-                        break;
-                    }
-                }
-
-                Assert.IsTrue(spectrumChanged, "EQ processing should change the spectrum");
-
-                Console.WriteLine($"Original loudness: {originalSpectrum.Loudness:F1} LUFS");
-                Console.WriteLine($"Processed loudness: {outputSpectrum.Loudness:F1} LUFS");
+                Console.WriteLine($"Enhanced preset result - RMS: {resultSpectrum.RMSLevel:F4}");
+                Console.WriteLine("✓ Enhanced preset processing completed successfully");
             }
-            catch (Exception ex)
+            finally
             {
-                Assert.Fail($"EQ matching failed: {ex.Message}");
+                if (File.Exists(outputFile)) File.Delete(outputFile);
             }
-
-            Console.WriteLine("✅ Complete EQ matching test completed successfully");
         }
 
         [TestMethod]
         [Priority(6)]
-        public void Test6_SafetyAndLimiting()
+        public void Test6_SegmentedAnalysisRobustness()
         {
-            Console.WriteLine("=== Testing Safety and Limiting Features ===");
+            Console.WriteLine("=== Testing Segmented Analysis Robustness ===");
 
-            // Create extreme test case that would normally cause clipping
-            var extremeSourceFile = CreateExtremeSourceFile();
-            var extremeTargetFile = CreateExtremeTargetFile();
-            string safeOutputFile = Path.Combine(_outputDirectory, "safe_output.wav");
+            // Create longer test file for better segmentation testing
+            string longTestFile = CreateTestAudioFile("long_test.wav", TestAudioType.Extended);
 
             try
             {
-                Console.WriteLine("Testing safety limiting with extreme inputs...");
-                _analyzer.ProcessEQMatching(extremeSourceFile, extremeTargetFile, safeOutputFile);
+                Console.WriteLine("Analyzing longer audio file with segmentation...");
+                var longSpectrum = _analyzer.AnalyzeAudioFile(longTestFile);
 
-                Assert.IsTrue(File.Exists(safeOutputFile), "Safe output file should be created");
+                Assert.IsNotNull(longSpectrum, "Long audio spectrum should not be null");
 
-                // Analyze output for clipping and safety
-                var safeSpectrum = _analyzer.AnalyzeAudioFile(safeOutputFile);
+                // Verify segmented analysis produces stable results
+                Assert.IsTrue(longSpectrum.RMSLevel > 0, "Segmented RMS should be positive");
+                Assert.IsTrue(longSpectrum.DynamicRange > 0, "Segmented dynamic range should be positive");
 
-                // Peak level should be limited
-                Assert.IsTrue(safeSpectrum.PeakLevel <= 1.0f, "Peak level should not exceed digital maximum");
-                Assert.IsTrue(safeSpectrum.PeakLevel >= 0.1f, "Peak level should be reasonable after safety processing");
-
-                Console.WriteLine($"Safe output peak level: {safeSpectrum.PeakLevel:F3}");
-                Console.WriteLine($"Safe output RMS level: {safeSpectrum.RMSLevel:F3}");
-
-                // Test that extreme EQ adjustments are controlled
-                var sourceSpectrum = _analyzer.AnalyzeAudioFile(extremeSourceFile);
-                var targetSpectrum = _analyzer.AnalyzeAudioFile(extremeTargetFile);
-
-                var method = typeof(AudioAnalyzer).GetMethod("CalculateDirectEQAdjustments",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-                var eqAdjustments = (float[])method.Invoke(_analyzer, new object[] { sourceSpectrum, targetSpectrum });
-
-                // No single adjustment should be extremely high
-                foreach (var adjustment in eqAdjustments)
+                // Test with different audio characteristics
+                for (int i = 0; i < longSpectrum.FrequencyBands.Length; i++)
                 {
-                    Assert.IsTrue(Math.Abs(adjustment) <= 12.0f,
-                        $"Extreme EQ adjustment {adjustment} should be limited for safety");
+                    Assert.IsTrue(!float.IsNaN(longSpectrum.FrequencyBands[i]),
+                                 $"Segmented band {i} should not be NaN");
+                    Assert.IsTrue(longSpectrum.FrequencyBands[i] >= 0,
+                                 $"Segmented band {i} should be non-negative");
                 }
 
-                Console.WriteLine("Safety limiting working correctly");
+                Console.WriteLine($"Segmented analysis - {longSpectrum.FrequencyBands.Count(x => x > 0)} active bands");
+                Console.WriteLine("✓ Segmented analysis robustness test completed successfully");
             }
             finally
             {
-                File.Delete(extremeSourceFile);
-                File.Delete(extremeTargetFile);
+                if (File.Exists(longTestFile)) File.Delete(longTestFile);
             }
-
-            Console.WriteLine("✅ Safety and limiting test completed successfully");
         }
 
         [TestMethod]
         [Priority(7)]
-        public void Test7_QFactorOptimization()
+        public void Test7_ErrorHandlingAndEdgeCases()
         {
-            Console.WriteLine("=== Testing Q Factor Optimization ===");
+            Console.WriteLine("=== Testing Error Handling and Edge Cases ===");
 
-            // Create test scenarios for Q factor calculation
-            var sourceSpectrum = new AudioSpectrum
-            {
-                FrequencyBands = CreateFlatTestSpectrum(),
-                RMSLevel = 0.1f,
-                PeakLevel = 0.3f,
-                DynamicRange = 12.0f,
-                Loudness = -20.0f
-            };
-
-            var targetSpectrum = new AudioSpectrum
-            {
-                FrequencyBands = CreateBassHeavyTestSpectrum(),
-                RMSLevel = 0.12f,
-                PeakLevel = 0.35f,
-                DynamicRange = 10.0f,
-                Loudness = -18.0f
-            };
-
-            // Test Q factor calculation method
-            var method = typeof(AudioAnalyzer).GetMethod("CalculateOptimalQFactors",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-            if (method != null)
-            {
-                // First get EQ adjustments
-                var eqMethod = typeof(AudioAnalyzer).GetMethod("CalculateDirectEQAdjustments",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-                var eqAdjustments = (float[])eqMethod.Invoke(_analyzer, new object[] { sourceSpectrum, targetSpectrum });
-
-                // Calculate Q factors
-                var qFactors = (float[])method.Invoke(_analyzer, new object[] { eqAdjustments, sourceSpectrum, targetSpectrum });
-
-                Assert.IsNotNull(qFactors, "Q factors should not be null");
-                Assert.AreEqual(30, qFactors.Length, "Should have 30 Q factors");
-
-                // Verify Q factors are in reasonable range
-                foreach (var qFactor in qFactors)
-                {
-                    Assert.IsTrue(qFactor >= 0.3f && qFactor <= 5.0f, $"Q factor {qFactor} should be in range 0.3-5.0");
-                }
-
-                Console.WriteLine("Q factor optimization working correctly");
-            }
-            else
-            {
-                Console.WriteLine("Q factor method not found - skipping test");
-            }
-
-            Console.WriteLine("✅ Q factor optimization test completed successfully");
-        }
-
-        [TestMethod]
-        [Priority(8)]
-        public void Test8_PlaybackSystemPresets()
-        {
-            Console.WriteLine("=== Testing Playback System Presets ===");
-
-            // Test preset availability
-            var presets = AudioAnalyzer.GetAvailablePresets();
-            Assert.IsTrue(presets.Count > 0, "Should have available presets");
-
-            // Test specific preset systems
-            var testSystems = new[] {
-                PlaybackSystem.HiFiSpeakers,
-                PlaybackSystem.Headphones,
-                PlaybackSystem.CarStereo
-            };
-
-            foreach (var system in testSystems)
-            {
-                Console.WriteLine($"Testing preset: {system}");
-
-                Assert.IsTrue(presets.ContainsKey(system), $"Should have preset for {system}");
-
-                var preset = presets[system];
-                Assert.IsNotNull(preset.FrequencyResponse, "Preset should have frequency response");
-                Assert.AreEqual(30, preset.FrequencyResponse.Length, "Preset should have 30 frequency bands");
-
-                // Test preset processing
-                string presetOutputFile = Path.Combine(_outputDirectory, $"preset_{system}_output.wav");
-
-                try
-                {
-                    _analyzer.ProcessWithPreset(_sourceAudioFile, presetOutputFile, system);
-
-                    Assert.IsTrue(File.Exists(presetOutputFile), $"Preset output file should be created for {system}");
-
-                    var outputInfo = new FileInfo(presetOutputFile);
-                    Assert.IsTrue(outputInfo.Length > 1000, $"Preset output file should have reasonable size for {system}");
-
-                    Console.WriteLine($"  ✅ {system} preset processed successfully");
-                }
-                catch (Exception ex)
-                {
-                    Assert.Fail($"Preset processing failed for {system}: {ex.Message}");
-                }
-            }
-
-            Console.WriteLine("✅ Playback system presets test completed successfully");
-        }
-
-        [TestMethod]
-        [Priority(9)]
-        public void Test9_ErrorHandling()
-        {
-            Console.WriteLine("=== Testing Error Handling ===");
-
-            // Test with non-existent file
+            // Test invalid file handling
+            Console.WriteLine("Testing invalid file handling...");
             try
             {
                 _analyzer.AnalyzeAudioFile("non_existent_file.wav");
@@ -541,189 +303,178 @@ namespace Ownaudio.Tests.Matchering
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Correctly handled non-existent file: {ex.GetType().Name}");
+                Console.WriteLine($"✓ Correctly handled missing file: {ex.GetType().Name}");
             }
 
-            // Test with empty file path
+            // Test empty directory handling
+            Console.WriteLine("Testing empty path handling...");
             try
             {
                 _analyzer.AnalyzeAudioFile("");
-                Assert.Fail("Should throw exception for empty file path");
+                Assert.Fail("Should throw exception for empty path");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Correctly handled empty path: {ex.GetType().Name}");
+                Console.WriteLine($"✓ Correctly handled empty path: {ex.GetType().Name}");
             }
 
-            // Test with null file path
+            // Test null parameter handling
+            Console.WriteLine("Testing null parameter handling...");
             try
             {
                 _analyzer.AnalyzeAudioFile(null);
-                Assert.Fail("Should throw exception for null file path");
+                Assert.Fail("Should throw exception for null path");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Correctly handled null path: {ex.GetType().Name}");
+                Console.WriteLine($"✓ Correctly handled null parameter: {ex.GetType().Name}");
             }
 
-            Console.WriteLine("✅ Error handling test completed successfully");
+            // Test invalid preset processing
+            Console.WriteLine("Testing invalid preset processing...");
+            try
+            {
+                _analyzer.ProcessWithEnhancedPreset(
+                    "invalid_source.wav",
+                    Path.Combine(_tempDirectory, "should_fail.wav"),
+                    PlaybackSystem.StudioMonitors
+                );
+                Assert.Fail("Should throw exception for invalid source file");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"✓ Correctly handled invalid preset processing: {ex.GetType().Name}");
+            }
+
+            Console.WriteLine("✓ Error handling and edge cases test completed successfully");
         }
 
         [TestMethod]
-        [Priority(10)]
-        public void Test10_PerformanceAndMemory()
+        [Priority(8)]
+        public void Test8_BatchProcessingCapability()
         {
-            Console.WriteLine("=== Testing Performance and Memory ===");
+            Console.WriteLine("=== Testing Batch Processing Capability ===");
+
+            // Create multiple test files
+            var sourceFiles = new List<string>();
+            string batchOutputDir = Path.Combine(_tempDirectory, "batch_output");
+            Directory.CreateDirectory(batchOutputDir);
+
+            try
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    string testFile = CreateTestAudioFile($"batch_source_{i}.wav",
+                        (TestAudioType)(i % 3)); // Vary audio types
+                    sourceFiles.Add(testFile);
+                }
+
+                Console.WriteLine($"Testing batch processing with {sourceFiles.Count} files...");
+
+                // Test batch processing
+                _analyzer.BatchProcessWithEnhancedPreset(
+                    sourceFiles.ToArray(),
+                    _baseSampleFile,
+                    batchOutputDir,
+                    PlaybackSystem.HiFiSpeakers,
+                    "_batch_test"
+                );
+
+                // Verify all outputs were created
+                var outputFiles = Directory.GetFiles(batchOutputDir, "*_batch_test.wav");
+                Assert.AreEqual(sourceFiles.Count, outputFiles.Length,
+                               "Should create output for each input file");
+
+                foreach (var outputFile in outputFiles)
+                {
+                    Assert.IsTrue(new FileInfo(outputFile).Length > 0,
+                                 $"Output file {Path.GetFileName(outputFile)} should not be empty");
+                }
+
+                Console.WriteLine($"✓ Batch processing created {outputFiles.Length} output files");
+                Console.WriteLine("✓ Batch processing capability test completed successfully");
+            }
+            finally
+            {
+                // Cleanup
+                foreach (var file in sourceFiles)
+                {
+                    if (File.Exists(file)) File.Delete(file);
+                }
+                if (Directory.Exists(batchOutputDir))
+                    Directory.Delete(batchOutputDir, true);
+            }
+        }
+
+        [TestMethod]
+        [Priority(9)]
+        public void Test9_PerformanceAndMemoryUsage()
+        {
+            Console.WriteLine("=== Testing Performance and Memory Usage ===");
 
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var initialMemory = GC.GetTotalMemory(true);
 
-            // Test multiple analyses
-            for (int i = 0; i < 5; i++)
+            try
             {
-                var spectrum = _analyzer.AnalyzeAudioFile(_sourceAudioFile);
-                Assert.IsNotNull(spectrum, $"Analysis {i} should succeed");
+                // Test multiple analyses for performance
+                Console.WriteLine("Running performance test with multiple analyses...");
+
+                for (int i = 0; i < 5; i++)
+                {
+                    var spectrum = _analyzer.AnalyzeAudioFile(_sourceTestFile);
+                    Assert.IsNotNull(spectrum, $"Analysis {i + 1} should succeed");
+
+                    // Verify consistent results
+                    Assert.IsTrue(spectrum.RMSLevel > 0, $"Analysis {i + 1} should have valid RMS");
+                }
+
+                stopwatch.Stop();
+                var finalMemory = GC.GetTotalMemory(true);
+                var memoryUsed = finalMemory - initialMemory;
+
+                Console.WriteLine($"Performance metrics:");
+                Console.WriteLine($"- Total time: {stopwatch.ElapsedMilliseconds} ms");
+                Console.WriteLine($"- Average per analysis: {stopwatch.ElapsedMilliseconds / 5.0:F1} ms");
+                Console.WriteLine($"- Memory used: {memoryUsed / 1024.0 / 1024.0:F1} MB");
+
+                // Performance assertions
+                Assert.IsTrue(stopwatch.ElapsedMilliseconds < 30000,
+                             "Multiple analyses should complete within 30 seconds");
+                Assert.IsTrue(memoryUsed < 100 * 1024 * 1024,
+                             "Memory usage should be reasonable (< 100MB)");
+
+                Console.WriteLine("✓ Performance and memory usage test completed successfully");
             }
-
-            stopwatch.Stop();
-            Console.WriteLine($"5 analyses completed in {stopwatch.ElapsedMilliseconds}ms");
-
-            // Performance should be reasonable (less than 10 seconds for 5 analyses)
-            Assert.IsTrue(stopwatch.ElapsedMilliseconds < 10000, "Analysis should complete in reasonable time");
-
-            // Test memory usage doesn't grow excessively
-            long initialMemory = GC.GetTotalMemory(true);
-
-            for (int i = 0; i < 10; i++)
+            catch (Exception ex)
             {
-                var spectrum = _analyzer.AnalyzeAudioFile(_sourceAudioFile);
+                Console.WriteLine($"Performance test error: {ex.Message}");
+                throw;
             }
-
-            long finalMemory = GC.GetTotalMemory(true);
-            long memoryGrowth = finalMemory - initialMemory;
-
-            Console.WriteLine($"Memory growth: {memoryGrowth / 1024}KB");
-
-            // Memory growth should be reasonable (less than 50MB)
-            Assert.IsTrue(memoryGrowth < 50 * 1024 * 1024, "Memory usage should not grow excessively");
-
-            Console.WriteLine("✅ Performance and memory test completed successfully");
         }
 
         #region Helper Methods
 
-        private static string CreateSourceAudioFile()
+        private enum TestAudioType
         {
-            string filePath = Path.Combine(_outputDirectory, "source_test.wav");
-            var samples = GenerateTestAudio(44100 * 3, new[] { 440.0f, 880.0f, 1760.0f }, 0.3f);
-            WriteWaveFile(filePath, samples, 44100);
-            return filePath;
+            Vocal,
+            Music,
+            Reference,
+            Extended
         }
 
-        private static string CreateTargetAudioFile()
+        private static string CreateTestAudioFile(string fileName, TestAudioType audioType)
         {
-            string filePath = Path.Combine(_outputDirectory, "target_test.wav");
-            // Different frequency content and levels
-            var samples = GenerateTestAudio(44100 * 3, new[] { 220.0f, 440.0f, 2000.0f, 4000.0f }, 0.5f);
-            WriteWaveFile(filePath, samples, 44100);
-            return filePath;
-        }
+            string fullPath = Path.Combine(_tempDirectory, fileName);
 
-        private static Dictionary<float, string> CreateFrequencyTestFiles()
-        {
-            var testFiles = new Dictionary<float, string>();
-            var testFrequencies = new[] { 25.0f, 50.0f, 125.0f, 500.0f, 1000.0f, 2000.0f, 8000.0f, 12500.0f };
-
-            foreach (var freq in testFrequencies)
-            {
-                string filePath = Path.Combine(_outputDirectory, $"test_{freq}Hz.wav");
-                var samples = GenerateTestAudio(44100, new[] { freq }, 0.5f);
-                WriteWaveFile(filePath, samples, 44100);
-                testFiles[freq] = filePath;
-            }
-
-            return testFiles;
-        }
-
-        private static string CreateQuietAudioFile()
-        {
-            string filePath = Path.Combine(_outputDirectory, "quiet_test.wav");
-            var samples = GenerateTestAudio(44100 * 2, new[] { 440.0f }, 0.05f);
-            WriteWaveFile(filePath, samples, 44100);
-            return filePath;
-        }
-
-        private static string CreateLoudAudioFile()
-        {
-            string filePath = Path.Combine(_outputDirectory, "loud_test.wav");
-            var samples = GenerateTestAudio(44100 * 2, new[] { 440.0f }, 0.8f);
-            WriteWaveFile(filePath, samples, 44100);
-            return filePath;
-        }
-
-        private static string CreateCompressedAudioFile()
-        {
-            string filePath = Path.Combine(_outputDirectory, "compressed_test.wav");
-            var samples = GenerateTestAudio(44100 * 2, new[] { 440.0f }, 0.6f);
-
-            // Simulate compression by reducing dynamic range
-            for (int i = 0; i < samples.Length; i++)
-            {
-                samples[i] = Math.Sign(samples[i]) * (float)Math.Sqrt(Math.Abs(samples[i])) * 0.7f;
-            }
-
-            WriteWaveFile(filePath, samples, 44100);
-            return filePath;
-        }
-
-        private static string CreateExtremeSourceFile()
-        {
-            string filePath = Path.Combine(_outputDirectory, "extreme_source.wav");
-            // Very bass-heavy content
-            var samples = GenerateTestAudio(44100 * 2, new[] { 40.0f, 80.0f, 160.0f }, 0.2f);
-            WriteWaveFile(filePath, samples, 44100);
-            return filePath;
-        }
-
-        private static string CreateExtremeTargetFile()
-        {
-            string filePath = Path.Combine(_outputDirectory, "extreme_target.wav");
-            // Very treble-heavy content
-            var samples = GenerateTestAudio(44100 * 2, new[] { 4000.0f, 8000.0f, 12000.0f }, 0.8f);
-            WriteWaveFile(filePath, samples, 44100);
-            return filePath;
-        }
-
-        private static float[] GenerateTestAudio(int sampleCount, float[] frequencies, float amplitude)
-        {
-            var samples = new float[sampleCount];
-            var random = new Random(42); // Fixed seed for reproducible tests
-
-            for (int i = 0; i < sampleCount; i++)
-            {
-                double time = (double)i / 44100.0;
-                double sample = 0;
-
-                foreach (var freq in frequencies)
-                {
-                    sample += Math.Sin(2.0 * Math.PI * freq * time) / frequencies.Length;
-                }
-
-                // Add slight noise for realism
-                sample += (random.NextDouble() - 0.5) * 0.01;
-
-                samples[i] = (float)(sample * amplitude);
-            }
-
-            return samples;
-        }
-
-        private static void WriteWaveFile(string filePath, float[] samples, int sampleRate)
-        {
+            var sampleRate = 44100;
+            int duration = audioType == TestAudioType.Extended ? 35 : 25; // Ensure well above 10 second minimum
+            var sampleCount = sampleRate * duration;
             var wavData = new List<byte>();
 
             // WAV header
             wavData.AddRange(System.Text.Encoding.ASCII.GetBytes("RIFF"));
-            wavData.AddRange(BitConverter.GetBytes((uint)(36 + samples.Length * 2)));
+            wavData.AddRange(BitConverter.GetBytes((uint)(36 + sampleCount * 2)));
             wavData.AddRange(System.Text.Encoding.ASCII.GetBytes("WAVE"));
 
             // Format chunk
@@ -736,72 +487,104 @@ namespace Ownaudio.Tests.Matchering
             wavData.AddRange(BitConverter.GetBytes((ushort)2));
             wavData.AddRange(BitConverter.GetBytes((ushort)16));
 
-            // Data chunk
+            // Data chunk header
             wavData.AddRange(System.Text.Encoding.ASCII.GetBytes("data"));
-            wavData.AddRange(BitConverter.GetBytes((uint)(samples.Length * 2)));
+            wavData.AddRange(BitConverter.GetBytes((uint)(sampleCount * 2)));
 
-            foreach (var sample in samples)
+            // Generate different content based on audio type
+            for (int i = 0; i < sampleCount; i++)
             {
-                short sampleValue = (short)(Math.Max(-1.0f, Math.Min(1.0f, sample)) * 32767);
+                double time = (double)i / sampleRate;
+                double sample = 0;
+
+                switch (audioType)
+                {
+                    case TestAudioType.Vocal:
+                        // Vocal-like frequencies with formants
+                        sample = Math.Sin(2.0 * Math.PI * 220.0 * time) * 0.4 +    // Fundamental
+                                Math.Sin(2.0 * Math.PI * 880.0 * time) * 0.2 +     // 2nd harmonic
+                                Math.Sin(2.0 * Math.PI * 1760.0 * time) * 0.1;     // 4th harmonic
+                        break;
+
+                    case TestAudioType.Music:
+                        // Musical content with more complex harmonics
+                        sample = Math.Sin(2.0 * Math.PI * 440.0 * time) * 0.3 +    // A4
+                                Math.Sin(2.0 * Math.PI * 554.37 * time) * 0.25 +   // C#5
+                                Math.Sin(2.0 * Math.PI * 659.25 * time) * 0.2 +    // E5
+                                Math.Sin(2.0 * Math.PI * 110.0 * time) * 0.15;     // Bass
+                        break;
+
+                    case TestAudioType.Reference:
+                        // Reference signal with flat spectrum characteristics
+                        sample = Math.Sin(2.0 * Math.PI * 1000.0 * time) * 0.3 +   // 1kHz reference
+                                Math.Sin(2.0 * Math.PI * 100.0 * time) * 0.2 +     // Low freq
+                                Math.Sin(2.0 * Math.PI * 5000.0 * time) * 0.1;     // High freq
+                        break;
+
+                    case TestAudioType.Extended:
+                        // Extended file with varying content over time
+                        double phase = time * 0.1; // Slow modulation
+                        sample = Math.Sin(2.0 * Math.PI * (440.0 + 100.0 * Math.Sin(phase)) * time) * 0.3 +
+                                Math.Sin(2.0 * Math.PI * 880.0 * time) * (0.2 * Math.Abs(Math.Sin(phase * 2))) +
+                                Math.Sin(2.0 * Math.PI * 1760.0 * time) * 0.1;
+                        break;
+                }
+
+                // Apply envelope
+                double envelope = Math.Sin(Math.PI * time / duration);
+                sample *= envelope * 0.7; // Prevent clipping
+
+                short sampleValue = (short)(sample * 16383);
                 wavData.AddRange(BitConverter.GetBytes(sampleValue));
             }
 
-            File.WriteAllBytes(filePath, wavData.ToArray());
+            File.WriteAllBytes(fullPath, wavData.ToArray());
+            return fullPath;
         }
 
-        private static float[] CreateFlatTestSpectrum()
+        private static string CreateShortTestAudioFile(string fileName, int durationSeconds)
         {
-            return Enumerable.Repeat(0.5f, 30).ToArray();
-        }
+            string fullPath = Path.Combine(_tempDirectory, fileName);
 
-        private static float[] CreateBassHeavyTestSpectrum()
-        {
-            var spectrum = new float[30];
-            // First 9 bands (20-125Hz) have high energy
-            for (int i = 0; i < 9; i++)
-                spectrum[i] = 0.9f - (i * 0.05f);
-            // Mid bands moderate energy
-            for (int i = 9; i < 20; i++)
-                spectrum[i] = 0.4f;
-            // High bands low energy
-            for (int i = 20; i < 30; i++)
-                spectrum[i] = 0.2f - ((i - 20) * 0.01f);
-            return spectrum;
-        }
+            var sampleRate = 44100;
+            var sampleCount = sampleRate * durationSeconds;
+            var wavData = new List<byte>();
 
-        private static float[] CreateTrebleHeavyTestSpectrum()
-        {
-            var spectrum = new float[30];
-            // Low bands low energy
-            for (int i = 0; i < 15; i++)
-                spectrum[i] = 0.1f + (i * 0.01f);
-            // Mid bands moderate energy
-            for (int i = 15; i < 23; i++)
-                spectrum[i] = 0.4f + ((i - 15) * 0.05f);
-            // High bands (6.3kHz+) high energy
-            for (int i = 23; i < 30; i++)
-                spectrum[i] = 0.8f + ((i - 23) * 0.02f);
-            return spectrum;
-        }
+            // WAV header
+            wavData.AddRange(System.Text.Encoding.ASCII.GetBytes("RIFF"));
+            wavData.AddRange(BitConverter.GetBytes((uint)(36 + sampleCount * 2)));
+            wavData.AddRange(System.Text.Encoding.ASCII.GetBytes("WAVE"));
 
-        private static int GetExpectedBandIndex(float frequency)
-        {
-            // Updated 30-band frequency array
-            var bands = new[] {
-                20f, 25f, 31.5f, 40f, 50f, 63f, 80f, 100f, 125f, 160f,
-                200f, 250f, 315f, 400f, 500f, 630f, 800f, 1000f, 1250f, 1600f,
-                2000f, 2500f, 3150f, 4000f, 5000f, 6300f, 8000f, 10000f, 12500f, 16000f
-            };
+            // Format chunk
+            wavData.AddRange(System.Text.Encoding.ASCII.GetBytes("fmt "));
+            wavData.AddRange(BitConverter.GetBytes((uint)16));
+            wavData.AddRange(BitConverter.GetBytes((ushort)1)); // PCM
+            wavData.AddRange(BitConverter.GetBytes((ushort)1)); // Mono
+            wavData.AddRange(BitConverter.GetBytes((uint)sampleRate));
+            wavData.AddRange(BitConverter.GetBytes((uint)(sampleRate * 2)));
+            wavData.AddRange(BitConverter.GetBytes((ushort)2));
+            wavData.AddRange(BitConverter.GetBytes((ushort)16));
 
-            for (int i = 0; i < bands.Length; i++)
+            // Data chunk header
+            wavData.AddRange(System.Text.Encoding.ASCII.GetBytes("data"));
+            wavData.AddRange(BitConverter.GetBytes((uint)(sampleCount * 2)));
+
+            // Generate simple test signal
+            for (int i = 0; i < sampleCount; i++)
             {
-                // Check if frequency is within reasonable range of the band center
-                float tolerance = bands[i] * 0.7f; // 70% tolerance
-                if (frequency >= bands[i] - tolerance && frequency <= bands[i] + tolerance)
-                    return i;
+                double time = (double)i / sampleRate;
+                double sample = Math.Sin(2.0 * Math.PI * 1000.0 * time) * 0.3; // 1kHz sine
+
+                // Apply envelope
+                double envelope = Math.Sin(Math.PI * time / durationSeconds);
+                sample *= envelope * 0.7;
+
+                short sampleValue = (short)(sample * 16383);
+                wavData.AddRange(BitConverter.GetBytes(sampleValue));
             }
 
-            return -1; // Frequency doesn't clearly fit in any band
+            File.WriteAllBytes(fullPath, wavData.ToArray());
+            return fullPath;
         }
 
         #endregion

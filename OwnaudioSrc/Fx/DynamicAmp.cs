@@ -110,6 +110,11 @@ namespace Ownaudio.Fx
         private bool bufferFilled = false;
 
         /// <summary>
+        /// Slow-moving average for baseline level tracking
+        /// </summary>
+        private float slowRms = 0.0f;
+
+        /// <summary>
         /// Creates a new DynamicAmp instance with the given parameters
         /// </summary>
         /// <param name="targetLevel">Target RMS level in dB (between -40.0 - 0.0)</param>
@@ -158,7 +163,7 @@ namespace Ownaudio.Fx
             rmsWindowLength = Math.Max(1, (int)(sampleRate * windowSeconds));
             rmsBuffer = new float[rmsWindowLength];
 
-            float estimatedInputRms = DbToLinear(-16.0f); 
+            float estimatedInputRms = DbToLinear(-16.0f);
             float initialRmsSquared = estimatedInputRms * estimatedInputRms;
 
             // Fill buffer with estimated value
@@ -170,6 +175,7 @@ namespace Ownaudio.Fx
             rmsBufferIndex = 0;
             windowSumSquares = initialRmsSquared * rmsWindowLength;
             bufferFilled = true;
+            slowRms = estimatedInputRms;
         }
 
         /// <summary>
@@ -331,58 +337,55 @@ namespace Ownaudio.Fx
             }
 
             float targetRmsLinear = DbToLinear(targetRmsLevelDb);
-            float targetGain = Math.Min(targetRmsLinear / Math.Max(bufferRms, 1e-10f), maxGain);
+            // We base the target gain on slowRms to keep it stable.
+            float targetGain = Math.Min(targetRmsLinear / Math.Max(slowRms, 1e-10f), maxGain);
 
             ApplyGain(samples, targetGain, bufferRms);
             lastRms = bufferRms;
         }
 
         /// <summary>
-        /// Applies gain with signal integrity protection
+        /// Applies gain with asymmetric release logic for better dynamics preservation
         /// </summary>
         /// <param name="samples">Audio samples to process</param>
-        /// <param name="targetGain">Target gain value</param>
+        /// <param name="targetGain">Target gain value based on RMS</param>
         /// <param name="bufferRms">Current RMS level</param>
         private void ApplyGain(Span<float> samples, float targetGain, float bufferRms)
         {
-            float maxPeak = 0.0f;
-            for (int i = 0; i < samples.Length; i++)
-            {
-                float absValue = Math.Abs(samples[i]);
-                if (absValue > maxPeak)
-                    maxPeak = absValue;
-            }
-
-            float predictedPeak = maxPeak * targetGain;
-            float safeGain = targetGain;
-
-            if (predictedPeak > 0.95f) // Leave 5% headroom
-            {
-                safeGain = 0.95f / Math.Max(maxPeak, 1e-10f);
-                targetGain = Math.Min(targetGain, safeGain);
-            }
-
-            // Gain smoothing
+            // Dynamic gain control (attack/release)
+            // This code is responsible for equalizing the volume and avoiding the 'pumping' phenomenon.
             float timeConstant = (targetGain > currentGain) ? attackTime : releaseTime;
             float alpha = CalculateAlpha(timeConstant, samples.Length);
 
+            // Acceleration logic for large gain jumps (fast return to target gain)
             if (targetGain < currentGain && bufferRms > lastRms * 1.5f)
             {
-                alpha = CalculateAlpha(0.5f * attackTime, samples.Length);
+                float fastAlpha = CalculateAlpha(0.5f * attackTime, samples.Length);
+                alpha = Math.Min(alpha, fastAlpha);
             }
 
+            // Update currentGain with smoothing logic.
+            // This gain value will not be adjusted immediately based on peaks.
             currentGain = alpha * currentGain + (1.0f - alpha) * targetGain;
 
+            // SIGNAL PROCESSING AND PEAK LIMITER
+            // Clipping protection is applied sample by sample, after dynamic amplification.
             for (int i = 0; i < samples.Length; i++)
             {
+                // Apply dynamic gain
                 float processedSample = samples[i] * currentGain;
 
-                if (processedSample > 1.0f)
-                    samples[i] = 1.0f;
-                else if (processedSample < -1.0f)
-                    samples[i] = -1.0f;
+                // Peak Limiter: We only reduce the volume if it is too loud.
+                if (Math.Abs(processedSample) > 0.98f)
+                {
+                    // Kiszámítunk egy korrekciós faktort az adott mintára
+                    float limiterGain = 0.98f / Math.Abs(processedSample);
+                    samples[i] = processedSample * limiterGain;
+                }
                 else
+                {
                     samples[i] = processedSample;
+                }
             }
         }
 
@@ -412,8 +415,8 @@ namespace Ownaudio.Fx
 
                 case DynamicAmpPreset.Music:
                     targetRmsLevelDb = -14.0f;
-                    attackTime = 0.01f;
-                    releaseTime = 0.3f;
+                    attackTime = 0.03f;     // Slightly slower for music
+                    releaseTime = 0.6f;     // Slightly slower release
                     noiseGate = 0.002f;
                     maxGain = 4.0f;
                     break;
@@ -484,6 +487,7 @@ namespace Ownaudio.Fx
             windowSumSquares = 0.0f;
             rmsBufferIndex = 0;
             bufferFilled = false;
+            slowRms = DbToLinear(-16.0f);
 
             if (rmsBuffer != null)
             {
@@ -534,7 +538,12 @@ namespace Ownaudio.Fx
                 return 0.0f;
             }
 
-            return MathF.Sqrt(meanSquare);
+            float currentRms = MathF.Sqrt(meanSquare);
+
+            // Update slow-moving average for dynamics detection (slower coefficient)
+            slowRms = 0.9999f * slowRms + 0.0001f * currentRms;
+
+            return currentRms;
         }
 
         /// <summary>

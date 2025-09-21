@@ -9,44 +9,6 @@ namespace Ownaudio.Utilities.Matchering
     /// </summary>
     partial class AudioAnalyzer
     {
-        #region Audio Dynamics Analysis
-
-        /// <summary>
-        /// Analyzes comprehensive audio dynamics including RMS, peak levels, loudness, and dynamic range.
-        /// </summary>
-        /// <param name="audioData">Audio sample data to analyze</param>
-        /// <returns>Complete dynamics analysis information</returns>
-        private DynamicsInfo AnalyzeDynamics(float[] audioData)
-        {
-            if (audioData.Length == 0)
-                return new DynamicsInfo();
-
-            double sumSquares = audioData.Sum(sample => sample * sample);
-            float rms = (float)Math.Sqrt(sumSquares / audioData.Length);
-
-            float peak = audioData.Max(sample => Math.Abs(sample));
-
-            float loudness = 20 * (float)Math.Log10(Math.Max(rms, 1e-10f)) - 23.0f;
-
-            var sortedLevels = audioData.Select(Math.Abs).OrderByDescending(x => x).ToArray();
-            int top10Percent = Math.Max(1, sortedLevels.Length / 10);
-            int top90Percent = Math.Max(1, sortedLevels.Length * 9 / 10);
-
-            float dynamicRange = 20 * (float)Math.Log10(
-                Math.Max(sortedLevels.Take(top10Percent).Average(), 1e-10f) /
-                Math.Max(sortedLevels.Take(top90Percent).Average(), 1e-10f));
-
-            return new DynamicsInfo
-            {
-                RMS = rms,
-                Peak = peak,
-                Loudness = loudness,
-                DynamicRange = Math.Max(0, dynamicRange)
-            };
-        }
-
-        #endregion
-
         #region Dynamic Amplification Settings
 
         /// <summary>

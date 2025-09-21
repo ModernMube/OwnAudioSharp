@@ -1,6 +1,5 @@
 ﻿using Ownaudio;
 using Ownaudio.Utilities.Matchering;
-using System.Diagnostics;
 
 class Program
 {
@@ -13,15 +12,15 @@ class Program
                 var processor = new AudioAnalyzer();
 
                 processor.ProcessEQMatching(
-                    sourceFile: @"path\audio\source.wav",   // File to be processed
-                    targetFile: @"path\audio\target.wav",   // Reference file
-                    outputFile: @"path\output.wav");  // Output file that we create
+                    sourceFile: @"path/audio/source.mp3",   // File to be processed
+                    targetFile: @"path/audio/target.wav",   // Reference file
+                    outputFile: @"path/output.wav");  // Output file that we create
 
-                processor.ProcessWithPreset(
-                    sourceFile: @"path\audio\source.wav",
-                    outputFile: @"path\output_club.wav",
-                    PlaybackSystem.ClubPA);
-                                              
+                processor.ProcessWithEnhancedPreset(
+                    sourceFile: @"path/audio/source.mp3",
+                    outputFile: @"path/output.wav",
+                    PlaybackSystem.HiFiSpeakers);
+
                 OwnAudio.Free();
             }
             catch (Exception ex)
