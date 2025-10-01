@@ -18,7 +18,7 @@
 
 OwnAudio is a platform-independent C# audio library that provides a high-level API for audio playback, recording, and processing. By default, it uses Miniaudio for audio I/O. If FFmpeg or PortAudio is installed, it automatically uses Portaudio and FFmpeg. This way, it can work with MiniAudio without any external dependencies. The implementation of MiniAudio also allowed the API to be used on mobile platforms. It is possible to manipulate audio data in real time (pitch change, tempo change, and various real-time effects). The API is able to detect musical chords from audio and create a timed list of chords. A feature has been built in to help game developers manage sound effects.
 
-## Information
+## NEW Information
 
 **I haven't stopped developing the repo, but there hasn't been any development for about a month now. I've started developing a cross platform audio engine with pure managed code, to replace miniaudio and portaudio. I plan to have it ready by the beginning of November, if I don't run into any serious problems. This way the entire code will work without dependencies on the platforms (Windows - Wasapi, Macos - Coreaudio, Linux - Alsa, Android -AAudio, Ios - Coreaudio).**
 
