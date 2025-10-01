@@ -20,7 +20,7 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 
 ## NEW Information
 
-**I haven't stopped developing the repo, but there hasn't been any development for about a month now. I've started developing a cross platform audio engine with pure managed code, to replace miniaudio and portaudio. I plan to have it ready by the beginning of November, if I don't run into any serious problems. This way the entire code will work without dependencies on the platforms (Windows - Wasapi, Macos - Coreaudio, Linux - Alsa, Android -AAudio, Ios - Coreaudio).**
+**I did not stop developing the repo, but there will be no development for about a month. I started developing an audio engine that would be a clean managed code instead of miniaudio and portaudio. I plan to be ready by the beginning of November if I don't meet a serious problem. In this way, the full code will work without addiction on platforms (Windows - Wasapi, MacOS - Coreaudio, Linux - Alsa, Android -udio, iOS - Coreaudio).**
 
 ## Features
 
