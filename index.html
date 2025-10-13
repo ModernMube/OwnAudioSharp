@@ -110,7 +110,7 @@
 
         /* Hero Section */
         .hero {
-            padding: 120px 0 80px;
+            padding: 160px 0 80px;  /* 120px helyett 160px */
             text-align: center;
             background: linear-gradient(135deg, var(--background) 0%, var(--surface) 100%);
             position: relative;
@@ -415,16 +415,7 @@
         }
     </style>
 </head>
-<body>
-    <!-- Development Notice Banner -->
-    <div style="background: linear-gradient(135deg, #f59e0b, #d97706); padding: 12px 0; text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.2);">
-        <div style="max-width: 1200px; margin: 0 auto; padding: 0 2rem;">
-            <p style="margin: 0; color: white; font-weight: 500;">
-                ⚠️ Development Notice: API updates temporarily paused while transitioning to a fully managed, cross-platform audio engine (no external dependencies). Expected completion: November 2025
-            </p>
-        </div>
-    </div>
-    
+<body>    
     <!-- Navigation -->
     <nav class="nav">
         <div class="nav-container">
@@ -438,6 +429,15 @@
             </ul>
         </div>
     </nav>
+
+    <!-- Development Notice Banner -->
+    <div style="background: linear-gradient(135deg, #f59e0b, #d97706); padding: 12px 0; text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.2); position: fixed; top: 70px; width: 100%; z-index: 999;">
+        <div style="max-width: 1200px; margin: 0 auto; padding: 0 2rem;">
+            <p style="margin: 0; color: white; font-weight: 500; font-size: 0.9rem;">
+                ⚠️ Development Notice: API updates temporarily paused while transitioning to a fully managed, cross-platform audio engine (no external dependencies). Expected completion: November 2025
+            </p>
+        </div>
+    </div>
 
     <!-- Hero Section -->
     <section class="hero">
