@@ -108,8 +108,6 @@ See the [LICENSE](LICENSE) file for details.
 ## 🙏 Acknowledgements
 
 Special thanks to the creators of:
-- [Bufdio](https://github.com/luthfiampas/Bufdio) - Audio playback library for .NET
-- [FFmpeg.AutoGen](https://github.com/Ruslan-B/FFmpeg.AutoGen) - FFmpeg bindings for C#/.NET
+- [DryWetMidi](https://github.com/melanchall/drywetmidi) - .NET library to work with MIDI data and MIDI devices
 - [soundtouch.net](https://github.com/owoudenberg/soundtouch.net) - .NET wrapper for SoundTouch
 - [Avalonia](https://github.com/AvaloniaUI/Avalonia) - Cross-platform .NET UI framework
-- [SoundFlow](https://github.com/LSXPrime/SoundFlow) - Cross-platform .NET audio engine
