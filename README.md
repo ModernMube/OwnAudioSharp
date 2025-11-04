@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
   <img src="Ownaudiologo.png" alt="Logo" width="600"/>
 </div>
 
@@ -11,106 +11,109 @@
 </a>
 
 <a href="https://github.com/ModernMube/OwnAudioSharpDemo">
-  <img src="https://img.shields.io/badge/Sample-OwnAudioSharp%20Demo%20Application-darkgreen" alt="OwnAudioSharp Package">
+  <img src="https://img.shields.io/badge/Sample-OwnAudioSharp%20Demo%20Application-darkgreen" alt="OwnAudioSharp Demo">
 </a>
 
 ##
 
-OwnAudio is a platform-independent C# audio library that provides a high-level API for audio playback, recording, and processing. By default, it uses Miniaudio for audio I/O. If FFmpeg or PortAudio is installed, it automatically uses Portaudio and FFmpeg. This way, it can work with MiniAudio without any external dependencies. The implementation of MiniAudio also allowed the API to be used on mobile platforms. It is possible to manipulate audio data in real time (pitch change, tempo change, and various real-time effects). The API is able to detect musical chords from audio and create a timed list of chords. A feature has been built in to help game developers manage sound effects.
+**OwnAudioSharp** is a cross-platform C# audio library providing professional-grade audio playback, recording, and processing. Built with pure managed code using native system audio APIs - no external dependencies required.
 
-## NEW Information
+## ⚠️ Important Notice
 
-**It wasn't easy, but it's done!!! A few more days and I'll publish it!**
+**Version 2.0.0 introduces major improvements!**
 
-**I've been waiting and searching for years for a real, platform-independent audio engine that I can use on all systems without external dependencies (bass.net, miniaudio, portaudio, etc.). Unfortunately, no one has made such a fully managed engine yet. Now I see why no one has started! It's a serious challenge to compress the differences between platforms into a common code and handle GC independence. But I think it was worth it! I hope I'm not the only one who thinks so!**
+Pre-2.0.0 versions relied on native libraries (miniaudio, portaudio, ffmpeg) and were less optimized. Starting from version 2.0.0, OwnAudioSharp operates with **zero external dependencies** using a fully managed audio engine.
 
-**In a few days I'll upload the project so that anyone can freely create 100% managed audio applications for platform-independent systems!**
+**Key changes:**
+- ✅ Fully managed audio engine across all platforms
+- ✅ ~90% backward compatibility with previous API
+- ✅ Significant performance improvements
+- ⚠️ Legacy APIs marked as `[Obsolete]` - will be removed in future versions
 
-**I've made a website for the code so that everyone can see how the code is structured and how to use it!**
+**Migration recommendation:** Use version 2.0.0 or later for all new projects. The new managed engine offers superior performance and maintainability.
 
-## The new API website is here!
+## ✨ Key Features
+
+- **Cross-platform**: Windows (WASAPI), macOS (Core Audio), Linux (PulseAudio), iOS & Android (in progress)
+- **Dual API layers**: Core API (low-level control) and NET API (high-level features)
+- **Audio playback**: Support for MP3, WAV, FLAC and other formats
+- **Real-time processing**: Pitch shifting, tempo control, effects
+- **Audio mixing**: Multi-source mixing with synchronized playback
+- **Professional mastering**: AI-driven audio matchering and EQ analysis
+- **Chord detection**: Automatic musical chord recognition
+- **Zero-allocation**: Optimized performance for real-time usage
+
+## 📦 Installation
+
+### NuGet Package Manager
+```powershell
+Install-Package OwnAudioSharp
+```
+
+### .NET CLI
+```bash
+dotnet add package OwnAudioSharp
+```
+
+### Requirements
+- .NET 8.0 or later
+- No external dependencies
+
+## 📚 Documentation
+
+Complete documentation is available on the official website:
 
 <a href="https://modernmube.github.io/OwnAudioSharp/">
-  <img src="https://img.shields.io/badge/NEW-OwnAudioSharp%20API%20website-blue" alt="OwnAudioSharp" width="400">
+  <img src="https://img.shields.io/badge/Documentation-OwnAudioSharp%20Website-blue" alt="Documentation" width="350">
 </a>
 
-# 🎵 NEW: Professional Audio Matchering in OwnAudioSharp!
-
-**Studio-grade mastering with advanced AI-driven analysis - single line of code!**
+## 🚀 Quick Start Example
 
 ```csharp
-// Process source audio to match reference characteristics
-analyzer.ProcessEQMatching("source.wav", "reference.wav", "mastered.wav");
+using Ownaudio.Core;
+using Ownaudio.Decoders;
 
-// Optimize for different playback systems
-analyzer.ProcessWithEnhancedPreset("source.wav", "hifi_output.wav", PlaybackSystem.HiFiSpeakers);
+// Create audio engine with default settings
+using var engine = AudioEngineFactory.CreateDefault();
+engine.Initialize(AudioConfig.Default);
+engine.Start();
+
+// Create decoder for audio file
+using var decoder = AudioDecoderFactory.Create(
+    "music.mp3",
+    targetSampleRate: 48000,
+    targetChannels: 2
+);
+
+// Decode and play frames
+while (true)
+{
+    var result = decoder.DecodeNextFrame();
+    if (result.IsEOF) break;
+    
+    engine.Send(result.Frame.Samples);
+}
+
+engine.Stop();
 ```
 
-⚡ **What you get:**
-- Intelligent 10-band EQ matching
-- Multiband compression across 4 frequency bands  
-- Psychoacoustic weighting and spectral masking
-- Distortion-protected automatic processing
+## 💡 Support
 
-🎯 **Result:** Your source audio will sound exactly like the reference track - professional mastering studio quality.
+If you find this library useful or use it for commercial purposes, consider supporting the development:
 
-## Support My Work
+<a href="https://www.buymeacoffee.com/ModernMube" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;">
+</a>
 
-If you find the code useful or use it for commercial purposes, invite me for a coffee!
+## 📄 License
 
-<a href="https://www.buymeacoffee.com/ModernMube" 
-    target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" 
-    alt="Buy Me A Coffee" 
-    style="height: 60px !important;width: 217px !important;" >
- </a>
+See the [LICENSE](LICENSE) file for details.
 
-## Basic Usage
+## 🙏 Acknowledgements
 
-Here's a quick example of how to use OwnAudio to play an audio file:
-
-```csharp
-using Ownaudio;
-using Ownaudio.Sources;
-using System;
-using System.Threading.Tasks;
-
-try 
-{
-    // Initialize OwnAudio
-    OwnAudio.Initialize();
-
-    // Create a source manager
-    var sourceManager = SourceManager.Instance;
-
-    // Add an audio file
-    await sourceManager.AddOutputSource("path/to/audio.mp3");
-
-    // Play the audio
-    sourceManager.Play();
-
-    // Wait for the audio to finish
-    Console.WriteLine("Press any key to stop playback...");
-    Console.ReadKey();
-
-    // Stop playback and clean up
-    sourceManager.Stop();
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"Audio error: {ex.Message}");
-}
-finally
-{
-    OwnAudio.Free();
-}
-```
-
-## Acknowledgements
-
-Special thanks to the creators of the following repositories, whose code was instrumental in the development of OwnAudio:
-
+Special thanks to the creators of:
 - [Bufdio](https://github.com/luthfiampas/Bufdio) - Audio playback library for .NET
-- [FFmpeg.AutoGen](https://github.com/Ruslan-B/FFmpeg.AutoGen) - FFmpeg auto generated unsafe bindings for C#/.NET
-- [soundtouch.net](https://github.com/owoudenberg/soundtouch.net) - .NET wrapper for the SoundTouch audio processing library
+- [FFmpeg.AutoGen](https://github.com/Ruslan-B/FFmpeg.AutoGen) - FFmpeg bindings for C#/.NET
+- [soundtouch.net](https://github.com/owoudenberg/soundtouch.net) - .NET wrapper for SoundTouch
 - [Avalonia](https://github.com/AvaloniaUI/Avalonia) - Cross-platform .NET UI framework
-- [SoundFlow](https://github.com/LSXPrime/SoundFlow) - A powerful and extensible cross-platform .NET audio engine.
+- [SoundFlow](https://github.com/LSXPrime/SoundFlow) - Cross-platform .NET audio engine
