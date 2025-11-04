@@ -1,0 +1,76 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Multi-targeting for different platforms -->
+    <TargetFramework>net8.0</TargetFramework>
+    <!-- Runtime identifiers for all supported platforms -->
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    
+    <!-- NuGet package properties -->
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageId>OwnAudioSharp</PackageId>
+    <Version>2.0.0</Version>
+    <Authors>ModernMube</Authors>
+    <Description>Cross-platform audio engine library for .NET</Description>
+    <PackageTags>audio;cross-platform;windows;linux;macos;sound;multitrack</PackageTags>
+    <RepositoryUrl>https://github.com/ModernMube/OwnAudioSharp</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageCopyright>Copyright (c) 2025 ModernMube</PackageCopyright>
+    <PackageIcon>ownaudio.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+
+  <!-- Common dependencies -->
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.7" />
+    <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
+    <PackageReference Include="Melanchall.DryWetMidi" Version="8.0.2" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.1" />
+    <PackageReference Include="SoundTouch.Net" Version="2.3.2" />
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+    <PackageReference Include="System.Numerics.Tensors" Version="9.0.10" />
+  </ItemGroup>
+
+  <!-- Embedded resources -->
+  <ItemGroup>
+    <EmbeddedResource Include="nmp.onnx" />
+    <EmbeddedResource Include="basesample.bin" />
+  </ItemGroup>
+
+  <!-- NuGet package files -->
+  <ItemGroup>
+    <None Include="..\..\ownaudio.png" Pack="true" PackagePath="\" />
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- Platform-specific project references with private assets (embedded in this assembly) -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Windows\Ownaudio.Windows.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Linux\Ownaudio.Linux.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.macOS\Ownaudio.macOS.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Include platform-specific assemblies in the NuGet package -->
+  <ItemGroup>
+    <!-- Windows assemblies -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Windows\bin\$(Configuration)\net8.0\Ownaudio.Windows.dll" Pack="true" PackagePath="lib\net8.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Windows\bin\$(Configuration)\net8.0\Ownaudio.Windows.dll')" />
+
+    <!-- Linux assemblies -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Linux\bin\$(Configuration)\net8.0\Ownaudio.Linux.dll" Pack="true" PackagePath="lib\net8.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Linux\bin\$(Configuration)\net8.0\Ownaudio.Linux.dll')" />
+
+    <!-- macOS assemblies -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.macOS\bin\$(Configuration)\net8.0\Ownaudio.macOS.dll" Pack="true" PackagePath="lib\net8.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.macOS\bin\$(Configuration)\net8.0\Ownaudio.macOS.dll')" />
+    <None Remove="..\..\OwnAudioEngine\Ownaudio.Core\bin\Debug\net8.0\Ownaudio.Core.dll" />
+
+    <!-- Core assemblies -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net8.0\Ownaudio.Core.dll" Pack="true" PackagePath="lib\net8.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net8.0\Ownaudio.Core.dll')" />
+  </ItemGroup>
+
+</Project>

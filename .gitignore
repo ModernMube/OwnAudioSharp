@@ -132,6 +132,12 @@ _ReSharper*/
 *.[Rr]e[Ss]harper
 *.DotSettings.user
 
+#Claude code folder
+.claude/
+.markdowns/
+ClearFolders.bat
+
+
 # TeamCity is a build add-in
 _TeamCity*
 
