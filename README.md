@@ -20,24 +20,18 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 
 ## NEW Information
 
-**I did not stop developing the repo, but there will be no development for about a month. I started developing an audio engine that would be a clean managed code instead of miniaudio and portaudio. I plan to be ready by the beginning of November if I don't meet a serious problem. In this way, the full code will work without addiction on platforms (Windows - Wasapi, MacOS - Coreaudio, Linux - Alsa, Android -Aaudio, iOS - Coreaudio).**
+**It wasn't easy, but it's done!!!
 
-## Features
+I've been waiting and searching for years for a real, platform-independent audio engine that I can use on all systems without external dependencies (bass.net, miniaudio, portaudio, etc.). Unfortunately, no one has made such a fully managed engine yet. Now I see why no one has started! It's a serious challenge to compress the differences between platforms into a common code and handle GC independence. But I think it was worth it! I hope I'm not the only one who thinks so!
 
-- **Cross-platform** compatibility (Windows, macOS, Linux, Android, iOS)
-- **Audio playbook** with support for various formats via FFmpeg, or MiniAudio (mp3, wav, flac) formats
-- **Audio recording** capabilities through input devices
-- **Time stretching and pitch shifting** using SoundTouch
-- **Mixing** multiple audio sources
-- **Volume control** and custom audio processing
-- **Seeking** within audio files
-- **Real-time audio processing** with custom sample processors
-- **Audio data visualize** customizable waveform display
+In a few days I'll upload the project so that anyone can freely create 100% managed audio applications for platform-independent systems!
 
-## You can find all the information on the website!
+I've made a website for the code so that everyone can see how the code is structured and how to use it!**
+
+## The new API website is here!
 
 <a href="https://modernmube.github.io/OwnAudioSharp/">
-  <img src="https://img.shields.io/badge/WEB-OwnAudioSharp%20API%20website-blue" alt="OwnAudioSharp" width="400">
+  <img src="https://img.shields.io/badge/NEW-OwnAudioSharp%20API%20website-blue" alt="OwnAudioSharp" width="400">
 </a>
 
 # 🎵 NEW: Professional Audio Matchering in OwnAudioSharp!

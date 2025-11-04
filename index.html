@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <!-- Google tag (gtag.js) -->
@@ -12,7 +12,7 @@
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OwnAudioSharp - Modern C# Audio Library</title>
+    <title>Ownaudio - Cross-Platform Audio Framework for .NET</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
     <style>
         * {
@@ -22,18 +22,21 @@
         }
 
         :root {
-            --primary-color: #6366f1;
-            --primary-dark: #4f46e5;
-            --secondary-color: #ec4899;
-            --background: #0f0f23;
-            --surface: #1a1a2e;
-            --surface-light: #16213e;
-            --text-primary: #e2e8f0;
-            --text-secondary: #94a3b8;
-            --accent: #00d9ff;
+            --primary-color: #4a9eff;
+            --primary-dark: #3d86db;
+            --secondary-color: #7c3aed;
+            --core-color: #06b6d4;
+            --net-color: #10b981;
+            --background: #0f1419;
+            --surface: #1a1f2e;
+            --surface-light: #252d3d;
+            --text-primary: #e8edf4;
+            --text-secondary: #9ca8b8;
+            --accent: #06b6d4;
             --success: #10b981;
             --warning: #f59e0b;
-            --border: #334155;
+            --border: #2d3748;
+            --border-light: #4a5568;
         }
 
         body {
@@ -46,7 +49,7 @@
 
         /* Navigation */
         .nav {
-            background: rgba(26, 26, 46, 0.95);
+            background: rgba(20, 25, 32, 0.98);
             backdrop-filter: blur(10px);
             border-bottom: 1px solid var(--border);
             position: fixed;
@@ -68,11 +71,12 @@
 
         .logo {
             font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--primary-color), var(--accent));
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--text-primary), var(--primary-color));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            letter-spacing: -0.5px;
         }
 
         .nav-links {
@@ -81,51 +85,51 @@
             gap: 2rem;
         }
 
-            .nav-links a {
-                color: var(--text-secondary);
-                text-decoration: none;
-                font-weight: 500;
-                transition: color 0.3s ease;
-                position: relative;
-            }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+            position: relative;
+        }
 
-                .nav-links a:hover {
-                    color: var(--primary-color);
-                }
+        .nav-links a:hover {
+            color: var(--primary-color);
+        }
 
-                .nav-links a::after {
-                    content: '';
-                    position: absolute;
-                    bottom: -5px;
-                    left: 0;
-                    width: 0;
-                    height: 2px;
-                    background: var(--primary-color);
-                    transition: width 0.3s ease;
-                }
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--primary-color);
+            transition: width 0.3s ease;
+        }
 
-                .nav-links a:hover::after {
-                    width: 100%;
-                }
+        .nav-links a:hover::after {
+            width: 100%;
+        }
 
         /* Hero Section */
         .hero {
-            padding: 160px 0 80px;  /* 120px helyett 160px */
+            padding: 160px 0 80px;
             text-align: center;
-            background: linear-gradient(135deg, var(--background) 0%, var(--surface) 100%);
+            background: linear-gradient(180deg, var(--background) 0%, var(--surface) 100%);
             position: relative;
             overflow: hidden;
         }
 
-            .hero::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
-            }
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 50% 50%, rgba(74, 158, 255, 0.12) 0%, transparent 70%);
+        }
 
         .hero-container {
             max-width: 1200px;
@@ -137,21 +141,20 @@
 
         .hero h1 {
             font-size: 3.5rem;
-            font-weight: 800;
+            font-weight: 600;
             margin-bottom: 1rem;
-            background: linear-gradient(135deg, var(--text-primary), var(--primary-color));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: var(--text-primary);
+            letter-spacing: -1px;
         }
 
         .hero .subtitle {
             font-size: 1.25rem;
             color: var(--text-secondary);
             margin-bottom: 2rem;
-            max-width: 600px;
+            max-width: 700px;
             margin-left: auto;
             margin-right: auto;
+            font-weight: 400;
         }
 
         .cta-buttons {
@@ -164,9 +167,9 @@
 
         .btn {
             padding: 12px 24px;
-            border-radius: 8px;
+            border-radius: 6px;
             text-decoration: none;
-            font-weight: 600;
+            font-weight: 500;
             transition: all 0.3s ease;
             border: none;
             cursor: pointer;
@@ -176,31 +179,59 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            background: var(--primary-color);
             color: white;
-            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+            box-shadow: 0 2px 12px rgba(74, 158, 255, 0.3);
         }
 
-            .btn-primary:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4);
-            }
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            box-shadow: 0 4px 20px rgba(74, 158, 255, 0.45);
+            transform: translateY(-1px);
+        }
 
         .btn-secondary {
             background: transparent;
             color: var(--text-primary);
-            border: 2px solid var(--border);
+            border: 1px solid var(--border-light);
         }
 
-            .btn-secondary:hover {
-                border-color: var(--primary-color);
-                color: var(--primary-color);
-            }
+        .btn-secondary:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+            background: rgba(91, 124, 153, 0.05);
+        }
 
-        /* Features Grid */
-        .features {
+        .btn-secondary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            border-color: var(--border);
+        }
+
+        .btn-secondary:disabled:hover {
+            border-color: var(--border);
+            color: var(--text-primary);
+            background: transparent;
+            transform: none;
+        }
+
+        .countdown-wrapper {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .countdown-timer {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* Architecture Section */
+        .architecture {
             padding: 80px 0;
-            background: var(--background);
+            background: var(--surface);
         }
 
         .container {
@@ -210,51 +241,180 @@
         }
 
         .section-title {
-            text-align: center;
             font-size: 2.5rem;
-            font-weight: 700;
-            margin-bottom: 3rem;
+            text-align: center;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+
+        .section-subtitle {
+            text-align: center;
+            color: var(--text-secondary);
+            margin-bottom: 4rem;
+            font-size: 1.1rem;
+        }
+
+        .architecture-diagram {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .layer {
+            background: var(--surface-light);
+            border-radius: 12px;
+            padding: 2rem;
+            border: 2px solid var(--border);
+            transition: all 0.3s ease;
+        }
+
+        .layer:hover {
+            border-color: var(--primary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(74, 158, 255, 0.2);
+        }
+
+        .layer-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .layer-badge {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .layer-badge.core {
+            background: rgba(6, 182, 212, 0.2);
+            color: var(--core-color);
+        }
+
+        .layer-badge.net {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--net-color);
+        }
+
+        .layer h3 {
+            font-size: 1.5rem;
             color: var(--text-primary);
+        }
+
+        .layer-content {
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+
+        .layer-features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .feature-tag {
+            background: var(--surface);
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            border: 1px solid var(--border);
+        }
+
+        /* Platforms Section */
+        .platforms {
+            padding: 80px 0;
+            background: var(--background);
+        }
+
+        .platforms-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .platform-card {
+            text-align: center;
+            padding: 2rem;
+            background: var(--surface-light);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
+        }
+
+        .platform-card:hover {
+            border-color: var(--core-color);
+            transform: translateY(-4px);
+            box-shadow: 0 4px 20px rgba(6, 182, 212, 0.3);
+        }
+
+        .platform-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .platform-name {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .platform-api {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        /* Features Section */
+        .features {
+            padding: 80px 0;
+            background: var(--surface);
         }
 
         .features-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 2rem;
-            margin-bottom: 3rem;
+            margin-top: 3rem;
         }
 
         .feature-card {
-            background: var(--surface);
+            background: var(--surface-light);
             padding: 2rem;
             border-radius: 12px;
             border: 1px solid var(--border);
             transition: all 0.3s ease;
         }
 
-            .feature-card:hover {
-                transform: translateY(-5px);
-                border-color: var(--primary-color);
-                box-shadow: 0 10px 30px rgba(99, 102, 241, 0.2);
-            }
+        .feature-card:hover {
+            border-color: var(--primary-color);
+            transform: translateY(-4px);
+            box-shadow: 0 4px 20px rgba(74, 158, 255, 0.2);
+        }
 
         .feature-icon {
             width: 50px;
             height: 50px;
-            background: linear-gradient(135deg, var(--primary-color), var(--accent));
+            background: rgba(74, 158, 255, 0.1);
             border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 1rem;
-            color: white;
-            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: var(--primary-color);
+        }
+
+        .feature-icon svg {
+            width: 28px;
+            height: 28px;
         }
 
         .feature-card h3 {
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-bottom: 0.75rem;
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
             color: var(--text-primary);
         }
 
@@ -263,68 +423,100 @@
             line-height: 1.6;
         }
 
-        /* Code Example Section */
-        .code-example {
+        /* Code Examples Section */
+        .examples {
             padding: 80px 0;
+            background: var(--background);
+        }
+
+        .examples-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .tab-btn {
+            padding: 0.75rem 1.5rem;
             background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .tab-btn.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .tab-btn:hover:not(.active) {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
         }
 
         .code-container {
+            max-width: 900px;
+            margin: 0 auto;
             background: var(--surface-light);
-            border-radius: 12px;
-            border: 1px solid var(--border);
+            border-radius: 8px;
             overflow: hidden;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
         }
 
         .code-header {
-            background: var(--background);
-            padding: 1rem 1.5rem;
-            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+            padding: 12px 20px;
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            gap: 0.5rem;
+            border-bottom: 1px solid var(--border);
         }
 
         .code-dots {
             display: flex;
-            gap: 0.5rem;
+            gap: 8px;
         }
 
         .code-dot {
             width: 12px;
             height: 12px;
             border-radius: 50%;
+            background: var(--border-light);
         }
 
-            .code-dot:nth-child(1) {
-                background: #ff5f56;
-            }
-
-            .code-dot:nth-child(2) {
-                background: #ffbd2e;
-            }
-
-            .code-dot:nth-child(3) {
-                background: #27ca3f;
-            }
-
         .code-title {
-            margin-left: 1rem;
             color: var(--text-secondary);
-            font-size: 0.875rem;
+            font-size: 0.9rem;
+            font-weight: 500;
         }
 
         pre {
             margin: 0;
             padding: 1.5rem;
-            background: transparent !important;
             overflow-x: auto;
+        }
+
+        code {
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 0.9rem;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
         }
 
         /* Stats Section */
         .stats {
             padding: 60px 0;
-            background: var(--background);
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
         }
 
         .stats-grid {
@@ -335,153 +527,247 @@
         }
 
         .stat-item h3 {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: var(--primary-color);
+            font-size: 3rem;
+            font-weight: 600;
             margin-bottom: 0.5rem;
+            color: white;
         }
 
         .stat-item p {
-            color: var(--text-secondary);
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 500;
         }
 
         /* Footer */
         .footer {
-            background: var(--surface);
             padding: 40px 0;
+            background: var(--surface);
             border-top: 1px solid var(--border);
-            text-align: center;
         }
 
         .footer-content {
             max-width: 1200px;
             margin: 0 auto;
             padding: 0 2rem;
+            text-align: center;
         }
 
         .footer-links {
             display: flex;
             justify-content: center;
             gap: 2rem;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
             flex-wrap: wrap;
         }
 
-            .footer-links a {
-                color: var(--text-secondary);
-                text-decoration: none;
-                transition: color 0.3s ease;
-            }
+        .footer-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
 
-                .footer-links a:hover {
-                    color: var(--primary-color);
-                }
+        .footer-links a:hover {
+            color: var(--primary-color);
+        }
+
+        .footer p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
 
         /* Responsive Design */
         @media (max-width: 768px) {
-            .nav-links {
-                display: none;
-            }
-
             .hero h1 {
                 font-size: 2.5rem;
             }
 
-            .cta-buttons {
-                flex-direction: column;
-                align-items: center;
+            .hero .subtitle {
+                font-size: 1.1rem;
             }
 
-            .features-grid {
+            .nav-links {
+                display: none;
+            }
+
+            .section-title {
+                font-size: 2rem;
+            }
+
+            .features-grid,
+            .platforms-grid {
                 grid-template-columns: 1fr;
             }
         }
-
-        /* Animations */
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .fade-in-up {
-            animation: fadeInUp 0.6s ease-out forwards;
-        }
     </style>
 </head>
-<body>    
+<body>
     <!-- Navigation -->
     <nav class="nav">
         <div class="nav-container">
-            <div class="logo">OwnAudioSharp</div>
+            <div class="logo">OwnaudioSharp</div>
             <ul class="nav-links">
+                <li><a href="#architecture">Architecture</a></li>
+                <li><a href="#platforms">Platforms</a></li>
                 <li><a href="#features">Features</a></li>
-                <li><a href="documents/quickstart.html">Quick Start</a></li>
-                <li><a href="documents/api-reference.html">API Reference</a></li>
-                <li><a href="documents/examples.html">Examples</a></li>
-                <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
+                <li><a href="#documentation">Documentation</a></li>
+                <li><a href="#examples">Examples</a></li>
             </ul>
         </div>
     </nav>
 
-    <!-- Development Notice Banner -->
-    <div style="background: linear-gradient(135deg, #f59e0b, #d97706); padding: 12px 0; text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.2); position: fixed; top: 70px; width: 100%; z-index: 999;">
-        <div style="max-width: 1200px; margin: 0 auto; padding: 0 2rem;">
-            <p style="margin: 0; color: white; font-weight: 500; font-size: 0.9rem;">
-                ⚠️ Development Notice: API updates temporarily paused while transitioning to a fully managed, cross-platform audio engine (no external dependencies). 
-            </p>
-            <p style="margin: 0; color: white; font-weight: 500; font-size: 0.9rem;">
-                Expected completion: November 2025
-            </p>
-        </div>
-    </div>
-
     <!-- Hero Section -->
     <section class="hero">
         <div class="hero-container">
-            <h1 class="fade-in-up">Modern C# Audio Library</h1>
-            <p class="subtitle fade-in-up">Cross-platform audio playback, recording, and processing with professional effects and real-time capabilities.</p>
-
-            <div class="cta-buttons fade-in-up">
-                <a href="documents/quickstart.html" class="btn btn-primary">
-                    🚀 Get Started
-                </a>
-                <a href="https://github.com/ModernMube/OwnAudioSharp" class="btn btn-secondary" target="_blank">
-                    📋 View on GitHub
-                </a>
-                <a href="https://www.nuget.org/packages/OwnAudioSharp" class="btn btn-secondary" target="_blank">
-                    📦 NuGet Package
-                </a>
-            </div>
-
-            <div class="code-container fade-in-up">
-                <div class="code-header">
-                    <div class="code-dots">
-                        <div class="code-dot"></div>
-                        <div class="code-dot"></div>
-                        <div class="code-dot"></div>
-                    </div>
-                    <div class="code-title">Program.cs</div>
+            <h1>Ownaudio Framework</h1>
+            <p class="subtitle">
+                Cross-platform audio framework for .NET with zero external dependencies. 
+                Pure managed code utilizing native system audio APIs.
+            </p>
+            <div class="cta-buttons">
+                <a href="#examples" class="btn btn-primary">Get Started</a>
+                <div class="countdown-wrapper">
+                    <button id="github-btn" class="btn btn-secondary" disabled>View on GitHub</button>
+                    <div class="countdown-timer" id="countdown"></div>
                 </div>
-                <pre><code class="language-csharp">// Initialize OwnAudio
-OwnAudio.Initialize();
+            </div>
+        </div>
+    </section>
 
-// Create source manager
-var sourceManager = SourceManager.Instance;
+    <!-- Architecture Section -->
+    <section class="architecture" id="architecture">
+        <div class="container">
+            <h2 class="section-title">Framework Architecture</h2>
+            <p class="section-subtitle">
+                Two-layer architecture providing both low-level control and high-level convenience
+            </p>
 
-// Add and play audio file
-await sourceManager.AddOutputSource("audio.mp3");
-sourceManager.Play();
+            <div class="architecture-diagram">
+                <!-- OwnaudioNET Layer -->
+                <div class="layer">
+                    <div class="layer-header">
+                        <span class="layer-badge net">OwnaudioNET</span>
+                        <h3>High-Level API</h3>
+                    </div>
+                    <div class="layer-content">
+                        <p>
+                            Complete audio solution with professional features for production-ready applications.
+                            Built on top of Ownaudio.Core, providing simplified APIs for common audio tasks.
+                        </p>
+                        <div class="layer-features">
+                            <div class="feature-tag">15+ Audio Effects</div>
+                            <div class="feature-tag">Multi-Track Mixing</div>
+                            <div class="feature-tag">Format Support (MP3, WAV, FLAC)</div>
+                            <div class="feature-tag">Real-Time Processing</div>
+                            <div class="feature-tag">Chord Detection</div>
+                            <div class="feature-tag">Audio Matchering</div>
+                            <div class="feature-tag">Recording & Streaming</div>
+                            <!--<div class="feature-tag">Visualization Components</div>-->
+                        </div>
+                    </div>
+                </div>
 
-// Apply professional effects
-var reverb = new Reverb(0.5f, 0.3f, 0.4f, 0.7f);
-sourceManager.CustomSampleProcessor = reverb;</code></pre>
+                <!-- Ownaudio.Core Layer -->
+                <div class="layer">
+                    <div class="layer-header">
+                        <span class="layer-badge core">Ownaudio.Core</span>
+                        <h3>Core Audio Engine</h3>
+                    </div>
+                    <div class="layer-content">
+                        <p>
+                            Cross-platform audio foundation providing low-level access to native system audio APIs.
+                            <strong>Pure managed code with zero external dependencies</strong> - uses the integrated audio 
+                            systems of each platform without requiring any additional installations.
+                        </p>
+                        <div class="layer-features">
+                            <div class="feature-tag">Zero-Allocation</div>
+                            <div class="feature-tag">Real-Time Safe</div>
+                            <div class="feature-tag">Native API Integration</div>
+                            <div class="feature-tag">Built-in Decoders</div>
+                            <div class="feature-tag">Device Management</div>
+                            <div class="feature-tag">Format Conversion</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Platforms Section -->
+    <section class="platforms" id="platforms">
+        <div class="container">
+            <h2 class="section-title">Native Platform Support</h2>
+            <p class="section-subtitle">
+                Direct integration with operating system audio APIs - no external dependencies required
+            </p>
+
+            <style>
+                .platform-icon {
+                    color: var(--primary-color);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin-bottom: 1rem;
+                }
+                .platform-icon svg {
+                    transition: transform 0.3s ease;
+                }
+                .platform-card:hover .platform-icon svg {
+                    transform: scale(1.1);
+                }
+            </style>
+
+            <div class="platforms-grid">
+                <div class="platform-card">
+                    <div class="platform-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                            <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+                        </svg>
+                    </div>
+                    <div class="platform-name">Windows</div>
+                    <div class="platform-api">WASAPI</div>
+                </div>
+
+                <div class="platform-card">
+                    <div class="platform-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                            <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/>
+                        </svg>
+                    </div>
+                    <div class="platform-name">macOS</div>
+                    <div class="platform-api">Core Audio</div>
+                </div>
+
+                <div class="platform-card">
+                    <div class="platform-icon">
+                        <svg viewBox="0 0 304.998 304.998" fill="currentColor" width="48" height="48">
+                            <path d="M274.659,244.888c-8.944-3.663-12.77-8.524-12.4-15.777c0.381-8.466-4.422-14.667-6.703-17.117c1.378-5.264,5.405-23.474,0.004-39.291c-5.804-16.93-23.524-42.787-41.808-68.204c-7.485-10.438-7.839-21.784-8.248-34.922c-0.392-12.531-0.834-26.735-7.822-42.525C190.084,9.859,174.838,0,155.851,0c-11.295,0-22.889,3.53-31.811,9.684c-18.27,12.609-15.855,40.1-14.257,58.291c0.219,2.491,0.425,4.844,0.545,6.853c1.064,17.816,0.096,27.206-1.17,30.06c-0.819,1.865-4.851,7.173-9.118,12.793c-4.413,5.812-9.416,12.4-13.517,18.539c-4.893,7.387-8.843,18.678-12.663,29.597c-2.795,7.99-5.435,15.537-8.005,20.047c-4.871,8.676-3.659,16.766-2.647,20.505c-1.844,1.281-4.508,3.803-6.757,8.557c-2.718,5.8-8.233,8.917-19.701,11.122c-5.27,1.078-8.904,3.294-10.804,6.586c-2.765,4.791-1.259,10.811,0.115,14.925c2.03,6.048,0.765,9.876-1.535,16.826c-0.53,1.604-1.131,3.42-1.74,5.423c-0.959,3.161-0.613,6.035,1.026,8.542c4.331,6.621,16.969,8.956,29.979,10.492c7.768,0.922,16.27,4.029,24.493,7.035c8.057,2.944,16.388,5.989,23.961,6.913c1.151,0.145,2.291,0.218,3.39,0.218c11.434,0,16.6-7.587,18.238-10.704c4.107-0.838,18.272-3.522,32.871-3.882c14.576-0.416,28.679,2.462,32.674,3.357c1.256,2.404,4.567,7.895,9.845,10.724c2.901,1.586,6.938,2.495,11.073,2.495c0.001,0,0,0,0.001,0c4.416,0,12.817-1.044,19.466-8.039c6.632-7.028,23.202-16,35.302-22.551c2.7-1.462,5.226-2.83,7.441-4.065c6.797-3.768,10.506-9.152,10.175-14.771C282.445,250.905,279.356,246.811,274.659,244.888z M124.189,243.535c-0.846-5.96-8.513-11.871-17.392-18.715c-7.26-5.597-15.489-11.94-17.756-17.312c-4.685-11.082-0.992-30.568,5.447-40.602c3.182-5.024,5.781-12.643,8.295-20.011c2.714-7.956,5.521-16.182,8.66-19.783c4.971-5.622,9.565-16.561,10.379-25.182c4.655,4.444,11.876,10.083,18.547,10.083c1.027,0,2.024-0.134,2.977-0.403c4.564-1.318,11.277-5.197,17.769-8.947c5.597-3.234,12.499-7.222,15.096-7.585c4.453,6.394,30.328,63.655,32.972,82.044c2.092,14.55-0.118,26.578-1.229,31.289c-0.894-0.122-1.96-0.221-3.08-0.221c-7.207,0-9.115,3.934-9.612,6.283c-1.278,6.103-1.413,25.618-1.427,30.003c-2.606,3.311-15.785,18.903-34.706,21.706c-7.707,1.12-14.904,1.688-21.39,1.688c-5.544,0-9.082-0.428-10.551-0.651l-9.508-10.879C121.429,254.489,125.177,250.583,124.189,243.535z M136.254,64.149c-0.297,0.128-0.589,0.265-0.876,0.411c-0.029-0.644-0.096-1.297-0.199-1.952c-1.038-5.975-5-10.312-9.419-10.312c-0.327,0-0.656,0.025-1.017,0.08c-2.629,0.438-4.691,2.413-5.821,5.213c0.991-6.144,4.472-10.693,8.602-10.693c4.85,0,8.947,6.536,8.947,14.272C136.471,62.143,136.4,63.113,136.254,64.149z M173.94,68.756c0.444-1.414,0.684-2.944,0.684-4.532c0-7.014-4.45-12.509-10.131-12.509c-5.552,0-10.069,5.611-10.069,12.509c0,0.47,0.023,0.941,0.067,1.411c-0.294-0.113-0.581-0.223-0.861-0.329c-0.639-1.935-0.962-3.954-0.962-6.015c0-8.387,5.36-15.211,11.95-15.211c6.589,0,11.95,6.824,11.95,15.211C176.568,62.78,175.605,66.11,173.94,68.756z M169.081,85.08c-0.095,0.424-0.297,0.612-2.531,1.774c-1.128,0.587-2.532,1.318-4.289,2.388l-1.174,0.711c-4.718,2.86-15.765,9.559-18.764,9.952c-2.037,0.274-3.297-0.516-6.13-2.441c-0.639-0.435-1.319-0.897-2.044-1.362c-5.107-3.351-8.392-7.042-8.763-8.485c1.665-1.287,5.792-4.508,7.905-6.415c4.289-3.988,8.605-6.668,10.741-6.668c0.113,0,0.215,0.008,0.321,0.028c2.51,0.443,8.701,2.914,13.223,4.718c2.09,0.834,3.895,1.554,5.165,2.01C166.742,82.664,168.828,84.422,169.081,85.08z M205.028,271.45c2.257-10.181,4.857-24.031,4.436-32.196c-0.097-1.855-0.261-3.874-0.42-5.826c-0.297-3.65-0.738-9.075-0.283-10.684c0.09-0.042,0.19-0.078,0.301-0.109c0.019,4.668,1.033,13.979,8.479,17.226c2.219,0.968,4.755,1.458,7.537,1.458c7.459,0,15.735-3.659,19.125-7.049c1.996-1.996,3.675-4.438,4.851-6.372c0.257,0.753,0.415,1.737,0.332,3.005c-0.443,6.885,2.903,16.019,9.271,19.385l0.927,0.487c2.268,1.19,8.292,4.353,8.389,5.853c-0.001,0.001-0.051,0.177-0.387,0.489c-1.509,1.379-6.82,4.091-11.956,6.714c-9.111,4.652-19.438,9.925-24.076,14.803c-6.53,6.872-13.916,11.488-18.376,11.488c-0.537,0-1.026-0.068-1.461-0.206C206.873,288.406,202.886,281.417,205.028,271.45z M39.917,245.477c-0.494-2.312-0.884-4.137-0.465-5.905c0.304-1.31,6.771-2.714,9.533-3.313c3.883-0.843,7.899-1.714,10.525-3.308c3.551-2.151,5.474-6.118,7.17-9.618c1.228-2.531,2.496-5.148,4.005-6.007c0.085-0.05,0.215-0.108,0.463-0.108c2.827,0,8.759,5.943,12.177,11.262c0.867,1.341,2.473,4.028,4.331,7.139c5.557,9.298,13.166,22.033,17.14,26.301c3.581,3.837,9.378,11.214,7.952,17.541c-1.044,4.909-6.602,8.901-7.913,9.784c-0.476,0.108-1.065,0.163-1.758,0.163c-7.606,0-22.662-6.328-30.751-9.728l-1.197-0.503c-4.517-1.894-11.891-3.087-19.022-4.241c-5.674-0.919-13.444-2.176-14.732-3.312c-1.044-1.171,0.167-4.978,1.235-8.337c0.769-2.414,1.563-4.91,1.998-7.523C41.225,251.596,40.499,248.203,39.917,245.477z"/>
+                        </svg>
+                    </div>
+                    <div class="platform-name">Linux</div>
+                    <div class="platform-api">PulseAudio</div>
+                </div>
+
+                <div class="platform-card">
+                    <div class="platform-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                            <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/>
+                        </svg>
+                    </div>
+                    <div class="platform-name">iOS</div>
+                    <div class="platform-api">Core Audio</div>
+					<div class="platform-api">In Progress...</div>
+                </div>
+
+                <div class="platform-card">
+                    <div class="platform-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                            <path d="M17.6 9.48l1.84-3.18c.16-.31.04-.69-.26-.85-.29-.15-.65-.06-.83.22l-1.88 3.24c-2.86-1.21-6.08-1.21-8.94 0L5.65 5.67c-.19-.28-.55-.37-.83-.22-.3.16-.42.54-.26.85l1.84 3.18C2.92 11.03 1 14.21 1 17.74h22c0-3.53-1.92-6.71-5.4-8.26zM8.06 15.2c-.66 0-1.2-.54-1.2-1.2 0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2 0 .66-.54 1.2-1.2 1.2zm7.88 0c-.66 0-1.2-.54-1.2-1.2 0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2 0 .66-.54 1.2-1.2 1.2z"/>
+                        </svg>
+                    </div>
+                    <div class="platform-name">Android</div>
+                    <div class="platform-api">Oboe</div>
+					<div class="platform-api">In Progress...</div>
+                </div>
             </div>
         </div>
     </section>
@@ -493,51 +779,180 @@ sourceManager.CustomSampleProcessor = reverb;</code></pre>
 
             <div class="features-grid">
                 <div class="feature-card">
-                    <div class="feature-icon">🌍</div>
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                        </svg>
+                    </div>
+                    <h3>Zero Dependencies</h3>
+                    <p>Pure managed code with no external libraries required. Uses native system audio APIs directly.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                    </div>
                     <h3>Cross-Platform</h3>
-                    <p>Works seamlessly on Windows, macOS, Linux, Android, and iOS with automatic dependency management.</p>
+                    <p>Single codebase works on Windows, macOS, Linux, (Android, and iOS - In Progress...) with platform-optimized backends.</p>
                 </div>
 
                 <div class="feature-card">
-                    <div class="feature-icon">🎵</div>
-                    <h3>Multiple Formats</h3>
-                    <p>Support for MP3, WAV, FLAC, AAC, OGG via FFmpeg or MiniAudio fallback for zero dependencies.</p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">🎛️</div>
-                    <h3>Professional Effects</h3>
-                    <p>Built-in reverb, delay, distortion, compressor, 30-band EQ, chorus, flanger, and more.</p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">⚡</div>
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                        </svg>
+                    </div>
                     <h3>Real-Time Processing</h3>
-                    <p>Live audio synthesis, network streaming, and real-time effects with minimal latency.</p>
+                    <p>Zero-allocation guarantee with lock-free data structures for real-time audio processing.</p>
                 </div>
 
                 <div class="feature-card">
-                    <div class="feature-icon">🎼</div>
-                    <h3>Chord Detection</h3>
-                    <p>Advanced musical chord detection with timed analysis and confidence scoring.</p>
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 18V5l12-2v13M9 13l12-2"/>
+                            <circle cx="6" cy="18" r="3"/>
+                            <circle cx="18" cy="16" r="3"/>
+                        </svg>
+                    </div>
+                    <h3>Format Support</h3>
+                    <p>Built-in decoders for WAV, MP3, and FLAC with automatic format conversion and resampling.</p>
                 </div>
 
                 <div class="feature-card">
-                    <div class="feature-icon">🎚️</div>
-                    <h3>Professional Mastering</h3>
-                    <p>Intelligent audio matchering with 30-band EQ and psychoacoustic analysis.</p>
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="4" y1="21" x2="4" y2="14"/>
+                            <line x1="4" y1="10" x2="4" y2="3"/>
+                            <line x1="12" y1="21" x2="12" y2="12"/>
+                            <line x1="12" y1="8" x2="12" y2="3"/>
+                            <line x1="20" y1="21" x2="20" y2="16"/>
+                            <line x1="20" y1="12" x2="20" y2="3"/>
+                        </svg>
+                    </div>
+                    <h3>Audio Effects</h3>
+                    <p>Professional effects including reverb, delay, compressor, 30-band EQ, chorus, and distortion.</p>
                 </div>
 
                 <div class="feature-card">
-                    <div class="feature-icon">📊</div>
-                    <h3>Audio Visualization</h3>
-                    <p>Avalonia waveform display component with zoom, seeking, and multiple display styles.</p>
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="9" y1="9" x2="15" y2="9"/>
+                            <line x1="9" y1="15" x2="15" y2="15"/>
+                        </svg>
+                    </div>
+                    <h3>Device Management</h3>
+                    <p>Dynamic device enumeration and switching with event-based notifications for device changes.</p>
                 </div>
 
                 <div class="feature-card">
-                    <div class="feature-icon">🔧</div>
-                    <h3>Custom Processing</h3>
-                    <p>Extensible architecture for custom audio processors and effects chains.</p>
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                        </svg>
+                    </div>
+                    <h3>Multi-Track Mixing</h3>
+                    <p>Unlimited simultaneous audio sources with synchronized playback and drift correction.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                        </svg>
+                    </div>
+                    <h3>Audio Analysis</h3>
+                    <p>Real-time peak and RMS metering, chord detection, and psychoacoustic analysis.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Code Examples Section -->
+    <section class="examples" id="examples">
+        <div class="container">
+            <h2 class="section-title">Quick Start Examples</h2>
+            <p class="section-subtitle">
+                Get started with Ownaudio in minutes
+            </p>
+
+            <div class="examples-tabs">
+                <button class="tab-btn active" data-tab="core">Ownaudio.Core</button>
+                <button class="tab-btn" data-tab="net">OwnaudioNET</button>
+            </div>
+
+            <!-- Core Example -->
+            <div class="tab-content active" id="core">
+                <div class="code-container">
+                    <div class="code-header">
+                        <div class="code-dots">
+                            <div class="code-dot"></div>
+                            <div class="code-dot"></div>
+                            <div class="code-dot"></div>
+                        </div>
+                        <div class="code-title">CoreExample.cs</div>
+                    </div>
+                    <pre><code class="language-csharp">// Create audio engine with default settings
+using var engine = AudioEngineFactory.CreateDefault();
+
+// Start the engine
+engine.Start();
+
+// Create decoder for audio file
+using var decoder = AudioDecoderFactory.Create("music.mp3", 
+    targetSampleRate: 48000, 
+    targetChannels: 2);
+
+// Decode and send audio frames
+while (true)
+{
+    var result = decoder.DecodeNextFrame();
+    if (result.IsEOF) break;
+    
+    engine.Send(result.Frame.Samples);
+}
+
+// Stop the engine
+engine.Stop();</code></pre>
+                </div>
+            </div>
+
+            <!-- NET Example -->
+            <div class="tab-content" id="net">
+                <div class="code-container">
+                    <div class="code-header">
+                        <div class="code-dots">
+                            <div class="code-dot"></div>
+                            <div class="code-dot"></div>
+                            <div class="code-dot"></div>
+                        </div>
+                        <div class="code-title">NetExample.cs</div>
+                    </div>
+                    <pre><code class="language-csharp">// Initialize OwnaudioNET
+OwnaudioNet.Initialize();
+
+// Create file source
+var source = new FileSource("music.mp3");
+
+// Create mixer and add source
+var mixer = new AudioMixer(OwnaudioNet.Engine);
+mixer.AddSource(source);
+mixer.Start();
+
+// Play the source
+source.Play();
+
+// Apply professional effects
+var reverb = new ReverbEffect { Mix = 0.3f, RoomSize = 0.7f };
+var compressor = new CompressorEffect { Threshold = -12, Ratio = 4 };
+var sourceWithEffects = new SourceWithEffects(source, reverb, compressor);
+
+// Control playback
+source.Volume = 0.8f;
+source.Seek(30.0); // seconds</code></pre>
                 </div>
             </div>
         </div>
@@ -552,16 +967,122 @@ sourceManager.CustomSampleProcessor = reverb;</code></pre>
                     <p>Supported Platforms</p>
                 </div>
                 <div class="stat-item">
+                    <h3>Zero</h3>
+                    <p>External Dependencies</p>
+                </div>
+                <div class="stat-item">
                     <h3>15+</h3>
                     <p>Built-in Effects</p>
                 </div>
                 <div class="stat-item">
-                    <h3>30</h3>
-                    <p>Band EQ System</p>
+                    <h3>&lt;12ms</h3>
+                    <p>Low Latency</p>
                 </div>
-                <div class="stat-item">
-                    <h3>Zero</h3>
-                    <p>Dependencies Required</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Documentation Section -->
+    <section class="documentation-section" id="documentation" style="padding: 80px 0; background: var(--surface);">
+        <div class="container">
+            <h2 class="section-title">Documentation</h2>
+            <p class="section-subtitle">
+                Comprehensive guides and references to help you get started and master Ownaudio
+            </p>
+
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                            <polyline points="10 9 9 9 8 9"/>
+                        </svg>
+                    </div>
+                    <h3>Quick Start</h3>
+                    <p>Get up and running in minutes with our step-by-step guide for both Core and NET APIs.</p>
+                    <a href="documents/quickstart.html" style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
+                        Read Guide →
+                    </a>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="2" y1="12" x2="22" y2="12"/>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                    </div>
+                    <h3>Core API Reference</h3>
+                    <p>Complete reference for the low-level Core API with zero-allocation audio engine.</p>
+                    <a href="documents/api-core.html" style="color: var(--core-color); text-decoration: none; font-weight: 500;">
+                        View API Docs →
+                    </a>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="9" y1="9" x2="15" y2="9"/>
+                            <line x1="9" y1="15" x2="15" y2="15"/>
+                        </svg>
+                    </div>
+                    <h3>NET API Reference</h3>
+                    <p>High-level API documentation with mixing, effects, and multi-track support.</p>
+                    <a href="documents/api-net.html" style="color: var(--net-color); text-decoration: none; font-weight: 500;">
+                        View API Docs →
+                    </a>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="16 18 22 12 16 6"/>
+                            <polyline points="8 6 2 12 8 18"/>
+                        </svg>
+                    </div>
+                    <h3>Code Examples</h3>
+                    <p>Learn from practical examples covering various use cases and scenarios.</p>
+                    <a href="documents/examples.html" style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
+                        Browse Examples →
+                    </a>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="4" y1="21" x2="4" y2="14"/>
+                            <line x1="4" y1="10" x2="4" y2="3"/>
+                            <line x1="12" y1="21" x2="12" y2="12"/>
+                            <line x1="12" y1="8" x2="12" y2="3"/>
+                            <line x1="20" y1="21" x2="20" y2="16"/>
+                            <line x1="20" y1="12" x2="20" y2="3"/>
+                        </svg>
+                    </div>
+                    <h3>Audio Matchering</h3>
+                    <p>Professional audio mastering with intelligent EQ and psychoacoustic analysis.</p>
+                    <a href="documents/matchering.html" style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
+                        Learn More →
+                    </a>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 18V5l12-2v13"/>
+                            <circle cx="6" cy="18" r="3"/>
+                            <circle cx="18" cy="16" r="3"/>
+                        </svg>
+                    </div>
+                    <h3>Chord Detection</h3>
+                    <p>Advanced musical chord detection with timed analysis and confidence scoring.</p>
+                    <a href="documents/chorddetect.html" style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
+                        Learn More →
+                    </a>
                 </div>
             </div>
         </div>
@@ -572,14 +1093,15 @@ sourceManager.CustomSampleProcessor = reverb;</code></pre>
         <div class="footer-content">
             <div class="footer-links">
                 <a href="documents/quickstart.html">Quick Start</a>
-                <a href="documents/api-reference.html">API Reference</a>
+                <a href="documents/api-core.html">Core API</a>
+                <a href="documents/api-net.html">NET API</a>
                 <a href="documents/examples.html">Examples</a>
-                <a href="documents/effects.html">Effects</a>
                 <a href="documents/matchering.html">Matchering</a>
+                <a href="documents/chorddetect.html">Chord Detection</a>
                 <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a>
                 <a href="https://www.nuget.org/packages/OwnAudioSharp" target="_blank">NuGet</a>
             </div>
-            <p>&copy; 2025 OwnAudioSharp. Open source audio library for modern C# development.</p>
+            <p>&copy; 2025 Ownaudio. Cross-platform audio framework for modern .NET development.</p>
         </div>
     </footer>
 
@@ -587,52 +1109,99 @@ sourceManager.CustomSampleProcessor = reverb;</code></pre>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <script>
-        // Smooth scrolling for navigation links
+        // Tab switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Remove active class from all tabs
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                // Add active class to clicked tab
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // Smooth scrolling
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-        anchor.addEventListener('click', function (e) {
-        e.preventDefault();
-        const target = document.querySelector(this.getAttribute('href'));
-        if (target) {
-        target.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-        });
-        }
-        });
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
         });
 
         // Navbar scroll effect
         window.addEventListener('scroll', () => {
-        const nav = document.querySelector('.nav');
-        if (window.scrollY > 50) {
-        nav.style.background = 'rgba(26, 26, 46, 0.98)';
-        } else {
-        nav.style.background = 'rgba(26, 26, 46, 0.95)';
-        }
+            const nav = document.querySelector('.nav');
+            if (window.scrollY > 50) {
+                nav.style.background = 'rgba(20, 25, 32, 1)';
+            } else {
+                nav.style.background = 'rgba(20, 25, 32, 0.98)';
+            }
         });
 
         // Intersection Observer for animations
         const observerOptions = {
-        threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
         };
 
         const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-        if (entry.isIntersecting) {
-        entry.target.style.opacity = '1';
-        entry.target.style.transform = 'translateY(0)';
-        }
-        });
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
         }, observerOptions);
 
-        // Observe feature cards
-        document.querySelectorAll('.feature-card').forEach(card => {
-        card.style.opacity = '0';
-        card.style.transform = 'translateY(30px)';
-        card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
-        observer.observe(card);
+        // Observe elements
+        document.querySelectorAll('.feature-card, .platform-card, .layer').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(30px)';
+            el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+            observer.observe(el);
         });
+
+        // Countdown timer
+        const targetDate = new Date('2025-11-09T12:00:00').getTime();
+        const githubBtn = document.getElementById('github-btn');
+        const countdownDisplay = document.getElementById('countdown');
+
+        function updateCountdown() {
+            const now = new Date().getTime();
+            const distance = targetDate - now;
+
+            if (distance <= 0) {
+                // Enable button
+                githubBtn.disabled = false;
+                githubBtn.onclick = () => {
+                    window.open('https://github.com/ModernMube/OwnAudioSharp', '_blank');
+                };
+                countdownDisplay.textContent = '';
+                return;
+            }
+
+            // Calculate time units
+            const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+            // Display countdown
+            countdownDisplay.textContent = `Available in: ${days}d ${hours}h ${minutes}m ${seconds}s`;
+
+            // Update every second
+            setTimeout(updateCountdown, 1000);
+        }
+
+        updateCountdown();
     </script>
 </body>
 </html>
