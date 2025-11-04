@@ -8,19 +8,17 @@ The code is being developed for the mobile platform.
 
 This project is tested with BrowserStack.
 
-## Features
+## NEW Information
 
-- **Cross-platform** compatibility (Windows, macOS, Linux, Android, iOS)
-- **Audio playbook** with support for various formats via FFmpeg, or MiniAudio (mp3, wav, flac) formats
-- **Audio recording** capabilities through input devices
-- **Time stretching and pitch shifting** using SoundTouch
-- **Mixing** multiple audio sources
-- **Volume control** and custom audio processing
-- **Seeking** within audio files
-- **Real-time audio processing** with custom sample processors
-- **Audio data visualize** customizable waveform display
+**It wasn't easy, but it's done!!!
 
-## You can find all the information on the website!
+I've been waiting and searching for years for a real, platform-independent audio engine that I can use on all systems without external dependencies (bass.net, miniaudio, portaudio, etc.). Unfortunately, no one has made such a fully managed engine yet. Now I see why no one has started! It's a serious challenge to compress the differences between platforms into a common code and handle GC independence. But I think it was worth it! I hope I'm not the only one who thinks so!
+
+In a few days I'll upload the project so that anyone can freely create 100% managed audio applications for platform-independent systems!
+
+I've made a website for the code so that everyone can see how the code is structured and how to use it!**
+
+## The new API website is here!
 
 [OwnAudioSharp Website](https://modernmube.github.io/OwnAudioSharp/)
 

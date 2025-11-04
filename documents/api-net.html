@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NET API Reference - Ownaudio</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="docs.css">
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="../index.html" class="logo">OwnaudioSharp</a>
+            <ul class="nav-links">
+                <li><a href="quickstart.html">Quick Start</a></li>
+                <li><a href="api-core.html">Core API</a></li>
+                <li><a href="api-net.html" class="active">NET API</a></li>
+                <li><a href="examples.html">Examples</a></li>
+				<li><a href="matchering.html">Matchering</a></li>
+                <li><a href="chorddetect.html">Chord Detection</a></li>
+                <!--<li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>-->
+            </ul>
+        </div>
+    </nav>
+
+    <div class="main">
+        <aside class="sidebar">
+            <h3>NET API</h3>
+            <ul class="sidebar-nav">
+                <li><a href="#overview" class="active">Overview</a></li>
+                <li><a href="#initialization">Initialization</a></li>
+                <li><a href="#sources">Audio Sources</a></li>
+                <li><a href="#mixer">AudioMixer</a></li>
+                <li><a href="#effects">Effects</a></li>
+                <li><a href="#sync">Synchronization</a></li>
+                <li><a href="#interfaces">Interfaces</a></li>
+            </ul>
+        </aside>
+
+        <main class="content">
+            <h1><span class="badge badge-net">NET</span> OwnaudioNET API Reference</h1>
+            <p>
+                High-level audio API with professional features. Built on Ownaudio.Core with multi-track mixing,
+                effects, synchronization, and real-time processing.
+            </p>
+
+            <div class="alert alert-info">
+                <strong>Production-Ready Features</strong>
+                OwnaudioNET provides 15+ professional effects, unlimited track mixing, perfect synchronization,
+                tempo/pitch control, and recording capabilities.
+            </div>
+
+            <h2 id="overview">Overview</h2>
+            <p>OwnaudioNET extends Ownaudio.Core with:</p>
+            <ul>
+                <li><strong>Multi-track mixing</strong> with unlimited simultaneous sources</li>
+                <li><strong>15+ professional effects</strong> including reverb, compressor, EQ</li>
+                <li><strong>Perfect synchronization</strong> with drift correction</li>
+                <li><strong>Tempo and pitch control</strong> via SoundTouch integration</li>
+                <li><strong>Recording</strong> to WAV format</li>
+                <li><strong>Real-time metering</strong> (peak and RMS)</li>
+                <li><strong>Thread-safe architecture</strong> with lock-free buffers</li>
+            </ul>
+
+            <h3>Key Features</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Multiple Formats</td>
+                        <td>WAV, MP3, FLAC support</td>
+                    </tr>
+                    <tr>
+                        <td>Low Latency</td>
+                        <td>&lt; 12ms @ 512 buffer size</td>
+                    </tr>
+                    <tr>
+                        <td>Synchronization</td>
+                        <td>Sample-accurate multi-track sync with drift correction</td>
+                    </tr>
+                    <tr>
+                        <td>Real-time Processing</td>
+                        <td>Live synthesis, streaming, effects chains</td>
+                    </tr>
+                    <tr>
+                        <td>SoundTouch</td>
+                        <td>Independent tempo and pitch control</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2 id="initialization">Initialization</h2>
+
+            <h3>OwnaudioNet Class</h3>
+            <p>Central initialization and configuration for OwnaudioNET.</p>
+
+            <div class="code-block">
+                <div class="code-header">Basic Initialization</div>
+                <pre><code class="language-csharp">// Default initialization (48kHz, stereo, 512 frames)
+OwnaudioNet.Initialize();
+
+// Custom configuration
+var config = new AudioConfig
+{
+    SampleRate = 44100,
+    Channels = 2,
+    BufferSize = 256
+};
+OwnaudioNet.Initialize(config);
+
+// Mock engine for testing (no hardware required)
+OwnaudioNet.Initialize(config, useMockEngine: true);
+
+// Shutdown
+OwnaudioNet.Shutdown();</code></pre>
+            </div>
+
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Method</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>Initialize()</code></td>
+                        <td>Initialize with default settings</td>
+                    </tr>
+                    <tr>
+                        <td><code>Initialize(AudioConfig)</code></td>
+                        <td>Initialize with custom configuration</td>
+                    </tr>
+                    <tr>
+                        <td><code>Initialize(AudioConfig, bool)</code></td>
+                        <td>Initialize with mock engine option</td>
+                    </tr>
+                    <tr>
+                        <td><code>Shutdown()</code></td>
+                        <td>Shutdown and release resources</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2 id="sources">Audio Sources</h2>
+
+            <h3>FileSource</h3>
+            <p>File-based audio source with decoding and SoundTouch support.</p>
+
+            <div class="code-block">
+                <div class="code-header">FileSource Usage</div>
+                <pre><code class="language-csharp">// Create from file
+var source = new FileSource("music.mp3");
+
+// Configure playback
+source.Volume = 0.8f;          // Volume (0.0-1.0)
+source.Loop = true;             // Enable looping
+source.Tempo = 1.2f;            // 20% faster (0.5-2.0)
+source.PitchShift = -2.0f;      // 2 semitones lower (-12..+12)
+
+// Control playback
+source.Play();
+source.Pause();
+source.Stop();
+source.Seek(30.0);  // Seek to 30 seconds
+
+// Get info
+double position = source.Position;  // Current position (seconds)
+double duration = source.Duration;  // Total duration (seconds)
+AudioState state = source.State;    // Playing/Paused/Stopped
+
+// Cleanup
+source.Dispose();</code></pre>
+            </div>
+
+            <h4>Properties</h4>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Property</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>Id</code></td>
+                        <td>Guid</td>
+                        <td>Unique source identifier</td>
+                    </tr>
+                    <tr>
+                        <td><code>State</code></td>
+                        <td>AudioState</td>
+                        <td>Current playback state</td>
+                    </tr>
+                    <tr>
+                        <td><code>Volume</code></td>
+                        <td>float</td>
+                        <td>Volume level (0.0-1.0)</td>
+                    </tr>
+                    <tr>
+                        <td><code>Loop</code></td>
+                        <td>bool</td>
+                        <td>Enable/disable looping</td>
+                    </tr>
+                    <tr>
+                        <td><code>Position</code></td>
+                        <td>double</td>
+                        <td>Current position in seconds</td>
+                    </tr>
+                    <tr>
+                        <td><code>Duration</code></td>
+                        <td>double</td>
+                        <td>Total duration in seconds</td>
+                    </tr>
+                    <tr>
+                        <td><code>Tempo</code></td>
+                        <td>float</td>
+                        <td>Playback tempo (0.5-2.0, 1.0 = normal)</td>
+                    </tr>
+                    <tr>
+                        <td><code>PitchShift</code></td>
+                        <td>float</td>
+                        <td>Pitch shift in semitones (-12..+12)</td>
+                    </tr>
+                    <tr>
+                        <td><code>IsEndOfStream</code></td>
+                        <td>bool</td>
+                        <td>True if reached end of file</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h4>Supported Formats</h4>
+            <ul>
+                <li><strong>WAV</strong> - PCM, IEEE Float</li>
+                <li><strong>MP3</strong> - MPEG-1/2/2.5 Layer III</li>
+                <li><strong>FLAC</strong> - Free Lossless Audio Codec</li>
+            </ul>
+
+            <h3>SampleSource</h3>
+            <p>Play audio from memory samples.</p>
+
+            <div class="code-block">
+                <div class="code-header">SampleSource Usage</div>
+                <pre><code class="language-csharp">// Generate or load samples
+float[] samples = GenerateAudioSamples();
+
+// Create source
+var source = new SampleSource(
+    samples,
+    sampleRate: 48000,
+    channels: 2,
+    copyData: true  // Copy samples (true) or use reference (false)
+);
+
+// Update samples dynamically
+float[] newSamples = GenerateNewSamples();
+source.UpdateSamples(newSamples, copyData: true);
+
+// Playback control
+source.Play();
+source.Loop = true;</code></pre>
+            </div>
+
+            <h3>InputSource</h3>
+            <p>Real-time audio input from microphone or line-in.</p>
+
+            <div class="code-block">
+                <div class="code-header">InputSource Usage</div>
+                <pre><code class="language-csharp">// Enable input in configuration
+var config = new AudioConfig
+{
+    SampleRate = 48000,
+    Channels = 2,
+    BufferSize = 512,
+    EnableInput = true
+};
+
+var input = new InputSource(config);
+
+// Configure input
+input.InputGain = 1.5f;                    // Amplify input (0.0-2.0)
+input.EnableNoiseGate = true;              // Enable noise gate
+input.NoiseGateThreshold = -40.0f;         // Threshold in dB (-60..0)
+
+// Add to mixer and start
+mixer.AddSource(input);
+input.Play();</code></pre>
+            </div>
+
+            <h3>GhostTrackSource</h3>
+            <p>Silent source for synchronization timing.</p>
+
+            <div class="code-block">
+                <div class="code-header">GhostTrackSource Usage</div>
+                <pre><code class="language-csharp">// Create ghost track with duration
+var ghost = new GhostTrackSource(
+    durationInSeconds: 180.0,  // 3 minutes
+    config: AudioConfig.Default
+);
+
+// Use for sync timing
+var syncGroup = mixer.CreateSyncGroup(track1, track2, ghost);</code></pre>
+            </div>
+
+            <h3>SourceWithEffects</h3>
+            <p>Wrapper for applying effects to sources.</p>
+
+            <div class="code-block">
+                <div class="code-header">SourceWithEffects Usage</div>
+                <pre><code class="language-csharp">var source = new FileSource("guitar.wav");
+
+// Create effects
+var reverb = new ReverbEffect
+{
+    Mix = 0.3f,
+    RoomSize = 0.7f,
+    Damping = 0.5f
+};
+
+var compressor = new CompressorEffect
+{
+    Threshold = -12.0f,
+    Ratio = 4.0f,
+    Attack = 10.0f,
+    Release = 100.0f
+};
+
+// Create source with effects chain
+var sourceWithFx = new SourceWithEffects(source, reverb, compressor);
+
+// Modify effects dynamically
+sourceWithFx.AddEffect(new DelayEffect());
+sourceWithFx.RemoveEffect(reverb);
+sourceWithFx.SetEffectEnabled(0, false);  // Disable first effect
+sourceWithFx.ClearEffects();</code></pre>
+            </div>
+
+            <h2 id="mixer">AudioMixer</h2>
+            <p>Central mixing engine for multi-track audio playback.</p>
+
+            <div class="code-block">
+                <div class="code-header">AudioMixer Usage</div>
+                <pre><code class="language-csharp">// Create mixer
+var mixer = new AudioMixer(OwnaudioNet.Engine);
+mixer.Start();
+
+// Add sources
+var drums = new FileSource("drums.wav");
+var bass = new FileSource("bass.wav");
+var guitar = new FileSource("guitar.wav");
+
+mixer.AddSource(drums);
+mixer.AddSource(bass);
+mixer.AddSource(guitar);
+
+// Control individual sources
+drums.Volume = 0.8f;
+bass.Volume = 0.7f;
+guitar.Volume = 0.6f;
+
+// Play sources
+drums.Play();
+bass.Play();
+guitar.Play();
+
+// Master controls
+mixer.MasterVolume = 0.9f;
+
+// Real-time metering
+float leftPeak = mixer.LeftPeak;
+float rightPeak = mixer.RightPeak;
+
+// Recording
+mixer.StartRecording("output.wav");
+// ... playback ...
+mixer.StopRecording();
+
+// Cleanup
+mixer.Stop();
+mixer.Dispose();</code></pre>
+            </div>
+
+            <h3>Properties</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Property</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>MasterVolume</code></td>
+                        <td>float</td>
+                        <td>Master volume level (0.0-1.0)</td>
+                    </tr>
+                    <tr>
+                        <td><code>IsRunning</code></td>
+                        <td>bool</td>
+                        <td>True if mixer is running</td>
+                    </tr>
+                    <tr>
+                        <td><code>SourceCount</code></td>
+                        <td>int</td>
+                        <td>Number of active sources</td>
+                    </tr>
+                    <tr>
+                        <td><code>LeftPeak</code></td>
+                        <td>float</td>
+                        <td>Left channel peak level</td>
+                    </tr>
+                    <tr>
+                        <td><code>RightPeak</code></td>
+                        <td>float</td>
+                        <td>Right channel peak level</td>
+                    </tr>
+                    <tr>
+                        <td><code>IsRecording</code></td>
+                        <td>bool</td>
+                        <td>True if currently recording</td>
+                    </tr>
+                    <tr>
+                        <td><code>EnableAutoDriftCorrection</code></td>
+                        <td>bool</td>
+                        <td>Enable automatic drift correction</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Methods</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Method</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>Start()</code></td>
+                        <td>Start the mixer</td>
+                    </tr>
+                    <tr>
+                        <td><code>Stop()</code></td>
+                        <td>Stop the mixer</td>
+                    </tr>
+                    <tr>
+                        <td><code>AddSource(IAudioSource)</code></td>
+                        <td>Add audio source to mixer</td>
+                    </tr>
+                    <tr>
+                        <td><code>RemoveSource(Guid)</code></td>
+                        <td>Remove source by ID</td>
+                    </tr>
+                    <tr>
+                        <td><code>RemoveAllSources()</code></td>
+                        <td>Remove all sources</td>
+                    </tr>
+                    <tr>
+                        <td><code>GetSource(Guid)</code></td>
+                        <td>Get source by ID</td>
+                    </tr>
+                    <tr>
+                        <td><code>AddMasterEffect(IEffectProcessor)</code></td>
+                        <td>Add effect to master chain</td>
+                    </tr>
+                    <tr>
+                        <td><code>RemoveMasterEffect(IEffectProcessor)</code></td>
+                        <td>Remove effect from master chain</td>
+                    </tr>
+                    <tr>
+                        <td><code>StartRecording(string)</code></td>
+                        <td>Start recording to WAV file</td>
+                    </tr>
+                    <tr>
+                        <td><code>StopRecording()</code></td>
+                        <td>Stop recording</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2 id="effects">Audio Effects</h2>
+            <p>OwnaudioNET includes 15+ professional audio effects.</p>
+
+            <h3>ReverbEffect</h3>
+            <p>Room reverb with multiple presets.</p>
+
+            <div class="code-block">
+                <div class="code-header">ReverbEffect Usage</div>
+                <pre><code class="language-csharp">var reverb = new ReverbEffect
+{
+    RoomSize = 0.7f,       // Room size (0-1)
+    Damping = 0.5f,        // High frequency damping (0-1)
+    Width = 1.0f,          // Stereo width (0-1)
+    PreDelay = 20.0f,      // Pre-delay in ms
+    Mix = 0.3f             // Wet/dry mix (0-1)
+};
+
+// Load preset
+reverb.LoadPreset(ReverbPreset.Hall);</code></pre>
+            </div>
+
+            <h3>CompressorEffect</h3>
+            <p>Dynamic range compressor.</p>
+
+            <div class="code-block">
+                <div class="code-header">CompressorEffect Usage</div>
+                <pre><code class="language-csharp">var compressor = new CompressorEffect
+{
+    Threshold = -12.0f,    // Threshold in dB
+    Ratio = 4.0f,          // Compression ratio (1:1 - 20:1)
+    Attack = 10.0f,        // Attack time in ms
+    Release = 100.0f,      // Release time in ms
+    Knee = 3.0f,           // Knee width in dB
+    MakeupGain = 0.0f      // Makeup gain in dB
+};
+
+// Read current gain reduction
+float gr = compressor.GainReduction;</code></pre>
+            </div>
+
+            <h3>Equalizer30Band</h3>
+            <p>30-band graphic equalizer.</p>
+
+            <div class="code-block">
+                <div class="code-header">Equalizer30Band Usage</div>
+                <pre><code class="language-csharp">var eq = new Equalizer30Band();
+
+// Set individual bands (-12 to +12 dB)
+eq.SetBandGain(0, 3.0f);   // Boost first band by 3dB
+eq.SetBandGain(10, -2.0f); // Cut band 10 by 2dB
+
+// Get frequency bands
+float[] frequencies = eq.GetFrequencyBands();
+
+// Pre/post gain
+eq.PreGain = 0.0f;
+eq.OutputGain = -1.0f;  // Reduce output by 1dB</code></pre>
+            </div>
+
+            <h3>DelayEffect</h3>
+            <p>Echo/delay with feedback.</p>
+
+            <div class="code-block">
+                <div class="code-header">DelayEffect Usage</div>
+                <pre><code class="language-csharp">var delay = new DelayEffect
+{
+    DelayTime = 500.0f,    // Delay in ms
+    Feedback = 0.4f,       // Feedback amount (0-0.99)
+    Mix = 0.3f,            // Wet/dry mix (0-1)
+    PingPong = true,       // Ping-pong stereo mode
+    HighPassFreq = 100.0f, // High-pass filter
+    LowPassFreq = 8000.0f  // Low-pass filter
+};</code></pre>
+            </div>
+
+            <h3>ChorusEffect</h3>
+            <p>Chorus with multiple voices.</p>
+
+            <div class="code-block">
+                <div class="code-header">ChorusEffect Usage</div>
+                <pre><code class="language-csharp">var chorus = new ChorusEffect
+{
+    Depth = 0.5f,          // Modulation depth (0-1)
+    Rate = 1.5f,           // LFO frequency in Hz
+    Feedback = 0.3f,       // Feedback (0-0.99)
+    Mix = 0.5f,            // Wet/dry mix (0-1)
+    Voices = 3             // Number of voices (1-4)
+};</code></pre>
+            </div>
+
+            <h3>DistortionEffect</h3>
+            <p>Multiple distortion modes.</p>
+
+            <div class="code-block">
+                <div class="code-header">DistortionEffect Usage</div>
+                <pre><code class="language-csharp">var distortion = new DistortionEffect
+{
+    Drive = 5.0f,          // Distortion amount (0-10)
+    OutputGain = -6.0f,    // Output level in dB
+    Mix = 0.7f,            // Wet/dry mix (0-1)
+    Mode = DistortionMode.Tube,  // Distortion type
+    ToneFrequency = 2000.0f,      // Tone control
+    BitDepth = 16          // For bitcrusher mode
+};</code></pre>
+            </div>
+
+            <h3>LimiterEffect</h3>
+            <p>Peak limiter with lookahead.</p>
+
+            <div class="code-block">
+                <div class="code-header">LimiterEffect Usage</div>
+                <pre><code class="language-csharp">var limiter = new LimiterEffect
+{
+    Threshold = -0.5f,     // Limit threshold in dB
+    Release = 50.0f,       // Release time in ms
+    Lookahead = 5.0f,      // Lookahead time in ms
+    Ceiling = -0.1f,       // Maximum output level
+    SoftKnee = true        // Use soft knee
+};
+
+// Read gain reduction
+float gr = limiter.GainReduction;</code></pre>
+            </div>
+
+            <h3>Available Effects Summary</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Effect</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>ReverbEffect</td><td>Room reverb with presets</td></tr>
+                    <tr><td>CompressorEffect</td><td>Dynamic range compressor</td></tr>
+                    <tr><td>DelayEffect</td><td>Echo/delay with ping-pong</td></tr>
+                    <tr><td>ChorusEffect</td><td>Chorus with multiple voices</td></tr>
+                    <tr><td>DistortionEffect</td><td>Multiple distortion modes</td></tr>
+                    <tr><td>EqualizerEffect</td><td>Parametric EQ</td></tr>
+                    <tr><td>Equalizer30Band</td><td>30-band graphic EQ</td></tr>
+                    <tr><td>LimiterEffect</td><td>Peak limiter</td></tr>
+                    <tr><td>FlangerEffect</td><td>Flanger effect</td></tr>
+                    <tr><td>PhaserEffect</td><td>Phaser effect</td></tr>
+                    <tr><td>AutoGainEffect</td><td>Automatic gain control</td></tr>
+                    <tr><td>EnhancerEffect</td><td>Harmonic enhancer</td></tr>
+                    <tr><td>OverdriveEffect</td><td>Tube overdrive</td></tr>
+                    <tr><td>RotaryEffect</td><td>Leslie speaker simulator</td></tr>
+                    <tr><td>DynamicAmpEffect</td><td>Dynamic amplifier</td></tr>
+                </tbody>
+            </table>
+
+            <h2 id="sync">Synchronization</h2>
+
+            <h3>Synchronized Playback</h3>
+            <p>Perfect sample-accurate synchronization of multiple sources.</p>
+
+            <div class="code-block">
+                <div class="code-header">Sync Group Usage</div>
+                <pre><code class="language-csharp">// Create sources
+var drums = new FileSource("drums.wav");
+var bass = new FileSource("bass.wav");
+var guitar = new FileSource("guitar.wav");
+
+// Add to mixer
+mixer.AddSource(drums);
+mixer.AddSource(bass);
+mixer.AddSource(guitar);
+
+// Create sync group
+var syncGroup = mixer.CreateSyncGroup(drums, bass, guitar);
+
+// Start all sources in perfect sync
+mixer.StartSyncGroup(syncGroup.Id);
+
+// Stop sync group
+mixer.StopSyncGroup(syncGroup.Id);
+
+// Remove sync group
+mixer.RemoveSyncGroup(syncGroup.Id);</code></pre>
+            </div>
+
+            <h3>Drift Correction</h3>
+            <div class="code-block">
+                <div class="code-header">Drift Correction</div>
+                <pre><code class="language-csharp">// Enable automatic drift correction
+mixer.EnableAutoDriftCorrection = true;
+
+// Drift correction monitors timing differences between sources
+// and automatically adjusts to maintain perfect synchronization</code></pre>
+            </div>
+
+            <h2 id="interfaces">Interfaces</h2>
+
+            <h3>IAudioSource</h3>
+            <p>Base interface for all audio sources.</p>
+
+            <div class="code-block">
+                <div class="code-header">IAudioSource Interface</div>
+                <pre><code class="language-csharp">public interface IAudioSource : IDisposable
+{
+    // Properties
+    Guid Id { get; }
+    AudioState State { get; }
+    float Volume { get; set; }
+    bool Loop { get; set; }
+    double Position { get; }
+    double Duration { get; }
+    bool IsEndOfStream { get; }
+    float Tempo { get; set; }
+    float PitchShift { get; set; }
+    
+    // Methods
+    void Play();
+    void Pause();
+    void Stop();
+    bool Seek(double positionInSeconds);
+    int ReadSamples(Span<float> buffer, int frameCount);
+    
+    // Events
+    event EventHandler<AudioStateChangedEventArgs> StateChanged;
+    event EventHandler<BufferUnderrunEventArgs> BufferUnderrun;
+    event EventHandler<AudioErrorEventArgs> Error;
+}</code></pre>
+            </div>
+
+            <h3>IEffectProcessor</h3>
+            <p>Base interface for audio effects.</p>
+
+            <div class="code-block">
+                <div class="code-header">IEffectProcessor Interface</div>
+                <pre><code class="language-csharp">public interface IEffectProcessor
+{
+    bool IsEnabled { get; set; }
+    void Process(Span<float> buffer, int frameCount);
+    void Reset();
+}</code></pre>
+            </div>
+
+            <h3>ISynchronizable</h3>
+            <p>Interface for synchronizable sources.</p>
+
+            <div class="code-block">
+                <div class="code-header">ISynchronizable Interface</div>
+                <pre><code class="language-csharp">public interface ISynchronizable
+{
+    void PrepareForSync();
+    void StartSync();
+    void ResyncTo(double targetPosition);
+    double GetSyncPosition();
+}</code></pre>
+            </div>
+
+            <h2>Performance</h2>
+
+            <h3>Latency</h3>
+            <ul>
+                <li><strong>Total pipeline:</strong> ~31ms @ 512 frames, 48kHz</li>
+                <li><strong>Mix cycle:</strong> &lt; 5ms with 4 sources</li>
+                <li><strong>Send() latency:</strong> &lt; 1ms (buffer write only)</li>
+            </ul>
+
+            <h3>CPU Usage</h3>
+            <ul>
+                <li><strong>Idle:</strong> &lt; 1%</li>
+                <li><strong>1 source:</strong> ~3-5%</li>
+                <li><strong>4 sources + effects:</strong> ~10-15%</li>
+                <li><strong>Pump thread:</strong> &lt; 5%</li>
+            </ul>
+
+            <h3>Memory</h3>
+            <ul>
+                <li>Zero allocation in hot paths</li>
+                <li>Buffer pooling and reuse</li>
+                <li>SIMD-optimized mixing</li>
+            </ul>
+
+            <h2>Thread Safety</h2>
+            <p>OwnaudioNET uses a multi-threaded architecture:</p>
+            <ul>
+                <li><strong>Main Thread:</strong> User API calls</li>
+                <li><strong>Mix Thread:</strong> High-priority mixing</li>
+                <li><strong>Decoder Threads:</strong> Source decoding</li>
+                <li><strong>Pump Thread:</strong> Audio engine communication</li>
+            </ul>
+            <p>All public methods are thread-safe with lock-free buffer management.</p>
+
+            <div style="margin-top: 4rem; padding: 2rem; background: var(--surface); border-radius: 8px;">
+                <h3>Related Documentation</h3>
+                <ul style="list-style: none; padding: 0;">
+                    <li style="margin-bottom: 0.5rem;">
+                        <a href="quickstart.html" style="color: var(--primary-color);">📖 Quick Start Guide</a>
+                    </li>
+                    <li style="margin-bottom: 0.5rem;">
+                        <a href="api-core.html" style="color: var(--core-color);">⚙️ Core API Reference</a>
+                    </li>
+                    <li style="margin-bottom: 0.5rem;">
+                        <a href="examples.html" style="color: var(--primary-color);">💡 Code Examples</a>
+                    </li>
+                    <li style="margin-bottom: 0.5rem;">
+                        <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" style="color: var(--primary-color);">🔗 GitHub Repository</a>
+                    </li>
+                </ul>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script>
+        const sections = document.querySelectorAll('h2[id], h3[id]');
+        const navLinks = document.querySelectorAll('.sidebar-nav a');
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (window.pageYOffset >= sectionTop - 150) {
+                    current = section.getAttribute('id');
+                }
+            });
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.classList.add('active');
+                }
+            });
+        });
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

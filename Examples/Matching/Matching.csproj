@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\OwnaudioSrc\Ownaudio.csproj" />
+    <ProjectReference Include="..\Microphone\Microphone.csproj" />
   </ItemGroup>
 
 </Project>
