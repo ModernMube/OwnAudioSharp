@@ -20,7 +20,7 @@ OwnAudio is a platform-independent C# audio library that provides a high-level A
 
 ## NEW Information
 
-**It wasn't easy, but it's done!!!**
+**It wasn't easy, but it's done!!! A few more days and I'll publish it!**
 
 **I've been waiting and searching for years for a real, platform-independent audio engine that I can use on all systems without external dependencies (bass.net, miniaudio, portaudio, etc.). Unfortunately, no one has made such a fully managed engine yet. Now I see why no one has started! It's a serious challenge to compress the differences between platforms into a common code and handle GC independence. But I think it was worth it! I hope I'm not the only one who thinks so!**
 
