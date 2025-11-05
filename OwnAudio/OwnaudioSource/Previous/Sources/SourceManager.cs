@@ -1,12 +1,12 @@
 ﻿using Ownaudio.Core;
 using Ownaudio.Decoders;
-using Ownaudio.Exceptions;
-using Ownaudio.Processors;
-using Ownaudio.Sources.Extensions;
-using Ownaudio.Utilities;
-using Ownaudio.Utilities.Extensions;
-using Ownaudio.Utilities.OwnChordDetect.Analysis;
-using Ownaudio.Utilities.OwnChordDetect.Core;
+using OwnaudioLegacy.Exceptions;
+using OwnaudioLegacy.Processors;
+using OwnaudioLegacy.Sources.Extensions;
+using OwnaudioLegacy.Utilities;
+using OwnaudioLegacy.Utilities.Extensions;
+using OwnaudioLegacy.Utilities.OwnChordDetect.Analysis;
+using OwnaudioLegacy.Utilities.OwnChordDetect.Core;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -16,7 +16,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Ownaudio.Sources
+namespace OwnaudioLegacy.Sources
 {
     /// <summary>
     /// A singleton class that provides functions for mixing and playing multiple audio sources.
@@ -298,7 +298,7 @@ namespace Ownaudio.Sources
 
             if (!IsRecorded)
             {
-                if (OwnAudioEngine.DefaultInputDevice.State == Core.AudioDeviceState.Active)
+                if (OwnAudioEngine.DefaultInputDevice.State == Ownaudio.Core.AudioDeviceState.Active)
                 {
                     SourceInput _inputSource = new SourceInput(InputEngineOptions);
                     _inputSource.Name = name ?? "Input";

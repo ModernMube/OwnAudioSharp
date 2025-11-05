@@ -1,12 +1,12 @@
 ﻿using System;
 using System.Collections.Concurrent;
 
-using Ownaudio.Common;
-using Ownaudio.Processors;
-using Ownaudio.Utilities.Extensions;
+using OwnaudioLegacy.Common;
+using OwnaudioLegacy.Processors;
+using OwnaudioLegacy.Utilities.Extensions;
 
 
-namespace Ownaudio.Sources
+namespace OwnaudioLegacy.Sources
 {
     public partial class SourceSound
     {

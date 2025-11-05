@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Ownaudio.Exceptions;
+namespace OwnaudioLegacy.Exceptions;
 
 /// <summary>
 /// An exception that is thrown when an error occured during Bufdio-specific operations.

@@ -30,6 +30,10 @@ Pre-2.0.0 versions relied on native libraries (miniaudio, portaudio, ffmpeg) and
 - ✅ Significant performance improvements
 - ⚠️ Legacy APIs marked as `[Obsolete]` - will be removed in future versions
 
+**Using OwnaudioSharp version 2 with older code:**
+If you need pre-2.0.0 functionality because you wrote your code for an older version of OwnaudioSharp, replace the **Ownaudio** namespaces in your code with the **OwnaudioLegacy** namespace.
+for example: **Ownaudio.Source** => **OwnaudioLegacy.Source**
+
 **Migration recommendation:** Use version 2.0.0 or later for all new projects. The new managed engine offers superior performance and maintainability.
 
 ## ✨ Key Features

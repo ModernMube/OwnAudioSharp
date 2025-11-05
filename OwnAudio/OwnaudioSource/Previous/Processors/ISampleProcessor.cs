@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Ownaudio.Processors;
+namespace OwnaudioLegacy.Processors;
 
 /// <summary>
 /// An interface that is intended to manipulate specified audio sample in <c>Float32</c> format

@@ -1,4 +1,4 @@
-namespace Ownaudio.Common;
+namespace OwnaudioLegacy.Common;
 
 /// <summary>
 /// An interface for simple logging operations.

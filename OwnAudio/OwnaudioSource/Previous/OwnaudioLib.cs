@@ -1,5 +1,5 @@
 ﻿using Ownaudio.Core;
-using Ownaudio.Exceptions;
+using OwnaudioLegacy.Exceptions;
 #if WINDOWS
 using Ownaudio.Windows;
 #elif MACOS
@@ -10,7 +10,7 @@ using Ownaudio.Linux;
 using System;
 using System.Threading;
 
-namespace Ownaudio;
+namespace OwnaudioLegacy;
 /// <summary>
 /// Functions to retrieve, configure and manage the current Ownaudio environment,
 /// which affects the entire directory configuration.

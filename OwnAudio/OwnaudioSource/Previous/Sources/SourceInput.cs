@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using Ownaudio.Core;
-using Ownaudio.Processors;
+using OwnaudioLegacy.Processors;
 
-namespace Ownaudio.Sources
+namespace OwnaudioLegacy.Sources
 {
     /// <summary>
     /// An input source that processes audio data from an input device or stream.

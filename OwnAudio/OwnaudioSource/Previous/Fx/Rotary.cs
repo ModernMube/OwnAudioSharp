@@ -1,7 +1,7 @@
-﻿using Ownaudio.Processors;
+﻿using OwnaudioLegacy.Processors;
 using System;
 
-namespace Ownaudio.Fx
+namespace OwnaudioLegacy.Fx
 {
     /// <summary>
     /// Rotary speaker presets for different musical styles and applications

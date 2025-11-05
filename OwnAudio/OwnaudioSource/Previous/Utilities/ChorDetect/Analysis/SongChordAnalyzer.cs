@@ -1,11 +1,11 @@
-﻿using Ownaudio.Utilities.Extensions;
-using Ownaudio.Utilities.OwnChordDetect.Core;
-using Ownaudio.Utilities.OwnChordDetect.Detectors;
+﻿using OwnaudioLegacy.Utilities.Extensions;
+using OwnaudioLegacy.Utilities.OwnChordDetect.Core;
+using OwnaudioLegacy.Utilities.OwnChordDetect.Detectors;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Ownaudio.Utilities.OwnChordDetect.Analysis
+namespace OwnaudioLegacy.Utilities.OwnChordDetect.Analysis
 {
     /// <summary>
     /// Represents a detected chord with timing information.

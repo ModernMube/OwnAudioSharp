@@ -1,12 +1,12 @@
-﻿using Ownaudio.Fx;
-using Ownaudio.Sources;
+﻿using OwnaudioLegacy.Fx;
+using OwnaudioLegacy.Sources;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 
-namespace Ownaudio.Utilities.Matchering
+namespace OwnaudioLegacy.Utilities.Matchering
 {
     partial class AudioAnalyzer
     {
@@ -199,7 +199,7 @@ namespace Ownaudio.Utilities.Matchering
             Console.WriteLine($"Final max level: {20 * Math.Log10(finalMaxLevel):F1}dB");
 
             // Write processed base sample
-            Ownaudio.Utilities.WaveFile.WriteFile(processedBaseSample, processedData.ToArray(), sampleRate, channels, 24);
+            OwnaudioLegacy.Utilities.WaveFile.WriteFile(processedBaseSample, processedData.ToArray(), sampleRate, channels, 24);
 
             Console.WriteLine($"Enhanced base sample created: {processedBaseSample}");
         }
@@ -229,7 +229,7 @@ namespace Ownaudio.Utilities.Matchering
                 using var memoryStream = new MemoryStream();
                 stream.CopyTo(memoryStream);
 
-                Ownaudio.Utilities.WaveFile.WriteFile(path, memoryStream.ToArray(), 48000, 2, 24);
+                OwnaudioLegacy.Utilities.WaveFile.WriteFile(path, memoryStream.ToArray(), 48000, 2, 24);
 
                 isLoadSample = true;    
             }

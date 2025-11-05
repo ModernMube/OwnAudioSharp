@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
-using Ownaudio.Utilities.Extensions;
+using OwnaudioLegacy.Utilities.Extensions;
 
-namespace Ownaudio.Utilities.OwnChordDetect.Detectors
+namespace OwnaudioLegacy.Utilities.OwnChordDetect.Detectors
 {
     /// <summary>
     /// Base chord detector - legacy compatibility wrapper for basic chord detection.

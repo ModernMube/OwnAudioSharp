@@ -1,4 +1,4 @@
-﻿namespace Ownaudio.Sources;
+﻿namespace OwnaudioLegacy.Sources;
 
 /// <summary>
 /// Enumeration represents audio playback state.

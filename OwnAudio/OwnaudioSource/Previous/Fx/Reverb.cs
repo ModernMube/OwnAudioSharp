@@ -1,8 +1,8 @@
-﻿using Ownaudio.Processors;
+﻿using OwnaudioLegacy.Processors;
 using System;
 using System.Runtime.CompilerServices;
 
-namespace Ownaudio.Fx
+namespace OwnaudioLegacy.Fx
 {
     /// <summary>
     /// Reverb presets for different acoustic environments and audio processing scenarios

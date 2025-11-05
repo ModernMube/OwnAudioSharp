@@ -1,7 +1,7 @@
 ﻿using System;
-using Ownaudio.Processors;
+using OwnaudioLegacy.Processors;
 
-namespace Ownaudio.Fx;
+namespace OwnaudioLegacy.Fx;
 
 /// <summary>
 /// Automatic Gain Control preset

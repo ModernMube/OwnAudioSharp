@@ -3,13 +3,14 @@ using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Threading;
-using Ownaudio.Common;
+using OwnaudioLegacy.Common;
+using Ownaudio;
 using Ownaudio.Decoders;
-using Ownaudio.Processors;
-using Ownaudio.Utilities;
-using Ownaudio.Utilities.Extensions;
+using OwnaudioLegacy.Processors;
+using OwnaudioLegacy.Utilities;
+using OwnaudioLegacy.Utilities.Extensions;
 
-namespace Ownaudio.Sources;
+namespace OwnaudioLegacy.Sources;
 
 /// <summary>
 /// A class that provides functionalities for loading and controlling Source playback.

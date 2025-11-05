@@ -1,12 +1,12 @@
-﻿using Ownaudio.Common;
+﻿using OwnaudioLegacy.Common;
 using Ownaudio.Decoders;
-using Ownaudio.Processors;
-using Ownaudio.Utilities;
-using Ownaudio.Utilities.Extensions;
+using OwnaudioLegacy.Processors;
+using OwnaudioLegacy.Utilities;
+using OwnaudioLegacy.Utilities.Extensions;
 using System;
 using System.Collections.Concurrent;
 
-namespace Ownaudio.Sources
+namespace OwnaudioLegacy.Sources
 {
     public partial class SourceSpark : ISource
     {

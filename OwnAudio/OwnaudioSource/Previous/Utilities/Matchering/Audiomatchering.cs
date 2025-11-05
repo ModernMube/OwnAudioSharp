@@ -1,11 +1,11 @@
 using MathNet.Numerics.IntegralTransforms;
-using Ownaudio.Sources;
+using OwnaudioLegacy.Sources;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 
-namespace Ownaudio.Utilities.Matchering
+namespace OwnaudioLegacy.Utilities.Matchering
 {
     /// <summary>
     /// Provides audio spectrum analysis and EQ matching functionality for audio processing applications.

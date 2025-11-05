@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Ownaudio.Utilities.Matchering;
+namespace OwnaudioLegacy.Utilities.Matchering;
 
 partial class AudioAnalyzer
 {

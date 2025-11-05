@@ -8,7 +8,7 @@ using System.Linq;
 using System.Numerics.Tensors;
 using System.Reflection;
 
-namespace Ownaudio.Utilities.Extensions;
+namespace OwnaudioLegacy.Utilities.Extensions;
 
 #region Constants
 

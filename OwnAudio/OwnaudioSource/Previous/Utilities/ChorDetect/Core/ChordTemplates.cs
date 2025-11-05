@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
 
-namespace Ownaudio.Utilities.OwnChordDetect.Core
+namespace OwnaudioLegacy.Utilities.OwnChordDetect.Core
 {
     /// <summary>
     /// Manages chord templates and note name conversion with key-aware naming.

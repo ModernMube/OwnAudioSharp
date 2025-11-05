@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 
-using Ownaudio.Exceptions;
-using Ownaudio.Utilities;
+using OwnaudioLegacy.Exceptions;
+using OwnaudioLegacy.Utilities;
 using Ownaudio.Core;
 using Ownaudio.Decoders;
 
-namespace Ownaudio;
+namespace OwnaudioLegacy;
 
 /// <summary>
 /// Functions to retrieve, configure and manage the current Ownaudio environment, 

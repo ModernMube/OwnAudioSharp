@@ -1,8 +1,8 @@
 ﻿// RealTimeChordDetector.cs - simplified wrapper
-using Ownaudio.Utilities.Extensions;
+using OwnaudioLegacy.Utilities.Extensions;
 using System.Collections.Generic;
 
-namespace Ownaudio.Utilities.OwnChordDetect.Detectors
+namespace OwnaudioLegacy.Utilities.OwnChordDetect.Detectors
 {
     /// <summary>
     /// Real-time chord detector for continuous analysis with stability tracking.

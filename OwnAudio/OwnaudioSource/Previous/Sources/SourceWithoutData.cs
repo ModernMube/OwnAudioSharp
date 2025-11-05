@@ -2,10 +2,10 @@ using System;
 using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
-using Ownaudio.Processors;
-using Ownaudio.Utilities.Extensions;
+using OwnaudioLegacy.Processors;
+using OwnaudioLegacy.Utilities.Extensions;
 
-namespace Ownaudio.Sources;
+namespace OwnaudioLegacy.Sources;
 
 /// <summary>
 /// A placeholder source that provides audio processing infrastructure without actual audio content.

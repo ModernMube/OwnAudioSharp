@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 
-namespace Ownaudio.Utilities;
+namespace OwnaudioLegacy.Utilities;
 
 /// <summary>
 /// Verification of the specified conditions

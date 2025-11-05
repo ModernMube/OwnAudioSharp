@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Ownaudio.Sources.Extensions
+namespace OwnaudioLegacy.Sources.Extensions
 {
     /// <summary>
     /// 

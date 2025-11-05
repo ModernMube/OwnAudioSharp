@@ -1,6 +1,6 @@
 ﻿
 
-namespace Ownaudio.Utilities.Matchering
+namespace OwnaudioLegacy.Utilities.Matchering
 {
     #region Data Classes
 

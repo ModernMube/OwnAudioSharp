@@ -1,5 +1,4 @@
 using Ownaudio.Core;
-using Ownaudio.Processors;
 using OwnaudioNET.Interfaces;
 using System;
 using System.Runtime.CompilerServices;

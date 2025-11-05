@@ -1,10 +1,10 @@
-﻿using Ownaudio.Fx;
-using Ownaudio.Sources;
+﻿using OwnaudioLegacy.Fx;
+using OwnaudioLegacy.Sources;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Ownaudio.Utilities.Matchering
+namespace OwnaudioLegacy.Utilities.Matchering
 {
     /// <summary>
     /// Provides audio spectrum analysis and EQ matching functionality for audio processing applications.
@@ -282,7 +282,7 @@ namespace Ownaudio.Utilities.Matchering
                 }
 
                 Console.WriteLine("\nWriting to file...");
-                Ownaudio.Utilities.WaveFile.WriteFile(outputFile, processedData.ToArray(), sampleRate, channels, 24);
+                OwnaudioLegacy.Utilities.WaveFile.WriteFile(outputFile, processedData.ToArray(), sampleRate, channels, 24);
                 Console.WriteLine($"Processing completed: {outputFile}");
             }
             catch (Exception ex)

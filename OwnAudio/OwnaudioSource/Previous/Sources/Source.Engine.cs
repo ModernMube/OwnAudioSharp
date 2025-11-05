@@ -1,12 +1,12 @@
 using Ownaudio.Decoders;
-using Ownaudio.Sources.Extensions;
-using Ownaudio.Utilities.Extensions;
+using OwnaudioLegacy.Sources.Extensions;
+using OwnaudioLegacy.Utilities.Extensions;
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Ownaudio.Sources;
+namespace OwnaudioLegacy.Sources;
 
 public partial class Source : ISource
 {
