@@ -1,9 +1,9 @@
-﻿using Ownaudio.Sources.Extensions;
-using Ownaudio.Utilities.Extensions;
+﻿using OwnaudioLegacy.Sources.Extensions;
+using OwnaudioLegacy.Utilities.Extensions;
 using System;
 using System.Threading;
 
-namespace Ownaudio.Sources;
+namespace OwnaudioLegacy.Sources;
 
 /// <summary>
 /// A simplified audio source for sound effects and short audio clips.

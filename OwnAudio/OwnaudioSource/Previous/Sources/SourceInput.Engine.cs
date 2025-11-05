@@ -1,7 +1,7 @@
 using Ownaudio.Core;
 using System;
 
-namespace Ownaudio.Sources;
+namespace OwnaudioLegacy.Sources;
 
 public partial class SourceInput : ISource
 {

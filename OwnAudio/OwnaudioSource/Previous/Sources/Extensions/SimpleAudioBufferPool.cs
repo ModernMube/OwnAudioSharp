@@ -2,7 +2,7 @@
 using System.Collections.Concurrent;
 using System.Threading;
 
-namespace Ownaudio.Sources.Extensions
+namespace OwnaudioLegacy.Sources.Extensions
 {
     /// <summary>
     /// Simplified buffer pool for audio processing - optimized for large buffers with minimal overhead.

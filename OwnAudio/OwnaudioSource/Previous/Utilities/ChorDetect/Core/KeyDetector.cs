@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Ownaudio.Utilities.Extensions;
+using OwnaudioLegacy.Utilities.Extensions;
 
-namespace Ownaudio.Utilities.OwnChordDetect.Core
+namespace OwnaudioLegacy.Utilities.OwnChordDetect.Core
 {
     /// <summary>
     /// Represents a musical key with its signature and note naming preferences.

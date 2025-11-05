@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading;
 
-namespace Ownaudio.Utilities.Extensions;
+namespace OwnaudioLegacy.Utilities.Extensions;
 
 /// <summary>
 /// Additional method of threads

@@ -1,5 +1,5 @@
 using Ownaudio.Core;
-using Ownaudio.Sources.Extensions;
+using OwnaudioLegacy.Sources.Extensions;
 using System;
 using System.Linq;
 using System.Numerics;
@@ -7,7 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Ownaudio.Sources;
+namespace OwnaudioLegacy.Sources;
 
 public partial class SourceManager
 {
@@ -218,7 +218,7 @@ public partial class SourceManager
 
             writeDataToFile();
         }
-        catch (Core.Common.AudioException)
+        catch (Exceptions.OwnaudioException)
         {
             // Engine was stopped externally (e.g., during Free() or Dispose())
             // Gracefully exit the mixing thread

@@ -5,7 +5,7 @@ using Avalonia.Reactive;
 using System;
 using System.Buffers;
 
-namespace Ownaudio.Utilities
+namespace OwnaudioLegacy.Utilities
 {
     /// <summary>
     /// A control for displaying audio waveforms with zoom and scroll capabilities.

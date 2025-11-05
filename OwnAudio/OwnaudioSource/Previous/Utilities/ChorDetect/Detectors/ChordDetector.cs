@@ -1,11 +1,11 @@
-﻿using Ownaudio.Utilities.Extensions;
-using Ownaudio.Utilities.OwnChordDetect.Analysis;
-using Ownaudio.Utilities.OwnChordDetect.Core;
+﻿using OwnaudioLegacy.Utilities.Extensions;
+using OwnaudioLegacy.Utilities.OwnChordDetect.Analysis;
+using OwnaudioLegacy.Utilities.OwnChordDetect.Core;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Ownaudio.Utilities.OwnChordDetect.Detectors
+namespace OwnaudioLegacy.Utilities.OwnChordDetect.Detectors
 {
     /// <summary>
     /// Detection modes for the chord detector.

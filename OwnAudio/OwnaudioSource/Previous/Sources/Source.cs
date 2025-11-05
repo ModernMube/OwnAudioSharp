@@ -1,9 +1,10 @@
-﻿using Ownaudio.Decoders;
-using Ownaudio.Exceptions;
-using Ownaudio.Processors;
-using Ownaudio.Sources.Extensions;
-using Ownaudio.Utilities;
-using Ownaudio.Utilities.Extensions;
+﻿using Ownaudio;
+using Ownaudio.Decoders;
+using OwnaudioLegacy.Exceptions;
+using OwnaudioLegacy.Processors;
+using OwnaudioLegacy.Sources.Extensions;
+using OwnaudioLegacy.Utilities;
+using OwnaudioLegacy.Utilities.Extensions;
 using SoundTouch;
 using System;
 using System.Collections.Concurrent;
@@ -13,7 +14,7 @@ using System.Threading.Tasks;
 
 using Ownaudio.Core;
 
-namespace Ownaudio.Sources;
+namespace OwnaudioLegacy.Sources;
 
 /// <summary>
 /// A class that provides functionalities for loading and controlling Source playback.

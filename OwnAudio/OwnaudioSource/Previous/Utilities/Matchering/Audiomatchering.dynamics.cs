@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Linq;
 
-namespace Ownaudio.Utilities.Matchering
+namespace OwnaudioLegacy.Utilities.Matchering
 {
     /// <summary>
     /// Provides audio spectrum analysis and EQ matching functionality for audio processing applications.

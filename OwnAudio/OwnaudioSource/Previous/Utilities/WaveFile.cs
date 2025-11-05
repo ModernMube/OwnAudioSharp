@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 
-namespace Ownaudio.Utilities
+namespace OwnaudioLegacy.Utilities
 {
     /// <summary>
     /// The specified path creates the audio file from the data specified in the parameter

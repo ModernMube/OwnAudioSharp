@@ -3,7 +3,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Ownaudio.Utilities;
+namespace OwnaudioLegacy.Utilities;
 
 /// <summary>
 /// High-performance audio format conversion utilities using SIMD and Span-based APIs.

@@ -1,6 +1,6 @@
 ﻿using System.Linq;
 
-namespace Ownaudio.Utilities.OwnChordDetect.Analysis
+namespace OwnaudioLegacy.Utilities.OwnChordDetect.Analysis
 {
     /// <summary>
     /// Detailed chord analysis result.

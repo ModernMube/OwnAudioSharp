@@ -6,7 +6,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Ownaudio.Utilities
+namespace OwnaudioLegacy.Utilities
 {
     public partial class WaveAvaloniaDisplay : Avalonia.Controls.Control
     {

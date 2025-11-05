@@ -1,8 +1,8 @@
-﻿using Ownaudio.Common;
+﻿using OwnaudioLegacy.Common;
 using Ownaudio.Decoders;
-using Ownaudio.Processors;
-using Ownaudio.Sources.Extensions;
-using Ownaudio.Utilities;
+using OwnaudioLegacy.Processors;
+using OwnaudioLegacy.Sources.Extensions;
+using OwnaudioLegacy.Utilities;
 using SoundTouch;
 using System;
 using System.Collections.Concurrent;
@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Ownaudio.Sources;
+namespace OwnaudioLegacy.Sources;
 
 /// <summary>
 /// High-performance audio source implementation that loads complete audio files into memory for fast playback.

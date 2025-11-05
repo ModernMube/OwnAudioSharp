@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Ownaudio.Processors;
+namespace OwnaudioLegacy.Processors;
 
 /// <summary>
 /// Provides basic implementation of <see cref="ISampleProcessor"/> interface.

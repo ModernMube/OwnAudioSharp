@@ -12,7 +12,7 @@
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>OwnAudioSharp</PackageId>
-    <Version>2.0.0</Version>
+    <Version>2.0.15</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for .NET</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;sound;multitrack</PackageTags>
@@ -71,6 +71,9 @@
 
     <!-- Core assemblies -->
     <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net8.0\Ownaudio.Core.dll" Pack="true" PackagePath="lib\net8.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net8.0\Ownaudio.Core.dll')" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Previous\Engines\" />
   </ItemGroup>
 
 </Project>

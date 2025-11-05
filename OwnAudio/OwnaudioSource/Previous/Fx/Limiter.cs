@@ -1,8 +1,8 @@
-﻿using Ownaudio.Processors;
+﻿using OwnaudioLegacy.Processors;
 using System;
 using System.Runtime.CompilerServices;
 
-namespace Ownaudio.Fx
+namespace OwnaudioLegacy.Fx
 {
     /// <summary>
     /// Limiter presets for different audio processing scenarios

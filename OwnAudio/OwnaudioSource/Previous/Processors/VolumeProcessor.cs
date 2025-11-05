@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Ownaudio.Processors;
+namespace OwnaudioLegacy.Processors;
 
 /// <summary>
 /// A sample processor that simply multiply given audio sample to a desired volume.

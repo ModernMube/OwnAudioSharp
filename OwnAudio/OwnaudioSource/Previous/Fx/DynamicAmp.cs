@@ -1,7 +1,7 @@
-﻿using Ownaudio.Processors;
+﻿using OwnaudioLegacy.Processors;
 using System;
 
-namespace Ownaudio.Fx
+namespace OwnaudioLegacy.Fx
 {
     /// <summary>
     /// Preset options for DynamicAmp configuration

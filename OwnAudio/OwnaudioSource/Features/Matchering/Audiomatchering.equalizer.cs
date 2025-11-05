@@ -285,7 +285,7 @@ namespace OwnaudioNET.Features.Matchering
                 }
 
                 Console.WriteLine("\nWriting to file...");
-                Ownaudio.Utilities.WaveFile.WriteFile(outputFile, processedData.ToArray(), sampleRate, channels, 24);
+                OwnaudioLegacy.Utilities.WaveFile.WriteFile(outputFile, processedData.ToArray(), sampleRate, channels, 24);
                 Console.WriteLine($"Processing completed: {outputFile}");
             }
             catch (Exception ex)

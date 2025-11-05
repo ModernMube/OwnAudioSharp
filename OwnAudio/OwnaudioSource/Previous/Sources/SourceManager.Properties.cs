@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 
-using Ownaudio.Common;
+using OwnaudioLegacy.Common;
 using Ownaudio.Core;
-using Ownaudio.Processors;
-using Ownaudio.Utilities.Extensions;
+using OwnaudioLegacy.Processors;
+using OwnaudioLegacy.Utilities.Extensions;
 
-namespace Ownaudio.Sources;
+namespace OwnaudioLegacy.Sources;
 
 public partial class SourceManager
 {

@@ -1,9 +1,9 @@
-﻿using Ownaudio.Processors;
-using Ownaudio.Sources.Extensions;
+﻿using OwnaudioLegacy.Processors;
+using OwnaudioLegacy.Sources.Extensions;
 using System;
 using System.Diagnostics;
 
-namespace Ownaudio.Sources
+namespace OwnaudioLegacy.Sources
 {
     /// <summary>
     /// Represents a real-time audio source that allows external sample data to be pushed into the engine.

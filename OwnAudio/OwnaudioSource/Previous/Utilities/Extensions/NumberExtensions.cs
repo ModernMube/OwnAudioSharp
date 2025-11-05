@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Ownaudio.Utilities.Extensions;
+namespace OwnaudioLegacy.Utilities.Extensions;
 
 internal static class NumberExtensions
 {

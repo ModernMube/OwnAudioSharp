@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using MathNet.Numerics.Interpolation;
-using Ownaudio.Common;
-using Ownaudio.Processors;
+using OwnaudioLegacy.Common;
+using OwnaudioLegacy.Processors;
 
-namespace Ownaudio.Sources;
+namespace OwnaudioLegacy.Sources;
 
 /// <summary>
 /// An interface for loading and controlling audio playback.
