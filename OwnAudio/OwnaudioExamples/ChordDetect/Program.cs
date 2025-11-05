@@ -14,7 +14,7 @@ namespace ChordDetect
                 try
                 {
 
-                    string audioFilePath = @"D:\Sogorock\Ocam\2025\Lanyok\Peter Srámek - Lányok (Official Music Video)_audio_music.wav";
+                    string audioFilePath = @"path/audio/music.mp3";
 
                     FileSource audioSource = new FileSource(audioFilePath);
 
