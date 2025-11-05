@@ -32,7 +32,7 @@ Pre-2.0.0 versions relied on native libraries (miniaudio, portaudio, ffmpeg) and
 
 - **Cross-platform**: Windows (WASAPI), macOS (Core Audio), Linux (PulseAudio), iOS & Android (in progress)
 - **Dual API layers**: Core API (low-level control) and NET API (high-level features)
-- **Audio playback**: Support for MP3, WAV, FLAC and other formats
+- **Audio playback**: Support for MP3, WAV, FLAC
 - **Real-time processing**: Pitch shifting, tempo control, effects
 - **Audio mixing**: Multi-source mixing with synchronized playback
 - **Professional mastering**: AI-driven audio matchering and EQ analysis
