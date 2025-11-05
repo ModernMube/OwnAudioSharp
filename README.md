@@ -10,10 +10,6 @@
   <img src="https://img.shields.io/badge/Nuget-OwnAudioSharp%20Nuget%20Package-blue" alt="OwnAudioSharp Package">
 </a>
 
-<a href="https://github.com/ModernMube/OwnAudioSharpDemo">
-  <img src="https://img.shields.io/badge/Sample-OwnAudioSharp%20Demo%20Application-darkgreen" alt="OwnAudioSharp Demo">
-</a>
-
 ##
 
 **OwnAudioSharp** is a cross-platform C# audio library providing professional-grade audio playback, recording, and processing. Built with pure managed code using native system audio APIs - no external dependencies required.
@@ -40,7 +36,7 @@ for example: **Ownaudio.Source** => **OwnaudioLegacy.Source**
 
 - **Cross-platform**: Windows (WASAPI), macOS (Core Audio), Linux (PulseAudio), iOS & Android (in progress)
 - **Dual API layers**: Core API (low-level control) and NET API (high-level features)
-- **Audio playback**: Support for MP3, WAV, FLAC and other formats
+- **Audio playback**: Support for MP3, WAV, FLAC
 - **Real-time processing**: Pitch shifting, tempo control, effects
 - **Audio mixing**: Multi-source mixing with synchronized playback
 - **Professional mastering**: AI-driven audio matchering and EQ analysis
@@ -116,8 +112,6 @@ See the [LICENSE](LICENSE) file for details.
 ## 🙏 Acknowledgements
 
 Special thanks to the creators of:
-- [Bufdio](https://github.com/luthfiampas/Bufdio) - Audio playback library for .NET
-- [FFmpeg.AutoGen](https://github.com/Ruslan-B/FFmpeg.AutoGen) - FFmpeg bindings for C#/.NET
+- [DryWetMidi](https://github.com/melanchall/drywetmidi) - .NET library to work with MIDI data and MIDI devices
 - [soundtouch.net](https://github.com/owoudenberg/soundtouch.net) - .NET wrapper for SoundTouch
 - [Avalonia](https://github.com/AvaloniaUI/Avalonia) - Cross-platform .NET UI framework
-- [SoundFlow](https://github.com/LSXPrime/SoundFlow) - Cross-platform .NET audio engine
