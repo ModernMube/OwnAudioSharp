@@ -335,13 +335,13 @@ var reverb = new ReverbEffect
     Damping = 0.5f
 };
 
-var compressor = new CompressorEffect
-{
-    Threshold = -12.0f,
-    Ratio = 4.0f,
-    Attack = 10.0f,
-    Release = 100.0f
-};
+var compressor = new CompressorEffect(
+    threshold: 0.5f,       // 0.5 = -6dB threshold
+    ratio: 4.0f,
+    attackTime: 10.0f,
+    releaseTime: 100.0f,
+    sampleRate: 48000f
+);
 
 // Apply effects to source
 var sourceWithEffects = new SourceWithEffects(source, reverb, compressor);
@@ -350,7 +350,7 @@ mixer.AddSource(sourceWithEffects);
 sourceWithEffects.Play();
 
 // Master effects (applied to final mix)
-var limiter = new LimiterEffect { Threshold = -0.5f };
+var limiter = new LimiterEffect(sampleRate: 48000f, threshold: -0.5f);
 mixer.AddMasterEffect(limiter);</code></pre>
             </div>
 

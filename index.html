@@ -944,7 +944,7 @@ source.Play();
 
 // Apply professional effects
 var reverb = new ReverbEffect { Mix = 0.3f, RoomSize = 0.7f };
-var compressor = new CompressorEffect { Threshold = -12, Ratio = 4 };
+var compressor = new CompressorEffect(threshold: 0.5f, ratio: 4.0f, sampleRate: 48000f);
 var sourceWithEffects = new SourceWithEffects(source, reverb, compressor);
 
 // Control playback
