@@ -500,12 +500,14 @@ mixer.Dispose();</code></pre>
     RoomSize = 0.7f,       // Room size (0-1)
     Damping = 0.5f,        // High frequency damping (0-1)
     Width = 1.0f,          // Stereo width (0-1)
-    PreDelay = 20.0f,      // Pre-delay in ms
-    Mix = 0.3f             // Wet/dry mix (0-1)
+    WetLevel = 0.33f,      // Wet signal level (0-1)
+    DryLevel = 0.7f,       // Dry signal level (0-1)
+    Gain = 0.015f,         // Input gain
+    Mix = 0.5f             // Wet/dry mix (0-1)
 };
 
 // Load preset
-reverb.LoadPreset(ReverbPreset.Hall);</code></pre>
+reverb.SetPreset(ReverbPreset.LargeHall);</code></pre>
             </div>
 
             <h3>CompressorEffect</h3>
@@ -513,37 +515,39 @@ reverb.LoadPreset(ReverbPreset.Hall);</code></pre>
 
             <div class="code-block">
                 <div class="code-header">CompressorEffect Usage</div>
-                <pre><code class="language-csharp">var compressor = new CompressorEffect
-{
-    Threshold = -12.0f,    // Threshold in dB
-    Ratio = 4.0f,          // Compression ratio (1:1 - 20:1)
-    Attack = 10.0f,        // Attack time in ms
-    Release = 100.0f,      // Release time in ms
-    Knee = 3.0f,           // Knee width in dB
-    MakeupGain = 0.0f      // Makeup gain in dB
-};
+                <pre><code class="language-csharp">// Create compressor with constructor parameters
+var compressor = new CompressorEffect(
+    threshold: 0.5f,      // Threshold level (0-1, where 1.0 = 0dB, 0.5 = -6dB)
+    ratio: 4.0f,          // Compression ratio (1:1 - 100:1)
+    attackTime: 100f,     // Attack time in ms (0.1-1000)
+    releaseTime: 200f,    // Release time in ms (1-2000)
+    makeupGain: 1.0f,     // Makeup gain as linear multiplier (0.1-10.0)
+    sampleRate: 48000f
+);
 
-// Read current gain reduction
-float gr = compressor.GainReduction;</code></pre>
+// Or use a preset
+var compressor2 = new CompressorEffect(CompressorPreset.VocalGentle, sampleRate: 48000f);</code></pre>
             </div>
 
-            <h3>Equalizer30Band</h3>
+            <h3>Equalizer30BandEffect</h3>
             <p>30-band graphic equalizer.</p>
 
             <div class="code-block">
-                <div class="code-header">Equalizer30Band Usage</div>
-                <pre><code class="language-csharp">var eq = new Equalizer30Band();
+                <div class="code-header">Equalizer30BandEffect Usage</div>
+                <pre><code class="language-csharp">var eq = new Equalizer30BandEffect();
 
 // Set individual bands (-12 to +12 dB)
-eq.SetBandGain(0, 3.0f);   // Boost first band by 3dB
-eq.SetBandGain(10, -2.0f); // Cut band 10 by 2dB
+eq[0] = 3.0f;              // Boost first band (20Hz) by 3dB
+eq[10] = -2.0f;            // Cut band 10 (200Hz) by 2dB
 
-// Get frequency bands
-float[] frequencies = eq.GetFrequencyBands();
+// Or use SetBandGain method with frequency and Q
+eq.SetBandGain(15, 1000f, 1.0f, 2.0f);  // band, frequency, Q, gain in dB
 
-// Pre/post gain
-eq.PreGain = 0.0f;
-eq.OutputGain = -1.0f;  // Reduce output by 1dB</code></pre>
+// Use a preset
+eq.SetPreset(Equalizer30Preset.Rock);
+
+// Get all current gains
+float[] gains = eq.GetAllGains();</code></pre>
             </div>
 
             <h3>DelayEffect</h3>
@@ -553,13 +557,14 @@ eq.OutputGain = -1.0f;  // Reduce output by 1dB</code></pre>
                 <div class="code-header">DelayEffect Usage</div>
                 <pre><code class="language-csharp">var delay = new DelayEffect
 {
-    DelayTime = 500.0f,    // Delay in ms
-    Feedback = 0.4f,       // Feedback amount (0-0.99)
+    Time = 375,            // Delay time in ms (1-5000)
+    Repeat = 0.35f,        // Feedback amount (0-1)
     Mix = 0.3f,            // Wet/dry mix (0-1)
-    PingPong = true,       // Ping-pong stereo mode
-    HighPassFreq = 100.0f, // High-pass filter
-    LowPassFreq = 8000.0f  // Low-pass filter
-};</code></pre>
+    Damping = 0.25f        // High-frequency damping (0-1)
+};
+
+// Or use a preset
+delay.SetPreset(DelayPreset.ClassicEcho);</code></pre>
             </div>
 
             <h3>ChorusEffect</h3>
@@ -569,28 +574,30 @@ eq.OutputGain = -1.0f;  // Reduce output by 1dB</code></pre>
                 <div class="code-header">ChorusEffect Usage</div>
                 <pre><code class="language-csharp">var chorus = new ChorusEffect
 {
+    Rate = 1.0f,           // LFO rate in Hz (0.1-10.0)
     Depth = 0.5f,          // Modulation depth (0-1)
-    Rate = 1.5f,           // LFO frequency in Hz
-    Feedback = 0.3f,       // Feedback (0-0.99)
     Mix = 0.5f,            // Wet/dry mix (0-1)
-    Voices = 3             // Number of voices (1-4)
-};</code></pre>
+    Voices = 3             // Number of voices (2-6)
+};
+
+// Or use a preset
+chorus.SetPreset(ChorusPreset.VocalLush);</code></pre>
             </div>
 
             <h3>DistortionEffect</h3>
-            <p>Multiple distortion modes.</p>
+            <p>Distortion effect with soft clipping.</p>
 
             <div class="code-block">
                 <div class="code-header">DistortionEffect Usage</div>
                 <pre><code class="language-csharp">var distortion = new DistortionEffect
 {
-    Drive = 5.0f,          // Distortion amount (0-10)
-    OutputGain = -6.0f,    // Output level in dB
-    Mix = 0.7f,            // Wet/dry mix (0-1)
-    Mode = DistortionMode.Tube,  // Distortion type
-    ToneFrequency = 2000.0f,      // Tone control
-    BitDepth = 16          // For bitcrusher mode
-};</code></pre>
+    Drive = 2.0f,          // Drive amount (1.0-10.0)
+    Mix = 1.0f,            // Wet/dry mix (0-1)
+    OutputGain = 0.5f      // Output gain compensation (0.1-1.0)
+};
+
+// Or use a preset
+distortion.SetPreset(DistortionPreset.ClassicRock);</code></pre>
             </div>
 
             <h3>LimiterEffect</h3>
@@ -598,17 +605,144 @@ eq.OutputGain = -1.0f;  // Reduce output by 1dB</code></pre>
 
             <div class="code-block">
                 <div class="code-header">LimiterEffect Usage</div>
-                <pre><code class="language-csharp">var limiter = new LimiterEffect
+                <pre><code class="language-csharp">// Create limiter with constructor parameters
+var limiter = new LimiterEffect(
+    sampleRate: 48000f,
+    threshold: -3.0f,     // Threshold in dB (-20 to 0)
+    ceiling: -0.1f,       // Output ceiling in dB (-2 to 0)
+    release: 50.0f,       // Release time in ms (1-1000)
+    lookAheadMs: 5.0f     // Look-ahead time in ms (1-20)
+);
+
+// Or use a preset
+var limiter2 = new LimiterEffect(sampleRate: 48000f, preset: LimiterPreset.Mastering);
+
+// Check if limiting is active
+bool isLimiting = limiter.IsLimiting;
+float gainReduction = limiter.GetGainReductionDb();</code></pre>
+            </div>
+
+            <h3>FlangerEffect</h3>
+            <p>Flanger effect with variable delay modulation.</p>
+
+            <div class="code-block">
+                <div class="code-header">FlangerEffect Usage</div>
+                <pre><code class="language-csharp">var flanger = new FlangerEffect
 {
-    Threshold = -0.5f,     // Limit threshold in dB
-    Release = 50.0f,       // Release time in ms
-    Lookahead = 5.0f,      // Lookahead time in ms
-    Ceiling = -0.1f,       // Maximum output level
-    SoftKnee = true        // Use soft knee
+    Rate = 0.5f,           // LFO rate in Hz (0.1-5.0)
+    Depth = 0.8f,          // Modulation depth (0-1)
+    Feedback = 0.6f,       // Feedback amount (0-0.95)
+    Mix = 0.5f             // Wet/dry mix (0-1)
 };
 
-// Read gain reduction
-float gr = limiter.GainReduction;</code></pre>
+// Or use a preset
+flanger.SetPreset(FlangerPreset.Classic);</code></pre>
+            </div>
+
+            <h3>PhaserEffect</h3>
+            <p>Phaser effect with all-pass filter stages.</p>
+
+            <div class="code-block">
+                <div class="code-header">PhaserEffect Usage</div>
+                <pre><code class="language-csharp">var phaser = new PhaserEffect
+{
+    Rate = 0.5f,           // LFO rate in Hz (0.1-10.0)
+    Depth = 0.7f,          // Modulation depth (0-1)
+    Feedback = 0.5f,       // Feedback amount (0-0.95)
+    Mix = 0.5f,            // Wet/dry mix (0-1)
+    Stages = 4             // Number of stages (2-8)
+};
+
+// Or use a preset
+phaser.SetPreset(PhaserPreset.Vintage);</code></pre>
+            </div>
+
+            <h3>AutoGainEffect</h3>
+            <p>Automatic gain control processor.</p>
+
+            <div class="code-block">
+                <div class="code-header">AutoGainEffect Usage</div>
+                <pre><code class="language-csharp">var autoGain = new AutoGainEffect
+{
+    TargetLevel = 0.25f,         // Target level (0.01-1.0)
+    AttackCoefficient = 0.99f,   // Attack coefficient (0.9-0.999)
+    ReleaseCoefficient = 0.999f, // Release coefficient (0.9-0.9999)
+    GateThreshold = 0.001f,      // Gate threshold (0.0001-0.01)
+    MaximumGain = 4.0f,          // Maximum gain (1.0-10.0)
+    MinimumGain = 0.25f          // Minimum gain (0.1-1.0)
+};
+
+// Or use a preset
+autoGain.SetPreset(AutoGainPreset.Voice);</code></pre>
+            </div>
+
+            <h3>EnhancerEffect</h3>
+            <p>Harmonic enhancer for adding presence.</p>
+
+            <div class="code-block">
+                <div class="code-header">EnhancerEffect Usage</div>
+                <pre><code class="language-csharp">var enhancer = new EnhancerEffect
+{
+    Mix = 0.2f,                  // Mix amount (0-1)
+    Gain = 2.5f,                 // Pre-saturation gain (0.1-10)
+    CutoffFrequency = 4000f      // High-pass cutoff in Hz (100-20000)
+};
+
+// Or use a preset
+enhancer.SetPreset(EnhancerPreset.VocalClarity);</code></pre>
+            </div>
+
+            <h3>OverdriveEffect</h3>
+            <p>Tube-like overdrive effect.</p>
+
+            <div class="code-block">
+                <div class="code-header">OverdriveEffect Usage</div>
+                <pre><code class="language-csharp">var overdrive = new OverdriveEffect
+{
+    Gain = 2.0f,           // Input gain (1.0-5.0)
+    Tone = 0.5f,           // Tone control (0=dark, 1=bright)
+    Mix = 1.0f,            // Wet/dry mix (0-1)
+    OutputLevel = 0.7f     // Output level (0.1-1.0)
+};
+
+// Or use a preset
+overdrive.SetPreset(OverdrivePreset.Blues);</code></pre>
+            </div>
+
+            <h3>RotaryEffect</h3>
+            <p>Leslie speaker simulator with horn and rotor.</p>
+
+            <div class="code-block">
+                <div class="code-header">RotaryEffect Usage</div>
+                <pre><code class="language-csharp">var rotary = new RotaryEffect
+{
+    HornSpeed = 6.0f,      // Horn rotation speed in Hz (2.0-15.0)
+    RotorSpeed = 1.0f,     // Rotor rotation speed in Hz (0.5-5.0)
+    Intensity = 0.7f,      // Effect intensity (0-1)
+    Mix = 1.0f,            // Wet/dry mix (0-1)
+    IsFast = false         // Fast/slow speed switch
+};
+
+// Or use a preset
+rotary.SetPreset(RotaryPreset.Hammond);</code></pre>
+            </div>
+
+            <h3>DynamicAmpEffect</h3>
+            <p>Adaptive volume control with dynamics preservation.</p>
+
+            <div class="code-block">
+                <div class="code-header">DynamicAmpEffect Usage</div>
+                <pre><code class="language-csharp">var dynamicAmp = new DynamicAmpEffect
+{
+    TargetLevel = -9.0f,         // Target RMS level in dB (-40 to 0)
+    AttackTime = 0.2f,           // Attack time in seconds (min 0.001)
+    ReleaseTime = 0.8f,          // Release time in seconds (min 0.001)
+    NoiseGate = 0.005f,          // Noise threshold (0-1)
+    MaxGain = 10.0f              // Maximum gain (> 0)
+};
+
+// Or use a preset
+dynamicAmp.SetPreset(DynamicAmpPreset.Music);</code></pre>
             </div>
 
             <h3>Available Effects Summary</h3>
@@ -626,7 +760,7 @@ float gr = limiter.GainReduction;</code></pre>
                     <tr><td>ChorusEffect</td><td>Chorus with multiple voices</td></tr>
                     <tr><td>DistortionEffect</td><td>Multiple distortion modes</td></tr>
                     <tr><td>EqualizerEffect</td><td>Parametric EQ</td></tr>
-                    <tr><td>Equalizer30Band</td><td>30-band graphic EQ</td></tr>
+                    <tr><td>Equalizer30BandEffect</td><td>30-band graphic EQ</td></tr>
                     <tr><td>LimiterEffect</td><td>Peak limiter</td></tr>
                     <tr><td>FlangerEffect</td><td>Flanger effect</td></tr>
                     <tr><td>PhaserEffect</td><td>Phaser effect</td></tr>

@@ -669,7 +669,7 @@ public partial class SourceManager
     /// </remarks>
     private bool InitializeEngine()
     {
-        if (OwnAudioEngine.IsInitialized && OwnAudioEngine.DefaultOutputDevice.State == AudioDeviceState.Active)  //Engine initialize
+        if (OwnAudioEngine.IsInitialized)  //Engine initialize
         {
             Engine = OwnAudioEngine.Engine;
         }

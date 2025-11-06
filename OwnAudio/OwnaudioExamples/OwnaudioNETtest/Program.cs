@@ -195,9 +195,39 @@ public class TestProgram
             // ==========================================
             // Add effect vocal track
             // ==========================================
+
+            // 1. Compressor - dynamic control
+            CompressorEffect compressor = new CompressorEffect(
+                threshold: 0.4f,      // 40% threshold
+                ratio: 3.0f,          // 3:1 compression
+                attackTime: 5f,       // Fast attack
+                releaseTime: 150f,    // Smooth release
+                makeupGain: 1.5f      // +50% makeup gain
+            );
+
+            // 2. Delay - depth and space
+            DelayEffect delay = new DelayEffect(
+                time: 375,            // 375ms (eighth note at 120 BPM)
+                repeat: 0.25f,        // Subtle feedback
+                mix: 0.15f,           // Low in mix
+                damping: 0.4f         // Warm repeats
+            );
+
+            // 3. Reverb - ambience
+            ReverbEffect reverb = new ReverbEffect(
+                size: 0.5f,           // Medium room
+                damp: 0.6f,           // Natural damping
+                wet: 0.25f,           // Reverb level
+                dry: 0.75f,           // Dry signal
+                stereoWidth: 0.8f,    // Wide stereo
+                gainLevel: 0.015f,    // Standard gain
+                mix: 0.25f            // 25% wet mix
+            );
+
             var fileSource3Effect = new SourceWithEffects(fileSource3);
-            fileSource3Effect.AddEffect(new DelayEffect(preset: DelayPreset.ClassicEcho));
-            fileSource3Effect.AddEffect(new ReverbEffect(preset: ReverbPreset.SmallRoom));
+            fileSource3Effect.AddEffect(compressor);
+            fileSource3Effect.AddEffect(delay);
+            fileSource3Effect.AddEffect(reverb);
 
             // Add source to mixer (will automatically start because mixer is running)
             mixer.AddSource(fileSource0);
