@@ -13,8 +13,8 @@ namespace OwnSeparator.BasicConsole
             Console.WriteLine("OwnSeparator Audio Separation - Simplified");
             Console.WriteLine("==========================================");
 
-            string audioFilePath = @"D:\Sogorock\Ocam\2025\Vintage Remix\GITANO - VINTAGE REMIX 4_audio.flac";
-            string outputDirectory = @"D:\Sogorock\Ocam\2025\Vintage Remix";
+            string audioFilePath = @"path/audio/music.flac";
+            string outputDirectory = @"path/output";
 
             try
             {
