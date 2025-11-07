@@ -12,7 +12,7 @@
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>OwnAudioSharp</PackageId>
-    <Version>2.0.15</Version>
+    <Version>2.1.0</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for .NET</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;sound;multitrack</PackageTags>
@@ -39,6 +39,9 @@
   <!-- Embedded resources -->
   <ItemGroup>
     <EmbeddedResource Include="nmp.onnx" />
+    <EmbeddedResource Include="best.onnx" />
+    <EmbeddedResource Include="default.onnx" />
+    <EmbeddedResource Include="karaoke.onnx" />
     <EmbeddedResource Include="basesample.bin" />
   </ItemGroup>
 

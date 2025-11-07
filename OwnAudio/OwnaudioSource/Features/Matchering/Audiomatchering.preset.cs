@@ -201,7 +201,7 @@ namespace OwnaudioNET.Features.Matchering
             Console.WriteLine($"Final max level: {20 * Math.Log10(finalMaxLevel):F1}dB");
 
             // Write processed base sample
-            OwnaudioLegacy.Utilities.WaveFile.WriteFile(processedBaseSample, processedData.ToArray(), sampleRate, channels, 24);
+            OwnaudioNET.Recording.WaveFile.Create(processedBaseSample, processedData.ToArray(), sampleRate, channels, 24);
 
             Console.WriteLine($"Enhanced base sample created: {processedBaseSample}");
         }
@@ -231,7 +231,7 @@ namespace OwnaudioNET.Features.Matchering
                 using var memoryStream = new MemoryStream();
                 stream.CopyTo(memoryStream);
 
-                OwnaudioLegacy.Utilities.WaveFile.WriteFile(path, memoryStream.ToArray(), 48000, 2, 24);
+                OwnaudioNET.Recording.WaveFile.Create(path, memoryStream.ToArray(), 48000, 2, 24);
 
                 isLoadSample = true;    
             }

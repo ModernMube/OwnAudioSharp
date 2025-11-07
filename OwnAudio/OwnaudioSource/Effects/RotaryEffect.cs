@@ -488,5 +488,26 @@ namespace OwnaudioNET.Effects
                 _lowPass.Reset();
             }
         }
+
+        /// <summary>
+        /// Fast audio clamping function that constrains values to the valid audio range [0.0, 1.0].
+        /// </summary>
+        /// <param name="value">The audio parameter value to clamp.</param>
+        /// <returns>The clamped value within the range [0.0, 1.0].</returns>
+        /// <remarks>
+        /// This method is aggressively inlined for maximum performance in audio processing loops.
+        /// Parameter clamping is essential to prevent:
+        /// - Invalid parameter states
+        /// - Unexpected audio artifacts
+        /// - Filter instability
+        ///
+        /// Values below 0.0 are clamped to 0.0, values above 1.0 are clamped to 1.0,
+        /// and values within the valid range are passed through unchanged.
+        /// </remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float FastClamp(float value)
+        {
+            return value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
+        }
     }
 }
