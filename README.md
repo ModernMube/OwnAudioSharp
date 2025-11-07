@@ -14,6 +14,13 @@
 
 **OwnAudioSharp** is a cross-platform C# audio library providing professional-grade audio playback, recording, and processing. Built with pure managed code using native system audio APIs - no external dependencies required.
 
+## New Feature: VOCAL REMOVER API
+
+**Advanced AI-driven audio separation technology** for separating songs into vocal and instrumental components. It uses state-of-the-art ONNX neural network models with STFT-based processing and intelligent noise reduction.
+
+See the document for a detailed description!
+**Try the sample code**
+
 ## ⚠️ Important Notice
 
 **Version 2.0.0 introduces major improvements!**

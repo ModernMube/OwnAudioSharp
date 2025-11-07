@@ -66,6 +66,12 @@ namespace OwnaudioNET.Effects
 
     /// <summary>
     /// Professional audio limiter with look-ahead and smooth gain reduction
+    ///
+    /// ZERO-ALLOCATION DESIGN:
+    /// - Buffers are pre-allocated at maximum size (MAX_LOOKAHEAD) during construction
+    /// - Dynamic lookahead changes only modify _activeBufferSize, never reallocate
+    /// - No heap allocations during Process() or parameter changes
+    /// - Safe for real-time audio with multiple effects chaining
     /// </summary>
     public sealed class LimiterEffect : IEffectProcessor
     {
@@ -82,6 +88,7 @@ namespace OwnaudioNET.Effects
         private float _currentGain;
         private float _targetGain;
         private readonly float _sampleRate;
+        private readonly int _maxBufferSize;
 
         // Limiter parameters
         private float _threshold;
@@ -89,6 +96,7 @@ namespace OwnaudioNET.Effects
         private float _release;
         private float _lookAheadMs;
         private int _lookAheadSamples;
+        private int _activeBufferSize;
 
         // Constants
         private const float DEFAULT_THRESHOLD = -3.0f;  // dB
@@ -152,15 +160,23 @@ namespace OwnaudioNET.Effects
 
             _sampleRate = sampleRate;
 
+            // Calculate maximum buffer size for MAX_LOOKAHEAD at given sample rate
+            // This ensures zero-allocation during runtime parameter changes
+            _maxBufferSize = (int)(MAX_LOOKAHEAD * sampleRate / 1000.0f);
+
             // Set parameters with validation
             Threshold = threshold;
             Ceiling = ceiling;
             Release = release;
-            LookAheadMs = lookAheadMs;
 
-            // Initialize buffers
-            _delayBuffer = new float[_lookAheadSamples];
-            _envelopeBuffer = new float[_lookAheadSamples];
+            // Calculate initial lookahead samples
+            _lookAheadMs = Math.Clamp(lookAheadMs, MIN_LOOKAHEAD, MAX_LOOKAHEAD);
+            _lookAheadSamples = (int)(_lookAheadMs * sampleRate / 1000.0f);
+            _activeBufferSize = _lookAheadSamples;
+
+            // Allocate buffers at maximum size to prevent reallocation
+            _delayBuffer = new float[_maxBufferSize];
+            _envelopeBuffer = new float[_maxBufferSize];
 
             _currentGain = 1.0f;
             _targetGain = 1.0f;
@@ -181,16 +197,21 @@ namespace OwnaudioNET.Effects
 
             _sampleRate = sampleRate;
 
+            // Calculate maximum buffer size for MAX_LOOKAHEAD at given sample rate
+            // This ensures zero-allocation during runtime parameter changes
+            _maxBufferSize = (int)(MAX_LOOKAHEAD * sampleRate / 1000.0f);
+
             // Initialize with default values first
             _threshold = DbToLinear(DEFAULT_THRESHOLD);
             _ceiling = DbToLinear(DEFAULT_CEILING);
             _release = CalculateReleaseCoeff(DEFAULT_RELEASE, sampleRate);
             _lookAheadMs = DEFAULT_LOOKAHEAD;
             _lookAheadSamples = (int)(DEFAULT_LOOKAHEAD * sampleRate / 1000.0f);
+            _activeBufferSize = _lookAheadSamples;
 
-            // Initialize buffers
-            _delayBuffer = new float[_lookAheadSamples];
-            _envelopeBuffer = new float[_lookAheadSamples];
+            // Allocate buffers at maximum size to prevent reallocation
+            _delayBuffer = new float[_maxBufferSize];
+            _envelopeBuffer = new float[_maxBufferSize];
 
             _currentGain = 1.0f;
             _targetGain = 1.0f;
@@ -251,6 +272,7 @@ namespace OwnaudioNET.Effects
 
         /// <summary>
         /// Gets or sets the look-ahead time in ms
+        /// ZERO-ALLOCATION: Uses pre-allocated buffer, only changes active size
         /// </summary>
         public float LookAheadMs
         {
@@ -264,9 +286,11 @@ namespace OwnaudioNET.Effects
                 if (newLookAheadSamples != _lookAheadSamples)
                 {
                     _lookAheadSamples = newLookAheadSamples;
-                    // Reinitialize buffers with new size
-                    Array.Resize(ref _delayBuffer, _lookAheadSamples);
-                    Array.Resize(ref _envelopeBuffer, _lookAheadSamples);
+                    _activeBufferSize = newLookAheadSamples;
+
+                    // ZERO-ALLOCATION: No Array.Resize!
+                    // Buffers were pre-allocated at _maxBufferSize
+                    // We only use the first _activeBufferSize elements
                     Reset();
                 }
             }
@@ -308,7 +332,8 @@ namespace OwnaudioNET.Effects
                 float smoothGain = GetSmoothedGain();
 
                 // Apply gain reduction to delayed sample
-                float delayedSample = _delayBuffer[(_delayIndex - _lookAheadSamples + _delayBuffer.Length) % _delayBuffer.Length];
+                // Use _activeBufferSize for wrapping to support dynamic lookahead changes
+                float delayedSample = _delayBuffer[(_delayIndex - _lookAheadSamples + _activeBufferSize) % _activeBufferSize];
                 float processedSample = delayedSample * smoothGain;
 
                 // Apply final ceiling limit
@@ -316,19 +341,21 @@ namespace OwnaudioNET.Effects
 
                 buffer[i] = processedSample;
 
-                // Update buffer indices
-                _delayIndex = (_delayIndex + 1) % _delayBuffer.Length;
-                _envelopeIndex = (_envelopeIndex + 1) % _envelopeBuffer.Length;
+                // Update buffer indices - wrap at active buffer size
+                _delayIndex = (_delayIndex + 1) % _activeBufferSize;
+                _envelopeIndex = (_envelopeIndex + 1) % _activeBufferSize;
             }
         }
 
         /// <summary>
         /// Reset limiter state
+        /// ZERO-ALLOCATION: Only clears active buffer portion
         /// </summary>
         public void Reset()
         {
-            Array.Clear(_delayBuffer);
-            Array.Clear(_envelopeBuffer);
+            // Only clear the active portion of buffers for efficiency
+            Array.Clear(_delayBuffer, 0, _activeBufferSize);
+            Array.Clear(_envelopeBuffer, 0, _activeBufferSize);
             _currentGain = 1.0f;
             _targetGain = 1.0f;
             _delayIndex = 0;
@@ -454,12 +481,14 @@ namespace OwnaudioNET.Effects
 
         /// <summary>
         /// Get peak level from look-ahead buffer
+        /// ZERO-ALLOCATION: Only scans active buffer portion
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private float GetPeakLevel()
         {
             float peak = 0.0f;
-            for (int i = 0; i < _delayBuffer.Length; i++)
+            // Only scan active buffer portion for efficiency
+            for (int i = 0; i < _activeBufferSize; i++)
             {
                 float abs = Math.Abs(_delayBuffer[i]);
                 if (abs > peak)
@@ -486,13 +515,15 @@ namespace OwnaudioNET.Effects
 
         /// <summary>
         /// Get smoothed gain from envelope buffer
+        /// ZERO-ALLOCATION: Only scans active buffer portion
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private float GetSmoothedGain()
         {
             // Find minimum gain in envelope buffer (most restrictive)
+            // Only scan active buffer portion for efficiency
             float minGain = 1.0f;
-            for (int i = 0; i < _envelopeBuffer.Length; i++)
+            for (int i = 0; i < _activeBufferSize; i++)
             {
                 if (_envelopeBuffer[i] < minGain)
                     minGain = _envelopeBuffer[i];

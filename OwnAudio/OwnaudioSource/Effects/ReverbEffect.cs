@@ -747,7 +747,7 @@ namespace OwnaudioNET.Effects
         /// and values within the valid range are passed through unchanged.
         /// </remarks>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float FastClamp(float value)
+        private float FastClamp(float value)
         {
             return value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
         }

@@ -17,6 +17,7 @@
                 <li><a href="api-net.html" class="active">NET API</a></li>
                 <li><a href="examples.html">Examples</a></li>
 				<li><a href="matchering.html">Matchering</a></li>
+                <li><a href="vocalremover.html">Vocal Remover</a></li>
                 <li><a href="chorddetect.html">Chord Detection</a></li>
                 <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
             </ul>
@@ -251,17 +252,24 @@ source.Dispose();</code></pre>
                 <pre><code class="language-csharp">// Generate or load samples
 float[] samples = GenerateAudioSamples();
 
-// Create source
-var source = new SampleSource(
-    samples,
-    sampleRate: 48000,
-    channels: 2,
-    copyData: true  // Copy samples (true) or use reference (false)
-);
+// Create source from existing samples
+var config = new AudioConfig
+{
+    SampleRate = 48000,
+    Channels = 2
+};
+var source = new SampleSource(samples, config);
 
-// Update samples dynamically
+// OR create empty source for dynamic updates
+var dynamicSource = new SampleSource(
+    bufferSizeInFrames: 48000,  // 1 second buffer
+    config: config
+);
+// dynamicSource.AllowDynamicUpdate is automatically true
+
+// Update samples dynamically (only works if AllowDynamicUpdate is enabled)
 float[] newSamples = GenerateNewSamples();
-source.UpdateSamples(newSamples, copyData: true);
+dynamicSource.SubmitSamples(newSamples);
 
 // Playback control
 source.Play();
@@ -273,21 +281,14 @@ source.Loop = true;</code></pre>
 
             <div class="code-block">
                 <div class="code-header">InputSource Usage</div>
-                <pre><code class="language-csharp">// Enable input in configuration
-var config = new AudioConfig
-{
-    SampleRate = 48000,
-    Channels = 2,
-    BufferSize = 512,
-    EnableInput = true
-};
+                <pre><code class="language-csharp">// Initialize OwnaudioNET (engine must be running)
+OwnaudioNet.Initialize();
 
-var input = new InputSource(config);
-
-// Configure input
-input.InputGain = 1.5f;                    // Amplify input (0.0-2.0)
-input.EnableNoiseGate = true;              // Enable noise gate
-input.NoiseGateThreshold = -40.0f;         // Threshold in dB (-60..0)
+// Create input source (requires AudioEngineWrapper)
+var input = new InputSource(
+    engine: OwnaudioNet.Engine,
+    bufferSizeInFrames: 8192  // Optional, default is 8192
+);
 
 // Add to mixer and start
 mixer.AddSource(input);
@@ -302,7 +303,8 @@ input.Play();</code></pre>
                 <pre><code class="language-csharp">// Create ghost track with duration
 var ghost = new GhostTrackSource(
     durationInSeconds: 180.0,  // 3 minutes
-    config: AudioConfig.Default
+    sampleRate: 48000,         // Optional, default is 48000
+    outputChannels: 2          // Optional, default is 2 (stereo)
 );
 
 // Use for sync timing
@@ -316,24 +318,27 @@ var syncGroup = mixer.CreateSyncGroup(track1, track2, ghost);</code></pre>
                 <div class="code-header">SourceWithEffects Usage</div>
                 <pre><code class="language-csharp">var source = new FileSource("guitar.wav");
 
-// Create effects
+// Create source with effects wrapper
+var sourceWithFx = new SourceWithEffects(source);
+
+// Add effects to the chain
 var reverb = new ReverbEffect
 {
     Mix = 0.3f,
     RoomSize = 0.7f,
     Damping = 0.5f
 };
+sourceWithFx.AddEffect(reverb);
 
-var compressor = new CompressorEffect
-{
-    Threshold = -12.0f,
-    Ratio = 4.0f,
-    Attack = 10.0f,
-    Release = 100.0f
-};
-
-// Create source with effects chain
-var sourceWithFx = new SourceWithEffects(source, reverb, compressor);
+var compressor = new CompressorEffect(
+    threshold: 0.5f,
+    ratio: 4.0f,
+    attackTime: 10.0f,
+    releaseTime: 100.0f,
+    makeupGain: 1.0f,
+    sampleRate: 48000f
+);
+sourceWithFx.AddEffect(compressor);
 
 // Modify effects dynamically
 sourceWithFx.AddEffect(new DelayEffect());
