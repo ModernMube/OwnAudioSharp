@@ -313,8 +313,9 @@ namespace Ownaudio.Windows
                     // Wait for thread to finish (with timeout)
                     if (_audioThread != null && _audioThread.IsAlive)
                     {
-                        if (!_audioThread.Join(5000))
+                        if (!_audioThread.Join(2000))
                         {
+                            System.Diagnostics.Debug.WriteLine("WASAPI: Audio thread did not stop within 2s, forcing abort...");
                             _audioThread.Abort(); // Force abort if necessary
                         }
                         _audioThread = null;

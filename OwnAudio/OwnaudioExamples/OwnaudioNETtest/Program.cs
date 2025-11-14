@@ -13,7 +13,7 @@ namespace OwnaudioNET.Test;
 /// </summary>
 public class TestProgram
 {
-    public static void Main(string[] args)
+    public static async Task Main(string[] args)
     {
         Console.WriteLine("=== OwnaudioNET AudioMixer Demonstration ===\n");
         Console.WriteLine("This program demonstrates audio playback using the AudioMixer");
@@ -39,7 +39,7 @@ public class TestProgram
                 Channels = 2,
                 BufferSize = 512
             };
-            OwnaudioNet.Initialize(config);
+            await OwnaudioNet.InitializeAsync(config);
 
             Console.WriteLine($"  ✓ Initialized: {OwnaudioNet.IsInitialized}");
             Console.WriteLine($"  ✓ Version: {OwnaudioNet.Version}");
