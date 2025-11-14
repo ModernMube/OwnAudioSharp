@@ -216,13 +216,25 @@ engine.Stop();</code></pre>
                 High-level API with professional features for production-ready applications.
             </div>
 
-            <h3>Basic Playback</h3>
+            <div class="alert alert-warning">
+                <strong>⚠️ IMPORTANT FOR UI APPLICATIONS</strong>
+                When building desktop (WPF, WinForms, MAUI, Avalonia) or mobile applications,
+                ALWAYS use the async API methods to prevent UI thread blocking:
+                <ul>
+                    <li><code>InitializeAsync()</code> instead of <code>Initialize()</code></li>
+                    <li><code>StopAsync()</code> instead of <code>Stop()</code></li>
+                    <li><code>ShutdownAsync()</code> instead of <code>Shutdown()</code></li>
+                </ul>
+                This prevents your application from freezing during audio initialization (50-5000ms) and shutdown (up to 2 seconds).
+            </div>
+
+            <h3>Basic Playback (Console Applications)</h3>
             <div class="code-block">
                 <div class="code-header">BasicPlayback.cs</div>
                 <pre><code class="language-csharp">using OwnaudioNET;
 using OwnaudioNET.Sources;
 
-// Initialize OwnaudioNET
+// Initialize OwnaudioNET (synchronous - OK for console apps)
 OwnaudioNet.Initialize();
 
 // Create file source
@@ -247,6 +259,79 @@ mixer.Stop();
 mixer.Dispose();
 source.Dispose();
 OwnaudioNet.Shutdown();</code></pre>
+            </div>
+
+            <h3>UI Application Playback (WPF/MAUI/Avalonia) ⭐ RECOMMENDED</h3>
+            <div class="code-block">
+                <div class="code-header">UIApplication.cs</div>
+                <pre><code class="language-csharp">using OwnaudioNET;
+using OwnaudioNET.Sources;
+
+public class AudioPlayerViewModel
+{
+    private AudioMixer? _mixer;
+    private FileSource? _source;
+
+    // Initialize asynchronously (UI remains responsive!)
+    public async Task InitializeAsync()
+    {
+        // ✅ Async initialization prevents UI freezing
+        await OwnaudioNet.InitializeAsync();
+
+        _mixer = new AudioMixer(OwnaudioNet.Engine);
+        _mixer.Start();
+    }
+
+    // Play audio file
+    public void Play(string filePath)
+    {
+        _source?.Dispose();
+        _source = new FileSource(filePath);
+
+        _mixer?.AddSource(_source);
+        _source.Play();
+    }
+
+    // Stop playback
+    public void Stop()
+    {
+        _source?.Stop();
+    }
+
+    // Shutdown asynchronously (UI remains responsive!)
+    public async Task ShutdownAsync()
+    {
+        _source?.Dispose();
+
+        _mixer?.Stop();
+        _mixer?.Dispose();
+
+        // ✅ Async shutdown prevents UI freezing
+        await OwnaudioNet.ShutdownAsync();
+    }
+}
+
+// Usage in UI event handler (e.g., WPF Button Click)
+private async void InitButton_Click(object sender, RoutedEventArgs e)
+{
+    InitButton.IsEnabled = false;
+    StatusText.Text = "Initializing audio...";
+
+    try
+    {
+        await _audioPlayer.InitializeAsync(); // UI stays responsive!
+        StatusText.Text = "Audio system ready!";
+        PlayButton.IsEnabled = true;
+    }
+    catch (Exception ex)
+    {
+        StatusText.Text = $"Error: {ex.Message}";
+    }
+    finally
+    {
+        InitButton.IsEnabled = true;
+    }
+}</code></pre>
             </div>
 
             <h3>Volume Control and Seeking</h3>

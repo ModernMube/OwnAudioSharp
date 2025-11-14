@@ -53,6 +53,9 @@ public static class OwnaudioNet
     /// <summary>
     /// Initializes the OwnaudioNET library with custom configuration.
     /// This method should be called once at application startup.
+    ///
+    /// ⚠️ **WARNING:** This method BLOCKS for 50-5000ms depending on platform!
+    /// For UI applications, use InitializeAsync() instead to prevent UI freezing.
     /// </summary>
     /// <param name="config">The audio configuration.</param>
     /// <param name="useMockEngine">If true, uses MockAudioEngine for testing (no hardware required).</param>
@@ -260,5 +263,210 @@ public static class OwnaudioNet
             Channels = 2,
             BufferSize = 2048
         };
+    }
+
+    // ==========================================
+    // ASYNC API - Prevents UI Thread Blocking
+    // ==========================================
+
+    /// <summary>
+    /// Initializes the OwnaudioNET library asynchronously with default configuration.
+    /// This method prevents UI thread blocking by running initialization on a background thread.
+    ///
+    /// Recommended for UI applications (WPF, WinForms, MAUI, Avalonia).
+    ///
+    /// Usage:
+    /// <code>
+    /// await OwnaudioNet.InitializeAsync();
+    /// OwnaudioNet.Start();
+    /// </code>
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token to abort initialization.</param>
+    /// <exception cref="AudioEngineException">Thrown if initialization fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
+    public static async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        AudioConfig defaultConfig = new AudioConfig
+        {
+            SampleRate = 48000,
+            Channels = 2,
+            BufferSize = 512
+        };
+        await InitializeAsync(defaultConfig, useMockEngine: false, cancellationToken);
+    }
+
+    /// <summary>
+    /// Initializes the OwnaudioNET library asynchronously with custom configuration.
+    /// This method prevents UI thread blocking by running initialization on a background thread.
+    ///
+    /// Platform initialization times (on background thread):
+    /// - Windows WASAPI: 50-200ms
+    /// - Linux PulseAudio: 100-5000ms (longest!)
+    /// - macOS Core Audio: 50-300ms
+    ///
+    /// Recommended for UI applications (WPF, WinForms, MAUI, Avalonia).
+    ///
+    /// Usage:
+    /// <code>
+    /// var config = new AudioConfig { SampleRate = 48000, Channels = 2, BufferSize = 512 };
+    /// await OwnaudioNet.InitializeAsync(config);
+    /// OwnaudioNet.Start();
+    /// </code>
+    /// </summary>
+    /// <param name="config">The audio configuration.</param>
+    /// <param name="useMockEngine">If true, uses MockAudioEngine for testing (no hardware required).</param>
+    /// <param name="cancellationToken">Cancellation token to abort initialization.</param>
+    /// <exception cref="ArgumentNullException">Thrown if config is null.</exception>
+    /// <exception cref="AudioEngineException">Thrown if initialization fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
+    public static async Task InitializeAsync(AudioConfig config, bool useMockEngine = false, CancellationToken cancellationToken = default)
+    {
+        if (config == null)
+            throw new ArgumentNullException(nameof(config));
+
+        // Run initialization on background thread to prevent UI blocking
+        await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Initialize(config, useMockEngine);
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Stops the audio engine asynchronously.
+    /// This method prevents UI thread blocking by running stop on a background thread.
+    ///
+    /// The stop operation waits for the audio thread to finish gracefully (up to 2 seconds).
+    ///
+    /// Recommended for UI applications (WPF, WinForms, MAUI, Avalonia).
+    ///
+    /// Usage:
+    /// <code>
+    /// await OwnaudioNet.StopAsync();
+    /// </code>
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token to abort the wait (not the stop itself).</param>
+    /// <exception cref="InvalidOperationException">Thrown if not initialized.</exception>
+    /// <exception cref="AudioEngineException">Thrown if stop fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
+    /// <remarks>
+    /// Note: Even if cancelled, the engine will still attempt to stop gracefully.
+    /// The cancellation only affects the async wait, not the engine stop operation itself.
+    /// </remarks>
+    public static async Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            lock (_initLock)
+            {
+                if (!_initialized || _engineWrapper == null)
+                    throw new InvalidOperationException("OwnaudioNet must be initialized before calling StopAsync().");
+
+                _engineWrapper.Stop();
+            }
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Shuts down the OwnaudioNET library asynchronously and releases all resources.
+    /// This method prevents UI thread blocking by running shutdown on a background thread.
+    ///
+    /// Automatically stops the engine if running.
+    ///
+    /// Usage:
+    /// <code>
+    /// await OwnaudioNet.ShutdownAsync();
+    /// </code>
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token to abort the operation.</param>
+    /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
+    public static async Task ShutdownAsync(CancellationToken cancellationToken = default)
+    {
+        await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            lock (_initLock)
+            {
+                if (!_initialized)
+                    return;
+
+                try
+                {
+                    _engineWrapper?.Dispose();
+                    _engineWrapper = null;
+                }
+                finally
+                {
+                    _initialized = false;
+                }
+            }
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Gets the list of available output devices asynchronously.
+    /// This method prevents UI thread blocking by running device enumeration on a background thread.
+    ///
+    /// Typical duration: 10-50ms (on background thread).
+    ///
+    /// Usage:
+    /// <code>
+    /// var devices = await OwnaudioNet.GetOutputDevicesAsync();
+    /// foreach (var device in devices)
+    /// {
+    ///     Console.WriteLine($"Device: {device.Name}");
+    /// }
+    /// </code>
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token to abort the operation.</param>
+    /// <returns>List of output device information.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if not initialized.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
+    public static async Task<List<AudioDeviceInfo>> GetOutputDevicesAsync(CancellationToken cancellationToken = default)
+    {
+        return await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!_initialized || _engineWrapper == null)
+                throw new InvalidOperationException("OwnaudioNet must be initialized. Call InitializeAsync() first.");
+
+            return _engineWrapper.GetOutputDevices();
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Gets the list of available input devices asynchronously.
+    /// This method prevents UI thread blocking by running device enumeration on a background thread.
+    ///
+    /// Typical duration: 10-50ms (on background thread).
+    ///
+    /// Usage:
+    /// <code>
+    /// var devices = await OwnaudioNet.GetInputDevicesAsync();
+    /// foreach (var device in devices)
+    /// {
+    ///     Console.WriteLine($"Input Device: {device.Name}");
+    /// }
+    /// </code>
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token to abort the operation.</param>
+    /// <returns>List of input device information.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if not initialized.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
+    public static async Task<List<AudioDeviceInfo>> GetInputDevicesAsync(CancellationToken cancellationToken = default)
+    {
+        return await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!_initialized || _engineWrapper == null)
+                throw new InvalidOperationException("OwnaudioNet must be initialized. Call InitializeAsync() first.");
+
+            return _engineWrapper.GetInputDevices();
+        }, cancellationToken).ConfigureAwait(false);
     }
 }

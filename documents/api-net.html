@@ -100,8 +100,19 @@
             <h3>OwnaudioNet Class</h3>
             <p>Central initialization and configuration for OwnaudioNET.</p>
 
+            <div class="alert alert-warning">
+                <strong>⚠️ UI APPLICATIONS: Use Async API</strong>
+                For desktop/mobile UI applications, use async methods to prevent UI thread blocking:
+                <ul>
+                    <li><code>await InitializeAsync()</code> - Prevents 50-5000ms UI freeze</li>
+                    <li><code>await StopAsync()</code> - Prevents up to 2000ms UI freeze</li>
+                    <li><code>await ShutdownAsync()</code> - Non-blocking shutdown</li>
+                    <li><code>await GetOutputDevicesAsync()</code> - Non-blocking device enumeration</li>
+                </ul>
+            </div>
+
             <div class="code-block">
-                <div class="code-header">Basic Initialization</div>
+                <div class="code-header">Synchronous Initialization (Console Apps)</div>
                 <pre><code class="language-csharp">// Default initialization (48kHz, stereo, 512 frames)
 OwnaudioNet.Initialize();
 
@@ -121,29 +132,121 @@ OwnaudioNet.Initialize(config, useMockEngine: true);
 OwnaudioNet.Shutdown();</code></pre>
             </div>
 
+            <div class="code-block">
+                <div class="code-header">Async Initialization (UI Apps) ⭐ RECOMMENDED</div>
+                <pre><code class="language-csharp">// Default async initialization
+await OwnaudioNet.InitializeAsync();
+
+// Custom async configuration
+var config = new AudioConfig
+{
+    SampleRate = 44100,
+    Channels = 2,
+    BufferSize = 256
+};
+await OwnaudioNet.InitializeAsync(config);
+
+// With cancellation token
+var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+await OwnaudioNet.InitializeAsync(config, useMockEngine: false, cts.Token);
+
+// Async device enumeration
+var devices = await OwnaudioNet.GetOutputDevicesAsync();
+foreach (var device in devices)
+{
+    Console.WriteLine($"Device: {device.Name}");
+}
+
+// Async shutdown
+await OwnaudioNet.ShutdownAsync();</code></pre>
+            </div>
+
             <table class="api-table">
                 <thead>
                     <tr>
                         <th>Method</th>
                         <th>Description</th>
+                        <th>Recommended For</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
                         <td><code>Initialize()</code></td>
-                        <td>Initialize with default settings</td>
+                        <td>Initialize with default settings (⚠️ BLOCKS 50-200ms)</td>
+                        <td>Console apps</td>
                     </tr>
                     <tr>
                         <td><code>Initialize(AudioConfig)</code></td>
-                        <td>Initialize with custom configuration</td>
+                        <td>Initialize with custom config (⚠️ BLOCKS 50-5000ms)</td>
+                        <td>Console apps</td>
                     </tr>
                     <tr>
                         <td><code>Initialize(AudioConfig, bool)</code></td>
-                        <td>Initialize with mock engine option</td>
+                        <td>Initialize with mock engine (⚠️ BLOCKS 50-5000ms)</td>
+                        <td>Console apps, testing</td>
+                    </tr>
+                    <tr>
+                        <td><code>InitializeAsync()</code></td>
+                        <td>✅ Async init with default settings (NON-BLOCKING)</td>
+                        <td>UI apps (WPF, MAUI, Avalonia)</td>
+                    </tr>
+                    <tr>
+                        <td><code>InitializeAsync(AudioConfig)</code></td>
+                        <td>✅ Async init with custom config (NON-BLOCKING)</td>
+                        <td>UI apps (WPF, MAUI, Avalonia)</td>
+                    </tr>
+                    <tr>
+                        <td><code>InitializeAsync(AudioConfig, bool, CancellationToken)</code></td>
+                        <td>✅ Async init with cancellation (NON-BLOCKING)</td>
+                        <td>UI apps with timeout control</td>
                     </tr>
                     <tr>
                         <td><code>Shutdown()</code></td>
-                        <td>Shutdown and release resources</td>
+                        <td>Shutdown and release resources (⚠️ BLOCKS up to 2000ms)</td>
+                        <td>Console apps</td>
+                    </tr>
+                    <tr>
+                        <td><code>ShutdownAsync()</code></td>
+                        <td>✅ Async shutdown (NON-BLOCKING)</td>
+                        <td>UI apps (WPF, MAUI, Avalonia)</td>
+                    </tr>
+                    <tr>
+                        <td><code>GetOutputDevicesAsync()</code></td>
+                        <td>✅ Get output devices async (NON-BLOCKING)</td>
+                        <td>UI apps</td>
+                    </tr>
+                    <tr>
+                        <td><code>GetInputDevicesAsync()</code></td>
+                        <td>✅ Get input devices async (NON-BLOCKING)</td>
+                        <td>UI apps</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Platform Initialization Times</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Platform</th>
+                        <th>Typical Time</th>
+                        <th>Maximum Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Windows WASAPI</td>
+                        <td>50-100ms</td>
+                        <td>200ms</td>
+                    </tr>
+                    <tr>
+                        <td>Linux PulseAudio</td>
+                        <td>100-500ms</td>
+                        <td>5000ms ⚠️</td>
+                    </tr>
+                    <tr>
+                        <td>macOS Core Audio</td>
+                        <td>50-150ms</td>
+                        <td>300ms</td>
                     </tr>
                 </tbody>
             </table>

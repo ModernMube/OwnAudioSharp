@@ -926,10 +926,10 @@ engine.Stop();</code></pre>
                             <div class="code-dot"></div>
                             <div class="code-dot"></div>
                         </div>
-                        <div class="code-title">NetExample.cs</div>
+                        <div class="code-title">NetExample.cs (UI Apps - Async)</div>
                     </div>
-                    <pre><code class="language-csharp">// Initialize OwnaudioNET
-OwnaudioNet.Initialize();
+                    <pre><code class="language-csharp">// Initialize OwnaudioNET (async for UI apps!)
+await OwnaudioNet.InitializeAsync();
 
 // Create file source
 var source = new FileSource("music.mp3");

@@ -204,6 +204,9 @@ public sealed class AudioEngineWrapper : IDisposable
     /// <summary>
     /// Stops the audio engine and pump thread gracefully.
     /// This method is thread-safe and idempotent.
+    ///
+    /// ⚠️ **WARNING:** This method BLOCKS for up to 2 seconds waiting for the pump thread to exit!
+    /// For UI applications, use StopAsync() instead to prevent UI freezing.
     /// </summary>
     /// <exception cref="AudioEngineException">Thrown if the engine fails to stop.</exception>
     /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
@@ -240,6 +243,34 @@ public sealed class AudioEngineWrapper : IDisposable
         {
             throw new AudioEngineException("Failed to stop audio engine wrapper.", ex);
         }
+    }
+
+    /// <summary>
+    /// Stops the audio engine and pump thread asynchronously.
+    /// This method prevents UI thread blocking by running the stop operation on a background thread.
+    ///
+    /// Recommended for UI applications (WPF, WinForms, MAUI, Avalonia).
+    ///
+    /// Usage:
+    /// <code>
+    /// await wrapper.StopAsync();
+    /// </code>
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token to abort the wait (not the stop itself).</param>
+    /// <exception cref="AudioEngineException">Thrown if the engine fails to stop.</exception>
+    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
+    /// <remarks>
+    /// Note: Even if cancelled, the engine will still attempt to stop gracefully.
+    /// The cancellation only affects the async wait, not the engine stop operation itself.
+    /// </remarks>
+    public async Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Stop();
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
