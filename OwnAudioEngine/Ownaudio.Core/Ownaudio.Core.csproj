@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net9.0</TargetFrameworks>
+    <TargetFrameworks>net9.0;net9.0-android;net9.0-ios</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -10,12 +10,12 @@
     <Authors>Ownaudio Team</Authors>
     <Company>Ownaudio</Company>
     <Product>Ownaudio Core</Product>
-    <Description>Cross-platform audio engine core library with zero-allocation guarantees</Description>
+    <Description>Cross-platform audio engine core library with zero-allocation guarantees (Windows, Linux, macOS, Android, iOS)</Description>
     <Copyright>Copyright © 2025</Copyright>
     <PackageProjectUrl>https://github.com/yourusername/ownaudio</PackageProjectUrl>
     <RepositoryUrl>https://github.com/yourusername/ownaudio</RepositoryUrl>
-    <PackageTags>audio;real-time;low-latency;zero-allocation;gc-free</PackageTags>
-    <Version>2.0.0</Version>
+    <PackageTags>audio;real-time;low-latency;zero-allocation;gc-free;android;ios;mobile</PackageTags>
+    <Version>2.1.0</Version>
   </PropertyGroup>
 
   <PropertyGroup>
