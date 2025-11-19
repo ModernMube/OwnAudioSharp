@@ -333,6 +333,57 @@ public static class OwnaudioNet
     }
 
     /// <summary>
+    /// Initializes the OwnaudioNET library asynchronously with a pre-initialized audio engine.
+    /// This is useful for platforms not automatically detected (e.g., custom engine implementations).
+    ///
+    /// Note: This overload is rarely needed since Android is now automatically detected.
+    ///
+    /// Usage:
+    /// <code>
+    /// var customEngine = new CustomAudioEngine();
+    /// var config = new AudioConfig { SampleRate = 48000, Channels = 2, BufferSize = 512 };
+    /// await Task.Run(() => customEngine.Initialize(config));
+    /// await OwnaudioNet.InitializeAsync(customEngine, config);
+    /// OwnaudioNet.Start();
+    /// </code>
+    /// </summary>
+    /// <param name="engine">A pre-initialized IAudioEngine instance.</param>
+    /// <param name="config">The audio configuration used to initialize the engine.</param>
+    /// <param name="cancellationToken">Cancellation token to abort initialization.</param>
+    /// <exception cref="ArgumentNullException">Thrown if engine or config is null.</exception>
+    /// <exception cref="AudioEngineException">Thrown if initialization fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
+    public static async Task InitializeAsync(IAudioEngine engine, AudioConfig config, CancellationToken cancellationToken = default)
+    {
+        if (engine == null)
+            throw new ArgumentNullException(nameof(engine));
+        if (config == null)
+            throw new ArgumentNullException(nameof(config));
+
+        await Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            lock (_initLock)
+            {
+                if (_initialized)
+                    return;
+
+                try
+                {
+                    // Create wrapper with the provided engine
+                    _engineWrapper = new AudioEngineWrapper(engine, config);
+                    _initialized = true;
+                }
+                catch (Exception ex) when (ex is not AudioEngineException and not ArgumentNullException)
+                {
+                    throw new AudioEngineException("Failed to initialize audio engine wrapper.", ex);
+                }
+            }
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Stops the audio engine asynchronously.
     /// This method prevents UI thread blocking by running stop on a background thread.
     ///

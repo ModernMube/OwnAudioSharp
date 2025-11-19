@@ -11,13 +11,13 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.Core", "OwnAudioEn
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.Windows", "OwnAudioEngine\Ownaudio.Windows\Ownaudio.Windows.csproj", "{1FC6AC99-D9CF-497A-9240-8D3B2079E781}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Matching", "OwnAudio\OwnaudioExamples\Matching\Matching.csproj", "{BAB69FCF-04FE-44ED-9DE9-318449DAF19E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MatchingExample", "OwnAudio\OwnaudioExamples\MatchingExample\MatchingExample.csproj", "{BAB69FCF-04FE-44ED-9DE9-318449DAF19E}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OwnaudioNET", "OwnAudio\OwnaudioSource\OwnaudioNET.csproj", "{D5C415DA-A87A-8F21-0004-5ED7F593BDA1}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "OwnAudioAPI", "OwnAudioAPI", "{F8B29F87-CAE2-4246-ADC9-00FCFD26C22F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OwnaudiNETexample", "OwnAudio\OwnaudioExamples\OwnaudioNETtest\OwnaudiNETexample.csproj", "{ED5E93F9-7CD2-EF7F-D1F7-202ACB435049}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OwnaudioDesktopExample", "OwnAudio\OwnaudioExamples\OwnaudioDesktopExample\OwnaudioDesktopExample.csproj", "{ED5E93F9-7CD2-EF7F-D1F7-202ACB435049}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{19ECC34F-C8B2-4CB0-AEFF-090EF0EC46B8}"
 EndProject
@@ -27,17 +27,19 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.macOS", "OwnAudioE
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.Linux", "OwnAudioEngine\Ownaudio.Linux\Ownaudio.Linux.csproj", "{80390699-CA77-4FF8-A7A5-CD9A5768D475}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChordDetect", "OwnAudio\OwnaudioExamples\ChordDetect\ChordDetect.csproj", "{8E68006C-D65F-AB8A-081A-BC3CCC9A35DC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChordDetectExample", "OwnAudio\OwnaudioExamples\ChordDetectExample\ChordDetectExample.csproj", "{8E68006C-D65F-AB8A-081A-BC3CCC9A35DC}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.OwnaudioNET", "OwnAudioTests\Ownaudio.OwnaudioNET\Ownaudio.OwnaudioNET.csproj", "{F1A2B3C4-D5E6-7890-ABCD-EF9876543210}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OwnaudioInput", "OwnAudio\OwnaudioExamples\OwnaudioInput\OwnaudioInput.csproj", "{9A8B7C6D-5E4F-3A2B-1C0D-9E8F7A6B5C4D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OwnaudioInputExample", "OwnAudio\OwnaudioExamples\OwnaudioInputExample\OwnaudioInputExample.csproj", "{9A8B7C6D-5E4F-3A2B-1C0D-9E8F7A6B5C4D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Vocalremover", "OwnAudio\OwnaudioExamples\VocalRemover\Vocalremover.csproj", "{48A6A5FB-8263-1BBF-52B6-8F16344F7B0F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VocalremoverExample", "OwnAudio\OwnaudioExamples\VocalRemover\VocalremoverExample.csproj", "{48A6A5FB-8263-1BBF-52B6-8F16344F7B0F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.Android", "OwnAudioEngine\Ownaudio.Android\Ownaudio.Android.csproj", "{2A3B4C5D-6E7F-8901-2345-6789ABCDEF01}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.iOS", "OwnAudioEngine\Ownaudio.iOS\Ownaudio.iOS.csproj", "{3B4C5D6E-7F89-0123-4567-89ABCDEF0123}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OwnaudioAndroidExample", "OwnAudio\OwnaudioExamples\OwnaudioAndroidExample\OwnaudioAndroidExample.csproj", "{E0D4DA84-BF90-030D-BA16-BCF519702CC8}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -51,6 +53,7 @@ Global
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{B9EB7923-1A73-4F91-8112-7548664DC0CF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B9EB7923-1A73-4F91-8112-7548664DC0CF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B9EB7923-1A73-4F91-8112-7548664DC0CF}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
 		{B9EB7923-1A73-4F91-8112-7548664DC0CF}.Debug|x64.ActiveCfg = Debug|Any CPU
 		{B9EB7923-1A73-4F91-8112-7548664DC0CF}.Debug|x64.Build.0 = Debug|Any CPU
 		{B9EB7923-1A73-4F91-8112-7548664DC0CF}.Debug|x86.ActiveCfg = Debug|Any CPU
@@ -229,6 +232,24 @@ Global
 		{3B4C5D6E-7F89-0123-4567-89ABCDEF0123}.Release|x86.ActiveCfg = Release|Any CPU
 		{3B4C5D6E-7F89-0123-4567-89ABCDEF0123}.Release|x86.Build.0 = Release|Any CPU
 		{3B4C5D6E-7F89-0123-4567-89ABCDEF0123}.Release|x86.Deploy.0 = Release|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Debug|x64.Build.0 = Debug|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Debug|x64.Deploy.0 = Debug|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Debug|x86.Build.0 = Debug|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Debug|x86.Deploy.0 = Debug|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Release|Any CPU.Deploy.0 = Release|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Release|x64.ActiveCfg = Release|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Release|x64.Build.0 = Release|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Release|x64.Deploy.0 = Release|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Release|x86.ActiveCfg = Release|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Release|x86.Build.0 = Release|Any CPU
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8}.Release|x86.Deploy.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -248,6 +269,7 @@ Global
 		{48A6A5FB-8263-1BBF-52B6-8F16344F7B0F} = {C3D4E5F6-A7B8-9012-CDEF-123456789012}
 		{2A3B4C5D-6E7F-8901-2345-6789ABCDEF01} = {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
 		{3B4C5D6E-7F89-0123-4567-89ABCDEF0123} = {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
+		{E0D4DA84-BF90-030D-BA16-BCF519702CC8} = {C3D4E5F6-A7B8-9012-CDEF-123456789012}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {1F9E84F3-54D4-4849-89A2-B6D0BF288902}
