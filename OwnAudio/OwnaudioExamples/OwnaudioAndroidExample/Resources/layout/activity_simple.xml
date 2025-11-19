@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
+
+        <!-- Title -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="OwnAudio Android Demo"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"
+            android:textColor="#000000" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="AAudio Engine"
+            android:textSize="14sp"
+            android:layout_marginBottom="24dp"
+            android:textColor="#666666" />
+
+        <!-- Status Display -->
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Ready"
+            android:textSize="16sp"
+            android:padding="12dp"
+            android:background="#E0E0E0"
+            android:layout_marginBottom="16dp"
+            android:textColor="#000000" />
+
+        <!-- Progress Display -->
+        <TextView
+            android:id="@+id/tvProgress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Position: 00:00 / 00:00 (0%)"
+            android:textSize="14sp"
+            android:padding="12dp"
+            android:background="#F5F5F5"
+            android:layout_marginBottom="8dp"
+            android:fontFamily="monospace"
+            android:textColor="#000000" />
+
+        <!-- Peak Meters Display -->
+        <TextView
+            android:id="@+id/tvPeaks"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Peaks: L=0.00 R=0.00"
+            android:textSize="14sp"
+            android:padding="12dp"
+            android:background="#FFF3E0"
+            android:layout_marginBottom="8dp"
+            android:fontFamily="monospace"
+            android:textColor="#000000" />
+
+        <!-- Statistics Display -->
+        <TextView
+            android:id="@+id/tvStats"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Mixed: 0 | Underruns: 0"
+            android:textSize="12sp"
+            android:padding="12dp"
+            android:background="#E8F5E9"
+            android:layout_marginBottom="24dp"
+            android:fontFamily="monospace"
+            android:textColor="#000000" />
+
+        <!-- Volume Control -->
+        <TextView
+            android:id="@+id/tvVolume"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Volume: 80%"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp"
+            android:textColor="#000000" />
+
+        <SeekBar
+            android:id="@+id/seekVolume"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:max="100"
+            android:progress="80" />
+
+        <!-- Control Buttons -->
+        <Button
+            android:id="@+id/btnInitialize"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Initialize AAudio"
+            android:textSize="16sp"
+            android:layout_marginBottom="12dp"
+            android:padding="16dp" />
+
+        <Button
+            android:id="@+id/btnPlay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Play"
+            android:textSize="16sp"
+            android:layout_marginBottom="12dp"
+            android:padding="16dp"
+            android:enabled="false" />
+
+        <Button
+            android:id="@+id/btnStop"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Stop"
+            android:textSize="16sp"
+            android:layout_marginBottom="24dp"
+            android:padding="16dp"
+            android:enabled="false" />
+
+        <!-- Info -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="OwnaudioNET AudioMixer Demo\n• 4-track mixing (drums, bass, other, vocals)\n• Master effects (EQ, Compressor, DynamicAmp)\n• Vocal effects (Compressor, Delay, Reverb)\n• Synchronized playback with drift correction\n• Real-time statistics and peak meters"
+            android:textSize="12sp"
+            android:padding="12dp"
+            android:background="#E3F2FD"
+            android:textColor="#000000" />
+
+    </LinearLayout>
+
+</ScrollView>

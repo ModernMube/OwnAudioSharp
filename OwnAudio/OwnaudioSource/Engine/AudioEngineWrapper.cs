@@ -38,7 +38,7 @@ public sealed class AudioEngineWrapper : IDisposable
     private readonly AudioBufferPool _inputBufferPool;
 
     // Pump thread
-    private readonly Thread _pumpThread;
+    private Thread? _pumpThread;
     private volatile bool _stopRequested;
     private volatile bool _isRunning;
 
@@ -153,13 +153,8 @@ public sealed class AudioEngineWrapper : IDisposable
         // Subscribe to engine events
         SubscribeToEngineEvents();
 
-        // Create pump thread (will be started in Start() method)
-        _pumpThread = new Thread(PumpThreadLoop)
-        {
-            Name = "AudioEngineWrapper.PumpThread",
-            IsBackground = true,
-            Priority = ThreadPriority.Highest // High priority for audio pumping
-        };
+        // Pump thread will be created in Start() method to allow restart
+        _pumpThread = null;
 
         _stopRequested = false;
         _isRunning = false;
@@ -191,8 +186,14 @@ public sealed class AudioEngineWrapper : IDisposable
             _stopRequested = false;
             _isRunning = true;
 
-            if (!_pumpThread.IsAlive)
-                _pumpThread.Start();
+            // Create new thread for each start (threads cannot be restarted)
+            _pumpThread = new Thread(PumpThreadLoop)
+            {
+                Name = "AudioEngineWrapper.PumpThread",
+                IsBackground = true,
+                Priority = ThreadPriority.Highest // High priority for audio pumping
+            };
+            _pumpThread.Start();
         }
         catch (Exception ex) when (ex is not AudioEngineException)
         {
@@ -223,7 +224,7 @@ public sealed class AudioEngineWrapper : IDisposable
             _stopRequested = true;
 
             // Wait for pump thread to exit (with timeout)
-            if (_pumpThread.IsAlive)
+            if (_pumpThread != null && _pumpThread.IsAlive)
             {
                 if (!_pumpThread.Join(TimeSpan.FromSeconds(2)))
                 {

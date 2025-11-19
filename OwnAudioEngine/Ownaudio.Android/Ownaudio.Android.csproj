@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0-android</TargetFramework>
-    <SupportedOSPlatformVersion>21.0</SupportedOSPlatformVersion>
+    <TargetFramework>net9.0-android35.0</TargetFramework>
+    <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
+    <TargetPlatformMinVersion>24.0</TargetPlatformMinVersion>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -17,7 +18,6 @@
     <RepositoryUrl>https://github.com/yourusername/ownaudio</RepositoryUrl>
     <PackageTags>audio;android;audiotrack;real-time;low-latency;zero-allocation;mobile</PackageTags>
     <Version>1.0.0</Version>
-    <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
     <AndroidEnableProfiledAot>true</AndroidEnableProfiledAot>
     <AndroidUseInterpreter>false</AndroidUseInterpreter>
   </PropertyGroup>
@@ -36,5 +36,13 @@
   <ItemGroup>
     <ProjectReference Include="..\Ownaudio.Core\Ownaudio.Core.csproj" />
   </ItemGroup>
+
+  <!--
+    NOTE: AAudio is a built-in Android system library (libaaudio.so) available since Android 8.0 (API 26).
+    No native libraries need to be embedded in the APK - the system provides libaaudio.so automatically.
+
+    The libs/ directory and native library references have been removed as they are not needed.
+    If you previously had liboboe.so or libc++_shared.so, they can be safely deleted.
+  -->
 
 </Project>

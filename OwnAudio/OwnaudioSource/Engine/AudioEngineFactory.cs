@@ -19,6 +19,8 @@ public static class AudioEngineFactory
     private static Type? _pulseaudioEngineType = null;
     private static bool _coreaudioChecked = false;
     private static Type? _coreaudioEngineType = null;
+    private static bool _aaudioChecked = false;
+    private static Type? _aaudioEngineType = null;
 
     /// <summary>
     /// Creates an audio engine instance for the current platform.
@@ -30,7 +32,9 @@ public static class AudioEngineFactory
     /// <remarks>
     /// Platform detection order:
     /// 1. Windows: Attempts to load WasapiEngine via reflection
-    /// 2. Other platforms: Currently not supported, will throw exception
+    /// 2. macOS: Attempts to load CoreAudioEngine via reflection
+    /// 3. Linux: Attempts to load PulseAudioEngine via reflection (includes Android detection)
+    /// 4. Android: Attempts to load AAudioEngine via reflection
     ///
     /// For testing purposes, use <see cref="CreateMockEngine"/> instead.
     /// </remarks>
@@ -46,18 +50,23 @@ public static class AudioEngineFactory
 
         try
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (OperatingSystem.IsWindows())
             {
                 engine = CreateWasapiEngine();
             }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            else if (OperatingSystem.IsMacOS())
             {
                 engine = CreateCoreAudioEngine();
             }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            else if (OperatingSystem.IsLinux())
             {
                 engine = CreatePulseAudioEngine();
             }
+            else if(OperatingSystem.IsAndroid())
+            {
+                engine = CreateAAudioEngine();
+            }
+
             else
             {
                 throw new AudioEngineException($"Unsupported platform: {RuntimeInformation.OSDescription}. Use CreateMockEngine() for testing.");
@@ -315,12 +324,72 @@ public static class AudioEngineFactory
     }
 
     /// <summary>
+    /// Creates an AAudioEngine instance using reflection to avoid hard dependency.
+    /// </summary>
+    /// <returns>An AAudioEngine instance, or null if assembly cannot be loaded.</returns>
+    /// <exception cref="AudioEngineException">Thrown when AAudioEngine cannot be loaded.</exception>
+    private static IAudioEngine? CreateAAudioEngine()
+    {
+        lock (_lock)
+        {
+            // Check if we've already tried to load AAudio
+            if (_aaudioChecked && _aaudioEngineType == null)
+            {
+                throw new AudioEngineException(
+                    "AAudioEngine is not available. Ensure Ownaudio.Android assembly is referenced and accessible. " +
+                    "For testing without hardware, use CreateMockEngine() instead.");
+            }
+
+            // Try to load the type on first call
+            if (!_aaudioChecked)
+            {
+                try
+                {
+                    // Attempt to load the Ownaudio.Android assembly
+                    Assembly aaudioAssembly = Assembly.Load("Ownaudio.Android");
+                    _aaudioEngineType = aaudioAssembly.GetType("Ownaudio.Android.AAudioEngine");
+
+                    if (_aaudioEngineType == null)
+                    {
+                        throw new AudioEngineException(
+                            "AAudioEngine type not found in Ownaudio.Android assembly. " +
+                            "The assembly may be corrupted or incompatible.");
+                    }
+                }
+                catch (Exception ex) when (ex is not AudioEngineException)
+                {
+                    _aaudioEngineType = null;
+                    throw new AudioEngineException(
+                        "Failed to load Ownaudio.Android assembly. Ensure the assembly is referenced and available. " +
+                        "For testing without hardware, use CreateMockEngine() instead.",
+                        ex);
+                }
+                finally
+                {
+                    _aaudioChecked = true;
+                }
+            }
+
+            // Create instance using reflection
+            try
+            {
+                var instance = Activator.CreateInstance(_aaudioEngineType!);
+                return instance as IAudioEngine;
+            }
+            catch (Exception ex)
+            {
+                throw new AudioEngineException($"Failed to instantiate AAudioEngine: {ex.Message}", ex);
+            }
+        }
+    }
+
+    /// <summary>
     /// Checks if a platform-specific audio engine is available.
     /// </summary>
     /// <returns>True if a native audio engine is available for the current platform.</returns>
     public static bool IsNativeEngineAvailable()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (OperatingSystem.IsWindows())
         {
             lock (_lock)
             {
@@ -342,8 +411,7 @@ public static class AudioEngineFactory
                 }
             }
         }
-
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        else if (OperatingSystem.IsLinux())
         {
             lock (_lock)
             {
@@ -365,7 +433,7 @@ public static class AudioEngineFactory
                 }
             }
         }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        else if (OperatingSystem.IsMacOS())
         {
             lock (_lock)
             {
@@ -387,6 +455,28 @@ public static class AudioEngineFactory
                 }
             }
         }
+        else if(OperatingSystem.IsAndroid())
+        {
+            lock (_lock)
+            {
+                if (_aaudioChecked)
+                    return _aaudioEngineType != null;
+
+                try
+                {
+                    Assembly aaudioAssembly = Assembly.Load("Ownaudio.Android");
+                    _aaudioEngineType = aaudioAssembly.GetType("Ownaudio.Android.AAudioEngine");
+                    _aaudioChecked = true;
+                    return _aaudioEngineType != null;
+                }
+                catch
+                {
+                    _aaudioChecked = true;
+                    _aaudioEngineType = null;
+                    return false;
+                }
+            }
+        }
 
         return false;
     }
@@ -397,12 +487,14 @@ public static class AudioEngineFactory
     /// <returns>The engine name (e.g., "WasapiEngine", "CoreAudio"), or "None" if no native engine is available.</returns>
     public static string GetPlatformEngineName()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (OperatingSystem.IsWindows())
             return "WasapiEngine";
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        else if (OperatingSystem.IsMacOS())
             return "CoreAudioEngine";
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        else if (OperatingSystem.IsLinux())
             return "PulseAudioEngine";
+        else if (OperatingSystem.IsAndroid())
+            return "AAudioEngine";
         else
             return "None";
     }
