@@ -14,13 +14,6 @@
 
 **OwnAudioSharp** is a cross-platform C# audio library providing professional-grade audio playback, recording, and processing. Built with pure managed code using native system audio APIs - no external dependencies required.
 
-## New Feature: VOCAL REMOVER API
-
-**Advanced AI-driven audio separation technology** for separating songs into vocal and instrumental components. It uses state-of-the-art ONNX neural network models with STFT-based processing and intelligent noise reduction.
-
-See the document for a detailed description!
-**Try the sample code**
-
 ## ⚠️ Important Notice
 
 **Version 2.0.0 introduces major improvements!**
@@ -41,13 +34,14 @@ for example: **Ownaudio.Source** => **OwnaudioLegacy.Source**
 
 ## ✨ Key Features
 
-- **Cross-platform**: Windows (WASAPI), macOS (Core Audio), Linux (PulseAudio), iOS & Android (in progress)
+- **Cross-platform**: Windows (WASAPI), macOS (Core Audio), Linux (PulseAudio), Android (Aaudio) iOS (in progress)
 - **Dual API layers**: Core API (low-level control) and NET API (high-level features)
 - **Audio playback**: Support for MP3, WAV, FLAC
 - **Real-time processing**: Pitch shifting, tempo control, effects
 - **Audio mixing**: Multi-source mixing with synchronized playback
 - **Professional mastering**: AI-driven audio matchering and EQ analysis
 - **Chord detection**: Automatic musical chord recognition
+- **Vocal remover**: Advanced AI-driven audio separation technology
 - **Zero-allocation**: Optimized performance for real-time usage
 
 ## 📦 Installation
@@ -63,7 +57,7 @@ dotnet add package OwnAudioSharp
 ```
 
 ### Requirements
-- .NET 8.0 or later
+- .NET 9.0 or later
 - No external dependencies
 
 ## 📚 Documentation
@@ -74,34 +68,53 @@ Complete documentation is available on the official website:
   <img src="https://img.shields.io/badge/Documentation-OwnAudioSharp%20Website-blue" alt="Documentation" width="350">
 </a>
 
+### 🔧 Engine Architecture Documentation
+
+OwnAudioSharp's audio engine is built on a modular architecture with platform-specific implementations. Detailed documentation is available for each component:
+
+#### Core Components
+- **[Ownaudio.Core](OwnAudioEngine/Ownaudio.Core/README.md)** - Cross-platform interfaces, audio decoders (MP3/WAV/FLAC), lock-free buffers, and zero-allocation primitives
+
+#### Platform-Specific Implementations
+- **[Ownaudio.Windows](OwnAudioEngine/Ownaudio.Windows/README.md)** - WASAPI implementation for Windows (10+)
+- **[Ownaudio.Linux](OwnAudioEngine/Ownaudio.Linux/README.md)** - PulseAudio implementation for Linux
+- **[Ownaudio.macOS](OwnAudioEngine/Ownaudio.macOS/README.md)** - Core Audio implementation for macOS
+- **[Ownaudio.Android](OwnAudioEngine/Ownaudio.Android/README.md)** - AAudio implementation for Android (API 26+)
+
+Each platform implementation includes:
+- Architecture overview and native API details
+- Performance characteristics and latency information
+- Platform-specific requirements and dependencies
+- Usage examples and best practices
+- Troubleshooting guides
+
+For low-level engine development or platform-specific optimization, refer to the individual platform documentation.
+
 ## 🚀 Quick Start Example
 
 ```csharp
-using Ownaudio.Core;
-using Ownaudio.Decoders;
+// Initialize OwnaudioNET (async for UI apps!)
+await OwnaudioNet.InitializeAsync();
 
-// Create audio engine with default settings
-using var engine = AudioEngineFactory.CreateDefault();
-engine.Initialize(AudioConfig.Default);
-engine.Start();
+// Create file source
+var source = new FileSource("music.mp3");
 
-// Create decoder for audio file
-using var decoder = AudioDecoderFactory.Create(
-    "music.mp3",
-    targetSampleRate: 48000,
-    targetChannels: 2
-);
+// Create mixer and add source
+var mixer = new AudioMixer(OwnaudioNet.Engine);
+mixer.AddSource(source);
+mixer.Start();
 
-// Decode and play frames
-while (true)
-{
-    var result = decoder.DecodeNextFrame();
-    if (result.IsEOF) break;
-    
-    engine.Send(result.Frame.Samples);
-}
+// Play the source
+source.Play();
 
-engine.Stop();
+// Apply professional effects
+var reverb = new ReverbEffect { Mix = 0.3f, RoomSize = 0.7f };
+var compressor = new CompressorEffect(threshold: 0.5f, ratio: 4.0f, sampleRate: 48000f);
+var sourceWithEffects = new SourceWithEffects(source, reverb, compressor);
+
+// Control playback
+source.Volume = 0.8f;
+source.Seek(30.0); // seconds
 ```
 
 ## 💡 Support
