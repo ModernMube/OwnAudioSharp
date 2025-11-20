@@ -33,7 +33,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.OwnaudioNET", "Own
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OwnaudioInputExample", "OwnAudio\OwnaudioExamples\OwnaudioInputExample\OwnaudioInputExample.csproj", "{9A8B7C6D-5E4F-3A2B-1C0D-9E8F7A6B5C4D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VocalremoverExample", "OwnAudio\OwnaudioExamples\VocalRemover\VocalremoverExample.csproj", "{48A6A5FB-8263-1BBF-52B6-8F16344F7B0F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VocalremoverExample", "OwnAudio\OwnaudioExamples\VocalRemoverExample\VocalremoverExample.csproj", "{48A6A5FB-8263-1BBF-52B6-8F16344F7B0F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.Android", "OwnAudioEngine\Ownaudio.Android\Ownaudio.Android.csproj", "{2A3B4C5D-6E7F-8901-2345-6789ABCDEF01}"
 EndProject
