@@ -772,8 +772,16 @@ namespace Ownaudio.Android
                 // Check if resampling is needed
                 if (_outputResampler != null && _outputResampler.IsResamplingNeeded && _resampleTempBuffer != null)
                 {
-                    // Calculate how many input frames we need (at source rate)
-                    // The ratio is: (numFrames / deviceRate) * requestedRate = inputFramesNeeded
+                    // Calculate how many input frames we need (at requested/source rate)
+                    // CRITICAL: Correct understanding of the resampling direction
+                    // - Device requests: numFrames @ _actualSampleRate (e.g., 512 @ 44100 Hz)
+                    // - Source data is @ _requestedSampleRate (e.g., 48000 Hz)
+                    // - We're DOWNSAMPLING: 48000 Hz → 44100 Hz
+                    // - Input needed = outputFrames * (sourceRate / targetRate)
+                    // - Example: 512 * (48000/44100) = 557 input frames @ 48000 Hz
+                    //
+                    // NOTE: The original calculation was CORRECT for downsampling!
+                    // The issue must be elsewhere (likely in the resampler logic or decoder timing)
                     int inputFramesNeeded = (int)Math.Ceiling(numFrames * (double)_requestedSampleRate / _actualSampleRate);
                     int inputSamplesNeeded = inputFramesNeeded * _requestedChannels;
 

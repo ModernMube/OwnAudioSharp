@@ -16,7 +16,7 @@ public sealed class AudioResampler
     private readonly int _sourceRate;
     private readonly int _targetRate;
     private readonly int _channels;
-    private readonly double _ratio;
+    private readonly double _ratio; // How much we advance in source per output sample (sourceRate/targetRate)
     private double _position;
 
     // Pre-allocated buffer for resampled output
@@ -86,10 +86,9 @@ public sealed class AudioResampler
             int index0 = (int)_position;
             int index1 = index0 + 1;
 
-            // Check bounds
+            // Check if we have enough data for interpolation
             if (index1 >= inputFrames)
                 break;
-
             double frac = _position - index0;
 
             // Interpolate each channel
@@ -111,9 +110,10 @@ public sealed class AudioResampler
         }
 
         // Wrap position for next call (maintain sub-sample accuracy)
+        // CRITICAL FIX: Don't reset to 0 if negative - this causes sample rate drift!
+        // The negative value represents how much we "overshoot" the input buffer,
+        // which should carry over to the next call for accurate resampling.
         _position -= inputFrames;
-        if (_position < 0)
-            _position = 0;
 
         return outputFrameCount * _channels;
     }

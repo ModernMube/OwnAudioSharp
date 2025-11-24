@@ -17,6 +17,7 @@ namespace Ownaudio.Decoders.Mp3;
 /// <item>Windows: Media Foundation (hardware-accelerated)</item>
 /// <item>macOS: Core Audio (hardware-accelerated)</item>
 /// <item>Linux: GStreamer (hardware-accelerated)</item>
+/// <item>Android: MediaCodec (hardware-accelerated)</item>
 /// </list>
 /// </remarks>
 public sealed class Mp3Decoder : BaseStreamDecoder
@@ -108,82 +109,165 @@ public sealed class Mp3Decoder : BaseStreamDecoder
     /// <exception cref="AudioException">Thrown when no suitable decoder is available.</exception>
     private static IPlatformMp3Decoder CreatePlatformDecoder()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+#if ANDROID
+        // Try to load Android MediaCodec decoder
+        try
         {
-            // Try to load Windows Media Foundation decoder
-            try
-            {
-                var windowsDecoderType = Type.GetType(
-                    "Ownaudio.Windows.Decoders.WindowsMFMp3Decoder, Ownaudio.Windows");
+            var androidDecoderType = Type.GetType(
+                "Ownaudio.Android.Decoders.MediaCodecMp3Decoder, Ownaudio.Android");
 
-                if (windowsDecoderType != null)
+            if (androidDecoderType != null)
+            {
+                var instance = Activator.CreateInstance(androidDecoderType);
+
+                if (instance is IPlatformMp3Decoder decoder)
                 {
-                    var instance = Activator.CreateInstance(windowsDecoderType);
-                    if (instance is IPlatformMp3Decoder decoder)
-                        return decoder;
+                    return decoder;
+                }
+                else
+                {
+                    LogError("Mp3Decoder", $"Instance is not IPlatformMp3Decoder! Actual type: {instance?.GetType().FullName}");
                 }
             }
-            catch
+            else
             {
-                // Fall through to error
+                LogError("Mp3Decoder", "MediaCodecMp3Decoder type not found!");
             }
-
-            throw new AudioException(
-                AudioErrorCategory.PlatformAPI,
-                "Windows Media Foundation MP3 decoder not available. Ensure Ownaudio.Windows package is referenced.");
         }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        catch (Exception ex)
         {
-            // Try to load macOS Core Audio decoder
-            try
-            {
-                var macosDecoderType = Type.GetType(
-                    "Ownaudio.macOS.Decoders.CoreAudioMp3Decoder, Ownaudio.macOS");
-
-                if (macosDecoderType != null)
-                {
-                    var instance = Activator.CreateInstance(macosDecoderType);
-                    if (instance is IPlatformMp3Decoder decoder)
-                        return decoder;
-                }
-            }
-            catch
-            {
-                // Fall through to error
-            }
-
             throw new AudioException(
                 AudioErrorCategory.PlatformAPI,
-                "macOS Core Audio MP3 decoder not available. Ensure Ownaudio.macOS package is referenced.");
-        }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-        {
-            // Try to load Linux GStreamer decoder
-            try
-            {
-                var linuxDecoderType = Type.GetType(
-                    "Ownaudio.Linux.Decoders.GStreamerMp3Decoder, Ownaudio.Linux");
-
-                if (linuxDecoderType != null)
-                {
-                    var instance = Activator.CreateInstance(linuxDecoderType);
-                    if (instance is IPlatformMp3Decoder decoder)
-                        return decoder;
-                }
-            }
-            catch
-            {
-                // Fall through to error
-            }
-
-            throw new AudioException(
-                AudioErrorCategory.PlatformAPI,
-                "Linux GStreamer MP3 decoder not available. Ensure Ownaudio.Linux package is referenced and GStreamer 1.0 is installed.");
+                $"Android MediaCodec MP3 decoder not available. Ensure Ownaudio.Android package is referenced. Error: {ex.Message}", ex);
         }
 
         throw new AudioException(
             AudioErrorCategory.PlatformAPI,
-            "No MP3 decoder available for current platform.");
+            "Android MediaCodec MP3 decoder not available. Ensure Ownaudio.Android package is referenced.");
+#elif WINDOWS
+        LogDebug("Mp3Decoder", "Detected Windows platform (compile-time)");
+        // Try to load Windows Media Foundation decoder
+        try
+        {
+            var windowsDecoderType = Type.GetType(
+                "Ownaudio.Windows.Decoders.WindowsMFMp3Decoder, Ownaudio.Windows");
+
+            if (windowsDecoderType != null)
+            {
+                var instance = Activator.CreateInstance(windowsDecoderType);
+                if (instance is IPlatformMp3Decoder decoder)
+                    return decoder;
+            }
+        }
+        catch
+        {
+            // Fall through to error
+        }
+
+        throw new AudioException(
+            AudioErrorCategory.PlatformAPI,
+            "Windows Media Foundation MP3 decoder not available. Ensure Ownaudio.Windows package is referenced.");
+#elif MACOS
+        LogDebug("Mp3Decoder", "Detected macOS platform (compile-time)");
+        // Try to load macOS Core Audio decoder
+        try
+        {
+            var macosDecoderType = Type.GetType(
+                "Ownaudio.macOS.Decoders.CoreAudioMp3Decoder, Ownaudio.macOS");
+
+            if (macosDecoderType != null)
+            {
+                var instance = Activator.CreateInstance(macosDecoderType);
+                if (instance is IPlatformMp3Decoder decoder)
+                    return decoder;
+            }
+        }
+        catch
+        {
+            // Fall through to error
+        }
+
+        throw new AudioException(
+            AudioErrorCategory.PlatformAPI,
+            "macOS Core Audio MP3 decoder not available. Ensure Ownaudio.macOS package is referenced.");
+#elif LINUX
+        LogDebug("Mp3Decoder", "Detected Linux platform (compile-time)");
+        // Try to load Linux GStreamer decoder
+        try
+        {
+            var linuxDecoderType = Type.GetType(
+                "Ownaudio.Linux.Decoders.GStreamerMp3Decoder, Ownaudio.Linux");
+
+            if (linuxDecoderType != null)
+            {
+                var instance = Activator.CreateInstance(linuxDecoderType);
+                if (instance is IPlatformMp3Decoder decoder)
+                    return decoder;
+            }
+        }
+        catch
+        {
+            // Fall through to error
+        }
+
+        throw new AudioException(
+            AudioErrorCategory.PlatformAPI,
+            "Linux GStreamer MP3 decoder not available. Ensure Ownaudio.Linux package is referenced and GStreamer 1.0 is installed.");
+#else
+        LogError("Mp3Decoder", $"Unknown platform! OS={RuntimeInformation.OSDescription}");
+
+        throw new AudioException(
+            AudioErrorCategory.PlatformAPI,
+            $"No MP3 decoder available for current platform. OS={RuntimeInformation.OSDescription}");
+#endif
+    }
+
+    /// <summary>
+    /// Platform-agnostic debug logging helper.
+    /// Uses FileLogger on Android, System.Diagnostics.Debug elsewhere.
+    /// </summary>
+    private static void LogDebug(string tag, string message)
+    {
+#if ANDROID
+        try
+        {
+            // Use reflection to call FileLogger.Debug
+            var fileLoggerType = Type.GetType("Ownaudio.Android.Common.FileLogger, Ownaudio.Android");
+            var debugMethod = fileLoggerType?.GetMethod("Debug", new[] { typeof(string), typeof(string) });
+            debugMethod?.Invoke(null, new object[] { tag, message });
+        }
+        catch
+        {
+            // Fallback to Debug.WriteLine
+            System.Diagnostics.Debug.WriteLine($"[{tag}] {message}");
+        }
+#else
+        System.Diagnostics.Debug.WriteLine($"[{tag}] {message}");
+#endif
+    }
+
+    /// <summary>
+    /// Platform-agnostic error logging helper.
+    /// Uses FileLogger on Android, System.Diagnostics.Debug elsewhere.
+    /// </summary>
+    private static void LogError(string tag, string message)
+    {
+#if ANDROID
+        try
+        {
+            // Use reflection to call FileLogger.Error
+            var fileLoggerType = Type.GetType("Ownaudio.Android.Common.FileLogger, Ownaudio.Android");
+            var errorMethod = fileLoggerType?.GetMethod("Error", new[] { typeof(string), typeof(string) });
+            errorMethod?.Invoke(null, new object[] { tag, message });
+        }
+        catch
+        {
+            // Fallback to Debug.WriteLine
+            System.Diagnostics.Debug.WriteLine($"[ERROR][{tag}] {message}");
+        }
+#else
+        System.Diagnostics.Debug.WriteLine($"[ERROR][{tag}] {message}");
+#endif
     }
 
     /// <summary>
