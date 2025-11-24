@@ -12,19 +12,19 @@
 
 ##
 
-**OwnAudioSharp** is a **cross-platform managed audio engine** built entirely in C# with **zero external native dependencies**. It provides direct access to native system audio APIs (WASAPI, PulseAudio, Core Audio, AAudio) through pure managed code, offering professional-grade audio capabilities that are typically only found in commercial software - **completely free**.
+**OwnAudioSharp** is a cross-platform managed audio engine I built entirely in C# with **zero external native dependencies**. It provides direct access to native system audio APIs (WASAPI, PulseAudio, Core Audio, AAudio) through pure managed code, offering professional-grade audio capabilities that you usually only find in commercial software - **completely free**.
 
 ### Why OwnAudioSharp?
 
 **Pure Managed Code Engine**: No native library dependencies - runs anywhere .NET runs
 **Professional Audio Features**: AI-driven vocal separation, audio mastering, advanced chord detection
 **High Performance**: Zero-allocation design, lock-free buffers, SIMD optimization
-**Commercial-Grade, Free**: Professional tools without licensing costs
-**True Cross-Platform**: Windows, macOS, Linux, Android, iOS (in progress)
+**Commercial Quality, Free**: Professional tools without licensing costs
+**Truly Cross-Platform**: Windows, macOS, Linux, Android, iOS (in progress)
 
-## ⚠️ Important Notice
+## ⚠️ Important!
 
-**Version 2.0.0 introduces major improvements!**
+**Version 2.0.0 brings major changes!**
 
 Pre-2.0.0 versions relied on native libraries (miniaudio, portaudio, ffmpeg) and were less optimized. Starting from version 2.0.0, OwnAudioSharp operates with **zero external dependencies** using a fully managed audio engine.
 
@@ -38,16 +38,16 @@ Pre-2.0.0 versions relied on native libraries (miniaudio, portaudio, ffmpeg) and
 If you need pre-2.0.0 functionality because you wrote your code for an older version of OwnaudioSharp, replace the **Ownaudio** namespaces in your code with the **OwnaudioLegacy** namespace.
 for example: **Ownaudio.Source** => **OwnaudioLegacy.Source**
 
-**Migration recommendation:** Use version 2.0.0 or later for all new projects. The new managed engine offers superior performance and maintainability.
+**Migration recommendation:** Use version 2.0.0 or later for all new projects. The new managed engine offers better performance and maintainability.
 
 ## ✨ Key Features
 
 ### Professional Audio Features (Free!)
 
-Features typically found only in commercial software:
+Features you typically only find in commercial software:
 
 - **AI Vocal Separation**: State-of-the-art vocal and instrumental track separation using ONNX neural networks
-  - Multiple quality models: `default`, `best`, `karaoke`, `nmp`
+  - Multiple quality models: `default`, `best`, `karaoke`
   - Professional-grade stem isolation
 
 - **Audio Mastering**: AI-driven matchering - master your tracks to match reference audio
@@ -132,7 +132,7 @@ Each platform implementation includes:
 - Usage examples and best practices
 - Troubleshooting guides
 
-For low-level engine development or platform-specific optimization, refer to the individual platform documentation.
+For low-level engine development or platform-specific optimization, check out the individual platform documentation.
 
 ## 🚀 Quick Start Example
 
@@ -161,9 +161,9 @@ source.Volume = 0.8f;
 source.Seek(30.0); // seconds
 ```
 
-## 💡 Support the Project
+## 💡 Support
 
-**OwnAudioSharp is completely free and open-source**, providing professional-grade audio features without licensing costs. If you find this library useful, especially for commercial purposes, please consider supporting its continued development:
+**OwnAudioSharp is completely free and open-source**, providing professional-grade audio features without licensing costs. If you find this library useful, especially for commercial purposes, consider supporting its continued development:
 
 <div align="center">
   <a href="https://www.buymeacoffee.com/ModernMube" target="_blank">
