@@ -12,7 +12,15 @@
 
 ##
 
-**OwnAudioSharp** is a cross-platform C# audio library providing professional-grade audio playback, recording, and processing. Built with pure managed code using native system audio APIs - no external dependencies required.
+**OwnAudioSharp** is a **cross-platform managed audio engine** built entirely in C# with **zero external native dependencies**. It provides direct access to native system audio APIs (WASAPI, PulseAudio, Core Audio, AAudio) through pure managed code, offering professional-grade audio capabilities that are typically only found in commercial software - **completely free**.
+
+### Why OwnAudioSharp?
+
+**Pure Managed Code Engine**: No native library dependencies - runs anywhere .NET runs
+**Professional Audio Features**: AI-driven vocal separation, audio mastering, advanced chord detection
+**High Performance**: Zero-allocation design, lock-free buffers, SIMD optimization
+**Commercial-Grade, Free**: Professional tools without licensing costs
+**True Cross-Platform**: Windows, macOS, Linux, Android, iOS (in progress)
 
 ## ⚠️ Important Notice
 
@@ -34,15 +42,42 @@ for example: **Ownaudio.Source** => **OwnaudioLegacy.Source**
 
 ## ✨ Key Features
 
-- **Cross-platform**: Windows (WASAPI), macOS (Core Audio), Linux (PulseAudio), Android (Aaudio) iOS (in progress)
-- **Dual API layers**: Core API (low-level control) and NET API (high-level features)
-- **Audio playback**: Support for MP3, WAV, FLAC
-- **Real-time processing**: Pitch shifting, tempo control, effects
-- **Audio mixing**: Multi-source mixing with synchronized playback
-- **Professional mastering**: AI-driven audio matchering and EQ analysis
-- **Chord detection**: Automatic musical chord recognition
-- **Vocal remover**: Advanced AI-driven audio separation technology
-- **Zero-allocation**: Optimized performance for real-time usage
+### Professional Audio Features (Free!)
+
+Features typically found only in commercial software:
+
+- **AI Vocal Separation**: State-of-the-art vocal and instrumental track separation using ONNX neural networks
+  - Multiple quality models: `default`, `best`, `karaoke`, `nmp`
+  - Professional-grade stem isolation
+
+- **Audio Mastering**: AI-driven matchering - master your tracks to match reference audio
+  - Automatic EQ matching and spectral analysis
+  - Professional mastering without expensive plugins
+
+- **Advanced Chord Detection**: Musical chord recognition from simple to professional
+  - Real-time and offline analysis
+  - Major, minor, diminished, augmented, extended chords (7th, 9th, 11th, 13th)
+  - Chromagram-based recognition
+
+### Core Engine Features
+
+- **Cross-platform Managed Engine**: Pure C# implementation for all platforms
+  - Windows (WASAPI), macOS (Core Audio), Linux (PulseAudio), Android (AAudio), iOS (in progress)
+  - No native library dependencies - works out of the box
+
+- **Dual API Layers**:
+  - Low-level Core API for direct engine control
+  - High-level NET API for professional features
+
+- **Audio Processing**:
+  - Multi-format support (MP3, WAV, FLAC) with built-in decoders
+  - Real-time effects: reverb, compressor, equalizer, pitch shifting, tempo control
+  - Multi-source audio mixing with synchronized playback
+
+- **High Performance**:
+  - Zero-allocation design for real-time audio
+  - Lock-free ring buffers for thread safety
+  - SIMD-optimized audio processing
 
 ## 📦 Installation
 
@@ -60,13 +95,22 @@ dotnet add package OwnAudioSharp
 - .NET 9.0 or later
 - No external dependencies
 
-## 📚 Documentation
+## 📚 Documentation & API Reference
 
-Complete documentation is available on the official website:
+**Complete API documentation with examples is available on the official website:**
 
-<a href="https://modernmube.github.io/OwnAudioSharp/">
-  <img src="https://img.shields.io/badge/Documentation-OwnAudioSharp%20Website-blue" alt="Documentation" width="350">
-</a>
+<div align="center">
+  <a href="https://modernmube.github.io/OwnAudioSharp/">
+    <img src="https://img.shields.io/badge/📖_Full_API_Documentation-OwnAudioSharp_Website-blue?style=for-the-badge" alt="Documentation" width="400">
+  </a>
+</div>
+
+The website includes:
+- Complete API reference for all classes and methods
+- Step-by-step tutorials and usage examples
+- Architecture and design documentation
+- Best practices and performance tips
+- Professional feature guides (vocal removal, mastering, chord detection)
 
 ### 🔧 Engine Architecture Documentation
 
@@ -117,13 +161,23 @@ source.Volume = 0.8f;
 source.Seek(30.0); // seconds
 ```
 
-## 💡 Support
+## 💡 Support the Project
 
-If you find this library useful or use it for commercial purposes, consider supporting the development:
+**OwnAudioSharp is completely free and open-source**, providing professional-grade audio features without licensing costs. If you find this library useful, especially for commercial purposes, please consider supporting its continued development:
 
-<a href="https://www.buymeacoffee.com/ModernMube" target="_blank">
-  <img src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;">
-</a>
+<div align="center">
+  <a href="https://www.buymeacoffee.com/ModernMube" target="_blank">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;">
+  </a>
+</div>
+
+**Why support?**
+- Enables continued development and new features
+- Ensures timely bug fixes and updates
+- Improves documentation and examples
+- Saves you thousands in commercial audio library licensing costs
+
+Your support helps keep professional audio technology accessible to everyone!
 
 ## 📄 License
 

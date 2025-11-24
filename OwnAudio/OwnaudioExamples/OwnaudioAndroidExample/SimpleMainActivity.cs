@@ -16,6 +16,7 @@ using AlertDialog = AndroidX.AppCompat.App.AlertDialog;
 using AudioEngine = Ownaudio.Core.IAudioEngine;
 using AudioEngineFactory = Ownaudio.Core.AudioEngineFactory;
 using AudioConfig = Ownaudio.Core.AudioConfig;
+using System.Diagnostics;
 
 namespace OwnaudioAndroidTest
 {
@@ -53,6 +54,10 @@ namespace OwnaudioAndroidTest
         protected override void OnCreate(Bundle? savedInstanceState)
         {
             base.OnCreate(savedInstanceState);
+
+            // Initialize file logger FIRST
+            //Ownaudio.Android.Common.FileLogger.Initialize(this);
+            //Android.Util.Log.Info("OwnaudioAndroidTest", $"Log file: {Ownaudio.Android.Common.FileLogger.LogFilePath}");
 
             // Set layout
             SetContentView(Resource.Layout.activity_simple);
@@ -92,6 +97,7 @@ namespace OwnaudioAndroidTest
             }
 
             UpdateStatus("Ready. Press Initialize to begin.");
+            //UpdateStatus($"📝 Log file: {Ownaudio.Android.Common.FileLogger.LogFilePath}");
         }
 
         private async void BtnInitialize_Click(object? sender, EventArgs e)
@@ -180,20 +186,36 @@ namespace OwnaudioAndroidTest
                 // ==========================================
                 UpdateStatus("\n[4/6] Loading audio files...");
 
-                var requestedConfig = OwnaudioNet.Engine!.Config;
-                int targetSampleRate = requestedConfig.SampleRate;
-                int targetChannels = requestedConfig.Channels;
+                try
+                {
+                    var requestedConfig = OwnaudioNet.Engine!.Config;
+                    int targetSampleRate = requestedConfig.SampleRate;
+                    int targetChannels = requestedConfig.Channels;
 
-                // Load all 4 audio files
-                string audioPath0 = await ExtractAssetAsync("drums.wav");
-                string audioPath1 = await ExtractAssetAsync("bass.wav");
-                string audioPath2 = await ExtractAssetAsync("other.wav");
-                string audioPath3 = await ExtractAssetAsync("vocals.wav");
+                    // Load all 4 audio files
+                    string audioPath0 = await ExtractAssetAsync("drums.wav");
+                    string audioPath1 = await ExtractAssetAsync("bass.wav");
+                    string audioPath2 = await ExtractAssetAsync("other.wav");
+                    string audioPath3 = await ExtractAssetAsync("vocals.wav");
 
-                _fileSource0 = new FileSource(audioPath0, 8192, targetSampleRate, targetChannels);
-                _fileSource1 = new FileSource(audioPath1, 8192, targetSampleRate, targetChannels);
-                _fileSource2 = new FileSource(audioPath2, 8192, targetSampleRate, targetChannels);
-                _fileSource3 = new FileSource(audioPath3, 8192, targetSampleRate, targetChannels);
+                    _fileSource0 = new FileSource(audioPath0, 8192, targetSampleRate, targetChannels);
+                    _fileSource1 = new FileSource(audioPath1, 8192, targetSampleRate, targetChannels);
+                    _fileSource2 = new FileSource(audioPath2, 8192, targetSampleRate, targetChannels);
+                    _fileSource3 = new FileSource(audioPath3, 8192, targetSampleRate, targetChannels);
+                }
+                catch(Exception ex)
+                {
+                    //Ownaudio.Android.Common.FileLogger.Error("SimpleMainActivity", $"FILE LOADING ERROR: {ex.GetType().Name}: {ex.Message}");
+
+                    //if (ex.InnerException != null)
+                    //{
+                    //    Ownaudio.Android.Common.FileLogger.Error("SimpleMainActivity", $"Inner: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
+                    //}
+
+                    //System.Diagnostics.Debug.WriteLine("Failed to load audio files.", ex);
+                    throw;
+                }
+
 
                 // Set volumes (same as desktop)
                 _fileSource0.Volume = 0.7f; // drums

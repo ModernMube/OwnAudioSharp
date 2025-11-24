@@ -206,14 +206,26 @@ public static class AudioDecoderFactory
     /// <summary>
     /// Creates platform-specific MP3 decoder from file path.
     /// Uses Mp3Decoder wrapper which automatically selects the correct platform implementation:
+    /// Android: MediaCodec
     /// Windows: Media Foundation
     /// macOS: Core Audio (AudioToolbox ExtAudioFile)
-    /// Other: Managed decoder fallback (not yet implemented)
+    /// Linux: GStreamer
     /// </summary>
     private static IAudioDecoder CreateMp3DecoderFromFile(string filePath, int targetSampleRate, int targetChannels)
     {
-#if WINDOWS
-        // Windows: Use Media Foundation MP3 decoder via reflection
+#if ANDROID || IOS
+        // Mobile platforms: Use Mp3Decoder wrapper which uses compile-time platform detection
+        try
+        {
+            return new Mp3Decoder(filePath, targetSampleRate, targetChannels);
+        }
+        catch (Exception ex) when (!(ex is AudioException))
+        {
+            throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException($"Failed to create MP3 decoder: {ex.Message}", ex));
+        }
+#elif WINDOWS
+        // Desktop Windows: Use Media Foundation MP3 decoder directly via reflection
+        // (Mp3Decoder wrapper doesn't work correctly on desktop Windows - causes fast playback tempo)
         try
         {
             var assembly = System.Reflection.Assembly.Load("Ownaudio.Windows");
@@ -234,16 +246,16 @@ public static class AudioDecoderFactory
             throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException($"Failed to load Windows MP3 decoder: {ex.Message}", ex));
         }
 #else
+        // macOS, Linux, other desktop platforms: Use Mp3Decoder wrapper
         try
         {
-            // Mp3Decoder wrapper automatically selects platform-specific implementation
             return new Mp3Decoder(filePath, targetSampleRate, targetChannels);
         }
         catch (Exception ex) when (!(ex is AudioException))
         {
             throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException($"Failed to create MP3 decoder: {ex.Message}", ex));
         }
-#endif              
+#endif
     }
 
     /// <summary>

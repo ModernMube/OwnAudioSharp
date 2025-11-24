@@ -136,6 +136,7 @@ _ReSharper*/
 .claude/
 .markdowns/
 ClearFolders.bat
+CLAUDE.md
 
 
 # TeamCity is a build add-in
