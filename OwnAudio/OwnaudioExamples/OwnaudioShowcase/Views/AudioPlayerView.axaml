@@ -1,0 +1,243 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:OwnaudioShowcase.ViewModels"
+             xmlns:models="using:OwnaudioShowcase.Models"
+             x:Class="OwnaudioShowcase.Views.AudioPlayerView"
+             x:DataType="vm:AudioPlayerViewModel">
+
+    <Grid RowDefinitions="Auto,*,Auto,Auto">
+
+        <!-- Header Section -->
+        <StackPanel Grid.Row="0" Spacing="10" Margin="10">
+            <TextBlock Text="Audio Player &amp; Multitrack Mixer"
+                      FontSize="20"
+                      FontWeight="Bold"/>
+
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Content="Initialize Engine"
+                       Command="{Binding InitializeCommand}"
+                       IsEnabled="{Binding !IsInitialized}"/>
+                <Button Content="Load Audio Files"
+                       Command="{Binding LoadAudioFilesCommand}"
+                       IsEnabled="{Binding IsInitialized}"/>
+                <TextBlock Text="{Binding StatusText}"
+                          VerticalAlignment="Center"
+                          Foreground="Gray"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Track List Section -->
+        <Border Grid.Row="1"
+                BorderBrush="Gray"
+                BorderThickness="1"
+                Margin="10">
+            <ScrollViewer>
+                <ItemsControl ItemsSource="{Binding Tracks}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:AudioTrackModel">
+                            <Border BorderBrush="LightGray"
+                                   BorderThickness="0,0,0,1"
+                                   Padding="10"
+                                   Background="Transparent">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+
+                                    <!-- Track Info -->
+                                    <StackPanel Grid.Column="0" Spacing="5" Width="200">
+                                        <TextBlock Text="{Binding Name}"
+                                                  FontWeight="SemiBold"
+                                                  TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding DurationFormatted}"
+                                                  FontSize="11"
+                                                  Foreground="Gray"/>
+                                    </StackPanel>
+
+                                    <!-- Volume Control -->
+                                    <StackPanel Grid.Column="1"
+                                               Orientation="Horizontal"
+                                               Spacing="10"
+                                               Margin="10,0">
+                                        <TextBlock Text="Volume:"
+                                                  VerticalAlignment="Center"
+                                                  Width="60"/>
+                                        <Slider Value="{Binding Volume}"
+                                               Minimum="0"
+                                               Maximum="1"
+                                               Width="150"
+                                               VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Volume, StringFormat='{}{0:F2}'}"
+                                                  VerticalAlignment="Center"
+                                                  Width="40"/>
+                                    </StackPanel>
+
+                                    <!-- Tempo Control -->
+                                    <StackPanel Grid.Column="2"
+                                               Orientation="Horizontal"
+                                               Spacing="10"
+                                               Margin="10,0">
+                                        <TextBlock Text="Tempo:"
+                                                  VerticalAlignment="Center"
+                                                  Width="60"/>
+                                        <Slider Value="{Binding Tempo}"
+                                               Minimum="0.5"
+                                               Maximum="2.0"
+                                               Width="120"
+                                               VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Tempo, StringFormat='{}{0:F2}x'}"
+                                                  VerticalAlignment="Center"
+                                                  Width="50"/>
+                                    </StackPanel>
+
+                                    <!-- Pitch Control -->
+                                    <StackPanel Grid.Column="3"
+                                               Orientation="Horizontal"
+                                               Spacing="10"
+                                               Margin="10,0">
+                                        <TextBlock Text="Pitch:"
+                                                  VerticalAlignment="Center"
+                                                  Width="60"/>
+                                        <Slider Value="{Binding PitchShift}"
+                                               Minimum="-12"
+                                               Maximum="12"
+                                               Width="120"
+                                               VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding PitchShift, StringFormat='{}{0:F0}'}"
+                                                  VerticalAlignment="Center"
+                                                  Width="40"/>
+                                    </StackPanel>
+
+                                    <!-- Actions -->
+                                    <StackPanel Grid.Column="4"
+                                               Orientation="Horizontal"
+                                               Spacing="5">
+                                        <Button Content="M"
+                                               ToolTip.Tip="Mute"
+                                               Width="30"
+                                               IsEnabled="False"/>
+                                        <Button Content="S"
+                                               ToolTip.Tip="Solo"
+                                               Width="30"
+                                               IsEnabled="False"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Transport Controls Section -->
+        <Border Grid.Row="2"
+                Background="#353545"
+                Padding="10"
+                Margin="10,0">
+            <Grid RowDefinitions="Auto,Auto,Auto">
+
+                <!-- Position Slider - ✅ FIX #1 & #2: Direct UI update, no binding for position text -->
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,10">
+                    <TextBlock Grid.Column="0"
+                              x:Name="PositionTextBlock"
+                              Text="00:00"
+                              VerticalAlignment="Center"
+                              Margin="0,0,10,0"
+                              Width="50"/>
+                    <Slider Grid.Column="1"
+                           x:Name="PositionSlider"
+                           Value="{Binding Position, Mode=OneWay}"
+                           Minimum="0"
+                           Maximum="{Binding Duration}"
+                           IsEnabled="{Binding IsInitialized}"
+                           PointerPressed="OnPositionSliderPressed"
+                           PointerReleased="OnPositionSliderReleased"
+                           PropertyChanged="OnPositionSliderPropertyChanged"/>
+                    <TextBlock Grid.Column="2"
+                              Text="{Binding Duration, StringFormat='{}{0:mm\\:ss}'}"
+                              VerticalAlignment="Center"
+                              Margin="10,0,0,0"
+                              Width="50"/>
+                </Grid>
+
+                <!-- Playback Buttons -->
+                <StackPanel Grid.Row="1"
+                           Orientation="Horizontal"
+                           HorizontalAlignment="Center"
+                           Spacing="10"
+                           Margin="0,0,0,10">
+                    <Button Content="▶ Play / ⏸ Pause"
+                           Command="{Binding PlayPauseCommand}"
+                           IsEnabled="{Binding IsInitialized}"
+                           Width="150"/>
+                    <Button Content="⏹ Stop"
+                           Command="{Binding StopCommand}"
+                           IsEnabled="{Binding IsInitialized}"
+                           Width="80"/>
+                </StackPanel>
+
+                <!-- Master Volume and Peak Meters -->
+                <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
+
+                    <!-- Master Volume -->
+                    <StackPanel Grid.Column="0"
+                               Orientation="Horizontal"
+                               Spacing="10">
+                        <TextBlock Text="Master Volume:"
+                                  VerticalAlignment="Center"
+                                  FontWeight="SemiBold"/>
+                        <Slider Value="{Binding MasterVolume}"
+                               Minimum="0"
+                               Maximum="1"
+                               Width="200"
+                               VerticalAlignment="Center"
+                               IsEnabled="{Binding IsInitialized}"/>
+                        <TextBlock Text="{Binding MasterVolume, StringFormat='{}{0:P0}'}"
+                                  VerticalAlignment="Center"
+                                  Width="50"/>
+                    </StackPanel>
+
+                    <!-- Peak Meters - Direct UI Update (NO Binding for zero GC!) -->
+                    <StackPanel Grid.Column="1"
+                               Orientation="Horizontal"
+                               Spacing="10"
+                               Margin="20,0,0,0">
+                        <TextBlock Text="L:"
+                                  VerticalAlignment="Center"
+                                  FontWeight="SemiBold"/>
+                        <ProgressBar x:Name="LeftPeakProgressBar"
+                                    Value="0"
+                                    Minimum="-1"
+                                    Maximum="1"
+                                    Width="100"
+                                    Height="20"
+                                    VerticalAlignment="Center"/>
+                        <TextBlock Text="R:"
+                                  VerticalAlignment="Center"
+                                  FontWeight="SemiBold"
+                                  Margin="10,0,0,0"/>
+                        <ProgressBar x:Name="RightPeakProgressBar"
+                                    Value="0"
+                                    Minimum="-1"
+                                    Maximum="1"
+                                    Width="100"
+                                    Height="20"
+                                    VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- Status Bar -->
+        <Border Grid.Row="3"
+                Background="#202040"
+                Padding="10">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0"
+                          Text="{Binding StatusText}"
+                          VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1"
+                          Text="{Binding Tracks.Count, StringFormat='Tracks: {0}'}"
+                          VerticalAlignment="Center"
+                          FontWeight="SemiBold"/>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

@@ -485,6 +485,7 @@ namespace Ownaudio.Android
                 new AudioDeviceInfo(
                     deviceId: "0",
                     name: "Default Output Device",
+                    engineName: "AAudio",
                     isInput: false,
                     isOutput: true,
                     isDefault: true,
@@ -503,6 +504,7 @@ namespace Ownaudio.Android
                 new AudioDeviceInfo(
                     deviceId: "0",
                     name: "Default Input Device",
+                    engineName: "AAudio",
                     isInput: true,
                     isOutput: false,
                     isDefault: true,
@@ -916,6 +918,7 @@ namespace Ownaudio.Android
             var deviceInfo = new AudioDeviceInfo(
                 deviceId: "0",
                 name: "Default Output Device",
+                "AAudio",
                 isInput: false,
                 isOutput: true,
                 isDefault: true,
@@ -937,6 +940,7 @@ namespace Ownaudio.Android
             var deviceInfo = new AudioDeviceInfo(
                 deviceId: "0",
                 name: "Default Input Device",
+                "AAudio",
                 isInput: true,
                 isOutput: false,
                 isDefault: true,

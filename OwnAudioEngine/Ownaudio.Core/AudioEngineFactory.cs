@@ -28,36 +28,47 @@ namespace Ownaudio.Core
 
             IAudioEngine engine;
 
-            // Detect platform and create appropriate engine
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            // Try to use NativeAudioEngine first (PortAudio/MiniAudio hybrid)
+            // This is the preferred cross-platform solution
+            try
             {
-                // Windows WASAPI
-                engine = CreateWindowsEngine();
+                engine = CreateNativeEngine();
             }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            catch (Exception)
             {
-                // macOS Core Audio
-                engine = CreateMacOSEngine();
-            }
-            else if (OperatingSystem.IsIOS())
-            {
-                // iOS Core Audio
-                engine = CreateIOSEngine();
-            }
-            else if (OperatingSystem.IsAndroid())
-            {
-                // Android AAudio
-                engine = CreateAndroidEngine();
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                // Linux ALSA
-                engine = CreateLinuxEngine();
-            }
-            else
-            {
-                throw new AudioException("AudioEngineFactory ERROR: ", new PlatformNotSupportedException(
-                    $"Audio engine not implemented for platform: {RuntimeInformation.OSDescription}"));
+                // Fallback to platform-specific engines if NativeAudioEngine fails
+
+                // Detect platform and create appropriate engine
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    // Windows WASAPI
+                    engine = CreateWindowsEngine();
+                }
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                {
+                    // macOS Core Audio
+                    engine = CreateMacOSEngine();
+                }
+                else if (OperatingSystem.IsIOS())
+                {
+                    // iOS Core Audio
+                    engine = CreateIOSEngine();
+                }
+                else if (OperatingSystem.IsAndroid())
+                {
+                    // Android AAudio
+                    engine = CreateAndroidEngine();
+                }
+                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                {
+                    // Linux ALSA
+                    engine = CreateLinuxEngine();
+                }
+                else
+                {
+                    throw new AudioException("AudioEngineFactory ERROR: ", new PlatformNotSupportedException(
+                        $"Audio engine not implemented for platform: {RuntimeInformation.OSDescription}"));
+                }
             }
 
             // Initialize the engine
@@ -104,6 +115,15 @@ namespace Ownaudio.Core
         public static IAudioEngine CreateHighLatency()
         {
             return Create(AudioConfig.HighLatency);
+        }
+
+        private static IAudioEngine CreateNativeEngine()
+        {
+            // Use reflection to avoid hard dependency on Native assembly
+            // NativeAudioEngine uses PortAudio (preferred) or MiniAudio (fallback)
+            var assembly = System.Reflection.Assembly.Load("Ownaudio.Native");
+            var type = assembly.GetType("Ownaudio.Native.NativeAudioEngine");
+            return (IAudioEngine)Activator.CreateInstance(type);
         }
 
         private static IAudioEngine CreateWindowsEngine()
@@ -181,36 +201,38 @@ namespace Ownaudio.Core
         public static string GetPlatformInfo()
         {
             string platform = "Unknown";
-            string implementation = "Not Available";
+            string primaryImplementation = "NativeAudioEngine (PortAudio/MiniAudio)";
+            string fallbackImplementation = "Not Available";
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 platform = "Windows";
-                implementation = "WASAPI (Windows Audio Session API)";
+                fallbackImplementation = "WASAPI (Windows Audio Session API)";
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
                 platform = "macOS";
-                implementation = "Core Audio (AudioQueue)";
+                fallbackImplementation = "Core Audio (AudioQueue)";
             }
             else if (OperatingSystem.IsIOS())
             {
                 platform = "iOS";
-                implementation = "Core Audio (AudioUnit/RemoteIO)";
+                fallbackImplementation = "Core Audio (AudioUnit/RemoteIO)";
             }
             else if (OperatingSystem.IsAndroid())
             {
                 platform = "Android";
-                implementation = "AAudio";
+                fallbackImplementation = "AAudio";
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
                 platform = "Linux";
-                implementation = "PulseAudio";
+                fallbackImplementation = "PulseAudio";
             }
 
             return $"Platform: {platform}\n" +
-                   $"Implementation: {implementation}\n" +
+                   $"Primary Implementation: {primaryImplementation}\n" +
+                   $"Fallback Implementation: {fallbackImplementation}\n" +
                    $"OS Description: {RuntimeInformation.OSDescription}\n" +
                    $"Framework: {RuntimeInformation.FrameworkDescription}";
         }

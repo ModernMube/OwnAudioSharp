@@ -54,6 +54,13 @@ namespace Ownaudio.Core
         public string? InputDeviceId { get; set; } = null;
 
         /// <summary>
+        /// Specifies the host API type to use for audio processing.
+        /// Only applicable when using PortAudio backend. MiniAudio ignores this setting.
+        /// Default: None (uses platform default host API).
+        /// </summary>
+        public EngineHostType HostType { get; set; } = EngineHostType.None;
+
+        /// <summary>
         /// Validates the configuration parameters.
         /// </summary>
         /// <returns>True if configuration is valid, false otherwise.</returns>

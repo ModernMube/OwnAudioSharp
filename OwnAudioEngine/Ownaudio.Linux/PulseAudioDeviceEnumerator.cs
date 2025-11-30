@@ -288,6 +288,7 @@ namespace Ownaudio.Linux
                     var device = new AudioDeviceInfo(
                         deviceId: name,
                         name: description ?? name,
+                        engineName: "PulseAudio",
                         isInput: false,
                         isOutput: true,
                         isDefault: isDefault,
@@ -334,6 +335,7 @@ namespace Ownaudio.Linux
                     var device = new AudioDeviceInfo(
                         deviceId: name,
                         name: description ?? name,
+                        engineName: "PulseAudio",
                         isInput: true,
                         isOutput: false,
                         isDefault: isDefault,

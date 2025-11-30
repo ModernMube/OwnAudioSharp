@@ -1,0 +1,116 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:OwnaudioShowcase.ViewModels"
+        xmlns:views="using:OwnaudioShowcase.Views"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="800"
+        x:Class="OwnaudioShowcase.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="{Binding Title}"
+        Width="1200"
+        Height="800"
+        MinWidth="1000"
+        MinHeight="600">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Header -->
+        <Border Grid.Row="0"
+                Background="#2D2D30"
+                Padding="15">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Grid.Column="0"
+                          Text="OwnAudioSharp Showcase"
+                          FontSize="18"
+                          FontWeight="Bold"
+                          Foreground="White"
+                          VerticalAlignment="Center"/>
+
+                <TextBlock Grid.Column="2"
+                          Text="v2.2.0 | .NET 9.0 + Avalonia 11.3.7"
+                          FontSize="11"
+                          Foreground="LightGray"
+                          VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- Main Content with TabControl -->
+        <TabControl Grid.Row="1"
+                   SelectedIndex="{Binding SelectedTabIndex}"
+                   Margin="0">
+
+            <!-- Tab 1: Audio Player & Multitrack -->
+            <TabItem Header="Audio Player">
+                <views:AudioPlayerView DataContext="{Binding AudioPlayerViewModel}"/>
+            </TabItem>
+
+            <!-- Tab 2: Audio Effects (Placeholder) -->
+            <TabItem Header="Audio Effects" IsEnabled="False">
+                <TextBlock Text="Audio Effects - Coming Soon"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          FontSize="16"
+                          Foreground="Gray"/>
+            </TabItem>
+
+            <!-- Tab 3: Recording & Microphone (Placeholder) -->
+            <TabItem Header="Recording" IsEnabled="False">
+                <TextBlock Text="Recording &amp; Microphone - Coming Soon"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          FontSize="16"
+                          Foreground="Gray"/>
+            </TabItem>
+
+            <!-- Tab 4: Vocal Remover (Placeholder) -->
+            <TabItem Header="Vocal Remover" IsEnabled="False">
+                <TextBlock Text="Vocal Remover (AI) - Coming Soon"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          FontSize="16"
+                          Foreground="Gray"/>
+            </TabItem>
+
+            <!-- Tab 5: Audio Matchering (Placeholder) -->
+            <TabItem Header="Matchering" IsEnabled="False">
+                <TextBlock Text="Audio Matchering - Coming Soon"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          FontSize="16"
+                          Foreground="Gray"/>
+            </TabItem>
+
+            <!-- Tab 6: Chord Detection (Placeholder) -->
+            <TabItem Header="Chord Detection" IsEnabled="False">
+                <TextBlock Text="Chord Detection - Coming Soon"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          FontSize="16"
+                          Foreground="Gray"/>
+            </TabItem>
+        </TabControl>
+
+        <!-- Footer / Status Bar -->
+        <Border Grid.Row="2"
+                Background="#003A7C"
+                Padding="10,5">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0"
+                          Text="Ready"
+                          Foreground="White"
+                          VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1"
+                          Text="Cross-Platform Audio Library Demo"
+                          Foreground="White"
+                          FontSize="11"
+                          VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

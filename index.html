@@ -620,8 +620,8 @@
         <div class="hero-container">
             <h1>Ownaudio Framework</h1>
             <p class="subtitle">
-                Cross-platform audio framework for .NET with zero external dependencies. 
-                Pure managed code utilizing native system audio APIs.
+                Professional cross-platform audio framework for .NET with zero external dependencies.
+                Native audio engine with optional managed code backends for maximum flexibility.
             </p>
             <div class="cta-buttons">
                 <a href="#examples" class="btn btn-primary">Get Started</a>
@@ -635,8 +635,34 @@
         <div class="container">
             <h2 class="section-title">Framework Architecture</h2>
             <p class="section-subtitle">
-                Two-layer architecture providing both low-level control and high-level convenience
+                Two-layer architecture with native C++ engine core and high-level .NET API
             </p>
+
+            <div class="alert alert-info" style="max-width: 900px; margin: 0 auto 3rem; background: rgba(251, 191, 36, 0.1); border: 2px solid var(--warning); border-radius: 12px; padding: 2rem;">
+                <h3 style="color: var(--warning); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 28px; height: 28px;">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    The GC Challenge: Why We Moved to Native
+                </h3>
+                <p style="color: var(--text-secondary); line-height: 1.8; margin-bottom: 1rem;">
+                    <strong>The Reality of Managed Audio:</strong> Despite our best efforts with pure managed C# code, zero-allocation design,
+                    and lock-free structures, the .NET Garbage Collector proved to be an insurmountable challenge for real-time audio.
+                    The GC is an inherent part of managed code, and its unpredictable pauses - even brief ones - caused audible glitches
+                    and dropouts in audio playback.
+                </p>
+                <p style="color: var(--text-secondary); line-height: 1.8; margin-bottom: 1rem;">
+                    <strong>The Solution:</strong> We introduced a <strong style="color: var(--warning);">native C++ audio engine</strong>
+                    that operates completely outside the GC's influence. This native engine is now the <strong>default</strong> for all
+                    platforms, ensuring glitch-free, professional-grade audio performance.
+                </p>
+                <p style="color: var(--text-secondary); line-height: 1.8;">
+                    <strong>Maximum Flexibility:</strong> The managed audio engines remain available in the API for scenarios where
+                    GC pauses are acceptable or for development/testing purposes. You have the freedom to choose based on your needs!
+                </p>
+            </div>
 
             <div class="architecture-diagram">
                 <!-- OwnaudioNET Layer -->
@@ -663,22 +689,45 @@
                     </div>
                 </div>
 
+                <!-- Native Engine Layer -->
+                <div class="layer" style="border-color: var(--warning);">
+                    <div class="layer-header">
+                        <span class="layer-badge" style="background: rgba(251, 191, 36, 0.2); color: var(--warning);">Native Engine</span>
+                        <h3>C++ Audio Core <span style="font-size: 0.7rem; background: var(--warning); color: var(--background); padding: 0.25rem 0.5rem; border-radius: 4px; margin-left: 0.5rem;">DEFAULT</span></h3>
+                    </div>
+                    <div class="layer-content">
+                        <p>
+                            <strong>High-performance native C++ engine that eliminates GC interference.</strong> After extensive testing
+                            with managed code, we found that the .NET Garbage Collector inevitably causes audio glitches. The native
+                            engine provides deterministic, glitch-free audio processing by operating outside the GC's control.
+                        </p>
+                        <div class="layer-features">
+                            <div class="feature-tag" style="border-color: var(--warning);">No GC Pauses</div>
+                            <div class="feature-tag" style="border-color: var(--warning);">Deterministic Timing</div>
+                            <div class="feature-tag" style="border-color: var(--warning);">Ultra-Low Latency</div>
+                            <div class="feature-tag" style="border-color: var(--warning);">Professional Quality</div>
+                            <div class="feature-tag" style="border-color: var(--warning);">All Platforms</div>
+                            <div class="feature-tag" style="border-color: var(--warning);">Default Engine</div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Ownaudio.Core Layer -->
                 <div class="layer">
                     <div class="layer-header">
                         <span class="layer-badge core">Ownaudio.Core</span>
-                        <h3>Core Audio Engine</h3>
+                        <h3>Managed Audio Engines <span style="font-size: 0.7rem; background: var(--core-color); color: var(--background); padding: 0.25rem 0.5rem; border-radius: 4px; margin-left: 0.5rem;">OPTIONAL</span></h3>
                     </div>
                     <div class="layer-content">
                         <p>
-                            Cross-platform audio foundation providing low-level access to native system audio APIs.
-                            <strong>Pure managed code with zero external dependencies</strong> - uses the integrated audio 
-                            systems of each platform without requiring any additional installations.
+                            Pure managed C# implementations remain available for scenarios where GC pauses are acceptable
+                            or for development/testing. While we achieved zero-allocation design and lock-free structures,
+                            the GC remains an unavoidable part of managed code that can impact real-time audio.
                         </p>
                         <div class="layer-features">
-                            <div class="feature-tag">Zero-Allocation</div>
-                            <div class="feature-tag">Real-Time Safe</div>
-                            <div class="feature-tag">Native API Integration</div>
+                            <div class="feature-tag">Pure C# Code</div>
+                            <div class="feature-tag">Easy Debugging</div>
+                            <div class="feature-tag">Platform Integration</div>
                             <div class="feature-tag">Built-in Decoders</div>
                             <div class="feature-tag">Device Management</div>
                             <div class="feature-tag">Format Conversion</div>
@@ -752,7 +801,6 @@
                     </div>
                     <div class="platform-name">iOS</div>
                     <div class="platform-api">Core Audio</div>
-					<div class="platform-api">In Progress...</div>
                 </div>
 
                 <div class="platform-card">
@@ -762,8 +810,7 @@
                         </svg>
                     </div>
                     <div class="platform-name">Android</div>
-                    <div class="platform-api">Oboe</div>
-					<div class="platform-api">In Progress...</div>
+                    <div class="platform-api">AAudio</div>
                 </div>
             </div>
         </div>
@@ -776,13 +823,13 @@
 
             <div class="features-grid">
                 <div class="feature-card">
-                    <div class="feature-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                    <div class="feature-icon" style="background: rgba(251, 191, 36, 0.1);">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2">
+                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
                         </svg>
                     </div>
-                    <h3>Zero Dependencies</h3>
-                    <p>Pure managed code with no external libraries required. Uses native system audio APIs directly.</p>
+                    <h3>Native Engine Core</h3>
+                    <p>High-performance C++ audio engine eliminates GC pauses for glitch-free, professional audio. Managed engines also available.</p>
                 </div>
 
                 <div class="feature-card">
@@ -793,7 +840,7 @@
                         </svg>
                     </div>
                     <h3>Cross-Platform</h3>
-                    <p>Single codebase works on Windows, macOS, Linux, (Android, and iOS - In Progress...) with platform-optimized backends.</p>
+                    <p>Single codebase works on Windows, macOS, Linux, Android, and iOS with platform-optimized backends.</p>
                 </div>
 
                 <div class="feature-card">
@@ -802,8 +849,8 @@
                             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
                         </svg>
                     </div>
-                    <h3>Real-Time Processing</h3>
-                    <p>Zero-allocation guarantee with lock-free data structures for real-time audio processing.</p>
+                    <h3>Deterministic Real-Time</h3>
+                    <p>Native engine ensures deterministic timing without GC interference. Glitch-free audio processing for professional applications.</p>
                 </div>
 
                 <div class="feature-card">
@@ -877,12 +924,13 @@
             </p>
 
             <div class="examples-tabs">
-                <button class="tab-btn active" data-tab="core">Ownaudio.Core</button>
+                <button class="tab-btn active" data-tab="native">Native Engine</button>
+                <button class="tab-btn" data-tab="managed">Managed Engine</button>
                 <button class="tab-btn" data-tab="net">OwnaudioNET</button>
             </div>
 
-            <!-- Core Example -->
-            <div class="tab-content active" id="core">
+            <!-- Native Engine Example -->
+            <div class="tab-content active" id="native">
                 <div class="code-container">
                     <div class="code-header">
                         <div class="code-dots">
@@ -890,29 +938,81 @@
                             <div class="code-dot"></div>
                             <div class="code-dot"></div>
                         </div>
-                        <div class="code-title">CoreExample.cs</div>
+                        <div class="code-title">NativeEngineExample.cs</div>
                     </div>
-                    <pre><code class="language-csharp">// Create audio engine with default settings
+                    <pre><code class="language-csharp">// Create NATIVE audio engine (DEFAULT - GC-free!)
 using var engine = AudioEngineFactory.CreateDefault();
+// Or explicitly request native engine:
+// using var engine = AudioEngineFactory.CreateNative();
 
-// Start the engine
+// Configure and start the engine
+var config = new AudioConfig
+{
+    SampleRate = 48000,
+    Channels = 2,
+    BufferSize = 512
+};
+engine.Initialize(config);
 engine.Start();
 
 // Create decoder for audio file
-using var decoder = AudioDecoderFactory.Create("music.mp3", 
-    targetSampleRate: 48000, 
+using var decoder = AudioDecoderFactory.Create("music.mp3",
+    targetSampleRate: 48000,
     targetChannels: 2);
 
 // Decode and send audio frames
+// Native engine runs outside GC - no glitches!
 while (true)
 {
     var result = decoder.DecodeNextFrame();
     if (result.IsEOF) break;
-    
+
     engine.Send(result.Frame.Samples);
 }
 
-// Stop the engine
+engine.Stop();</code></pre>
+                </div>
+            </div>
+
+            <!-- Managed Engine Example -->
+            <div class="tab-content" id="managed">
+                <div class="code-container">
+                    <div class="code-header">
+                        <div class="code-dots">
+                            <div class="code-dot"></div>
+                            <div class="code-dot"></div>
+                            <div class="code-dot"></div>
+                        </div>
+                        <div class="code-title">ManagedEngineExample.cs</div>
+                    </div>
+                    <pre><code class="language-csharp">// Create MANAGED audio engine (OPTIONAL - pure C#)
+// Note: Managed engines may experience GC-related glitches
+using var engine = AudioEngineFactory.CreateManaged();
+
+// Or create platform-specific managed engine:
+#if WINDOWS
+    using var engine = new WasapiEngine();
+#elif LINUX
+    using var engine = new PulseAudioEngine();
+#elif MACOS
+    using var engine = new CoreAudioEngine();
+#endif
+
+// Rest of the code is the same
+engine.Start();
+
+using var decoder = AudioDecoderFactory.Create("music.mp3",
+    targetSampleRate: 48000,
+    targetChannels: 2);
+
+while (true)
+{
+    var result = decoder.DecodeNextFrame();
+    if (result.IsEOF) break;
+
+    engine.Send(result.Frame.Samples);
+}
+
 engine.Stop();</code></pre>
                 </div>
             </div>
@@ -965,15 +1065,15 @@ source.Seek(30.0); // seconds</code></pre>
                 </div>
                 <div class="stat-item">
                     <h3>Zero</h3>
-                    <p>External Dependencies</p>
+                    <p>GC Pauses (Native)</p>
                 </div>
                 <div class="stat-item">
                     <h3>15+</h3>
                     <p>Built-in Effects</p>
                 </div>
                 <div class="stat-item">
-                    <h3>&lt;12ms</h3>
-                    <p>Low Latency</p>
+                    <h3>&lt;5ms</h3>
+                    <p>Ultra-Low Latency</p>
                 </div>
             </div>
         </div>

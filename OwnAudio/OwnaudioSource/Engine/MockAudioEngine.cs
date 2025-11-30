@@ -280,6 +280,7 @@ public sealed class MockAudioEngine : IAudioEngine
             new AudioDeviceInfo(
                 deviceId: "mock-output-default",
                 name: "Mock Output Device (Default)",
+                engineName: "Mock",
                 isInput: false,
                 isOutput: true,
                 isDefault: true,
@@ -287,6 +288,7 @@ public sealed class MockAudioEngine : IAudioEngine
             new AudioDeviceInfo(
                 deviceId: "mock-output-secondary",
                 name: "Mock Output Device (Secondary)",
+                engineName: "Mock",
                 isInput: false,
                 isOutput: true,
                 isDefault: false,
@@ -303,6 +305,7 @@ public sealed class MockAudioEngine : IAudioEngine
             new AudioDeviceInfo(
                 deviceId: "mock-input-default",
                 name: "Mock Input Device (Default)",
+                engineName: "Mock",
                 isInput: true,
                 isOutput: false,
                 isDefault: true,
@@ -310,6 +313,7 @@ public sealed class MockAudioEngine : IAudioEngine
             new AudioDeviceInfo(
                 deviceId: "mock-input-secondary",
                 name: "Mock Input Device (Secondary)",
+                engineName: "Mock",
                 isInput: true,
                 isOutput: false,
                 isDefault: false,
@@ -406,6 +410,7 @@ public sealed class MockAudioEngine : IAudioEngine
         var newDevice = new AudioDeviceInfo(
             newDeviceId,
             $"Mock Output Device ({newDeviceId})",
+            "Mock",
             isInput: false,
             isOutput: true,
             isDefault: true,
@@ -424,6 +429,7 @@ public sealed class MockAudioEngine : IAudioEngine
         var newDevice = new AudioDeviceInfo(
             newDeviceId,
             $"Mock Input Device ({newDeviceId})",
+            "Mock",
             isInput: true,
             isOutput: false,
             isDefault: true,
@@ -442,6 +448,7 @@ public sealed class MockAudioEngine : IAudioEngine
         var device = new AudioDeviceInfo(
             deviceId,
             $"Mock Device ({deviceId})",
+            "Mock",
             isInput: true,
             isOutput: true,
             isDefault: true,

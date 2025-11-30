@@ -32,22 +32,50 @@ public class TestProgram
             // ==========================================
             Console.WriteLine("[1/6] Initializing audio engine...");
 
-            // Use REAL audio engine
+            // Use the standard OwnaudioNet API - it will automatically use NativeAudioEngine
             AudioConfig config = new AudioConfig()
             {
                 SampleRate = 48000,
                 Channels = 2,
-                BufferSize = 512
+                BufferSize = 512,
+                HostType = EngineHostType.None
             };
-            await OwnaudioNet.InitializeAsync(config);
+
+            // Initialize via OwnaudioNet (uses AudioEngineFactory internally)
+            // This will try NativeAudioEngine first, then fallback to platform-specific engines
+            OwnaudioNet.Initialize(config);
 
             Console.WriteLine($"  ✓ Initialized: {OwnaudioNet.IsInitialized}");
             Console.WriteLine($"  ✓ Version: {OwnaudioNet.Version}");
-            Console.WriteLine($"  ✓ Engine: {OwnaudioNet.Engine?.GetType().Name}");
+            Console.WriteLine($"  ✓ Engine Wrapper: {OwnaudioNet.Engine?.GetType().Name}");
+            Console.WriteLine($"  ✓ Underlying Engine: {OwnaudioNet.Engine?.UnderlyingEngine.GetType().Name}");
             Console.WriteLine($"  ✓ Sample Rate: {OwnaudioNet.Engine?.Config.SampleRate} Hz");
             Console.WriteLine($"  ✓ Channels: {OwnaudioNet.Engine?.Config.Channels}");
             Console.WriteLine($"  ✓ Buffer Size: {OwnaudioNet.Engine?.FramesPerBuffer} frames");
             Console.WriteLine($"  ✓ Expected Latency: {(OwnaudioNet.Engine?.FramesPerBuffer / (double)OwnaudioNet.Engine?.Config.SampleRate * 1000):F2} ms");
+
+            // Get current audio device information
+            var outputDevices = OwnaudioNet.Engine?.UnderlyingEngine.GetOutputDevices();
+            if (outputDevices != null && outputDevices.Count > 0)
+            {
+                // Find the current device (either by OutputDeviceId or the default device)
+                AudioDeviceInfo? currentDevice = null;
+
+                if (!string.IsNullOrEmpty(config.OutputDeviceId))
+                {
+                    currentDevice = outputDevices.FirstOrDefault(d => d.DeviceId == config.OutputDeviceId);
+                }
+                else
+                {
+                    currentDevice = outputDevices.FirstOrDefault(d => d.IsDefault);
+                }
+
+                if (currentDevice != null)
+                {
+                    Console.WriteLine($"  ✓ Audio Engine: {currentDevice.EngineName}");
+                    Console.WriteLine($"  ✓ Output Device: {currentDevice.Name}");
+                }
+            }
 
             // ==========================================
             // Step 2: Start Audio Engine
@@ -260,7 +288,17 @@ public class TestProgram
             // Display playback progress
             DateTime startTime = DateTime.Now;
             bool userCancelled = false;
-            int statusLine = Console.CursorTop;
+            int statusLine = -1;
+
+            // Try to get cursor position (may fail in timeout/redirect scenarios)
+            try
+            {
+                statusLine = Console.CursorTop;
+            }
+            catch (IOException)
+            {
+                // Console not available - will use line-by-line output instead
+            }
 
             while (fileSource0.State == AudioState.Playing && !userCancelled)
             {
