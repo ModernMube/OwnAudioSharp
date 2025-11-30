@@ -124,15 +124,6 @@ using var engine = AudioEngineFactory.CreateManaged();
 
 **Pre-2.0.0** - Native libraries (miniaudio, portaudio, ffmpeg)
 
-**Using older code:**
-If you wrote code for pre-2.0.0 versions, replace **Ownaudio** namespaces with **OwnaudioLegacy**:
-```csharp
-// Old: using Ownaudio.Source;
-using OwnaudioLegacy.Source;
-```
-
-**Migration recommendation:** Use version 2.1.0+ for all new projects to benefit from the GC-free native engine.
-
 ## ✨ Key Features
 
 ### Professional Audio Features (Free!)
