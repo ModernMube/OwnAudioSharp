@@ -17,19 +17,18 @@
     <PackageTags>audio;portaudio;miniaudio;cross-platform;real-time;low-latency;decoder;android;ios;mobile</PackageTags>
     <Version>3.0.0</Version>
     <Platforms>AnyCPU;x64;x86</Platforms>
+    <!-- Exclude runtimes folder from default wildcard inclusions to prevent Android build from picking up wrong ABIs -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);runtimes\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <!-- Android-specific settings -->
   <PropertyGroup Condition="$(TargetFramework.Contains('android')) AND '$(TargetFramework)' != 'net9.0'">
     <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
-    <AndroidEnableProfiledAot>true</AndroidEnableProfiledAot>
-    <AndroidUseInterpreter>false</AndroidUseInterpreter>
   </PropertyGroup>
 
   <!-- iOS-specific settings -->
   <PropertyGroup Condition="$(TargetFramework.Contains('ios')) AND '$(TargetFramework)' != 'net9.0'">
     <SupportedOSPlatformVersion>11.0</SupportedOSPlatformVersion>
-    <RuntimeIdentifiers>ios-arm64;iossimulator-arm64;iossimulator-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
@@ -47,101 +46,64 @@
     <ProjectReference Include="..\Ownaudio.Core\Ownaudio.Core.csproj" />
   </ItemGroup>
 
-  <!-- Desktop native libraries (net9.0 only) -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
-    <!-- Windows x64 - MiniAudio -->
-    <Content Include="runtimes\win-x64\native\libminiaudio.dll">
+    <None Include="runtimes\win-x64\**\*.*">
+      <Link>runtimes\win-x64\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\win-x64</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>runtimes\win-x64\native\libminiaudio.dll</Link>
-      <PackagePath>runtimes\win-x64\native\</PackagePath>
       <Pack>true</Pack>
-    </Content>
-
-    <!-- Windows x86 - MiniAudio -->
-    <Content Include="runtimes\win-x86\native\libminiaudio.dll">
+    </None>
+    <None Include="runtimes\win-x86\**\*.*">
+      <Link>runtimes\win-x86\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\win-x86</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>runtimes\win-x86\native\libminiaudio.dll</Link>
-      <PackagePath>runtimes\win-x86\native\</PackagePath>
       <Pack>true</Pack>
-    </Content>
-
-    <!-- Linux x64 - MiniAudio -->
-    <Content Include="runtimes\linux-x64\native\libminiaudio.so">
+    </None>
+    <None Include="runtimes\linux-x64\**\*.*">
+      <Link>runtimes\linux-x64\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\linux-x64</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>runtimes\linux-x64\native\libminiaudio.so</Link>
-      <PackagePath>runtimes\linux-x64\native\</PackagePath>
       <Pack>true</Pack>
-    </Content>
-
-    <!-- Linux ARM - MiniAudio -->
-    <Content Include="runtimes\linux-arm\native\libminiaudio.so">
+    </None>
+    <None Include="runtimes\linux-arm\**\*.*">
+      <Link>runtimes\linux-arm\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\linux-arm</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>runtimes\linux-arm\native\libminiaudio.so</Link>
-      <PackagePath>runtimes\linux-arm\native\</PackagePath>
       <Pack>true</Pack>
-    </Content>
-
-    <!-- Linux ARM64 - MiniAudio -->
-    <Content Include="runtimes\linux-arm64\native\libminiaudio.so">
+    </None>
+    <None Include="runtimes\linux-arm64\**\*.*">
+      <Link>runtimes\linux-arm64\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\linux-arm64</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>runtimes\linux-arm64\native\libminiaudio.so</Link>
-      <PackagePath>runtimes\linux-arm64\native\</PackagePath>
       <Pack>true</Pack>
-    </Content>
-
-    <!-- macOS x64 - MiniAudio -->
-    <Content Include="runtimes\osx-x64\native\libminiaudio.dylib">
+    </None>
+    <None Include="runtimes\osx-x64\**\*.*">
+      <Link>runtimes\osx-x64\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\osx-x64</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>runtimes\osx-x64\native\libminiaudio.dylib</Link>
-      <PackagePath>runtimes\osx-x64\native\</PackagePath>
       <Pack>true</Pack>
-    </Content>
-
-    <!-- macOS ARM64 - MiniAudio -->
-    <Content Include="runtimes\osx-arm64\native\libminiaudio.dylib">
+    </None>
+    <None Include="runtimes\osx-arm64\**\*.*">
+      <Link>runtimes\osx-arm64\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\osx-arm64</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>runtimes\osx-arm64\native\libminiaudio.dylib</Link>
-      <PackagePath>runtimes\osx-arm64\native\</PackagePath>
       <Pack>true</Pack>
-    </Content>
+    </None>
   </ItemGroup>
 
-  <!-- Android native libraries (net9.0-android only) -->
-  <ItemGroup Condition="$(TargetFramework.Contains('android')) AND '$(TargetFramework)' != 'net9.0'">
-    <!-- Android ARM - MiniAudio -->
-    <Content Include="runtimes\android-arm\native\libminiaudio.so">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>runtimes\android-arm\native\libminiaudio.so</Link>
-      <PackagePath>runtimes\android-arm\native\</PackagePath>
-      <Pack>true</Pack>
-    </Content>
-
-    <!-- Android ARM64 - MiniAudio -->
-    <Content Include="runtimes\android-arm64\native\libminiaudio.so">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>runtimes\android-arm64\native\libminiaudio.so</Link>
-      <PackagePath>runtimes\android-arm64\native\</PackagePath>
-      <Pack>true</Pack>
-    </Content>
-
-    <!-- Android x64 - MiniAudio -->
-    <Content Include="runtimes\android-x64\native\libminiaudio.so">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>runtimes\android-x64\native\libminiaudio.so</Link>
-      <PackagePath>runtimes\android-x64\native\</PackagePath>
-      <Pack>true</Pack>
-    </Content>
-  </ItemGroup>
-
-  <!-- iOS native libraries (net9.0-ios only) -->
-  <ItemGroup Condition="$(TargetFramework.Contains('ios')) AND '$(TargetFramework)' != 'net9.0'">
-    <!-- iOS ARM64 - MiniAudio Framework -->
-    <Content Include="runtimes\iOS-arm64\native\miniaudio.framework\**\*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>runtimes\iOS-arm64\native\miniaudio.framework\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <PackagePath>runtimes\iOS-arm64\native\miniaudio.framework\</PackagePath>
-      <Pack>true</Pack>
-    </Content>
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net9.0-android'))">
+    <AndroidNativeLibrary Include="runtimes\android-arm\native\*.so">
+      <Abi>armeabi-v7a</Abi>
+      <Link>libs\armeabi-v7a\%(Filename)%(Extension)</Link>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="runtimes\android-arm64\native\*.so">
+      <Abi>arm64-v8a</Abi>
+      <Link>libs\arm64-v8a\%(Filename)%(Extension)</Link>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="runtimes\android-x64\native\*.so">
+      <Abi>x86_64</Abi>
+      <Link>libs\x86_64\%(Filename)%(Extension)</Link>
+    </AndroidNativeLibrary>
   </ItemGroup>
 
 </Project>
