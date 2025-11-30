@@ -41,13 +41,20 @@
         <main class="content">
             <h1><span class="badge badge-core">Core</span> Ownaudio.Core API Reference</h1>
             <p>
-                Low-level cross-platform audio engine with zero-allocation guarantee and real-time safety.
-                Built on pure managed code without external dependencies.
+                Low-level cross-platform audio engine with native C++ core (default) or managed C# implementations.
+                Built without external dependencies using native system audio APIs.
             </p>
+
+            <div class="alert alert-warning">
+                <strong>🚀 Native Engine (Default)</strong>
+                The native C++ engine is now the default, providing GC-free, glitch-free audio. Despite extensive optimization
+                efforts with managed code (zero-allocation design, lock-free structures), the .NET Garbage Collector proved to be
+                an insurmountable challenge for real-time audio. The managed engines remain available for development/testing.
+            </div>
 
             <div class="alert alert-info">
                 <strong>Zero External Dependencies</strong>
-                Ownaudio.Core uses native system audio APIs directly: WASAPI (Windows), Core Audio (macOS/iOS), 
+                Ownaudio.Core uses native system audio APIs directly: WASAPI (Windows), Core Audio (macOS/iOS),
                 PulseAudio (Linux), and Oboe (Android). No additional libraries required!
             </div>
 
@@ -56,12 +63,39 @@
                 Ownaudio.Core provides the foundation for cross-platform audio applications with:
             </p>
             <ul>
-                <li><strong>Zero-allocation guarantee</strong> in real-time audio paths</li>
+                <li><strong>Native C++ engine (default)</strong> - GC-free, deterministic real-time audio</li>
+                <li><strong>Managed C# engines (optional)</strong> - Pure C# implementations for testing/development</li>
                 <li><strong>Platform-native APIs</strong> for optimal performance</li>
                 <li><strong>Built-in decoders</strong> for WAV, MP3, and FLAC</li>
                 <li><strong>Device management</strong> with hot-plug support</li>
                 <li><strong>Automatic format conversion</strong> and resampling</li>
             </ul>
+
+            <h3>Engine Types</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Engine Type</th>
+                        <th>Implementation</th>
+                        <th>GC Behavior</th>
+                        <th>Use Case</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Native (Default)</strong></td>
+                        <td>C++ core</td>
+                        <td>No GC interference</td>
+                        <td>Production, professional audio</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Managed (Optional)</strong></td>
+                        <td>Pure C#</td>
+                        <td>Subject to GC pauses</td>
+                        <td>Development, testing, debugging</td>
+                    </tr>
+                </tbody>
+            </table>
 
             <h3>Supported Platforms</h3>
             <table class="api-table">
@@ -91,12 +125,12 @@
                     <tr>
                         <td>iOS</td>
                         <td>Core Audio</td>
-                        <td>Ownaudio.iOS - In Progress...</td>
+                        <td>Ownaudio.iOS</td>
                     </tr>
                     <tr>
                         <td>Android</td>
-                        <td>Oboe</td>
-                        <td>Ownaudio.Android - In Progress...</td>
+                        <td>AAudio</td>
+                        <td>Ownaudio.Android</td>
                     </tr>
                 </tbody>
             </table>

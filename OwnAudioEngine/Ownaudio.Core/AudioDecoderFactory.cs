@@ -68,13 +68,38 @@ public static class AudioDecoderFactory
         if (format == AudioFormat.Unknown)
             throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException($"Unable to detect audio format for file: {filePath}"));
 
-        // Handle MP3 separately (requires file path for Media Foundation)
+        // PRIMARY: Try MiniAudio decoder first for all formats (MP3, WAV, FLAC, etc.)
+        // The sf_ functions are custom wrapper functions implemented in library.c
+        try
+        {
+            var assembly = System.Reflection.Assembly.Load("Ownaudio.Native");
+            var decoderType = assembly.GetType("Ownaudio.Native.Decoders.MaDecoder");
+
+            if (decoderType != null)
+            {
+                var decoder = Activator.CreateInstance(decoderType, filePath, targetSampleRate, targetChannels) as IAudioDecoder;
+                if (decoder != null)
+                {
+                    Console.WriteLine($"Using MiniAudio decoder for {format} format (native)");
+                    return decoder;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // MiniAudio not available - fallback to managed decoders
+            Console.WriteLine($"MiniAudio decoder not available: {ex.Message}");
+            Console.WriteLine("Falling back to managed decoder...");
+        }
+
+        // FALLBACK: Use managed decoders
+        // For MP3, use platform-specific decoders if available
         if (format == AudioFormat.Mp3)
         {
             return CreateMp3DecoderFromFile(filePath, targetSampleRate, targetChannels);
         }
 
-        // Open stream for other decoders
+        // For WAV and FLAC, use managed decoders
         var fileStream = File.OpenRead(filePath);
         return CreateDecoderInternal(fileStream, format, true, targetSampleRate, targetChannels);
     }
@@ -191,9 +216,13 @@ public static class AudioDecoderFactory
 
     /// <summary>
     /// Internal method to create decoder instance based on format.
+    /// Strategy: Try MiniAudio decoder first, fallback to managed decoders.
+    /// Note: MiniAudio decoder currently only supports file-based decoding, not streams.
     /// </summary>
     private static IAudioDecoder CreateDecoderInternal(Stream stream, AudioFormat format, bool ownsStream, int targetSampleRate = 0, int targetChannels = 0)
     {
+        // For stream-based decoding, use managed decoders
+        // (MiniAudio decoder requires file path for now)
         return format switch
         {
             AudioFormat.Wav => new WavDecoder(stream, ownsStream, targetSampleRate, targetChannels),
@@ -205,14 +234,37 @@ public static class AudioDecoderFactory
 
     /// <summary>
     /// Creates platform-specific MP3 decoder from file path.
-    /// Uses Mp3Decoder wrapper which automatically selects the correct platform implementation:
-    /// Android: MediaCodec
-    /// Windows: Media Foundation
-    /// macOS: Core Audio (AudioToolbox ExtAudioFile)
-    /// Linux: GStreamer
+    /// Strategy:
+    /// 1. Try MiniAudio decoder first (preferred cross-platform solution)
+    /// 2. Fallback to platform-specific decoders if MiniAudio fails
+    /// 3. Fallback to managed Mp3Decoder as last resort
     /// </summary>
     private static IAudioDecoder CreateMp3DecoderFromFile(string filePath, int targetSampleRate, int targetChannels)
     {
+        // PRIMARY: Try MiniAudio decoder first (supports MP3, WAV, FLAC, and more)
+        try
+        {
+            var assembly = System.Reflection.Assembly.Load("Ownaudio.Native");
+            var decoderType = assembly.GetType("Ownaudio.Native.Decoders.MaDecoder");
+
+            if (decoderType != null)
+            {
+                var decoder = Activator.CreateInstance(decoderType, filePath, targetSampleRate, targetChannels) as IAudioDecoder;
+                if (decoder != null)
+                {
+                    Console.WriteLine("Using MiniAudio decoder (native)");
+                    return decoder;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // MiniAudio not available - fallback to platform-specific or managed
+            Console.WriteLine($"MiniAudio decoder not available: {ex.Message}");
+            Console.WriteLine("Falling back to platform-specific decoder...");
+        }
+
+        // FALLBACK 1: Platform-specific decoders
 #if ANDROID || IOS
         // Mobile platforms: Use Mp3Decoder wrapper which uses compile-time platform detection
         try

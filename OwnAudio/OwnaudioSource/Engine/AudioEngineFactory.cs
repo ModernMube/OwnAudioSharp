@@ -13,6 +13,8 @@ namespace OwnaudioNET.Engine;
 public static class AudioEngineFactory
 {
     private static readonly object _lock = new object();
+    private static bool _nativeChecked = false;
+    private static Type? _nativeEngineType = null;
     private static bool _wasapiChecked = false;
     private static Type? _wasapiEngineType = null;
     private static bool _pulseaudioChecked = false;
@@ -30,11 +32,13 @@ public static class AudioEngineFactory
     /// <exception cref="ArgumentNullException">Thrown when config is null.</exception>
     /// <exception cref="AudioEngineException">Thrown when engine creation or initialization fails.</exception>
     /// <remarks>
-    /// Platform detection order:
-    /// 1. Windows: Attempts to load WasapiEngine via reflection
-    /// 2. macOS: Attempts to load CoreAudioEngine via reflection
-    /// 3. Linux: Attempts to load PulseAudioEngine via reflection (includes Android detection)
-    /// 4. Android: Attempts to load AAudioEngine via reflection
+    /// Engine selection priority:
+    /// 1. NativeAudioEngine (PortAudio/MiniAudio hybrid) - preferred cross-platform solution
+    /// 2. Platform-specific fallback engines:
+    ///    - Windows: WasapiEngine
+    ///    - macOS: CoreAudioEngine
+    ///    - Linux: PulseAudioEngine
+    ///    - Android: AAudioEngine
     ///
     /// For testing purposes, use <see cref="CreateMockEngine"/> instead.
     /// </remarks>
@@ -47,35 +51,77 @@ public static class AudioEngineFactory
             throw new AudioEngineException("Invalid audio configuration. Check SampleRate, Channels, BufferSize, and EnableInput/EnableOutput settings.");
 
         IAudioEngine? engine = null;
+        Exception? nativeEngineException = null;
 
+        // Try to use NativeAudioEngine first (PortAudio/MiniAudio hybrid)
+        // This is the preferred cross-platform solution
         try
         {
-            if (OperatingSystem.IsWindows())
+            engine = CreateNativeEngine();
+        }
+        catch (Exception ex)
+        {
+            // Store the exception for logging, but continue to fallback
+            nativeEngineException = ex;
+            engine = null;
+        }
+
+        // Fallback to platform-specific engines if NativeAudioEngine fails
+        if (engine == null)
+        {
+            if (nativeEngineException != null)
             {
-                engine = CreateWasapiEngine();
-            }
-            else if (OperatingSystem.IsMacOS())
-            {
-                engine = CreateCoreAudioEngine();
-            }
-            else if (OperatingSystem.IsLinux())
-            {
-                engine = CreatePulseAudioEngine();
-            }
-            else if(OperatingSystem.IsAndroid())
-            {
-                engine = CreateAAudioEngine();
+                Console.WriteLine($"NativeAudioEngine not available: {nativeEngineException.Message}");
+                Console.WriteLine("Falling back to platform-specific audio engine...");
             }
 
-            else
+            try
             {
-                throw new AudioEngineException($"Unsupported platform: {RuntimeInformation.OSDescription}. Use CreateMockEngine() for testing.");
+                if (OperatingSystem.IsWindows())
+                {
+                    engine = CreateWasapiEngine();
+                }
+                else if (OperatingSystem.IsMacOS())
+                {
+                    engine = CreateCoreAudioEngine();
+                }
+                else if (OperatingSystem.IsLinux())
+                {
+                    engine = CreatePulseAudioEngine();
+                }
+                else if(OperatingSystem.IsAndroid())
+                {
+                    engine = CreateAAudioEngine();
+                }
+                else if(OperatingSystem.IsIOS())
+                {
+                    // iOS uses NativeAudioEngine via MiniAudio (CoreAudio backend)
+                    // If we reach here, NativeAudioEngine initialization already failed above
+                    throw new AudioEngineException("NativeAudioEngine (required for iOS) is not available. Ensure Ownaudio.Native assembly is referenced and miniaudio framework is bundled.");
+                }
+                else
+                {
+                    throw new AudioEngineException($"Unsupported platform: {RuntimeInformation.OSDescription}. Use CreateMockEngine() for testing.");
+                }
+
+                if (engine == null)
+                    throw new AudioEngineException("Failed to create audio engine instance.");
             }
+            catch (AudioEngineException)
+            {
+                // Re-throw AudioEngineException as-is
+                throw;
+            }
+            catch (Exception ex)
+            {
+                engine?.Dispose();
+                throw new AudioEngineException($"Failed to create audio engine: {ex.Message}", ex);
+            }
+        }
 
-            if (engine == null)
-                throw new AudioEngineException("Failed to create audio engine instance.");
-
-            // Initialize the engine
+        // Initialize the engine
+        try
+        {
             int result = engine.Initialize(config);
             if (result < 0)
             {
@@ -87,13 +133,12 @@ public static class AudioEngineFactory
         }
         catch (AudioEngineException)
         {
-            // Re-throw AudioEngineException as-is
             throw;
         }
         catch (Exception ex)
         {
             engine?.Dispose();
-            throw new AudioEngineException($"Failed to create audio engine: {ex.Message}", ex);
+            throw new AudioEngineException($"Failed to initialize audio engine: {ex.Message}", ex);
         }
     }
 
@@ -140,6 +185,65 @@ public static class AudioEngineFactory
         catch (Exception ex)
         {
             throw new AudioEngineException($"Failed to create mock audio engine: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Creates a NativeAudioEngine instance using reflection to avoid hard dependency.
+    /// NativeAudioEngine uses PortAudio (preferred) or MiniAudio (fallback).
+    /// </summary>
+    /// <returns>A NativeAudioEngine instance.</returns>
+    /// <exception cref="AudioEngineException">Thrown when NativeAudioEngine cannot be loaded.</exception>
+    private static IAudioEngine? CreateNativeEngine()
+    {
+        lock (_lock)
+        {
+            // Check if we've already tried to load Native engine
+            if (_nativeChecked && _nativeEngineType == null)
+            {
+                throw new AudioEngineException(
+                    "NativeAudioEngine is not available. Ensure Ownaudio.Native assembly is referenced and accessible.");
+            }
+
+            // Try to load the type on first call
+            if (!_nativeChecked)
+            {
+                try
+                {
+                    // Attempt to load the Ownaudio.Native assembly
+                    Assembly nativeAssembly = Assembly.Load("Ownaudio.Native");
+                    _nativeEngineType = nativeAssembly.GetType("Ownaudio.Native.NativeAudioEngine");
+
+                    if (_nativeEngineType == null)
+                    {
+                        throw new AudioEngineException(
+                            "NativeAudioEngine type not found in Ownaudio.Native assembly. " +
+                            "The assembly may be corrupted or incompatible.");
+                    }
+                }
+                catch (Exception ex) when (ex is not AudioEngineException)
+                {
+                    _nativeEngineType = null;
+                    throw new AudioEngineException(
+                        "Failed to load Ownaudio.Native assembly. Ensure the assembly is referenced and available.",
+                        ex);
+                }
+                finally
+                {
+                    _nativeChecked = true;
+                }
+            }
+
+            // Create instance using reflection
+            try
+            {
+                var instance = Activator.CreateInstance(_nativeEngineType!);
+                return instance as IAudioEngine;
+            }
+            catch (Exception ex)
+            {
+                throw new AudioEngineException($"Failed to instantiate NativeAudioEngine: {ex.Message}", ex);
+            }
         }
     }
 
@@ -384,11 +488,35 @@ public static class AudioEngineFactory
     }
 
     /// <summary>
-    /// Checks if a platform-specific audio engine is available.
+    /// Checks if a native audio engine (NativeAudioEngine or platform-specific) is available.
     /// </summary>
     /// <returns>True if a native audio engine is available for the current platform.</returns>
     public static bool IsNativeEngineAvailable()
     {
+        // First, check if NativeAudioEngine is available (preferred)
+        lock (_lock)
+        {
+            if (!_nativeChecked)
+            {
+                try
+                {
+                    Assembly nativeAssembly = Assembly.Load("Ownaudio.Native");
+                    _nativeEngineType = nativeAssembly.GetType("Ownaudio.Native.NativeAudioEngine");
+                    _nativeChecked = true;
+                }
+                catch
+                {
+                    _nativeChecked = true;
+                    _nativeEngineType = null;
+                }
+            }
+
+            // If NativeAudioEngine is available, return true immediately
+            if (_nativeEngineType != null)
+                return true;
+        }
+
+        // Fallback: check platform-specific engines
         if (OperatingSystem.IsWindows())
         {
             lock (_lock)
@@ -477,24 +605,54 @@ public static class AudioEngineFactory
                 }
             }
         }
+        else if(OperatingSystem.IsIOS())
+        {
+            // iOS uses NativeAudioEngine (already checked above)
+            return _nativeEngineType != null;
+        }
 
         return false;
     }
 
     /// <summary>
-    /// Gets the name of the platform-specific audio engine for the current platform.
+    /// Gets the name of the audio engine that would be used for the current platform.
     /// </summary>
-    /// <returns>The engine name (e.g., "WasapiEngine", "CoreAudio"), or "None" if no native engine is available.</returns>
+    /// <returns>The engine name (e.g., "NativeAudioEngine", "WasapiEngine", "CoreAudioEngine"), or "None" if no native engine is available.</returns>
     public static string GetPlatformEngineName()
     {
+        // Check if NativeAudioEngine is available first
+        lock (_lock)
+        {
+            if (!_nativeChecked)
+            {
+                try
+                {
+                    Assembly nativeAssembly = Assembly.Load("Ownaudio.Native");
+                    _nativeEngineType = nativeAssembly.GetType("Ownaudio.Native.NativeAudioEngine");
+                    _nativeChecked = true;
+                }
+                catch
+                {
+                    _nativeChecked = true;
+                    _nativeEngineType = null;
+                }
+            }
+
+            if (_nativeEngineType != null)
+                return "NativeAudioEngine (PortAudio/MiniAudio)";
+        }
+
+        // Fallback to platform-specific engine names
         if (OperatingSystem.IsWindows())
-            return "WasapiEngine";
+            return "WasapiEngine (Windows fallback)";
         else if (OperatingSystem.IsMacOS())
-            return "CoreAudioEngine";
+            return "CoreAudioEngine (macOS fallback)";
         else if (OperatingSystem.IsLinux())
-            return "PulseAudioEngine";
+            return "PulseAudioEngine (Linux fallback)";
         else if (OperatingSystem.IsAndroid())
-            return "AAudioEngine";
+            return "AAudioEngine (Android fallback)";
+        else if (OperatingSystem.IsIOS())
+            return "NativeAudioEngine (iOS via MiniAudio/CoreAudio)";
         else
             return "None";
     }

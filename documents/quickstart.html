@@ -52,9 +52,16 @@
 
             <h2 id="introduction">Introduction</h2>
 
+            <div class="alert alert-warning">
+                <strong>🚀 Native Engine - GC-Free Audio!</strong>
+                Ownaudio now uses a high-performance C++ native engine by default, eliminating GC pauses for glitch-free audio.
+                Despite our best efforts with managed code, the .NET Garbage Collector proved insurmountable for professional
+                real-time audio. The native engine is now the default, but managed C# engines remain available for testing/development.
+            </div>
+
             <div class="alert alert-info">
                 <strong>Zero External Dependencies</strong>
-                Ownaudio uses pure managed code with native system audio APIs - no external libraries required!
+                Ownaudio uses native system audio APIs - no external libraries required!
             </div>
 
             <div class="feature-grid">
@@ -88,14 +95,50 @@ dotnet add package OwnAudioSharp</code></pre>
             <ul>
                 <li><strong>.NET 8.0</strong> or later</li>
                 <li><strong>No external dependencies</strong> - uses system audio APIs</li>
-                <li><strong>Cross-platform</strong> - Windows, macOS, Linux, (iOS, Android - In Progress...)</li>
+                <li><strong>Cross-platform</strong> - Windows, macOS, Linux, IOS, Android</li>
             </ul>
 
             <h2 id="core-usage">Ownaudio.Core Usage</h2>
 
             <div class="alert alert-info">
                 <strong>Core API</strong>
-                Direct access to audio engine with zero-allocation guarantee and real-time safety.
+                Direct access to audio engine. Native engine (default) provides GC-free operation, or use managed engines for pure C# code.
+            </div>
+
+            <h3>Native Engine (Default - Recommended)</h3>
+            <div class="code-block">
+                <div class="code-header">NativeEngine.cs</div>
+                <pre><code class="language-csharp">using Ownaudio.Core;
+
+// Create NATIVE audio engine (DEFAULT - GC-free!)
+using var engine = AudioEngineFactory.CreateDefault();
+// Or explicitly: AudioEngineFactory.CreateNative();
+
+// Native engine runs outside GC - no audio glitches!
+engine.Initialize(AudioConfig.Default);
+engine.Start();</code></pre>
+            </div>
+
+            <h3>Managed Engine (Optional - Pure C#)</h3>
+            <div class="code-block">
+                <div class="code-header">ManagedEngine.cs</div>
+                <pre><code class="language-csharp">using Ownaudio.Core;
+
+// Create MANAGED audio engine (pure C#)
+// Note: May experience GC-related audio glitches
+using var engine = AudioEngineFactory.CreateManaged();
+
+// Or create platform-specific managed engine:
+#if WINDOWS
+    using var engine = new WasapiEngine();
+#elif LINUX
+    using var engine = new PulseAudioEngine();
+#elif MACOS
+    using var engine = new CoreAudioEngine();
+#endif
+
+engine.Initialize(AudioConfig.Default);
+engine.Start();</code></pre>
             </div>
 
             <h3>Basic Playback</h3>
@@ -504,12 +547,10 @@ mixer.StopRecording();</code></pre>
                 <div class="feature-card">
                     <h4>iOS</h4>
                     <p><strong>Core Audio</strong> - Native iOS audio framework</p>
-					<p>In Progress...</p>
                 </div>
                 <div class="feature-card">
                     <h4>Android</h4>
-                    <p><strong>Oboe</strong> - Modern Android audio API</p>
-					<p>In Progress...</p>
+                    <p><strong>AAudio</strong> - Modern Android audio API</p>
                 </div>
             </div>
 
@@ -524,8 +565,8 @@ Console.WriteLine($"Platform: {platformInfo}");
 // "Windows-WASAPI"
 // "macOS-CoreAudio"
 // "Linux-PulseAudio"
-// "iOS-CoreAudio (In Progress...)"
-// "Android-Oboe" (In Progress...)</code></pre>
+// "iOS-CoreAudio"
+// "Android-AAudio"</code></pre>
             </div>
 
             <h2 id="next-steps">Next Steps</h2>

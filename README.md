@@ -12,33 +12,126 @@
 
 ##
 
-**OwnAudioSharp** is a cross-platform managed audio engine I built entirely in C# with **zero external native dependencies**. It provides direct access to native system audio APIs (WASAPI, PulseAudio, Core Audio, AAudio) through pure managed code, offering professional-grade audio capabilities that you usually only find in commercial software - **completely free**.
+**OwnAudioSharp** is a professional cross-platform audio framework featuring a **native C++ audio engine** for glitch-free, real-time audio processing. After extensive development with pure managed code, we discovered that the .NET Garbage Collector is insurmountable for professional real-time audio - the native engine is now the default, with managed C# implementations available for development and testing.
 
 ### Why OwnAudioSharp?
 
-**Pure Managed Code Engine**: No native library dependencies - runs anywhere .NET runs
+**Native Engine (Default)**: GC-free C++ audio core eliminates glitches and provides deterministic real-time performance
+**Managed Engines (Optional)**: Pure C# implementations available for development, testing, and debugging
 **Professional Audio Features**: AI-driven vocal separation, audio mastering, advanced chord detection
-**High Performance**: Zero-allocation design, lock-free buffers, SIMD optimization
 **Commercial Quality, Free**: Professional tools without licensing costs
-**Truly Cross-Platform**: Windows, macOS, Linux, Android, iOS (in progress)
+**Truly Cross-Platform**: Windows, macOS, Linux, Android, iOS
 
-## ⚠️ Important!
+## 🚀 The Native Engine: Why We Moved Beyond Managed Code
 
-**Version 2.0.0 brings major changes!**
+### The GC Challenge - An Honest Assessment
 
-Pre-2.0.0 versions relied on native libraries (miniaudio, portaudio, ffmpeg) and were less optimized. Starting from version 2.0.0, OwnAudioSharp operates with **zero external dependencies** using a fully managed audio engine.
+During the development of OwnAudioSharp 2.0, we invested significant effort into creating a **pure managed C# audio engine** with zero external dependencies. We implemented:
 
-**Key changes:**
-- ✅ Fully managed audio engine across all platforms
-- ✅ ~90% backward compatibility with previous API
-- ✅ Significant performance improvements
-- ⚠️ Legacy APIs marked as `[Obsolete]` - will be removed in future versions
+- ✅ **Zero-allocation design** - no allocations in real-time audio paths
+- ✅ **Lock-free ring buffers** - wait-free cross-thread communication
+- ✅ **SIMD optimization** - vectorized audio processing
+- ✅ **Object pooling** - reusing buffers to minimize GC pressure
+- ✅ **Span<T>** usage - stack-allocated audio data
 
-**Using OwnaudioSharp version 2 with older code:**
-If you need pre-2.0.0 functionality because you wrote your code for an older version of OwnaudioSharp, replace the **Ownaudio** namespaces in your code with the **OwnaudioLegacy** namespace.
-for example: **Ownaudio.Source** => **OwnaudioLegacy.Source**
+Despite these optimizations, **the .NET Garbage Collector proved to be insurmountable** for professional real-time audio:
 
-**Migration recommendation:** Use version 2.0.0 or later for all new projects. The new managed engine offers better performance and maintainability.
+❌ **GC pauses are inevitable** - Even brief GC pauses (1-10ms) cause audible glitches and dropouts
+❌ **GC is inherent to managed code** - There's no way to completely avoid it in C#
+❌ **Unpredictable timing** - GC can trigger at any moment, breaking real-time guarantees
+
+### The Solution: Native C++ Audio Engine
+
+We introduced a **high-performance native C++ audio engine** that operates completely outside the GC's control:
+
+✅ **Zero GC interference** - Native code runs independently of .NET's GC
+✅ **Deterministic timing** - Guaranteed real-time performance without glitches
+✅ **Professional quality** - Audio processing meets industry standards
+✅ **Default engine** - Automatically used unless you specify otherwise
+
+### Native Engine Backend Priority
+
+The native engine automatically selects the best available audio backend:
+
+**1. PortAudio (Preferred)** - If installed on the system
+**2. miniaudio (Fallback)** - Bundled as embedded resource
+**3. Managed Engines (Development)** - Pure C# implementations (may experience GC glitches)
+
+### Installing PortAudio (Optional but Recommended)
+
+PortAudio provides the best cross-platform audio performance. Here's how to install it:
+
+#### Windows
+```powershell
+# Using Chocolatey
+choco install portaudio
+
+# Or download binaries from:
+# http://www.portaudio.com/download.html
+# Place portaudio.dll in your application directory
+```
+
+#### Linux
+```bash
+# Ubuntu/Debian
+sudo apt-get install portaudio19-dev
+
+# Fedora/RHEL
+sudo dnf install portaudio-devel
+
+# Arch Linux
+sudo pacman -S portaudio
+```
+
+#### macOS
+```bash
+# Using Homebrew
+brew install portaudio
+
+# Using MacPorts
+sudo port install portaudio
+```
+
+**Note:** If PortAudio is not found, OwnAudioSharp automatically falls back to the embedded miniaudio library - **no installation required for basic functionality**.
+
+### Managed Engines: Still Available
+
+The pure C# managed engines remain in the API for:
+- 🔧 **Development and debugging** - easier to step through C# code
+- 🧪 **Testing scenarios** - when GC pauses are acceptable
+- 📚 **Educational purposes** - learning audio engine architecture
+
+**To use managed engines explicitly:**
+```csharp
+// Use managed engine (may experience GC glitches)
+using var engine = AudioEngineFactory.CreateManaged();
+
+// Or platform-specific:
+#if WINDOWS
+    using var engine = new WasapiEngine();
+#elif LINUX
+    using var engine = new PulseAudioEngine();
+#elif MACOS
+    using var engine = new CoreAudioEngine();
+#endif
+```
+
+## ⚠️ Version History
+
+**Version 2.1.0+ (Current)** - Native engine with PortAudio/miniaudio backends
+
+**Version 2.0.0** - Attempted pure managed code (GC issues discovered)
+
+**Pre-2.0.0** - Native libraries (miniaudio, portaudio, ffmpeg)
+
+**Using older code:**
+If you wrote code for pre-2.0.0 versions, replace **Ownaudio** namespaces with **OwnaudioLegacy**:
+```csharp
+// Old: using Ownaudio.Source;
+using OwnaudioLegacy.Source;
+```
+
+**Migration recommendation:** Use version 2.1.0+ for all new projects to benefit from the GC-free native engine.
 
 ## ✨ Key Features
 
@@ -61,9 +154,16 @@ Features you typically only find in commercial software:
 
 ### Core Engine Features
 
-- **Cross-platform Managed Engine**: Pure C# implementation for all platforms
-  - Windows (WASAPI), macOS (Core Audio), Linux (PulseAudio), Android (AAudio), iOS (in progress)
-  - No native library dependencies - works out of the box
+- **Native C++ Audio Engine (Default)**:
+  - GC-free, deterministic real-time audio processing
+  - PortAudio backend (if installed) or embedded miniaudio fallback
+  - Professional-grade performance on all platforms
+  - Zero audio glitches or dropouts
+
+- **Managed C# Engines (Optional)**:
+  - Windows (WASAPI), macOS (Core Audio), Linux (PulseAudio), Android (AAudio)
+  - Pure C# implementation for development and debugging
+  - Available but may experience GC-related glitches
 
 - **Dual API Layers**:
   - Low-level Core API for direct engine control
@@ -75,7 +175,7 @@ Features you typically only find in commercial software:
   - Multi-source audio mixing with synchronized playback
 
 - **High Performance**:
-  - Zero-allocation design for real-time audio
+  - Native engine: Zero GC interference
   - Lock-free ring buffers for thread safety
   - SIMD-optimized audio processing
 
@@ -92,8 +192,14 @@ dotnet add package OwnAudioSharp
 ```
 
 ### Requirements
-- .NET 9.0 or later
-- No external dependencies
+- .NET 8.0 or later
+- **Optional:** PortAudio library for best performance (automatically falls back to embedded miniaudio if not available)
+
+### Native Engine Dependencies (Automatic)
+The native engine includes:
+- **PortAudio** (preferred) - Install separately for best performance
+- **miniaudio** (fallback) - Embedded as resource, always available
+- No installation required - works out of the box with miniaudio
 
 ## 📚 Documentation & API Reference
 
@@ -134,10 +240,48 @@ Each platform implementation includes:
 
 For low-level engine development or platform-specific optimization, check out the individual platform documentation.
 
-## 🚀 Quick Start Example
+## 🚀 Quick Start Examples
+
+### Using the Native Engine (Recommended)
 
 ```csharp
-// Initialize OwnaudioNET (async for UI apps!)
+using Ownaudio.Core;
+
+// Create NATIVE audio engine (DEFAULT - GC-free!)
+// Automatically uses PortAudio if available, otherwise miniaudio
+using var engine = AudioEngineFactory.CreateDefault();
+
+// Configure and start the engine
+var config = new AudioConfig
+{
+    SampleRate = 48000,
+    Channels = 2,
+    BufferSize = 512
+};
+engine.Initialize(config);
+engine.Start();
+
+// Create decoder and play audio
+using var decoder = AudioDecoderFactory.Create("music.mp3",
+    targetSampleRate: 48000,
+    targetChannels: 2);
+
+while (true)
+{
+    var result = decoder.DecodeNextFrame();
+    if (result.IsEOF) break;
+
+    // Native engine - no GC glitches!
+    engine.Send(result.Frame.Samples);
+}
+
+engine.Stop();
+```
+
+### Using OwnaudioNET (High-Level API)
+
+```csharp
+// Initialize OwnaudioNET (uses native engine by default)
 await OwnaudioNet.InitializeAsync();
 
 // Create file source
@@ -159,6 +303,27 @@ var sourceWithEffects = new SourceWithEffects(source, reverb, compressor);
 // Control playback
 source.Volume = 0.8f;
 source.Seek(30.0); // seconds
+```
+
+### Using Managed Engines (Optional)
+
+```csharp
+// Create MANAGED audio engine (pure C#)
+// Note: May experience GC-related audio glitches
+using var engine = AudioEngineFactory.CreateManaged();
+
+// Or platform-specific:
+#if WINDOWS
+    using var engine = new WasapiEngine();
+#elif LINUX
+    using var engine = new PulseAudioEngine();
+#elif MACOS
+    using var engine = new CoreAudioEngine();
+#endif
+
+engine.Initialize(AudioConfig.Default);
+engine.Start();
+// ... rest of your code
 ```
 
 ## 💡 Support

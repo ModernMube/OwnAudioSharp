@@ -286,6 +286,7 @@ namespace Ownaudio.Windows
                         return new AudioDeviceInfo(
                             deviceId,
                             friendlyName,
+                            "Wasapi",
                             isInput,
                             isOutput,
                             isDefault,
@@ -408,6 +409,7 @@ namespace Ownaudio.Windows
                         var deviceInfo = new AudioDeviceInfo(
                             deviceId,
                             friendlyName,
+                            "Wasapi",
                             dataFlow == WasapiInterop.EDataFlow.eCapture,
                             dataFlow == WasapiInterop.EDataFlow.eRender,
                             isDefault,
@@ -504,6 +506,7 @@ namespace Ownaudio.Windows
                 return new AudioDeviceInfo(
                     deviceId,
                     friendlyName,
+                    "Wasapi",
                     dataFlow == WasapiInterop.EDataFlow.eCapture,
                     dataFlow == WasapiInterop.EDataFlow.eRender,
                     true, // This is the default device

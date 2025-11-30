@@ -18,6 +18,12 @@ namespace Ownaudio.Core
         public string Name { get; }
 
         /// <summary>
+        /// Gets the name of the audio engine that manages this device.
+        /// Examples: "Wasapi", "CoreAudio", "PulseAudio", "Portaudio.Asio", "Portaudio.Wasapi", "Miniaudio"
+        /// </summary>
+        public string EngineName { get; }
+
+        /// <summary>
         /// Gets a value indicating whether this is an input (capture) device.
         /// </summary>
         public bool IsInput { get; }
@@ -42,6 +48,7 @@ namespace Ownaudio.Core
         /// </summary>
         /// <param name="deviceId">The unique device identifier.</param>
         /// <param name="name">The human-readable device name.</param>
+        /// <param name="engineName">The name of the audio engine managing this device.</param>
         /// <param name="isInput">Indicates whether this is an input device.</param>
         /// <param name="isOutput">Indicates whether this is an output device.</param>
         /// <param name="isDefault">Indicates whether this is the default device.</param>
@@ -49,6 +56,7 @@ namespace Ownaudio.Core
         public AudioDeviceInfo(
             string deviceId,
             string name,
+            string engineName,
             bool isInput,
             bool isOutput,
             bool isDefault,
@@ -56,6 +64,7 @@ namespace Ownaudio.Core
         {
             DeviceId = deviceId;
             Name = name;
+            EngineName = engineName ?? "Unknown";
             IsInput = isInput;
             IsOutput = isOutput;
             IsDefault = isDefault;
@@ -65,12 +74,12 @@ namespace Ownaudio.Core
         /// <summary>
         /// Returns a string representation of this audio device.
         /// </summary>
-        /// <returns>A string containing the device name and type.</returns>
+        /// <returns>A string containing the device name, engine, and type.</returns>
         public override string ToString()
         {
             string type = IsInput && IsOutput ? "Duplex" : IsInput ? "Input" : "Output";
             string defaultMarker = IsDefault ? " [Default]" : "";
-            return $"{Name} ({type}){defaultMarker}";
+            return $"{Name} [{EngineName}] ({type}){defaultMarker}";
         }
     }
 

@@ -39,6 +39,7 @@ namespace Ownaudio.macOS
                         devices.Add(new AudioDeviceInfo(
                             deviceId.ToString(),
                             name ?? $"Audio Device {deviceId}",
+                            "CoreAudio",
                             false, // isInput
                             true,  // isOutput
                             isDefault,
@@ -82,6 +83,7 @@ namespace Ownaudio.macOS
                         devices.Add(new AudioDeviceInfo(
                             deviceId.ToString(),
                             name ?? $"Audio Device {deviceId}",
+                            "CoreAudio",
                             true,  // isInput
                             false, // isOutput
                             isDefault,
@@ -410,6 +412,7 @@ namespace Ownaudio.macOS
                 return new AudioDeviceInfo(
                     defaultOutputId.ToString(),
                     name ?? "Default Output Device",
+                    "CoreAudio",
                     false, // isInput
                     true,  // isOutput
                     true,  // isDefault
@@ -440,6 +443,7 @@ namespace Ownaudio.macOS
                 return new AudioDeviceInfo(
                     defaultInputId.ToString(),
                     name ?? "Default Input Device",
+                    "CoreAudio",
                     true,  // isInput
                     false, // isOutput
                     true,  // isDefault
