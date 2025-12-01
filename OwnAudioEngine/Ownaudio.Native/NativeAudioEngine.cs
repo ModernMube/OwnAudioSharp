@@ -969,8 +969,53 @@ namespace Ownaudio.Native
             }
             else if (_backend == AudioEngineBackend.MiniAudio)
             {
-                // MiniAudio device enumeration
-                Console.WriteLine("MiniAudio device enumeration not yet fully implemented");
+                // MiniAudio device enumeration using ma_context_get_devices
+                try
+                {
+                    MaResult result = MaBinding.ma_context_get_devices(
+                        _maContext,
+                        out IntPtr pPlaybackDevices,
+                        out IntPtr pCaptureDevices,
+                        out int playbackCount,
+                        out int captureCount);
+
+                    if (result != MaResult.Success)
+                    {
+                        Console.WriteLine($"MiniAudio device enumeration failed: {result}");
+                        return devices;
+                    }
+
+                    // Get backend name for display
+                    var context = Marshal.PtrToStructure<MaContext>(_maContext);
+                    string engineName = $"MiniAudio.{context.backend}";
+
+                    // Enumerate output devices
+                    for (int i = 0; i < playbackCount; i++)
+                    {
+                        // Calculate pointer to device info
+                        int deviceInfoSize = Marshal.SizeOf<MaDeviceInfo>();
+                        IntPtr deviceInfoPtr = IntPtr.Add(pPlaybackDevices, i * deviceInfoSize);
+
+                        var deviceInfo = Marshal.PtrToStructure<MaDeviceInfo>(deviceInfoPtr);
+
+                        // Convert device ID to string (use index as ID)
+                        string deviceId = $"ma_output_{i}";
+
+                        devices.Add(new AudioDeviceInfo(
+                            deviceId: deviceId,
+                            name: deviceInfo.Name,
+                            engineName: engineName,
+                            isInput: false,
+                            isOutput: true,
+                            isDefault: deviceInfo.IsDefault,
+                            state: AudioDeviceState.Active
+                        ));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"MiniAudio output device enumeration error: {ex.Message}");
+                }
             }
 
             return devices;
@@ -1039,8 +1084,53 @@ namespace Ownaudio.Native
             }
             else if (_backend == AudioEngineBackend.MiniAudio)
             {
-                // MiniAudio device enumeration
-                Console.WriteLine("MiniAudio device enumeration not yet fully implemented");
+                // MiniAudio device enumeration using ma_context_get_devices
+                try
+                {
+                    MaResult result = MaBinding.ma_context_get_devices(
+                        _maContext,
+                        out IntPtr pPlaybackDevices,
+                        out IntPtr pCaptureDevices,
+                        out int playbackCount,
+                        out int captureCount);
+
+                    if (result != MaResult.Success)
+                    {
+                        Console.WriteLine($"MiniAudio device enumeration failed: {result}");
+                        return devices;
+                    }
+
+                    // Get backend name for display
+                    var context = Marshal.PtrToStructure<MaContext>(_maContext);
+                    string engineName = $"MiniAudio.{context.backend}";
+
+                    // Enumerate input devices
+                    for (int i = 0; i < captureCount; i++)
+                    {
+                        // Calculate pointer to device info
+                        int deviceInfoSize = Marshal.SizeOf<MaDeviceInfo>();
+                        IntPtr deviceInfoPtr = IntPtr.Add(pCaptureDevices, i * deviceInfoSize);
+
+                        var deviceInfo = Marshal.PtrToStructure<MaDeviceInfo>(deviceInfoPtr);
+
+                        // Convert device ID to string (use index as ID)
+                        string deviceId = $"ma_input_{i}";
+
+                        devices.Add(new AudioDeviceInfo(
+                            deviceId: deviceId,
+                            name: deviceInfo.Name,
+                            engineName: engineName,
+                            isInput: true,
+                            isOutput: false,
+                            isDefault: deviceInfo.IsDefault,
+                            state: AudioDeviceState.Active
+                        ));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"MiniAudio input device enumeration error: {ex.Message}");
+                }
             }
 
             return devices;
