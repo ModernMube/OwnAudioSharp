@@ -2,13 +2,29 @@
   <img src="Ownaudiologo.png" alt="Logo" width="600"/>
 </div>
 
-<a href="https://www.buymeacoffee.com/ModernMube">
-  <img src="https://img.shields.io/badge/Support-Buy%20Me%20A%20Coffee-orange" alt="Buy Me a Coffee">
-</a>
+<div align="center">
+  <a href="https://www.nuget.org/packages/OwnAudioSharp">
+    <img src="https://img.shields.io/badge/Nuget-OwnAudioSharp%20Nuget%20Package-blue" alt="OwnAudioSharp Package">
+  </a>
+  <a href="https://www.buymeacoffee.com/ModernMube">
+    <img src="https://img.shields.io/badge/Support-Buy%20Me%20A%20Coffee-orange" alt="Buy Me a Coffee">
+  </a>
+</div>
 
-<a href="https://www.nuget.org/packages/OwnAudioSharp">
-  <img src="https://img.shields.io/badge/Nuget-OwnAudioSharp%20Nuget%20Package-blue" alt="OwnAudioSharp Package">
-</a>
+<div align="center">
+  <a href="https://modernmube.github.io/OwnAudioSharp/documents/api-net.html">
+    <img src="https://img.shields.io/badge/Ownaudio%20NET%20API-blue" width="175">
+  </a>
+  <a href="https://modernmube.github.io/OwnAudioSharp/documents/matchering.html">
+    <img src="https://img.shields.io/badge/Audio%20Matchering%20API-blue" width="200">
+  </a>
+  <a href="https://modernmube.github.io/OwnAudioSharp/documents/vocalremover.html">
+    <img src="https://img.shields.io/badge/Vocal%20Remover%20API-blue" width="180">
+  </a>
+  <a href="https://modernmube.github.io/OwnAudioSharp/documents/chorddetect.html">
+    <img src="https://img.shields.io/badge/Chord%20Detect%20API-blue" width="165">
+  </a>
+</div>
 
 ##
 
