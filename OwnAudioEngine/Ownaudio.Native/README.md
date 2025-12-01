@@ -260,5 +260,3 @@ Part of the OwnAudioSharp project
 ## See Also
 
 - [OwnAudioSharp Documentation](https://modernmube.github.io/OwnAudioSharp/)
-- [CLAUDE.md](../../CLAUDE.md) - Project development guidelines
-- [THREAD_BLOCKING_ANALYSIS.md](../../THREAD_BLOCKING_ANALYSIS.md) - Threading constraints
