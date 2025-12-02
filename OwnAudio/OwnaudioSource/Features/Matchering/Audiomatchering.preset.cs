@@ -20,7 +20,7 @@ namespace OwnaudioNET.Features.Matchering
         /// <param name="system">Playback system preset to apply</param>
         /// <param name="tempDirectory">Directory for temporary files (optional)</param>
         /// <param name="eqOnlyMode">If true, applies only EQ without compression/dynamics</param>
-        public void ProcessWithEnhancedPreset(string sourceFile, string outputFile, 
+        public void ProcessWithEnhancedPreset(string sourceFile, string outputFile,
             PlaybackSystem system, string tempDirectory = null, bool eqOnlyMode = true)
         {
             if (string.IsNullOrEmpty(tempDirectory))
@@ -48,7 +48,9 @@ namespace OwnaudioNET.Features.Matchering
                 ProcessEQMatching(sourceFile, processedBaseSample, outputFile);
 
                 Console.WriteLine($"Enhanced preset processing completed: {outputFile}");
-                PrintEnhancedPresetResults(sourceFile, baseSampleFile, processedBaseSample, outputFile, system);
+                // PrintEnhancedPresetResults(sourceFile, baseSampleFile, processedBaseSample, outputFile, system);
+                // DISABLED: This method creates 3 additional FileSource instances which causes MiniAudio DLL crash (0xC0000005)
+                // The native library does not handle rapid create/destroy cycles well
             }
             finally
             {
@@ -79,17 +81,23 @@ namespace OwnaudioNET.Features.Matchering
         {
             var preset = SystemPresets[system];
 
-            //using var source = new Source();
-            //source.LoadAsync(baseSampleFile).Wait();
+            // CRITICAL: Lock to prevent race condition during MiniAudio initialization
+            // This FileSource creation must be synchronized with AnalyzeAudioFile()
+            float[] audioData;
+            int channels;
+            int sampleRate;
 
-            using var source = new FileSource(baseSampleFile);
+            lock (_analyzerLock)
+            {
+                using var source = new FileSource(baseSampleFile);
 
-            if (source.Duration == 0)
-                throw new InvalidOperationException($"Cannot load base sample file: {baseSampleFile}");
+                if (source.Duration == 0)
+                    throw new InvalidOperationException($"Cannot load base sample file: {baseSampleFile}");
 
-            var audioData = source.GetFloatAudioData(TimeSpan.Zero);
-            var channels = source.StreamInfo.Channels;
-            var sampleRate = source.StreamInfo.SampleRate;
+                audioData = source.GetFloatAudioData(TimeSpan.Zero);
+                channels = source.StreamInfo.Channels;
+                sampleRate = source.StreamInfo.SampleRate;
+            }
 
             Console.WriteLine($"Base sample loaded: {audioData.Length / channels / sampleRate:F1}s, {channels}ch, {sampleRate}Hz");
 
@@ -128,36 +136,53 @@ namespace OwnaudioNET.Features.Matchering
             {
                 // ONLY compressor, NO DynamicAmp to preserve level
                 enhancedCompressor = new CompressorEffect(
-                    CompressorEffect.DbToLinear(-15f), 
-                    1.8f, 
-                    50f, 
-                    200f,  
-                    2.0f, 
+                    CompressorEffect.DbToLinear(-15f),
+                    1.8f,
+                    50f,
+                    200f,
+                    2.0f,
                     sampleRate
                 );
             }
 
+            // Initialize effects with audio configuration
+            var audioConfig = new Ownaudio.Core.AudioConfig
+            {
+                SampleRate = sampleRate,
+                Channels = channels,
+                BufferSize = 512
+            };
+
+            presetEQ.Initialize(audioConfig);
+            if (enhancedCompressor != null)
+            {
+                enhancedCompressor.Initialize(audioConfig);
+            }
+
             // Process audio with effects chain
-            int chunkSize = 512 * channels;
+            int framesPerChunk = 512;
+            int samplesPerChunk = framesPerChunk * channels;
             var processedData = new List<float>();
             int totalSamples = audioData.Length;
             float maxLevel = 0f;
 
             Console.WriteLine($"Applying {(eqOnlyMode ? "EQ-only" : "full")} {preset.Name} effects to base sample...");
 
-            for (int offset = 0; offset < totalSamples; offset += chunkSize)
+            for (int offset = 0; offset < totalSamples; offset += samplesPerChunk)
             {
-                int samplesToProcess = Math.Min(chunkSize, totalSamples - offset);
+                int samplesToProcess = Math.Min(samplesPerChunk, totalSamples - offset);
+                int framesToProcess = samplesToProcess / channels;
+
                 var chunk = new float[samplesToProcess];
                 Array.Copy(audioData, offset, chunk, 0, samplesToProcess);
 
-                // Always apply EQ
-                presetEQ.Process(chunk.AsSpan(), chunkSize);
+                // Always apply EQ - NOTE: frameCount, not sampleCount!
+                presetEQ.Process(chunk.AsSpan(), framesToProcess);
 
                 // Conditionally apply ONLY compression (NO DynamicAmp)
                 if (!eqOnlyMode && enhancedCompressor != null)
                 {
-                    enhancedCompressor.Process(chunk.AsSpan(), chunkSize);
+                    enhancedCompressor.Process(chunk.AsSpan(), framesToProcess);
                 }
 
                 // Monitor levels with gentler limiting
@@ -177,7 +202,7 @@ namespace OwnaudioNET.Features.Matchering
 
                 processedData.AddRange(chunk);
 
-                if ((offset / chunkSize) % 50 == 0)
+                if ((offset / samplesPerChunk) % 50 == 0)
                 {
                     float progress = (float)(offset + samplesToProcess) / totalSamples * 100f;
                     Console.Write($"\rProcessing base sample: {progress:F1}%");

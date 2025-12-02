@@ -201,9 +201,8 @@ namespace OwnaudioNET.Features.Matchering
         /// <exception cref="InvalidOperationException">Thrown when the audio file cannot be loaded</exception>
         /// <exception cref="Exception">Thrown when any processing error occurs</exception>
         /// <remarks>
-        /// Loads the audio file, applies pre-gain reduction, calculates optimal Q factors for EQ bands,
-        /// processes the audio through a 30-band equalizer, global compressor, and dynamic amplifier.
-        /// Includes safety clipping and progress reporting during processing.
+        /// Processes audio directly through effect chain without real-time playback.
+        /// Creates effects, initializes them, and processes audio in chunks.
         /// </remarks>
         private void ApplyDirectEQProcessing(string inputFile, string outputFile,
             float[] eqAdjustments, DynamicAmpSettings dynamicAmp,
@@ -211,70 +210,91 @@ namespace OwnaudioNET.Features.Matchering
         {
             try
             {
-                Console.WriteLine($"Starting EQ processing with dynamic Q optimization: {inputFile} -> {outputFile}");
+                Console.WriteLine($"Starting EQ processing with direct effect chain: {inputFile} -> {outputFile}");
 
-                //using var source = new Source();
+                // Load source audio file
+                using var fileSource = new FileSource(inputFile);
 
-                using var source = new FileSource(inputFile);
-                //source.LoadAsync(inputFile).Wait();
-
-                if (source.Duration == 0)
+                if (fileSource.Duration == 0)
                     throw new InvalidOperationException($"Cannot load audio file: {inputFile}");
 
-                var audioData = source.GetFloatAudioData(TimeSpan.Zero);
+                var audioData = fileSource.GetFloatAudioData(TimeSpan.Zero);
+                var channels = fileSource.StreamInfo.Channels;
+                var sampleRate = fileSource.StreamInfo.SampleRate;
 
-                var channels = source.StreamInfo.Channels;
-                var sampleRate = source.StreamInfo.SampleRate;
+                Console.WriteLine($"Audio loaded: {channels} channels, {sampleRate} Hz, {audioData.Length} samples");
 
-                Console.WriteLine($"Audio loaded: {channels} channels, {sampleRate} Hz");
+                // Apply pre-gain reduction
                 for (int i = 0; i < audioData.Length; i++)
                     audioData[i] *= 0.9f;
 
+                // Calculate optimal Q factors
                 var optimizedQFactors = CalculateOptimalQFactors(eqAdjustments, sourceSpectrum, targetSpectrum);
 
-                var directEQ = new Equalizer30BandEffect(sampleRate);
-
+                // Create and configure EQ effect
+                var directEQ = new Equalizer30BandEffect();
                 for (int i = 0; i < FrequencyBands.Length; i++)
                 {
                     directEQ.SetBandGain(i, FrequencyBands[i], optimizedQFactors[i], eqAdjustments[i]);
                 }
 
+                // Create compressor effect
                 var globalCompressor = new CompressorEffect(
-                    CompressorEffect.DbToLinear(-26.0f),      
-                    1.1f,                               
-                    60.0f,                              
-                    500.0f,                             
-                    1.0f,
-                    sampleRate
+                    CompressorEffect.DbToLinear(-26.0f),
+                    1.1f,
+                    60.0f,
+                    500.0f,
+                    1.0f
                 );
 
+                // Create dynamic amplifier effect
                 var dynamicAmplifier = new DynamicAmpEffect(
-                    dynamicAmp.TargetLevel + 1.0f,      
-                    dynamicAmp.AttackTime * 0.8f,       
-                    dynamicAmp.ReleaseTime * 1.0f,      
-                    0.001f,                             
-                    dynamicAmp.MaxGain * 0.85f,         
+                    dynamicAmp.TargetLevel + 1.0f,
+                    dynamicAmp.AttackTime * 0.8f,
+                    dynamicAmp.ReleaseTime * 1.0f,
+                    0.001f,
+                    dynamicAmp.MaxGain * 0.85f,
                     sampleRate,
-                    0.15f                               
+                    0.15f
                 );
 
-                int chunkSize = 512 * channels;
-                var processedData = new List<float>();
+                // Initialize all effects with audio configuration
+                var audioConfig = new Ownaudio.Core.AudioConfig
+                {
+                    SampleRate = sampleRate,
+                    Channels = channels,
+                    BufferSize = 512
+                };
+
+                directEQ.Initialize(audioConfig);
+                globalCompressor.Initialize(audioConfig);
+                dynamicAmplifier.Initialize(audioConfig);
+
+                Console.WriteLine("Effects initialized, processing audio...");
+
+                // Process audio in chunks
+                var processedData = new List<float>(audioData.Length);
+                int framesPerChunk = 512;
+                int samplesPerChunk = framesPerChunk * channels;
                 int totalSamples = audioData.Length;
+                int totalFrames = totalSamples / channels;
                 int processedSamples = 0;
 
-                for (int offset = 0; offset < totalSamples; offset += chunkSize)
+                for (int offset = 0; offset < totalSamples; offset += samplesPerChunk)
                 {
-                    int samplesToProcess = Math.Min(chunkSize, totalSamples - offset);
+                    int samplesToProcess = Math.Min(samplesPerChunk, totalSamples - offset);
+                    int framesToProcess = samplesToProcess / channels;
+
                     var chunk = new float[samplesToProcess];
                     Array.Copy(audioData, offset, chunk, 0, samplesToProcess);
 
-                    directEQ.Process(chunk.AsSpan(), chunkSize);
-                    globalCompressor.Process(chunk.AsSpan(), chunkSize);
-                    dynamicAmplifier.Process(chunk.AsSpan(), chunkSize);
+                    // Process through effect chain - NOTE: frameCount, not sampleCount!
+                    directEQ.Process(chunk.AsSpan(), framesToProcess);
+                    globalCompressor.Process(chunk.AsSpan(), framesToProcess);
+                    dynamicAmplifier.Process(chunk.AsSpan(), framesToProcess);
 
                     // Safety clipping
-                    for (int i = 0; i < chunk.Length; i++)
+                    for (int i = 0; i < samplesToProcess; i++)
                         chunk[i] = Math.Max(-1.0f, Math.Min(1.0f, chunk[i]));
 
                     processedData.AddRange(chunk);
@@ -284,13 +304,14 @@ namespace OwnaudioNET.Features.Matchering
                     Console.Write($"\rProcessing: {progress:F1}%");
                 }
 
-                Console.WriteLine("\nWriting to file...");
+                Console.WriteLine("\n\nWriting to file...");
                 OwnaudioNET.Recording.WaveFile.Create(outputFile, processedData.ToArray(), sampleRate, channels, 24);
                 Console.WriteLine($"Processing completed: {outputFile}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error during processing: {ex.Message}");
+                Console.WriteLine($"\nError during processing: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 throw;
             }
         }
