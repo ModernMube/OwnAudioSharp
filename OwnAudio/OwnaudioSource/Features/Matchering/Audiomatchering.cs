@@ -38,35 +38,47 @@ namespace OwnaudioNET.Features.Matchering
 
         #region Public API Methods
 
+        // Thread synchronization lock to prevent race condition during MiniAudio initialization
+        private static readonly object _analyzerLock = new object();
+
         /// <summary>
         /// Performs enhanced audio analysis using segmented approach with weighted averaging.
         /// Divides the audio into overlapping segments and analyzes each segment separately
         /// to provide more accurate and robust spectrum analysis.
+        /// Thread-safe: Uses lock to prevent concurrent FileSource creation during initialization.
         /// </summary>
         /// <param name="filePath">Path to the audio file to analyze</param>
         /// <returns>Weighted average spectrum analysis result</returns>
         /// <exception cref="InvalidOperationException">Thrown when the audio file cannot be loaded</exception>
         public AudioSpectrum AnalyzeAudioFile(string filePath)
         {
-            using FileSource source = new FileSource(filePath);
+            // CRITICAL: Lock prevents race condition when multiple FileSource instances
+            // try to initialize MiniAudio bindings simultaneously on first run
+            lock (_analyzerLock)
+            {
+                // Give MiniAudio DLL time to fully initialize on first call
+                System.Threading.Thread.Sleep(300);
 
-            if (source.Duration == 0)
-                throw new InvalidOperationException($"Cannot load audio file: {filePath}");
+                using FileSource source = new FileSource(filePath);
 
-            float[] audioData = source.GetFloatAudioData(TimeSpan.Zero);
-            int channels = source.StreamInfo.Channels;
-            int sampleRate = source.StreamInfo.SampleRate;
+                if (source.Duration == 0)
+                    throw new InvalidOperationException($"Cannot load audio file: {filePath}");
 
-            float[] monoData = ConvertToMono(audioData, channels);
+                float[] audioData = source.GetFloatAudioData(TimeSpan.Zero);
+                int channels = source.StreamInfo.Channels;
+                int sampleRate = source.StreamInfo.SampleRate;
 
-            Console.WriteLine($"Starting segmented analysis: {filePath}");
-            Console.WriteLine($"Audio length: {monoData.Length / (float)sampleRate:F1}s, Sample rate: {sampleRate}Hz");
+                float[] monoData = ConvertToMono(audioData, channels);
 
-            List<AudioSegment> segments = CreateAudioSegments(monoData, sampleRate);
-            List<SegmentAnalysis> segmentAnalyses = AnalyzeSegments(segments, sampleRate);
-            List<SegmentAnalysis> filteredAnalyses = FilterOutlierSegments(segmentAnalyses);
+                Console.WriteLine($"Starting segmented analysis: {filePath}");
+                Console.WriteLine($"Audio length: {monoData.Length / (float)sampleRate:F1}s, Sample rate: {sampleRate}Hz");
 
-            return CalculateWeightedAverageSpectrum(filteredAnalyses);
+                List<AudioSegment> segments = CreateAudioSegments(monoData, sampleRate);
+                List<SegmentAnalysis> segmentAnalyses = AnalyzeSegments(segments, sampleRate);
+                List<SegmentAnalysis> filteredAnalyses = FilterOutlierSegments(segmentAnalyses);
+
+                return CalculateWeightedAverageSpectrum(filteredAnalyses);
+            }
         }
 
         /// <summary>
