@@ -51,6 +51,9 @@ public sealed partial class AudioMixer
 
         // Create sync group in synchronizer
         _synchronizer.CreateSyncGroup(groupId, sources);
+
+        // NOTE: Ghost track is NOT added to _sources to avoid drift correction issues.
+        // Instead, the MixThreadLoop will process ghost tracks separately.
     }
 
     /// <summary>
@@ -308,32 +311,42 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Gets the duration of a sync group's ghost track.
+    /// Gets the duration of a sync group based on the longest source.
     /// This represents the length of the longest audio source in the group.
     /// </summary>
     /// <param name="groupId">The ID of the sync group.</param>
-    /// <returns>The duration in seconds, or 0.0 if group doesn't exist.</returns>
+    /// <returns>The duration in seconds, or 0.0 if group doesn't exist or has no sources.</returns>
     /// <exception cref="ObjectDisposedException">Thrown if mixer is disposed.</exception>
     public double GetSyncGroupDuration(string groupId)
     {
         ThrowIfDisposed();
 
-        var ghostTrack = GetGhostTrack(groupId);
-        return ghostTrack?.Duration ?? 0.0;
+        var sources = GetSyncGroup(groupId);
+        if (sources == null || sources.Count == 0)
+            return 0.0;
+
+        // Return the duration of the longest source
+        return sources.Max(s => s.Duration);
     }
 
     /// <summary>
-    /// Gets the current playback position of a sync group's ghost track.
-    /// This is the master position that all sources in the group sync to.
+    /// Gets the current playback position of a sync group based on the longest source's position.
+    /// This is more reliable than using the ghost track and avoids drift correction issues.
     /// </summary>
     /// <param name="groupId">The ID of the sync group.</param>
-    /// <returns>The position in seconds, or 0.0 if group doesn't exist.</returns>
+    /// <returns>The position in seconds, or 0.0 if group doesn't exist or has no sources.</returns>
     /// <exception cref="ObjectDisposedException">Thrown if mixer is disposed.</exception>
     public double GetSyncGroupPosition(string groupId)
     {
         ThrowIfDisposed();
 
-        var ghostTrack = GetGhostTrack(groupId);
-        return ghostTrack?.Position ?? 0.0;
+        var sources = GetSyncGroup(groupId);
+        if (sources == null || sources.Count == 0)
+            return 0.0;
+
+        // Return the position of the longest source (which determines the total duration)
+        // Find the source with maximum duration
+        var longestSource = sources.OrderByDescending(s => s.Duration).FirstOrDefault();
+        return longestSource?.Position ?? 0.0;
     }
 }

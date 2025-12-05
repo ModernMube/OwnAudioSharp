@@ -1,0 +1,225 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:MultitrackPlayer.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+        x:Class="MultitrackPlayer.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Ownaudio Multitrack Player"
+        Width="1000" Height="700"
+        MinWidth="800" MinHeight="600"
+        Background="#1E1E1E">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel />
+    </Design.DataContext>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+        <!-- Top Menu Bar -->
+        <Border Grid.Row="0" Background="#252526" Padding="10">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Content="Add Tracks" Click="OnAddTracksClicked"
+                        Background="#0E639C" Foreground="White" Padding="15,8"
+                        CornerRadius="4" />
+                <Button Content="Play" Command="{Binding PlayCommand}"
+                        Background="#0E7A0D" Foreground="White" Padding="15,8"
+                        CornerRadius="4" />
+                <!--<Button Content="Pause" Command="{Binding PauseCommand}"
+                        Background="#CCAA00" Foreground="White" Padding="15,8"
+                        CornerRadius="4" />-->
+                <Button Content="Stop" Command="{Binding StopCommand}"
+                        Background="#A1260D" Foreground="White" Padding="15,8"
+                        CornerRadius="4" />
+                <TextBlock Text="{Binding StatusMessage}"
+                           VerticalAlignment="Center"
+                           Foreground="#CCCCCC"
+                           Margin="20,0,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- Playback Progress Bar -->
+        <Border Grid.Row="1" Background="#252526" Padding="10,0,10,10">
+            <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                <Slider Grid.Column="0"
+                        Minimum="0"
+                        Maximum="{Binding TrackDurationSeconds}"
+                        Value="{Binding CurrentPositionSeconds}"
+                        Margin="0,0,10,0"
+                        PointerPressed="OnSliderSeekStart"
+                        PointerReleased="OnSliderSeekEnd" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding PositionDisplay}"
+                           Foreground="#CCCCCC"
+                           VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <!-- Main Content Area -->
+        <Grid Grid.Row="2" ColumnDefinitions="3*,2*">
+            <!-- Tracks List -->
+            <Border Grid.Column="0" Background="#2D2D30" Padding="10" Margin="5">
+                <Grid RowDefinitions="Auto,*">
+                    <TextBlock Grid.Row="0" Text="Tracks"
+                              FontSize="18" FontWeight="Bold"
+                              Foreground="White" Margin="0,0,0,10" />
+
+                    <ScrollViewer Grid.Row="1">
+                        <ItemsControl ItemsSource="{Binding Tracks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#3E3E42" Margin="0,0,0,5"
+                                           Padding="10" CornerRadius="4">
+                                        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto">
+                                            <TextBlock Grid.Column="0"
+                                                      Text="{Binding FileName}"
+                                                      Foreground="White"
+                                                      VerticalAlignment="Center" />
+
+                                            <TextBlock Grid.Column="1"
+                                                      Text="Vol:"
+                                                      Foreground="#CCCCCC"
+                                                      VerticalAlignment="Center"
+                                                      Margin="10,0,5,0" />
+
+                                            <Slider Grid.Column="2"
+                                                   Value="{Binding Volume}"
+                                                   Minimum="0" Maximum="100"
+                                                   Width="100"
+                                                   VerticalAlignment="Center" />
+
+                                            <TextBlock Grid.Column="3"
+                                                      Text="{Binding Volume, StringFormat='{}{0:F0}%'}"
+                                                      Foreground="#CCCCCC"
+                                                      Width="40"
+                                                      VerticalAlignment="Center"
+                                                      Margin="5,0,10,0" />
+
+                                            <CheckBox Grid.Column="4"
+                                                     Content="M"
+                                                     IsChecked="{Binding IsMuted}"
+                                                     Margin="5,0,5,0"
+                                                     Foreground="#CCCCCC" />
+
+                                            <CheckBox Grid.Column="5"
+                                                     Content="S"
+                                                     IsChecked="{Binding IsSolo}"
+                                                     Margin="5,0,10,0"
+                                                     Foreground="#CCCCCC" />
+
+                                            <Button Grid.Column="6"  
+                                                   FontSize="18"
+                                                   FontWeight="Bold"
+                                                   Background="#A1260D"
+                                                   Foreground="White"
+                                                   Width="30"
+                                                   Height="30"
+                                                   Padding="0"
+                                                   CornerRadius="15"
+                                                   Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).RemoveTrackCommand}"
+                                                   CommandParameter="{Binding}"
+                                                   ToolTip.Tip="Remove track">
+                                                    <TextBlock Text="×"
+                                                               VerticalAlignment="Center"
+                                                               HorizontalAlignment="Center"/>
+                                                </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- Master Controls -->
+            <Border Grid.Column="1" Background="#2D2D30" Padding="10" Margin="5">
+                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,20">
+                        <TextBlock Text="Master Controls"
+                                  FontSize="18" FontWeight="Bold"
+                                  Foreground="White"
+                                  VerticalAlignment="Center" />
+                        <Button Content="Reset"
+                               Command="{Binding ResetControlsCommand}"
+                               Background="#555555"
+                               Foreground="White"
+                               Padding="10,5"
+                               CornerRadius="4"
+                               Margin="20,0,0,0"
+                               ToolTip.Tip="Reset all sliders to default values" />
+                    </StackPanel>
+
+                    <!-- Master Volume -->
+                    <StackPanel Grid.Row="1" Spacing="5" Margin="0,0,0,20">
+                        <TextBlock Text="Master Volume" Foreground="#CCCCCC" />
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Slider Grid.Column="0"
+                                   Value="{Binding MasterVolume}"
+                                   Minimum="0" Maximum="100"
+                                   VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1"
+                                      Text="{Binding MasterVolume, StringFormat='{}{0:F0}%'}"
+                                      Foreground="White"
+                                      Width="50"
+                                      TextAlignment="Right"
+                                      Margin="10,0,0,0" />
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Tempo Control -->
+                    <StackPanel Grid.Row="2" Spacing="5" Margin="0,0,0,20">
+                        <TextBlock Text="Tempo (Time Stretch)" Foreground="#CCCCCC" />
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Slider Grid.Column="0"
+                                   Value="{Binding TempoPercent}"
+                                   Minimum="50" Maximum="200"
+                                   VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1"
+                                      Text="{Binding TempoPercent, StringFormat='{}{0:F0}%'}"
+                                      Foreground="White"
+                                      Width="50"
+                                      TextAlignment="Right"
+                                      Margin="10,0,0,0" />
+                        </Grid>
+                        <TextBlock Text="50% = half speed, 100% = normal, 200% = double speed"
+                                  FontSize="10" Foreground="#888888" />
+                    </StackPanel>
+
+                    <!-- Pitch Control -->
+                    <StackPanel Grid.Row="3" Spacing="5">
+                        <TextBlock Text="Pitch Shift" Foreground="#CCCCCC" />
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Slider Grid.Column="0"
+                                   Value="{Binding PitchSemitones}"
+                                   Minimum="-12" Maximum="12"
+                                   TickFrequency="1"
+                                   IsSnapToTickEnabled="True"
+                                   VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1"
+                                      Text="{Binding PitchSemitones, StringFormat='{}{0:F0} st'}"
+                                      Foreground="White"
+                                      Width="50"
+                                      TextAlignment="Right"
+                                      Margin="10,0,0,0" />
+                        </Grid>
+                        <TextBlock Text="-12 = one octave down, +12 = one octave up"
+                                  FontSize="10" Foreground="#888888" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Status Bar -->
+        <Border Grid.Row="3" Background="#252526" Padding="10">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0"
+                          Text="{Binding StatusMessage}"
+                          Foreground="#CCCCCC" />
+                <TextBlock Grid.Column="1"
+                          Text="{Binding Tracks.Count, StringFormat='Tracks: {0}'}"
+                          Foreground="#CCCCCC" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

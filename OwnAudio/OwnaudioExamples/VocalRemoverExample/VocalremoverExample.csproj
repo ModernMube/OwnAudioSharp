@@ -8,10 +8,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" />
-    <ProjectReference Include="..\..\..\OwnAudioEngine\Ownaudio.Linux\Ownaudio.Linux.csproj" />
-    <ProjectReference Include="..\..\..\OwnAudioEngine\Ownaudio.macOS\Ownaudio.macOS.csproj" />
-    <ProjectReference Include="..\..\..\OwnAudioEngine\Ownaudio.Windows\Ownaudio.Windows.csproj" />
     <ProjectReference Include="..\..\OwnaudioSource\OwnaudioNET.csproj" />
   </ItemGroup>
 

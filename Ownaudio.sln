@@ -43,6 +43,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OwnaudioAndroidExample", "O
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.Native", "OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj", "{19D871AC-710A-4AEF-ABA5-17CEFC61EEB7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MultitrackPlayer", "OwnAudio\OwnaudioExamples\MultitrackPlayer\MultitrackPlayer.csproj", "{263995E9-ED34-CB3A-4AD8-281CFDFC873F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -264,6 +266,18 @@ Global
 		{19D871AC-710A-4AEF-ABA5-17CEFC61EEB7}.Release|x64.Build.0 = Release|x64
 		{19D871AC-710A-4AEF-ABA5-17CEFC61EEB7}.Release|x86.ActiveCfg = Release|x86
 		{19D871AC-710A-4AEF-ABA5-17CEFC61EEB7}.Release|x86.Build.0 = Release|x86
+		{263995E9-ED34-CB3A-4AD8-281CFDFC873F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{263995E9-ED34-CB3A-4AD8-281CFDFC873F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{263995E9-ED34-CB3A-4AD8-281CFDFC873F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{263995E9-ED34-CB3A-4AD8-281CFDFC873F}.Debug|x64.Build.0 = Debug|Any CPU
+		{263995E9-ED34-CB3A-4AD8-281CFDFC873F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{263995E9-ED34-CB3A-4AD8-281CFDFC873F}.Debug|x86.Build.0 = Debug|Any CPU
+		{263995E9-ED34-CB3A-4AD8-281CFDFC873F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{263995E9-ED34-CB3A-4AD8-281CFDFC873F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{263995E9-ED34-CB3A-4AD8-281CFDFC873F}.Release|x64.ActiveCfg = Release|Any CPU
+		{263995E9-ED34-CB3A-4AD8-281CFDFC873F}.Release|x64.Build.0 = Release|Any CPU
+		{263995E9-ED34-CB3A-4AD8-281CFDFC873F}.Release|x86.ActiveCfg = Release|Any CPU
+		{263995E9-ED34-CB3A-4AD8-281CFDFC873F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -285,6 +299,7 @@ Global
 		{3B4C5D6E-7F89-0123-4567-89ABCDEF0123} = {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
 		{E0D4DA84-BF90-030D-BA16-BCF519702CC8} = {C3D4E5F6-A7B8-9012-CDEF-123456789012}
 		{19D871AC-710A-4AEF-ABA5-17CEFC61EEB7} = {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
+		{263995E9-ED34-CB3A-4AD8-281CFDFC873F} = {C3D4E5F6-A7B8-9012-CDEF-123456789012}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {1F9E84F3-54D4-4849-89A2-B6D0BF288902}
