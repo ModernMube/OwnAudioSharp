@@ -82,6 +82,7 @@ public sealed class AudioSynchronizer
     /// <summary>
     /// Creates or updates a synchronization group with the specified sources.
     /// All sources in a group will be kept sample-accurate synchronized using a ghost track as master.
+    /// NEW ARCHITECTURE: Automatically attaches FileSource instances to the GhostTrack via observer pattern.
     /// </summary>
     /// <param name="groupId">The unique identifier for the sync group.</param>
     /// <param name="sources">The sources to include in the sync group.</param>
@@ -102,6 +103,16 @@ public sealed class AudioSynchronizer
             else
             {
                 groupInfo = _syncGroups[groupId];
+
+                // Detach old sources from ghost track
+                foreach (var oldSource in groupInfo.Sources)
+                {
+                    if (oldSource is OwnaudioNET.Sources.FileSource oldFileSource)
+                    {
+                        oldFileSource.DetachFromGhostTrack();
+                    }
+                }
+
                 groupInfo.Sources.Clear();
             }
 
@@ -110,6 +121,12 @@ public sealed class AudioSynchronizer
             {
                 groupInfo.Sources.Add(source);
                 RegisterSource(source);
+
+                // NEW ARCHITECTURE: Attach FileSource to GhostTrack
+                if (source is OwnaudioNET.Sources.FileSource fileSource)
+                {
+                    fileSource.AttachToGhostTrack(groupInfo.GhostTrack);
+                }
 
                 // Mark as synchronized if implements ISynchronizable
                 if (source is ISynchronizable syncSource)
@@ -154,7 +171,8 @@ public sealed class AudioSynchronizer
 
     /// <summary>
     /// Starts all sources in a sync group simultaneously at sample position 0.
-    /// Uses the ghost track as the master clock and a synchronization barrier to ensure sample-accurate start.
+    /// NEW ARCHITECTURE: Simply starts the GhostTrack, which automatically propagates to all observers.
+    /// Much simpler than the old barrier-based approach.
     /// </summary>
     /// <param name="groupId">The ID of the sync group to start.</param>
     public void SynchronizedStart(string groupId)
@@ -164,97 +182,32 @@ public sealed class AudioSynchronizer
             if (!_syncGroups.TryGetValue(groupId, out var groupInfo))
                 return;
 
-            var sources = groupInfo.Sources;
             var ghostTrack = groupInfo.GhostTrack;
 
-            // STEP 1: Reset ghost track to position 0
+            // NEW ARCHITECTURE: Just operate on the GhostTrack
+            // All attached sources will automatically follow via observer pattern
+
+            // Step 1: Seek to beginning
             ghostTrack.Seek(0);
+
+            // Step 2: Start playback
+            // This automatically starts all attached sources via OnGhostTrackStateChanged callback
             ghostTrack.Play();
 
-            // STEP 2: Close sync gates on all FileSource instances
-            // This prevents the mixer from reading data while we're pre-buffering
-            foreach (var source in sources)
-            {
-                if (source is OwnaudioNET.Sources.FileSource fileSource)
-                {
-                    fileSource.SetSyncGate(false); // Close gate - return silence during pre-buffer
-                }
-            }
-
-            // STEP 3: Reset all sources to same position (seek to 0)
-            // This is fast now because decoder threads haven't started yet
-            foreach (var source in sources)
-            {
-                source.Seek(0);
-                _sourcePositions[source] = 0;
-            }
-
+            // Reset master position
             _masterSamplePosition = 0;
 
-            // STEP 4: Pre-start all decoder threads in parallel and wait for pre-buffering
-            // This ensures all sources have data ready before we start playing
-            var barrier = new System.Threading.CountdownEvent(sources.Count);
-            var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
-
-            try
+            // Reset source positions
+            foreach (var source in groupInfo.Sources)
             {
-                foreach (var source in sources)
-                {
-                    ThreadPool.QueueUserWorkItem(_ =>
-                    {
-                        try
-                        {
-                            // Start decoder thread and pre-buffer
-                            // Play() will start the decoder thread and wait for buffer fill
-                            source.Play();
-
-                            // Signal that this source is ready
-                            barrier.Signal();
-                        }
-                        catch (Exception ex)
-                        {
-                            exceptions.Add(ex);
-                            barrier.Signal(); // Still signal to avoid deadlock
-                        }
-                    });
-                }
-
-                // Wait for all sources to pre-buffer (max 500ms total)
-                if (!barrier.Wait(TimeSpan.FromMilliseconds(500)))
-                {
-                    // Timeout - some sources didn't pre-buffer in time
-                    // Continue anyway to avoid hanging
-                }
-
-                // Check for errors
-                if (!exceptions.IsEmpty)
-                {
-                    // At least one source failed - but we continue with the others
-                }
+                _sourcePositions[source] = 0;
             }
-            finally
-            {
-                // Ensure barrier is disposed after all threads have finished
-                barrier.Dispose();
-            }
-
-            // STEP 5: All sources are now pre-buffered with data at position 0
-            // Open all gates simultaneously - this is the ATOMIC SYNC POINT
-            foreach (var source in sources)
-            {
-                if (source is OwnaudioNET.Sources.FileSource fileSource)
-                {
-                    fileSource.SetSyncGate(true); // Open gate - allow reading
-                }
-            }
-
-            // Now all sources will output synchronized audio starting from sample 0
-            // Ghost track is running and acts as the master clock
         }
     }
 
     /// <summary>
     /// Seeks all sources in a sync group to the same position simultaneously.
+    /// NEW ARCHITECTURE: Simply seeks the GhostTrack, which automatically propagates to all observers.
     /// </summary>
     /// <param name="groupId">The ID of the sync group.</param>
     /// <param name="positionInSeconds">The target position in seconds.</param>
@@ -265,28 +218,27 @@ public sealed class AudioSynchronizer
             if (!_syncGroups.TryGetValue(groupId, out var groupInfo) || groupInfo.Sources.Count == 0)
                 return;
 
-            var sources = groupInfo.Sources;
             var ghostTrack = groupInfo.GhostTrack;
 
-            // Seek ghost track first
+            // NEW ARCHITECTURE: Just seek the GhostTrack
+            // All attached sources will automatically seek via OnGhostTrackPositionChanged callback
             ghostTrack.Seek(positionInSeconds);
 
-            // Calculate sample position from first source's sample rate
-            var firstSource = sources[0];
-            long samplePosition = (long)(positionInSeconds * firstSource.Config.SampleRate);
+            // Update master position
+            long samplePosition = (long)(positionInSeconds * ghostTrack.Config.SampleRate);
+            _masterSamplePosition = samplePosition;
 
-            foreach (var source in sources)
+            // Update source positions tracking
+            foreach (var source in groupInfo.Sources)
             {
-                source.Seek(positionInSeconds);
                 _sourcePositions[source] = samplePosition;
             }
-
-            _masterSamplePosition = samplePosition;
         }
     }
 
     /// <summary>
     /// Pauses all sources in a sync group simultaneously.
+    /// NEW ARCHITECTURE: Simply pauses the GhostTrack, which automatically propagates to all observers.
     /// </summary>
     /// <param name="groupId">The ID of the sync group to pause.</param>
     public void SynchronizedPause(string groupId)
@@ -296,19 +248,15 @@ public sealed class AudioSynchronizer
             if (!_syncGroups.TryGetValue(groupId, out var groupInfo))
                 return;
 
-            // Pause ghost track
+            // NEW ARCHITECTURE: Just pause the GhostTrack
+            // All attached sources will automatically pause via OnGhostTrackStateChanged callback
             groupInfo.GhostTrack.Pause();
-
-            // Pause all sources
-            foreach (var source in groupInfo.Sources)
-            {
-                source.Pause();
-            }
         }
     }
 
     /// <summary>
     /// Resumes all sources in a sync group simultaneously.
+    /// NEW ARCHITECTURE: Simply resumes the GhostTrack, which automatically propagates to all observers.
     /// </summary>
     /// <param name="groupId">The ID of the sync group to resume.</param>
     public void SynchronizedResume(string groupId)
@@ -318,19 +266,15 @@ public sealed class AudioSynchronizer
             if (!_syncGroups.TryGetValue(groupId, out var groupInfo))
                 return;
 
-            // Resume ghost track
+            // NEW ARCHITECTURE: Just resume (play) the GhostTrack
+            // All attached sources will automatically resume via OnGhostTrackStateChanged callback
             groupInfo.GhostTrack.Play();
-
-            // Resume all sources
-            foreach (var source in groupInfo.Sources)
-            {
-                source.Play();
-            }
         }
     }
 
     /// <summary>
     /// Stops all sources in a sync group simultaneously.
+    /// NEW ARCHITECTURE: Simply stops the GhostTrack, which automatically propagates to all observers.
     /// </summary>
     /// <param name="groupId">The ID of the sync group to stop.</param>
     public void SynchronizedStop(string groupId)
@@ -340,13 +284,13 @@ public sealed class AudioSynchronizer
             if (!_syncGroups.TryGetValue(groupId, out var groupInfo))
                 return;
 
-            // Stop ghost track
+            // NEW ARCHITECTURE: Just stop the GhostTrack
+            // All attached sources will automatically stop via OnGhostTrackStateChanged callback
             groupInfo.GhostTrack.Stop();
 
-            // Stop all sources
+            // Reset positions
             foreach (var source in groupInfo.Sources)
             {
-                source.Stop();
                 _sourcePositions[source] = 0;
             }
 
@@ -499,6 +443,7 @@ public sealed class AudioSynchronizer
 
     /// <summary>
     /// Adds a source to an existing sync group and updates the ghost track length if needed.
+    /// NEW ARCHITECTURE: Automatically attaches FileSource to the GhostTrack via observer pattern.
     /// </summary>
     /// <param name="groupId">The ID of the sync group.</param>
     /// <param name="source">The source to add.</param>
@@ -516,6 +461,12 @@ public sealed class AudioSynchronizer
             groupInfo.Sources.Add(source);
             RegisterSource(source);
 
+            // NEW ARCHITECTURE: Attach FileSource to GhostTrack
+            if (source is OwnaudioNET.Sources.FileSource fileSource)
+            {
+                fileSource.AttachToGhostTrack(groupInfo.GhostTrack);
+            }
+
             // Mark as synchronized
             if (source is ISynchronizable syncSource)
             {
@@ -532,6 +483,7 @@ public sealed class AudioSynchronizer
 
     /// <summary>
     /// Removes a source from a sync group and updates the ghost track length if needed.
+    /// NEW ARCHITECTURE: Automatically detaches FileSource from the GhostTrack.
     /// </summary>
     /// <param name="groupId">The ID of the sync group.</param>
     /// <param name="source">The source to remove.</param>
@@ -545,6 +497,12 @@ public sealed class AudioSynchronizer
 
             if (!groupInfo.Sources.Remove(source))
                 return false;
+
+            // NEW ARCHITECTURE: Detach FileSource from GhostTrack
+            if (source is OwnaudioNET.Sources.FileSource fileSource)
+            {
+                fileSource.DetachFromGhostTrack();
+            }
 
             // Unmark as synchronized
             if (source is ISynchronizable syncSource)
@@ -564,7 +522,7 @@ public sealed class AudioSynchronizer
 
     /// <summary>
     /// Sets the tempo for a sync group.
-    /// This affects the ghost track and cascades to all synchronized sources.
+    /// NEW ARCHITECTURE: Simply sets the GhostTrack tempo, which automatically propagates to all observers.
     /// </summary>
     /// <param name="groupId">The ID of the sync group.</param>
     /// <param name="tempo">The tempo multiplier (1.0 = normal, 0.5 = half speed, 2.0 = double speed).</param>
@@ -576,21 +534,9 @@ public sealed class AudioSynchronizer
             if (!_syncGroups.TryGetValue(groupId, out var groupInfo))
                 return false;
 
-            // Set tempo on ghost track
+            // NEW ARCHITECTURE: Just set tempo on GhostTrack
+            // All attached sources will automatically update via OnGhostTrackTempoChanged callback
             groupInfo.GhostTrack.Tempo = tempo;
-
-            // Set tempo on all sources that support it
-            foreach (var source in groupInfo.Sources)
-            {
-                try
-                {
-                    source.Tempo = tempo;
-                }
-                catch
-                {
-                    // Some sources might not support tempo changes
-                }
-            }
 
             return true;
         }

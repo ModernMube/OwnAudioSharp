@@ -15,8 +15,14 @@ namespace OwnaudioNET.Sources;
 /// Uses Ownaudio.Core decoders (WavDecoder, Mp3Decoder, FlacDecoder) via AudioDecoderFactory.
 /// Supports pitch shifting and tempo control via SoundTouch.NET.
 /// Implements ISynchronizable for sample-accurate multi-track synchronization with drift correction.
+///
+/// NEW ARCHITECTURE (GhostTrack Observer Pattern):
+/// - Implements IGhostTrackObserver to receive automatic notifications from GhostTrack
+/// - Zero overhead when not attached to a GhostTrack (single null check)
+/// - Automatic state/position/tempo/pitch synchronization
+/// - Continuous drift correction in ReadSamples hot path
 /// </summary>
-public partial class FileSource : BaseAudioSource, ISynchronizable
+public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackObserver
 {
     private readonly IAudioDecoder _decoder;
     private readonly CircularBuffer _buffer;
@@ -41,7 +47,9 @@ public partial class FileSource : BaseAudioSource, ISynchronizable
     private float _tempo = 1.0f;
     private float _pitchShift = 0.0f;
     private bool _disposed;
-    private volatile bool _syncReadyGate = true; // Controls when ReadSamples can return data (for sync start)
+
+    // NEW: GhostTrack observer pattern (replaces old sync gate mechanism)
+    private GhostTrackSource? _ghostTrack = null;  // null = not synchronized (zero overhead)
 
     /// <inheritdoc/>
     public override AudioConfig Config => _config;
@@ -190,11 +198,22 @@ public partial class FileSource : BaseAudioSource, ISynchronizable
             return frameCount;
         }
 
-        // SYNC GATE: If gate is closed, return silence (used for synchronized start)
-        if (!_syncReadyGate)
+        // NEW: Continuous drift correction (zero overhead if not synchronized)
+        // Single null check - branch predictor will optimize this to ~1 cycle when null
+        if (_ghostTrack != null)
         {
-            FillWithSilence(buffer, frameCount * _streamInfo.Channels);
-            return frameCount;
+            // Get ghost track position and check drift
+            long ghostPosition = _ghostTrack.CurrentFrame;
+            long myPosition = SamplePosition;
+            long drift = Math.Abs(ghostPosition - myPosition);
+
+            // Tight tolerance: 512 frames (~10ms @ 48kHz, reduced from 100ms)
+            // This ensures sample-accurate sync while avoiding excessive seeking
+            if (drift > 512)
+            {
+                // Drift detected - resync immediately
+                ResyncTo(ghostPosition);
+            }
         }
 
         int samplesToRead = frameCount * _streamInfo.Channels;
@@ -321,30 +340,98 @@ public partial class FileSource : BaseAudioSource, ISynchronizable
     }
 
     /// <summary>
-    /// Sets the synchronization gate state.
-    /// When gate is closed (false), ReadSamples returns silence even if playing.
-    /// This is used for synchronized multi-track start.
+    /// Attaches this FileSource to a GhostTrack for automatic synchronization.
+    /// After attachment, this source will automatically follow the GhostTrack's
+    /// state (play/pause/stop), position (seek), tempo, and pitch changes.
     /// </summary>
-    /// <param name="isOpen">True to allow reading data, false to return silence.</param>
-    public void SetSyncGate(bool isOpen)
+    /// <param name="ghostTrack">The GhostTrack to attach to.</param>
+    /// <exception cref="ArgumentNullException">Thrown when ghostTrack is null.</exception>
+    internal void AttachToGhostTrack(GhostTrackSource ghostTrack)
     {
-        _syncReadyGate = isOpen;
+        if (ghostTrack == null)
+            throw new ArgumentNullException(nameof(ghostTrack));
 
-        // CRITICAL: Clear buffer when closing gate to prevent residual sounds
-        // This ensures a clean start when gate opens
-        if (!isOpen)
+        // Detach from previous ghost track if any
+        DetachFromGhostTrack();
+
+        // Attach to new ghost track
+        _ghostTrack = ghostTrack;
+        _ghostTrack.Subscribe(this);
+
+        // Mark as synchronized
+        IsSynchronized = true;
+    }
+
+    /// <summary>
+    /// Detaches this FileSource from its GhostTrack.
+    /// After detachment, this source operates independently.
+    /// </summary>
+    internal void DetachFromGhostTrack()
+    {
+        if (_ghostTrack != null)
         {
-            // Use ClearWithZero() to completely eliminate residual sounds
-            // This zeros out the entire buffer array (more expensive but necessary for clean sync)
-            _buffer.ClearWithZero();
-
-            // Also clear SoundTouch buffer to prevent stale audio
-            lock (_soundTouchLock)
-            {
-                _soundTouch.Clear();
-                _soundTouchAccumulationCount = 0;
-            }
+            _ghostTrack.Unsubscribe(this);
+            _ghostTrack = null;
         }
+
+        // Mark as not synchronized
+        IsSynchronized = false;
+    }
+
+    // ========================================
+    // IGhostTrackObserver Implementation
+    // ========================================
+
+    /// <inheritdoc/>
+    public void OnGhostTrackStateChanged(AudioState newState)
+    {
+        // Automatically follow GhostTrack state changes
+        switch (newState)
+        {
+            case AudioState.Playing:
+                if (State != AudioState.Playing)
+                    Play();
+                break;
+
+            case AudioState.Paused:
+                if (State != AudioState.Paused)
+                    Pause();
+                break;
+
+            case AudioState.Stopped:
+                if (State != AudioState.Stopped)
+                    Stop();
+                break;
+        }
+    }
+
+    /// <inheritdoc/>
+    public void OnGhostTrackPositionChanged(long newFramePosition)
+    {
+        // Automatically seek to match GhostTrack position
+        double targetPositionInSeconds = (double)newFramePosition / _streamInfo.SampleRate;
+        Seek(targetPositionInSeconds);
+    }
+
+    /// <inheritdoc/>
+    public void OnGhostTrackTempoChanged(float newTempo)
+    {
+        // Automatically update tempo to match GhostTrack
+        Tempo = newTempo;
+    }
+
+    /// <inheritdoc/>
+    public void OnGhostTrackPitchChanged(float newPitch)
+    {
+        // Automatically update pitch to match GhostTrack
+        PitchShift = newPitch;
+    }
+
+    /// <inheritdoc/>
+    public void OnGhostTrackLoopChanged(bool shouldLoop)
+    {
+        // Automatically update loop state to match GhostTrack
+        Loop = shouldLoop;
     }
 
     /// <inheritdoc/>
@@ -690,6 +777,9 @@ public partial class FileSource : BaseAudioSource, ISynchronizable
                     }
                 }
 
+                // Detach from GhostTrack
+                DetachFromGhostTrack();
+
                 // Dispose managed resources (now safe to dispose _pauseEvent)
                 _pauseEvent?.Dispose();
                 _decoder?.Dispose();
@@ -704,5 +794,5 @@ public partial class FileSource : BaseAudioSource, ISynchronizable
     }
 
     // ISynchronizable is already implemented in BaseAudioSource
-    // No need to reimplement here
+    // IGhostTrackObserver callbacks are implemented above
 }

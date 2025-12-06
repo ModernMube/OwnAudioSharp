@@ -1,6 +1,7 @@
 using Ownaudio;
 using Ownaudio.Core;
 using OwnaudioNET.Core;
+using OwnaudioNET.Interfaces;
 
 namespace OwnaudioNET.Sources;
 
@@ -15,6 +16,12 @@ namespace OwnaudioNET.Sources;
 /// - Provides the master sample position for drift correction
 /// - Supports tempo changes that cascade to all synced sources
 ///
+/// NEW ARCHITECTURE (Observer Pattern):
+/// - All synchronized sources subscribe to this GhostTrack as observers
+/// - Property changes (tempo, pitch, state, position) automatically propagate to all observers
+/// - No manual synchronization calls needed
+/// - Single source of truth for all sync group operations
+///
 /// This is the "invisible conductor" that keeps all tracks perfectly in sync.
 /// </summary>
 public sealed class GhostTrackSource : BaseAudioSource
@@ -25,6 +32,10 @@ public sealed class GhostTrackSource : BaseAudioSource
     private double _tempo;
     private readonly object _lock = new();
     private bool _disposed;
+
+    // Observer pattern - thread-safe list of observers
+    private readonly List<IGhostTrackObserver> _observers = new();
+    private readonly object _observersLock = new();
 
     /// <summary>
     /// Gets the audio configuration for this ghost track.
@@ -86,7 +97,7 @@ public sealed class GhostTrackSource : BaseAudioSource
 
     /// <summary>
     /// Gets or sets the tempo multiplier (1.0 = normal speed, 0.5 = half speed, 2.0 = double speed).
-    /// Changes to tempo affect all synchronized sources.
+    /// Changes to tempo AUTOMATICALLY affect all synchronized sources via observer pattern.
     /// </summary>
     public override float Tempo
     {
@@ -101,8 +112,17 @@ public sealed class GhostTrackSource : BaseAudioSource
         {
             lock (_lock)
             {
-                _tempo = Math.Clamp(value, 0.1f, 4.0f); // Reasonable tempo range
+                float newTempo = Math.Clamp(value, 0.1f, 4.0f); // Reasonable tempo range
+
+                // Only notify if value actually changed
+                if (Math.Abs(_tempo - newTempo) < 0.001f)
+                    return;
+
+                _tempo = newTempo;
             }
+
+            // Notify observers OUTSIDE lock to avoid deadlock
+            NotifyObservers(observer => observer.OnGhostTrackTempoChanged((float)_tempo));
         }
     }
 
@@ -252,6 +272,7 @@ public sealed class GhostTrackSource : BaseAudioSource
 
     /// <summary>
     /// Seeks to a specific position in the ghost track.
+    /// AUTOMATICALLY seeks all synchronized sources to the same position via observer pattern.
     /// </summary>
     /// <param name="positionInSeconds">The target position in seconds.</param>
     /// <returns>True if seek was successful, false otherwise.</returns>
@@ -262,9 +283,10 @@ public sealed class GhostTrackSource : BaseAudioSource
         if (positionInSeconds < 0)
             return false;
 
+        long targetFrame;
         lock (_lock)
         {
-            long targetFrame = (long)(positionInSeconds * _config.SampleRate);
+            targetFrame = (long)(positionInSeconds * _config.SampleRate);
 
             // Clamp to valid range
             targetFrame = Math.Clamp(targetFrame, 0, _totalFrames);
@@ -273,31 +295,43 @@ public sealed class GhostTrackSource : BaseAudioSource
 
             // Update sample position for sync tracking
             SetSamplePosition(targetFrame);
-
-            return true;
         }
+
+        // Notify observers OUTSIDE lock to avoid deadlock
+        NotifyObservers(observer => observer.OnGhostTrackPositionChanged(targetFrame));
+
+        return true;
     }
 
     /// <summary>
     /// Starts playback of the ghost track.
+    /// AUTOMATICALLY starts all synchronized sources via observer pattern.
     /// </summary>
     public override void Play()
     {
         ThrowIfDisposed();
         base.Play();
+
+        // Notify observers that state changed to Playing
+        NotifyObservers(observer => observer.OnGhostTrackStateChanged(AudioState.Playing));
     }
 
     /// <summary>
     /// Pauses the ghost track.
+    /// AUTOMATICALLY pauses all synchronized sources via observer pattern.
     /// </summary>
     public override void Pause()
     {
         ThrowIfDisposed();
         base.Pause();
+
+        // Notify observers that state changed to Paused
+        NotifyObservers(observer => observer.OnGhostTrackStateChanged(AudioState.Paused));
     }
 
     /// <summary>
     /// Stops the ghost track and resets position to zero.
+    /// AUTOMATICALLY stops all synchronized sources via observer pattern.
     /// </summary>
     public override void Stop()
     {
@@ -310,6 +344,9 @@ public sealed class GhostTrackSource : BaseAudioSource
         }
 
         base.Stop();
+
+        // Notify observers that state changed to Stopped
+        NotifyObservers(observer => observer.OnGhostTrackStateChanged(AudioState.Stopped));
     }
 
     /// <summary>
@@ -340,6 +377,88 @@ public sealed class GhostTrackSource : BaseAudioSource
     }
 
     /// <summary>
+    /// Subscribes an observer to receive notifications when the GhostTrack state changes.
+    /// The observer will be automatically notified of Play, Pause, Stop, Seek, Tempo, and Pitch changes.
+    /// </summary>
+    /// <param name="observer">The observer to subscribe.</param>
+    /// <exception cref="ArgumentNullException">Thrown when observer is null.</exception>
+    public void Subscribe(IGhostTrackObserver observer)
+    {
+        if (observer == null)
+            throw new ArgumentNullException(nameof(observer));
+
+        lock (_observersLock)
+        {
+            if (!_observers.Contains(observer))
+            {
+                _observers.Add(observer);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Unsubscribes an observer from receiving notifications.
+    /// </summary>
+    /// <param name="observer">The observer to unsubscribe.</param>
+    public void Unsubscribe(IGhostTrackObserver observer)
+    {
+        if (observer == null)
+            return;
+
+        lock (_observersLock)
+        {
+            _observers.Remove(observer);
+        }
+    }
+
+    /// <summary>
+    /// Gets the number of currently subscribed observers.
+    /// Useful for debugging and monitoring sync group health.
+    /// </summary>
+    public int ObserverCount
+    {
+        get
+        {
+            lock (_observersLock)
+            {
+                return _observers.Count;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Notifies all subscribed observers with the specified action.
+    /// Thread-safe and handles observer exceptions gracefully.
+    /// </summary>
+    /// <param name="notifyAction">The action to perform on each observer.</param>
+    private void NotifyObservers(Action<IGhostTrackObserver> notifyAction)
+    {
+        // Get a snapshot of observers to avoid lock during notification
+        IGhostTrackObserver[] observerSnapshot;
+        lock (_observersLock)
+        {
+            if (_observers.Count == 0)
+                return; // Fast path - no observers
+
+            observerSnapshot = _observers.ToArray();
+        }
+
+        // Notify all observers OUTSIDE lock to prevent deadlock
+        foreach (var observer in observerSnapshot)
+        {
+            try
+            {
+                notifyAction(observer);
+            }
+            catch
+            {
+                // Observer threw exception - ignore and continue notifying others
+                // In production, log this via ILogger
+            }
+        }
+    }
+
+    /// <summary>
     /// Gets statistics about the ghost track.
     /// </summary>
     /// <returns>A string representation of the ghost track state.</returns>
@@ -348,7 +467,7 @@ public sealed class GhostTrackSource : BaseAudioSource
         lock (_lock)
         {
             return $"GhostTrack: {Duration:F2}s, Position: {Position:F2}s, " +
-                   $"Frame: {_currentFrame}/{_totalFrames}, Tempo: {_tempo:F2}x, State: {State}";
+                   $"Frame: {_currentFrame}/{_totalFrames}, Tempo: {_tempo:F2}x, State: {State}, Observers: {ObserverCount}";
         }
     }
 
@@ -363,6 +482,12 @@ public sealed class GhostTrackSource : BaseAudioSource
             if (disposing)
             {
                 Stop();
+
+                // Unsubscribe all observers
+                lock (_observersLock)
+                {
+                    _observers.Clear();
+                }
             }
             _disposed = true;
         }

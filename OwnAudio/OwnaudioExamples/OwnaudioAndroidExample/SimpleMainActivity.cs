@@ -18,7 +18,7 @@ using AudioEngineFactory = Ownaudio.Core.AudioEngineFactory;
 using AudioConfig = Ownaudio.Core.AudioConfig;
 using System.Diagnostics;
 
-namespace OwnaudioAndroidTest
+namespace OwnaudioAndroidExample
 {
     [Activity(Label = "@string/app_name", MainLauncher = true, ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize)]
     public class SimpleMainActivity : AppCompatActivity
