@@ -56,7 +56,6 @@ public sealed partial class AudioMixer : IDisposable
 
     // Master controls
     private volatile float _masterVolume;
-    private volatile bool _enableAutoDriftCorrection = false; // Disabled by default to avoid stuttering
 
     // Level metering (peak levels in last mix cycle)
     private volatile float _leftPeak;
@@ -130,17 +129,6 @@ public sealed partial class AudioMixer : IDisposable
     /// </summary>
     public bool IsRecording => _isRecording;
 
-    /// <summary>
-    /// Gets or sets whether automatic drift correction is enabled for synchronized sources.
-    /// When enabled, sources in sync groups are periodically checked for drift and resynced if needed.
-    /// WARNING: Enabling this may cause occasional stuttering during resync operations.
-    /// Default: false (disabled)
-    /// </summary>
-    public bool EnableAutoDriftCorrection
-    {
-        get => _enableAutoDriftCorrection;
-        set => _enableAutoDriftCorrection = value;
-    }
 
     /// <summary>
     /// Event raised when a buffer underrun occurs (audio dropout).
@@ -544,11 +532,6 @@ public sealed partial class AudioMixer : IDisposable
         float[] mixBuffer = new float[bufferSizeInSamples];
         float[] sourceBuffer = new float[bufferSizeInSamples];
 
-        // Drift detection counter (check every 100 iterations = ~1 second @ 512 frames, 48kHz)
-        // Less frequent checks = smoother playback, drift correction happens slowly over time
-        int syncCheckCounter = 0;
-        const int SyncCheckInterval = 100;
-
         while (!_shouldStop)
         {
             try
@@ -617,25 +600,9 @@ public sealed partial class AudioMixer : IDisposable
                     // Advance master position for sync tracking
                     _synchronizer.AdvanceMasterPosition(_bufferSizeInFrames);
 
-                    // Periodically check for drift and resync if needed (only if enabled)
-                    if (_enableAutoDriftCorrection)
-                    {
-                        syncCheckCounter++;
-                        if (syncCheckCounter >= SyncCheckInterval)
-                        {
-                            syncCheckCounter = 0;
-
-                            // Check all sync groups for drift
-                            var groupIds = _synchronizer.GetSyncGroupIds();
-                            foreach (var groupId in groupIds)
-                            {
-                                // Tolerance: 512 frames (~10ms @ 48kHz) before resyncing
-                                // This is a buffer-sized tolerance - only resync if drift > 1 buffer
-                                // Prevents frequent resyncs due to minor jitter
-                                _synchronizer.CheckAndResyncGroup(groupId, _synchronizer.MasterSamplePosition, toleranceInFrames: 512);
-                            }
-                        }
-                    }
+                    // NEW ARCHITECTURE: No periodic drift correction needed!
+                    // Each FileSource continuously checks drift in its own ReadSamples() method
+                    // This is zero-overhead and sample-accurate
 
                     // NO SLEEP HERE - Engine.Send() is blocking and provides timing
                     // Adding sleep would make playback too slow

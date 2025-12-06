@@ -101,26 +101,19 @@ public class AudioService : IDisposable
         if (_isInitialized)
             return;
 
-        await Task.Run(() =>
+        // Initialize the audio engine (may block up to 5000ms on Linux)
+        await OwnaudioNet.InitializeAsync();
+
+        // CRITICAL: Start the audio engine BEFORE creating mixer
+        OwnaudioNet.Start();
+
+        // Create the mixer with the underlying engine (not the wrapper)
+        if (OwnaudioNet.Engine != null)
         {
-            // Initialize the audio engine (may block up to 5000ms on Linux)
-            OwnaudioNet.Initialize();
-
-            // CRITICAL: Start the audio engine BEFORE creating mixer
-            OwnaudioNet.Start();
-
-            // Create the mixer with the underlying engine (not the wrapper)
-            if (OwnaudioNet.Engine != null)
-            {
-                // Indoklás: Buffer méret növelése 512-ről 2048-ra.
-                // A nagyobb buffer csökkenti a processzor terhelését és a "buffer underrun" esélyét,
-                // így megszünteti a folyamatos akadozást. Lejátszó programnál a ~10ms (512) késleltetés helyett
-                // a ~42ms (2048) teljesen elfogadható és sokkal stabilabb.
-                _mixer = new AudioMixer(OwnaudioNet.Engine.UnderlyingEngine, bufferSizeInFrames: 2048);
-                // Start the mixer once and leave it running
-                _mixer.Start();
-            }
-        });
+            _mixer = new AudioMixer(OwnaudioNet.Engine.UnderlyingEngine, bufferSizeInFrames: 512);
+            // Start the mixer once and leave it running
+            _mixer.Start();
+        }
 
         _isInitialized = true;
     }
@@ -136,40 +129,37 @@ public class AudioService : IDisposable
         if (!_isInitialized)
             return;
 
-        await Task.Run(() =>
+        // Stop and dispose existing mixer
+        _mixer?.Stop();
+        _mixer?.Dispose();
+        _mixer = null;
+
+        // Stop and shutdown audio engine
+        await OwnaudioNet.StopAsync();
+        await OwnaudioNet.ShutdownAsync();
+
+        // Wait for complete cleanup
+        System.Threading.Thread.Sleep(200);
+
+        // Force garbage collection
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        // Wait again
+        System.Threading.Thread.Sleep(100);
+
+        // Restart audio engine
+        OwnaudioNet.Initialize();
+        OwnaudioNet.Start();
+
+        // Create new mixer
+        if (OwnaudioNet.Engine != null)
         {
-            // Stop and dispose existing mixer
-            _mixer?.Stop();
-            _mixer?.Dispose();
-            _mixer = null;
-
-            // Stop and shutdown audio engine
-            OwnaudioNet.Stop();
-            OwnaudioNet.Shutdown();
-
-            // Wait for complete cleanup
-            System.Threading.Thread.Sleep(200);
-
-            // Force garbage collection
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-
-            // Wait again
-            System.Threading.Thread.Sleep(100);
-
-            // Restart audio engine
-            OwnaudioNet.Initialize();
-            OwnaudioNet.Start();
-
-            // Create new mixer
-            if (OwnaudioNet.Engine != null)
-            {
-                // Indoklás: Buffer méret növelése 2048-ra a stabilitás érdekében (lásd InitializeAsync).
-                _mixer = new AudioMixer(OwnaudioNet.Engine.UnderlyingEngine, bufferSizeInFrames: 2048);
-                _mixer.Start();
-            }
-        });
+            // Indoklás: Buffer méret növelése 2048-ra a stabilitás érdekében (lásd InitializeAsync).
+            _mixer = new AudioMixer(OwnaudioNet.Engine.UnderlyingEngine, bufferSizeInFrames: 512);
+            _mixer.Start();
+        }
     }
 
     #endregion

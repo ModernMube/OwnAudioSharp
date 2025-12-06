@@ -1,7 +1,7 @@
 using Android.App;
 using Android.Runtime;
 
-namespace OwnaudioAndroidTest
+namespace OwnaudioAndroidExample
 {
     [Application]
     public class MainApplication : Application

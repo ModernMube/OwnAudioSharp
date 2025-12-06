@@ -263,10 +263,17 @@ public class TestProgram
             mixer.AddSource(fileSource2);
             mixer.AddSource(fileSource3Effect);
 
+            // NEW ARCHITECTURE: Create sync group - automatically attaches sources to GhostTrack
             mixer.CreateSyncGroup("Demo", fileSource0, fileSource1, fileSource2, fileSource3);
+
+            // NEW ARCHITECTURE: Set tempo on GhostTrack - automatically propagates to all sources
             mixer.SetSyncGroupTempo("Demo", 1.0f);
-            mixer.CheckAndResyncAllGroups(toleranceInFrames: 30);
-            mixer.EnableAutoDriftCorrection = true;
+
+            // NEW ARCHITECTURE: No need for manual drift correction!
+            // Each FileSource continuously checks drift in ReadSamples() automatically
+            // - Continuous check every ~10ms (vs old: once per second)
+            // - Tight tolerance: 10ms (vs old: 100ms)
+            // - Zero overhead, lock-free design
 
             Console.WriteLine($"  ✓ Source added to mixer");
             Console.WriteLine($"  ✓ Active sources: {mixer.SourceCount}");

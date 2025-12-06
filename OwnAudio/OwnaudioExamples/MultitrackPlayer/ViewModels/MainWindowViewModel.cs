@@ -437,10 +437,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             
             await Task.Run(() =>
             {
+                // NEW ARCHITECTURE: Create sync group - automatically attaches sources to GhostTrack
                 _audioService.Mixer.CreateSyncGroup("MainTracks", sources);
+
+                // NEW ARCHITECTURE: Set tempo on GhostTrack - automatically propagates to all sources
                 _audioService.Mixer.SetSyncGroupTempo("MainTracks", TempoPercent / 100.0f);
-                _audioService.Mixer.CheckAndResyncAllGroups(toleranceInFrames: 30);
-                _audioService.Mixer.EnableAutoDriftCorrection = true;
+
+                // NEW ARCHITECTURE: No manual drift correction needed!
+                // - Automatic continuous drift check in ReadSamples() every ~10ms
+                // - Tight 10ms tolerance (vs old 100ms)
+                // - Lock-free, zero overhead design
+
                 _audioService.Mixer.StartSyncGroup("MainTracks");
             });
 
