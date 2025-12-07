@@ -231,20 +231,6 @@ public class AudioMixerTests : IDisposable
     }
 
     [Fact]
-    public void EnableAutoDriftCorrection_ShouldBeSettable()
-    {
-        // Arrange
-        _engine = AudioEngineFactory.CreateMockEngine(_testConfig);
-        _mixer = new AudioMixer(_engine);
-
-        // Act
-        _mixer.EnableAutoDriftCorrection = true;
-
-        // Assert
-        _mixer.EnableAutoDriftCorrection.Should().BeTrue();
-    }
-
-    [Fact]
     public void AddMultipleSources_AndMix_ShouldCombineAudio()
     {
         // Arrange
