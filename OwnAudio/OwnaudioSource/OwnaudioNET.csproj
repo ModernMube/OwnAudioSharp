@@ -25,7 +25,7 @@
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>OwnAudioSharp</PackageId>
-    <Version>2.3.0</Version>
+    <Version>2.3.1</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for desktop platforms (Windows, Linux, macOS)</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;desktop;sound;multitrack</PackageTags>
@@ -61,32 +61,61 @@
   <!-- NuGet package files -->
   <ItemGroup>
     <None Include="..\..\ownaudio.png" Pack="true" PackagePath="\" />
-    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="README.Desktop.md" Pack="true" PackagePath="\README.md" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <!-- Platform-specific project references with private assets (embedded in this assembly) -->
   <ItemGroup>
     <!-- Core (always included) -->
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" />
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" />
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" PrivateAssets="all" IncludeAssets="runtime"/>
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" PrivateAssets="all" IncludeAssets="runtime"/>
   </ItemGroup>
 
   <!-- Desktop platform references -->
   <ItemGroup>
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Windows\Ownaudio.Windows.csproj" />
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Linux\Ownaudio.Linux.csproj" />
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.macOS\Ownaudio.macOS.csproj" />
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Windows\Ownaudio.Windows.csproj" PrivateAssets="all" IncludeAssets="runtime"/>
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Linux\Ownaudio.Linux.csproj" PrivateAssets="all" IncludeAssets="runtime"/>
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.macOS\Ownaudio.macOS.csproj" PrivateAssets="all" IncludeAssets="runtime"/>
   </ItemGroup>
+
+  <!-- Ensure platform-specific projects are built before packing -->
+  <Target Name="BuildPlatformProjects" BeforeTargets="GenerateNuspec">
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=net9.0" />
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=net9.0" />
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Windows\Ownaudio.Windows.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=net9.0" />
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Linux\Ownaudio.Linux.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=net9.0" />
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.macOS\Ownaudio.macOS.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=net9.0" />
+  </Target>
 
   <!-- Include platform-specific assemblies in the NuGet package -->
   <ItemGroup>
-    <!-- Desktop (.NET 9.0) assemblies -->
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net9.0\Ownaudio.Native.dll" Pack="true" PackagePath="lib\net9.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net9.0\Ownaudio.Native.dll')" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Windows\bin\$(Configuration)\net9.0\Ownaudio.Windows.dll" Pack="true" PackagePath="lib\net9.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Windows\bin\$(Configuration)\net9.0\Ownaudio.Windows.dll')" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Linux\bin\$(Configuration)\net9.0\Ownaudio.Linux.dll" Pack="true" PackagePath="lib\net9.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Linux\bin\$(Configuration)\net9.0\Ownaudio.Linux.dll')" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.macOS\bin\$(Configuration)\net9.0\Ownaudio.macOS.dll" Pack="true" PackagePath="lib\net9.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.macOS\bin\$(Configuration)\net9.0\Ownaudio.macOS.dll')" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net9.0\Ownaudio.Core.dll" Pack="true" PackagePath="lib\net9.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net9.0\Ownaudio.Core.dll')" />
+    <!-- Desktop (.NET 9.0) assemblies - removing Exists condition to ensure inclusion -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net9.0\Ownaudio.Core.dll"
+          Pack="true"
+          PackagePath="lib\net9.0\" />
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net9.0\Ownaudio.Native.dll"
+          Pack="true"
+          PackagePath="lib\net9.0\" />
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Windows\bin\$(Configuration)\net9.0\Ownaudio.Windows.dll"
+          Pack="true"
+          PackagePath="lib\net9.0\" />
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Linux\bin\$(Configuration)\net9.0\Ownaudio.Linux.dll"
+          Pack="true"
+          PackagePath="lib\net9.0\" />
+    <None Include="..\..\OwnAudioEngine\Ownaudio.macOS\bin\$(Configuration)\net9.0\Ownaudio.macOS.dll"
+          Pack="true"
+          PackagePath="lib\net9.0\" />
   </ItemGroup>
 
 </Project>

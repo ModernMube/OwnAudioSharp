@@ -276,8 +276,6 @@ namespace OwnaudioAndroidExample
                 // Create sync group for synchronized playback
                 _mixer.CreateSyncGroup("Demo", _fileSource0, _fileSource1, _fileSource2, _fileSource3);
                 _mixer.SetSyncGroupTempo("Demo", 1.0f);
-                _mixer.CheckAndResyncAllGroups(toleranceInFrames: 30);
-                _mixer.EnableAutoDriftCorrection = true;
 
                 UpdateStatus($"✓ Sync group created with 4 tracks");
                 UpdateStatus($"✓ Active sources: {_mixer.SourceCount}");

@@ -18,7 +18,7 @@
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>OwnAudioSharp.Mobile</PackageId>
-    <Version>2.3.0</Version>
+    <Version>2.3.1</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for mobile platforms (Android and iOS)</Description>
     <PackageTags>audio;cross-platform;android;ios;mobile;sound;multitrack</PackageTags>
@@ -58,38 +58,75 @@
   <!-- NuGet package files -->
   <ItemGroup>
     <None Include="..\..\ownaudio.png" Pack="true" PackagePath="\" />
-    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="README.Mobile.md" Pack="true" PackagePath="\README.md" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <!-- Platform-specific project references with private assets (embedded in this assembly) -->
   <ItemGroup>
     <!-- Core (always included) -->
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" />
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" />
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" PrivateAssets="all" IncludeAssets="runtime"/>
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" PrivateAssets="all" IncludeAssets="runtime"/>
   </ItemGroup>
 
   <!-- Android platform reference (net9.0-android only) -->
   <ItemGroup Condition="$(TargetFramework.StartsWith('net9.0-android'))">
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Android\Ownaudio.Android.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Android\Ownaudio.Android.csproj" PrivateAssets="all" IncludeAssets="runtime"/>
   </ItemGroup>
 
   <!-- iOS platform reference (net9.0-ios only) -->
   <ItemGroup Condition="$(TargetFramework.StartsWith('net9.0-ios'))">
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.iOS\Ownaudio.iOS.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.iOS\Ownaudio.iOS.csproj" PrivateAssets="all" IncludeAssets="runtime"/>
   </ItemGroup>
+
+  <!-- Ensure platform-specific projects are built before packing -->
+  <Target Name="BuildAndroidProjects" BeforeTargets="GenerateNuspec" Condition="$(TargetFramework.StartsWith('net9.0-android'))">
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=net9.0-android35.0" />
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=net9.0-android35.0" />
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Android\Ownaudio.Android.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=net9.0-android35.0" />
+  </Target>
+
+  <Target Name="BuildiOSProjects" BeforeTargets="GenerateNuspec" Condition="$(TargetFramework.StartsWith('net9.0-ios'))">
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=net9.0-ios18.0" />
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=net9.0-ios18.0" />
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.iOS\Ownaudio.iOS.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);TargetFramework=net9.0-ios18.0" />
+  </Target>
 
   <!-- Include platform-specific assemblies in the NuGet package -->
   <ItemGroup>
-    <!-- Android assemblies -->
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Android\bin\$(Configuration)\net9.0-android35.0\Ownaudio.Android.dll" Pack="true" PackagePath="lib\net9.0-android35.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Android\bin\$(Configuration)\net9.0-android35.0\Ownaudio.Android.dll')" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net9.0-android35.0\Ownaudio.Core.dll" Pack="true" PackagePath="lib\net9.0-android35.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net9.0-android35.0\Ownaudio.Core.dll')" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net9.0-android35.0\Ownaudio.Native.dll" Pack="true" PackagePath="lib\net9.0-android35.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net9.0-android35.0\Ownaudio.Native.dll')" />
+    <!-- Android assemblies - removing Exists condition to ensure inclusion -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net9.0-android35.0\Ownaudio.Core.dll"
+          Pack="true"
+          PackagePath="lib\net9.0-android35.0\" />
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net9.0-android35.0\Ownaudio.Native.dll"
+          Pack="true"
+          PackagePath="lib\net9.0-android35.0\" />
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Android\bin\$(Configuration)\net9.0-android35.0\Ownaudio.Android.dll"
+          Pack="true"
+          PackagePath="lib\net9.0-android35.0\" />
 
-    <!-- iOS assemblies -->
-    <None Include="..\..\OwnAudioEngine\Ownaudio.iOS\bin\$(Configuration)\net9.0-ios18.0\Ownaudio.iOS.dll" Pack="true" PackagePath="lib\net9.0-ios18.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.iOS\bin\$(Configuration)\net9.0-ios18.0\Ownaudio.iOS.dll')" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net9.0-ios18.0\Ownaudio.Core.dll" Pack="true" PackagePath="lib\net9.0-ios18.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net9.0-ios18.0\Ownaudio.Core.dll')" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net9.0-ios18.0\Ownaudio.Native.dll" Pack="true" PackagePath="lib\net9.0-ios18.0\" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net9.0-ios18.0\Ownaudio.Native.dll')" />
+    <!-- iOS assemblies - removing Exists condition to ensure inclusion -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net9.0-ios18.0\Ownaudio.Core.dll"
+          Pack="true"
+          PackagePath="lib\net9.0-ios18.0\" />
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net9.0-ios18.0\Ownaudio.Native.dll"
+          Pack="true"
+          PackagePath="lib\net9.0-ios18.0\" />
+    <None Include="..\..\OwnAudioEngine\Ownaudio.iOS\bin\$(Configuration)\net9.0-ios18.0\Ownaudio.iOS.dll"
+          Pack="true"
+          PackagePath="lib\net9.0-ios18.0\" />
   </ItemGroup>
 
 </Project>
