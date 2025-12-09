@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Diagnostics;
 using System.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -6,6 +7,8 @@ using Ownaudio;
 using Ownaudio.Core;
 using OwnaudioNET.Mixing;
 using OwnaudioNET.Sources;
+using System.Linq;
+using System.Collections.Generic;
 
 namespace Ownaudio.EngineTest;
 
@@ -45,8 +48,7 @@ public class GCPressureProfileTest
         Console.WriteLine("===================================================");
 
         // Initialize engine
-        var factory = new AudioEngineFactory();
-        var engine = factory.CreateDefault();
+        var engine = AudioEngineFactory.CreateDefault();
 
         var config = new AudioConfig
         {
@@ -153,7 +155,7 @@ public class GCPressureProfileTest
         mixer.Stop();
         mixer.Dispose();
         engine.Stop();
-        engine.Shutdown();
+        engine.Dispose();
 
         // ACCEPTANCE CRITERIA for low GC pressure:
         // - Gen0: < 10 collections/minute (< 0.167 per second)
