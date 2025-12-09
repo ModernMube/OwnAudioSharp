@@ -39,6 +39,8 @@ public sealed partial class AudioMixer : IDisposable
 
     // Source management
     private readonly ConcurrentDictionary<Guid, IAudioSource> _sources;
+    private IAudioSource[] _cachedSourcesArray = Array.Empty<IAudioSource>();  // OPTIMIZATION: Cache to avoid ConcurrentDictionary.Values allocation
+    private volatile bool _sourcesArrayNeedsUpdate = true;  // Flag to update cache when sources change
 
     // Synchronization
     private readonly AudioSynchronizer _synchronizer;
@@ -280,6 +282,9 @@ public sealed partial class AudioMixer : IDisposable
             // Subscribe to source error events
             source.Error += OnSourceError;
 
+            // OPTIMIZATION: Invalidate cached array when sources change
+            _sourcesArrayNeedsUpdate = true;
+
             // If mixer is running and source is not playing, start it
             if (_isRunning && source.State != AudioState.Playing)
             {
@@ -330,6 +335,9 @@ public sealed partial class AudioMixer : IDisposable
             // Unsubscribe from error events
             source.Error -= OnSourceError;
 
+            // OPTIMIZATION: Invalidate cached array when sources change
+            _sourcesArrayNeedsUpdate = true;
+
             // Stop the source
             try
             {
@@ -368,6 +376,9 @@ public sealed partial class AudioMixer : IDisposable
         }
 
         _sources.Clear();
+
+        // OPTIMIZATION: Invalidate cached array when sources change
+        _sourcesArrayNeedsUpdate = true;
     }
 
     /// <summary>
@@ -524,6 +535,7 @@ public sealed partial class AudioMixer : IDisposable
     /// <summary>
     /// Mix thread loop - continuously mixes sources and sends to engine.
     /// This is the hot path - must be zero-allocation.
+    /// OPTIMIZATION: Uses cached array instead of ConcurrentDictionary.Values to avoid enumerator allocation.
     /// </summary>
     private void MixThreadLoop()
     {
@@ -543,13 +555,22 @@ public sealed partial class AudioMixer : IDisposable
                     continue;
                 }
 
+                // OPTIMIZATION: Update cached sources array if needed (zero allocation in steady state)
+                // This avoids ConcurrentDictionary.Values enumeration which allocates an enumerator every call
+                if (_sourcesArrayNeedsUpdate)
+                {
+                    _cachedSourcesArray = _sources.Values.ToArray();
+                    _sourcesArrayNeedsUpdate = false;
+                }
+
                 // Clear mix buffer
                 Array.Clear(mixBuffer, 0, bufferSizeInSamples);
 
-                // Mix all sources
+                // OPTIMIZATION: Mix all sources using cached array (zero allocation)
                 int activeSources = 0;
-                foreach (var source in _sources.Values)
+                for (int i = 0; i < _cachedSourcesArray.Length; i++)
                 {
+                    var source = _cachedSourcesArray[i];  // Get source from cached array
                     try
                     {
                         // Only mix playing sources

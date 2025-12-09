@@ -121,7 +121,7 @@ public class AudioService : IDisposable
     /// <summary>
     /// Restarts the audio engine and mixer from scratch.
     /// This is the safest way to ensure clean state after track changes.
-    /// Performs complete cleanup including garbage collection before reinitialization.
+    /// Performs complete cleanup with minimal blocking time.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task RestartAsync()
@@ -138,16 +138,8 @@ public class AudioService : IDisposable
         await OwnaudioNet.StopAsync();
         await OwnaudioNet.ShutdownAsync();
 
-        // Wait for complete cleanup
-        System.Threading.Thread.Sleep(200);
-
-        // Force garbage collection
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
-        // Wait again
-        System.Threading.Thread.Sleep(100);
+        // Brief wait for resources to be released (reduced from 200ms to 50ms)
+        await Task.Delay(50);
 
         // Restart audio engine
         OwnaudioNet.Initialize();
@@ -156,7 +148,6 @@ public class AudioService : IDisposable
         // Create new mixer
         if (OwnaudioNet.Engine != null)
         {
-            // Indoklás: Buffer méret növelése 2048-ra a stabilitás érdekében (lásd InitializeAsync).
             _mixer = new AudioMixer(OwnaudioNet.Engine.UnderlyingEngine, bufferSizeInFrames: 512);
             _mixer.Start();
         }
