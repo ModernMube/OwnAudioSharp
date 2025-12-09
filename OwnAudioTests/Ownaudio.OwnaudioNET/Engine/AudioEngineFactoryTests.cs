@@ -133,7 +133,14 @@ public class AudioEngineFactoryTests
 
         // Assert
         engineName.Should().NotBeNullOrEmpty();
-        engineName.Should().BeOneOf("WasapiEngine", "CoreAudioEngine", "PulseAudioEngine", "None");
+        engineName.Should().BeOneOf(
+            "NativeAudioEngine (PortAudio/MiniAudio)",
+            "WasapiEngine (Windows fallback)",
+            "CoreAudioEngine (macOS fallback)",
+            "PulseAudioEngine (Linux fallback)",
+            "AAudioEngine (Android fallback)",
+            "NativeAudioEngine (iOS via MiniAudio/CoreAudio)",
+            "None");
     }
 
     [Fact]
