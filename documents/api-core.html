@@ -259,7 +259,7 @@ engine.Stop();</code></pre>
             </div>
 
             <h3>IAudioDecoder</h3>
-            <p>Audio file decoder interface for WAV, MP3, and FLAC formats.</p>
+            <p>Audio file decoder interface for WAV, MP3, and FLAC formats, designed for high-performance, zero-allocation reading.</p>
 
             <div class="code-block">
                 <div class="code-header">IAudioDecoder Interface</div>
@@ -267,9 +267,14 @@ engine.Stop();</code></pre>
 {
     AudioStreamInfo StreamInfo { get; }
     
-    AudioDecoderResult DecodeNextFrame();
+    // New zero-allocation method (Recommended)
+    AudioDecoderResult ReadFrames(byte[] buffer);
+
     bool TrySeek(TimeSpan position, out string error);
-    AudioDecoderResult DecodeAllFrames(TimeSpan position);
+
+    // Obsolete allocating method
+    [Obsolete("Use ReadFrames for better performance.")]
+    AudioDecoderResult DecodeNextFrame();
 }</code></pre>
             </div>
 
@@ -286,7 +291,7 @@ engine.Stop();</code></pre>
                     <tr>
                         <td><code>StreamInfo</code></td>
                         <td>AudioStreamInfo</td>
-                        <td>Information about the loaded audio stream</td>
+                        <td>Information about the loaded audio stream (sample rate, channels, duration).</td>
                     </tr>
                 </tbody>
             </table>
@@ -302,26 +307,26 @@ engine.Stop();</code></pre>
                 </thead>
                 <tbody>
                     <tr>
-                        <td><code>DecodeNextFrame()</code></td>
+                        <td><code>ReadFrames(byte[] buffer)</code></td>
                         <td>AudioDecoderResult</td>
-                        <td>Decode next audio frame</td>
+                        <td><span class="badge badge-success">Recommended</span> Reads audio into a pre-allocated buffer. Zero-allocation.</td>
                     </tr>
                     <tr>
                         <td><code>TrySeek(TimeSpan, out string)</code></td>
                         <td>bool</td>
-                        <td>Seek to position. Returns true on success</td>
+                        <td>Seek to a specific position. Returns true on success.</td>
                     </tr>
                     <tr>
-                        <td><code>DecodeAllFrames(TimeSpan)</code></td>
+                        <td><code>DecodeNextFrame()</code></td>
                         <td>AudioDecoderResult</td>
-                        <td>Decode all frames from position</td>
+                        <td><span class="badge badge-danger">Obsolete</span> Decodes the next frame, but allocates memory. Use <code>ReadFrames</code> instead.</td>
                     </tr>
                 </tbody>
             </table>
 
             <h4>Usage Example</h4>
             <div class="code-block">
-                <div class="code-header">Decoder Usage</div>
+                <div class="code-header">Modern Decoder Usage (Zero-Allocation)</div>
                 <pre><code class="language-csharp">// Create decoder
 using var decoder = AudioDecoderFactory.Create(
     "music.mp3",
@@ -329,24 +334,27 @@ using var decoder = AudioDecoderFactory.Create(
     targetChannels: 2
 );
 
-// Get stream info
 var info = decoder.StreamInfo;
 Console.WriteLine($"Duration: {info.Duration}");
 
-// Decode frames
+// Create a reusable buffer
+int bufferSize = 4096 * info.Channels * sizeof(float);
+var buffer = new byte[bufferSize];
+
+// Decode frames efficiently
 while (true)
 {
-    var result = decoder.DecodeNextFrame();
+    var result = decoder.ReadFrames(buffer);
     if (result.IsEOF) break;
     
-    // Process frame
-    ProcessAudioFrame(result.Frame);
-}
-
-// Seek to position
-if (decoder.TrySeek(TimeSpan.FromSeconds(30), out string error))
-{
-    Console.WriteLine("Seeked to 30 seconds");
+    if (result.FramesRead > 0)
+    {
+        int bytesRead = result.FramesRead * info.Channels * sizeof(float);
+        var samples = System.Runtime.InteropServices.MemoryMarshal.Cast&lt;byte, float&gt;(buffer.AsSpan(0, bytesRead));
+        
+        // Process the audio samples directly from the buffer
+        ProcessAudioSamples(samples);
+    }
 }</code></pre>
             </div>
 

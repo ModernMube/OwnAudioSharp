@@ -104,7 +104,7 @@ namespace Ownaudio.Native
         /// <summary>
         /// MiniAudio library loader instance.
         /// </summary>
-        private LibraryLoader? _miniAudioLoader;
+        // private LibraryLoader? _miniAudioLoader; // REMOVED: Managed by MaBinding
 
         /// <summary>
         /// Pointer to the MiniAudio context.
@@ -249,9 +249,8 @@ namespace Ownaudio.Native
             }
 
             // Fallback: Use MiniAudio (bundled for all platforms)
-            _miniAudioLoader = new LibraryLoader("libminiaudio");
-            MaBinding.InitializeBindings(_miniAudioLoader);
-            Console.WriteLine($"MiniAudio loaded successfully from: {_miniAudioLoader.LibraryPath}");
+            MaBinding.EnsureInitialized();
+            Console.WriteLine($"MiniAudio loaded successfully"); // LibraryPath not available directly via MaBinding
             return AudioEngineBackend.MiniAudio;
         }
 
@@ -1299,7 +1298,7 @@ namespace Ownaudio.Native
             }
 
             _portAudioLoader?.Dispose();
-            _miniAudioLoader?.Dispose();
+            // _miniAudioLoader?.Dispose(); // REMOVED: Managed by MaBinding
 
             _disposed = true;
             GC.SuppressFinalize(this);

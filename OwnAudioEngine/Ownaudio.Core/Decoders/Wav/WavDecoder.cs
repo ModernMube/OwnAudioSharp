@@ -283,6 +283,70 @@ public sealed class WavDecoder : IAudioDecoder
     }
 
     /// <summary>
+    /// Reads the next block of audio frames into the provided buffer.
+    /// This is the recommended zero-allocation method for reading audio data.
+    /// </summary>
+    /// <param name="buffer">The buffer to write the decoded audio data into. The data is in 32-bit floating point format.</param>
+    /// <returns>An <see cref="AudioDecoderResult"/> indicating the number of frames read.</returns>
+    public AudioDecoderResult ReadFrames(byte[] buffer)
+    {
+        if (_disposed)
+            return AudioDecoderResult.CreateError("Decoder has been disposed.");
+
+        // Check if we've reached end of data chunk
+        if (_stream.Position >= _dataChunkStart + _dataChunkSize)
+            return AudioDecoderResult.CreateEOF();
+
+        // Calculate how many bytes to read from the source
+        long remainingBytes = (_dataChunkStart + _dataChunkSize) - _stream.Position;
+        int bytesToRead = (int)Math.Min(_frameSizeBytes, remainingBytes);
+
+        // Read audio data into pre-allocated buffer
+        int bytesRead = _stream.Read(_tempReadBuffer, 0, bytesToRead);
+
+        if (bytesRead == 0)
+            return AudioDecoderResult.CreateEOF();
+
+        // Convert to Float32 using SIMD
+        int samplesRead = bytesRead / _bytesPerSample;
+        ConvertToFloat32(_tempReadBuffer.AsSpan(0, bytesRead), samplesRead);
+
+        // Apply format conversion if needed (resampling + channel conversion)
+        int finalSampleCount = samplesRead;
+        Span<byte> outputData = _decodeBuffer.Data.Slice(0, samplesRead * sizeof(float));
+
+        if (_formatConverter != null)
+        {
+            // Convert format (resample + channel convert)
+            Span<float> sourceFloat = MemoryMarshal.Cast<byte, float>(outputData);
+            Span<float> convertedFloat = _convertBuffer.AsSpan();
+
+            finalSampleCount = _formatConverter.Convert(sourceFloat, convertedFloat);
+
+            // Copy converted data back to byte buffer
+            outputData = MemoryMarshal.Cast<float, byte>(convertedFloat.Slice(0, finalSampleCount));
+        }
+
+        // Copy the decoded data to the output buffer
+        int float32Bytes = finalSampleCount * sizeof(float);
+        if (float32Bytes > buffer.Length)
+        {
+            return AudioDecoderResult.CreateError($"Output buffer too small. Required: {float32Bytes}, Available: {buffer.Length}");
+        }
+
+        outputData.Slice(0, float32Bytes).CopyTo(buffer.AsSpan());
+
+        // Update presentation timestamp (based on SOURCE format, not target)
+        int samplesPerChannel = samplesRead / _format.Channels;
+        _currentPts += (samplesPerChannel * 1000.0) / _format.SampleRate;
+
+        // Calculate number of frames read (frames = samples / channels)
+        int framesRead = finalSampleCount / _targetChannels;
+
+        return AudioDecoderResult.CreateSuccess(framesRead, _currentPts);
+    }
+
+    /// <summary>
     /// Decodes the next audio frame from the WAV stream.
     /// </summary>
     /// <returns>A <see cref="AudioDecoderResult"/> containing the decoded frame or error information.</returns>

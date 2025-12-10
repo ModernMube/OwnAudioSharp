@@ -322,6 +322,41 @@ public sealed class Mp3Decoder : BaseStreamDecoder
     }
 
     /// <summary>
+    /// Reads the next block of audio frames into the provided buffer.
+    /// This is the recommended zero-allocation method.
+    /// </summary>
+    /// <param name="buffer">The buffer to write the decoded audio data into.</param>
+    /// <returns>An <see cref="AudioDecoderResult"/> indicating the number of frames read.</returns>
+    protected override AudioDecoderResult ReadFramesCore(byte[] buffer)
+    {
+        if (_platformDecoder.IsEOF)
+            return AudioDecoderResult.CreateEOF();
+
+        // Decode frame using platform decoder
+        int bytesDecoded = _platformDecoder.DecodeFrame(buffer.AsSpan(), out double pts);
+
+        if (bytesDecoded == 0)
+        {
+            // EOF
+            return AudioDecoderResult.CreateEOF();
+        }
+
+        if (bytesDecoded < 0)
+        {
+            // Error
+            return AudioDecoderResult.CreateError("Platform decoder error");
+        }
+
+        // Update PTS
+        _currentPts = pts;
+
+        // Calculate number of samples decoded
+        int samplesDecoded = bytesDecoded / sizeof(float);
+
+        return AudioDecoderResult.CreateSuccess(samplesDecoded, pts);
+    }
+
+    /// <summary>
     /// Seeks to the specified sample position.
     /// </summary>
     /// <param name="samplePosition">Target sample position (per channel).</param>
