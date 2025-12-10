@@ -296,6 +296,90 @@ public sealed class FlacDecoder : IAudioDecoder
     }
 
     /// <summary>
+    /// Reads the next block of audio frames into the provided buffer.
+    /// This is the recommended zero-allocation method for reading audio data.
+    /// </summary>
+    /// <param name="buffer">The buffer to write the decoded audio data into. The data is in 32-bit floating point format.</param>
+    /// <returns>An <see cref="AudioDecoderResult"/> indicating the number of frames read.</returns>
+    public AudioDecoderResult ReadFrames(byte[] buffer)
+    {
+        if (_disposed)
+            return AudioDecoderResult.CreateError("Decoder has been disposed.");
+
+        // Check if we've decoded all samples
+        if (_currentSample >= _flacStreamInfo.TotalSamples)
+            return AudioDecoderResult.CreateEOF();
+
+        try
+        {
+            // Find frame sync
+            if (!FindFrameSync())
+                return AudioDecoderResult.CreateEOF();
+
+            long frameStart = _stream.Position - 2; // Sync code is 2 bytes
+
+            // Read frame into buffer
+            int frameSize = ReadFrameToBuffer(frameStart);
+            if (frameSize == 0)
+                return AudioDecoderResult.CreateEOF();
+
+            // Decode frame
+            var span = _frameBuffer.AsSpan(0, frameSize);
+            int samplesDecoded = DecodeFrame(span, out string decodeError, out int bytesConsumed);
+
+            if (samplesDecoded == 0)
+                return AudioDecoderResult.CreateError($"Failed to decode frame: {decodeError}");
+
+            // Adjust stream position to account for bytes we didn't use
+            _stream.Position = frameStart + bytesConsumed;
+
+            // Convert to Float32 using SIMD
+            ConvertToFloat32(_decodeBuffer.AsSpan(0, samplesDecoded), _outputBuffer.AsSpan(0, samplesDecoded));
+
+            // Apply format conversion if needed (resampling, channel conversion)
+            int finalSampleCount;
+            Span<float> finalSpan;
+
+            if (_formatConverter != null)
+            {
+                finalSampleCount = _formatConverter.Convert(_outputBuffer.AsSpan(0, samplesDecoded), _convertBuffer.AsSpan());
+                finalSpan = _convertBuffer.AsSpan(0, finalSampleCount);
+            }
+            else
+            {
+                finalSampleCount = samplesDecoded;
+                finalSpan = _outputBuffer.AsSpan(0, samplesDecoded);
+            }
+
+            // Check if output buffer is large enough
+            int byteCount = finalSampleCount * sizeof(float);
+            if (byteCount > buffer.Length)
+            {
+                return AudioDecoderResult.CreateError($"Output buffer too small. Required: {byteCount}, Available: {buffer.Length}");
+            }
+
+            // Copy float data to output buffer
+            var destFloatSpan = MemoryMarshal.Cast<byte, float>(buffer.AsSpan());
+            finalSpan.CopyTo(destFloatSpan);
+
+            // Update presentation timestamp (based on SOURCE samples, not target)
+            int samplesPerChannel = samplesDecoded / _flacStreamInfo.Channels;
+            _currentPts += (samplesPerChannel * 1000.0) / _flacStreamInfo.SampleRate;
+            _currentSample += samplesPerChannel;
+            _currentFrame++;
+
+            // Calculate number of frames read (frames = samples / channels)
+            int framesRead = finalSampleCount / _targetChannels;
+
+            return AudioDecoderResult.CreateSuccess(framesRead, _currentPts);
+        }
+        catch (Exception ex)
+        {
+            return AudioDecoderResult.CreateError($"Exception during FLAC decode: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// Decodes the next audio frame from the FLAC stream.
     /// </summary>
     /// <returns>A <see cref="AudioDecoderResult"/> containing the decoded frame or error information.</returns>

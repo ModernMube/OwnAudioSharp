@@ -961,13 +961,15 @@ using var decoder = AudioDecoderFactory.Create("music.mp3",
     targetChannels: 2);
 
 // Decode and send audio frames
-// Native engine runs outside GC - no glitches!
+// Use the new, efficient zero-allocation pattern
+var buffer = new byte[config.BufferSize * config.Channels * sizeof(float)];
 while (true)
 {
-    var result = decoder.DecodeNextFrame();
+    var result = decoder.ReadFrames(buffer);
     if (result.IsEOF) break;
 
-    engine.Send(result.Frame.Samples);
+    var samples = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(buffer.AsSpan(0, result.FramesRead * config.Channels * sizeof(float)));
+    engine.Send(samples);
 }
 
 engine.Stop();</code></pre>
@@ -999,18 +1001,23 @@ using var engine = AudioEngineFactory.CreateManaged();
 #endif
 
 // Rest of the code is the same
+var config = new AudioConfig { SampleRate = 48000, Channels = 2 };
+engine.Initialize(config);
 engine.Start();
 
 using var decoder = AudioDecoderFactory.Create("music.mp3",
     targetSampleRate: 48000,
     targetChannels: 2);
 
+// Use the new, efficient zero-allocation pattern
+var buffer = new byte[config.BufferSize * config.Channels * sizeof(float)];
 while (true)
 {
-    var result = decoder.DecodeNextFrame();
+    var result = decoder.ReadFrames(buffer);
     if (result.IsEOF) break;
 
-    engine.Send(result.Frame.Samples);
+    var samples = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(buffer.AsSpan(0, result.FramesRead * config.Channels * sizeof(float)));
+    engine.Send(samples);
 }
 
 engine.Stop();</code></pre>

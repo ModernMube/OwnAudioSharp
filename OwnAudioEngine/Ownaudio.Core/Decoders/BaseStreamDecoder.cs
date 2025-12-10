@@ -59,11 +59,20 @@ public abstract class BaseStreamDecoder : IAudioDecoder
     /// </summary>
     /// <returns>Decoded audio data and metadata.</returns>
     /// <exception cref="AudioException">Thrown when decoding fails.</exception>
+    [Obsolete("This method allocates a new AudioFrame on each call. Use ReadFramesCore instead.", true)]
     protected abstract AudioDecoderResult DecodeNextFrameCore();
 
     /// <summary>
+    /// Reads the next block of audio frames into the provided buffer.
+    /// This is the platform/format-specific zero-allocation implementation.
+    /// </summary>
+    /// <param name="buffer">The buffer to write the decoded audio data into.</param>
+    /// <returns>An <see cref="AudioDecoderResult"/> indicating the number of frames read.</returns>
+    protected abstract AudioDecoderResult ReadFramesCore(byte[] buffer);
+
+    /// <summary>
     /// Seeks to the specified sample position in the stream.
-    /// This is the platform/format-specific implementation.
+    /// This is the platform-format-specific implementation.
     /// </summary>
     /// <param name="samplePosition">Sample position to seek to (zero-based).</param>
     /// <returns>True if seek succeeded, false otherwise.</returns>
@@ -75,6 +84,7 @@ public abstract class BaseStreamDecoder : IAudioDecoder
     /// </summary>
     /// <returns>Decoded audio data and metadata.</returns>
     /// <exception cref="ObjectDisposedException">Thrown when decoder has been disposed.</exception>
+    [Obsolete("This method allocates a new AudioFrame on each call. Use ReadFrames instead.", true)]
     public AudioDecoderResult DecodeNextFrame()
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
@@ -100,6 +110,40 @@ public abstract class BaseStreamDecoder : IAudioDecoder
             };
         }
     }
+
+    /// <summary>
+    /// Reads the next block of audio frames into the provided buffer.
+    /// This is the recommended zero-allocation method.
+    /// </summary>
+    /// <param name="buffer">The buffer to write the decoded audio data into.</param>
+    /// <returns>An <see cref="AudioDecoderResult"/> indicating the number of frames read.</returns>
+    public AudioDecoderResult ReadFrames(byte[] buffer)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
+
+        try
+        {
+            return ReadFramesCore(buffer);
+        }
+        catch (AudioException)
+        {
+            // Re-throw AudioException as-is
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Wrap unexpected exceptions
+            throw new AudioException(
+                AudioErrorCategory.Decoding,
+                $"Unexpected error during frame read at position {_stream?.Position ?? -1}",
+                ex)
+            {
+                StreamPosition = _stream?.Position ?? -1
+            };
+        }
+    }
+
+
 
     /// <summary>
     /// Attempts to seek the audio stream to the specified position.
@@ -161,69 +205,6 @@ public abstract class BaseStreamDecoder : IAudioDecoder
             error = $"Unexpected seek error: {ex.Message}";
             return false;
         }
-    }
-
-    /// <summary>
-    /// Decodes all audio frames from the specified position to the end of the stream.
-    /// </summary>
-    /// <param name="position">Starting position for decoding.</param>
-    /// <returns>All decoded audio data concatenated.</returns>
-    /// <exception cref="AudioException">Thrown when decoding fails.</exception>
-    public virtual AudioDecoderResult DecodeAllFrames(TimeSpan position)
-    {
-        ObjectDisposedException.ThrowIf(_isDisposed, this);
-
-        // Seek to start position if not at zero
-        if (position != TimeSpan.Zero)
-        {
-            if (!TrySeek(position, out string error))
-            {
-                throw new AudioException(
-                    AudioErrorCategory.Seeking,
-                    $"Failed to seek to position {position}: {error}");
-            }
-        }
-
-        // Calculate total samples needed
-        long totalSamples = (long)(_streamInfo.Duration.TotalSeconds * _streamInfo.SampleRate * _streamInfo.Channels);
-
-        // Pre-allocate buffer for all samples
-        float[] allSamples = new float[totalSamples];
-        int offset = 0;
-
-        // Decode all frames
-        while (true)
-        {
-            var result = DecodeNextFrame();
-
-            if (result.IsEOF)
-                break;
-
-            if (result.Frame != null && result.Frame.Data != null && result.Frame.Data.Length > 0)
-            {
-                // Convert byte[] to float[] (AudioFrame.Data is byte[], we need float[])
-                int floatCount = result.Frame.Data.Length / sizeof(float);
-                ReadOnlySpan<float> floatData = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(result.Frame.Data.AsSpan());
-
-                // Ensure we don't overflow
-                int copyLength = Math.Min(floatCount, allSamples.Length - offset);
-                floatData.Slice(0, copyLength).CopyTo(allSamples.AsSpan(offset, copyLength));
-                offset += copyLength;
-            }
-        }
-
-        // Trim to actual size
-        if (offset < allSamples.Length)
-        {
-            Array.Resize(ref allSamples, offset);
-        }
-
-        // Convert float[] to byte[] for AudioFrame
-        byte[] byteData = new byte[allSamples.Length * sizeof(float)];
-        Buffer.BlockCopy(allSamples, 0, byteData, 0, byteData.Length);
-
-        var audioFrame = new AudioFrame(_currentPts, byteData);
-        return new AudioDecoderResult(audioFrame, true, false);
     }
 
     /// <summary>

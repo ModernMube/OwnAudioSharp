@@ -353,6 +353,92 @@ public sealed class MFMp3Decoder : IAudioDecoder
     }
 
     /// <summary>
+    /// Reads the next block of audio frames into the provided buffer.
+    /// This is the recommended zero-allocation method for reading audio data.
+    /// </summary>
+    /// <param name="buffer">The buffer to write the decoded audio data into. The data is in 32-bit floating point format.</param>
+    /// <returns>An <see cref="AudioDecoderResult"/> indicating the number of frames read.</returns>
+    public AudioDecoderResult ReadFrames(byte[] buffer)
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(MFMp3Decoder));
+
+        if (_isEOF)
+            return AudioDecoderResult.CreateEOF();
+
+        if (_sourceReader == null)
+            return AudioDecoderResult.CreateError("Source reader not initialized");
+
+        try
+        {
+            int hr = _sourceReader.ReadSample(
+                MediaFoundationInterop.MF_SOURCE_READER_FIRST_AUDIO_STREAM,
+                0,
+                out int actualStreamIndex,
+                out MediaFoundationInterop.MF_SOURCE_READER_FLAG streamFlags,
+                out long mfTimestamp,
+                out MediaFoundationInterop.IMFSample? sample);
+
+            if (MediaFoundationInterop.FAILED(hr))
+                return AudioDecoderResult.CreateError($"ReadSample failed: HRESULT 0x{hr:X8}");
+
+            if (streamFlags.HasFlag(MediaFoundationInterop.MF_SOURCE_READER_FLAG.EndOfStream))
+            {
+                _isEOF = true;
+                if (sample != null)
+                    Marshal.ReleaseComObject(sample);
+                return AudioDecoderResult.CreateEOF();
+            }
+
+            if (sample == null)
+                return AudioDecoderResult.CreateError("No sample returned");
+
+            try
+            {
+                sample.ConvertToContiguousBuffer(out var sampleBuffer);
+                try
+                {
+                    sampleBuffer.Lock(out IntPtr dataPtr, out int maxLength, out int currentLength);
+                    try
+                    {
+                        if (currentLength == 0)
+                            return AudioDecoderResult.CreateError("Empty sample buffer");
+
+                        if (currentLength > buffer.Length)
+                            return AudioDecoderResult.CreateError($"Output buffer too small. Required: {currentLength}, Available: {buffer.Length}");
+
+                        Marshal.Copy(dataPtr, buffer, 0, currentLength);
+
+                        int totalFloatSamples = currentLength / sizeof(float);
+                        int samplesPerChannel = totalFloatSamples / _streamInfo.Channels;
+
+                        double frameDurationMs = (samplesPerChannel * 1000.0) / _sourceSampleRate;
+                        _currentPts += frameDurationMs;
+
+                        return AudioDecoderResult.CreateSuccess(samplesPerChannel, _currentPts);
+                    }
+                    finally
+                    {
+                        sampleBuffer.Unlock();
+                    }
+                }
+                finally
+                {
+                    Marshal.ReleaseComObject(sampleBuffer);
+                }
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(sample);
+            }
+        }
+        catch (Exception ex)
+        {
+            return AudioDecoderResult.CreateError($"Exception during decode: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// Decodes next available audio frame from MP3 source.
     /// SYNCHRONOUS MODE: Blocks until frame is ready or EOF.
     /// </summary>

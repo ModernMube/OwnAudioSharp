@@ -278,6 +278,13 @@ public sealed class CachedAudioDecoder : IAudioDecoder
         _frameIndex = 0;
     }
 
+    public AudioDecoderResult ReadFrames(byte[] buffer)
+    {
+        // For ReadFrames, we bypass the cache and delegate directly to the base decoder
+        // Caching at the ReadFrames level is less useful since the buffer size may vary
+        return _baseDecoder.ReadFrames(buffer);
+    }
+
     public AudioDecoderResult DecodeNextFrame()
     {
         // Try to get from cache first
@@ -314,11 +321,6 @@ public sealed class CachedAudioDecoder : IAudioDecoder
         return false;
     }
 
-    public AudioDecoderResult DecodeAllFrames(TimeSpan position)
-    {
-        // Delegate to base decoder (caching individual frames is more useful)
-        return _baseDecoder.DecodeAllFrames(position);
-    }
 
     public void Dispose()
     {
