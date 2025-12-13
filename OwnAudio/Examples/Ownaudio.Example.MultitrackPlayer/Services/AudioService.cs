@@ -110,7 +110,8 @@ public class AudioService : IDisposable
         // Create the mixer with the underlying engine (not the wrapper)
         if (OwnaudioNet.Engine != null)
         {
-            _mixer = new AudioMixer(OwnaudioNet.Engine.UnderlyingEngine, bufferSizeInFrames: 512);
+            // Increased buffer to 4096 frames (~85ms) to handle high track counts (e.g. 22 tracks) without drift/glitches
+            _mixer = new AudioMixer(OwnaudioNet.Engine.UnderlyingEngine, bufferSizeInFrames: 4096);
             // Start the mixer once and leave it running
             _mixer.Start();
         }

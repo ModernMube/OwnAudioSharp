@@ -21,7 +21,7 @@ namespace OwnaudioNET.Features.Matchering
         /// <param name="tempDirectory">Directory for temporary files (optional)</param>
         /// <param name="eqOnlyMode">If true, applies only EQ without compression/dynamics</param>
         public void ProcessWithEnhancedPreset(string sourceFile, string outputFile,
-            PlaybackSystem system, string tempDirectory = null, bool eqOnlyMode = true)
+            PlaybackSystem system, string? tempDirectory = null, bool eqOnlyMode = true)
         {
             if (string.IsNullOrEmpty(tempDirectory))
                 tempDirectory = Path.GetTempPath();
@@ -420,7 +420,7 @@ namespace OwnaudioNET.Features.Matchering
         /// <param name="system">Playback system preset</param>
         /// <param name="fileNameSuffix">Suffix for output filenames</param>
         public void BatchProcessWithEnhancedPreset(string[] sourceFiles, string baseSampleFile,
-            string outputDirectory, PlaybackSystem system, string fileNameSuffix = null)
+            string outputDirectory, PlaybackSystem system, string? fileNameSuffix = null)
         {
             if (!Directory.Exists(outputDirectory))
                 Directory.CreateDirectory(outputDirectory);

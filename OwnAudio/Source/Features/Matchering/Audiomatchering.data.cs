@@ -127,7 +127,7 @@ namespace OwnaudioNET.Features.Matchering
         /// <summary>
         /// Gets or sets the audio data for this segment.
         /// </summary>
-        public float[] Data { get; set; }
+        public float[] Data { get; set; } = null!;
 
         /// <summary>
         /// Gets or sets the start time of this segment in seconds.
@@ -179,12 +179,12 @@ namespace OwnaudioNET.Features.Matchering
         /// <summary>
         /// Gets or sets the frequency spectrum analysis for this segment.
         /// </summary>
-        public float[] FrequencySpectrum { get; set; }
+        public float[] FrequencySpectrum { get; set; } = null!;
 
         /// <summary>
         /// Gets or sets the dynamic analysis information for this segment.
         /// </summary>
-        public DynamicsInfo Dynamics { get; set; }
+        public DynamicsInfo Dynamics { get; set; } = null!;
 
         /// <summary>
         /// Gets or sets the calculated weight for this segment in final averaging.

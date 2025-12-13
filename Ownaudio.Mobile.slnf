@@ -1,0 +1,13 @@
+{
+  "solution": {
+    "path": "Ownaudio.sln",
+    "projects": [
+      "OwnAudioEngine\\Ownaudio.Android\\Ownaudio.Android.csproj",
+      "OwnAudioEngine\\Ownaudio.iOS\\Ownaudio.iOS.csproj",
+      "OwnAudioEngine\\Ownaudio.Core\\Ownaudio.Core.csproj",
+      "OwnAudioEngine\\Ownaudio.Native\\Ownaudio.Native.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.Android\\Ownaudio.Example.Android.csproj",
+      "OwnAudio\\Source\\OwnaudioNET.Mobile.csproj"
+    ]
+  }
+}

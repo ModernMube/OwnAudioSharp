@@ -1,0 +1,21 @@
+{
+  "solution": {
+    "path": "Ownaudio.sln",
+    "projects": [
+      "OwnAudioEngine\\Ownaudio.Core\\Ownaudio.Core.csproj",
+      "OwnAudioEngine\\Ownaudio.Native\\Ownaudio.Native.csproj",
+      "OwnAudioEngine\\Ownaudio.Windows\\Ownaudio.Windows.csproj",
+      "OwnAudioEngine\\Ownaudio.Linux\\Ownaudio.Linux.csproj",
+      "OwnAudioEngine\\Ownaudio.macOS\\Ownaudio.macOS.csproj",
+      "OwnAudio\\Source\\OwnaudioNET.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.Desktop\\Ownaudio.Example.Desktop.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.Matching\\Ownaudio.Example.Matching.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.ChordDetect\\Ownaudio.Example.ChordDetect.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.Input\\Ownaudio.Example.Input.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.VocalRemover\\Ownaudio.Example.Vocalremover.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.MultitrackPlayer\\Ownaudio.Example.MultitrackPlayer.csproj",
+      "OwnAudioTests\\Ownaudio.EngineTest\\Ownaudio.Test.Engine.csproj",
+      "OwnAudioTests\\Ownaudio.OwnaudioNET\\Ownaudio.Test.OwnaudioNET.csproj"
+    ]
+  }
+}

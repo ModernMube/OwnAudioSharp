@@ -472,7 +472,7 @@ internal static class MediaFoundationInterop
     /// <summary>
     /// Throws exception if HRESULT indicates failure.
     /// </summary>
-    public static void ThrowIfFailed(int hr, string message = null)
+    public static void ThrowIfFailed(int hr, string? message = null)
     {
         if (FAILED(hr))
         {

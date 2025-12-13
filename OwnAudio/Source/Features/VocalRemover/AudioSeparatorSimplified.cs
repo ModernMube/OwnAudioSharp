@@ -1073,6 +1073,7 @@ namespace OwnaudioNET.Features.Vocalremover
         /// <summary>
         /// Processing started event
         /// </summary>
+#pragma warning disable CS0067 // Event is never used
         public event EventHandler<string>? ProcessingStarted;
 
         /// <summary>
@@ -1084,6 +1085,7 @@ namespace OwnaudioNET.Features.Vocalremover
         /// Error occurred event
         /// </summary>
         public event EventHandler<Exception>? ErrorOccurred;
+#pragma warning restore CS0067
 
         #endregion
 
@@ -1102,6 +1104,7 @@ namespace OwnaudioNET.Features.Vocalremover
         /// <summary>
         /// ONNX Runtime session for model inference (traditional mode)
         /// </summary>
+#pragma warning disable CS0649 // Field is never assigned to, and will always have its default value
         private InferenceSession? _onnxSession;
 
         /// <summary>
@@ -1113,11 +1116,14 @@ namespace OwnaudioNET.Features.Vocalremover
         /// Memory monitoring timer
         /// </summary>
         private Timer? _memoryMonitorTimer;
+#pragma warning restore CS0649
 
         /// <summary>
         /// Current memory pressure flag
         /// </summary>
+#pragma warning disable CS0414 // Field is assigned but its value is never used
         private volatile bool _isMemoryPressureHigh = false;
+#pragma warning restore CS0414
 
         /// <summary>
         /// Flag indicating if the object has been disposed

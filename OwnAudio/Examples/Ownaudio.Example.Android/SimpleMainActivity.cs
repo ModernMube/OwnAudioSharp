@@ -17,6 +17,7 @@ using AudioEngine = Ownaudio.Core.IAudioEngine;
 using AudioEngineFactory = Ownaudio.Core.AudioEngineFactory;
 using AudioConfig = Ownaudio.Core.AudioConfig;
 using System.Diagnostics;
+using Ownaudio.Example.Android;
 
 namespace OwnaudioAndroidExample
 {
@@ -203,7 +204,7 @@ namespace OwnaudioAndroidExample
                     _fileSource2 = new FileSource(audioPath2, 8192, targetSampleRate, targetChannels);
                     _fileSource3 = new FileSource(audioPath3, 8192, targetSampleRate, targetChannels);
                 }
-                catch(Exception ex)
+                catch(Exception)
                 {
                     //Ownaudio.Android.Common.FileLogger.Error("SimpleMainActivity", $"FILE LOADING ERROR: {ex.GetType().Name}: {ex.Message}");
 
@@ -620,9 +621,9 @@ namespace OwnaudioAndroidExample
             RunOnUiThread(() =>
             {
                 new AlertDialog.Builder(this)
-                    .SetTitle(title)
-                    .SetMessage(message)
-                    .SetPositiveButton("OK", (s, e) => { })
+                    .SetTitle(title)!
+                    .SetMessage(message)!
+                    .SetPositiveButton("OK", (s, e) => { })!
                     .Show();
             });
         }

@@ -52,7 +52,7 @@ public class TestProgram
             Console.WriteLine($"  ✓ Sample Rate: {OwnaudioNet.Engine?.Config.SampleRate} Hz");
             Console.WriteLine($"  ✓ Channels: {OwnaudioNet.Engine?.Config.Channels}");
             Console.WriteLine($"  ✓ Buffer Size: {OwnaudioNet.Engine?.FramesPerBuffer} frames");
-            Console.WriteLine($"  ✓ Expected Latency: {(OwnaudioNet.Engine?.FramesPerBuffer / (double)OwnaudioNet.Engine?.Config.SampleRate * 1000):F2} ms");
+            Console.WriteLine($"  ✓ Expected Latency: {(OwnaudioNet.Engine?.FramesPerBuffer / (double)OwnaudioNet.Engine?.Config.SampleRate! * 1000):F2} ms");
 
             // Get current audio device information
             var outputDevices = OwnaudioNet.Engine?.UnderlyingEngine.GetOutputDevices();
@@ -175,10 +175,10 @@ public class TestProgram
             string? exeDirectory = Path.GetDirectoryName(exePath);
 
             // Use REAL WAV decoder from Ownaudio.Core
-            string audioFilePath0 = Path.Combine(exeDirectory, "media", "drums.wav");
-            string audioFilePath1 = Path.Combine(exeDirectory, "media", "bass.wav");
-            string audioFilePath2 = Path.Combine(exeDirectory, "media", "other.wav");
-            string audioFilePath3 = Path.Combine(exeDirectory, "media", "vocals.wav");
+            string audioFilePath0 = Path.Combine(exeDirectory!, "media", "drums.wav");
+            string audioFilePath1 = Path.Combine(exeDirectory!, "media", "bass.wav");
+            string audioFilePath2 = Path.Combine(exeDirectory!, "media", "other.wav");
+            string audioFilePath3 = Path.Combine(exeDirectory!, "media", "vocals.wav");
 
             Console.WriteLine($"  Loading files: 1 - {audioFilePath0}, 2 - {audioFilePath1}, 3 - {audioFilePath2}, 4 - {audioFilePath3}");
 

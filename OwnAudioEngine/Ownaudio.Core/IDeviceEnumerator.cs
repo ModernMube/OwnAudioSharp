@@ -35,14 +35,14 @@ namespace Ownaudio.Core
         /// </summary>
         /// <returns>Information about the default output device, or null if none available.</returns>
         /// <exception cref="AudioException">Thrown when device query fails.</exception>
-        AudioDeviceInfo GetDefaultOutputDevice();
+        AudioDeviceInfo? GetDefaultOutputDevice();
 
         /// <summary>
         /// Gets the default input (capture) device.
         /// </summary>
         /// <returns>Information about the default input device, or null if none available.</returns>
         /// <exception cref="AudioException">Thrown when device query fails.</exception>
-        AudioDeviceInfo GetDefaultInputDevice();
+        AudioDeviceInfo? GetDefaultInputDevice();
 
         /// <summary>
         /// Gets detailed information about a specific device by its ID.
@@ -50,6 +50,6 @@ namespace Ownaudio.Core
         /// <param name="deviceId">The unique device identifier.</param>
         /// <returns>Device information, or null if device not found.</returns>
         /// <exception cref="AudioException">Thrown when device query fails.</exception>
-        AudioDeviceInfo GetDeviceInfo(string deviceId);
+        AudioDeviceInfo? GetDeviceInfo(string deviceId);
     }
 }

@@ -124,8 +124,10 @@ namespace Ownaudio.Android
 
         #region IAudioEngine Events
 
+#pragma warning disable CS0067 // Event is never used
         public event EventHandler<AudioDeviceChangedEventArgs>? OutputDeviceChanged;
         public event EventHandler<AudioDeviceChangedEventArgs>? InputDeviceChanged;
+#pragma warning restore CS0067
         public event EventHandler<AudioDeviceStateChangedEventArgs>? DeviceStateChanged;
 
         #endregion

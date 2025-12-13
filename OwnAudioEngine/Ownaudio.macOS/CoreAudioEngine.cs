@@ -21,8 +21,8 @@ namespace Ownaudio.macOS
         private IntPtr _inputAudioUnit;
 
         // Pre-allocated buffers (pinned)
-        private float[] _outputBuffer;
-        private float[] _inputBuffer;
+        private float[] _outputBuffer = null!;
+        private float[] _inputBuffer = null!;
         private GCHandle _outputBufferHandle;
         private GCHandle _inputBufferHandle;
         private IntPtr _outputBufferPtr;
@@ -33,11 +33,11 @@ namespace Ownaudio.macOS
         private int _inputBufferListSize;
 
         // Ring buffers for thread-safe data exchange
-        private LockFreeRingBuffer<float> _outputRing;
-        private LockFreeRingBuffer<float> _inputRing;
+        private LockFreeRingBuffer<float> _outputRing = null!;
+        private LockFreeRingBuffer<float> _inputRing = null!;
 
         // Configuration
-        private AudioConfig _config;
+        private AudioConfig _config = null!;
         private int _framesPerBuffer;
         private int _samplesPerBuffer;
         private int _bufferSizeBytes;
@@ -52,8 +52,8 @@ namespace Ownaudio.macOS
         private volatile int _lastRingBufferLevel;
 
         // Callbacks (must be kept alive to prevent GC)
-        private AURenderCallback _outputCallback;
-        private AURenderCallback _inputCallback;
+        private AURenderCallback _outputCallback = null!;
+        private AURenderCallback _inputCallback = null!;
 
         // Threading
         private readonly object _stateLock = new object();
@@ -61,13 +61,13 @@ namespace Ownaudio.macOS
         private volatile int _stopRequested; // 0 = keep running, 1 = stop requested
 
         // Buffer pool for Receives()
-        private AudioBufferPool _bufferPool;
+        private AudioBufferPool _bufferPool = null!;
 
         // Device management
         private CoreAudioDeviceEnumerator _deviceEnumHelper;
         private uint _currentOutputDeviceId;
         private uint _currentInputDeviceId;
-        private AudioObjectPropertyListenerProc _deviceChangeListener;
+        private AudioObjectPropertyListenerProc _deviceChangeListener = null!;
 
         // Sample rate tracking - CRITICAL for correct playback speed
         private double _actualOutputSampleRate;
@@ -81,17 +81,19 @@ namespace Ownaudio.macOS
         /// <summary>
         /// Occurs when the default output device changes.
         /// </summary>
-        public event EventHandler<AudioDeviceChangedEventArgs> OutputDeviceChanged;
+        public event EventHandler<AudioDeviceChangedEventArgs>? OutputDeviceChanged;
 
         /// <summary>
         /// Occurs when the default input device changes.
         /// </summary>
-        public event EventHandler<AudioDeviceChangedEventArgs> InputDeviceChanged;
+        public event EventHandler<AudioDeviceChangedEventArgs>? InputDeviceChanged;
 
         /// <summary>
         /// Occurs when an audio device's state changes.
         /// </summary>
-        public event EventHandler<AudioDeviceStateChangedEventArgs> DeviceStateChanged;
+#pragma warning disable CS0067 // Event is declared but never used
+        public event EventHandler<AudioDeviceStateChangedEventArgs>? DeviceStateChanged;
+#pragma warning restore CS0067
 
         /// <summary>
         /// Gets the number of audio frames per buffer.
@@ -173,7 +175,7 @@ namespace Ownaudio.macOS
                     _isActive = 0; // Idle state
                     return 0;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     _errorCode = -1;
                     _isActive = -1;
@@ -341,7 +343,7 @@ namespace Ownaudio.macOS
 
                 return 0;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return -1;
             }
@@ -541,7 +543,7 @@ namespace Ownaudio.macOS
 
                 return 0;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return -1;
             }
@@ -608,7 +610,7 @@ namespace Ownaudio.macOS
 
                     return 0;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     _isActive = -1;
                     return -1;
@@ -662,7 +664,7 @@ namespace Ownaudio.macOS
                     _isActive = 0;
                     return 0;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     _isActive = -1;
                     return -1;
@@ -728,7 +730,7 @@ namespace Ownaudio.macOS
                     Thread.Sleep(sleepMs);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 _isActive = -1;
                 _errorCode = -1;
@@ -1318,7 +1320,7 @@ namespace Ownaudio.macOS
                                     OutputDeviceChanged?.Invoke(this, new AudioDeviceChangedEventArgs(
                                         oldDeviceId.ToString(),
                                         newDeviceId.ToString(),
-                                        null));
+                                        null!));
                                 }
                                 catch
                                 {
@@ -1341,7 +1343,7 @@ namespace Ownaudio.macOS
                                     InputDeviceChanged?.Invoke(this, new AudioDeviceChangedEventArgs(
                                         oldDeviceId.ToString(),
                                         newDeviceId.ToString(),
-                                        null));
+                                        null!));
                                 }
                                 catch
                                 {

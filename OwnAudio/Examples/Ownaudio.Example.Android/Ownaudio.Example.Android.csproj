@@ -9,9 +9,19 @@
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
+    <AndroidGenerateResourceDesigner>true</AndroidGenerateResourceDesigner>
+  </PropertyGroup>
+
+  <!-- Debug configuration: use interpreter for hot reload -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
     <AndroidUseInterpreter>true</AndroidUseInterpreter>
-    <AndroidGenerateResourceDesigner>true</AndroidGenerateResourceDesigner>
+  </PropertyGroup>
+
+  <!-- Release configuration: use AOT for performance -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <AndroidEnableProfiledAot>true</AndroidEnableProfiledAot>
+    <AndroidUseInterpreter>false</AndroidUseInterpreter>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net9.0-android|AnyCPU'">
@@ -37,16 +47,16 @@
 
   <!-- Copy media files to Android assets -->
   <ItemGroup>
-    <AndroidAsset Include="..\OwnaudioDesktopExample\media\bass.wav">
+    <AndroidAsset Include="..\Ownaudio.Example.Desktop\media\bass.wav">
       <Link>Assets\bass.wav</Link>
     </AndroidAsset>
-    <AndroidAsset Include="..\OwnaudioDesktopExample\media\drums.wav">
+    <AndroidAsset Include="..\Ownaudio.Example.Desktop\media\drums.wav">
       <Link>Assets\drums.wav</Link>
     </AndroidAsset>
-    <AndroidAsset Include="..\OwnaudioDesktopExample\media\other.wav">
+    <AndroidAsset Include="..\Ownaudio.Example.Desktop\media\other.wav">
       <Link>Assets\other.wav</Link>
     </AndroidAsset>
-    <AndroidAsset Include="..\OwnaudioDesktopExample\media\vocals.wav">
+    <AndroidAsset Include="..\Ownaudio.Example.Desktop\media\vocals.wav">
       <Link>Assets\vocals.wav</Link>
     </AndroidAsset>
   </ItemGroup>

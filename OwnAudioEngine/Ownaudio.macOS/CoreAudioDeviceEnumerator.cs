@@ -15,7 +15,6 @@ namespace Ownaudio.macOS
         /// Enumerates all available output (render) devices.
         /// </summary>
         /// <returns>A list of output device information objects.</returns>
-        /// <exception cref="AudioException">Thrown when device enumeration fails.</exception>
         public List<AudioDeviceInfo> EnumerateOutputDevices()
         {
             var devices = new List<AudioDeviceInfo>();
@@ -59,7 +58,6 @@ namespace Ownaudio.macOS
         /// Enumerates all available input (capture) devices.
         /// </summary>
         /// <returns>A list of input device information objects.</returns>
-        /// <exception cref="AudioException">Thrown when device enumeration fails.</exception>
         public List<AudioDeviceInfo> EnumerateInputDevices()
         {
             var devices = new List<AudioDeviceInfo>();
@@ -225,10 +223,10 @@ namespace Ownaudio.macOS
                         new IntPtr(&cfString));
 
                     if (!IsSuccess(status) || cfString == IntPtr.Zero)
-                        return null;
+                        return null!;
 
-                    string name = CFStringToString(cfString);
-                    return name;
+                    string? name = CFStringToString(cfString);
+                    return name!;
                 }
             }
             finally
@@ -384,7 +382,6 @@ namespace Ownaudio.macOS
         /// Enumerates all available audio devices (both input and output).
         /// </summary>
         /// <returns>A list of all device information objects.</returns>
-        /// <exception cref="AudioException">Thrown when device enumeration fails.</exception>
         public List<AudioDeviceInfo> EnumerateAllDevices()
         {
             var devices = new List<AudioDeviceInfo>();
@@ -397,8 +394,7 @@ namespace Ownaudio.macOS
         /// Gets the default output (render) device.
         /// </summary>
         /// <returns>Information about the default output device, or null if none available.</returns>
-        /// <exception cref="AudioException">Thrown when device query fails.</exception>
-        public AudioDeviceInfo GetDefaultOutputDevice()
+        public AudioDeviceInfo? GetDefaultOutputDevice()
         {
             try
             {
@@ -428,8 +424,7 @@ namespace Ownaudio.macOS
         /// Gets the default input (capture) device.
         /// </summary>
         /// <returns>Information about the default input device, or null if none available.</returns>
-        /// <exception cref="AudioException">Thrown when device query fails.</exception>
-        public AudioDeviceInfo GetDefaultInputDevice()
+        public AudioDeviceInfo? GetDefaultInputDevice()
         {
             try
             {
@@ -460,8 +455,7 @@ namespace Ownaudio.macOS
         /// </summary>
         /// <param name="deviceId">The unique device identifier.</param>
         /// <returns>Device information, or null if device not found.</returns>
-        /// <exception cref="AudioException">Thrown when device query fails.</exception>
-        public AudioDeviceInfo GetDeviceInfo(string deviceId)
+        public AudioDeviceInfo? GetDeviceInfo(string deviceId)
         {
             if (string.IsNullOrEmpty(deviceId))
                 return null;

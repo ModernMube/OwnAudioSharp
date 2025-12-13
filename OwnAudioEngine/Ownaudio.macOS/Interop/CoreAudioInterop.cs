@@ -482,13 +482,13 @@ namespace Ownaudio.macOS.Interop
                 string errorMessage = GetErrorMessage(status);
                 
                 // Próbáljuk meg a FourCC kódot is kiolvasni, ha hibaként kódolható
-                string fourCC = (status >= 0x20202020 && status <= 0x7A7A7A7A) 
-                                ? new string(new[] { 
-                                    (char)((status >> 24) & 0xFF), 
-                                    (char)((status >> 16) & 0xFF), 
-                                    (char)((status >> 8) & 0xFF), 
-                                    (char)(status & 0xFF) 
-                                }) 
+                string? fourCC = (status >= 0x20202020 && status <= 0x7A7A7A7A)
+                                ? new string(new[] {
+                                    (char)((status >> 24) & 0xFF),
+                                    (char)((status >> 16) & 0xFF),
+                                    (char)((status >> 8) & 0xFF),
+                                    (char)(status & 0xFF)
+                                })
                                 : null;
 
                 string codeInfo = string.IsNullOrEmpty(fourCC) 

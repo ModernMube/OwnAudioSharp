@@ -97,11 +97,10 @@ namespace Ownaudio.macOS.Interop
             uint count);
 
         /// <summary>
-        /// Converts nanoseconds to Mach absolute time units.
+        /// Gets the timebase information for converting between Mach absolute time and nanoseconds.
         /// Required for setting time constraint policy values.
         /// </summary>
-        /// <param name="nanos">Time in nanoseconds.</param>
-        /// <param name="result">Output: time in Mach absolute time units.</param>
+        /// <param name="info">Output: timebase information structure.</param>
         /// <returns>0 on success.</returns>
         [DllImport(LibSystem, EntryPoint = "mach_timebase_info")]
         private static extern int mach_timebase_info(out mach_timebase_info_data_t info);

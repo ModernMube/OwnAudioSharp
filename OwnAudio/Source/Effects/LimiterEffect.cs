@@ -79,7 +79,7 @@ namespace OwnaudioNET.Effects
         private string _name;
         private bool _enabled;
         private bool _disposed;
-        private AudioConfig _config;
+        private AudioConfig _config = null!;
 
         private float[] _delayBuffer;
         private float[] _envelopeBuffer;

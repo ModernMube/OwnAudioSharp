@@ -30,8 +30,9 @@ namespace Ownaudio.Native
 
         /// <summary>
         /// The audio configuration for this engine instance.
+        /// Initialized in Initialize() method.
         /// </summary>
-        private AudioConfig _config;
+        private AudioConfig _config = null!;
 
         /// <summary>
         /// Indicates whether the engine has been disposed.
@@ -46,7 +47,9 @@ namespace Ownaudio.Native
         /// <summary>
         /// Active state: 0 = idle, 1 = active, -1 = error.
         /// </summary>
+#pragma warning disable CS0414 // Field is assigned but its value is never used
         private volatile int _isActive;
+#pragma warning restore CS0414
 
         /// <summary>
         /// Pre-buffering state: 0 = not buffering, 1 = buffering (waiting for initial data).
@@ -128,27 +131,32 @@ namespace Ownaudio.Native
 
         /// <summary>
         /// Lock-free ring buffer for output (playback) audio data.
+        /// Initialized in Initialize() method.
         /// </summary>
-        private LockFreeRingBuffer<float> _outputRing;
+        private LockFreeRingBuffer<float> _outputRing = null!;
 
         /// <summary>
         /// Lock-free ring buffer for input (recording) audio data.
+        /// Initialized in Initialize() method.
         /// </summary>
-        private LockFreeRingBuffer<float> _inputRing;
+        private LockFreeRingBuffer<float> _inputRing = null!;
 
         /// <summary>
         /// Temporary buffer for output audio samples.
+        /// Initialized in Initialize() method.
         /// </summary>
-        private float[] _tempOutputBuffer;
+        private float[] _tempOutputBuffer = null!;
 
         /// <summary>
         /// Temporary buffer for input audio samples.
+        /// Initialized in Initialize() method.
         /// </summary>
-        private float[] _tempInputBuffer;
+        private float[] _tempInputBuffer = null!;
 
         /// <summary>
         /// Raised when the output device changes.
         /// </summary>
+#pragma warning disable CS0067 // Event is never used
         public event EventHandler<AudioDeviceChangedEventArgs>? OutputDeviceChanged;
 
         /// <summary>
@@ -160,6 +168,7 @@ namespace Ownaudio.Native
         /// Raised when the device state changes.
         /// </summary>
         public event EventHandler<AudioDeviceStateChangedEventArgs>? DeviceStateChanged;
+#pragma warning restore CS0067
 
         /// <summary>
         /// Gets the number of frames per audio buffer.
@@ -859,13 +868,13 @@ namespace Ownaudio.Native
         {
             if (_isRunning == 0)
             {
-                samples = null;
+                samples = null!;
                 return -1;
             }
 
             if (!_config.EnableInput)
             {
-                samples = null;
+                samples = null!;
                 return -1;
             }
 

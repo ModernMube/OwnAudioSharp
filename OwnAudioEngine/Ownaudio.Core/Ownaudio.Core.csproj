@@ -9,6 +9,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ImplicitUsings>disable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Suppress nullable and documentation warnings for cleaner build -->
+    <NoWarn>$(NoWarn);CS8600;CS8603;CS8604;CS8602;CS8625;CS1591;CS0649;CS0675;CS0672;CA2014</NoWarn>
     <Authors>Ownaudio Team</Authors>
     <Company>Ownaudio</Company>
     <Product>Ownaudio Core</Product>

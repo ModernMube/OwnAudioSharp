@@ -121,8 +121,8 @@ namespace OwnaudioNET.Effects
         /// </summary>
         /// <param name="sampleRate">Audio sample rate in Hz (typically 44100 or 48000)</param>
         /// <param name="gains">Array of 30 gain values in dB (-12 to +12), or null for flat response</param>
-        public Equalizer30BandEffect(float sampleRate = 44100, 
-                                float[] gains = null)
+        public Equalizer30BandEffect(float sampleRate = 44100,
+                                float[]? gains = null)
         {
             _id = Guid.NewGuid();
             _name = "Equalizer30Band";

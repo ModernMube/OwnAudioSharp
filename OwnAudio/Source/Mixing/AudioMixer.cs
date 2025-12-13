@@ -65,7 +65,9 @@ public sealed partial class AudioMixer : IDisposable
 
     // Statistics
     private long _totalMixedFrames;
+#pragma warning disable CS0649 // Field is never assigned to, and will always have its default value
     private long _totalUnderruns;
+#pragma warning restore CS0649
 
     // Recording
     private WaveFileWriter? _recorder;
@@ -135,7 +137,9 @@ public sealed partial class AudioMixer : IDisposable
     /// <summary>
     /// Event raised when a buffer underrun occurs (audio dropout).
     /// </summary>
+#pragma warning disable CS0067 // Event is never used
     public event EventHandler<BufferUnderrunEventArgs>? BufferUnderrun;
+#pragma warning restore CS0067
 
     /// <summary>
     /// Event raised when a source error occurs during mixing.
@@ -618,11 +622,21 @@ public sealed partial class AudioMixer : IDisposable
                     // Update statistics
                     Interlocked.Add(ref _totalMixedFrames, _bufferSizeInFrames);
 
-                    // NEW: Check and correct drift for all sync groups
-                    CheckAndResyncAllGroups();
-
-                    // Advance master position for sync tracking
-                    _synchronizer.AdvanceMasterPosition(_bufferSizeInFrames);
+                    // CRITICAL: Advance GhostTracks!
+                    // GhostTracks are NOT in the _sources list (they are silent master clocks),
+                    // so we must manually advance them here to keep time moving.
+                    var syncGroupIds = _synchronizer.GetSyncGroupIds();
+                    foreach (var groupId in syncGroupIds)
+                    {
+                        var ghostTrack = _synchronizer.GetGhostTrack(groupId);
+                        // Only advance if playing
+                        if (ghostTrack != null && ghostTrack.State == AudioState.Playing)
+                        {
+                            // We use the existing sourceBuffer to read samples (which are silence)
+                            // This advances the GhostTrack's internal position
+                            ghostTrack.ReadSamples(sourceBuffer, _bufferSizeInFrames);
+                        }
+                    }
 
                     // NEW ARCHITECTURE: No periodic drift correction needed!
                     // Each FileSource continuously checks drift in its own ReadSamples() method
@@ -644,7 +658,7 @@ public sealed partial class AudioMixer : IDisposable
                     Thread.Sleep(_mixIntervalMs * 2);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Critical error in mix loop - log but don't crash
                 // In production, log via ILogger
@@ -801,12 +815,13 @@ public sealed partial class AudioMixer : IDisposable
             int simdFrames = (frameCount / simdLength) * simdLength;
             int i = 0;
 
+            // Pre-allocate buffers outside the loop to avoid potential stack overflow (CA2014)
+            Span<float> leftSamples = stackalloc float[simdLength];
+            Span<float> rightSamples = stackalloc float[simdLength];
+
             for (; i < simdFrames * 2; i += simdLength * 2)
             {
                 // Load left channel samples (every other pair)
-                Span<float> leftSamples = stackalloc float[simdLength];
-                Span<float> rightSamples = stackalloc float[simdLength];
-
                 for (int j = 0; j < simdLength && i + j * 2 < buffer.Length; j++)
                 {
                     leftSamples[j] = Math.Abs(buffer[i + j * 2]);

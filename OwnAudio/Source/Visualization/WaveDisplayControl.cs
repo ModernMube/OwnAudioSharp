@@ -28,7 +28,9 @@ namespace OwnaudioNET.Visualization
         private readonly Point[] _linePoints = new Point[2];
 
         // Auto-follow playback settings
+#pragma warning disable CS0414 // Field is assigned but its value is never used
         private bool _autoFollow = true;
+#pragma warning restore CS0414
         private bool _isUserDragging = false;
         private bool _isUpdatingProperties = false; // Prevent recursive updates
 

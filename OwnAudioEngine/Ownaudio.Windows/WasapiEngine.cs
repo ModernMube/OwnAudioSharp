@@ -216,14 +216,14 @@ namespace Ownaudio.Windows
                     _bufferPool = new AudioBufferPool(_samplesPerBuffer, initialPoolSize: 4, maxPoolSize: 16);
 
                     // Create stop event
-                    _stopEvent = Kernel32.CreateEvent(IntPtr.Zero, true, false, null);
+                    _stopEvent = Kernel32.CreateEvent(IntPtr.Zero, true, false, null!);
                     if (_stopEvent == IntPtr.Zero)
                         return -1;
 
                     _isActive = 0; // Idle state
                     return 0;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     _errorCode = -1;
                     _isActive = -1;
@@ -315,10 +315,11 @@ namespace Ownaudio.Windows
                     {
                         if (!_audioThread.Join(2000))
                         {
-                            System.Diagnostics.Debug.WriteLine("WASAPI: Audio thread did not stop within 2s, forcing abort...");
-                            _audioThread.Abort(); // Force abort if necessary
+                            System.Diagnostics.Debug.WriteLine("WASAPI: Audio thread did not stop within 2s");
+                            // Note: Thread.Abort() is obsolete and not supported in .NET 5+
+                            // The thread should terminate naturally when _isRunning is set to 0
                         }
-                        _audioThread = null;
+                        _audioThread = null!;
                     }
 
                     // Stop output audio client
@@ -594,7 +595,7 @@ namespace Ownaudio.Windows
         {
             if (_isRunning == 0)
             {
-                samples = null;
+                samples = null!;
                 return -1;
             }
 
@@ -949,19 +950,19 @@ namespace Ownaudio.Windows
                 if (_renderClient != null)
                 {
                     Marshal.ReleaseComObject(_renderClient);
-                    _renderClient = null;
+                    _renderClient = null!;
                 }
 
                 if (_audioClient != null)
                 {
                     Marshal.ReleaseComObject(_audioClient);
-                    _audioClient = null;
+                    _audioClient = null!;
                 }
 
                 if (_outputDevice != null)
                 {
                     Marshal.ReleaseComObject(_outputDevice);
-                    _outputDevice = null;
+                    _outputDevice = null!;
                 }
 
                 // Reinitialize output device
@@ -981,19 +982,19 @@ namespace Ownaudio.Windows
                 if (_captureClient != null)
                 {
                     Marshal.ReleaseComObject(_captureClient);
-                    _captureClient = null;
+                    _captureClient = null!;
                 }
 
                 if (_inputAudioClient != null)
                 {
                     Marshal.ReleaseComObject(_inputAudioClient);
-                    _inputAudioClient = null;
+                    _inputAudioClient = null!;
                 }
 
                 if (_inputDevice != null)
                 {
                     Marshal.ReleaseComObject(_inputDevice);
-                    _inputDevice = null;
+                    _inputDevice = null!;
                 }
 
                 // Reinitialize input device
@@ -1143,19 +1144,19 @@ namespace Ownaudio.Windows
             if (_renderClient != null)
             {
                 Marshal.ReleaseComObject(_renderClient);
-                _renderClient = null;
+                _renderClient = null!;
             }
 
             if (_captureClient != null)
             {
                 Marshal.ReleaseComObject(_captureClient);
-                _captureClient = null;
+                _captureClient = null!;
             }
 
             if (_audioClient != null)
             {
                 Marshal.ReleaseComObject(_audioClient);
-                _audioClient = null;
+                _audioClient = null!;
             }
 
             if (_audioClientPtr != IntPtr.Zero)
@@ -1167,25 +1168,25 @@ namespace Ownaudio.Windows
             if (_outputDevice != null)
             {
                 Marshal.ReleaseComObject(_outputDevice);
-                _outputDevice = null;
+                _outputDevice = null!;
             }
 
             if (_inputDevice != null)
             {
                 Marshal.ReleaseComObject(_inputDevice);
-                _inputDevice = null;
+                _inputDevice = null!;
             }
 
             if (_inputAudioClient != null)
             {
                 Marshal.ReleaseComObject(_inputAudioClient);
-                _inputAudioClient = null;
+                _inputAudioClient = null!;
             }
 
             if (_deviceEnumerator != null)
             {
                 Marshal.ReleaseComObject(_deviceEnumerator);
-                _deviceEnumerator = null;
+                _deviceEnumerator = null!;
             }
 
             // Uninitialize COM

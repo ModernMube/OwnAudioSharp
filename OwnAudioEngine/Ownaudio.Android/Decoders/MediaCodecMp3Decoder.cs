@@ -94,9 +94,11 @@ public sealed class MediaCodecMp3Decoder : IPlatformMp3Decoder
     private bool _inputEOS;
     private long _durationUs; // Duration in microseconds
 
-    // Debug: Track decode statistics
+    // Debug: Track decode statistics (kept for future diagnostics)
+#pragma warning disable CS0414 // Field is assigned but its value is never used
     private int _totalFramesDecoded;
     private int _totalSamplesDecoded;
+#pragma warning restore CS0414
 
     // File path or stream
     private string? _filePath;
@@ -440,7 +442,7 @@ public sealed class MediaCodecMp3Decoder : IPlatformMp3Decoder
 
             return bytesReturned;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             //FileLogger.Error("MediaCodecMp3", $"Decode error: {ex.Message}");
             pts = 0.0;
@@ -486,7 +488,7 @@ public sealed class MediaCodecMp3Decoder : IPlatformMp3Decoder
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             //FileLogger.Warn("MediaCodecMp3", $"FeedInput warning: {ex.Message}");
         }
@@ -546,7 +548,7 @@ public sealed class MediaCodecMp3Decoder : IPlatformMp3Decoder
 
             return true;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             //FileLogger.Error("MediaCodecMp3", $"Seek error: {ex.Message}");
             return false;
@@ -848,7 +850,7 @@ public sealed class MediaCodecMp3Decoder : IPlatformMp3Decoder
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Prefill error - log but don't throw
         }
