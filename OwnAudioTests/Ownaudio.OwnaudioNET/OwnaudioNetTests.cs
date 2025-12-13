@@ -286,7 +286,7 @@ public class OwnaudioNetTests : IDisposable
     }
 
     [Fact]
-    public void ThreadSafety_MultipleThreadsInitializing_ShouldHandleGracefully()
+    public async Task ThreadSafety_MultipleThreadsInitializing_ShouldHandleGracefully()
     {
         // Arrange
         var config = OwnaudioNet.CreateDefaultConfig();
@@ -312,7 +312,7 @@ public class OwnaudioNetTests : IDisposable
             }));
         }
 
-        Task.WaitAll(tasks.ToArray());
+        await Task.WhenAll(tasks.ToArray());
 
         // Assert
         OwnaudioNet.IsInitialized.Should().BeTrue();

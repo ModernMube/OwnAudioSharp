@@ -513,6 +513,7 @@ internal static class AudioToolboxInterop
     /// <param name="inExtAudioFile">The ExtAudioFile</param>
     /// <param name="inPropertyID">Property ID</param>
     /// <param name="outSize">On output, the size of the property value</param>
+    /// <param name="outWritable">On output, indicates if the property is writable</param>
     /// <returns>OSStatus - noErr (0) on success</returns>
     [DllImport(AudioToolboxFramework, EntryPoint = "ExtAudioFileGetPropertyInfo")]
     public static extern int ExtAudioFileGetPropertyInfo(
@@ -531,8 +532,7 @@ internal static class AudioToolboxInterop
     /// <param name="allocator">CFAllocator (pass IntPtr.Zero for default)</param>
     /// <param name="buffer">Byte representation of file system path</param>
     /// <param name="bufLen">Length of buffer</param>
-    /// <param name="pathStyle">Path style (use kCFURLPOSIXPathStyle = 0)</param>
-    /// <param name="baseURL">Base URL (pass IntPtr.Zero for none)</param>
+    /// <param name="isDirectory">True if the path represents a directory</param>
     /// <returns>CFURLRef (must be released with CFRelease)</returns>
     [DllImport("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
         EntryPoint = "CFURLCreateFromFileSystemRepresentation")]

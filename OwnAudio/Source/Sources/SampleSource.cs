@@ -226,7 +226,7 @@ public sealed class SampleSource : BaseAudioSource
             {
                 lock (_dataLock)
                 {
-                    _sampleData = null;
+                    _sampleData = null!;
                 }
             }
             _disposed = true;

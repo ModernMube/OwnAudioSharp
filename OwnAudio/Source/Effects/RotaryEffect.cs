@@ -74,7 +74,7 @@ namespace OwnaudioNET.Effects
         private string _name;
         private bool _enabled;
         private bool _disposed;
-        private AudioConfig _config;
+        private AudioConfig _config = null!;
 
         private readonly int _sampleRate;
         private readonly float[] _hornDelayBuffer;

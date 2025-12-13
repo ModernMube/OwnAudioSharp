@@ -7,6 +7,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ImplicitUsings>disable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Suppress nullable warnings (fields initialized in Initialize method) and XML doc warnings -->
+    <NoWarn>$(NoWarn);CS8618;CS1587</NoWarn>
     <Authors>Ownaudio Team</Authors>
     <Company>Ownaudio</Company>
     <Product>Ownaudio Native</Product>

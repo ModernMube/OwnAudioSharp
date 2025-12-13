@@ -68,7 +68,7 @@ namespace OwnaudioNET.Effects
         private string _name;
         private bool _enabled;
         private bool _disposed;
-        private AudioConfig _config;
+        private AudioConfig _config = null!;
 
         private float _gain = 2.0f;
         private float _tone = 0.5f;
