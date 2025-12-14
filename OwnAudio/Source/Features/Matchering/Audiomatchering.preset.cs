@@ -283,28 +283,28 @@ namespace OwnaudioNET.Features.Matchering
                 float freq = FrequencyBands[i];
                 float originalGain = originalCurve[i];
 
-                // MUCH smaller scaling factors - we want subtle changes for matchering
+                // Tuned scaling factors - narrower Q allows for more gain without mud
                 float conservativeFactor = freq switch
                 {
-                    <= 63f => 0.6f,     // Reduce bass enhancement
-                    <= 250f => 0.7f,    // Reduce low-mid character
-                    <= 1000f => 0.8f,   // Minimal mid enhancement
-                    <= 4000f => 0.8f,   // Reduce presence changes
-                    <= 8000f => 0.7f,   // Reduce brilliance
-                    _ => 0.6f           // Reduce air changes
+                    <= 63f => 0.75f,    // Bass needs to be solid (was 0.6)
+                    <= 250f => 0.8f,    // Low-mids (was 0.7)
+                    <= 1000f => 0.85f,  // Mids (was 0.8)
+                    <= 4000f => 0.85f,  // Presence (was 0.8)
+                    <= 8000f => 0.8f,   // Brilliance (was 0.7)
+                    _ => 0.75f          // Air (was 0.6)
                 };
 
                 float conservativeGain = originalGain * conservativeFactor;
 
-                // Much tighter limits for matchering targets
+                // Tighter limits but slightly relaxed for bass/air
                 float maxConservativeBoost = freq switch
                 {
-                    < 100f => 2f,   // Much lower bass limits
-                    < 500f => 2.5f,
-                    < 2000f => 3f,
-                    < 5000f => 3f,
-                    < 10000f => 2.5f,
-                    _ => 2f
+                    < 100f => 3f,       // Allow reasonable bass boost (was 2f)
+                    < 500f => 3f,       // (was 2.5f)
+                    < 2000f => 3.5f,    // (was 3f)
+                    < 5000f => 3.5f,    // (was 3f)
+                    < 10000f => 3f,     // (was 2.5f)
+                    _ => 3f             // (was 2f)
                 };
 
                 conservativeCurve[i] = Math.Max(-4f, Math.Min(maxConservativeBoost, conservativeGain));
@@ -343,27 +343,28 @@ namespace OwnaudioNET.Features.Matchering
                 float freq = FrequencyBands[i];
                 float gain = Math.Abs(enhancedCurve[i]);
 
-                // Base Q for enhanced processing (slightly wider for musicality)
+                // Base Q for enhanced processing - UPDATED for 30-band standard
+                // We use slightly wider values than surgical matching (avg ~3.5) for musicality
                 float baseQ = freq switch
                 {
-                    <= 63f => 0.5f,     // Wide for enhanced bass
-                    <= 250f => 0.6f,    // Moderate-wide for bass
-                    <= 1000f => 0.8f,   // Standard for low-mid
-                    <= 4000f => 0.9f,   // Slightly narrow for presence
-                    <= 10000f => 0.8f,  // Moderate for brilliance
-                    _ => 0.7f           // Wide for air frequencies
+                    <= 63f => 2.5f,     // Wide for bass foundation (was 0.5)
+                    <= 250f => 3.0f,    // Moderate for low-mids (was 0.6)
+                    <= 1000f => 3.8f,   // Standard 1/3 octave spacing (was 0.8)
+                    <= 4000f => 4.0f,   // Precise presence (was 0.9)
+                    <= 10000f => 3.8f,  // Moderate brilliance (was 0.8)
+                    _ => 3.0f           // Wider air (was 0.7)
                 };
 
-                // Gain-based adjustment (less aggressive than EQ matching)
+                // Gain-based adjustment
                 float gainAdjustment = gain switch
                 {
                     <= 1f => 1.0f,
-                    <= 3f => 1.1f,
-                    <= 5f => 1.2f,
-                    _ => 1.3f
+                    <= 3f => 1.05f,
+                    <= 5f => 1.1f,
+                    _ => 1.2f
                 };
 
-                qFactors[i] = Math.Max(0.4f, Math.Min(2.5f, baseQ * gainAdjustment));
+                qFactors[i] = Math.Max(2.5f, Math.Min(5.0f, baseQ * gainAdjustment));
             }
 
             return qFactors;

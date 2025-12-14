@@ -50,14 +50,17 @@ namespace OwnaudioNET.Features.Matchering
         /// <param name="filePath">Path to the audio file to analyze</param>
         /// <returns>Weighted average spectrum analysis result</returns>
         /// <exception cref="InvalidOperationException">Thrown when the audio file cannot be loaded</exception>
+        /// <summary>
+        /// Performs enhanced audio analysis using segmented approach.
+        /// Supports TRUE STEREO analysis: Analyzes Left and Right channels independently
+        /// and averages the spectra to avoid phase cancellation issues (which previously caused
+        /// under-detection of high frequencies in wide mixes).
+        /// </summary>
         public AudioSpectrum AnalyzeAudioFile(string filePath)
         {
-            // CRITICAL: Lock prevents race condition when multiple FileSource instances
-            // try to initialize MiniAudio bindings simultaneously on first run
             lock (_analyzerLock)
             {
-                // Give MiniAudio DLL time to fully initialize on first call
-                System.Threading.Thread.Sleep(300);
+                System.Threading.Thread.Sleep(50); // Small safety delay
 
                 using FileSource source = new FileSource(filePath);
 
@@ -68,17 +71,112 @@ namespace OwnaudioNET.Features.Matchering
                 int channels = source.StreamInfo.Channels;
                 int sampleRate = source.StreamInfo.SampleRate;
 
-                float[] monoData = ConvertToMono(audioData, channels);
+                Console.WriteLine($"Analyzing {filePath} ({channels} ch, {sampleRate}Hz)...");
 
-                Console.WriteLine($"Starting segmented analysis: {filePath}");
-                Console.WriteLine($"Audio length: {monoData.Length / (float)sampleRate:F1}s, Sample rate: {sampleRate}Hz");
+                if (channels == 1)
+                {
+                    // Mono: Simple analysis
+                    return AnalyzeMonophonicData(audioData, sampleRate);
+                }
+                else
+                {
+                    // Stereo/Multichannel: Independent Channel Analysis
+                    // 1. De-interleave
+                    float[][] channelData = new float[channels][];
+                    int samplesPerChannel = audioData.Length / channels;
+                    
+                    for (int c = 0; c < channels; c++)
+                        channelData[c] = new float[samplesPerChannel];
 
-                List<AudioSegment> segments = CreateAudioSegments(monoData, sampleRate);
-                List<SegmentAnalysis> segmentAnalyses = AnalyzeSegments(segments, sampleRate);
-                List<SegmentAnalysis> filteredAnalyses = FilterOutlierSegments(segmentAnalyses);
+                    // Simple de-interleave loop (not zero-alloc, but analysis is offline)
+                    for (int i = 0; i < samplesPerChannel; i++)
+                    {
+                        for (int c = 0; c < channels; c++)
+                            channelData[c][i] = audioData[i * channels + c];
+                    }
 
-                return CalculateWeightedAverageSpectrum(filteredAnalyses);
+                    // 2. Analyze each channel
+                    var channelSpectra = new List<AudioSpectrum>();
+                    for (int c = 0; c < channels; c++)
+                    {
+                        Console.WriteLine($"Analyzing Channel {c + 1}...");
+                        channelSpectra.Add(AnalyzeMonophonicData(channelData[c], sampleRate));
+                    }
+
+                    // 3. Average the spectra
+                    // This creates a "Power Sum" equivalent without phase issues
+                    return AverageSpectra(channelSpectra);
+                }
             }
+        }
+
+        /// <summary>
+        /// Internal method to analyze a single channel buffer (Mono execution).
+        /// Contains the original segmentation and analysis logic.
+        /// </summary>
+        private AudioSpectrum AnalyzeMonophonicData(float[] monoData, int sampleRate)
+        {
+            Console.WriteLine($"Starting segmented analysis (Length: {monoData.Length / (float)sampleRate:F1}s)");
+
+            List<AudioSegment> segments = CreateAudioSegments(monoData, sampleRate);
+            List<SegmentAnalysis> segmentAnalyses = AnalyzeSegments(segments, sampleRate);
+            List<SegmentAnalysis> filteredAnalyses = FilterOutlierSegments(segmentAnalyses);
+
+            var spectrum = CalculateWeightedAverageSpectrum(filteredAnalyses);
+            
+            // DEBUG: Print analyzed spectrum details
+            Console.WriteLine($"\n=== ANALYZED SPECTRUM INFO ===");
+            Console.WriteLine($"RMS: {spectrum.RMSLevel:F6}, Peak: {spectrum.PeakLevel:F6}");
+            Console.WriteLine($"Loudness: {spectrum.Loudness:F1} dBFS, Dynamic Range: {spectrum.DynamicRange:F1} dB");
+            
+            return spectrum;
+        }
+
+        /// <summary>
+        /// Averages multiple AudioSpectrum objects into one (for Stereo/Multichannel consolidation).
+        /// Uses Root Mean Square for energy averaging to preserve true power.
+        /// </summary>
+        private AudioSpectrum AverageSpectra(List<AudioSpectrum> spectra)
+        {
+            if (spectra == null || spectra.Count == 0) return new AudioSpectrum();
+            if (spectra.Count == 1) return spectra[0];
+
+            int bands = spectra[0].FrequencyBands.Length;
+            float[] avgSpectrum = new float[bands];
+            
+            double sumRmsSquares = 0;
+            double maxPeak = 0;
+            // Loudness/DR will be recalculated from final RMS/Peak
+
+            foreach (var s in spectra)
+            {
+                for (int i = 0; i < bands; i++) avgSpectrum[i] += s.FrequencyBands[i];
+                
+                sumRmsSquares += s.RMSLevel * s.RMSLevel;
+                maxPeak = Math.Max(maxPeak, s.PeakLevel);
+            }
+
+            // Spectrum Averaging (Linear average of magnitudes is OK for spectral shape, 
+            // but for energy it's better to be consistent. 
+            // However, sticking to averaging bands is safe for EQ matching).
+            for (int i = 0; i < bands; i++) avgSpectrum[i] /= spectra.Count;
+
+            // Proper RMS Averaging (Root Mean Square of the RMS values)
+            float finalRMS = (float)Math.Sqrt(sumRmsSquares / spectra.Count);
+            float finalPeak = (float)maxPeak;
+            
+            // Recalculate derived metrics
+            float finalLoudness = 20 * (float)Math.Log10(Math.Max(finalRMS, 1e-10f));
+            float finalDR = 20 * (float)Math.Log10(finalPeak / Math.Max(finalRMS, 1e-10f));
+
+            return new AudioSpectrum
+            {
+                FrequencyBands = avgSpectrum,
+                RMSLevel = finalRMS,
+                PeakLevel = finalPeak,
+                Loudness = finalLoudness,
+                DynamicRange = finalDR
+            };
         }
 
         /// <summary>

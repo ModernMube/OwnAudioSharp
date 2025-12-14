@@ -58,7 +58,7 @@ namespace OwnaudioNET.Effects
     public sealed class CompressorEffect : IEffectProcessor
     {
         // IEffectProcessor implementation
-        private Guid _id;
+        private readonly Guid _id;
         private string _name;
         private bool _enabled;
         private bool _disposed;
@@ -66,13 +66,28 @@ namespace OwnaudioNET.Effects
         // Audio configuration
         private AudioConfig? _config;
 
-        private float threshold = 0.5f;
-        private float ratio = 4.0f;
-        private float attackTime = 0.1f;
-        private float releaseTime = 0.2f;
-        private float makeupGain = 1.0f;
-        private float envelope = 0.0f;
-        private float sampleRate = 44100f;
+        // Parameters
+        private float _threshold = 0.5f;
+        private float _ratio = 4.0f;
+        private float _attackTime = 0.1f;
+        private float _releaseTime = 0.2f;
+        private float _makeupGain = 1.0f;
+        private float _sampleRate = 44100f;
+
+        // Internal DSP State - Cached for performance
+        private float _envelope = 0.0f;
+        
+        // Pre-calculated Coefficients
+        private float _attackCoeff;
+        private float _releaseCoeff;
+        private float _thresholdDb;
+        private float _slope; // 1.0/ratio - 1.0
+        
+        // Soft Knee cached values
+        private const float KneeWidthDb = 6.0f;
+        private const float KneeHalfWidth = KneeWidthDb / 2.0f;
+        private float _kneeLowerBoundDb;
+        private float _kneeUpperBoundDb;
 
         /// <summary>
         /// Gets the unique identifier for this effect.
@@ -122,12 +137,16 @@ namespace OwnaudioNET.Effects
             _name = "Compressor";
             _enabled = true;
 
-            Threshold = threshold;
-            Ratio = ratio;
-            AttackTime = attackTime;
-            ReleaseTime = releaseTime;
-            MakeupGain = makeupGain;
-            SampleRate = sampleRate;
+            // Initialize directly without property overhead for constructor
+            _threshold = FastClamp(threshold, 0.0f, 1.0f);
+            _ratio = FastClamp(ratio, 1.0f, 100.0f);
+            // Convert ms to seconds
+            _attackTime = FastClamp(attackTime, 0.1f, 1000f) / 1000f; 
+            _releaseTime = FastClamp(releaseTime, 1f, 2000f) / 1000f;
+            _makeupGain = FastClamp(makeupGain, 0.1f, 10.0f);
+            _sampleRate = FastClamp(sampleRate, 8000f, 192000f);
+
+            RecalculateCoefficients();
         }
 
         /// <summary>
@@ -140,9 +159,9 @@ namespace OwnaudioNET.Effects
             _id = Guid.NewGuid();
             _name = "Compressor";
             _enabled = true;
-
-            this.sampleRate = sampleRate;
-            SetPreset(preset);
+            _sampleRate = FastClamp(sampleRate, 8000f, 192000f);
+            
+            SetPreset(preset); // This will trigger RecalculateCoefficients
         }
 
         /// <summary>
@@ -151,6 +170,38 @@ namespace OwnaudioNET.Effects
         public void Initialize(AudioConfig config)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
+            
+            if (Math.Abs(_sampleRate - config.SampleRate) > 0.1f)
+            {
+                _sampleRate = config.SampleRate;
+                RecalculateCoefficients();
+            }
+        }
+
+        /// <summary>
+        /// Update all internal coefficients based on current parameters.
+        /// call this whenever a parameter changes.
+        /// </summary>
+        private void RecalculateCoefficients()
+        {
+            // Attack/Release coefficients
+            // Formula: coeff = exp(-1 / (time * sampleRate))
+            // We use MathF for performance in float context
+            _attackCoeff = MathF.Exp(-1.0f / (_sampleRate * _attackTime));
+            _releaseCoeff = MathF.Exp(-1.0f / (_sampleRate * _releaseTime));
+
+            // Threshold in dB
+            // Protect against log(0)
+            _thresholdDb = 20.0f * MathF.Log10(Math.Max(_threshold, 1e-6f));
+
+            // Slope for compression
+            // Output = Threshold + (Input - Threshold) / Ratio
+            // GainReduction = (Input - Threshold) * (1/Ratio - 1)
+            _slope = 1.0f / _ratio - 1.0f;
+
+            // Soft Knee bounds
+            _kneeLowerBoundDb = _thresholdDb - KneeHalfWidth;
+            _kneeUpperBoundDb = _thresholdDb + KneeHalfWidth;
         }
 
         /// <summary>
@@ -167,83 +218,94 @@ namespace OwnaudioNET.Effects
             if (!_enabled)
                 return;
 
-            // Calculate the actual number of samples to process
-            int sampleCount = frameCount * _config.Channels;
+            // Local copies of coefficients for register reuse/avoiding `this` indirection
+            float env = _envelope;
+            float att = _attackCoeff;
+            float rel = _releaseCoeff;
+            float mkp = _makeupGain;
+            float slope = _slope;
+            float tDb = _thresholdDb;
+            float kLower = _kneeLowerBoundDb;
+            float kUpper = _kneeUpperBoundDb;
+            
+            // Calculate total samples
+            int totalSamples = frameCount * _config.Channels;
 
-            float attackCoeff = (float)Math.Exp(-1.0 / (sampleRate * attackTime));
-            float releaseCoeff = (float)Math.Exp(-1.0 / (sampleRate * releaseTime));
-
-            for (int i = 0; i < sampleCount; i++)
+            for (int i = 0; i < totalSamples; i++)
             {
-                float inputLevel = Math.Abs(buffer[i]);
+                float input = buffer[i];
+                float absInput = Math.Abs(input);
 
-                // Envelope follower
-                if (inputLevel > envelope)
-                    envelope = attackCoeff * envelope + (1 - attackCoeff) * inputLevel;
+                // 1. Envelope Detection (Peak Detector with release)
+                // Branchless approach could be used but standard branching is predictable here
+                if (absInput > env)
+                {
+                    env = att * env + (1.0f - att) * absInput;
+                }
                 else
-                    envelope = releaseCoeff * envelope + (1 - releaseCoeff) * inputLevel;
+                {
+                    env = rel * env + (1.0f - rel) * absInput;
+                }
 
-                float gainReduction = ApplyCompression();
-                buffer[i] *= gainReduction * makeupGain;
+                // 2. Gain Calculation
+                // Avoid log of zero
+                if (env < 1e-6f) 
+                {
+                    // Signal is too small, no compression needed usually, but we apply makeup
+                    // To stay consistent with silence
+                    buffer[i] = input * mkp;
+                    continue; 
+                }
+
+                // Convert envelope to dB
+                // Approximation is suitable for dynamics processing and much faster
+                // We'll use standard Log10 here for accuracy as requested for "Professional"
+                // but MathF version is faster than double Math.Log10
+                float envDb = 20.0f * MathF.Log10(env);
+
+                float gainReductionDb = 0.0f;
+
+                // 3. Compression Characteristic (Soft Knee)
+                if (envDb < kLower)
+                {
+                    // Below knee - linear region (1:1), no reduction
+                    gainReductionDb = 0.0f;
+                }
+                else if (envDb > kUpper)
+                {
+                    // Above knee - constant ratio compression
+                    gainReductionDb = slope * (envDb - tDb);
+                }
+                else
+                {
+                    // Inside soft knee - quadratic interpolation
+                    // Formula: slope * ((x - (T - W/2))^2) / (2 * W)
+                    float over = envDb - kLower; // x - lower_bound
+                    gainReductionDb = slope * (over * over) / (2.0f * KneeWidthDb);
+                }
+
+                // 4. Application
+                // DB to Linear
+                // gain = 10^(dB/20)
+                float currentGain = MathF.Pow(10.0f, gainReductionDb * 0.05f);
+
+                // Apply makeup gain and compression
+                float combinedGain = currentGain * mkp;
+
+                // 5. Output Limiting / Safety
+                // Hard limit at 0dB (1.0) to prevent clipping if makeup is too high
+                // This is a safety feature for the "internal" professional sound
+                float output = input * combinedGain;
+                if (output > 1.0f) output = 1.0f;
+                else if (output < -1.0f) output = -1.0f;
+
+                buffer[i] = output;
             }
-        }
 
-        /// <summary>
-        /// Applies compression with Soft Knee and output range protection
-        /// </summary>
-        /// <returns>Gain reduction factor with safe output limiting</returns>
-        private float ApplyCompression()
-        {
-            float safeEnvelope = Math.Max(envelope, 1e-6f);
-            float safeThreshold = Math.Max(threshold, 1e-6f);
-            
-            // Soft Knee parameters - internal fixed width of 6dB for musical response
-            float kneeWidthDb = 6.0f; 
-            float kneeWidthLinear = DbToLinear(kneeWidthDb) - 1.0f; // Approximate linear width
-            float lowerNum = safeThreshold * (1.0f / MathF.Sqrt(DbToLinear(kneeWidthDb/2))); // Threshold - 3dB
-            float upperNum = safeThreshold * MathF.Sqrt(DbToLinear(kneeWidthDb/2)); // Threshold + 3dB
-
-            float gainReductionDb = 0.0f;
-            float levelDb = 20 * (float)Math.Log10(safeEnvelope);
-            float thresholdDb = 20 * (float)Math.Log10(safeThreshold);
-
-            // Soft Knee Logic
-            if (2 * (levelDb - thresholdDb) < -kneeWidthDb)
-            {
-                // Below knee: No compression
-                gainReductionDb = 0.0f;
-            }
-            else if (2 * Math.Abs(levelDb - thresholdDb) <= kneeWidthDb)
-            {
-                // In knee range: Quadratic smoothing
-                // (x - (T - W/2))^2 / (2W) * (1/Ratio - 1)
-                float slope = 1.0f / ratio - 1.0f; // Negative slope
-                float overDb = levelDb - (thresholdDb - kneeWidthDb / 2.0f);
-                gainReductionDb = slope * (overDb * overDb) / (2.0f * kneeWidthDb);
-            }
-            else
-            {
-                // Above knee: Linear compression
-                // (x - T) * (1/Ratio - 1)
-                gainReductionDb = (levelDb - thresholdDb) * (1.0f / ratio - 1.0f);
-            }
-
-            // Convert back to linear gain factor
-            float baseGainReduction = (float)Math.Pow(10, gainReductionDb / 20);
-
-            float maximumSafeGain = 0.95f / Math.Max(safeEnvelope, 1e-6f);
-            float totalGain = baseGainReduction * makeupGain;
-
-            // Limit total gain to prevent clipping
-            if (totalGain > maximumSafeGain)
-            {
-                return maximumSafeGain;
-            }
-            
-            // Safety check for positive gain (should only reduce)
-             if (baseGainReduction > 1.0f) baseGainReduction = 1.0f;
-
-            return baseGainReduction;
+            // Save state
+            _envelope = env;
+            // Prevent denormal numbers which can slow down CPU
+            if (_envelope < 1e-10f) _envelope = 0.0f;
         }
 
         /// <summary>
@@ -255,74 +317,62 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case CompressorPreset.Default:
-                    // Default balanced settings for general use
-                    Threshold = 0.5f;     // -6 dB - moderate threshold
-                    Ratio = 4.0f;         // 4:1 - standard compression ratio
-                    AttackTime = 100f;    // 100ms - balanced attack time
-                    ReleaseTime = 200f;   // 200ms - balanced release time
-                    MakeupGain = 1.0f;    // 0 dB - no makeup gain by default
+                    _threshold = 0.5f;     // -6 dB 
+                    _ratio = 4.0f; 
+                    _attackTime = 0.1f;    // 100ms
+                    _releaseTime = 0.2f;   // 200ms
+                    _makeupGain = 1.0f;
                     break;
 
                 case CompressorPreset.VocalGentle:
-                    // Gentle vocal processing for natural sound
-                    // Higher threshold to catch only louder parts, moderate ratio for musicality
-                    Threshold = 0.7f;     // -2.9 dB - catches peaks without over-processing
-                    Ratio = 3.0f;         // 3:1 - musical compression ratio
-                    AttackTime = 15f;     // 15ms - fast enough for vocals, slow enough to preserve character
-                    ReleaseTime = 150f;   // 150ms - natural release for smooth sound
-                    MakeupGain = 1.2f;    // +1.6 dB - compensate for gentle reduction
+                    _threshold = 0.7f;     // ~ -3 dB
+                    _ratio = 3.0f;
+                    _attackTime = 0.015f;  // 15ms
+                    _releaseTime = 0.150f; // 150ms
+                    _makeupGain = 1.2f;
                     break;
 
                 case CompressorPreset.VocalAggressive:
-                    // Strong vocal control for broadcast/podcast style
-                    // Low threshold catches more signal, high ratio for consistent levels
-                    Threshold = 0.35f;    // -9.1 dB - catches most of the vocal range
-                    Ratio = 8.0f;         // 8:1 - strong compression for consistency
-                    AttackTime = 5f;      // 5ms - fast attack for immediate control
-                    ReleaseTime = 100f;   // 100ms - quick release to avoid pumping
-                    MakeupGain = 2.5f;    // +8 dB - significant makeup gain needed
+                    _threshold = 0.35f;    // ~ -9 dB
+                    _ratio = 8.0f;
+                    _attackTime = 0.005f;  // 5ms
+                    _releaseTime = 0.100f; // 100ms
+                    _makeupGain = 2.5f;
                     break;
 
                 case CompressorPreset.Drums:
-                    // Punchy drum compression preserving transients
-                    // Balanced threshold, moderate ratio, very fast attack for transient control
-                    Threshold = 0.6f;     // -4.4 dB - allows transient punch through
-                    Ratio = 4.5f;         // 4.5:1 - controlled but punchy
-                    AttackTime = 1f;      // 1ms - ultra-fast to catch transients
-                    ReleaseTime = 80f;    // 80ms - quick release to avoid sustain compression
-                    MakeupGain = 1.8f;    // +5.1 dB - restore punch
+                    _threshold = 0.6f;
+                    _ratio = 4.5f;
+                    _attackTime = 0.001f;  // 1ms
+                    _releaseTime = 0.080f; // 80ms
+                    _makeupGain = 1.8f;
                     break;
 
                 case CompressorPreset.Bass:
-                    // Tight bass control maintaining fundamental frequencies
-                    // Lower threshold for consistent low-end, high ratio for control
-                    Threshold = 0.45f;    // -7 dB - controls bass dynamics effectively
-                    Ratio = 6.0f;         // 6:1 - strong control for consistent low-end
-                    AttackTime = 10f;     // 10ms - fast enough for control, slow enough for fundamentals
-                    ReleaseTime = 200f;   // 200ms - slower release for smooth bass response
-                    MakeupGain = 2.0f;    // +6 dB - restore bass presence
+                    _threshold = 0.45f;
+                    _ratio = 6.0f;
+                    _attackTime = 0.010f;  // 10ms
+                    _releaseTime = 0.200f; // 200ms
+                    _makeupGain = 2.0f;
                     break;
 
                 case CompressorPreset.MasteringLimiter:
-                    // Transparent peak limiting for mastering
-                    // High threshold for peaks only, extreme ratio for limiting
-                    Threshold = 0.9f;     // -0.9 dB - only catches peaks
-                    Ratio = 20.0f;        // 20:1 - limiting ratio
-                    AttackTime = 0.1f;    // 0.1ms - instant attack for peak catching
-                    ReleaseTime = 50f;    // 50ms - fast release to avoid pumping
-                    MakeupGain = 1.0f;    // 0 dB - transparent processing
+                    _threshold = 0.9f;
+                    _ratio = 20.0f;
+                    _attackTime = 0.0001f; // 0.1ms
+                    _releaseTime = 0.050f; // 50ms
+                    _makeupGain = 1.0f;
                     break;
 
                 case CompressorPreset.Vintage:
-                    // Classic analog compressor emulation
-                    // Medium settings with slower response for vintage character
-                    Threshold = 0.55f;    // -5.2 dB - moderate threshold
-                    Ratio = 3.5f;         // 3.5:1 - vintage-style ratio
-                    AttackTime = 25f;     // 25ms - slower attack for vintage character
-                    ReleaseTime = 300f;   // 300ms - slow release for vintage smoothness
-                    MakeupGain = 1.6f;    // +4 dB - vintage-style makeup gain
+                    _threshold = 0.55f;
+                    _ratio = 3.5f;
+                    _attackTime = 0.025f;  // 25ms
+                    _releaseTime = 0.300f; // 300ms
+                    _makeupGain = 1.6f;
                     break;
             }
+            RecalculateCoefficients();
         }
 
         /// <summary>
@@ -330,7 +380,7 @@ namespace OwnaudioNET.Effects
         /// </summary>
         public void Reset()
         {
-            envelope = 0.0f;
+            _envelope = 0.0f;
         }
 
         /// <summary>
@@ -342,117 +392,121 @@ namespace OwnaudioNET.Effects
                 return;
 
             Reset();
-
             _disposed = true;
         }
 
         /// <summary>
-        /// Threshold level in range [0,1] where 1.0 = 0dB, 0.5 = -6dB
-        /// Minimum: 0.0 (negative infinity dB)
-        /// Maximum: 1.0 (0 dB)
-        /// Default: 0.5 (-6 dB)
+        /// Threshold level in range [0,1]
         /// </summary>
         public float Threshold
         {
-            get => threshold;
-            set => threshold = FastClamp(value, 0.0f, 1.0f);
+            get => _threshold;
+            set
+            {
+                if (Math.Abs(_threshold - value) > 0.001f)
+                {
+                    _threshold = FastClamp(value, 0.0f, 1.0f);
+                    RecalculateCoefficients();
+                }
+            }
         }
 
         /// <summary>
         /// Compression ratio (N:1)
-        /// Minimum: 1.0 (no compression)
-        /// Maximum: 100.0 (limiting)
-        /// Default: 4.0 (4:1 compression)
         /// </summary>
         public float Ratio
         {
-            get => ratio;
-            set => ratio = FastClamp(value, 1.0f, 100.0f);
+            get => _ratio;
+            set
+            {
+                if (Math.Abs(_ratio - value) > 0.01f)
+                {
+                    _ratio = FastClamp(value, 1.0f, 100.0f);
+                    RecalculateCoefficients();
+                }
+            }
         }
 
         /// <summary>
         /// Attack time in milliseconds
-        /// Minimum: 0.1 ms
-        /// Maximum: 1000 ms
-        /// Default: 100 ms
         /// </summary>
         public float AttackTime
         {
-            get => attackTime * 1000f;
-            set => attackTime = FastClamp(value, 0.1f, 1000f) / 1000f;
+            get => _attackTime * 1000f;
+            set
+            {
+                float newTime = FastClamp(value, 0.1f, 1000f) / 1000f;
+                if (Math.Abs(_attackTime - newTime) > 0.00001f)
+                {
+                    _attackTime = newTime;
+                    RecalculateCoefficients();
+                }
+            }
         }
 
         /// <summary>
         /// Release time in milliseconds
-        /// Minimum: 1 ms
-        /// Maximum: 2000 ms
-        /// Default: 200 ms
         /// </summary>
         public float ReleaseTime
         {
-            get => releaseTime * 1000f;
-            set => releaseTime = FastClamp(value, 1f, 2000f) / 1000f;
+            get => _releaseTime * 1000f;
+            set
+            {
+                float newTime = FastClamp(value, 1f, 2000f) / 1000f;
+                if (Math.Abs(_releaseTime - newTime) > 0.00001f)
+                {
+                    _releaseTime = newTime;
+                    RecalculateCoefficients();
+                }
+            }
         }
 
         /// <summary>
         /// Makeup gain as linear amplitude multiplier
-        /// Minimum: 0.1 (approximately -20 dB)
-        /// Maximum: 10.0 (+20 dB)
-        /// Default: 1.0 (0 dB)
         /// </summary>
         public float MakeupGain
         {
-            get => makeupGain;
-            set => makeupGain = FastClamp(value, 0.1f, 10.0f);
+            get => _makeupGain;
+            set => _makeupGain = FastClamp(value, 0.1f, 10.0f);
         }
 
         /// <summary>
         /// Sample rate in Hz
-        /// Minimum: 8000 Hz
-        /// Maximum: 192000 Hz
-        /// Default: 44100 Hz
         /// </summary>
         public float SampleRate
         {
-            get => sampleRate;
-            set => sampleRate = FastClamp(value, 8000f, 192000f);
+            get => _sampleRate;
+            set
+            {
+                if (Math.Abs(_sampleRate - value) > 1.0f)
+                {
+                    _sampleRate = FastClamp(value, 8000f, 192000f);
+                    RecalculateCoefficients();
+                }
+            }
         }
 
         /// <summary>
         /// Converts linear amplitude to decibels
         /// </summary>
-        /// <param name="linear">Linear amplitude value</param>
-        /// <returns>Value in decibels</returns>
         public static float LinearToDb(float linear)
         {
-            return 20f * (float)Math.Log10(Math.Max(linear, 1e-6f));
+            return 20f * MathF.Log10(Math.Max(linear, 1e-6f));
         }
 
         /// <summary>
         /// Converts decibels to linear amplitude
         /// </summary>
-        /// <param name="dB">Value in decibels</param>
-        /// <returns>Linear amplitude value</returns>
         public static float DbToLinear(float dB)
         {
-            return (float)Math.Pow(10f, dB / 20f);
+            return MathF.Pow(10f, dB / 20f);
         }
 
-        /// <summary>
-        /// Returns a string representation of the effect's state.
-        /// </summary>
         public override string ToString()
         {
-            return $"Compressor: Threshold={threshold:F2}, Ratio={ratio:F1}:1, Attack={AttackTime:F1}ms, Release={ReleaseTime:F1}ms, Enabled={_enabled}";
+            return $"Compressor: Threshold={_threshold:F2}, Ratio={_ratio:F1}:1, Attack={AttackTime:F1}ms, Release={ReleaseTime:F1}ms, Enabled={_enabled}";
         }
 
-        /// <summary>
-        /// Fast clamping function that constrains values to a specified range.
-        /// </summary>
-        /// <param name="value">The value to clamp.</param>
-        /// <param name="min">Minimum allowed value.</param>
-        /// <param name="max">Maximum allowed value.</param>
-        /// <returns>The clamped value within the specified range.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static float FastClamp(float value, float min, float max)
         {

@@ -45,8 +45,9 @@ partial class AudioAnalyzer
             // Combine all factors with weighted average
             qFactors[i] = CombineQFactors(baseQ, gainBasedQ, neighborQ, spectralQ, freq);
 
-            // Clamp to reasonable limits
-            qFactors[i] = Math.Max(0.3f, Math.Min(5.0f, qFactors[i]));
+            // Clamp to reasonable limits for a 30-band EQ
+            // Q < 2.5 is useless (bands merge), Q > 10 is ringing/dangerous
+            qFactors[i] = Math.Max(2.5f, Math.Min(8.0f, qFactors[i]));
         }
 
         Console.WriteLine("Calculated Q factors:");
@@ -81,24 +82,19 @@ partial class AudioAnalyzer
     /// </remarks>
     private float GetFrequencyBasedQ(float frequency)
     {
+        // Standard 1/3 Octave EQ requires Q ≈ 4.3 for minimal bleed.
+        // We use slightly wider values (3.5 - 4.0) for musicality, but much narrower than before.
         return frequency switch
         {
-            <= 40f => 0.5f,
-            <= 80f => 0.6f,
-            <= 160f => 0.7f,
-            <= 315f => 0.8f,
-            <= 630f => 1.0f,
-            <= 1250f => 1.2f,
-            <= 2000f => 1.3f,
-            <= 2500f => 1.4f,
-            <= 3150f => 1.5f,
-            <= 4000f => 1.4f,
-            <= 5000f => 1.2f,
-            <= 6300f => 1.15f,   // Gently decreasing Q
-            <= 8000f => 1.1f,    // Continuous decrease
-            <= 10000f => 1.05f,  // Further decrease
-            <= 12500f => 1.0f,   // Neutral Q
-            _ => 0.95f           // Slightly wider at highest frequencies
+            <= 40f => 3.0f,      // Slightly wider for loose low end
+            <= 80f => 3.5f,
+            <= 160f => 3.8f,
+            <= 315f => 4.0f,     // Standard tracking
+            <= 630f => 4.2f,
+            <= 1250f => 4.3f,    // Ideal 1/3 octave Q
+            <= 4000f => 4.3f,    
+            <= 10000f => 4.2f,   // Slightly wider for high frequency air
+            _ => 4.0f            
         };
     }
 
@@ -114,15 +110,17 @@ partial class AudioAnalyzer
     /// </remarks>
     private float CalculateGainBasedQ(float gainAdjustment)
     {
-        // Less aggressive Q increase even for large corrections
+        // REVISED LOGIC for Precision:
+        // Large gains with Narrow Q provide surgical precision and avoid "muddy" sound.
+        // Small gains with Standard Q maintain musicality for subtle adjustments.
+        // Since base Q is now correct (~4.3), we only need modest adjustments.
+        // Very large gains might need slightly tighter Q to prevent massive energy bloom.
         return gainAdjustment switch
         {
-            <= 1.0f => 1.0f,
-            <= 2.0f => 1.05f,    
-            <= 4.0f => 1.15f,    
-            <= 6.0f => 1.25f,    
-            <= 8.0f => 1.35f,    
-            _ => 1.5f            
+            <= 2.0f => 1.0f,     // No change
+            <= 5.0f => 1.05f,    // Minimal tightening
+            <= 10.0f => 1.1f,    // Slight tightening
+            _ => 1.2f            // Max tightening (Q ~5.2)
         };
     }
 
@@ -236,10 +234,11 @@ partial class AudioAnalyzer
     private float CombineQFactors(float baseQ, float gainQ, float neighborQ, float spectralQ, float frequency)
     {
         // Weight the different factors based on frequency range
-        float baseWeight = 0.4f;      // Base psychoacoustic Q is most important
-        float gainWeight = 0.3f;      // Gain-based adjustment is second most important
-        float neighborWeight = 0.2f;  // Neighboring band correlation
-        float spectralWeight = 0.1f;  // Spectral density consideration
+        // Weight the different factors based on frequency range
+        float baseWeight = 0.6f;      // Base Q is now the primary driver (mathematically correct)
+        float gainWeight = 0.2f;      // Gain adjustments are secondary
+        float neighborWeight = 0.1f;  // Minor context awareness
+        float spectralWeight = 0.1f;  // Minor spectral tuning
 
         // Adjust weights based on frequency range
         if (frequency <= 250f) // Low frequencies

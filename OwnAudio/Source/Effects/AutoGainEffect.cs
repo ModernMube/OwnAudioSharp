@@ -1,3 +1,4 @@
+using System;
 using System.Runtime.CompilerServices;
 using Ownaudio.Core;
 using OwnaudioNET.Interfaces;
@@ -5,328 +6,210 @@ using OwnaudioNET.Exceptions;
 
 namespace OwnaudioNET.Effects
 {
-    /// <summary>
-    /// Automatic Gain Control preset
-    /// </summary>
     public enum AutoGainPreset
     {
-        /// <summary>
-        /// Default AGC settings - balanced for general use
-        /// </summary>
         Default,
-
-        /// <summary>
-        /// Gentle AGC for music playback - preserves dynamics
-        /// Ideal for: Background music, streaming, acoustic content
-        /// </summary>
         Music,
-
-        /// <summary>
-        /// Voice optimized AGC - clear and consistent speech levels
-        /// Ideal for: Podcasts, voice recordings, interviews
-        /// </summary>
         Voice,
-
-        /// <summary>
-        /// Broadcast ready AGC - tight level control for professional use
-        /// Ideal for: Radio, streaming, commercial audio
-        /// </summary>
         Broadcast,
-
-        /// <summary>
-        /// Live performance AGC - fast response with feedback prevention
-        /// Ideal for: Live sound, stage use, real-time processing
-        /// </summary>
         Live
     }
 
-    /// <summary>
-    /// Simple Automatic Gain Control processor
-    /// </summary>
     public sealed class AutoGainEffect : IEffectProcessor
     {
-        // IEffectProcessor implementation
-        private Guid _id;
+        private readonly Guid _id;
         private string _name;
         private bool _enabled;
         private bool _disposed;
-
-        // Audio configuration
         private AudioConfig? _config;
 
-        private float targetLevel = 0.25f;   // Linear target level
-        private float attackCoeff = 0.99f;   // Attack coefficient
-        private float releaseCoeff = 0.999f; // Release coefficient
-        private float gateThreshold = 0.001f; // Gate threshold (linear)
-        private float maxGain = 4.0f;        // Maximum gain
-        private float minGain = 0.25f;       // Minimum gain
+        // Parameters
+        private float _targetLevel = 0.25f;
+        private float _attackCoeff = 0.99f;
+        private float _releaseCoeff = 0.999f;
+        private float _gateThreshold = 0.001f;
+        private float _maxGain = 4.0f;
+        private float _minGain = 0.25f;
 
-        private float currentGain = 1.0f;    // Current gain
-        private float currentLevel = 0.0f;   // Signal level detector
+        // State
+        private float _currentGain = 1.0f;
+        private float _currentLevel = 0.0f;
+        private float[]? _lookaheadBuffer;
+        private int _lookaheadIndex;
+        private int _lookaheadLength;
 
-        /// <summary>
-        /// Gets the unique identifier for this effect.
-        /// </summary>
         public Guid Id => _id;
+        public string Name { get => _name; set => _name = value ?? "AutoGain"; }
+        public bool Enabled { get => _enabled; set => _enabled = value; }
+        public float Mix { get => 1.0f; set { } } // Always 100%
 
-        /// <summary>
-        /// Gets or sets the name of the effect.
-        /// </summary>
-        public string Name
-        {
-            get => _name;
-            set => _name = value ?? "AutoGain";
-        }
+        // Properties with validation
+        public float TargetLevel { get => _targetLevel; set => _targetLevel = Math.Clamp(value, 0.01f, 1.0f); }
+        public float AttackCoefficient { get => _attackCoeff; set => _attackCoeff = Math.Clamp(value, 0.9f, 0.999f); }
+        public float ReleaseCoefficient { get => _releaseCoeff; set => _releaseCoeff = Math.Clamp(value, 0.9f, 0.9999f); }
+        public float GateThreshold { get => _gateThreshold; set => _gateThreshold = Math.Clamp(value, 0.0001f, 0.01f); }
+        public float MaximumGain { get => _maxGain; set => _maxGain = Math.Clamp(value, 1.0f, 10.0f); }
+        public float MinimumGain { get => _minGain; set => _minGain = Math.Clamp(value, 0.1f, 1.0f); }
+        
+        public float CurrentGain => _currentGain;
+        public float InputLevel => _currentLevel;
 
-        /// <summary>
-        /// Gets or sets whether the effect is enabled.
-        /// </summary>
-        public bool Enabled
-        {
-            get => _enabled;
-            set => _enabled = value;
-        }
-
-        /// <summary>
-        /// Gets or sets the wet/dry mix. AutoGain doesn't use traditional mix, always returns 1.0.
-        /// </summary>
-        public float Mix
-        {
-            get => 1.0f;
-            set { } // AutoGain is always 100% processed
-        }
-
-        /// <summary>
-        /// Get or set target level (0.01 to 1.0)
-        /// </summary>
-        public float TargetLevel
-        {
-            get => targetLevel;
-            set => targetLevel = Math.Max(0.01f, Math.Min(1.0f, value));
-        }
-
-        /// <summary>
-        /// Get or set attack coefficient (0.9 to 0.999, higher = slower)
-        /// </summary>
-        public float AttackCoefficient
-        {
-            get => attackCoeff;
-            set => attackCoeff = Math.Max(0.9f, Math.Min(0.999f, value));
-        }
-
-        /// <summary>
-        /// Get or set release coefficient (0.9 to 0.9999, higher = slower)
-        /// </summary>
-        public float ReleaseCoefficient
-        {
-            get => releaseCoeff;
-            set => releaseCoeff = Math.Max(0.9f, Math.Min(0.9999f, value));
-        }
-
-        /// <summary>
-        /// Get or set gate threshold (0.0001 to 0.01)
-        /// </summary>
-        public float GateThreshold
-        {
-            get => gateThreshold;
-            set => gateThreshold = Math.Max(0.0001f, Math.Min(0.01f, value));
-        }
-
-        /// <summary>
-        /// Get or set maximum gain (1.0 to 10.0)
-        /// </summary>
-        public float MaximumGain
-        {
-            get => maxGain;
-            set => maxGain = Math.Max(1.0f, Math.Min(10.0f, value));
-        }
-
-        /// <summary>
-        /// Get or set minimum gain (0.1 to 1.0)
-        /// </summary>
-        public float MinimumGain
-        {
-            get => minGain;
-            set => minGain = Math.Max(0.1f, Math.Min(1.0f, value));
-        }
-
-        /// <summary>
-        /// Current gain value (read-only)
-        /// </summary>
-        public float CurrentGain => currentGain;
-
-        /// <summary>
-        /// Current input level (read-only)
-        /// </summary>
-        public float InputLevel => currentLevel;
-
-        /// <summary>
-        /// Creates AGC with all parameters specified with default settings
-        /// </summary>
         public AutoGainEffect(float targetLevel = 0.25f, float attackCoeff = 0.99f, float releaseCoeff = 0.999f,
                        float gateThreshold = 0.001f, float maxGain = 4.0f, float minGain = 0.25f)
         {
             _id = Guid.NewGuid();
             _name = "AutoGain";
             _enabled = true;
-
-            this.targetLevel = Math.Max(0.01f, Math.Min(1.0f, targetLevel));
-            this.attackCoeff = Math.Max(0.9f, Math.Min(0.999f, attackCoeff));
-            this.releaseCoeff = Math.Max(0.9f, Math.Min(0.9999f, releaseCoeff));
-            this.gateThreshold = Math.Max(0.0001f, Math.Min(0.01f, gateThreshold));
-            this.maxGain = Math.Max(1.0f, Math.Min(10.0f, maxGain));
-            this.minGain = Math.Max(0.1f, Math.Min(1.0f, minGain));
+            TargetLevel = targetLevel;
+            AttackCoefficient = attackCoeff;
+            ReleaseCoefficient = releaseCoeff;
+            GateThreshold = gateThreshold;
+            MaximumGain = maxGain;
+            MinimumGain = minGain;
+            InitializeLookahead(44100);
         }
 
-        /// <summary>
-        /// Creates AGC with preset
-        /// </summary>
-        public AutoGainEffect(AutoGainPreset preset)
+        public AutoGainEffect(AutoGainPreset preset) : this()
         {
-            _id = Guid.NewGuid();
-            _name = "AutoGain";
-            _enabled = true;
-
             SetPreset(preset);
         }
 
-        /// <summary>
-        /// Initializes the effect with the specified audio configuration.
-        /// </summary>
         public void Initialize(AudioConfig config)
         {
             _config = config ?? throw new AudioException("AutoGainEffect ERROR: ", new ArgumentNullException(nameof(config)));
+            InitializeLookahead(config.SampleRate);
         }
 
-        /// <summary>
-        /// Process audio samples
-        /// </summary>
+        private void InitializeLookahead(int sampleRate)
+        {
+            // 5ms lookahead is enough to catch transients
+            int needed = (int)(0.005f * sampleRate);
+            if (_lookaheadBuffer == null || _lookaheadBuffer.Length != needed)
+            {
+                _lookaheadBuffer = new float[needed];
+            }
+            _lookaheadLength = needed;
+            _lookaheadIndex = 0;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
-            if (_config == null)
-                throw new AudioException("AutoGainEffect ERROR: ", new InvalidOperationException("Effect not initialized. Call Initialize() first."));
+            if (_config == null || !_enabled || _lookaheadBuffer == null) return;
 
-            if (!_enabled)
-                return;
-
-            // Calculate the actual number of samples to process
             int sampleCount = frameCount * _config.Channels;
+
+            // Local cache
+            float level = _currentLevel;
+            float gain = _currentGain;
+            float att = _attackCoeff;
+            float rel = _releaseCoeff;
+            float gate = _gateThreshold;
+            float target = _targetLevel;
+            float maxG = _maxGain;
+            float minG = _minGain;
+            
+            // Optimization: Pre-calculate smoothing factor (e.g. 1-att)?
+            float invAtt = 1.0f - att;
+            float invRel = 1.0f - rel;
 
             for (int i = 0; i < sampleCount; i++)
             {
-                float input = Math.Abs(buffer[i]);
+                float input = buffer[i];
+                float inputAbs = Math.Abs(input);
 
-                // Simple level detector
-                currentLevel = (input > currentLevel) ?
-                    attackCoeff * currentLevel + (1.0f - attackCoeff) * input :
-                    releaseCoeff * currentLevel + (1.0f - releaseCoeff) * input;
+                // Lookahead Logic
+                float bufOut = _lookaheadBuffer[_lookaheadIndex];
+                _lookaheadBuffer[_lookaheadIndex] = input;
+                _lookaheadIndex++;
+                if (_lookaheadIndex >= _lookaheadLength) _lookaheadIndex = 0;
+                
+                // Detection on INPUT (Ahead of output)
+                // This allows gain to drop BEFORE the loud main signal hits the output
+                if (inputAbs > level)
+                    level = att * level + invAtt * inputAbs;
+                else
+                    level = rel * level + invRel * inputAbs;
 
-                // Gate check
-                if (currentLevel < gateThreshold)
+                // Gate
+                if (level < gate)
                 {
-                    buffer[i] *= currentGain;
-                    continue;
+                    // If below gate, hold current gain or drift to unity?
+                    // Typically hold or slow release. 
+                    // Let's just apply current gain.
+                }
+                else
+                {
+                    // Calculate Target Gain
+                    // targetGain = TargetLevel / Level
+                    // Prevent division by zero roughly
+                    float effectiveLevel = level > 0.0001f ? level : 0.0001f;
+                    float targetGainVal = target / effectiveLevel;
+                    
+                    // Clamp
+                    if (targetGainVal > maxG) targetGainVal = maxG;
+                    if (targetGainVal < minG) targetGainVal = minG;
+                    
+                    // Smooth Gain Transition (Fast attack, slow release? Or just smooth?)
+                    // 0.995 is roughly 200 samples at 44k (~5ms)
+                    gain = 0.995f * gain + 0.005f * targetGainVal;
                 }
 
-                // Calculate needed gain
-                float targetGain = targetLevel / Math.Max(currentLevel, 0.0001f);
-                targetGain = Math.Max(minGain, Math.Min(maxGain, targetGain));
+                // Apply Gain to DELAYED signal
+                float output = bufOut * gain;
 
-                // Smooth gain changes
-                currentGain = 0.995f * currentGain + 0.005f * targetGain;
+                // Soft Limiting
+                if (output > 0.98f) output = 0.98f;
+                else if (output < -0.98f) output = -0.98f;
 
-                // Apply gain
-                buffer[i] *= currentGain;
-
-                // Simple soft limiting
-                if (buffer[i] > 0.95f) buffer[i] = 0.95f;
-                else if (buffer[i] < -0.95f) buffer[i] = -0.95f;
+                buffer[i] = output;
             }
+
+            _currentLevel = level;
+            _currentGain = gain;
         }
 
-        /// <summary>
-        /// Apply preset settings
-        /// </summary>
         public void SetPreset(AutoGainPreset preset)
         {
             switch (preset)
             {
                 case AutoGainPreset.Default:
-                    targetLevel = 0.25f;     // Balanced default level
-                    attackCoeff = 0.99f;     // Standard attack
-                    releaseCoeff = 0.999f;   // Standard release
-                    maxGain = 4.0f;          // Standard max gain (+12dB)
-                    minGain = 0.25f;         // Standard min gain (-12dB)
-                    gateThreshold = 0.001f;  // Standard gate
+                    TargetLevel = 0.25f; AttackCoefficient = 0.99f; ReleaseCoefficient = 0.999f;
+                    MaximumGain = 4.0f; MinimumGain = 0.25f; GateThreshold = 0.001f;
                     break;
-
                 case AutoGainPreset.Music:
-                    targetLevel = 0.2f;      // Moderate level to preserve dynamics
-                    attackCoeff = 0.995f;    // Very slow attack preserves transients
-                    releaseCoeff = 0.9995f;  // Very slow release for natural feel
-                    maxGain = 2.0f;          // Limited gain boost (+6dB)
-                    minGain = 0.5f;          // Limited attenuation (-6dB)
-                    gateThreshold = 0.002f;  // Higher gate to ignore quiet passages
+                    TargetLevel = 0.2f; AttackCoefficient = 0.995f; ReleaseCoefficient = 0.9995f;
+                    MaximumGain = 2.0f; MinimumGain = 0.5f; GateThreshold = 0.002f;
                     break;
-
                 case AutoGainPreset.Voice:
-                    targetLevel = 0.3f;      // Good speech level for clarity
-                    attackCoeff = 0.99f;     // Medium attack for speech dynamics
-                    releaseCoeff = 0.999f;   // Smooth release for natural speech
-                    maxGain = 3.0f;          // Higher gain for quiet speakers (+9.5dB)
-                    minGain = 0.3f;          // Moderate attenuation (-10dB)
-                    gateThreshold = 0.001f;  // Lower gate for breath detection
+                    TargetLevel = 0.3f; AttackCoefficient = 0.99f; ReleaseCoefficient = 0.999f;
+                    MaximumGain = 3.0f; MinimumGain = 0.3f; GateThreshold = 0.001f;
                     break;
-
                 case AutoGainPreset.Broadcast:
-                    targetLevel = 0.4f;      // Hot level for broadcast standards
-                    attackCoeff = 0.98f;     // Fast attack for quick response
-                    releaseCoeff = 0.995f;   // Medium release for punch
-                    maxGain = 4.0f;          // High gain capability (+12dB)
-                    minGain = 0.2f;          // Strong attenuation (-14dB)
-                    gateThreshold = 0.0005f; // Very low gate for full control
+                    TargetLevel = 0.4f; AttackCoefficient = 0.98f; ReleaseCoefficient = 0.995f;
+                    MaximumGain = 4.0f; MinimumGain = 0.2f; GateThreshold = 0.0005f;
                     break;
-
                 case AutoGainPreset.Live:
-                    targetLevel = 0.5f;      // High level for live use
-                    attackCoeff = 0.97f;     // Very fast attack prevents feedback
-                    releaseCoeff = 0.99f;    // Fast release for responsiveness
-                    maxGain = 2.5f;          // Limited gain to prevent feedback (+8dB)
-                    minGain = 0.1f;          // Can heavily attenuate loud signals (-20dB)
-                    gateThreshold = 0.005f;  // Higher gate for noisy live environments
+                    TargetLevel = 0.5f; AttackCoefficient = 0.97f; ReleaseCoefficient = 0.99f;
+                    MaximumGain = 2.5f; MinimumGain = 0.1f; GateThreshold = 0.005f;
                     break;
             }
         }
 
-        /// <summary>
-        /// Reset processor state - clears temporary storage but keeps parameters
-        /// </summary>
         public void Reset()
         {
-            currentGain = 1.0f;
-            currentLevel = 0.0f;
+            _currentGain = 1.0f;
+            _currentLevel = 0.0f;
+            if (_lookaheadBuffer != null) Array.Clear(_lookaheadBuffer, 0, _lookaheadBuffer.Length);
         }
 
-        /// <summary>
-        /// Disposes the effect and releases resources.
-        /// </summary>
         public void Dispose()
         {
-            if (_disposed)
-                return;
-
+            if (_disposed) return;
             Reset();
-
             _disposed = true;
         }
 
-        /// <summary>
-        /// Returns a string representation of the effect's state.
-        /// </summary>
-        public override string ToString()
-        {
-            return $"AutoGain: Target={targetLevel:F2}, CurrentGain={currentGain:F2}, Enabled={_enabled}";
-        }
+        public override string ToString() => $"AutoGain: Target={_targetLevel:F2}, CurrentGain={_currentGain:F2}, Enabled={_enabled}";
     }
 }

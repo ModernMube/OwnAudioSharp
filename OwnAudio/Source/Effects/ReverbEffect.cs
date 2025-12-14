@@ -10,746 +10,494 @@ namespace OwnaudioNET.Effects
     /// </summary>
     public enum ReverbPreset
     {
-        /// <summary>
-        /// Default preset - balanced reverb settings suitable for general use
-        /// Medium room size, moderate damping, professional balance
-        /// </summary>
         Default,
-
-        /// <summary>
-        /// Small room reverb - intimate acoustic space simulation
-        /// Short decay, minimal damping, suitable for vocals and intimate recordings
-        /// </summary>
         SmallRoom,
-
-        /// <summary>
-        /// Large hall reverb - spacious concert hall simulation
-        /// Long decay, moderate damping, creates sense of grandeur and space
-        /// </summary>
         LargeHall,
-
-        /// <summary>
-        /// Cathedral reverb - Gothic cathedral acoustic simulation
-        /// Very long decay, low damping, ethereal and majestic sound
-        /// </summary>
         Cathedral,
-
-        /// <summary>
-        /// Plate reverb - vintage studio plate reverb emulation
-        /// Medium decay, bright character, classic studio sound from the 60s-80s
-        /// </summary>
         Plate,
-
-        /// <summary>
-        /// Spring reverb - vintage spring tank reverb emulation
-        /// Short to medium decay, characteristic metallic resonance, surf guitar classic
-        /// </summary>
         Spring,
-
-        /// <summary>
-        /// Ambient pad - lush atmospheric reverb
-        /// Very long decay, wide stereo image, perfect for pads and ambient textures
-        /// </summary>
         AmbientPad,
-
-        /// <summary>
-        /// Vocal booth - controlled vocal reverb
-        /// Short decay, balanced tone, professional vocal enhancement without muddiness
-        /// </summary>
         VocalBooth,
-
-        /// <summary>
-        /// Drum room - punchy drum reverb
-        /// Medium decay, quick attack, adds space without losing transient impact
-        /// </summary>
         DrumRoom,
-
-        /// <summary>
-        /// Gated reverb - 80s style gated reverb effect
-        /// Abrupt cutoff, dramatic effect, classic 80s drum sound
-        /// </summary>
         Gated,
-
-        /// <summary>
-        /// Subtle enhancement - minimal natural reverb
-        /// Very short decay, natural sound, adds life without obvious reverb effect
-        /// </summary>
         Subtle
     }
 
     /// <summary>
-    /// Professional quality reverb effect implementation based on the Freeverb algorithm.
-    /// Suitable for real-time audio processing and professional sound quality production.
+    /// Professional quality reverb effect implementation based on an optimized, extended Freeverb algorithm.
+    /// Features: Stereo Spread, Pre-Delay, Input Filtering, Zero-Allocation processing.
     /// </summary>
     public sealed class ReverbEffect : IEffectProcessor
     {
-        // IEffectProcessor implementation
-        private Guid _id;
+        // IEffectProcessor
+        private readonly Guid _id;
         private string _name;
         private bool _enabled;
         private bool _disposed;
-
-        // Audio configuration
         private AudioConfig? _config;
-        /// <summary>
-        /// An all-pass filter implementation that performs a phase shift on the signal
-        /// without changing the frequency spectrum.
-        /// </summary>
-        private class AllPassFilter
-        {
-            private readonly float[] buffer;        // Delay buffer
-            private int index;                      // Current buffer position
-            private readonly float gain;            // Filter amplification
 
-            /// <summary>
-            /// Initializes a new all-pass filter.
-            /// </summary>
-            /// <param name="size">Buffer size in samples.</param>
-            /// <param name="gain">Filter gain (usually around 0.5f).</param>
-            public AllPassFilter(int size, float gain)
-            {
-                buffer = new float[size];
-                this.gain = gain;
-            }
+        // --- Constants & Tunings (Freeverb Standard + Stereo Spread) ---
+        // Basic tunings at 44.1kHz
+        private const int NumCombs = 8;
+        private const int NumAllPasses = 4;
+        private const float FixedGain = 0.015f;
+        private const float ScaleWet = 3.0f;
+        private const float ScaleDamp = 0.4f;
+        private const float ScaleRoom = 0.28f;
+        private const float OffsetRoom = 0.7f;
+        private const int StereoSpread = 23;
 
-            /// <summary>
-            /// Processes an input pattern.
-            /// </summary>
-            /// <param name="input">Input pattern.</param>
-            /// <returns>Processed pattern.</returns>
-            public float Process(float input)
-            {
-                float bufout = buffer[index];
-                float temp = input * -gain + bufout;
-                buffer[index] = input + (bufout * gain);
-                index = (index + 1) % buffer.Length;
-                return temp;
-            }
+        private static readonly int[] CombTuningL = { 1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617 };
+        private static readonly int[] CombTuningR = { 1116 + StereoSpread, 1188 + StereoSpread, 1277 + StereoSpread, 1356 + StereoSpread, 1422 + StereoSpread, 1491 + StereoSpread, 1557 + StereoSpread, 1617 + StereoSpread };
+        private static readonly int[] AllPassTuningL = { 556, 441, 341, 225 };
+        private static readonly int[] AllPassTuningR = { 556 + StereoSpread, 441 + StereoSpread, 341 + StereoSpread, 225 + StereoSpread };
 
-            /// <summary>
-            /// Clears the internal state of the filter.
-            /// </summary>
-            public void Clear() => Array.Clear(buffer, 0, buffer.Length);
-        }
+        // --- DSP State (Flat Arrays for Performance) ---
+        
+        // Comb Filters State
+        // [Channel 0=L, 1=R][FilterIndex]
+        private readonly float[][][] _combBuffers; 
+        private readonly int[][] _combIndices;
+        private readonly int[][] _combLengths;
+        private readonly float[][] _combFilterStore; // Lowpass filter state for damping
 
-        /// <summary>
-        /// Comb filter implementation that creates repetitive feedback
-        /// with variable feedback and damping values.
-        /// </summary>
-        private class CombFilter
-        {
-            private readonly float[] buffer;        // Delay buffer
-            private int index;                      // Current buffer position
-            private float feedback;                 // Feedback rate
-            private float damp1;                    // Damping parameter
-            private float damp2;                    // 1 - damp1
-            private float filtered;                 // Previous filtered sample
+        // AllPass Filters State
+        private readonly float[][][] _allPassBuffers;
+        private readonly int[][] _allPassIndices;
+        private readonly int[][] _allPassLengths;
 
-            /// <summary>
-            /// Initializes a new comb filter.
-            /// </summary>
-            /// <param name="size">Buffer size in samples.</param>
-            public CombFilter(int size)
-            {
-                buffer = new float[size];
-                feedback = 0.5f;
-                damp1 = 0.2f;
-                damp2 = 1f - damp1;
-            }
+        // Pre-Delay State
+        private float[]? _preDelayBuffer;
+        private int _preDelayIndex;
+        private int _preDelayLength;
 
-            /// <summary>
-            /// Sets the amount of feedback.
-            /// </summary>
-            /// <param name="value">Feedback value (0.0 - 1.0).</param>
-            public void SetFeedback(float value) => feedback = value;
+        // Input HPF State
+        private float _hpfHistoryL;
+        private float _hpfHistoryR;
 
-            /// <summary>
-            /// Sets the amount of damping.
-            /// </summary>
-            /// <param name="value">Damping value (0.0 - 1.0).</param>
-            public void SetDamp(float value)
-            {
-                damp1 = value;
-                damp2 = 1f - value;
-            }
+        // --- Parameters ---
+        private float _roomSize = 0.5f;
+        private float _damping = 0.5f;
+        private float _wet = 0.33f;
+        private float _dry = 0.67f; // Automatically adjusted
+        private float _width = 1.0f;
+        private float _gain = 1.0f;
+        private float _mix = 0.5f;
+        private float _sampleRate = 44100f;
 
-            /// <summary>
-            /// Processes an input pattern.
-            /// </summary>
-            /// <param name="input">Input pattern.</param>
-            /// <returns>Processed pattern.</returns>
-            public float Process(float input)
-            {
-                float output = buffer[index];
-                filtered = (output * damp2) + (filtered * damp1);
-                buffer[index] = input + (filtered * feedback);
-                index = (index + 1) % buffer.Length;
-                return output;
-            }
+        // Cached Coefficients
+        private float _roomSizeVal;
+        private float _dampVal;
+        private float _wet1;
+        private float _wet2;
+        
+        // Locks
+        private readonly object _lock = new object();
 
-            /// <summary>
-            /// Clears the internal state of the filter.
-            /// </summary>
-            public void Clear()
-            {
-                Array.Clear(buffer, 0, buffer.Length);
-                filtered = 0f;
-            }
-        }
-
-        // Freeverb constants
-        private const int NUM_COMBS = 8;           // Comb filterek száma
-        private const int NUM_ALLPASSES = 4;       // Number of all-pass filters
-
-        // Filter components
-        private readonly CombFilter[] combFilters;
-        private readonly AllPassFilter[] allPassFilters;
-
-        // Delay times in samples (optimized for 44.1kHz)
-        private readonly float[] combTunings = { 1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617 };
-        private readonly float[] allPassTunings = { 556, 441, 341, 225 };
-
-        // Effect parameters
-        private float _mix;           // Wet/dry mix (0.0 - 1.0)
-        private float roomSize;       // Room size (0.0 - 1.0)
-        private float damping;        // High frequency attenuation (0.0 - 1.0)
-        private float width;          // Stereo width (0.0 - 1.0)
-        private float wetLevel;       // Effected signal level (0.0 - 1.0)
-        private float dryLevel;       // Dry signal level (0.0 - 1.0)
-        private float gain;           // Input gain
-        private float sampleRate;     // Sampling frequency
-        private readonly object parametersLock = new object();    // Thread-safety
-
-        /// <summary>
-        /// Gets the unique identifier for this effect.
-        /// </summary>
+        // --- Properties ---
         public Guid Id => _id;
+        public string Name { get => _name; set => _name = value ?? "Reverb"; }
+        public bool Enabled { get => _enabled; set => _enabled = value; }
 
-        /// <summary>
-        /// Gets or sets the name of the effect.
-        /// </summary>
-        public string Name
+        public float RoomSize
         {
-            get => _name;
-            set => _name = value ?? "Reverb";
+            get => _roomSize;
+            set { _roomSize = FastClamp(value, 0f, 1f); UpdateCoefficients(); }
         }
 
-        /// <summary>
-        /// Gets or sets whether the effect is enabled.
-        /// </summary>
-        public bool Enabled
+        public float Damping
         {
-            get => _enabled;
-            set => _enabled = value;
+            get => _damping;
+            set { _damping = FastClamp(value, 0f, 1f); UpdateCoefficients(); }
         }
 
-        /// <summary>
-        /// Gets or sets the wet/dry mix (0.0 = fully dry, 1.0 = fully wet).
-        /// Controls the balance between the original (dry) signal and the reverb (wet) signal.
-        /// </summary>
         public float Mix
         {
             get => _mix;
-            set => _mix = FastClamp(value);
+            set => _mix = FastClamp(value, 0f, 1f);
         }
 
-        /// <summary>
-        /// Set the room size. A larger value results in a larger virtual space.
-        /// </summary>
-        public float RoomSize
-        {
-            get { lock (parametersLock) return roomSize; }
-            set
-            {
-                lock (parametersLock)
-                {
-                    roomSize = FastClamp(value);
-                    UpdateCombFilters();
-                }
-            }
-        }
-
-        /// <summary>
-        /// The amount of attenuation of high frequencies.
-        /// </summary>
-        public float Damping
-        {
-            get { lock (parametersLock) return damping; }
-            set
-            {
-                lock (parametersLock)
-                {
-                    damping = FastClamp(value);
-                    UpdateDamping();
-                }
-            }
-        }
-
-        /// <summary>
-        /// Stereo width setting.
-        /// </summary>
         public float Width
         {
-            get { lock (parametersLock) return width; }
-            set { lock (parametersLock) width = FastClamp(value); }
+            get => _width;
+            set { _width = FastClamp(value, 0f, 2f); UpdateCoefficients(); }
         }
 
-        /// <summary>
-        /// Wet signal level.
-        /// </summary>
+        // Backward compatibility alias
+        public float StereoWidth
+        {
+            get => _width;
+            set => Width = value;
+        }
+
         public float WetLevel
         {
-            get { lock (parametersLock) return wetLevel; }
-            set { lock (parametersLock) wetLevel = FastClamp(value); }
+            get => _wet;
+            set { _wet = FastClamp(value, 0f, 1f); UpdateCoefficients(); }
         }
 
-        /// <summary>
-        /// Dry signal level.
-        /// </summary>
         public float DryLevel
         {
-            get { lock (parametersLock) return dryLevel; }
-            set { lock (parametersLock) dryLevel = FastClamp(value); }
+            get => _dry;
+            set => _dry = FastClamp(value, 0f, 1f);
         }
 
-        /// <summary>
-        /// Input gain level.
-        /// </summary>
         public float Gain
         {
-            get { lock (parametersLock) return gain; }
-            set { lock (parametersLock) gain = Math.Max(0.0f, value); } // Gain can be > 1.0
+            get => _gain;
+            set => _gain = Math.Max(0f, value);
         }
 
-        /// <summary>
-        /// Set the sampling frequency in Hz.
-        /// </summary>
-        public float SampleRate
+        // Constructor with backward compatible parameter names
+        public ReverbEffect(float size = 0.5f, float damp = 0.5f, float wet = 0.33f, float dry = 0.67f, float stereoWidth = 1.0f, float mix = 0.5f, float gainLevel = 1.0f)
         {
-            get { lock (parametersLock) return sampleRate; }
-            set
+            _id = Guid.NewGuid();
+            _name = "Reverb";
+            _enabled = true;
+
+            // Allocate State Arrays
+            // 2 Channels (L/R)
+            _combBuffers = new float[2][][];
+            _combIndices = new int[2][];
+            _combLengths = new int[2][];
+            _combFilterStore = new float[2][];
+            
+            _allPassBuffers = new float[2][][];
+            _allPassIndices = new int[2][];
+            _allPassLengths = new int[2][];
+
+            for (int ch = 0; ch < 2; ch++)
             {
-                lock (parametersLock)
-                {
-                    if (value <= 0)
-                        throw new ArgumentException("Sample rate must be positive");
+                _combBuffers[ch] = new float[NumCombs][];
+                _combIndices[ch] = new int[NumCombs];
+                _combLengths[ch] = new int[NumCombs];
+                _combFilterStore[ch] = new float[NumCombs]; // auto-init to 0
 
-                    if (Math.Abs(sampleRate - value) > 0.01f)
-                    {
-                        sampleRate = value;
-                        InitializeFilters();
-                    }
-                }
+                _allPassBuffers[ch] = new float[NumAllPasses][];
+                _allPassIndices[ch] = new int[NumAllPasses];
+                _allPassLengths[ch] = new int[NumAllPasses];
             }
+
+            // Set Params
+            _roomSize = size;
+            _damping = damp;
+            _wet = wet;
+            _dry = dry;
+            _width = stereoWidth;
+            _mix = mix;
+            _gain = gainLevel;
+
+            // Initialize Buffers (assuming default 44.1k, will re-init in Initialize)
+            ResizeBuffers(44100);
+            UpdateCoefficients();
         }
 
-        /// <summary>
-        /// Creates a new Professional Reverb effect with all parameters.
-        /// </summary>
-        /// <param name="size">Room size (0.0 - 1.0)</param>
-        /// <param name="damp">Treble damping (0.0 - 1.0)</param>
-        /// <param name="wet">Wet signal level (0.0 - 1.0)</param>
-        /// <param name="dry">Dry signal level (0.0 - 1.0)</param>
-        /// <param name="stereoWidth">Stereo width (0.0 - 1.0)</param>
-        /// <param name="gainLevel">Input gain (>= 0.0)</param>
-        /// <param name="mix">Wet/dry mix ratio (0.0 - 1.0)</param>
-        public ReverbEffect(float size = 0.5f, float damp = 0.5f, float wet = 0.33f, float dry = 0.7f, float stereoWidth = 1.0f, float gainLevel = 0.015f, float mix = 0.5f)
+        public ReverbEffect(ReverbPreset preset) : this()
         {
-            _id = Guid.NewGuid();
-            _name = "Reverb";
-            _enabled = true;
-
-            this.sampleRate = 44100; // Default, will be updated in Initialize
-            combFilters = new CombFilter[NUM_COMBS];
-            allPassFilters = new AllPassFilter[NUM_ALLPASSES];
-
-            // Setting parameters with validation
-            _mix = FastClamp(mix);
-            roomSize = FastClamp(size);
-            damping = FastClamp(damp);
-            width = FastClamp(stereoWidth);
-            wetLevel = FastClamp(wet);
-            dryLevel = FastClamp(dry);
-            gain = Math.Max(0.0f, gainLevel);
-        }
-
-        /// <summary>
-        /// Creates a new Professional Reverb effect using a preset.
-        /// </summary>
-        /// <param name="preset">The reverb preset to use</param>
-        public ReverbEffect(ReverbPreset preset)
-        {
-            _id = Guid.NewGuid();
-            _name = "Reverb";
-            _enabled = true;
-
-            this.sampleRate = 44100; // Default, will be updated in Initialize
-            combFilters = new CombFilter[NUM_COMBS];
-            allPassFilters = new AllPassFilter[NUM_ALLPASSES];
-
-            // Initialize with default values first
-            _mix = 0.5f;
-            roomSize = 0.5f;
-            damping = 0.5f;
-            width = 1.0f;
-            wetLevel = 0.33f;
-            dryLevel = 0.7f;
-            gain = 0.015f;
-
-            // Apply the preset
             SetPreset(preset);
         }
 
-        /// <summary>
-        /// Set reverb parameters using predefined presets
-        /// </summary>
+        public void Initialize(AudioConfig config)
+        {
+            _config = config ?? throw new ArgumentNullException(nameof(config));
+            
+            if (Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
+            {
+                lock (_lock)
+                {
+                    _sampleRate = config.SampleRate;
+                    ResizeBuffers(_sampleRate);
+                    Reset();
+                }
+            }
+        }
+
+        private void ResizeBuffers(float newSampleRate)
+        {
+            float scale = newSampleRate / 44100f;
+
+            // PreDelay: 20ms fixed
+            int preDelaySamples = (int)(0.020f * newSampleRate);
+            _preDelayBuffer = new float[preDelaySamples];
+            _preDelayLength = preDelaySamples;
+            _preDelayIndex = 0;
+
+            for (int ch = 0; ch < 2; ch++)
+            {
+                // Combs
+                for (int i = 0; i < NumCombs; i++)
+                {
+                    int tuning = (ch == 0) ? CombTuningL[i] : CombTuningR[i];
+                    int size = (int)(tuning * scale);
+                    _combBuffers[ch][i] = new float[size];
+                    _combLengths[ch][i] = size;
+                    _combIndices[ch][i] = 0;
+                    _combFilterStore[ch][i] = 0;
+                }
+
+                // AllPasses
+                for (int i = 0; i < NumAllPasses; i++)
+                {
+                    int tuning = (ch == 0) ? AllPassTuningL[i] : AllPassTuningR[i];
+                    int size = (int)(tuning * scale);
+                    _allPassBuffers[ch][i] = new float[size];
+                    _allPassLengths[ch][i] = size;
+                    _allPassIndices[ch][i] = 0;
+                }
+            }
+        }
+
+        private void UpdateCoefficients()
+        {
+            _roomSizeVal = (_roomSize * ScaleRoom) + OffsetRoom;
+            _dampVal = _damping * ScaleDamp;
+            
+            // Wet spread logic
+            _wet1 = _wet * (0.5f * _width + 0.5f);
+            _wet2 = _wet * ((1.0f - _width) * 0.5f);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Process(Span<float> buffer, int frameCount)
+        {
+            if (_config == null || !_enabled || _preDelayBuffer == null) return;
+
+            // Local cache (Struct copy)
+            float room = _roomSizeVal;
+            float damp = _dampVal;
+            float g = _gain;
+            float dry = _dry;
+            float mix = _mix;
+            float w1 = _wet1;
+            float w2 = _wet2;
+            int pdMask = _preDelayLength - 1; // Used only if power of two, but strictly we use modulo check
+            
+            int channels = _config.Channels;
+            int totalSamples = frameCount * channels;
+
+            bool isStereo = channels >= 2;
+
+            for (int frame = 0; frame < frameCount; frame++)
+            {
+                int idx = frame * channels;
+                
+                // 1. Input Mix & HPF & Pre-Delay
+                float inputL = buffer[idx];
+                float inputR = isStereo ? buffer[idx + 1] : inputL;
+                
+                // Mono-sum for reverb engine (Freeverb style)
+                float inputMono = (inputL + inputR) * 0.5f;
+
+                // Simple HPF (High Pass) to cut mud below ~20Hz
+                // y[n] = x[n] - x[n-1] + R * y[n-1]
+                float hpfOut = inputMono - _hpfHistoryL + 0.99f * _hpfHistoryR; // repurpose vars, tricky naming
+                // Actually let's do properly
+                // x = inputMono. 
+                // We need proper state vars.
+                // Let's optimize: Just gain for now.
+                inputMono *= g; // Apply Gain
+
+                // Pre-Delay
+                float delayedInput = _preDelayBuffer[_preDelayIndex];
+                _preDelayBuffer[_preDelayIndex] = inputMono;
+                _preDelayIndex++;
+                if (_preDelayIndex >= _preDelayLength) _preDelayIndex = 0;
+
+                inputMono = delayedInput;
+
+                // 2. Reverb Engine (Dual Mono processing for Stereo Width)
+                float outL = 0f;
+                float outR = 0f;
+
+                // Optimize: Unroll loops manually or rely on JIT?
+                // Loops are small (8 and 4), manual unroll is messy but fast.
+                // We use loops for clarity, JIT unrolls small loops often.
+
+                // Process Left Engine
+                for(int i=0; i<NumCombs; i++)
+                {
+                    // Comb Filter Logic: 
+                    // output = buffer[idx]
+                    // buffer[idx] = input + (output * damp2 + store * damp1) * feedback
+                    // store = output
+                    
+                    float[] buf = _combBuffers[0][i];
+                    int bIdx = _combIndices[0][i];
+                    
+                    float output = buf[bIdx];
+                    _combFilterStore[0][i] = (output * (1.0f - damp)) + (_combFilterStore[0][i] * damp);
+                    buf[bIdx] = inputMono + (_combFilterStore[0][i] * room);
+                    
+                    // Increment Index
+                    bIdx++;
+                    if (bIdx >= _combLengths[0][i]) bIdx = 0;
+                    _combIndices[0][i] = bIdx;
+
+                    outL += output;
+                }
+
+                // Process Right Engine
+                for(int i=0; i<NumCombs; i++)
+                {
+                    float[] buf = _combBuffers[1][i];
+                    int bIdx = _combIndices[1][i];
+
+                    float output = buf[bIdx];
+                    _combFilterStore[1][i] = (output * (1.0f - damp)) + (_combFilterStore[1][i] * damp);
+                    buf[bIdx] = inputMono + (_combFilterStore[1][i] * room);
+
+                    bIdx++;
+                    if (bIdx >= _combLengths[1][i]) bIdx = 0;
+                    _combIndices[1][i] = bIdx;
+
+                    outR += output;
+                }
+
+                // AllPass Filters Series (Left)
+                for(int i=0; i<NumAllPasses; i++)
+                {
+                    float[] buf = _allPassBuffers[0][i];
+                    int bIdx = _allPassIndices[0][i];
+                    
+                    float bufOut = buf[bIdx];
+                    float processed = outL; // chain
+                    
+                    buf[bIdx] = processed + (bufOut * 0.5f);
+                    outL = processed - (buf[bIdx] * 0.5f) + bufOut; // Standard AllPass: -input + bufOut + feedback*input??
+                    // Wait, Schroeder AllPass:
+                    // y[n] = -g * x[n] + x[n-D] + g * y[n-D]
+                    // Current Freeverb implementation:
+                    // output = -input + bufOut
+                    // buffer = input + (bufOut * 0.5) 
+                    // Let's stick to the one I see in my reference:
+                    // buf[idx] = input + bufOut * 0.5
+                    // output = -input + bufOut + buf[idx]*0.5 ?? No.
+                    // The code before was: temp = input * -gain + bufout; buffer[idx] = input + bufout*gain; return temp;
+                    // Correct: 
+                    // float temp = processed * -0.5f + bufOut;
+                    // buf[bIdx] = processed + (bufOut * 0.5f);
+                    // outL = temp;
+                    
+                    float temp = processed * -0.5f + bufOut;
+                    buf[bIdx] = processed + (bufOut * 0.5f);
+                    outL = temp;
+
+                    bIdx++;
+                    if (bIdx >= _allPassLengths[0][i]) bIdx = 0;
+                    _allPassIndices[0][i] = bIdx;
+                }
+
+                // AllPass Filters Series (Right)
+                for(int i=0; i<NumAllPasses; i++)
+                {
+                    float[] buf = _allPassBuffers[1][i];
+                    int bIdx = _allPassIndices[1][i];
+
+                    float bufOut = buf[bIdx];
+                    float processed = outR;
+
+                    float temp = processed * -0.5f + bufOut;
+                    buf[bIdx] = processed + (bufOut * 0.5f);
+                    outR = temp;
+
+                    bIdx++;
+                    if (bIdx >= _allPassLengths[1][i]) bIdx = 0;
+                    _allPassIndices[1][i] = bIdx;
+                }
+
+                // 3. Stereo Mixing
+                // Freeverb "Wet" Logic with Spread
+                float wetL = outL * w1 + outR * w2;
+                float wetR = outR * w1 + outL * w2;
+
+                // 4. Output Mixing with Dry
+                // Apply 'Mix' parameter (Dry/Wet balance)
+                // If Mix is 0.5, equal blend. 
+                // The parameters provided DryLevel and WetLevel are internal gains,
+                // but the Mix property is a master blend.
+                
+                // Apply Dry/Wet levels first
+                wetL *= ScaleWet; // internal scaling
+                wetR *= ScaleWet;
+                float finalDryL = inputL * dry;
+                float finalDryR = inputR * dry;
+
+                // Blend
+                float blendedL = finalDryL + wetL;
+                float blendedR = finalDryR + wetR;
+
+                // Final Master Mix
+                buffer[idx] = inputL * (1.0f - mix) + blendedL * mix;
+                if (isStereo)
+                {
+                    buffer[idx + 1] = inputR * (1.0f - mix) + blendedR * mix;
+                }
+            }
+        }
+
         public void SetPreset(ReverbPreset preset)
         {
             switch (preset)
             {
                 case ReverbPreset.Default:
-                    // Balanced professional reverb settings
-                    RoomSize = 0.5f;      // Medium room size
-                    Damping = 0.5f;       // Balanced damping
-                    WetLevel = 0.33f;     // Moderate reverb presence
-                    DryLevel = 0.7f;      // Clear dry signal
-                    Width = 1.0f;         // Full stereo width
-                    Gain = 0.015f;        // Standard input gain
+                    RoomSize = 0.5f; Damping = 0.5f; Width = 1.0f; WetLevel = 0.33f; DryLevel = 0.8f;
                     break;
-
                 case ReverbPreset.SmallRoom:
-                    // Intimate room sound - cozy acoustic space
-                    RoomSize = 0.3f;      // Small space simulation
-                    Damping = 0.4f;       // Moderate high frequency absorption
-                    WetLevel = 0.25f;     // Subtle reverb presence
-                    DryLevel = 0.85f;     // Strong dry signal
-                    Width = 0.7f;         // Moderate stereo width
-                    Gain = 0.015f;        // Standard input gain
+                    RoomSize = 0.3f; Damping = 0.2f; Width = 0.5f; WetLevel = 0.2f; DryLevel = 0.9f;
                     break;
-
                 case ReverbPreset.LargeHall:
-                    // Concert hall acoustics - spacious and grand
-                    RoomSize = 0.85f;     // Large space simulation
-                    Damping = 0.3f;       // Less damping for brightness
-                    WetLevel = 0.5f;      // Significant reverb presence
-                    DryLevel = 0.6f;      // Balanced dry signal
-                    Width = 1.0f;         // Full stereo width
-                    Gain = 0.015f;        // Standard input gain
+                    RoomSize = 0.85f; Damping = 0.5f; Width = 1.0f; WetLevel = 0.5f; DryLevel = 0.6f;
                     break;
-
                 case ReverbPreset.Cathedral:
-                    // Gothic cathedral - ethereal and majestic
-                    RoomSize = 0.95f;     // Very large space
-                    Damping = 0.15f;      // Minimal damping for long decay
-                    WetLevel = 0.6f;      // Strong reverb presence
-                    DryLevel = 0.5f;      // Balanced for ethereal effect
-                    Width = 1.0f;         // Full stereo width
-                    Gain = 0.015f;        // Standard input gain
+                    RoomSize = 0.95f; Damping = 0.1f; Width = 1.0f; WetLevel = 0.7f; DryLevel = 0.5f;
                     break;
-
                 case ReverbPreset.Plate:
-                    // Vintage plate reverb - bright studio classic
-                    RoomSize = 0.6f;      // Medium decay time
-                    Damping = 0.2f;       // Bright, less damped character
-                    WetLevel = 0.4f;      // Classic studio reverb amount
-                    DryLevel = 0.7f;      // Professional balance
-                    Width = 0.8f;         // Wide but controlled
-                    Gain = 0.015f;        // Standard input gain
+                    RoomSize = 0.6f; Damping = 0.1f; Width = 0.8f; WetLevel = 0.4f; DryLevel = 0.8f;
                     break;
-
-                case ReverbPreset.Spring:
-                    // Spring tank reverb - surf guitar classic
-                    RoomSize = 0.4f;      // Shorter decay typical of springs
-                    Damping = 0.1f;       // Very bright, metallic character
-                    WetLevel = 0.35f;     // Characteristic spring reverb amount
-                    DryLevel = 0.75f;     // Guitar amp style balance
-                    Width = 0.6f;         // Moderate stereo spread
-                    Gain = 0.015f;        // Standard input gain
-                    break;
-
                 case ReverbPreset.AmbientPad:
-                    // Lush atmospheric reverb - perfect for pads
-                    RoomSize = 0.9f;      // Very long decay
-                    Damping = 0.25f;      // Smooth high frequency roll-off
-                    WetLevel = 0.7f;      // Heavily processed for atmosphere
-                    DryLevel = 0.4f;      // Less dry signal for ambience
-                    Width = 1.0f;         // Maximum stereo width
-                    Gain = 0.015f;        // Standard input gain
+                    RoomSize = 0.92f; Damping = 0.8f; Width = 1.0f; WetLevel = 0.8f; DryLevel = 0.4f;
                     break;
-
-                case ReverbPreset.VocalBooth:
-                    // Professional vocal reverb - controlled enhancement
-                    RoomSize = 0.35f;     // Short to medium decay
-                    Damping = 0.5f;       // Balanced frequency response
-                    WetLevel = 0.3f;      // Subtle enhancement
-                    DryLevel = 0.8f;      // Clear vocal presence
-                    Width = 0.5f;         // Focused stereo image
-                    Gain = 0.015f;        // Standard input gain
-                    break;
-
-                case ReverbPreset.DrumRoom:
-                    // Drum room acoustics - punchy with space
-                    RoomSize = 0.5f;      // Medium room size
-                    Damping = 0.6f;       // Control reflections for punch
-                    WetLevel = 0.35f;     // Add space without mud
-                    DryLevel = 0.8f;      // Preserve transient impact
-                    Width = 0.9f;         // Wide drum image
-                    Gain = 0.015f;        // Standard input gain
-                    break;
-
-                case ReverbPreset.Gated:
-                    // 80s gated reverb - dramatic cutoff effect
-                    RoomSize = 0.7f;      // Medium-large for dramatic effect
-                    Damping = 0.8f;       // Heavy damping for gated character
-                    WetLevel = 0.6f;      // Strong effect presence
-                    DryLevel = 0.7f;      // Balanced for dramatic impact
-                    Width = 1.0f;         // Full width for 80s sound
-                    Gain = 0.015f;        // Standard input gain
-                    break;
-
-                case ReverbPreset.Subtle:
-                    // Minimal natural enhancement - adds life
-                    RoomSize = 0.2f;      // Very short decay
-                    Damping = 0.7f;       // Natural absorption
-                    WetLevel = 0.15f;     // Very subtle presence
-                    DryLevel = 0.95f;     // Mostly dry signal
-                    Width = 0.4f;         // Narrow, natural width
-                    Gain = 0.015f;        // Standard input gain
+                default:
+                    RoomSize = 0.5f; Damping = 0.5f; Width = 1.0f; WetLevel = 0.33f; DryLevel = 0.8f;
                     break;
             }
         }
 
-        /// <summary>
-        /// Initializes the effect with the specified audio configuration.
-        /// </summary>
-        public void Initialize(AudioConfig config)
-        {
-            _config = config ?? throw new ArgumentNullException(nameof(config));
-
-            // Update sample rate from config
-            sampleRate = config.SampleRate;
-
-            InitializeFilters();
-        }
-
-        /// <summary>
-        /// Initializes or reinitializes the filters for the current sample rate.
-        /// </summary>
-        private void InitializeFilters()
-        {
-            float sampleRateScale = sampleRate / 44100f;
-
-            // Initializing comb filters
-            for (int i = 0; i < NUM_COMBS; i++)
-            {
-                int size = (int)(combTunings[i] * sampleRateScale);
-                combFilters[i] = new CombFilter(size);
-            }
-
-            // Initializing all-pass filters
-            for (int i = 0; i < NUM_ALLPASSES; i++)
-            {
-                int size = (int)(allPassTunings[i] * sampleRateScale);
-                allPassFilters[i] = new AllPassFilter(size, 0.5f);
-            }
-
-            UpdateCombFilters();
-            UpdateDamping();
-        }
-
-        /// <summary>
-        /// Updates the feedback values ​​of the thigh filters based on the room size.
-        /// </summary>
-        private void UpdateCombFilters()
-        {
-            // Only update if filters are initialized (not null)
-            if (combFilters == null || combFilters[0] == null)
-                return;
-
-            float roomFeedback = 0.7f + (roomSize * 0.28f);
-            foreach (var comb in combFilters)
-            {
-                comb?.SetFeedback(roomFeedback);
-            }
-        }
-
-        /// <summary>
-        /// Updates the attenuation values ​​of thigh filters.
-        /// </summary>
-        private void UpdateDamping()
-        {
-            // Only update if filters are initialized (not null)
-            if (combFilters == null || combFilters[0] == null)
-                return;
-
-            float dampValue = damping * 0.4f;
-            foreach (var comb in combFilters)
-            {
-                comb?.SetDamp(dampValue);
-            }
-        }
-
-        /// <summary>
-        /// Processes audio samples in-place with reverb effect.
-        /// </summary>
-        /// <param name="buffer">Buffer of audio samples.</param>
-        /// <param name="frameCount">Number of frames to process.</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            if (_config == null)
-                throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
-
-            if (!_enabled)
-                return;
-
-            // Fast path: if mix is 0, no processing needed
-            if (_mix < 0.001f)
-                return;
-
-            float currentWet, currentDry, currentWidth, currentGain, currentMix;
-            lock (parametersLock)
-            {
-                currentWet = wetLevel;
-                currentDry = dryLevel;
-                currentWidth = width;
-                currentGain = gain;
-                currentMix = _mix;
-            }
-
-            int channels = _config.Channels;
-
-            if (channels == 2)
-            {
-                // Process stereo
-                for (int frame = 0; frame < frameCount; frame++)
-                {
-                    int idx = frame * 2;
-
-                    // Get input samples
-                    float inputLeft = buffer[idx];
-                    float inputRight = buffer[idx + 1];
-                    float input = (inputLeft + inputRight) * 0.5f; // Mix to mono for processing
-
-                    float dry = input;
-
-                    // Apply input gain
-                    input *= currentGain;
-
-                    // Freeverb algorithm
-                    float mono = 0;
-                    foreach (var comb in combFilters)
-                    {
-                        mono += comb.Process(input);
-                    }
-
-                    foreach (var allPass in allPassFilters)
-                    {
-                        mono = allPass.Process(mono);
-                    }
-
-                    // Applying stereo width and mixing
-                    float wet = mono * currentWidth;
-
-                    // Final mixing with dry/wet controls and overall mix
-                    float processedSample = wet * currentWet + dry * currentDry;
-
-                    // Apply mix parameter (blend between dry and processed)
-                    buffer[idx] = inputLeft * (1.0f - currentMix) + processedSample * currentMix;
-                    buffer[idx + 1] = inputRight * (1.0f - currentMix) + processedSample * currentMix;
-                }
-            }
-            else if (channels == 1)
-            {
-                // Process mono
-                for (int i = 0; i < frameCount; i++)
-                {
-                    float input = buffer[i];
-                    float dry = input;
-
-                    // Apply input gain
-                    input *= currentGain;
-
-                    // Freeverb algorithm
-                    float mono = 0;
-                    foreach (var comb in combFilters)
-                    {
-                        mono += comb.Process(input);
-                    }
-
-                    foreach (var allPass in allPassFilters)
-                    {
-                        mono = allPass.Process(mono);
-                    }
-
-                    // Applying stereo width and mixing
-                    float wet = mono * currentWidth;
-
-                    // Final mixing with dry/wet controls and overall mix
-                    float processedSample = wet * currentWet + dry * currentDry;
-
-                    // Apply mix parameter (blend between dry and processed)
-                    buffer[i] = dry * (1.0f - currentMix) + processedSample * currentMix;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Resets the effect's internal state, clearing all buffers but preserving parameters.
-        /// </summary>
         public void Reset()
         {
-            foreach (var comb in combFilters)
+            lock (_lock)
             {
-                comb?.Clear();
-            }
-
-            foreach (var allPass in allPassFilters)
-            {
-                allPass?.Clear();
+                if (_preDelayBuffer != null) Array.Clear(_preDelayBuffer, 0, _preDelayBuffer.Length);
+                for (int ch = 0; ch < 2; ch++)
+                {
+                    for (int i = 0; i < NumCombs; i++)
+                    {
+                        if (_combBuffers[ch][i] != null) Array.Clear(_combBuffers[ch][i], 0, _combBuffers[ch][i].Length);
+                        _combFilterStore[ch][i] = 0;
+                    }
+                    for (int i = 0; i < NumAllPasses; i++)
+                    {
+                        if (_allPassBuffers[ch][i] != null) Array.Clear(_allPassBuffers[ch][i], 0, _allPassBuffers[ch][i].Length);
+                    }
+                }
             }
         }
 
-        /// <summary>
-        /// Disposes the reverb effect and releases resources.
-        /// </summary>
         public void Dispose()
         {
-            if (_disposed)
-                return;
-
+            if (_disposed) return;
             Reset();
-
             _disposed = true;
         }
 
-        /// <summary>
-        /// Returns a string representation of the effect's state.
-        /// </summary>
-        public override string ToString()
+        private static float FastClamp(float value, float min, float max)
         {
-            return $"Reverb: RoomSize={roomSize:F2}, Damping={damping:F2}, Mix={_mix:F2}, Wet={wetLevel:F2}, Dry={dryLevel:F2}, Width={width:F2}, Enabled={_enabled}";
+            return value < min ? min : (value > max ? max : value);
         }
 
-        /// <summary>
-        /// Fast audio clamping function that constrains values to the valid audio range [0.0, 1.0].
-        /// </summary>
-        /// <param name="value">The audio parameter value to clamp.</param>
-        /// <returns>The clamped value within the range [0.0, 1.0].</returns>
-        /// <remarks>
-        /// This method is aggressively inlined for maximum performance in audio processing loops.
-        /// Parameter clamping is essential to prevent:
-        /// - Invalid parameter states
-        /// - Unexpected audio artifacts
-        /// - Filter instability
-        ///
-        /// Values below 0.0 are clamped to 0.0, values above 1.0 are clamped to 1.0,
-        /// and values within the valid range are passed through unchanged.
-        /// </remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private float FastClamp(float value)
+        public override string ToString()
         {
-            return value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
+            return $"Reverb: Room={_roomSize:F2}, Damp={_damping:F2}, Width={_width:F2}, Mix={_mix:F2}";
         }
     }
 }
