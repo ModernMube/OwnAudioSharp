@@ -189,46 +189,61 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Applies compression with output range protection
+        /// Applies compression with Soft Knee and output range protection
         /// </summary>
         /// <returns>Gain reduction factor with safe output limiting</returns>
         private float ApplyCompression()
         {
             float safeEnvelope = Math.Max(envelope, 1e-6f);
             float safeThreshold = Math.Max(threshold, 1e-6f);
+            
+            // Soft Knee parameters - internal fixed width of 6dB for musical response
+            float kneeWidthDb = 6.0f; 
+            float kneeWidthLinear = DbToLinear(kneeWidthDb) - 1.0f; // Approximate linear width
+            float lowerNum = safeThreshold * (1.0f / MathF.Sqrt(DbToLinear(kneeWidthDb/2))); // Threshold - 3dB
+            float upperNum = safeThreshold * MathF.Sqrt(DbToLinear(kneeWidthDb/2)); // Threshold + 3dB
 
-            if (safeEnvelope > safeThreshold)
+            float gainReductionDb = 0.0f;
+            float levelDb = 20 * (float)Math.Log10(safeEnvelope);
+            float thresholdDb = 20 * (float)Math.Log10(safeThreshold);
+
+            // Soft Knee Logic
+            if (2 * (levelDb - thresholdDb) < -kneeWidthDb)
             {
-                float levelDb = 20 * (float)Math.Log10(safeEnvelope);
-                float thresholdDb = 20 * (float)Math.Log10(safeThreshold);
-
-                float compressedDb = thresholdDb + (levelDb - thresholdDb) / ratio;
-                float gainReductionDb = Math.Max(compressedDb - levelDb, -60f);
-
-                float baseGainReduction = (float)Math.Pow(10, gainReductionDb / 20);
-
-                float maximumSafeGain = 0.95f / Math.Max(safeEnvelope, 1e-6f);
-                float totalGain = baseGainReduction * makeupGain;
-
-                // Limit total gain to prevent clipping
-                if (totalGain > maximumSafeGain)
-                {
-                    return maximumSafeGain;
-                }
-
-                return baseGainReduction;
+                // Below knee: No compression
+                gainReductionDb = 0.0f;
+            }
+            else if (2 * Math.Abs(levelDb - thresholdDb) <= kneeWidthDb)
+            {
+                // In knee range: Quadratic smoothing
+                // (x - (T - W/2))^2 / (2W) * (1/Ratio - 1)
+                float slope = 1.0f / ratio - 1.0f; // Negative slope
+                float overDb = levelDb - (thresholdDb - kneeWidthDb / 2.0f);
+                gainReductionDb = slope * (overDb * overDb) / (2.0f * kneeWidthDb);
+            }
+            else
+            {
+                // Above knee: Linear compression
+                // (x - T) * (1/Ratio - 1)
+                gainReductionDb = (levelDb - thresholdDb) * (1.0f / ratio - 1.0f);
             }
 
-            // When below threshold, still check if makeup gain alone would cause clipping
-            float noCompressionGain = 1.0f * makeupGain;
-            float maxSafeGain = 0.95f / Math.Max(safeEnvelope, 1e-6f);
+            // Convert back to linear gain factor
+            float baseGainReduction = (float)Math.Pow(10, gainReductionDb / 20);
 
-            if (noCompressionGain > maxSafeGain)
+            float maximumSafeGain = 0.95f / Math.Max(safeEnvelope, 1e-6f);
+            float totalGain = baseGainReduction * makeupGain;
+
+            // Limit total gain to prevent clipping
+            if (totalGain > maximumSafeGain)
             {
-                return maxSafeGain;
+                return maximumSafeGain;
             }
+            
+            // Safety check for positive gain (should only reduce)
+             if (baseGainReduction > 1.0f) baseGainReduction = 1.0f;
 
-            return 1.0f;
+            return baseGainReduction;
         }
 
         /// <summary>

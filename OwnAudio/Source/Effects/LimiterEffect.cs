@@ -514,7 +514,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Get smoothed gain from envelope buffer
+        /// Get smoothed gain from envelope buffer with adaptive release
         /// ZERO-ALLOCATION: Only scans active buffer portion
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -534,13 +534,34 @@ namespace OwnaudioNET.Effects
 
             if (_targetGain < _currentGain)
             {
-                // Fast attack for gain reduction
+                // Fast attack for gain reduction (instant control)
                 _currentGain = _targetGain;
             }
             else
             {
-                // Slow release for gain recovery
-                _currentGain += (_targetGain - _currentGain) * _release;
+                // ADAPTIVE RELEASE
+                // If gain reduction is heavy (>3dB), release faster to recover loudness
+                // If gain reduction is minimal (<1dB), release slower for transparency
+                // This mimics "Auto" release behavior in pro limiters
+                
+                float gainDiff = 1.0f - _currentGain;
+                float adaptiveRelease = _release;
+
+                if (gainDiff > 0.3f) // >3dB reduction
+                {
+                    // Speed up release slightly for heavy limiting recovery
+                    adaptiveRelease *= 1.5f; 
+                }
+                else if (gainDiff < 0.1f) // <1dB reduction
+                {
+                    // Slow down for micro-dynamics transparency
+                    adaptiveRelease *= 0.5f;
+                }
+
+                 // Clamp release to stay stable
+                 adaptiveRelease = Math.Clamp(adaptiveRelease, 0.0001f, 0.9999f);
+
+                _currentGain += (_targetGain - _currentGain) * adaptiveRelease;
             }
 
             return _currentGain;

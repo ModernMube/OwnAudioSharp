@@ -21,7 +21,7 @@ class Program
                 processor.ProcessWithEnhancedPreset(
                     sourceFile: @"path/audio/source.mp3",
                     outputFile: @"path/output.wav",
-                    PlaybackSystem.HiFiSpeakers);
+                    PlaybackSystem.ConcertPA);
             }
             catch (Exception ex)
             {

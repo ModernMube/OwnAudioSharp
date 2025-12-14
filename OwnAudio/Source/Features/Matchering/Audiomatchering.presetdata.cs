@@ -24,20 +24,20 @@ namespace OwnaudioNET.Features.Matchering
                 Description = "Large venue sound reinforcement with extended dynamics",
                 FrequencyResponse = new float[]
             {
-                // 20-16kHz: Concert PA characteristic curve
-                -2f, -1f, 0f, +1f, +2f, +2f, +1f, +1f, 0f, 0f,     // 20-160Hz: Controlled low end
-                +1f, +1f, +1f, 0f, 0f, -1f, -1f, 0f, +1f, +2f,     // 200-1.6kHz: Clear midrange
-                +2f, +1f, 0f, +1f, +2f, +1f, 0f, -1f, -1f, -2f     // 2-16kHz: Controlled highs
+                // 20-16kHz: Cleaner low-end
+                -3f, -2f, -1f, 0f, +1f, +1f, +0.5f, 0f, 0f, 0f,    // 20-160Hz: Tighter bass
+                +0.5f, 0.5f, 0f, 0f, 0f, -0.5f, -0.5f, 0f, +1f, +2f, // 200-1.6kHz: Clear midrange
+                +2f, +1.5f, +1f, +1f, +2f, +1.5f, +1f, 0f, 0f, -1f  // 2-16kHz: Controlled highs
             },
-                TargetLoudness = -16f,  // Higher dynamic range for live music
-                DynamicRange = 18f,
+                TargetLoudness = -17f,  // More headroom (was -16)
+                DynamicRange = 19f,     // More dynamic
                 Compression = new CompressionSettings
                 {
-                    Threshold = -18f,
-                    Ratio = 2.5f,
-                    AttackTime = 10f,
-                    ReleaseTime = 100f,
-                    MakeupGain = 2f
+                    Threshold = -16f,   // Higher (was -18)
+                    Ratio = 2.0f,       // Lower (was 2.5)
+                    AttackTime = 15f,   // Slower (was 10)
+                    ReleaseTime = 80f,  // Faster release
+                    MakeupGain = 1.5f
                 },
                 DynamicAmp = new DynamicAmpSettings
                 {
@@ -54,24 +54,24 @@ namespace OwnaudioNET.Features.Matchering
                 Description = "Dance music optimized with enhanced bass and presence",
                 FrequencyResponse = new float[]
             {
-                // Club sound: Enhanced bass and presence
-                +3f, +4f, +4f, +3f, +2f, +2f, +1f, +1f, 0f, 0f,    // 20-160Hz: Strong bass
-                0f, 0f, +1f, +1f, +1f, +1f, +2f, +2f, +3f, +3f,     // 200-1.6kHz: Forward mids
-                +2f, +1f, +2f, +3f, +2f, +1f, +1f, 0f, 0f, -1f     // 2-16kHz: Dance presence
+                // Club: Punchy but not muddy
+                +2f, +3f, +3f, +2f, +1.5f, +1f, +0.5f, 0f, 0f, 0f,  // 20-160Hz: Reduced bass boost
+                0f, 0f, +0.5f, +0.5f, +0.5f, +1f, +1.5f, +1.5f, +2f, +2f, // 200-1.6kHz: Clear mids
+                +1.5f, +1f, +1.5f, +2f, +2f, +1f, +1f, +0.5f, 0f, -1f // 2-16kHz: Airy top
             },
-                TargetLoudness = -11f,  // Loud for club environment
-                DynamicRange = 8f,      // Compressed for dancefloor
+                TargetLoudness = -12.5f, // Quieter (was -11)
+                DynamicRange = 10f,      // More dynamic (was 8)
                 Compression = new CompressionSettings
                 {
-                    Threshold = -15f,
-                    Ratio = 4f,
-                    AttackTime = 3f,
-                    ReleaseTime = 50f,
-                    MakeupGain = 3f
+                    Threshold = -14f,    // Higher (was -15)
+                    Ratio = 3.0f,        // Much lower (was 4)
+                    AttackTime = 5f,     // Slower (was 3)
+                    ReleaseTime = 40f,
+                    MakeupGain = 2.0f
                 },
                 DynamicAmp = new DynamicAmpSettings
                 {
-                    TargetLevel = -11f,
+                    TargetLevel = -12f,
                     AttackTime = 0.05f,
                     ReleaseTime = 0.2f,
                     MaxGain = 4f
@@ -84,24 +84,24 @@ namespace OwnaudioNET.Features.Matchering
                 Description = "Neutral response for critical listening in treated rooms",
                 FrequencyResponse = new float[]
             {
-                // Hi-Fi: Neutral with slight warmth
-                0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,           // 20-160Hz: Flat bass
-                0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,            // 200-1.6kHz: Neutral mids
-                0f, 0f, 0f, 0f, +0.5f, +1f, +1f, +0.5f, 0f, 0f    // 2-16kHz: Slight air boost
+                // Hi-Fi: Smooth air, tight bass
+                -0.5f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,         // 20-160Hz: Tighter sub
+                0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,             // 200-1.6kHz: Neutral
+                0f, 0f, 0f, 0f, +0.5f, +1f, +1.5f, +1.5f, +1f, +0.5f // 2-16kHz: More air (10k+)
             },
-                TargetLoudness = -18f,  // Audiophile dynamics
-                DynamicRange = 20f,
+                TargetLoudness = -19f,  // More headroom
+                DynamicRange = 22f,     // Increased dynamic range
                 Compression = new CompressionSettings
                 {
-                    Threshold = -25f,
-                    Ratio = 1.5f,
-                    AttackTime = 20f,
+                    Threshold = -22f,   // Higher threshold (was -25)
+                    Ratio = 1.3f,       // Lower ratio (was 1.5)
+                    AttackTime = 30f,   // Slower attack (was 20)
                     ReleaseTime = 200f,
-                    MakeupGain = 1f
+                    MakeupGain = 0.5f
                 },
                 DynamicAmp = new DynamicAmpSettings
                 {
-                    TargetLevel = -18f,
+                    TargetLevel = -19f, // Matched
                     AttackTime = 0.3f,
                     ReleaseTime = 2f,
                     MaxGain = 3f
@@ -114,19 +114,19 @@ namespace OwnaudioNET.Features.Matchering
                 Description = "Reference standard for professional mixing",
                 FrequencyResponse = new float[]
             {
-                // Studio monitors: True reference
-                0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,           // 20-160Hz: Flat
-                0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,            // 200-1.6kHz: Flat
-                0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f             // 2-16kHz: Flat
+                // Studio: Open and flat
+                -1f, -0.5f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,       // 20-160Hz: Controlled low-lows
+                0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,           // 200-1.6kHz: Flat
+                0f, 0f, 0f, 0f, +0.5f, +0.5f, +0.5f, +1f, +1f, +0.5f // 2-16kHz: Subtle air
             },
-                TargetLoudness = -20f,  // Reference level
-                DynamicRange = 22f,
+                TargetLoudness = -21f,  // More dynamic (was -20)
+                DynamicRange = 24f,     // More dynamic (was 22)
                 Compression = new CompressionSettings
                 {
-                    Threshold = -30f,
-                    Ratio = 1.2f,
-                    AttackTime = 50f,
-                    ReleaseTime = 300f,
+                    Threshold = -26f,   // Higher (was -30)
+                    Ratio = 1.15f,      // Lower (was 1.2)
+                    AttackTime = 60f,   // Slower (was 50)
+                    ReleaseTime = 250f, // Faster release for transparency
                     MakeupGain = 0f
                 },
                 DynamicAmp = new DynamicAmpSettings
