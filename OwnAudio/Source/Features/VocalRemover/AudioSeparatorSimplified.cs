@@ -114,6 +114,7 @@ namespace OwnaudioNET.Features.Vocalremover
 
     /// <summary>
     /// Simplified audio separation service without async operations
+    /// Optimized for streaming processing with minimal memory footprint
     /// </summary>
     public class SimpleAudioSeparationService : IDisposable
     {
@@ -138,6 +139,9 @@ namespace OwnaudioNET.Features.Vocalremover
         private InferenceSession? _onnxSession;
         private bool _disposed = false;
         private const int TargetSampleRate = 44100;
+        
+        // Pre-calculated Hanning window for STFT/ISTFT optimization
+        private float[]? _hanningWindow;
 
         #endregion
 
@@ -199,6 +203,9 @@ namespace OwnaudioNET.Features.Vocalremover
 
             AutoDetectModelDimensions();
             Console.WriteLine($"Model parameters: DimF={_modelParams.DimF}, DimT={_modelParams.DimT}, NFft={_modelParams.NFft}");
+            
+            // Pre-calculate Hanning window for performance
+            PreCalculateHanningWindow();
         }
 
         /// <summary>
@@ -224,36 +231,15 @@ namespace OwnaudioNET.Features.Vocalremover
                 OverallProgress = 0
             });
 
-            var mix = LoadAndPrepareAudio(inputFilePath);
+            // Use streaming processing instead of loading entire file
+            var (vocals, instrumental) = ProcessAudioStreaming(inputFilePath);
 
             ReportProgress(new SimpleSeparationProgress
             {
                 CurrentFile = Path.GetFileName(inputFilePath),
-                Status = "Processing audio separation...",
-                OverallProgress = 10
-            });
-
-            var separated = ProcessAudio(mix);
-
-            ReportProgress(new SimpleSeparationProgress
-            {
-                CurrentFile = Path.GetFileName(inputFilePath),
-                Status = "Calculating results...",
+                Status = "Saving results...",
                 OverallProgress = 90
             });
-
-            // Calculate vocals and instrumental
-            var vocals = new float[2, mix.GetLength(1)];
-            var instrumental = new float[2, mix.GetLength(1)];
-
-            for (int ch = 0; ch < 2; ch++)
-            {
-                for (int i = 0; i < mix.GetLength(1); i++)
-                {
-                    vocals[ch, i] = mix[ch, i] - separated[ch, i];
-                    instrumental[ch, i] = separated[ch, i];
-                }
-            }
 
             Directory.CreateDirectory(_options.OutputDirectory);
 
@@ -344,127 +330,208 @@ namespace OwnaudioNET.Features.Vocalremover
         {
             ProgressChanged?.Invoke(this, progress);
         }
+        
+        /// <summary>
+        /// Pre-calculate Hanning window for STFT/ISTFT optimization
+        /// </summary>
+        private void PreCalculateHanningWindow()
+        {
+            _hanningWindow = new float[_modelParams.NFft];
+            for (int i = 0; i < _modelParams.NFft; i++)
+            {
+                _hanningWindow[i] = (float)(0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / _modelParams.NFft)));
+            }
+        }
 
-        private float[,] LoadAndPrepareAudio(string filePath)
+        /// <summary>
+        /// Process audio file using streaming approach to minimize memory usage
+        /// </summary>
+        private (float[,] vocals, float[,] instrumental) ProcessAudioStreaming(string inputFilePath)
         {
             using var decoder = AudioDecoderFactory.Create(
-                filePath,
-                targetSampleRate: 44100,
+                inputFilePath,
+                targetSampleRate: TargetSampleRate,
                 targetChannels: 2
             );
 
-            // Get stream info
             AudioStreamInfo info = decoder.StreamInfo;
-            int channels = info.Channels;
-            var samples = decoder.ReadAllSamples();
-            int frameCount = samples.Length / channels;
-            float[,] audioBuffer = new float[channels, frameCount];
-            //manager.AddOutputSource(filePath, "audiosource");
-            //List<float> samples = manager["audiosource"].GetFloatAudioData(new TimeSpan(0)).ToList();
-
-            //int channels = (int)audioEngineOptions.Channels;
-            //int frameCount = samples.Count / channels;
-            //var audioBuffer = new float[channels, frameCount];
-
-            for (int i = 0; i < frameCount; i++)
-            {
-                for (int ch = 0; ch < channels; ch++)
-                {
-                    audioBuffer[ch, i] = samples[i * channels + ch];
-                }
-            }
-
-            //OwnAudio.Free();
-            return audioBuffer;
-        }
-
-        private float[,] ProcessAudio(float[,] mix)
-        {
-            int samples = mix.GetLength(1);
+            int totalFrames = (int)(info.Duration.TotalSeconds * TargetSampleRate);
+            
+            // Allocate output buffers
+            var vocals = new float[2, totalFrames];
+            var instrumental = new float[2, totalFrames];
+            
             int margin = _options.Margin;
             int chunkSize = _options.ChunkSizeSeconds * TargetSampleRate;
-
+            
             if (margin == 0) throw new ArgumentException("Margin cannot be zero!");
             if (chunkSize != 0 && margin > chunkSize) margin = chunkSize;
-            if (_options.ChunkSizeSeconds == 0 || samples < chunkSize) chunkSize = samples;
+            if (_options.ChunkSizeSeconds == 0 || totalFrames < chunkSize) chunkSize = totalFrames;
 
-            var chunks = CreateChunks(mix, chunkSize, margin);
-            return ProcessChunks(chunks, margin);
+            // Processing context for buffer reuse
+            using var context = new ProcessingContext(_modelParams);
+            
+            int processedFrames = 0;
+            int chunkIndex = 0;
+            int totalChunks = (int)Math.Ceiling((double)totalFrames / chunkSize);
+            
+            // Read and process in chunks
+            int framesPerBuffer = Math.Min(chunkSize, 8192);
+            int bufferSizeInBytes = framesPerBuffer * 2 * sizeof(float); // 2 channels
+            byte[] readBuffer = new byte[bufferSizeInBytes];
+            
+            var chunkAccumulator = new List<float>();
+            
+            while (processedFrames < totalFrames)
+            {
+                // Read audio data
+                var result = decoder.ReadFrames(readBuffer);
+                
+                if (!result.IsSucceeded || result.FramesRead == 0)
+                {
+                    if (result.IsEOF) break;
+                    continue;
+                }
+                
+                // Convert byte buffer to float using MemoryMarshal
+                int bytesRead = result.FramesRead * 2 * sizeof(float);
+                var floatSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(
+                    readBuffer.AsSpan(0, bytesRead)
+                );
+                
+                // Accumulate samples for chunk processing
+                chunkAccumulator.AddRange(floatSpan.ToArray());
+                
+                // Process when we have enough data for a chunk
+                while (chunkAccumulator.Count >= chunkSize * 2)
+                {
+                    // Extract chunk
+                    var chunkData = new float[2, chunkSize];
+                    for (int i = 0; i < chunkSize; i++)
+                    {
+                        chunkData[0, i] = chunkAccumulator[i * 2];
+                        chunkData[1, i] = chunkAccumulator[i * 2 + 1];
+                    }
+                    
+                    // Remove processed samples
+                    chunkAccumulator.RemoveRange(0, chunkSize * 2);
+                    
+                    // Process chunk
+                    var separated = ProcessSingleChunkOptimized(chunkData, context);
+                    
+                    // Calculate vocals and instrumental
+                    for (int ch = 0; ch < 2; ch++)
+                    {
+                        for (int i = 0; i < chunkSize; i++)
+                        {
+                            int outIdx = processedFrames + i;
+                            if (outIdx < totalFrames)
+                            {
+                                instrumental[ch, outIdx] = separated[ch, i];
+                                vocals[ch, outIdx] = chunkData[ch, i] - separated[ch, i];
+                            }
+                        }
+                    }
+                    
+                    processedFrames += chunkSize;
+                    chunkIndex++;
+                    
+                    // Report progress
+                    ReportProgress(new SimpleSeparationProgress
+                    {
+                        Status = $"Processing chunk {chunkIndex}/{totalChunks}",
+                        ProcessedChunks = chunkIndex,
+                        TotalChunks = totalChunks,
+                        OverallProgress = 20 + ((double)chunkIndex / totalChunks * 70)
+                    });
+                }
+            }
+            
+            // Process remaining samples
+            if (chunkAccumulator.Count > 0)
+            {
+                int remainingFrames = chunkAccumulator.Count / 2;
+                var chunkData = new float[2, remainingFrames];
+                for (int i = 0; i < remainingFrames; i++)
+                {
+                    chunkData[0, i] = chunkAccumulator[i * 2];
+                    chunkData[1, i] = chunkAccumulator[i * 2 + 1];
+                }
+                
+                var separated = ProcessSingleChunkOptimized(chunkData, context);
+                
+                for (int ch = 0; ch < 2; ch++)
+                {
+                    for (int i = 0; i < remainingFrames; i++)
+                    {
+                        int outIdx = processedFrames + i;
+                        if (outIdx < totalFrames)
+                        {
+                            instrumental[ch, outIdx] = separated[ch, i];
+                            vocals[ch, outIdx] = chunkData[ch, i] - separated[ch, i];
+                        }
+                    }
+                }
+            }
+            
+            return (vocals, instrumental);
         }
 
         #endregion
 
         #region Private Methods - Chunk Processing
-
-        private Dictionary<long, float[,]> CreateChunks(float[,] mix, int chunkSize, int margin)
+        
+        /// <summary>
+        /// Processing context to reuse buffers and reduce GC pressure
+        /// </summary>
+        private class ProcessingContext : IDisposable
         {
-            var chunks = new Dictionary<long, float[,]>();
-            int samples = mix.GetLength(1);
-            long counter = -1;
-
-            for (long skip = 0; skip < samples; skip += chunkSize)
+            public float[] PaddedSignalL { get; }
+            public float[] PaddedSignalR { get; }
+            public Complex[] FftFrame { get; }
+            public double[] ReconstructedL { get; }
+            public double[] ReconstructedR { get; }
+            public double[] WindowSumL { get; }
+            public double[] WindowSumR { get; }
+            
+            public ProcessingContext(ModelParameters modelParams)
             {
-                counter++;
-                long sMargin = counter == 0 ? 0 : margin;
-                long end = Math.Min(skip + chunkSize + margin, samples);
-                long start = skip - sMargin;
-                int segmentLength = (int)(end - start);
-
-                var segment = new float[2, segmentLength];
-                for (int ch = 0; ch < 2; ch++)
-                {
-                    for (int i = 0; i < segmentLength; i++)
-                    {
-                        segment[ch, i] = mix[ch, start + i];
-                    }
-                }
-                chunks[skip] = segment;
-                if (end == samples) break;
+                int padSize = modelParams.NFft / 2;
+                int maxChunkSize = modelParams.ChunkSize + 2 * padSize;
+                
+                PaddedSignalL = new float[maxChunkSize];
+                PaddedSignalR = new float[maxChunkSize];
+                FftFrame = new Complex[modelParams.NFft];
+                ReconstructedL = new double[maxChunkSize];
+                ReconstructedR = new double[maxChunkSize];
+                WindowSumL = new double[maxChunkSize];
+                WindowSumR = new double[maxChunkSize];
             }
-
-            return chunks;
-        }
-
-        private float[,] ProcessChunks(Dictionary<long, float[,]> chunks, int margin)
-        {
-            var processedChunks = new List<float[,]>();
-            var keys = chunks.Keys.ToList();
-            int totalChunks = chunks.Count;
-
-            ReportProgress(new SimpleSeparationProgress
+            
+            public void Clear()
             {
-                Status = "Processing chunks...",
-                TotalChunks = totalChunks,
-                ProcessedChunks = 0,
-                OverallProgress = 20
-            });
-
-            int processedCount = 0;
-            foreach (var kvp in chunks)
-            {
-                var chunk = ProcessSingleChunk(kvp.Value, kvp.Key, keys, margin);
-                processedChunks.Add(chunk);
-
-                processedCount++;
-                double chunkProgress = (double)processedCount / totalChunks * 100;
-
-                ReportProgress(new SimpleSeparationProgress
-                {
-                    Status = $"Processing chunk {processedCount}/{totalChunks}",
-                    ProcessedChunks = processedCount,
-                    TotalChunks = totalChunks,
-                    OverallProgress = 20 + (chunkProgress * 0.6)
-                });
+                Array.Clear(PaddedSignalL, 0, PaddedSignalL.Length);
+                Array.Clear(PaddedSignalR, 0, PaddedSignalR.Length);
+                Array.Clear(ReconstructedL, 0, ReconstructedL.Length);
+                Array.Clear(ReconstructedR, 0, ReconstructedR.Length);
+                Array.Clear(WindowSumL, 0, WindowSumL.Length);
+                Array.Clear(WindowSumR, 0, WindowSumR.Length);
             }
-
-            return ConcatenateChunks(processedChunks);
+            
+            public void Dispose()
+            {
+                // Nothing to dispose, arrays are managed
+            }
         }
 
         #endregion
 
         #region Private Methods - Single Chunk Processing
 
-        private float[,] ProcessSingleChunk(float[,] mixChunk, long chunkKey, List<long> allKeys, int margin)
+        /// <summary>
+        /// Optimized single chunk processing with buffer reuse
+        /// </summary>
+        private float[,] ProcessSingleChunkOptimized(float[,] mixChunk, ProcessingContext context)
         {
             int nSample = mixChunk.GetLength(1);
             int trim = _modelParams.NFft / 2;
@@ -501,21 +568,23 @@ namespace OwnaudioNET.Features.Vocalremover
                 }
             }
 
-            // STFT -> Model -> ISTFT
-            var stftTensor = ComputeStft(mixWaves);
+            // STFT -> Model -> ISTFT (optimized with pre-calculated window)
+            var stftTensor = ComputeStftOptimized(mixWaves, context);
             var outputTensor = RunModelInference(stftTensor);
-            var resultWaves = ComputeIstft(outputTensor);
+            var resultWaves = ComputeIstftOptimized(outputTensor, context);
 
-            // Extract and apply margin
-            var result = ExtractSignal(resultWaves, nSample, trim, genSize);
-            return ApplyMargin(result, chunkKey, allKeys, margin);
+            // Extract signal
+            return ExtractSignal(resultWaves, nSample, trim, genSize);
         }
 
         #endregion
 
         #region Private Methods - STFT/ISTFT Processing
 
-        private DenseTensor<float> ComputeStft(float[,,] mixWaves)
+        /// <summary>
+        /// Optimized STFT computation with pre-calculated Hanning window
+        /// </summary>
+        private DenseTensor<float> ComputeStftOptimized(float[,,] mixWaves, ProcessingContext context)
         {
             int batchSize = mixWaves.GetLength(0);
             var tensor = new DenseTensor<float>(new[] { batchSize, 4, _modelParams.DimF, _modelParams.DimT });
@@ -525,7 +594,10 @@ namespace OwnaudioNET.Features.Vocalremover
                 for (int ch = 0; ch < 2; ch++)
                 {
                     int padSize = _modelParams.NFft / 2;
-                    var paddedSignal = new float[_modelParams.ChunkSize + 2 * padSize];
+                    var paddedSignal = ch == 0 ? context.PaddedSignalL : context.PaddedSignalR;
+                    
+                    // Clear and prepare padded signal
+                    Array.Clear(paddedSignal, 0, paddedSignal.Length);
 
                     // Reflection padding
                     for (int i = 0; i < padSize; i++)
@@ -545,27 +617,30 @@ namespace OwnaudioNET.Features.Vocalremover
                         paddedSignal[padSize + _modelParams.ChunkSize + i] = mixWaves[b, ch, srcIdx];
                     }
 
-                    // STFT computation
+                    // STFT computation with pre-calculated window
                     for (int t = 0; t < _modelParams.DimT; t++)
                     {
                         int frameStart = t * _modelParams.Hop;
-                        var frame = new Complex[_modelParams.NFft];
 
+                        // Apply window and prepare for FFT
                         for (int i = 0; i < _modelParams.NFft; i++)
                         {
                             if (frameStart + i < paddedSignal.Length)
                             {
-                                double windowValue = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / _modelParams.NFft));
-                                frame[i] = new Complex(paddedSignal[frameStart + i] * windowValue, 0);
+                                context.FftFrame[i] = new Complex(paddedSignal[frameStart + i] * _hanningWindow![i], 0);
+                            }
+                            else
+                            {
+                                context.FftFrame[i] = Complex.Zero;
                             }
                         }
 
-                        Fourier.Forward(frame, FourierOptions.NoScaling);
+                        Fourier.Forward(context.FftFrame, FourierOptions.NoScaling);
 
                         for (int f = 0; f < Math.Min(_modelParams.DimF, _modelParams.NBins); f++)
                         {
-                            tensor[b, ch * 2, f, t] = (float)frame[f].Real;
-                            tensor[b, ch * 2 + 1, f, t] = (float)frame[f].Imaginary;
+                            tensor[b, ch * 2, f, t] = (float)context.FftFrame[f].Real;
+                            tensor[b, ch * 2 + 1, f, t] = (float)context.FftFrame[f].Imaginary;
                         }
                     }
                 }
@@ -573,7 +648,10 @@ namespace OwnaudioNET.Features.Vocalremover
             return tensor;
         }
 
-        private float[,,] ComputeIstft(Tensor<float> spectrum)
+        /// <summary>
+        /// Optimized ISTFT computation with pre-calculated Hanning window and buffer reuse
+        /// </summary>
+        private float[,,] ComputeIstftOptimized(Tensor<float> spectrum, ProcessingContext context)
         {
             int batchSize = spectrum.Dimensions[0];
             var result = new float[batchSize, 2, _modelParams.ChunkSize];
@@ -583,57 +661,63 @@ namespace OwnaudioNET.Features.Vocalremover
                 for (int ch = 0; ch < 2; ch++)
                 {
                     int padSize = _modelParams.NFft / 2;
-                    var reconstructed = new double[_modelParams.ChunkSize + 2 * padSize];
-                    var windowSum = new double[_modelParams.ChunkSize + 2 * padSize];
+                    var reconstructed = ch == 0 ? context.ReconstructedL : context.ReconstructedR;
+                    var windowSum = ch == 0 ? context.WindowSumL : context.WindowSumR;
+                    
+                    // Clear buffers
+                    Array.Clear(reconstructed, 0, reconstructed.Length);
+                    Array.Clear(windowSum, 0, windowSum.Length);
 
                     int realIdx = ch * 2;
                     int imagIdx = ch * 2 + 1;
 
                     for (int t = 0; t < _modelParams.DimT; t++)
                     {
-                        var frame = new Complex[_modelParams.NFft];
-
+                        // Prepare FFT frame
                         for (int f = 0; f < _modelParams.NBins && f < _modelParams.NFft; f++)
                         {
                             if (f < _modelParams.DimF && f < spectrum.Dimensions[2])
                             {
-                                frame[f] = new Complex(spectrum[b, realIdx, f, t], spectrum[b, imagIdx, f, t]);
+                                context.FftFrame[f] = new Complex(spectrum[b, realIdx, f, t], spectrum[b, imagIdx, f, t]);
                             }
                             else
                             {
-                                frame[f] = Complex.Zero;
+                                context.FftFrame[f] = Complex.Zero;
                             }
                         }
 
                         // Hermitian symmetry
                         for (int f = 1; f < _modelParams.NFft / 2; f++)
                         {
-                            if (_modelParams.NFft - f < frame.Length)
+                            if (_modelParams.NFft - f < context.FftFrame.Length)
                             {
-                                frame[_modelParams.NFft - f] = Complex.Conjugate(frame[f]);
+                                context.FftFrame[_modelParams.NFft - f] = Complex.Conjugate(context.FftFrame[f]);
                             }
                         }
 
-                        Fourier.Inverse(frame, FourierOptions.NoScaling);
+                        Fourier.Inverse(context.FftFrame, FourierOptions.NoScaling);
 
+                        // Normalize
                         for (int i = 0; i < _modelParams.NFft; i++)
                         {
-                            frame[i] /= _modelParams.NFft;
+                            context.FftFrame[i] /= _modelParams.NFft;
                         }
 
+                        // Overlap-add with pre-calculated window
                         int frameStart = t * _modelParams.Hop;
                         for (int i = 0; i < _modelParams.NFft; i++)
                         {
                             int targetIdx = frameStart + i;
                             if (targetIdx >= 0 && targetIdx < reconstructed.Length)
                             {
-                                double windowValue = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / _modelParams.NFft));
-                                reconstructed[targetIdx] += frame[i].Real * windowValue;
+                                float windowValue = _hanningWindow![i];
+                                reconstructed[targetIdx] += context.FftFrame[i].Real * windowValue;
                                 windowSum[targetIdx] += windowValue * windowValue;
                             }
                         }
                     }
 
+                    // Extract final result
                     for (int i = 0; i < _modelParams.ChunkSize; i++)
                     {
                         int srcIdx = i + padSize;

@@ -100,9 +100,10 @@ namespace OwnaudioNET.Features.Matchering
 
             float[] eqAdjustments = CalculateDirectEQAdjustments(sourceSpectrum, targetSpectrum);
             DynamicAmpSettings ampSettings = CalculateDynamicAmpSettings(sourceSpectrum, targetSpectrum);
+            var compSettings = CalculateCompressorSettings(sourceSpectrum, targetSpectrum);
 
             Console.WriteLine("Processing audio with segmented-based EQ...");
-            ApplyDirectEQProcessing(sourceFile, outputFile, eqAdjustments, ampSettings, sourceSpectrum, targetSpectrum);
+            ApplyDirectEQProcessing(sourceFile, outputFile, eqAdjustments, ampSettings, compSettings, sourceSpectrum, targetSpectrum);
 
             //PrintSegmentedAnalysisResults(sourceSpectrum, targetSpectrum, eqAdjustments);
         }
