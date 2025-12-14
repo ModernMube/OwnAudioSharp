@@ -24,94 +24,114 @@ namespace OwnaudioNET.Features.Matchering
         {
             var rawAdjustments = new float[FrequencyBands.Length];
 
-            // 1. Smooth the spectrums first to avoid jagged EQ curves
-            // This is key for T-RackS style "musical" matching
-            float[] smoothedSource = SmoothSpectrum(source.FrequencyBands);
-            float[] smoothedTarget = SmoothSpectrum(target.FrequencyBands);
+            // 1. Smooth the spectrums first to prevent tracking random noise spikes
+        // Increased smoothing (0.5) to ensure we match tonal balance, not jagged noise
+        float[] smoothedSource = SmoothSpectrum(source.FrequencyBands, 0.5f);
+        float[] smoothedTarget = SmoothSpectrum(target.FrequencyBands, 0.5f);
 
             for (int i = 0; i < rawAdjustments.Length; i++)
             {
-                float sourceLevel = 20 * (float)Math.Log10(Math.Max(smoothedSource[i], 1e-10f));
-                float targetLevel = 20 * (float)Math.Log10(Math.Max(smoothedTarget[i], 1e-10f));
-                rawAdjustments[i] = targetLevel - sourceLevel;
+                float sourceLinear = Math.Max(smoothedSource[i], 1e-10f);
+                float targetLinear = Math.Max(smoothedTarget[i], 1e-10f);
+                
+                float sourceLevel = 20 * (float)Math.Log10(sourceLinear);
+                float targetLevel = 20 * (float)Math.Log10(targetLinear);
+
+                // SAFETY: Noise Floor Protection
+                // If source is extremely quiet (below -80 dB noise floor), DO NOT BOOST it to match target.
+                // Relaxed from -60dB to -80dB to allow more legitimate corrections
+                // This prevents boosting extreme hiss/noise to match musical elements.
+                if (sourceLevel < -80.0f && targetLevel > sourceLevel)
+                {
+                    // Allow cut (if source is noise but louder than target?), but restrict boost.
+                    rawAdjustments[i] = 0.0f; 
+                }
+                else
+                {
+                    rawAdjustments[i] = targetLevel - sourceLevel;
+                }
             }
 
             var adjustments = ApplyIntelligentScaling(rawAdjustments);
 
-            Console.WriteLine("Balanced EQ Adjustments:");
+            // COMPREHENSIVE DEBUG OUTPUT
+            Console.WriteLine("\n=== CALCULATED EQ ADJUSTMENTS ===");
+            string[] bandNames = new[] {
+                "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", "63Hz", "80Hz", "100Hz", "125Hz", "160Hz",
+                "200Hz", "250Hz", "315Hz", "400Hz", "500Hz", "630Hz", "800Hz", "1kHz", "1.25kHz", "1.6kHz",
+                "2kHz", "2.5kHz", "3.15kHz", "4kHz", "5kHz", "6.3kHz", "8kHz", "10kHz", "12.5kHz", "16kHz"
+            };
+            
+            for (int i = 0; i < adjustments.Length; i++)
+            {
+                float srcDb = 20 * (float)Math.Log10(Math.Max(smoothedSource[i], 1e-10f));
+                float tgtDb = 20 * (float)Math.Log10(Math.Max(smoothedTarget[i], 1e-10f));
+                string limited = (Math.Abs(adjustments[i] - rawAdjustments[i]) > 0.01f) ? " [LIMITED]" : "";
+                
+                Console.WriteLine($"{bandNames[i],8}: {adjustments[i],6:F1} dB (Raw: {rawAdjustments[i],6:F1} dB) " +
+                                $"[Src: {srcDb,6:F1} dB -> Tgt: {tgtDb,6:F1} dB]{limited}");
+            }
+            
             return adjustments;
         }
 
         /// <summary>
-        /// Smooths spectral data using a weighted moving average.
-        /// </summary>
-        private float[] SmoothSpectrum(float[] spectrum)
+    /// Smooths spectral data using adaptive weighted moving average.
+    /// </summary>
+    /// <param name="spectrum">Spectrum data to smooth</param>
+    /// <param name="smoothingFactor">Smoothing intensity (0.0 = no smoothing, 1.0 = heavy smoothing)</param>
+    private float[] SmoothSpectrum(float[] spectrum, float smoothingFactor = 0.25f)
+    {
+        // Adaptive Smoothing: Configurable balance between detail preservation and noise reduction
+        // Lower smoothingFactor = more detail preserved (surgical matching)
+        // Higher smoothingFactor = more smoothing (musical matching)
+        float[] smoothed = new float[spectrum.Length];
+        
+        for (int i = 0; i < spectrum.Length; i++)
         {
-            float[] smoothed = new float[spectrum.Length];
-            for (int i = 0; i < spectrum.Length; i++)
-            {
-                float sum = spectrum[i] * 2.0f; // Center weight
-                float div = 2.0f;
+            // Adaptive weighting based on smoothing factor
+            float centerWeight = 1.0f + smoothingFactor * 2.0f; // Was fixed at 4.0f
+            float neighborWeight = smoothingFactor; // Was fixed at 1.0f
+            
+            float sum = spectrum[i] * centerWeight;
+            float div = centerWeight;
 
-                if (i > 0) { sum += spectrum[i - 1]; div += 1.0f; }
-                if (i < spectrum.Length - 1) { sum += spectrum[i + 1]; div += 1.0f; }
+            if (i > 0) { sum += spectrum[i - 1] * neighborWeight; div += neighborWeight; }
+            if (i < spectrum.Length - 1) { sum += spectrum[i + 1] * neighborWeight; div += neighborWeight; }
 
-                // Wider smoothing for high frequencies to avoid harshness
-                if (i > 20) 
-                {
-                    if (i > 1) { sum += spectrum[i - 2] * 0.5f; div += 0.5f; }
-                    if (i < spectrum.Length - 2) { sum += spectrum[i + 2] * 0.5f; div += 0.5f; }
-                }
-
-                smoothed[i] = sum / div;
-            }
-            return smoothed;
+            smoothed[i] = sum / div;
         }
+        return smoothed;
+    }
 
         /// <summary>
-        /// Applies intelligent scaling to raw EQ adjustments that maintains spectral balance and musicality.
+        /// Applies intelligent scaling to raw EQ adjustments.
+        /// SURGICAL MODE: Forces 100% application for maximum similarity.
         /// </summary>
         private float[] ApplyIntelligentScaling(float[] rawAdjustments)
         {
             var adjustments = new float[rawAdjustments.Length];
 
-            float totalBoost = rawAdjustments.Where(x => x > 0).Sum();
-
-            // Tuned for "Closer Matching" (less restrictive than before)
-            float globalScaling = totalBoost switch
-            {
-                > 60f => 0.5f,  // Only damp very extreme corrections
-                > 40f => 0.6f,  
-                > 20f => 0.8f,  
-                _ => 1.0f       // Allow full correction for small differences
-            };
+            // SURGICAL MATCHING: No global damping.
+            float globalScaling = 1.0f;
 
             for (int i = 0; i < rawAdjustments.Length; i++)
             {
-                float freq = FrequencyBands[i];
-                float rawGain = rawAdjustments[i];
+                // No frequency Dependent scaling - Flat 100% transfer
+                float scaledGain = rawAdjustments[i] * globalScaling;
 
-                // Frequency scaling - allow more correction in lows/highs, careful in mids
-                float freqScaling = freq switch
-                {
-                    <= 100f => 0.9f,   // Solid low end matching
-                    <= 1000f => 0.8f,  // Mids slightly protected
-                    <= 4000f => 0.85f, // Critical vocal range
-                    _ => 0.95f         // Airy highs
-                };
-
-                float scaledGain = rawGain * globalScaling * freqScaling;
-
-                // Increased limits for closer matching
-                float maxBoost = 9.0f; 
-                float maxCut = 12.0f;
+                // Max limits allowed by DSP (prevent digital clipping/instability)
+                // FIXED: Increased to 18dB to match Equalizer30BandEffect capability
+                // This allows full spectral matching range
+                float maxBoost = 18.0f;  // Matches Equalizer capacity
+                float maxCut = 18.0f;    // Symmetric limits
 
                 adjustments[i] = Math.Max(-maxCut, Math.Min(maxBoost, scaledGain));
             }
 
-            return ApplyRefinedSpectralBalance(adjustments);
+            // Skip RefinedSpectralBalance for surgical matching to allow exact curve copying
+            return adjustments;
         }
-
         /// <summary>
         /// Applies refined spectral balance correction with specific 2-5kHz vocal presence control.
         /// </summary>
@@ -199,18 +219,52 @@ namespace OwnaudioNET.Features.Matchering
                 var channels = fileSource.StreamInfo.Channels;
                 var sampleRate = fileSource.StreamInfo.SampleRate;
 
-                // Apply safe headroom pre-gain
-                for (int i = 0; i < audioData.Length; i++)
-                    audioData[i] *= 0.85f; 
+                // SMART HEADROOM CALCULATION:
+                // Calculate headroom based on average boost rather than max boost
+                // to avoid excessive attenuation that degrades SNR
+                float maxBoost = eqAdjustments.Max();
+                float totalBoost = eqAdjustments.Where(x => x > 0).Sum();
+                int boostCount = eqAdjustments.Count(x => x > 0);
+                float avgBoost = boostCount > 0 ? totalBoost / boostCount : 0;
+                
+                // Use average boost + safety margin instead of max boost
+                // This provides adequate headroom without excessive attenuation
+                float effectiveBoost = Math.Min(maxBoost, avgBoost + 4.0f);
+                float preGainDb = 0.0f;
+                
+                if (effectiveBoost > 0)
+                {
+                    // Attenuate by effective boost amount + small safety margin
+                    preGainDb = -(effectiveBoost + 2.0f); 
+                    // Clamp to reasonable range to preserve SNR
+                    preGainDb = Math.Clamp(preGainDb, -12.0f, 0.0f);
+                    
+                    float linearPreGain = (float)Math.Pow(10, preGainDb / 20.0f);
+                    
+                    Console.WriteLine($"Applying Smart Headroom: {preGainDb:F1}dB (Max: {maxBoost:F1}dB, Avg: {avgBoost:F1}dB, Effective: {effectiveBoost:F1}dB)");
+                    
+                    for (int i = 0; i < audioData.Length; i++)
+                        audioData[i] *= linearPreGain;
+                }
 
                 // Calculate optimal Q factors
                 var optimizedQFactors = CalculateOptimalQFactors(eqAdjustments, sourceSpectrum, targetSpectrum);
 
                 // 1. Equalizer
                 var directEQ = new Equalizer30BandEffect();
+                
+                // DEBUG: Show applied EQ configuration
+                Console.WriteLine("\n=== APPLIED EQ CONFIGURATION ===");
+                string[] bandNames = new[] {
+                    "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", "63Hz", "80Hz", "100Hz", "125Hz", "160Hz",
+                    "200Hz", "250Hz", "315Hz", "400Hz", "500Hz", "630Hz", "800Hz", "1kHz", "1.25kHz", "1.6kHz",
+                    "2kHz", "2.5kHz", "3.15kHz", "4kHz", "5kHz", "6.3kHz", "8kHz", "10kHz", "12.5kHz", "16kHz"
+                };
+                
                 for (int i = 0; i < FrequencyBands.Length; i++)
                 {
                     directEQ.SetBandGain(i, FrequencyBands[i], optimizedQFactors[i], eqAdjustments[i]);
+                    Console.WriteLine($"Band {i,2} ({bandNames[i],8}): Gain = {eqAdjustments[i],6:F1} dB, Q = {optimizedQFactors[i]:F2}");
                 }
 
                 // 2. Compressor (Dynamic Settings)
@@ -218,21 +272,25 @@ namespace OwnaudioNET.Features.Matchering
                 var globalCompressor = new CompressorEffect(
                     CompressorEffect.DbToLinear(compSettings.Threshold), // Dynamic Threshold
                     compSettings.Ratio,                                  // Dynamic Ratio
-                    15.0f,    // Fast-ish attack
-                    150.0f,   // Smooth release
+                    10.0f,    // Fast attack (Surgical)
+                    100.0f,   // Fast release (Surgical)
                     1.0f      // No makeup here, let DynamicAmp handle levels
                 );
 
                 // 3. Dynamic Amplifier
-                // Gentle leveling, not maximizing
+                // Adjust max gain to ensure we can recover from the pre-gain attenuation
+                float headroomRecoveryGain = (effectiveBoost > 0) ? (float)Math.Pow(10, (effectiveBoost + 2.0f) / 20.0f) : 1.0f;
+                float totalMaxGain = dynamicAmp.MaxGain * headroomRecoveryGain;
+
                 var dynamicAmplifier = new DynamicAmpEffect(
-                    dynamicAmp.TargetLevel - 1.5f, // Reduced by 2.5dB total (was +1.0) to avoid "too loud" feel
-                    dynamicAmp.AttackTime * 0.8f,
-                    dynamicAmp.ReleaseTime * 1.0f,
+                    dynamicAmp.TargetLevel - 0.2f, 
+                    dynamicAmp.AttackTime,         
+                    dynamicAmp.ReleaseTime,        
                     0.001f,
-                    dynamicAmp.MaxGain * 0.85f,
+                    totalMaxGain,                  // Expanded gain capability
                     sampleRate,
-                    0.15f
+                    0.15f,
+                    headroomRecoveryGain           // Initial gain to match headroom attenuation
                 );
 
                 // 4. Limiter (New Mastering Stage)

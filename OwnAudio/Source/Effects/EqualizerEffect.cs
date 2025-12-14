@@ -1,129 +1,71 @@
-using Ownaudio.Core;
-using OwnaudioNET.Interfaces;
 using System;
 using System.Runtime.CompilerServices;
+using Ownaudio.Core;
+using OwnaudioNET.Interfaces;
 
 namespace OwnaudioNET.Effects
 {
-    /// <summary>
-    /// Equalizer preset enumeration for common audio enhancement scenarios
-    /// </summary>
     public enum EqualizerPreset
     {
-        /// <summary>
-        /// Default flat response - no EQ applied
-        /// </summary>
         Default,
-
-        /// <summary>
-        /// Enhanced bass response for modern music
-        /// </summary>
         Bass,
-
-        /// <summary>
-        /// Enhanced treble for clarity and detail
-        /// </summary>
         Treble,
-
-        /// <summary>
-        /// Rock music optimization with mid-range presence
-        /// </summary>
         Rock,
-
-        /// <summary>
-        /// Classical music with natural frequency response
-        /// </summary>
         Classical,
-
-        /// <summary>
-        /// Pop music with enhanced vocals and presence
-        /// </summary>
         Pop,
-
-        /// <summary>
-        /// Jazz optimization with smooth mid-range
-        /// </summary>
         Jazz,
-
-        /// <summary>
-        /// Voice clarity enhancement for podcasts and speech
-        /// </summary>
         Voice
     }
 
     /// <summary>
-    /// Professional 10-band parametric equalizer with preset configurations
-    /// Features cascaded biquad filters for superior audio quality and phase response
+    /// Professional 10-band parametric equalizer
+    /// Optimized with flattened Biquad structures for maximum performance
     /// </summary>
     public sealed class EqualizerEffect : IEffectProcessor
     {
-        private readonly BiquadFilter[][] _filters;
-        private readonly float[] _gains;
-        private readonly float[] _frequencies;
-        private readonly float[] _qFactors;
-        private readonly float _sampleRate;
-        private const int BANDS = 10;
-        private const int FILTERS_PER_BAND = 2;
-
         private readonly Guid _id;
-        private readonly string _name;
+        private string _name;
         private bool _enabled;
         private bool _disposed;
         private AudioConfig? _config;
 
-        // Standard ISO frequencies for 10-band EQ
+        // Constants
+        private const int Bands = 10;
+        private const int FiltersPerBand = 2; // Cascaded for steeper slopes
+        
+        // Filter Coefficients (Flattened: [Band][Filter][Coeff])
+        // Instead of 3D array, we use 1D arrays with striding or separate arrays for each coeff type
+        // Struct-of-Arrays for SIMD friendliness
+        
+        // Coefficients: b0, b1, b2, a1, a2 (a0 normalized to 1)
+        private readonly float[] _b0;
+        private readonly float[] _b1;
+        private readonly float[] _b2;
+        private readonly float[] _a1;
+        private readonly float[] _a2;
+        
+        // State: z1, z2 (Per Channel, Per Filter)
+        // Assume Max Channels = 2 for now, or dynamic.
+        // Dynamic: [Channel][TotalFilters]
+        private float[][] _z1;
+        private float[][] _z2;
+        
+        // EQ Parameters
+        private readonly float[] _frequencies;
+        private readonly float[] _gains;
+        private readonly float[] _qFactors;
+        private float _sampleRate = 44100;
+
+        // ISO Frequencies
         private static readonly float[] StandardFrequencies = {
-            31.25f,   // Sub-bass
-            62.5f,    // Bass
-            125f,     // Low-mid
-            250f,     // Mid-bass
-            500f,     // Mid
-            1000f,    // Upper-mid
-            2000f,    // Presence
-            4000f,    // Brilliance
-            8000f,    // Air
-            16000f    // Ultra-high
+            31.25f, 62.5f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f
         };
 
-        /// <summary>
-        /// Gets the unique identifier for this effect instance
-        /// </summary>
         public Guid Id => _id;
-
-        /// <summary>
-        /// Gets the name of this effect
-        /// </summary>
-        public string Name => _name;
-
-        /// <summary>
-        /// Gets or sets whether this effect is enabled
-        /// </summary>
-        public bool Enabled
-        {
-            get => _enabled;
-            set => _enabled = value;
-        }
-
-        /// <summary>
-        /// Gets or sets the mix between dry and wet signal (0.0 - 1.0)
-        /// Note: Equalizer applies 100% wet processing by default
-        /// </summary>
+        public string Name { get => _name; set => _name = value ?? "Equalizer"; }
+        public bool Enabled { get => _enabled; set => _enabled = value; }
         public float Mix { get; set; } = 1.0f;
 
-        /// <summary>
-        /// Initializes a new instance of the Equalizer with all parameters and default values
-        /// </summary>
-        /// <param name="sampleRate">Audio sample rate in Hz (typically 44100 or 48000)</param>
-        /// <param name="band0Gain">Band 0 (31.25Hz) gain in dB (-12 to +12)</param>
-        /// <param name="band1Gain">Band 1 (62.5Hz) gain in dB (-12 to +12)</param>
-        /// <param name="band2Gain">Band 2 (125Hz) gain in dB (-12 to +12)</param>
-        /// <param name="band3Gain">Band 3 (250Hz) gain in dB (-12 to +12)</param>
-        /// <param name="band4Gain">Band 4 (500Hz) gain in dB (-12 to +12)</param>
-        /// <param name="band5Gain">Band 5 (1000Hz) gain in dB (-12 to +12)</param>
-        /// <param name="band6Gain">Band 6 (2000Hz) gain in dB (-12 to +12)</param>
-        /// <param name="band7Gain">Band 7 (4000Hz) gain in dB (-12 to +12)</param>
-        /// <param name="band8Gain">Band 8 (8000Hz) gain in dB (-12 to +12)</param>
-        /// <param name="band9Gain">Band 9 (16000Hz) gain in dB (-12 to +12)</param>
         public EqualizerEffect(float sampleRate = 44100,
                         float band0Gain = 0.0f, float band1Gain = 0.0f, float band2Gain = 0.0f, float band3Gain = 0.0f, float band4Gain = 0.0f,
                         float band5Gain = 0.0f, float band6Gain = 0.0f, float band7Gain = 0.0f, float band8Gain = 0.0f, float band9Gain = 0.0f)
@@ -131,480 +73,260 @@ namespace OwnaudioNET.Effects
             _id = Guid.NewGuid();
             _name = "Equalizer";
             _enabled = true;
-
             _sampleRate = sampleRate;
-            _gains = new float[BANDS];
-            _frequencies = new float[BANDS];
-            _qFactors = new float[BANDS];
-            _filters = new BiquadFilter[BANDS][];
 
-            InitializeFilters();
+            int totalFilters = Bands * FiltersPerBand;
+            
+            // Allocate Coeffs
+            _b0 = new float[totalFilters];
+            _b1 = new float[totalFilters];
+            _b2 = new float[totalFilters];
+            _a1 = new float[totalFilters];
+            _a2 = new float[totalFilters];
 
-            // Set individual band gains with validation
-            Band0Gain = band0Gain;
-            Band1Gain = band1Gain;
-            Band2Gain = band2Gain;
-            Band3Gain = band3Gain;
-            Band4Gain = band4Gain;
-            Band5Gain = band5Gain;
-            Band6Gain = band6Gain;
-            Band7Gain = band7Gain;
-            Band8Gain = band8Gain;
-            Band9Gain = band9Gain;
+            // Allocate State (start with 2 channels capacity)
+            _z1 = new float[2][];
+            _z2 = new float[2][];
+            for(int c=0; c<2; c++) {
+                _z1[c] = new float[totalFilters];
+                _z2[c] = new float[totalFilters];
+            }
+
+            // Params
+            _frequencies = new float[Bands];
+            _gains = new float[Bands];
+            _qFactors = new float[Bands];
+
+            // Initialize defaults
+            for(int i=0; i<Bands; i++) {
+                _frequencies[i] = StandardFrequencies[i];
+                _qFactors[i] = 1.0f;
+                _gains[i] = 0.0f;
+            }
+
+            // Set Initial Gains from constructor
+            _gains[0] = band0Gain; _gains[1] = band1Gain; _gains[2] = band2Gain; _gains[3] = band3Gain; _gains[4] = band4Gain;
+            _gains[5] = band5Gain; _gains[6] = band6Gain; _gains[7] = band7Gain; _gains[8] = band8Gain; _gains[9] = band9Gain;
+
+            RecalculateAllFilters();
         }
 
-        /// <summary>
-        /// Initializes a new instance of the Equalizer with a preset configuration
-        /// </summary>
-        /// <param name="preset">The preset configuration to apply</param>
-        /// <param name="sampleRate">Audio sample rate in Hz (typically 44100 or 48000)</param>
-        public EqualizerEffect(EqualizerPreset preset, float sampleRate = 44100)
+        public EqualizerEffect(EqualizerPreset preset, float sampleRate = 44100) : this(sampleRate)
         {
-            _id = Guid.NewGuid();
-            _name = "Equalizer";
-            _enabled = true;
-
-            _sampleRate = sampleRate;
-            _gains = new float[BANDS];
-            _frequencies = new float[BANDS];
-            _qFactors = new float[BANDS];
-            _filters = new BiquadFilter[BANDS][];
-
-            InitializeFilters();
             SetPreset(preset);
         }
 
-        /// <summary>
-        /// Initializes the effect with the given audio configuration
-        /// </summary>
-        /// <param name="config">Audio configuration</param>
         public void Initialize(AudioConfig config)
         {
-            _config = config;
-        }
-
-        #region Band Properties - Read/Write for real-time control
-
-        /// <summary>
-        /// Gets or sets the gain for band 0 (31.25Hz) in dB
-        /// </summary>
-        public float Band0Gain
-        {
-            get => _gains[0];
-            set => SetBandGain(0, StandardFrequencies[0], _qFactors[0], value);
-        }
-
-        /// <summary>
-        /// Gets or sets the gain for band 1 (62.5Hz) in dB
-        /// </summary>
-        public float Band1Gain
-        {
-            get => _gains[1];
-            set => SetBandGain(1, StandardFrequencies[1], _qFactors[1], value);
-        }
-
-        /// <summary>
-        /// Gets or sets the gain for band 2 (125Hz) in dB
-        /// </summary>
-        public float Band2Gain
-        {
-            get => _gains[2];
-            set => SetBandGain(2, StandardFrequencies[2], _qFactors[2], value);
-        }
-
-        /// <summary>
-        /// Gets or sets the gain for band 3 (250Hz) in dB
-        /// </summary>
-        public float Band3Gain
-        {
-            get => _gains[3];
-            set => SetBandGain(3, StandardFrequencies[3], _qFactors[3], value);
-        }
-
-        /// <summary>
-        /// Gets or sets the gain for band 4 (500Hz) in dB
-        /// </summary>
-        public float Band4Gain
-        {
-            get => _gains[4];
-            set => SetBandGain(4, StandardFrequencies[4], _qFactors[4], value);
-        }
-
-        /// <summary>
-        /// Gets or sets the gain for band 5 (1000Hz) in dB
-        /// </summary>
-        public float Band5Gain
-        {
-            get => _gains[5];
-            set => SetBandGain(5, StandardFrequencies[5], _qFactors[5], value);
-        }
-
-        /// <summary>
-        /// Gets or sets the gain for band 6 (2000Hz) in dB
-        /// </summary>
-        public float Band6Gain
-        {
-            get => _gains[6];
-            set => SetBandGain(6, StandardFrequencies[6], _qFactors[6], value);
-        }
-
-        /// <summary>
-        /// Gets or sets the gain for band 7 (4000Hz) in dB
-        /// </summary>
-        public float Band7Gain
-        {
-            get => _gains[7];
-            set => SetBandGain(7, StandardFrequencies[7], _qFactors[7], value);
-        }
-
-        /// <summary>
-        /// Gets or sets the gain for band 8 (8000Hz) in dB
-        /// </summary>
-        public float Band8Gain
-        {
-            get => _gains[8];
-            set => SetBandGain(8, StandardFrequencies[8], _qFactors[8], value);
-        }
-
-        /// <summary>
-        /// Gets or sets the gain for band 9 (16000Hz) in dB
-        /// </summary>
-        public float Band9Gain
-        {
-            get => _gains[9];
-            set => SetBandGain(9, StandardFrequencies[9], _qFactors[9], value);
-        }
-
-        /// <summary>
-        /// Gets or sets the sample rate for the equalizer
-        /// </summary>
-        public float SampleRate => _sampleRate;
-
-        #endregion
-
-        /// <summary>
-        /// Initializes filter arrays and sets up default frequency bands
-        /// </summary>
-        private void InitializeFilters()
-        {
-            for (int band = 0; band < BANDS; band++)
+            _config = config ?? throw new ArgumentNullException(nameof(config));
+            
+            if (Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
             {
-                _filters[band] = new BiquadFilter[FILTERS_PER_BAND];
-                for (int i = 0; i < FILTERS_PER_BAND; i++)
-                {
-                    _filters[band][i] = new BiquadFilter();
+                _sampleRate = config.SampleRate;
+                RecalculateAllFilters();
+            }
+
+            // Resize state arrays if channels differ
+            int channels = config.Channels;
+            if (_z1.Length != channels)
+            {
+                _z1 = new float[channels][];
+                _z2 = new float[channels][];
+                int totalFilters = Bands * FiltersPerBand;
+                for(int c=0; c<channels; c++) {
+                    _z1[c] = new float[totalFilters];
+                    _z2[c] = new float[totalFilters];
                 }
-
-                // Use standard ISO frequencies for professional EQ response
-                _frequencies[band] = StandardFrequencies[band];
-                _qFactors[band] = 1.0f;  // Moderate Q for musical response
-                _gains[band] = 0.0f;     // Flat response initially
             }
         }
 
-        /// <summary>
-        /// Updates filter coefficients for a specific band with current parameters
-        /// </summary>
-        /// <param name="band">Band index (0-9)</param>
-        private void UpdateFilters(int band)
+        // Propeties for Bands
+        public float Band0Gain { get => _gains[0]; set => SetBand(0, value); }
+        public float Band1Gain { get => _gains[1]; set => SetBand(1, value); }
+        public float Band2Gain { get => _gains[2]; set => SetBand(2, value); }
+        public float Band3Gain { get => _gains[3]; set => SetBand(3, value); }
+        public float Band4Gain { get => _gains[4]; set => SetBand(4, value); }
+        public float Band5Gain { get => _gains[5]; set => SetBand(5, value); }
+        public float Band6Gain { get => _gains[6]; set => SetBand(6, value); }
+        public float Band7Gain { get => _gains[7]; set => SetBand(7, value); }
+        public float Band8Gain { get => _gains[8]; set => SetBand(8, value); }
+        public float Band9Gain { get => _gains[9]; set => SetBand(9, value); }
+
+        private void SetBand(int index, float gain)
         {
-            for (int i = 0; i < FILTERS_PER_BAND; i++)
+            if (index < 0 || index >= Bands) return;
+            if (Math.Abs(_gains[index] - gain) > 0.01f)
             {
-                _filters[band][i].SetPeakingEq(
-                    _sampleRate,
-                    _frequencies[band],
-                    _qFactors[band],
-                    _gains[band] * 0.5f  // Split gain across cascaded filters for smoother response
-                );
+                _gains[index] = Math.Clamp(gain, -12f, 12f);
+                UpdateFilter(index);
             }
         }
 
-        /// <summary>
-        /// Configures EQ parameters for a specific frequency band
-        /// </summary>
-        /// <param name="band">Band index (0-9)</param>
-        /// <param name="frequency">Center frequency in Hz (20-20000)</param>
-        /// <param name="q">Quality factor (0.1-10.0) - higher values create narrower bands</param>
-        /// <param name="gainDB">Gain adjustment in dB (-12 to +12)</param>
-        /// <exception cref="ArgumentOutOfRangeException">Thrown when band index is invalid</exception>
         public void SetBandGain(int band, float frequency, float q, float gainDB)
         {
-            if (band < 0 || band >= BANDS)
-                throw new ArgumentOutOfRangeException(nameof(band), "Band index must be between 0 and 9");
-
-            // Constrain parameters to safe audio ranges
-            frequency = Math.Max(20.0f, Math.Min(20000.0f, frequency));
-            q = Math.Max(0.1f, Math.Min(10.0f, q));
-            gainDB = FastClamp(gainDB);
-
-            // Store validated parameters
-            _frequencies[band] = frequency;
-            _qFactors[band] = q;
-            _gains[band] = gainDB;
-
-            UpdateFilters(band);
+             if (band < 0 || band >= Bands) return;
+             _frequencies[band] = Math.Clamp(frequency, 20f, 20000f);
+             _qFactors[band] = Math.Clamp(q, 0.1f, 10f);
+             SetBand(band, gainDB);
         }
 
-        /// <summary>
-        /// Applies a predefined equalizer preset for common audio scenarios
-        /// </summary>
-        /// <param name="preset">The preset configuration to apply</param>
-        public void SetPreset(EqualizerPreset preset)
+        private void RecalculateAllFilters()
         {
-            switch (preset)
-            {
-                case EqualizerPreset.Default:
-                    // Flat response - no coloration, reference monitoring
-                    ApplyPresetGains(new float[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 });
-                    break;
-
-                case EqualizerPreset.Bass:
-                    // Enhanced low-end for modern genres like hip-hop, EDM
-                    // Boosts sub-bass and bass while slightly reducing mid-bass to prevent muddiness
-                    ApplyPresetGains(new float[] { 6, 4, 2, -1, 0, 0, 0, 1, 2, 0 });
-                    break;
-
-                case EqualizerPreset.Treble:
-                    // Brightens audio for detail and clarity, useful for older recordings
-                    // Emphasizes presence and air frequencies while maintaining balance
-                    ApplyPresetGains(new float[] { 0, 0, 0, 0, 1, 2, 4, 3, 4, 2 });
-                    break;
-
-                case EqualizerPreset.Rock:
-                    // V-shaped curve ideal for rock/metal with powerful drums and clear vocals
-                    // Boosts bass for punch, cuts lower mids to reduce muddiness, enhances presence
-                    ApplyPresetGains(new float[] { 4, 3, 1, -2, -1, 1, 3, 2, 2, 1 });
-                    break;
-
-                case EqualizerPreset.Classical:
-                    // Natural, musical response respecting original recording balance
-                    // Subtle enhancements without artificial coloration
-                    ApplyPresetGains(new float[] { 1, 0, 0, 0, 0, 0, 1, 1, 2, 2 });
-                    break;
-
-                case EqualizerPreset.Pop:
-                    // Optimized for vocal clarity and modern production standards
-                    // Enhances vocal presence while maintaining musical balance
-                    ApplyPresetGains(new float[] { 2, 1, 0, 1, 2, 3, 2, 1, 2, 1 });
-                    break;
-
-                case EqualizerPreset.Jazz:
-                    // Warm, smooth response emphasizing musical instruments
-                    // Slight bass warmth, clear mids for instruments, controlled highs
-                    ApplyPresetGains(new float[] { 2, 1, 1, 0, 0, 1, 0, 1, 0, -1 });
-                    break;
-
-                case EqualizerPreset.Voice:
-                    // Speech intelligibility optimization for podcasts, audiobooks
-                    // Reduces bass rumble, emphasizes vocal formant frequencies
-                    ApplyPresetGains(new float[] { -3, -2, 0, 2, 4, 3, 2, 0, -1, -2 });
-                    break;
-
-                default:
-                    ApplyPresetGains(new float[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 });
-                    break;
-            }
+            for(int i=0; i<Bands; i++) UpdateFilter(i);
         }
 
-        /// <summary>
-        /// Applies gain values to all bands with optimized Q factors for each frequency range
-        /// </summary>
-        /// <param name="gains">Array of 10 gain values in dB</param>
-        private void ApplyPresetGains(float[] gains)
+        private void UpdateFilter(int bandIndex)
         {
-            // Optimized Q factors for each frequency band based on psychoacoustic principles
-            float[] optimizedQ = { 0.7f, 0.8f, 1.0f, 1.2f, 1.0f, 1.0f, 1.2f, 1.4f, 1.2f, 0.8f };
+            float freq = _frequencies[bandIndex];
+            float q = _qFactors[bandIndex];
+            float gain = _gains[bandIndex];
+            
+            // Split gain for 2 filters (Cascade)
+            float halfGain = gain * 0.5f;
 
-            for (int i = 0; i < BANDS; i++)
-            {
-                _gains[i] = FastClamp(gains[i]); // Validate gain values
-                _qFactors[i] = optimizedQ[i];
-                UpdateFilters(i);
-            }
-        }
-
-        /// <summary>
-        /// Processes audio samples through the equalizer using professional cascaded filtering
-        /// </summary>
-        /// <param name="buffer">Audio sample buffer to process in-place</param>
-        /// <param name="frameCount">Number of frames to process</param>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Process(Span<float> buffer, int frameCount)
-        {
-            if (_config == null)
-                throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
-
-            if (!_enabled)
-                return;
-
-            int sampleCount = frameCount * _config.Channels;
-
-            for (int sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++)
-            {
-                float sample = buffer[sampleIndex];
-                float drySample = sample;
-
-                // Process through each frequency band
-                for (int band = 0; band < BANDS; band++)
-                {
-                    // Skip processing if gain is effectively zero (performance optimization)
-                    if (Math.Abs(_gains[band]) > 0.01f)
-                    {
-                        // Cascaded filtering for superior phase response and steeper roll-off
-                        sample = _filters[band][0].Process(sample);
-                        sample = _filters[band][1].Process(sample);
-                    }
-                }
-
-                // Apply soft limiting to prevent clipping while preserving dynamics
-                float wetSample = SoftLimit(sample);
-
-                // Apply mix
-                buffer[sampleIndex] = drySample * (1.0f - Mix) + wetSample * Mix;
-            }
-        }
-
-        /// <summary>
-        /// Resets all filter states while preserving current EQ settings
-        /// Call this when switching audio sources or after processing discontinuities
-        /// </summary>
-        public void Reset()
-        {
-            for (int band = 0; band < BANDS; band++)
-            {
-                for (int filter = 0; filter < FILTERS_PER_BAND; filter++)
-                {
-                    _filters[band][filter].Reset();
-                }
-            }
-        }
-
-        /// <summary>
-        /// Disposes of the effect and releases any resources
-        /// </summary>
-        public void Dispose()
-        {
-            if (_disposed)
-                return;
-
-            Reset();
-            _disposed = true;
-        }
-
-        /// <summary>
-        /// Returns a string representation of this effect
-        /// </summary>
-        public override string ToString()
-        {
-            return $"Equalizer [ID: {_id}, Enabled: {_enabled}]";
-        }
-
-        /// <summary>
-        /// Professional soft limiting function that prevents harsh clipping
-        /// Uses hyperbolic tangent for smooth, musical saturation
-        /// </summary>
-        /// <param name="sample">Input audio sample</param>
-        /// <returns>Soft-limited audio sample</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float SoftLimit(float sample)
-        {
-            // Soft knee limiting starts at 0.8 to preserve dynamics
-            if (Math.Abs(sample) > 0.8f)
-            {
-                return Math.Sign(sample) * (0.8f + 0.2f * MathF.Tanh((Math.Abs(sample) - 0.8f) * 5.0f));
-            }
-            return sample;
-        }
-
-        /// <summary>
-        /// Fast gain clamping optimized for EQ parameter validation
-        /// </summary>
-        /// <param name="value">Gain value in dB</param>
-        /// <returns>Clamped gain value between -12dB and +12dB</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float FastClamp(float value)
-        {
-            return value < -12.0f ? -12.0f : (value > 12.0f ? 12.0f : value);
-        }
-    }
-
-    /// <summary>
-    /// High-quality biquad filter implementation for parametric EQ applications
-    /// Uses Direct Form II transposed structure for improved numerical stability
-    /// </summary>
-    public class BiquadFilter
-    {
-        private float _a0, _a1, _a2, _b0, _b1, _b2;
-        private float _z1, _z2;  // Direct Form II state variables for better numerical stability
-
-        /// <summary>
-        /// Gets the sample rate this filter was configured for
-        /// </summary>
-        public float SampleRate { get; private set; }
-
-        /// <summary>
-        /// Configures the biquad as a peaking equalizer with specified parameters
-        /// Uses cookbook formulas for accurate frequency response
-        /// </summary>
-        /// <param name="sampleRate">Audio sample rate in Hz</param>
-        /// <param name="centerFreq">Center frequency in Hz</param>
-        /// <param name="q">Quality factor (bandwidth = centerFreq/Q)</param>
-        /// <param name="gainDB">Peak gain in dB</param>
-        public void SetPeakingEq(float sampleRate, float centerFreq, float q, float gainDB)
-        {
-            SampleRate = sampleRate;
-
-            // Prevent numerical issues at extreme frequencies
-            centerFreq = Math.Max(1.0f, Math.Min(sampleRate * 0.49f, centerFreq));
-
-            float omega = 2.0f * MathF.PI * centerFreq / sampleRate;
+            // Calculate coeffs
+            // Peaking EQ
+            float omega = 2.0f * MathF.PI * freq / _sampleRate;
             float sinOmega = MathF.Sin(omega);
             float cosOmega = MathF.Cos(omega);
             float alpha = sinOmega / (2.0f * q);
-            float A = MathF.Pow(10.0f, gainDB / 40.0f);
+            float A = MathF.Pow(10.0f, halfGain / 40.0f);
 
-            // Cookbook peaking EQ coefficients
-            _b0 = 1.0f + alpha * A;
-            _b1 = -2.0f * cosOmega;
-            _b2 = 1.0f - alpha * A;
-            _a0 = 1.0f + alpha / A;
-            _a1 = -2.0f * cosOmega;
-            _a2 = 1.0f - alpha / A;
+            // Biquad coeffs regular (a0 normalized later)
+            float b0 = 1.0f + alpha * A;
+            float b1 = -2.0f * cosOmega;
+            float b2 = 1.0f - alpha * A;
+            float a0 = 1.0f + alpha / A;
+            float a1 = -2.0f * cosOmega;
+            float a2 = 1.0f - alpha / A;
 
-            // Normalize coefficients for numerical stability
-            float invA0 = 1.0f / _a0;
-            _b0 *= invA0;
-            _b1 *= invA0;
-            _b2 *= invA0;
-            _a1 *= invA0;
-            _a2 *= invA0;
+            // Normalize
+            float invA0 = 1.0f / a0;
+            
+            float fb0 = b0 * invA0;
+            float fb1 = b1 * invA0;
+            float fb2 = b2 * invA0;
+            float fa1 = a1 * invA0;
+            float fa2 = a2 * invA0;
+
+            // Store for both filters in band
+            int baseIdx = bandIndex * FiltersPerBand;
+            
+            // Filter 1
+            _b0[baseIdx] = fb0; _b1[baseIdx] = fb1; _b2[baseIdx] = fb2;
+            _a1[baseIdx] = fa1; _a2[baseIdx] = fa2;
+            
+            // Filter 2 (Identical)
+            _b0[baseIdx+1] = fb0; _b1[baseIdx+1] = fb1; _b2[baseIdx+1] = fb2;
+            _a1[baseIdx+1] = fa1; _a2[baseIdx+1] = fa2;
         }
 
-        /// <summary>
-        /// Processes a single audio sample through the biquad filter
-        /// Uses Direct Form II transposed for optimal numerical precision
-        /// </summary>
-        /// <param name="input">Input audio sample</param>
-        /// <returns>Filtered audio sample</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public float Process(float input)
+        public void Process(Span<float> buffer, int frameCount)
         {
-            // Direct Form II transposed - more numerically stable
-            float output = _b0 * input + _z1;
-            _z1 = _b1 * input - _a1 * output + _z2;
-            _z2 = _b2 * input - _a2 * output;
+            if (_config == null || !_enabled) return;
+            
+            int channels = _config.Channels;
+            int totalFilters = Bands * FiltersPerBand;
+            int samples = frameCount * channels;
 
-            return output;
+            // Optimization: If mix is 0? 
+            // EQ usually doesn't have Mix 0 often, but standard Check.
+            if (Mix < 0.01f) return;
+
+            // Process per channel
+            // Since samples are interleaved, we jump step = channels
+            
+            for (int ch = 0; ch < channels; ch++)
+            {
+                // Cache state array pointer for this channel
+                float[] z1 = _z1[ch];
+                float[] z2 = _z2[ch];
+
+                // Iterate samples for this channel
+                for (int i = ch; i < samples; i += channels)
+                {
+                    float sample = buffer[i];
+                    
+                    // Cascade filters
+                    // Unrolled loop for Filter Array? 
+                    // 20 iterations is small enough for modern CPU branch prediction
+                    for (int f = 0; f < totalFilters; f++)
+                    {
+                        // Direct Form II Transposed
+                        // y = b0*x + z1
+                        // z1 = b1*x - a1*y + z2
+                        // z2 = b2*x - a2*y
+                        
+                        float output = _b0[f] * sample + z1[f];
+                        z1[f] = _b1[f] * sample - _a1[f] * output + z2[f];
+                        z2[f] = _b2[f] * sample - _a2[f] * output;
+                        
+                        sample = output;
+                        
+                        // Note: If gain is 0, coeffs are b0=1, a1/a2/b1/b2=0? 
+                        // Actually standard calculation gives Identity coeffs if Gain=0?
+                        // Yes: A=1, alpha=sin/2Q.
+                        // b0 = 1+alpha, a0 = 1+alpha -> b0/a0 = 1.
+                        // b1 = -2cos, a1 = -2cos -> equal.
+                        // b2 = 1-alpha, a2 = 1-alpha -> equal.
+                        // y = x + z1...
+                        // If fully identity, we could optimize by skipping bands with 0 gain.
+                        // But branching might cost more than MUL. 
+                        // Vectorization (SIMD) would be best here but hard in pure C#.
+                    }
+                    
+                    // Apply Soft Limit to prevent clipping from EQ Boost
+                    if (Math.Abs(sample) > 0.95f)
+                    {
+                        sample = 0.95f * MathF.Tanh(sample); 
+                    }
+
+                    // Mix
+                    // buffer[i] is input (we overwrote sample variable, but buffer[i] is still orig until we write)
+                    // Wait, I used 'sample = buffer[i]' then modified 'sample'.
+                    // So 'sample' is now Wet.
+                    
+                    buffer[i] = buffer[i] * (1.0f - Mix) + sample * Mix;
+                }
+            }
         }
 
-        /// <summary>
-        /// Resets filter state variables to zero
-        /// Call when starting new audio stream or after processing gaps
-        /// </summary>
+        public void SetPreset(EqualizerPreset preset)
+        {
+            float[] gains = new float[10];
+            switch (preset)
+            {
+                case EqualizerPreset.Bass: gains = new float[] { 6, 4, 2, -1, 0, 0, 0, 1, 2, 0 }; break;
+                case EqualizerPreset.Treble: gains = new float[] { 0, 0, 0, 0, 1, 2, 4, 3, 4, 2 }; break;
+                case EqualizerPreset.Rock: gains = new float[] { 4, 3, 1, -2, -1, 1, 3, 2, 2, 1 }; break;
+                case EqualizerPreset.Classical: gains = new float[] { 1, 0, 0, 0, 0, 0, 1, 1, 2, 2 }; break;
+                case EqualizerPreset.Pop: gains = new float[] { 2, 1, 0, 1, 2, 3, 2, 1, 2, 1 }; break;
+                case EqualizerPreset.Jazz: gains = new float[] { 2, 1, 1, 0, 0, 1, 0, 1, 0, -1 }; break;
+                case EqualizerPreset.Voice: gains = new float[] { -3, -2, 0, 2, 4, 3, 2, 0, -1, -2 }; break;
+                default: break;
+            }
+            
+            for(int i=0; i<10; i++) Band0Gain = gains[i]; // Actually need to set each by index.
+            // Optimized Set:
+             _gains[0] = gains[0]; _gains[1] = gains[1]; _gains[2] = gains[2]; _gains[3] = gains[3]; _gains[4] = gains[4];
+             _gains[5] = gains[5]; _gains[6] = gains[6]; _gains[7] = gains[7]; _gains[8] = gains[8]; _gains[9] = gains[9];
+             RecalculateAllFilters();
+        }
+
         public void Reset()
         {
-            _z1 = 0.0f;
-            _z2 = 0.0f;
+            for(int c=0; c<_z1.Length; c++) {
+                Array.Clear(_z1[c], 0, _z1[c].Length);
+                Array.Clear(_z2[c], 0, _z2[c].Length);
+            }
         }
+
+        public void Dispose()
+        {
+            _disposed = true;
+        }
+
+        public override string ToString() => $"Equalizer: Enabled={_enabled}";
     }
 }
