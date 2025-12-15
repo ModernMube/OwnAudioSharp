@@ -27,7 +27,7 @@
 </div>
 
 <div align="center">
-  <a href="https://modernmube.github.io/OwnAudioSharp/OwnAudio/Examples">
+  <a href="https://github.com/ModernMube/OwnAudioSharp/tree/master/Example">
     <img src="https://img.shields.io/badge/Ownaudio%20Example%Projects-red" width="200">
   </a>
 </div>
