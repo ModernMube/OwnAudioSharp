@@ -29,7 +29,6 @@ namespace OwnaudioNET.Effects
         private readonly Guid _id;
         private string _name;
         private bool _enabled;
-        private bool _disposed;
         private AudioConfig? _config;
 
         // DSP State
@@ -225,7 +224,6 @@ namespace OwnaudioNET.Effects
 
         public void Dispose()
         {
-            _disposed = true;
         }
         
         public override string ToString() => $"Chorus: Rate={_rate:F2}, Depth={_depth:F2}, Enabled={_enabled}";

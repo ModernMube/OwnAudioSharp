@@ -137,4 +137,24 @@
           PackagePath="lib\net9.0-ios18.0\" />
   </ItemGroup>
 
+  <!-- Include native runtime libraries in the NuGet package -->
+  <ItemGroup>
+    <!-- Android native libraries (ARM) -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\android-arm\**\*.*"
+          Pack="true"
+          PackagePath="runtimes\android-arm" />
+    <!-- Android native libraries (ARM64) -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\android-arm64\**\*.*"
+          Pack="true"
+          PackagePath="runtimes\android-arm64" />
+    <!-- Android native libraries (x64) -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\android-x64\**\*.*"
+          Pack="true"
+          PackagePath="runtimes\android-x64" />
+    <!-- iOS native libraries (ARM64) - framework bundle -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\iOS-arm64\**\*.*"
+          Pack="true"
+          PackagePath="runtimes\iOS-arm64" />
+  </ItemGroup>
+
 </Project>

@@ -8,24 +8,11 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
-  <!-- Runtime identifiers per target framework -->
-  <!-- NOTE: RuntimeIdentifiers are commented out for library projects to avoid build issues -->
-  <!-- They are only needed for application projects, not libraries -->
-  <!--
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net9.0'">
-    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="$(TargetFramework.StartsWith('net9.0-android'))">
-    <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
-  </PropertyGroup>
-  -->
-
   <PropertyGroup>
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>OwnAudioSharp</PackageId>
-    <Version>2.3.3</Version>
+    <Version>2.3.4</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for desktop platforms (Windows, Linux, macOS)</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;desktop;sound;multitrack</PackageTags>
@@ -116,6 +103,43 @@
     <None Include="..\..\OwnAudioEngine\Ownaudio.macOS\bin\$(Configuration)\net9.0\Ownaudio.macOS.dll"
           Pack="true"
           PackagePath="lib\net9.0\" />
+  </ItemGroup>
+
+  <!-- Include native runtime libraries in the NuGet package -->
+  <ItemGroup>
+    <!-- Windows x64 native libraries -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\win-x64\**\*.*"
+          Pack="true"
+          PackagePath="runtimes\win-x64" />
+    <!-- Windows x86 native libraries -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\win-x86\**\*.*"
+          Pack="true"
+          PackagePath="runtimes\win-x86" />
+    <!-- Windows ARM64 native libraries -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\win-arm64\**\*.*"
+          Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Native\runtimes\win-arm64\')"
+          Pack="true"
+          PackagePath="runtimes\win-arm64" />
+    <!-- Linux x64 native libraries -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\linux-x64\**\*.*"
+          Pack="true"
+          PackagePath="runtimes\linux-x64" />
+    <!-- Linux ARM native libraries -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\linux-arm\**\*.*"
+          Pack="true"
+          PackagePath="runtimes\linux-arm" />
+    <!-- Linux ARM64 native libraries -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\linux-arm64\**\*.*"
+          Pack="true"
+          PackagePath="runtimes\linux-arm64" />
+    <!-- macOS x64 native libraries -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\osx-x64\**\*.*"
+          Pack="true"
+          PackagePath="runtimes\osx-x64" />
+    <!-- macOS ARM64 native libraries -->
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\osx-arm64\**\*.*"
+          Pack="true"
+          PackagePath="runtimes\osx-arm64" />
   </ItemGroup>
 
 </Project>
