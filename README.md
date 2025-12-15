@@ -26,6 +26,12 @@
   </a>
 </div>
 
+<div align="center">
+  <a href="https://modernmube.github.io/OwnAudioSharp/OwnAudio/Examples">
+    <img src="https://img.shields.io/badge/Ownaudio%20Example%Projects-red" width="200">
+  </a>
+</div>
+
 ##
 
 **OwnAudioSharp** is a professional cross-platform audio framework featuring a **native C++ audio engine** for glitch-free, real-time audio processing. After extensive development with pure managed code, we discovered that the .NET Garbage Collector is insurmountable for professional real-time audio - the native engine is now the default, with managed C# implementations available for development and testing.
