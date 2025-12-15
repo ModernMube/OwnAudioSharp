@@ -5,7 +5,7 @@ Professional Android example application demonstrating OwnAudioSharp's full Audi
 ## Status
 
 ✅ **Completed:**
-- AAudioEngine implementation (Oboe library)
+- AAudioEngine implementation
 - AAudioInterop P/Invoke definitions
 - Android project structure with full mixer demo
 - OwnaudioNET Android support (net9.0-android target)
@@ -41,7 +41,7 @@ OwnaudioAndroidTest/
 
 ## Dependencies
 
-- **Ownaudio.Android** - AAudio engine implementation
+- **Ownaudio.Native** - Miniaudio engine implementation
 - **Ownaudio.Core** - Core library (decoders, buffer management)
 - **OwnaudioNET** - High-level API (net9.0-android target)
 - **Xamarin.AndroidX.AppCompat** - UI components
