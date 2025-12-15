@@ -28,7 +28,7 @@
 
 <div align="center">
   <a href="https://github.com/ModernMube/OwnAudioSharp/tree/master/OwnAudio/Examples">
-    <img src="https://img.shields.io/badge/Ownaudio%20Example%Projects-red" width="200">
+    <img src="https://img.shields.io/badge/Examples-Ownaudio%20Example%20Projects-red" width="370">
   </a>
 </div>
 
