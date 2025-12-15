@@ -24,7 +24,6 @@ namespace OwnaudioNET.Effects
         private readonly Guid _id;
         private readonly string _name;
         private bool _enabled;
-        private bool _disposed;
         private AudioConfig? _config;
 
         private float targetRmsLevelDb;
@@ -256,7 +255,6 @@ namespace OwnaudioNET.Effects
 
         public void Dispose()
         {
-            _disposed = true;
         }
         
         public override string ToString() => $"{_name} (ID: {_id}, Enabled: {_enabled})";

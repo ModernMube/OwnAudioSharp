@@ -26,7 +26,6 @@ namespace OwnaudioNET.Effects
         private readonly Guid _id;
         private string _name;
         private bool _enabled;
-        private bool _disposed;
         private AudioConfig? _config;
 
         // Constants
@@ -324,7 +323,6 @@ namespace OwnaudioNET.Effects
 
         public void Dispose()
         {
-            _disposed = true;
         }
 
         public override string ToString() => $"Equalizer: Enabled={_enabled}";

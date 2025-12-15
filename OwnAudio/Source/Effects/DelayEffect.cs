@@ -23,7 +23,6 @@ namespace OwnaudioNET.Effects
         private readonly Guid _id;
         private string _name;
         private bool _enabled;
-        private bool _disposed;
         private AudioConfig? _config;
 
         // DSP State
@@ -39,8 +38,7 @@ namespace OwnaudioNET.Effects
         private float _damping;
 
         // Cached
-        private float _delaySamples; 
-        private int _bufferMask; // Optimization for Pot buffers, but we might use standard modulo for varying lengths
+        private float _delaySamples;
 
         public Guid Id => _id;
         public string Name { get => _name; set => _name = value ?? "Delay"; }
@@ -257,7 +255,6 @@ namespace OwnaudioNET.Effects
 
         public void Dispose()
         {
-            _disposed = true;
         }
 
         public override string ToString()

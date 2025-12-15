@@ -71,10 +71,6 @@ namespace OwnaudioNET.Effects
         private int _preDelayIndex;
         private int _preDelayLength;
 
-        // Input HPF State
-        private float _hpfHistoryL;
-        private float _hpfHistoryR;
-
         // --- Parameters ---
         private float _roomSize = 0.5f;
         private float _damping = 0.5f;
@@ -288,14 +284,8 @@ namespace OwnaudioNET.Effects
                 // Mono-sum for reverb engine (Freeverb style)
                 float inputMono = (inputL + inputR) * 0.5f;
 
-                // Simple HPF (High Pass) to cut mud below ~20Hz
-                // y[n] = x[n] - x[n-1] + R * y[n-1]
-                float hpfOut = inputMono - _hpfHistoryL + 0.99f * _hpfHistoryR; // repurpose vars, tricky naming
-                // Actually let's do properly
-                // x = inputMono. 
-                // We need proper state vars.
-                // Let's optimize: Just gain for now.
-                inputMono *= g; // Apply Gain
+                // Apply Gain
+                inputMono *= g;
 
                 // Pre-Delay
                 float delayedInput = _preDelayBuffer[_preDelayIndex];
