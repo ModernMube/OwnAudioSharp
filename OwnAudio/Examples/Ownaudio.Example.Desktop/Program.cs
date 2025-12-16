@@ -160,7 +160,7 @@ public class TestProgram
             // ==========================================
             mixer.AddMasterEffect(_equalizer);
             mixer.AddMasterEffect(_compressor);
-            mixer.AddMasterEffect(new DynamicAmpEffect(DynamicAmpPreset.Live));
+            mixer.AddMasterEffect(new DynamicAmpEffect(DynamicAmpPreset.Music));
 
             _equalizer.Enabled = false;
             _compressor.Enabled = false;

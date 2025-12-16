@@ -31,14 +31,6 @@ public partial class FileSource
 
         try
         {
-            // Calculate how much data to read
-            TimeSpan actualDuration = duration ?? TimeSpan.FromSeconds(Math.Max(0, Duration - position.TotalSeconds));
-
-            if (actualDuration <= TimeSpan.Zero)
-            {
-                return Array.Empty<byte>();
-            }
-
             // Check if we have a file path to create a decoder
             if (string.IsNullOrEmpty(_filePath))
             {
@@ -54,12 +46,25 @@ public partial class FileSource
                 throw new AudioException($"Failed to seek to position {position}: {seekError}");
             }
 
-            // Calculate total bytes needed
-            int totalFrames = (int)(actualDuration.TotalSeconds * _streamInfo.SampleRate);
-            int totalBytes = totalFrames * _streamInfo.Channels * sizeof(float);
+            // CRITICAL FIX: If duration is null, read until ACTUAL EOF instead of using Duration property
+            // The Duration property might be inaccurate or rounded, causing premature stop
+            bool readUntilEOF = (duration == null);
 
-            // Use a MemoryStream to accumulate data, which is more flexible than a fixed-size array.
-            using var memoryStream = new MemoryStream(totalBytes > 0 ? totalBytes : 32768);
+            // Calculate target bytes ONLY if duration was explicitly specified
+            int targetBytes = 0;
+            if (!readUntilEOF)
+            {
+                int targetFrames = (int)(duration!.Value.TotalSeconds * _streamInfo.SampleRate);
+                targetBytes = targetFrames * _streamInfo.Channels * sizeof(float);
+
+                if (targetBytes <= 0)
+                {
+                    return Array.Empty<byte>();
+                }
+            }
+
+            // Use a MemoryStream to accumulate data (dynamically grows if reading until EOF)
+            using var memoryStream = new MemoryStream(targetBytes > 0 ? targetBytes : 65536);
 
             // ZERO-ALLOC: Use a reusable byte buffer for the new ReadFrames method.
             var byteBuffer = ArrayPool<byte>.Shared.Rent(4096 * _streamInfo.Channels * sizeof(float));
@@ -67,11 +72,13 @@ public partial class FileSource
             try
             {
                 int bytesWritten = 0;
-                // Decode frames until we have enough data
-                while (bytesWritten < totalBytes)
+
+                // Decode frames until we reach target OR actual EOF
+                while (true)
                 {
                     var result = tempDecoder.ReadFrames(byteBuffer);
 
+                    // Always stop on EOF or error
                     if (result.IsEOF || !result.IsSucceeded || result.FramesRead == 0)
                     {
                         break;
@@ -79,9 +86,25 @@ public partial class FileSource
 
                     // Copy frame data to result
                     int bytesRead = result.FramesRead * _streamInfo.Channels * sizeof(float);
-                    int bytesToCopy = Math.Min(bytesRead, totalBytes - bytesWritten);
-                    memoryStream.Write(byteBuffer, 0, bytesToCopy);
-                    bytesWritten += bytesToCopy;
+
+                    if (readUntilEOF)
+                    {
+                        // No limit - read everything until EOF
+                        memoryStream.Write(byteBuffer, 0, bytesRead);
+                        bytesWritten += bytesRead;
+                    }
+                    else
+                    {
+                        // Limited read - stop when we reach target
+                        int bytesToCopy = Math.Min(bytesRead, targetBytes - bytesWritten);
+                        memoryStream.Write(byteBuffer, 0, bytesToCopy);
+                        bytesWritten += bytesToCopy;
+
+                        if (bytesWritten >= targetBytes)
+                        {
+                            break;
+                        }
+                    }
                 }
 
                 return memoryStream.ToArray();
