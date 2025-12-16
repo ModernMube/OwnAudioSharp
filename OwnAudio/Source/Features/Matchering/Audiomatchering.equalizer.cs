@@ -250,24 +250,18 @@ namespace OwnaudioNET.Features.Matchering
                 // Calculate optimal Q factors
                 var optimizedQFactors = CalculateOptimalQFactors(eqAdjustments, sourceSpectrum, targetSpectrum);
 
-                // 1. Equalizer
-                var directEQ = new Equalizer30BandEffect();
-                
-                // DEBUG: Show applied EQ configuration
-                Console.WriteLine("\n=== APPLIED EQ CONFIGURATION ===");
-                string[] bandNames = new[] {
-                    "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", "63Hz", "80Hz", "100Hz", "125Hz", "160Hz",
-                    "200Hz", "250Hz", "315Hz", "400Hz", "500Hz", "630Hz", "800Hz", "1kHz", "1.25kHz", "1.6kHz",
-                    "2kHz", "2.5kHz", "3.15kHz", "4kHz", "5kHz", "6.3kHz", "8kHz", "10kHz", "12.5kHz", "16kHz"
-                };
-                
-                for (int i = 0; i < FrequencyBands.Length; i++)
-                {
-                    directEQ.SetBandGain(i, FrequencyBands[i], optimizedQFactors[i], eqAdjustments[i]);
-                    Console.WriteLine($"Band {i,2} ({bandNames[i],8}): Gain = {eqAdjustments[i],6:F1} dB, Q = {optimizedQFactors[i]:F2}");
-                }
+                // =======================================================================
+                // PROFESSIONAL MASTERING CHAIN: Comp -> EQ -> DynamicAmp -> Limiter
+                // Rationale:
+                // 1. Compressor first stabilizes dynamics before tonal shaping
+                // 2. EQ shapes frequency response on stabilized signal
+                // 3. DynamicAmp provides gentle AGC for final level matching
+                // 4. Limiter acts as final safety net for peaks
+                // =======================================================================
 
-                // 2. Compressor (Dynamic Settings)
+                Console.WriteLine("\n=== MASTERING CHAIN CONFIGURATION ===");
+
+                // 1. Compressor (First - Stabilizes Dynamics)
                 // Use the calculated threshold and ratio from Crest Factor analysis
                 var globalCompressor = new CompressorEffect(
                     CompressorEffect.DbToLinear(compSettings.Threshold), // Dynamic Threshold
@@ -277,23 +271,56 @@ namespace OwnaudioNET.Features.Matchering
                     1.0f      // No makeup here, let DynamicAmp handle levels
                 );
 
-                // 3. Dynamic Amplifier
-                // Adjust max gain to ensure we can recover from the pre-gain attenuation
+                Console.WriteLine($"\n[1] COMPRESSOR:");
+                Console.WriteLine($"    Threshold: {compSettings.Threshold:F1} dB");
+                Console.WriteLine($"    Ratio: {compSettings.Ratio:F1}:1");
+                Console.WriteLine($"    Attack: 10ms, Release: 100ms (Surgical)");
+
+                // 2. Equalizer (Second - Shapes Frequency Response)
+                var directEQ = new Equalizer30BandEffect();
+
+                Console.WriteLine($"\n[2] EQUALIZER (30-Band Parametric):");
+                string[] bandNames = new[] {
+                    "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", "63Hz", "80Hz", "100Hz", "125Hz", "160Hz",
+                    "200Hz", "250Hz", "315Hz", "400Hz", "500Hz", "630Hz", "800Hz", "1kHz", "1.25kHz", "1.6kHz",
+                    "2kHz", "2.5kHz", "3.15kHz", "4kHz", "5kHz", "6.3kHz", "8kHz", "10kHz", "12.5kHz", "16kHz"
+                };
+
+                for (int i = 0; i < FrequencyBands.Length; i++)
+                {
+                    directEQ.SetBandGain(i, FrequencyBands[i], optimizedQFactors[i], eqAdjustments[i]);
+                    Console.WriteLine($"    Band {i,2} ({bandNames[i],8}): {eqAdjustments[i],+6:F1} dB, Q={optimizedQFactors[i]:F2}");
+                }
+
+                // 3. Dynamic Amplifier (Third - Automatic Gain Control)
+                // Professional mastering-grade AGC with slow, musical response
                 float headroomRecoveryGain = (effectiveBoost > 0) ? (float)Math.Pow(10, (effectiveBoost + 2.0f) / 20.0f) : 1.0f;
                 float totalMaxGain = dynamicAmp.MaxGain * headroomRecoveryGain;
 
                 var dynamicAmplifier = new DynamicAmpEffect(
-                    dynamicAmp.TargetLevel - 0.2f, 
-                    dynamicAmp.AttackTime,         
-                    dynamicAmp.ReleaseTime,        
-                    0.001f,
-                    totalMaxGain,                  // Expanded gain capability
-                    sampleRate,
-                    0.15f,
-                    headroomRecoveryGain           // Initial gain to match headroom attenuation
+                    targetLevel: dynamicAmp.TargetLevel,
+                    attackTimeSeconds: 1.5f,         // Slow attack for mastering
+                    releaseTimeSeconds: 4.0f,        // Very slow release for natural dynamics
+                    noiseThresholdDbOrLinear: -65.0f, // Low noise gate (dB value)
+                    maxGainValue: totalMaxGain,
+                    sampleRateHz: sampleRate,
+                    rmsWindowSeconds: 0.8f,          // Long window for stable musical decisions
+                    initialGain: headroomRecoveryGain,
+                    maxGainChangePerSecondDb: 4.0f,  // Very slow gain changes (transparent)
+                    maxGainReductionDb: 8.0f         // Gentle max reduction preserves dynamics
                 );
 
-                // 4. Limiter (New Mastering Stage)
+                Console.WriteLine($"\n[3] DYNAMIC AMPLIFIER (AGC):");
+                Console.WriteLine($"    Target Level: {dynamicAmp.TargetLevel:F1} dB");
+                Console.WriteLine($"    Attack: 1.5s, Release: 4.0s (Musical)");
+                Console.WriteLine($"    RMS Window: 0.8s (Long-term averaging)");
+                Console.WriteLine($"    Max Gain: {totalMaxGain:F2}x ({20 * MathF.Log10(totalMaxGain):+F1} dB)");
+                Console.WriteLine($"    Max Reduction: 8 dB (Gentle compression)");
+                Console.WriteLine($"    Gain Change Rate: 4 dB/s (Transparent)");
+                Console.WriteLine($"    Noise Gate: -65 dB (Very low, preserves tail)");
+                Console.WriteLine($"    Initial Gain: {headroomRecoveryGain:F2}x ({20 * MathF.Log10(headroomRecoveryGain):+F1} dB compensation)");
+
+                // 4. Limiter (Fourth - Final Safety/Peak Control)
                 // Transparent mastering settings
                 var outputLimiter = new LimiterEffect(
                     sampleRate,
@@ -303,6 +330,10 @@ namespace OwnaudioNET.Features.Matchering
                     lookAheadMs: 5.0f
                 );
 
+                Console.WriteLine($"\n[4] LIMITER (True Peak):");
+                Console.WriteLine($"    Threshold: -0.5 dB, Ceiling: -0.2 dB");
+                Console.WriteLine($"    Release: 60ms, Lookahead: 5ms");
+
                 // Initialize all effects
                 var audioConfig = new Ownaudio.Core.AudioConfig
                 {
@@ -311,33 +342,45 @@ namespace OwnaudioNET.Features.Matchering
                     BufferSize = 512
                 };
 
-                directEQ.Initialize(audioConfig);
                 globalCompressor.Initialize(audioConfig);
+                directEQ.Initialize(audioConfig);
                 dynamicAmplifier.Initialize(audioConfig);
                 outputLimiter.Initialize(audioConfig);
 
-                Console.WriteLine("Effects initialized (EQ -> Comp -> Amp -> Limiter), processing audio...");
+                Console.WriteLine("\n=== PROCESSING AUDIO ===");
+                Console.WriteLine($"Chain: Compressor \u2192 EQ \u2192 DynamicAmp \u2192 Limiter");
+                Console.WriteLine($"Sample Rate: {sampleRate} Hz, Channels: {channels}");
+                Console.WriteLine($"Total Samples: {audioData.Length:N0}, Total Frames: {audioData.Length / channels:N0}");
+                Console.WriteLine($"Buffer Size: 512 frames\n");
 
-                // Process audio in chunks
+                // Process audio in chunks (frame-based to prevent sample loss)
                 var processedData = new List<float>(audioData.Length);
                 int framesPerChunk = 512;
                 int samplesPerChunk = framesPerChunk * channels;
                 int totalSamples = audioData.Length;
+                int totalFrames = totalSamples / channels;
                 int processedSamples = 0;
 
                 for (int offset = 0; offset < totalSamples; offset += samplesPerChunk)
                 {
-                    int samplesToProcess = Math.Min(samplesPerChunk, totalSamples - offset);
-                    int framesToProcess = samplesToProcess / channels;
+                    // CRITICAL FIX: Calculate frames first to prevent sample loss
+                    int remainingSamples = totalSamples - offset;
+                    int remainingFrames = remainingSamples / channels;
+                    int framesToProcess = Math.Min(framesPerChunk, remainingFrames);
+                    int samplesToProcess = framesToProcess * channels;
+
+                    // Safety check: Skip only if no samples to process
+                    if (samplesToProcess <= 0)
+                        break;
 
                     var chunk = new float[samplesToProcess];
                     Array.Copy(audioData, offset, chunk, 0, samplesToProcess);
 
-                    // Chain Processing
-                    directEQ.Process(chunk.AsSpan(), framesToProcess);
-                    globalCompressor.Process(chunk.AsSpan(), framesToProcess);
-                    dynamicAmplifier.Process(chunk.AsSpan(), framesToProcess);
-                    outputLimiter.Process(chunk.AsSpan(), framesToProcess);
+                    // Professional Mastering Chain Processing Order
+                    globalCompressor.Process(chunk.AsSpan(), framesToProcess);  // 1. Stabilize dynamics
+                    directEQ.Process(chunk.AsSpan(), framesToProcess);          // 2. Shape frequency
+                    dynamicAmplifier.Process(chunk.AsSpan(), framesToProcess);  // 3. Level matching
+                    outputLimiter.Process(chunk.AsSpan(), framesToProcess);     // 4. Peak control
 
                     processedData.AddRange(chunk);
 
@@ -346,7 +389,21 @@ namespace OwnaudioNET.Features.Matchering
                     Console.Write($"\rProcessing: {progress:F1}%");
                 }
 
-                Console.WriteLine("\n\nWriting to file...");
+                // Verify all samples were processed
+                Console.WriteLine($"\n");
+                if (processedData.Count != audioData.Length)
+                {
+                    Console.WriteLine($"WARNING: Sample count mismatch!");
+                    Console.WriteLine($"  Input:  {audioData.Length:N0} samples ({audioData.Length / channels:N0} frames)");
+                    Console.WriteLine($"  Output: {processedData.Count:N0} samples ({processedData.Count / channels:N0} frames)");
+                    Console.WriteLine($"  Lost:   {audioData.Length - processedData.Count} samples ({(audioData.Length - processedData.Count) / (float)channels:F1} frames)");
+                }
+                else
+                {
+                    Console.WriteLine($"✓ All {audioData.Length:N0} samples processed successfully");
+                }
+
+                Console.WriteLine("\nWriting to file...");
                 OwnaudioNET.Recording.WaveFile.Create(outputFile, processedData.ToArray(), sampleRate, channels, 24);
                 Console.WriteLine($"Processing completed: {outputFile}");
             }
