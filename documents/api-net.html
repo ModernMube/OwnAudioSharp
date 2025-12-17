@@ -16,6 +16,7 @@
                 <li><a href="api-core.html">Core API</a></li>
                 <li><a href="api-net.html" class="active">NET API</a></li>
                 <li><a href="examples.html">Examples</a></li>
+                <li><a href="effects.html">Effects</a></li>
 				<li><a href="matchering.html">Matchering</a></li>
                 <li><a href="vocalremover.html">Vocal Remover</a></li>
                 <li><a href="chorddetect.html">Chord Detection</a></li>
@@ -444,9 +445,10 @@ var compressor = new CompressorEffect(
 sourceWithFx.AddEffect(compressor);
 
 // Modify effects dynamically
-sourceWithFx.AddEffect(new DelayEffect());
+var delay = new DelayEffect();
+sourceWithFx.AddEffect(delay);
 sourceWithFx.RemoveEffect(reverb);
-sourceWithFx.SetEffectEnabled(0, false);  // Disable first effect
+delay.Enabled = false;  // Disable delay effect
 sourceWithFx.ClearEffects();</code></pre>
             </div>
 
@@ -596,289 +598,75 @@ mixer.Dispose();</code></pre>
             </table>
 
             <h2 id="effects">Audio Effects</h2>
-            <p>OwnaudioNET includes 15+ professional audio effects.</p>
+            <p>OwnaudioNET includes 15+ professional audio effects with preset support and real-time processing.</p>
 
-            <h3>ReverbEffect</h3>
-            <p>Room reverb with multiple presets.</p>
-
-            <div class="code-block">
-                <div class="code-header">ReverbEffect Usage</div>
-                <pre><code class="language-csharp">var reverb = new ReverbEffect
-{
-    RoomSize = 0.7f,       // Room size (0-1)
-    Damping = 0.5f,        // High frequency damping (0-1)
-    Width = 1.0f,          // Stereo width (0-1)
-    WetLevel = 0.33f,      // Wet signal level (0-1)
-    DryLevel = 0.7f,       // Dry signal level (0-1)
-    Gain = 0.015f,         // Input gain
-    Mix = 0.5f             // Wet/dry mix (0-1)
-};
-
-// Load preset
-reverb.SetPreset(ReverbPreset.LargeHall);</code></pre>
+            <div class="alert alert-info">
+                <strong>Complete Effects Documentation</strong>
+                For detailed information about all effects, parameters, presets, and usage examples,
+                see the dedicated <a href="effects.html" style="color: var(--primary-color); font-weight: 600;">Audio Effects Reference</a>.
             </div>
 
-            <h3>CompressorEffect</h3>
-            <p>Dynamic range compressor.</p>
-
+            <h3>Quick Start - Adding Effects to Sources</h3>
             <div class="code-block">
-                <div class="code-header">CompressorEffect Usage</div>
-                <pre><code class="language-csharp">// Create compressor with constructor parameters
-var compressor = new CompressorEffect(
-    threshold: 0.5f,      // Threshold level (0-1, where 1.0 = 0dB, 0.5 = -6dB)
-    ratio: 4.0f,          // Compression ratio (1:1 - 100:1)
-    attackTime: 100f,     // Attack time in ms (0.1-1000)
-    releaseTime: 200f,    // Release time in ms (1-2000)
-    makeupGain: 1.0f,     // Makeup gain as linear multiplier (0.1-10.0)
-    sampleRate: 48000f
-);
+                <div class="code-header">Basic Effect Usage</div>
+                <pre><code class="language-csharp">// Create source and wrap with effects capability
+var fileSource = new FileSource("audio.mp3");
+var source = new SourceWithEffects(fileSource);
 
-// Or use a preset
-var compressor2 = new CompressorEffect(CompressorPreset.VocalGentle, sampleRate: 48000f);</code></pre>
+// Add effects
+var compressor = new CompressorEffect(CompressorPreset.VocalGentle);
+var reverb = new ReverbEffect(ReverbPreset.VocalBooth);
+var limiter = new LimiterEffect(48000f, LimiterPreset.Mastering);
+
+source.AddEffect(compressor);
+source.AddEffect(reverb);
+source.AddEffect(limiter);
+
+// Control effects
+reverb.Enabled = false;  // Bypass
+compressor.Threshold = 0.6f;  // Adjust parameter
+
+// Add to mixer
+mixer.AddSource(source);
+mixer.Start();</code></pre>
             </div>
 
-            <h3>Equalizer30BandEffect</h3>
-            <p>30-band graphic equalizer.</p>
-
-            <div class="code-block">
-                <div class="code-header">Equalizer30BandEffect Usage</div>
-                <pre><code class="language-csharp">var eq = new Equalizer30BandEffect();
-
-// Set individual bands (-12 to +12 dB)
-eq[0] = 3.0f;              // Boost first band (20Hz) by 3dB
-eq[10] = -2.0f;            // Cut band 10 (200Hz) by 2dB
-
-// Or use SetBandGain method with frequency and Q
-eq.SetBandGain(15, 1000f, 1.0f, 2.0f);  // band, frequency, Q, gain in dB
-
-// Use a preset
-eq.SetPreset(Equalizer30Preset.Rock);
-
-// Get all current gains
-float[] gains = eq.GetAllGains();</code></pre>
-            </div>
-
-            <h3>DelayEffect</h3>
-            <p>Echo/delay with feedback.</p>
-
-            <div class="code-block">
-                <div class="code-header">DelayEffect Usage</div>
-                <pre><code class="language-csharp">var delay = new DelayEffect
-{
-    Time = 375,            // Delay time in ms (1-5000)
-    Repeat = 0.35f,        // Feedback amount (0-1)
-    Mix = 0.3f,            // Wet/dry mix (0-1)
-    Damping = 0.25f        // High-frequency damping (0-1)
-};
-
-// Or use a preset
-delay.SetPreset(DelayPreset.ClassicEcho);</code></pre>
-            </div>
-
-            <h3>ChorusEffect</h3>
-            <p>Chorus with multiple voices.</p>
-
-            <div class="code-block">
-                <div class="code-header">ChorusEffect Usage</div>
-                <pre><code class="language-csharp">var chorus = new ChorusEffect
-{
-    Rate = 1.0f,           // LFO rate in Hz (0.1-10.0)
-    Depth = 0.5f,          // Modulation depth (0-1)
-    Mix = 0.5f,            // Wet/dry mix (0-1)
-    Voices = 3             // Number of voices (2-6)
-};
-
-// Or use a preset
-chorus.SetPreset(ChorusPreset.VocalLush);</code></pre>
-            </div>
-
-            <h3>DistortionEffect</h3>
-            <p>Distortion effect with soft clipping.</p>
-
-            <div class="code-block">
-                <div class="code-header">DistortionEffect Usage</div>
-                <pre><code class="language-csharp">var distortion = new DistortionEffect
-{
-    Drive = 2.0f,          // Drive amount (1.0-10.0)
-    Mix = 1.0f,            // Wet/dry mix (0-1)
-    OutputGain = 0.5f      // Output gain compensation (0.1-1.0)
-};
-
-// Or use a preset
-distortion.SetPreset(DistortionPreset.ClassicRock);</code></pre>
-            </div>
-
-            <h3>LimiterEffect</h3>
-            <p>Peak limiter with lookahead.</p>
-
-            <div class="code-block">
-                <div class="code-header">LimiterEffect Usage</div>
-                <pre><code class="language-csharp">// Create limiter with constructor parameters
-var limiter = new LimiterEffect(
-    sampleRate: 48000f,
-    threshold: -3.0f,     // Threshold in dB (-20 to 0)
-    ceiling: -0.1f,       // Output ceiling in dB (-2 to 0)
-    release: 50.0f,       // Release time in ms (1-1000)
-    lookAheadMs: 5.0f     // Look-ahead time in ms (1-20)
-);
-
-// Or use a preset
-var limiter2 = new LimiterEffect(sampleRate: 48000f, preset: LimiterPreset.Mastering);
-
-// Check if limiting is active
-bool isLimiting = limiter.IsLimiting;
-float gainReduction = limiter.GetGainReductionDb();</code></pre>
-            </div>
-
-            <h3>FlangerEffect</h3>
-            <p>Flanger effect with variable delay modulation.</p>
-
-            <div class="code-block">
-                <div class="code-header">FlangerEffect Usage</div>
-                <pre><code class="language-csharp">var flanger = new FlangerEffect
-{
-    Rate = 0.5f,           // LFO rate in Hz (0.1-5.0)
-    Depth = 0.8f,          // Modulation depth (0-1)
-    Feedback = 0.6f,       // Feedback amount (0-0.95)
-    Mix = 0.5f             // Wet/dry mix (0-1)
-};
-
-// Or use a preset
-flanger.SetPreset(FlangerPreset.Classic);</code></pre>
-            </div>
-
-            <h3>PhaserEffect</h3>
-            <p>Phaser effect with all-pass filter stages.</p>
-
-            <div class="code-block">
-                <div class="code-header">PhaserEffect Usage</div>
-                <pre><code class="language-csharp">var phaser = new PhaserEffect
-{
-    Rate = 0.5f,           // LFO rate in Hz (0.1-10.0)
-    Depth = 0.7f,          // Modulation depth (0-1)
-    Feedback = 0.5f,       // Feedback amount (0-0.95)
-    Mix = 0.5f,            // Wet/dry mix (0-1)
-    Stages = 4             // Number of stages (2-8)
-};
-
-// Or use a preset
-phaser.SetPreset(PhaserPreset.Vintage);</code></pre>
-            </div>
-
-            <h3>AutoGainEffect</h3>
-            <p>Automatic gain control processor.</p>
-
-            <div class="code-block">
-                <div class="code-header">AutoGainEffect Usage</div>
-                <pre><code class="language-csharp">var autoGain = new AutoGainEffect
-{
-    TargetLevel = 0.25f,         // Target level (0.01-1.0)
-    AttackCoefficient = 0.99f,   // Attack coefficient (0.9-0.999)
-    ReleaseCoefficient = 0.999f, // Release coefficient (0.9-0.9999)
-    GateThreshold = 0.001f,      // Gate threshold (0.0001-0.01)
-    MaximumGain = 4.0f,          // Maximum gain (1.0-10.0)
-    MinimumGain = 0.25f          // Minimum gain (0.1-1.0)
-};
-
-// Or use a preset
-autoGain.SetPreset(AutoGainPreset.Voice);</code></pre>
-            </div>
-
-            <h3>EnhancerEffect</h3>
-            <p>Harmonic enhancer for adding presence.</p>
-
-            <div class="code-block">
-                <div class="code-header">EnhancerEffect Usage</div>
-                <pre><code class="language-csharp">var enhancer = new EnhancerEffect
-{
-    Mix = 0.2f,                  // Mix amount (0-1)
-    Gain = 2.5f,                 // Pre-saturation gain (0.1-10)
-    CutoffFrequency = 4000f      // High-pass cutoff in Hz (100-20000)
-};
-
-// Or use a preset
-enhancer.SetPreset(EnhancerPreset.VocalClarity);</code></pre>
-            </div>
-
-            <h3>OverdriveEffect</h3>
-            <p>Tube-like overdrive effect.</p>
-
-            <div class="code-block">
-                <div class="code-header">OverdriveEffect Usage</div>
-                <pre><code class="language-csharp">var overdrive = new OverdriveEffect
-{
-    Gain = 2.0f,           // Input gain (1.0-5.0)
-    Tone = 0.5f,           // Tone control (0=dark, 1=bright)
-    Mix = 1.0f,            // Wet/dry mix (0-1)
-    OutputLevel = 0.7f     // Output level (0.1-1.0)
-};
-
-// Or use a preset
-overdrive.SetPreset(OverdrivePreset.Blues);</code></pre>
-            </div>
-
-            <h3>RotaryEffect</h3>
-            <p>Leslie speaker simulator with horn and rotor.</p>
-
-            <div class="code-block">
-                <div class="code-header">RotaryEffect Usage</div>
-                <pre><code class="language-csharp">var rotary = new RotaryEffect
-{
-    HornSpeed = 6.0f,      // Horn rotation speed in Hz (2.0-15.0)
-    RotorSpeed = 1.0f,     // Rotor rotation speed in Hz (0.5-5.0)
-    Intensity = 0.7f,      // Effect intensity (0-1)
-    Mix = 1.0f,            // Wet/dry mix (0-1)
-    IsFast = false         // Fast/slow speed switch
-};
-
-// Or use a preset
-rotary.SetPreset(RotaryPreset.Hammond);</code></pre>
-            </div>
-
-            <h3>DynamicAmpEffect</h3>
-            <p>Adaptive volume control with dynamics preservation.</p>
-
-            <div class="code-block">
-                <div class="code-header">DynamicAmpEffect Usage</div>
-                <pre><code class="language-csharp">var dynamicAmp = new DynamicAmpEffect
-{
-    TargetLevel = -9.0f,         // Target RMS level in dB (-40 to 0)
-    AttackTime = 0.2f,           // Attack time in seconds (min 0.001)
-    ReleaseTime = 0.8f,          // Release time in seconds (min 0.001)
-    NoiseGate = 0.005f,          // Noise threshold (0-1)
-    MaxGain = 10.0f              // Maximum gain (> 0)
-};
-
-// Or use a preset
-dynamicAmp.SetPreset(DynamicAmpPreset.Music);</code></pre>
-            </div>
-
-            <h3>Available Effects Summary</h3>
+            <h3>Available Effects</h3>
             <table class="api-table">
                 <thead>
                     <tr>
-                        <th>Effect</th>
-                        <th>Description</th>
+                        <th>Category</th>
+                        <th>Effects</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td>ReverbEffect</td><td>Room reverb with presets</td></tr>
-                    <tr><td>CompressorEffect</td><td>Dynamic range compressor</td></tr>
-                    <tr><td>DelayEffect</td><td>Echo/delay with ping-pong</td></tr>
-                    <tr><td>ChorusEffect</td><td>Chorus with multiple voices</td></tr>
-                    <tr><td>DistortionEffect</td><td>Multiple distortion modes</td></tr>
-                    <tr><td>EqualizerEffect</td><td>Parametric EQ</td></tr>
-                    <tr><td>Equalizer30BandEffect</td><td>30-band graphic EQ</td></tr>
-                    <tr><td>LimiterEffect</td><td>Peak limiter</td></tr>
-                    <tr><td>FlangerEffect</td><td>Flanger effect</td></tr>
-                    <tr><td>PhaserEffect</td><td>Phaser effect</td></tr>
-                    <tr><td>AutoGainEffect</td><td>Automatic gain control</td></tr>
-                    <tr><td>EnhancerEffect</td><td>Harmonic enhancer</td></tr>
-                    <tr><td>OverdriveEffect</td><td>Tube overdrive</td></tr>
-                    <tr><td>RotaryEffect</td><td>Leslie speaker simulator</td></tr>
-                    <tr><td>DynamicAmpEffect</td><td>Dynamic amplifier</td></tr>
+                    <tr>
+                        <td><strong>Dynamics</strong></td>
+                        <td>Compressor, Limiter, AutoGain, DynamicAmp</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Frequency</strong></td>
+                        <td>Equalizer (10-band), Equalizer30Band, Enhancer</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Modulation</strong></td>
+                        <td>Chorus, Flanger, Phaser, Rotary</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Spatial</strong></td>
+                        <td>Reverb, Delay</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Distortion</strong></td>
+                        <td>Distortion, Overdrive</td>
+                    </tr>
                 </tbody>
             </table>
+
+            <p style="margin-top: 1.5rem;">
+                <strong>See Also:</strong> <a href="effects.html" style="color: var(--primary-color);">Full Effects Documentation</a>
+                for detailed parameters, all presets, technical details, and advanced usage examples.
+            </p>
 
             <h2 id="sync">Synchronization</h2>
 
