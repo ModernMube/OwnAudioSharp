@@ -1,5 +1,6 @@
 ﻿using OwnaudioNET.Effects;
 using OwnaudioNET.Sources;
+using Logger;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -38,8 +39,8 @@ namespace OwnaudioNET.Features.Matchering
 
             try
             {
-                Console.WriteLine($"=== ENHANCED PRESET PROCESSING: {SystemPresets[system].Name} ===");
-                Console.WriteLine($"Mode: {(eqOnlyMode ? "EQ Only" : "Full Effects Chain")}");
+                Log.Info($"=== ENHANCED PRESET PROCESSING: {SystemPresets[system].Name} ===");
+                Log.Info($"Mode: {(eqOnlyMode ? "EQ Only" : "Full Effects Chain")}");
 
                 // Step 1: Apply preset effects to base sample
                 ApplyPresetToBaseSample(baseSampleFile, processedBaseSample, system, eqOnlyMode);
@@ -47,7 +48,7 @@ namespace OwnaudioNET.Features.Matchering
                 // Step 2: Use processed base sample as target for EQ matching
                 ProcessEQMatching(sourceFile, processedBaseSample, outputFile);
 
-                Console.WriteLine($"Enhanced preset processing completed: {outputFile}");
+                Log.Info($"Enhanced preset processing completed: {outputFile}");
                 // PrintEnhancedPresetResults(sourceFile, baseSampleFile, processedBaseSample, outputFile, system);
                 // DISABLED: This method creates 3 additional FileSource instances which causes MiniAudio DLL crash (0xC0000005)
                 // The native library does not handle rapid create/destroy cycles well
@@ -64,7 +65,7 @@ namespace OwnaudioNET.Features.Matchering
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Warning: Could not delete temporary file: {ex.Message}");
+                    Log.Warning($"Could not delete temporary file: {ex.Message}");
                 }
             }
         }
@@ -99,7 +100,7 @@ namespace OwnaudioNET.Features.Matchering
                 sampleRate = source.StreamInfo.SampleRate;
             }
 
-            Console.WriteLine($"Base sample loaded: {audioData.Length / channels / sampleRate:F1}s, {channels}ch, {sampleRate}Hz");
+            Log.Info($"Base sample loaded: {audioData.Length / channels / sampleRate:F1}s, {channels}ch, {sampleRate}Hz");
 
             // Calculate current RMS for level matching later
             float originalRMS = CalculateRMS(audioData);
@@ -120,7 +121,7 @@ namespace OwnaudioNET.Features.Matchering
             for (int i = 0; i < audioData.Length; i++)
                 audioData[i] *= protectiveGain;
 
-            Console.WriteLine($"Applied protective gain: {20 * Math.Log10(protectiveGain):F1}dB (total boosts: {totalBoosts:F1}dB)");
+            Log.Info($"Applied protective gain: {20 * Math.Log10(protectiveGain):F1}dB (total boosts: {totalBoosts:F1}dB)");
 
             // Setup EQ (always applied)
             var presetEQ = new Equalizer30BandEffect(sampleRate);
@@ -166,7 +167,7 @@ namespace OwnaudioNET.Features.Matchering
             int totalSamples = audioData.Length;
             float maxLevel = 0f;
 
-            Console.WriteLine($"Applying {(eqOnlyMode ? "EQ-only" : "full")} {preset.Name} effects to base sample...");
+            Log.Info($"Applying {(eqOnlyMode ? "EQ-only" : "full")} {preset.Name} effects to base sample...");
 
             for (int offset = 0; offset < totalSamples; offset += samplesPerChunk)
             {
@@ -205,11 +206,11 @@ namespace OwnaudioNET.Features.Matchering
                 if ((offset / samplesPerChunk) % 50 == 0)
                 {
                     float progress = (float)(offset + samplesToProcess) / totalSamples * 100f;
-                    Console.Write($"\rProcessing base sample: {progress:F1}%");
+                    Log.Info($"\rProcessing base sample: {progress:F1}%");
                 }
             }
 
-            Console.WriteLine($"\nBase sample processed. Max level: {20 * Math.Log10(maxLevel):F1}dB");
+            Log.Info($"\nBase sample processed. Max level: {20 * Math.Log10(maxLevel):F1}dB");
 
             // AUTOMATIC LEVEL MATCHING - preserve original RMS level
             float processedRMS = CalculateRMS(processedData.ToArray());
@@ -222,13 +223,13 @@ namespace OwnaudioNET.Features.Matchering
             }
 
             float finalMaxLevel = processedData.Max(Math.Abs);
-            Console.WriteLine($"Level compensation applied: {20 * Math.Log10(levelCompensation):F1}dB");
-            Console.WriteLine($"Final max level: {20 * Math.Log10(finalMaxLevel):F1}dB");
+            Log.Info($"Level compensation applied: {20 * Math.Log10(levelCompensation):F1}dB");
+            Log.Info($"Final max level: {20 * Math.Log10(finalMaxLevel):F1}dB");
 
             // Write processed base sample
             OwnaudioNET.Recording.WaveFile.Create(processedBaseSample, processedData.ToArray(), sampleRate, channels, 24);
 
-            Console.WriteLine($"Enhanced base sample created: {processedBaseSample}");
+            Log.Info($"Enhanced base sample created: {processedBaseSample}");
         }
 
         /// <summary>
@@ -237,7 +238,7 @@ namespace OwnaudioNET.Features.Matchering
         private bool LoadBaseSample(string path)
         {
             bool isLoadSample = false;
-            
+
             try
             {
                 var assembly = Assembly.GetExecutingAssembly();
@@ -258,14 +259,14 @@ namespace OwnaudioNET.Features.Matchering
 
                 OwnaudioNET.Recording.WaveFile.Create(path, memoryStream.ToArray(), 48000, 2, 24);
 
-                isLoadSample = true;    
+                isLoadSample = true;
             }
             catch
             {
                 isLoadSample = false;
                 throw new Exception("Load error target audio data!");
             }
-            
+
             return isLoadSample;
         }
 
@@ -310,7 +311,7 @@ namespace OwnaudioNET.Features.Matchering
                 conservativeCurve[i] = Math.Max(-4f, Math.Min(maxConservativeBoost, conservativeGain));
             }
 
-            Console.WriteLine("Conservative preset curve created for matchering:");
+            Log.Info("Conservative preset curve created for matchering:");
             var bandNames = new[] {
                 "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", "63Hz", "80Hz", "100Hz", "125Hz", "160Hz",
                 "200Hz", "250Hz", "315Hz", "400Hz", "500Hz", "630Hz", "800Hz", "1kHz", "1.25kHz", "1.6kHz",
@@ -321,7 +322,7 @@ namespace OwnaudioNET.Features.Matchering
             {
                 if (Math.Abs(conservativeCurve[i]) > 0.5f)
                 {
-                    Console.WriteLine($"{bandNames[i]}: {conservativeCurve[i]:+0.1;-0.1}dB (was {originalCurve[i]:+0.1;-0.1}dB)");
+                    Log.Info($"{bandNames[i]}: {conservativeCurve[i]:+0.1;-0.1}dB (was {originalCurve[i]:+0.1;-0.1}dB)");
                 }
             }
 
@@ -408,7 +409,7 @@ namespace OwnaudioNET.Features.Matchering
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Analysis error: {ex.Message}");
+                Log.Error($"Analysis error: {ex.Message}");
             }
         }
 
@@ -432,9 +433,9 @@ namespace OwnaudioNET.Features.Matchering
 
             try
             {
-                Console.WriteLine($"=== BATCH ENHANCED PRESET PROCESSING ===");
-                Console.WriteLine($"System: {SystemPresets[system].Name}");
-                Console.WriteLine($"Processing {sourceFiles.Length} files...");
+                Log.Info($"=== BATCH ENHANCED PRESET PROCESSING ===");
+                Log.Info($"System: {SystemPresets[system].Name}");
+                Log.Info($"Processing {sourceFiles.Length} files...");
 
                 for (int i = 0; i < sourceFiles.Length; i++)
                 {
@@ -442,20 +443,20 @@ namespace OwnaudioNET.Features.Matchering
                     string fileName = Path.GetFileNameWithoutExtension(sourceFile);
                     string outputFile = Path.Combine(outputDirectory, $"{fileName}{suffix}.wav");
 
-                    Console.WriteLine($"\n[{i + 1}/{sourceFiles.Length}] Processing: {Path.GetFileName(sourceFile)}");
+                    Log.Info($"\n[{i + 1}/{sourceFiles.Length}] Processing: {Path.GetFileName(sourceFile)}");
 
                     try
                     {
                         ProcessWithEnhancedPreset(sourceFile, outputFile, system, tempDirectory);
-                        Console.WriteLine($"Completed: {Path.GetFileName(outputFile)}");
+                        Log.Info($"Completed: {Path.GetFileName(outputFile)}");
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Error processing {Path.GetFileName(sourceFile)}: {ex.Message}");
+                        Log.Error($"Error processing {Path.GetFileName(sourceFile)}: {ex.Message}");
                     }
                 }
 
-                Console.WriteLine($"\nBatch processing completed. Files saved to: {outputDirectory}");
+                Log.Info($"\nBatch processing completed. Files saved to: {outputDirectory}");
             }
             finally
             {
@@ -467,7 +468,7 @@ namespace OwnaudioNET.Features.Matchering
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Warning: Could not delete temp directory: {ex.Message}");
+                    Log.Warning($"Could not delete temp directory: {ex.Message}");
                 }
             }
         }

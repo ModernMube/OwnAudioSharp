@@ -5,6 +5,7 @@ using System.Threading;
 using Ownaudio.Android.Interop;
 using Ownaudio.Core;
 using Ownaudio.Core.Common;
+using Logger;
 
 namespace Ownaudio.Android
 {
@@ -325,8 +326,8 @@ namespace Ownaudio.Android
                         int result = AAudioInterop.AAudioStream_requestStop(_outputStream);
                         if (result != AAudioInterop.AAUDIO_OK)
                         {
-                            Console.WriteLine(
-                                $"Warning: Failed to stop output stream: {AAudioInterop.GetErrorString(result)}");
+                            Log.Warning(
+                                $"Failed to stop output stream: {AAudioInterop.GetErrorString(result)}");
                         }
 
                         // Wait for stream to stop (with timeout)
@@ -344,8 +345,8 @@ namespace Ownaudio.Android
                         int result = AAudioInterop.AAudioStream_requestStop(_inputStream);
                         if (result != AAudioInterop.AAUDIO_OK)
                         {
-                            Console.WriteLine(
-                                $"Warning: Failed to stop input stream: {AAudioInterop.GetErrorString(result)}");
+                            Log.Warning(
+                                $"Failed to stop input stream: {AAudioInterop.GetErrorString(result)}");
                         }
 
                         // Wait for stream to stop (with timeout)
@@ -359,7 +360,7 @@ namespace Ownaudio.Android
                     // Clean up resources to prepare for potential restart
                     CleanupResources();
 
-                    Console.WriteLine("AAudio streams stopped and closed. Call Initialize() to restart.");
+                    Log.Info("AAudio streams stopped and closed. Call Initialize() to restart.");
 
                     return AAudioInterop.AAUDIO_OK;
                 }
@@ -597,8 +598,8 @@ namespace Ownaudio.Android
                 // CRITICAL: Check if device uses different sample rate than requested
                 if (deviceSampleRate != _requestedSampleRate)
                 {
-                    Console.WriteLine(
-                        $"WARNING: AAudio sample rate mismatch! Requested: {_requestedSampleRate} Hz, " +
+                    Log.Warning(
+                        $"AAudio sample rate mismatch! Requested: {_requestedSampleRate} Hz, " +
                         $"Device using: {deviceSampleRate} Hz. Enabling automatic resampling...");
 
                     // Create resampler to handle the mismatch
@@ -613,13 +614,13 @@ namespace Ownaudio.Android
                     int tempBufferSize = _outputResampler.CalculateOutputSize(maxFrames * _requestedChannels);
                     _resampleTempBuffer = new float[tempBufferSize];
 
-                    Console.WriteLine($"Resampler enabled: {_requestedSampleRate}Hz -> {deviceSampleRate}Hz");
+                    Log.Info($"Resampler enabled: {_requestedSampleRate}Hz -> {deviceSampleRate}Hz");
                 }
 
                 if (deviceChannels != _requestedChannels)
                 {
-                    Console.WriteLine(
-                        $"WARNING: AAudio channel count mismatch. Requested: {_requestedChannels}, " +
+                    Log.Warning(
+                        $"AAudio channel count mismatch. Requested: {_requestedChannels}, " +
                         $"Got: {deviceChannels}. Audio may sound incorrect.");
                 }
 
@@ -632,7 +633,7 @@ namespace Ownaudio.Android
                     _framesPerBuffer = framesPerBurst;
                 }
 
-                Console.WriteLine($"AAudio output stream created: {_actualSampleRate}Hz, {_actualChannels}ch, {_framesPerBuffer} frames/buffer");
+                Log.Info($"AAudio output stream created: {_actualSampleRate}Hz, {_actualChannels}ch, {_framesPerBuffer} frames/buffer");
 
                 return AAudioInterop.AAUDIO_OK;
             }
@@ -696,8 +697,8 @@ namespace Ownaudio.Android
                 // CRITICAL: Check if device uses different sample rate than requested
                 if (deviceSampleRate != _requestedSampleRate)
                 {
-                    Console.WriteLine(
-                        $"WARNING: AAudio input sample rate mismatch! Requested: {_requestedSampleRate} Hz, " +
+                    Log.Warning(
+                        $"AAudio input sample rate mismatch! Requested: {_requestedSampleRate} Hz, " +
                         $"Device using: {deviceSampleRate} Hz. Enabling automatic resampling...");
 
                     // Create resampler to handle the mismatch
@@ -713,13 +714,13 @@ namespace Ownaudio.Android
                     int tempBufferSize = _inputResampler.CalculateOutputSize(maxFrames * deviceChannels);
                     _inputResampleTempBuffer = new float[tempBufferSize];
 
-                    Console.WriteLine($"Input resampler enabled: {deviceSampleRate}Hz -> {_requestedSampleRate}Hz");
+                    Log.Info($"Input resampler enabled: {deviceSampleRate}Hz -> {_requestedSampleRate}Hz");
                 }
 
                 if (deviceChannels != _requestedChannels)
                 {
-                    Console.WriteLine(
-                        $"WARNING: AAudio input channel count mismatch. Requested: {_requestedChannels}, " +
+                    Log.Warning(
+                        $"AAudio input channel count mismatch. Requested: {_requestedChannels}, " +
                         $"Got: {deviceChannels}. Audio may sound incorrect.");
                 }
 
@@ -738,7 +739,7 @@ namespace Ownaudio.Android
                     _framesPerBuffer = framesPerBurst;
                 }
 
-                Console.WriteLine($"AAudio input stream created: {deviceSampleRate}Hz, {deviceChannels}ch, {_framesPerBuffer} frames/buffer");
+                Log.Info($"AAudio input stream created: {deviceSampleRate}Hz, {deviceChannels}ch, {_framesPerBuffer} frames/buffer");
 
                 return AAudioInterop.AAUDIO_OK;
             }
@@ -913,7 +914,7 @@ namespace Ownaudio.Android
         /// </summary>
         private void OutputErrorCallback(IntPtr stream, IntPtr userData, int error)
         {
-            Console.WriteLine($"AAudio output stream error: {AAudioInterop.GetErrorString(error)}");
+            Log.Error($"AAudio output stream error: {AAudioInterop.GetErrorString(error)}");
             _isActive = -1;
 
             // Notify listeners about device state change
@@ -935,7 +936,7 @@ namespace Ownaudio.Android
         /// </summary>
         private void InputErrorCallback(IntPtr stream, IntPtr userData, int error)
         {
-            Console.WriteLine($"AAudio input stream error: {AAudioInterop.GetErrorString(error)}");
+            Log.Error($"AAudio input stream error: {AAudioInterop.GetErrorString(error)}");
             _isActive = -1;
 
             // Notify listeners about device state change

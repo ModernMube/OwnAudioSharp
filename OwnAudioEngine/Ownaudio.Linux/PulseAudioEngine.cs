@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using Ownaudio.Core;
 using Ownaudio.Core.Common;
 using Ownaudio.Linux.Interop;
+using Logger;
 using static Ownaudio.Linux.Interop.PulseAudioInterop;
 
 namespace Ownaudio.Linux
@@ -333,11 +334,11 @@ namespace Ownaudio.Linux
                     unsafe
                     {
                         pa_sample_spec* actualSpec = (pa_sample_spec*)specPtr;
-                        // Console.WriteLine($"[PulseAudio] Requested sample rate: {config.SampleRate} Hz");
-                        // Console.WriteLine($"[PulseAudio] Actual stream sample rate: {actualSpec->rate} Hz");
+                        // Log.Info($"[PulseAudio] Requested sample rate: {config.SampleRate} Hz");
+                        // Log.Info($"[PulseAudio] Actual stream sample rate: {actualSpec->rate} Hz");
                         // if (actualSpec->rate != config.SampleRate)
                         // {
-                        //     Console.WriteLine($"[PulseAudio] WARNING: Sample rate mismatch! This will cause tempo issues.");
+                        //     Log.Warning($"[PulseAudio] WARNING: Sample rate mismatch! This will cause tempo issues.");
                         // }
                     }
                 }
@@ -349,15 +350,15 @@ namespace Ownaudio.Linux
                     unsafe
                     {
                         pa_buffer_attr* actualAttr = (pa_buffer_attr*)bufferAttrPtr;
-                        Console.WriteLine($"[PulseAudio] Requested buffer attributes:");
-                        Console.WriteLine($"  - tlength (target latency): {bufferBytes} bytes ({bufferBytes / sizeof(float)} samples)");
-                        Console.WriteLine($"  - minreq (minimum request): {bufferBytes / 2} bytes ({bufferBytes / (2 * sizeof(float))} samples)");
-                        Console.WriteLine($"[PulseAudio] Negotiated buffer attributes:");
-                        Console.WriteLine($"  - maxlength: {actualAttr->maxlength} bytes ({actualAttr->maxlength / sizeof(float)} samples)");
-                        Console.WriteLine($"  - tlength: {actualAttr->tlength} bytes ({actualAttr->tlength / sizeof(float)} samples)");
-                        Console.WriteLine($"  - prebuf: {actualAttr->prebuf} bytes ({actualAttr->prebuf / sizeof(float)} samples)");
-                        Console.WriteLine($"  - minreq: {actualAttr->minreq} bytes ({actualAttr->minreq / sizeof(float)} samples)");
-                        Console.WriteLine($"  - fragsize: {actualAttr->fragsize} bytes ({actualAttr->fragsize / sizeof(float)} samples)");
+                        Log.Info($"[PulseAudio] Requested buffer attributes:");
+                        Log.Info($"  - tlength (target latency): {bufferBytes} bytes ({bufferBytes / sizeof(float)} samples)");
+                        Log.Info($"  - minreq (minimum request): {bufferBytes / 2} bytes ({bufferBytes / (2 * sizeof(float))} samples)");
+                        Log.Info($"[PulseAudio] Negotiated buffer attributes:");
+                        Log.Info($"  - maxlength: {actualAttr->maxlength} bytes ({actualAttr->maxlength / sizeof(float)} samples)");
+                        Log.Info($"  - tlength: {actualAttr->tlength} bytes ({actualAttr->tlength / sizeof(float)} samples)");
+                        Log.Info($"  - prebuf: {actualAttr->prebuf} bytes ({actualAttr->prebuf / sizeof(float)} samples)");
+                        Log.Info($"  - minreq: {actualAttr->minreq} bytes ({actualAttr->minreq / sizeof(float)} samples)");
+                        Log.Info($"  - fragsize: {actualAttr->fragsize} bytes ({actualAttr->fragsize / sizeof(float)} samples)");
                     }
                 }
                 pa_threaded_mainloop_unlock(_mainLoop);
@@ -688,7 +689,7 @@ namespace Ownaudio.Linux
                             // Log timing every 100th callback only (reduced logging)
                             // if (currentCallback % 100 == 0)
                             // {
-                            //     Console.WriteLine($"[PA-Timing #{currentCallback}] Interval: {intervalMs:F2}ms (expected: {expectedIntervalMs:F2}ms, drift: {drift:F2}ms) | Requested: {samplesToWrite} samples | Ring: {_outputRing.AvailableRead}/{_outputRing.Capacity}");
+                            //     Log.Info($"[PA-Timing #{currentCallback}] Interval: {intervalMs:F2}ms (expected: {expectedIntervalMs:F2}ms, drift: {drift:F2}ms) | Requested: {samplesToWrite} samples | Ring: {_outputRing.AvailableRead}/{_outputRing.Capacity}");
                             // }
                         }
                     }
@@ -967,7 +968,7 @@ namespace Ownaudio.Linux
             {
                 if (_callbackCount == 0)
                 {
-                    //Console.WriteLine("[PA-Stats] No callbacks received yet");
+                    //Log.Info("[PA-Stats] No callbacks received yet");
                     return;
                 }
 
