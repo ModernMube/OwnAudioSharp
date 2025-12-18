@@ -1,5 +1,6 @@
 using MathNet.Numerics.IntegralTransforms;
 using OwnaudioNET.Sources;
+using Logger;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -84,7 +85,7 @@ namespace OwnaudioNET.Features.Matchering
                     // 1. De-interleave
                     float[][] channelData = new float[channels][];
                     int samplesPerChannel = audioData.Length / channels;
-                    
+
                     for (int c = 0; c < channels; c++)
                         channelData[c] = new float[samplesPerChannel];
 
@@ -123,12 +124,12 @@ namespace OwnaudioNET.Features.Matchering
             List<SegmentAnalysis> filteredAnalyses = FilterOutlierSegments(segmentAnalyses);
 
             var spectrum = CalculateWeightedAverageSpectrum(filteredAnalyses);
-            
+
             // DEBUG: Print analyzed spectrum details
             Console.WriteLine($"\n=== ANALYZED SPECTRUM INFO ===");
             Console.WriteLine($"RMS: {spectrum.RMSLevel:F6}, Peak: {spectrum.PeakLevel:F6}");
             Console.WriteLine($"Loudness: {spectrum.Loudness:F1} dBFS, Dynamic Range: {spectrum.DynamicRange:F1} dB");
-            
+
             return spectrum;
         }
 
@@ -143,7 +144,7 @@ namespace OwnaudioNET.Features.Matchering
 
             int bands = spectra[0].FrequencyBands.Length;
             float[] avgSpectrum = new float[bands];
-            
+
             double sumRmsSquares = 0;
             double maxPeak = 0;
             // Loudness/DR will be recalculated from final RMS/Peak
@@ -151,7 +152,7 @@ namespace OwnaudioNET.Features.Matchering
             foreach (var s in spectra)
             {
                 for (int i = 0; i < bands; i++) avgSpectrum[i] += s.FrequencyBands[i];
-                
+
                 sumRmsSquares += s.RMSLevel * s.RMSLevel;
                 maxPeak = Math.Max(maxPeak, s.PeakLevel);
             }
@@ -164,7 +165,7 @@ namespace OwnaudioNET.Features.Matchering
             // Proper RMS Averaging (Root Mean Square of the RMS values)
             float finalRMS = (float)Math.Sqrt(sumRmsSquares / spectra.Count);
             float finalPeak = (float)maxPeak;
-            
+
             // Recalculate derived metrics
             float finalLoudness = 20 * (float)Math.Log10(Math.Max(finalRMS, 1e-10f));
             float finalDR = 20 * (float)Math.Log10(finalPeak / Math.Max(finalRMS, 1e-10f));

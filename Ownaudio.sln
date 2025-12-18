@@ -47,6 +47,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.Native", "OwnAudio
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.Example.MultitrackPlayer", "OwnAudio\Examples\Ownaudio.Example.MultitrackPlayer\Ownaudio.Example.MultitrackPlayer.csproj", "{263995E9-ED34-CB3A-4AD8-281CFDFC873F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Logger", "Logger\Logger.csproj", "{3005EDB1-6CFF-42D6-A9BB-C8D80FD8D1BA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -294,6 +296,18 @@ Global
 		{263995E9-ED34-CB3A-4AD8-281CFDFC873F}.Release|x64.Build.0 = Release|Any CPU
 		{263995E9-ED34-CB3A-4AD8-281CFDFC873F}.Release|x86.ActiveCfg = Release|Any CPU
 		{263995E9-ED34-CB3A-4AD8-281CFDFC873F}.Release|x86.Build.0 = Release|Any CPU
+		{3005EDB1-6CFF-42D6-A9BB-C8D80FD8D1BA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3005EDB1-6CFF-42D6-A9BB-C8D80FD8D1BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3005EDB1-6CFF-42D6-A9BB-C8D80FD8D1BA}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3005EDB1-6CFF-42D6-A9BB-C8D80FD8D1BA}.Debug|x64.Build.0 = Debug|Any CPU
+		{3005EDB1-6CFF-42D6-A9BB-C8D80FD8D1BA}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3005EDB1-6CFF-42D6-A9BB-C8D80FD8D1BA}.Debug|x86.Build.0 = Debug|Any CPU
+		{3005EDB1-6CFF-42D6-A9BB-C8D80FD8D1BA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3005EDB1-6CFF-42D6-A9BB-C8D80FD8D1BA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3005EDB1-6CFF-42D6-A9BB-C8D80FD8D1BA}.Release|x64.ActiveCfg = Release|Any CPU
+		{3005EDB1-6CFF-42D6-A9BB-C8D80FD8D1BA}.Release|x64.Build.0 = Release|Any CPU
+		{3005EDB1-6CFF-42D6-A9BB-C8D80FD8D1BA}.Release|x86.ActiveCfg = Release|Any CPU
+		{3005EDB1-6CFF-42D6-A9BB-C8D80FD8D1BA}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
