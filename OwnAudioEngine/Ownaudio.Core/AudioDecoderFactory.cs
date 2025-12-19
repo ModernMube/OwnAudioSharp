@@ -1,4 +1,5 @@
 using System;
+using Logger;
 using System.IO;
 using System.Runtime.InteropServices;
 using Ownaudio.Core.Common;
@@ -62,7 +63,7 @@ public static class AudioDecoderFactory
                 var decoder = Activator.CreateInstance(decoderType, filePath, targetSampleRate, targetChannels) as IAudioDecoder;
                 if (decoder != null)
                 {
-                    Console.WriteLine($"Using MiniAudio decoder for {format} format (native)");
+                    Log.Info($"Using MiniAudio decoder for {format} format (native)");
                     return decoder;
                 }
             }
@@ -70,8 +71,8 @@ public static class AudioDecoderFactory
         catch (Exception ex)
         {
             // MiniAudio not available - fallback to managed decoders
-            Console.WriteLine($"MiniAudio decoder not available: {ex.Message}");
-            Console.WriteLine("Falling back to managed decoder...");
+            Log.Error($"MiniAudio decoder not available: {ex.Message}");
+            Log.Info("Falling back to managed decoder...");
         }
 
         // For MP3, use platform-specific decoders if available
@@ -233,7 +234,7 @@ public static class AudioDecoderFactory
                 var decoder = Activator.CreateInstance(decoderType, filePath, targetSampleRate, targetChannels) as IAudioDecoder;
                 if (decoder != null)
                 {
-                    Console.WriteLine("Using MiniAudio decoder (native)");
+                    Log.Info("Using MiniAudio decoder (native)");
                     return decoder;
                 }
             }
@@ -241,8 +242,8 @@ public static class AudioDecoderFactory
         catch (Exception ex)
         {
             // MiniAudio not available - fallback to platform-specific or managed
-            Console.WriteLine($"MiniAudio decoder not available: {ex.Message}");
-            Console.WriteLine("Falling back to platform-specific decoder...");
+            Log.Error($"MiniAudio decoder not available: {ex.Message}");
+            Log.Error("Falling back to platform-specific decoder...");
         }
 
         // FALLBACK 1: Platform-specific decoders

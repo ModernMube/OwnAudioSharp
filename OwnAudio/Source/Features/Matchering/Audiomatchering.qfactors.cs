@@ -1,4 +1,5 @@
 ﻿using System;
+using Logger;
 
 namespace OwnaudioNET.Features.Matchering;
 
@@ -50,7 +51,7 @@ partial class AudioAnalyzer
             qFactors[i] = Math.Max(2.5f, Math.Min(8.0f, qFactors[i]));
         }
 
-        Console.WriteLine("Calculated Q factors:");
+        Log.Info("Calculated Q factors:");
         var bandNames = new[] {
             "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", "63Hz", "80Hz", "100Hz", "125Hz", "160Hz",
             "200Hz", "250Hz", "315Hz", "400Hz", "500Hz", "630Hz", "800Hz", "1kHz", "1.25kHz", "1.6kHz",
@@ -59,7 +60,7 @@ partial class AudioAnalyzer
 
         for (int i = 0; i < qFactors.Length; i++)
         {
-            Console.WriteLine($"{bandNames[i]}: Q={qFactors[i]:F2} (Gain: {eqAdjustments[i]:+0.1;-0.1}dB)");
+            Log.Info($"{bandNames[i]}: Q={qFactors[i]:F2} (Gain: {eqAdjustments[i]:+0.1;-0.1}dB)");
         }
 
         return qFactors;
@@ -92,9 +93,9 @@ partial class AudioAnalyzer
             <= 315f => 4.0f,     // Standard tracking
             <= 630f => 4.2f,
             <= 1250f => 4.3f,    // Ideal 1/3 octave Q
-            <= 4000f => 4.3f,    
+            <= 4000f => 4.3f,
             <= 10000f => 4.2f,   // Slightly wider for high frequency air
-            _ => 4.0f            
+            _ => 4.0f
         };
     }
 

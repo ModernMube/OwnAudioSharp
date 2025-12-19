@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using Ownaudio.Native.Utils;
+using Logger;
 
 namespace Ownaudio.Native.MiniAudio;
 
@@ -110,7 +111,7 @@ internal static partial class MaBinding
         InitializeBindings(loader);
     }
 
-    #nullable disable
+#nullable disable
     #region Context Operations
     public static unsafe MaResult ma_context_init(MaBackend[] backends, uint backendCount, IntPtr contextConfig, IntPtr context)
     {
@@ -604,7 +605,7 @@ internal static partial class MaBinding
         if (_maFree == null)
             throw new NotSupportedException("Memory free operation is not supported.");
 
-        if (string.IsNullOrEmpty(message)) Console.WriteLine(message);
+        if (string.IsNullOrEmpty(message)) Log.Write(message);
         _maFree(ptr, pUserData);
     }
 
