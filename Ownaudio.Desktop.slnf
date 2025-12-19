@@ -15,7 +15,7 @@
       "OwnAudio\\Examples\\Ownaudio.Example.Matching\\Ownaudio.Example.Matching.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.MultitrackPlayer\\Ownaudio.Example.MultitrackPlayer.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.VocalRemover\\Ownaudio.Example.Vocalremover.csproj",
-      "OwnAudio\\Source\\OwnaudioNET.csproj"
+      "OwnAudio\\Source\\OwnaudioNET.csproj",
     ]
   }
 }
