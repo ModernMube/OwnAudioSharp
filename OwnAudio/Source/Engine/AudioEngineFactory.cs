@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using Ownaudio.Core;
 using OwnaudioNET.Exceptions;
+using Logger;
 
 namespace OwnaudioNET.Engine;
 
@@ -71,8 +72,8 @@ public static class AudioEngineFactory
         {
             if (nativeEngineException != null)
             {
-                Console.WriteLine($"NativeAudioEngine not available: {nativeEngineException.Message}");
-                Console.WriteLine("Falling back to platform-specific audio engine...");
+                Log.Error($"NativeAudioEngine not available: {nativeEngineException.Message}");
+                Log.Error("Falling back to platform-specific audio engine...");
             }
 
             try
@@ -89,11 +90,11 @@ public static class AudioEngineFactory
                 {
                     engine = CreatePulseAudioEngine();
                 }
-                else if(OperatingSystem.IsAndroid())
+                else if (OperatingSystem.IsAndroid())
                 {
                     engine = CreateAAudioEngine();
                 }
-                else if(OperatingSystem.IsIOS())
+                else if (OperatingSystem.IsIOS())
                 {
                     // iOS uses NativeAudioEngine via MiniAudio (CoreAudio backend)
                     // If we reach here, NativeAudioEngine initialization already failed above
@@ -583,7 +584,7 @@ public static class AudioEngineFactory
                 }
             }
         }
-        else if(OperatingSystem.IsAndroid())
+        else if (OperatingSystem.IsAndroid())
         {
             lock (_lock)
             {
@@ -605,7 +606,7 @@ public static class AudioEngineFactory
                 }
             }
         }
-        else if(OperatingSystem.IsIOS())
+        else if (OperatingSystem.IsIOS())
         {
             // iOS uses NativeAudioEngine (already checked above)
             return _nativeEngineType != null;

@@ -64,6 +64,11 @@
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>
 
+  <!-- Platform-independent logger -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Logger\Logger.csproj" />
+  </ItemGroup>
+  
   <!-- Platform-specific project references with private assets (embedded in this assembly) -->
   <ItemGroup>
     <!-- Core (always included) -->
