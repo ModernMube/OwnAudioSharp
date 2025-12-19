@@ -25,12 +25,6 @@ namespace OwnaudioNET.Mixing;
 /// - All public methods are thread-safe
 /// - Source list uses ConcurrentDictionary for lock-free add/remove
 /// - Master volume uses volatile field
-///
-/// Performance Targets:
-/// - Mix 4+ sources simultaneously
-/// - Latency: < 12ms @ 512 buffer size
-/// - CPU: < 15% single core
-/// - Zero allocations in mix loop
 /// </summary>
 public sealed partial class AudioMixer : IDisposable
 {
@@ -274,10 +268,6 @@ public sealed partial class AudioMixer : IDisposable
         if (source == null)
             throw new ArgumentNullException(nameof(source));
 
-        // NOTE: No format validation needed - the external audio engine's decoders
-        // (like MFMp3Decoder) automatically handle format conversion (resampling, channel conversion)
-        // We trust the decoder to provide audio in the correct format
-
         // Add to source dictionary
         bool added = _sources.TryAdd(source.Id, source);
 
@@ -306,14 +296,6 @@ public sealed partial class AudioMixer : IDisposable
         return added;
     }
 
-    /// <summary>
-    /// Removes an audio source from the mixer.
-    /// The source can be removed while the mixer is running (hot-swap).
-    /// </summary>
-    /// <param name="source">The audio source to remove.</param>
-    /// <returns>True if removed successfully, false if source was not found.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when source is null.</exception>
-    /// <exception cref="ObjectDisposedException">Thrown if mixer is disposed.</exception>
     public bool RemoveSource(IAudioSource source)
     {
         ThrowIfDisposed();
@@ -621,10 +603,7 @@ public sealed partial class AudioMixer : IDisposable
 
                     // Update statistics
                     Interlocked.Add(ref _totalMixedFrames, _bufferSizeInFrames);
-
-                    // CRITICAL: Advance GhostTracks!
-                    // GhostTracks are NOT in the _sources list (they are silent master clocks),
-                    // so we must manually advance them here to keep time moving.
+                    
                     var syncGroupIds = _synchronizer.GetSyncGroupIds();
                     foreach (var groupId in syncGroupIds)
                     {
@@ -637,13 +616,6 @@ public sealed partial class AudioMixer : IDisposable
                             ghostTrack.ReadSamples(sourceBuffer, _bufferSizeInFrames);
                         }
                     }
-
-                    // NEW ARCHITECTURE: No periodic drift correction needed!
-                    // Each FileSource continuously checks drift in its own ReadSamples() method
-                    // This is zero-overhead and sample-accurate
-
-                    // NO SLEEP HERE - Engine.Send() is blocking and provides timing
-                    // Adding sleep would make playback too slow
                 }
                 else
                 {
@@ -660,8 +632,6 @@ public sealed partial class AudioMixer : IDisposable
             }
             catch (Exception)
             {
-                // Critical error in mix loop - log but don't crash
-                // In production, log via ILogger
                 Thread.Sleep(_mixIntervalMs * 2);
             }
         }
@@ -755,8 +725,6 @@ public sealed partial class AudioMixer : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ApplyMasterEffects(Span<float> buffer, int frameCount)
     {
-        // Check if effects list changed and update cache if needed
-        // This is the only allocation point, happens only when effects are added/removed
         if (_effectsChanged)
         {
             lock (_effectsLock)

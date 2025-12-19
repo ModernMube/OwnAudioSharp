@@ -212,9 +212,7 @@ public sealed class SoundTouchProcessor : IDisposable
         if (!_disposed)
         {
             lock (_lock)
-            {
-                // SoundTouch.SoundTouchProcessor is not IDisposable
-                // Clear to release internal buffers
+            {                
                 _soundTouch?.Clear();
             }
             _disposed = true;

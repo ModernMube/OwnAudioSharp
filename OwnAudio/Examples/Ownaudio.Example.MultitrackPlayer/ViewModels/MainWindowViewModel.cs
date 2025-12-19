@@ -430,9 +430,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Starting playback..."; });
+            await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Preparing audio..."; });
 
-            await _audioService.RestartAsync();
+            // FIX: The entire audio engine was restarted on every play command, causing a "cold start"
+            // that resulted in buffer underruns heard as audio glitches. The engine should be initialized
+            // once and run continuously.
+            // await _audioService.RestartAsync(); // This was the cause of the problem.
 
             // OPTIMIZATION: Update cached arrays if needed (zero allocation in steady state)
             if (_cacheNeedsUpdate || _cachedTrackArray.Length != Tracks.Count)
@@ -499,6 +502,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
                 // NEW ARCHITECTURE: Set tempo on GhostTrack - automatically propagates to all sources
                 _audioService.Mixer.SetSyncGroupTempo("MainTracks", TempoPercent / 100.0f);
+                
+                // FIX: Prime the sources to prevent buffer underrun on startup.
+                // This reads the first chunk of audio from all tracks BEFORE playback starts.
+                // This moves the initial I/O latency from the real-time audio thread to here,
+                // where a small, one-time delay is acceptable.
+                int primeBufferSize = (_audioService.Mixer.WaveFormat.SampleRate / 5) * _audioService.Mixer.WaveFormat.Channels; // 200ms of audio data
+                float[] primeBuffer = new float[primeBufferSize];
+                _audioService.Mixer.Read(primeBuffer, 0, primeBuffer.Length);
+
+                // IMPORTANT: Reset the position back to the beginning after priming.
+                _audioService.Mixer.SeekSyncGroup("MainTracks", 0);
 
                 // NEW ARCHITECTURE: No manual drift correction needed!
                 // - Automatic continuous drift check in ReadSamples() every ~10ms
@@ -543,34 +557,74 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// Pauses the current playback.
-    /// Stops the playback timer and restarts the audio engine to clear buffers.
+    /// This currently functions as a stop, preserving the position for the next play.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
     [RelayCommand(CanExecute = nameof(CanPauseStop))]
     private async Task PauseAsync()
     {
+        if (!IsPlaying) return;
+        
         _playbackTimer.Stop();
         IsPlaying = false;
         await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Pausing..."; });
-        await _audioService.RestartAsync();
+
+        // FIX: Replaced full engine restart with a lightweight stop command.
+        // This prevents audio glitches when pausing and restarting playback.
+        if (_audioService.Mixer != null)
+        {
+            await Task.Run(() =>
+            {
+                try
+                {
+                    _audioService.Mixer.StopSyncGroup("MainTracks");
+                }
+                catch
+                {
+                    // Ignore error if sync group doesn't exist
+                }
+            });
+        }
+        
         await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Paused"; });
     }
 
     /// <summary>
     /// Stops the current playback and resets the position to the beginning.
-    /// Clears all playback state and restarts the audio engine.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
     [RelayCommand(CanExecute = nameof(CanPauseStop))]
     private async Task StopAsync()
     {
+        if (!IsPlaying) return;
+
         _playbackTimer.Stop();
         IsPlaying = false;
+        await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Stopping..."; });
+
+        // FIX: Replaced full engine restart with a lightweight stop/seek command.
+        if (_audioService.Mixer != null)
+        {
+            await Task.Run(() =>
+            {
+                try
+                {
+                    // Stop the group and seek to the beginning for the next playback.
+                    _audioService.Mixer.StopSyncGroup("MainTracks");
+                    _audioService.Mixer.SeekSyncGroup("MainTracks", 0);
+                }
+                catch
+                {
+                    // Ignore errors if the sync group doesn't exist.
+                }
+            });
+        }
+
+        // Reset UI state after stopping
         CurrentPositionSeconds = 0;
         TrackDurationSeconds = 0;
         PositionDisplay = "00:00 / 00:00";
-        await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Stopping..."; });
-        await _audioService.RestartAsync();
+        
         await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Stopped"; });
     }
 

@@ -298,19 +298,10 @@ namespace OwnaudioNET.Effects
                 // 2. Reverb Engine (Dual Mono processing for Stereo Width)
                 float outL = 0f;
                 float outR = 0f;
-
-                // Optimize: Unroll loops manually or rely on JIT?
-                // Loops are small (8 and 4), manual unroll is messy but fast.
-                // We use loops for clarity, JIT unrolls small loops often.
-
+                
                 // Process Left Engine
                 for(int i=0; i<NumCombs; i++)
-                {
-                    // Comb Filter Logic: 
-                    // output = buffer[idx]
-                    // buffer[idx] = input + (output * damp2 + store * damp1) * feedback
-                    // store = output
-                    
+                {                    
                     float[] buf = _combBuffers[0][i];
                     int bIdx = _combIndices[0][i];
                     
@@ -354,20 +345,7 @@ namespace OwnaudioNET.Effects
                     
                     buf[bIdx] = processed + (bufOut * 0.5f);
                     outL = processed - (buf[bIdx] * 0.5f) + bufOut; // Standard AllPass: -input + bufOut + feedback*input??
-                    // Wait, Schroeder AllPass:
-                    // y[n] = -g * x[n] + x[n-D] + g * y[n-D]
-                    // Current Freeverb implementation:
-                    // output = -input + bufOut
-                    // buffer = input + (bufOut * 0.5) 
-                    // Let's stick to the one I see in my reference:
-                    // buf[idx] = input + bufOut * 0.5
-                    // output = -input + bufOut + buf[idx]*0.5 ?? No.
-                    // The code before was: temp = input * -gain + bufout; buffer[idx] = input + bufout*gain; return temp;
-                    // Correct: 
-                    // float temp = processed * -0.5f + bufOut;
-                    // buf[bIdx] = processed + (bufOut * 0.5f);
-                    // outL = temp;
-                    
+                                        
                     float temp = processed * -0.5f + bufOut;
                     buf[bIdx] = processed + (bufOut * 0.5f);
                     outL = temp;
@@ -400,12 +378,6 @@ namespace OwnaudioNET.Effects
                 float wetL = outL * w1 + outR * w2;
                 float wetR = outR * w1 + outL * w2;
 
-                // 4. Output Mixing with Dry
-                // Apply 'Mix' parameter (Dry/Wet balance)
-                // If Mix is 0.5, equal blend. 
-                // The parameters provided DryLevel and WetLevel are internal gains,
-                // but the Mix property is a master blend.
-                
                 // Apply Dry/Wet levels first
                 wetL *= ScaleWet; // internal scaling
                 wetR *= ScaleWet;

@@ -30,11 +30,6 @@ namespace Ownaudio.Native.Decoders;
 public sealed class MaDecoder : IAudioDecoder
 {
     /// <summary>
-    /// MiniAudio library loader instance.
-    /// </summary>
-    // private readonly LibraryLoader? _miniAudioLoader; // REMOVED: Managed by MaBinding
-
-    /// <summary>
     /// Pointer to the MiniAudio decoder instance.
     /// </summary>
     private IntPtr _decoder;

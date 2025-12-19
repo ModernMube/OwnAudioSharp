@@ -230,9 +230,6 @@ namespace Ownaudio.Native
         /// <returns>The selected audio backend.</returns>
         private AudioEngineBackend DetermineBackend()
         {
-            // Strategy: Try PortAudio first on all platforms (bundled or system-installed)
-            // If not available or fails to load, fallback to MiniAudio (always bundled)
-
             try
             {
                 _portAudioLoader = new LibraryLoader("libportaudio");
@@ -312,8 +309,6 @@ namespace Ownaudio.Native
 
             var hostApiInfo = Marshal.PtrToStructure<PaHostApiInfo>(hostApiInfoPtr);
 
-            // IMPORTANT: defaultInputDevice and defaultOutputDevice are GLOBAL device indices, not host-relative!
-            // They are already global indices within the PortAudio device list.
             int globalDeviceIndex = isInput ? hostApiInfo.defaultInputDevice : hostApiInfo.defaultOutputDevice;
 
             if (globalDeviceIndex < 0)
@@ -568,8 +563,6 @@ namespace Ownaudio.Native
         /// <returns>0 on success, negative value on error.</returns>
         private unsafe int InitializeMiniAudio()
         {
-            // Note: MiniAudio does not support host API selection like PortAudio
-            // The HostType configuration parameter is ignored when using MiniAudio
             if (_config.HostType != EngineHostType.None)
             {
                 Console.WriteLine($"Note: HostType '{_config.HostType}' is ignored when using MiniAudio backend. MiniAudio uses platform defaults.");
@@ -850,9 +843,6 @@ namespace Ownaudio.Native
                 }
                 else
                 {
-                    // Buffer is full, sleep briefly to wait for audio callback to consume data
-                    // Sleep duration: time to play 1/4 buffer at current sample rate
-                    // Example: 512 frames / 48000 Hz / 4 = ~2.66ms
                     int sleepMs = Math.Max(1, (_framesPerBuffer / 4 * 1000) / _config.SampleRate);
                     Thread.Sleep(sleepMs);
                 }
@@ -891,8 +881,6 @@ namespace Ownaudio.Native
         /// <returns>0 = idle, 1 = active, -1 = error.</returns>
         public int OwnAudioEngineActivate()
         {
-            // Use _isRunning for now as tests expect active state immediately after Start()
-            // _isActive is set in the callback which might run later
             return _isRunning;
         }
 
@@ -1192,9 +1180,6 @@ namespace Ownaudio.Native
             if (deviceIndex >= devices.Count)
                 return -3; // Index out of range
 
-            // Get the actual PortAudio device index from the device info
-            // The list index passed in (deviceIndex) maps to devices[deviceIndex]
-            // The actual PA index is stored in DeviceId
             if (int.TryParse(devices[deviceIndex].DeviceId, out int actualPaIndex))
             {
                 _activeOutputDeviceIndex = actualPaIndex;

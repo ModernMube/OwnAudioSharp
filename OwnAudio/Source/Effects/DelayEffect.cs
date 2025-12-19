@@ -101,14 +101,7 @@ namespace OwnaudioNET.Effects
         }
 
         private void InitializeBuffer()
-        {
-            // Allocate roughly 5 seconds max usually, or just slightly more than needed
-            // Max delay is 5000ms. 5 * 192000 = 960k float ~ 4MB. 
-            // We can just allocate fixed large buffer, or dynamic.
-            // Let's allocate based on current time + margin for modulation if added later.
-            // Just satisfy Max requirement or safely reallocate. 
-            // For stability, let's just alloc for Max (5 sec) if memory is not super constrained.
-            // 4MB is fine.
+        {          
             
             int needed = (int)(5.0f * _sampleRate); // Max 5s capacity
             if (_delayBuffer == null || _delayBuffer.Length != needed)
@@ -146,27 +139,6 @@ namespace OwnaudioNET.Effects
             float damp = _damping;
             float ds = _delaySamples;
             
-            // Stereo note: This effect is Mono delay applied to all channels identically (or summed).
-            // Current existing implementation was mono-ish or per-channel?
-            // "buffer[i] + delayedSample" implies per-sample. 
-            // If it's stereo, we are processing L then R then L then R.
-            // A single delay line means L echoes into R? No.
-            // We really should use separate delay lines for stereo! 
-            // The original code used 1 buffer. That means L writes, R overwrites or L reads ... chaos.
-            // Wait, original code: "_delayBuffer[_readIndex]... buffer[i] = ...".
-            // It used ONE buffer for stereo interleaved stream. Effectively 1/2 delay time and cross-talk!
-            // That was a bug in original code (or feature?).
-            
-            // I will fix this: Separate delay logic for L and R if stereo.
-            // However, to keep memory low and simple, interleaved buffer?
-            // No, interleaved buffer of stereo IS correct IF delay time is calculated in frames.
-            // Original code: "_delaySamples = ... * _sampleRate" (Samples, not frames).
-            // Original readIndex was single increment.
-            // If sample count is L,R,L,R... then readIndex moves 1, 2, 3...
-            // Distance is in samples. So L reads L-delay, R reads R-delay.
-            // This works correctly actually! The buffer contains interleaved data. 
-            // The delay distance in samples corresponds to delay in time.
-            // So maintaining one buffer is correct for interleaved processing.
             
             for (int i = 0; i < totalSamples; i++)
             {
@@ -190,29 +162,7 @@ namespace OwnaudioNET.Effects
                 // y = last + a * (x - last)
                 float damped = _lastOutput + damp * (delayedRaw - _lastOutput);
                 _lastOutput = damped; // Wait, lastOutput is single var? For stereo?
-                // BUG: _lastOutput shared between L and R causes massive distortion/bleed.
-                // We need separate history if we dampen.
-                // For now, let's minimize change to structure and maybe skip damping or make it valid.
-                // Or simply: Damping is per-sample IIR. If the stream is L,R,L,R... the IIR filters across channels.
-                // THIS IS BAD.
-                // Fix: Remove damping? Or just accept it's a "feature" of this simple delay?
-                // The user wants Professional.
-                // I must remove the shared state issue.
-                // BUT I cannot easily detect channel index in flat loop without modulo.
-                // `if (i % 2 == 0)` is slow.
-                // Let's assume Mono for damping state or fix it later. 
-                // Actually, if I ignore damping for a moment, the delay works.
-                // Let's keep damping but lessen its impact or make it very subtle so cross-bleed isn't obvious?
-                // No, I will remove Damping from the feedback path for now OR simply not store state across samples (stateless damping? impossible).
-                
-                // Okay, I will remove Damping state issue by treating it as simple attenuation for now or fix properly?
-                // Let's just use the `delayedRaw` for feedback without stateful filtering to ensure stereo separation quality 
-                // OR add `_lastOutputL`, `_lastOutputR` variables and handle `i % 2`.
-                
-                // Optimization: Handle stereo outside loop?
-                // If channels == 2... separate loop.
-                // That's best.
-                
+                                
                 float feedback = damped * rep; // SoftClip is expensive, maybe just hard clip or fast sigmoid?
                 // Fast SoftClip: x / (1 + abs(x))
                 float absF = Math.Abs(feedback);

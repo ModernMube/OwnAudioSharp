@@ -104,16 +104,15 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
             ("11", new[] { 0, 4, 7, 10, 2, 5 }), // 11th
             ("m11", new[] { 0, 3, 7, 10, 2, 5 }), // Minor 11th
             ("13", new[] { 0, 4, 7, 10, 2, 9 }), // 13th
-            ("m13", new[] { 0, 3, 7, 10, 2, 9 }) // Minor 13th
+            ("m13", new[] { 0, 3, 7, 10, 2, 9 }), // Minor 13th
 
-            /* Uncomment for extended chord definitions
-            ("7b5", new[] { 0, 4, 6, 10 })   // Altered chords
-            ("7#5", new[] { 0, 4, 8, 10 })
-            ("7#9", new[] { 0, 4, 7, 10, 3 })
-            ("m7b5", new[] { 0, 3, 6, 10 })    // Half-diminished
-            ("dim7", new[] { 0, 3, 6, 9 })     // Diminished 7th
-            ("madd9", new[] { 0, 3, 7, 2 })    // Add2 variations
-            */
+            /* Uncomment for extended chord definitions */
+            ("7b5", new[] { 0, 4, 6, 10 }),   // Altered chords
+            ("7#5", new[] { 0, 4, 8, 10 }),
+            ("7#9", new[] { 0, 4, 7, 10, 3 }),
+            ("m7b5", new[] { 0, 3, 6, 10 }),    // Half-diminished
+            ("dim7", new[] { 0, 3, 6, 9 }),     // Diminished 7th
+            ("madd9", new[] { 0, 3, 7, 2 })    // Add2 variations           
         };
     }
 }

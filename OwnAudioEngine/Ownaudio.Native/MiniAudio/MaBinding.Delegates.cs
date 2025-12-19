@@ -252,11 +252,6 @@ internal static partial class MaBinding
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate MaResult EncoderWrite(IntPtr pEncoder, IntPtr pFramesIn, ulong frameCount, out ulong pFramesWritten);
 
-    //[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    //private delegate IntPtr AllocateEncoder();
-
-    //[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    //private delegate IntPtr AllocateEncoderConfig(MaFormat encodingFormat, MaFormat format, uint channels, uint sampleRate);
     #endregion
 
     #region Resampler delegates  

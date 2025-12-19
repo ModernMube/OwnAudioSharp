@@ -9,9 +9,6 @@ namespace OwnaudioNET.Mixing;
 /// </summary>
 public sealed partial class AudioMixer
 {
-    // Synchronizer instance is created in main AudioMixer.cs constructor
-    // We just use it here
-
     /// <summary>
     /// Gets the audio synchronizer instance.
     /// </summary>
@@ -51,9 +48,6 @@ public sealed partial class AudioMixer
 
         // Create sync group in synchronizer
         _synchronizer.CreateSyncGroup(groupId, sources);
-
-        // NOTE: Ghost track is NOT added to _sources to avoid drift correction issues.
-        // Instead, the MixThreadLoop will process ghost tracks separately.
     }
 
     /// <summary>

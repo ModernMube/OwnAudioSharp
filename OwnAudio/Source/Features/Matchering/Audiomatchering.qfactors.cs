@@ -109,12 +109,7 @@ partial class AudioAnalyzer
     /// This method provides a conservative approach to Q factor scaling to maintain musicality.
     /// </remarks>
     private float CalculateGainBasedQ(float gainAdjustment)
-    {
-        // REVISED LOGIC for Precision:
-        // Large gains with Narrow Q provide surgical precision and avoid "muddy" sound.
-        // Small gains with Standard Q maintain musicality for subtle adjustments.
-        // Since base Q is now correct (~4.3), we only need modest adjustments.
-        // Very large gains might need slightly tighter Q to prevent massive energy bloom.
+    {       
         return gainAdjustment switch
         {
             <= 2.0f => 1.0f,     // No change
@@ -170,9 +165,7 @@ partial class AudioAnalyzer
         }
 
         float normalizedCorrelation = neighborCount > 0 ? correlation / neighborCount : 0f;
-
-        // High correlation with neighbors = use wider Q (more musical)
-        // Low correlation = use narrower Q (more surgical)
+        
         return normalizedCorrelation switch
         {
             >= 0.7f => 0.7f,     // Wide Q for highly correlated regions
@@ -199,9 +192,7 @@ partial class AudioAnalyzer
     {
         float ratio = targetLevel / Math.Max(sourceLevel, 1e-10f);
         float logRatio = (float)Math.Log10(ratio);
-
-        // Sharp spectral features need narrower Q
-        // Broad spectral changes need wider Q
+        
         return Math.Abs(logRatio) switch
         {
             <= 0.1f => 0.8f,     // Wide for very similar levels
@@ -232,9 +223,7 @@ partial class AudioAnalyzer
     /// The base psychoacoustic Q factor receives the highest weight across all frequencies.
     /// </remarks>
     private float CombineQFactors(float baseQ, float gainQ, float neighborQ, float spectralQ, float frequency)
-    {
-        // Weight the different factors based on frequency range
-        // Weight the different factors based on frequency range
+    {        
         float baseWeight = 0.6f;      // Base Q is now the primary driver (mathematically correct)
         float gainWeight = 0.2f;      // Gain adjustments are secondary
         float neighborWeight = 0.1f;  // Minor context awareness
