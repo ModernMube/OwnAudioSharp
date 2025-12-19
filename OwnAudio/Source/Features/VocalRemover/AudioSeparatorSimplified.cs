@@ -4,6 +4,7 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using Ownaudio;
 using Ownaudio.Decoders;
 using Ownaudio.Core;
+using Logger;
 using System.Numerics;
 using System.Reflection;
 
@@ -139,7 +140,7 @@ namespace OwnaudioNET.Features.Vocalremover
         private InferenceSession? _onnxSession;
         private bool _disposed = false;
         private const int TargetSampleRate = 44100;
-        
+
         // Pre-calculated Hanning window for STFT/ISTFT optimization
         private float[]? _hanningWindow;
 
@@ -183,12 +184,12 @@ namespace OwnaudioNET.Features.Vocalremover
             try
             {
                 sessionOptions.AppendExecutionProvider_CUDA();
-                Console.WriteLine("CUDA execution provider enabled.");
+                Log.Info("CUDA execution provider enabled.");
             }
             catch
             {
                 sessionOptions.AppendExecutionProvider_CPU();
-                Console.WriteLine("Using CPU execution provider.");
+                Log.Info("Using CPU execution provider.");
             }
 
             if (File.Exists(_options.ModelPath))
@@ -202,8 +203,8 @@ namespace OwnaudioNET.Features.Vocalremover
             }
 
             AutoDetectModelDimensions();
-            Console.WriteLine($"Model parameters: DimF={_modelParams.DimF}, DimT={_modelParams.DimT}, NFft={_modelParams.NFft}");
-            
+            Log.Info($"Model parameters: DimF={_modelParams.DimF}, DimT={_modelParams.DimT}, NFft={_modelParams.NFft}");
+
             // Pre-calculate Hanning window for performance
             PreCalculateHanningWindow();
         }
@@ -300,11 +301,11 @@ namespace OwnaudioNET.Features.Vocalremover
                         int expectedFreq = (int)inputShape[2];
                         int expectedTime = (int)inputShape[3];
 
-                        Console.WriteLine($"Model expects: Frequency={expectedFreq}, Time={expectedTime}");
+                        Log.Info($"Model expects: Frequency={expectedFreq}, Time={expectedTime}");
 
                         if (expectedFreq != _modelParams.DimF || expectedTime != _modelParams.DimT)
                         {
-                            Console.WriteLine("Auto-adjusting model parameters to match ONNX model...");
+                            Log.Info("Auto-adjusting model parameters to match ONNX model...");
                             int newDimT = (int)Math.Log2(expectedTime);
 
                             _modelParams = new ModelParameters(
@@ -318,7 +319,7 @@ namespace OwnaudioNET.Features.Vocalremover
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Warning: Could not auto-detect model dimensions: {ex.Message}");
+                Log.Warning($"Could not auto-detect model dimensions: {ex.Message}");
             }
         }
 
@@ -330,7 +331,7 @@ namespace OwnaudioNET.Features.Vocalremover
         {
             ProgressChanged?.Invoke(this, progress);
         }
-        
+
         /// <summary>
         /// Pre-calculate Hanning window for STFT/ISTFT optimization
         /// </summary>
@@ -356,52 +357,52 @@ namespace OwnaudioNET.Features.Vocalremover
 
             AudioStreamInfo info = decoder.StreamInfo;
             int totalFrames = (int)(info.Duration.TotalSeconds * TargetSampleRate);
-            
+
             // Allocate output buffers
             var vocals = new float[2, totalFrames];
             var instrumental = new float[2, totalFrames];
-            
+
             int margin = _options.Margin;
             int chunkSize = _options.ChunkSizeSeconds * TargetSampleRate;
-            
+
             if (margin == 0) throw new ArgumentException("Margin cannot be zero!");
             if (chunkSize != 0 && margin > chunkSize) margin = chunkSize;
             if (_options.ChunkSizeSeconds == 0 || totalFrames < chunkSize) chunkSize = totalFrames;
 
             // Processing context for buffer reuse
             using var context = new ProcessingContext(_modelParams);
-            
+
             int processedFrames = 0;
             int chunkIndex = 0;
             int totalChunks = (int)Math.Ceiling((double)totalFrames / chunkSize);
-            
+
             // Read and process in chunks
             int framesPerBuffer = Math.Min(chunkSize, 8192);
             int bufferSizeInBytes = framesPerBuffer * 2 * sizeof(float); // 2 channels
             byte[] readBuffer = new byte[bufferSizeInBytes];
-            
+
             var chunkAccumulator = new List<float>();
-            
+
             while (processedFrames < totalFrames)
             {
                 // Read audio data
                 var result = decoder.ReadFrames(readBuffer);
-                
+
                 if (!result.IsSucceeded || result.FramesRead == 0)
                 {
                     if (result.IsEOF) break;
                     continue;
                 }
-                
+
                 // Convert byte buffer to float using MemoryMarshal
                 int bytesRead = result.FramesRead * 2 * sizeof(float);
                 var floatSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(
                     readBuffer.AsSpan(0, bytesRead)
                 );
-                
+
                 // Accumulate samples for chunk processing
                 chunkAccumulator.AddRange(floatSpan.ToArray());
-                
+
                 // Process when we have enough data for a chunk
                 while (chunkAccumulator.Count >= chunkSize * 2)
                 {
@@ -412,13 +413,13 @@ namespace OwnaudioNET.Features.Vocalremover
                         chunkData[0, i] = chunkAccumulator[i * 2];
                         chunkData[1, i] = chunkAccumulator[i * 2 + 1];
                     }
-                    
+
                     // Remove processed samples
                     chunkAccumulator.RemoveRange(0, chunkSize * 2);
-                    
+
                     // Process chunk
                     var separated = ProcessSingleChunkOptimized(chunkData, context);
-                    
+
                     // Calculate vocals and instrumental
                     for (int ch = 0; ch < 2; ch++)
                     {
@@ -432,10 +433,10 @@ namespace OwnaudioNET.Features.Vocalremover
                             }
                         }
                     }
-                    
+
                     processedFrames += chunkSize;
                     chunkIndex++;
-                    
+
                     // Report progress
                     ReportProgress(new SimpleSeparationProgress
                     {
@@ -446,7 +447,7 @@ namespace OwnaudioNET.Features.Vocalremover
                     });
                 }
             }
-            
+
             // Process remaining samples
             if (chunkAccumulator.Count > 0)
             {
@@ -457,9 +458,9 @@ namespace OwnaudioNET.Features.Vocalremover
                     chunkData[0, i] = chunkAccumulator[i * 2];
                     chunkData[1, i] = chunkAccumulator[i * 2 + 1];
                 }
-                
+
                 var separated = ProcessSingleChunkOptimized(chunkData, context);
-                
+
                 for (int ch = 0; ch < 2; ch++)
                 {
                     for (int i = 0; i < remainingFrames; i++)
@@ -473,14 +474,14 @@ namespace OwnaudioNET.Features.Vocalremover
                     }
                 }
             }
-            
+
             return (vocals, instrumental);
         }
 
         #endregion
 
         #region Private Methods - Chunk Processing
-        
+
         /// <summary>
         /// Processing context to reuse buffers and reduce GC pressure
         /// </summary>
@@ -493,12 +494,12 @@ namespace OwnaudioNET.Features.Vocalremover
             public double[] ReconstructedR { get; }
             public double[] WindowSumL { get; }
             public double[] WindowSumR { get; }
-            
+
             public ProcessingContext(ModelParameters modelParams)
             {
                 int padSize = modelParams.NFft / 2;
                 int maxChunkSize = modelParams.ChunkSize + 2 * padSize;
-                
+
                 PaddedSignalL = new float[maxChunkSize];
                 PaddedSignalR = new float[maxChunkSize];
                 FftFrame = new Complex[modelParams.NFft];
@@ -507,7 +508,7 @@ namespace OwnaudioNET.Features.Vocalremover
                 WindowSumL = new double[maxChunkSize];
                 WindowSumR = new double[maxChunkSize];
             }
-            
+
             public void Clear()
             {
                 Array.Clear(PaddedSignalL, 0, PaddedSignalL.Length);
@@ -517,7 +518,7 @@ namespace OwnaudioNET.Features.Vocalremover
                 Array.Clear(WindowSumL, 0, WindowSumL.Length);
                 Array.Clear(WindowSumR, 0, WindowSumR.Length);
             }
-            
+
             public void Dispose()
             {
                 // Nothing to dispose, arrays are managed
@@ -595,7 +596,7 @@ namespace OwnaudioNET.Features.Vocalremover
                 {
                     int padSize = _modelParams.NFft / 2;
                     var paddedSignal = ch == 0 ? context.PaddedSignalL : context.PaddedSignalR;
-                    
+
                     // Clear and prepare padded signal
                     Array.Clear(paddedSignal, 0, paddedSignal.Length);
 
@@ -663,7 +664,7 @@ namespace OwnaudioNET.Features.Vocalremover
                     int padSize = _modelParams.NFft / 2;
                     var reconstructed = ch == 0 ? context.ReconstructedL : context.ReconstructedR;
                     var windowSum = ch == 0 ? context.WindowSumL : context.WindowSumR;
-                    
+
                     // Clear buffers
                     Array.Clear(reconstructed, 0, reconstructed.Length);
                     Array.Clear(windowSum, 0, windowSum.Length);
@@ -1274,13 +1275,13 @@ namespace OwnaudioNET.Features.Vocalremover
                         int expectedFreq = (int)inputShape[2];
                         int expectedTime = (int)inputShape[3];
 
-                        Console.WriteLine($"Model expects: Frequency={expectedFreq}, Time={expectedTime}");
-                        Console.WriteLine($"Current config: Frequency={_modelParams.DimF}, Time={_modelParams.DimT}");
+                        Log.Info($"Model expects: Frequency={expectedFreq}, Time={expectedTime}");
+                        Log.Info($"Current config: Frequency={_modelParams.DimF}, Time={_modelParams.DimT}");
 
                         // Update model parameters if they don't match
                         if (expectedFreq != _modelParams.DimF || expectedTime != _modelParams.DimT)
                         {
-                            Console.WriteLine("Auto-adjusting model parameters to match ONNX model...");
+                            Log.Info("Auto-adjusting model parameters to match ONNX model...");
 
                             int newDimT = (int)Math.Log2(expectedTime);
 
@@ -1290,15 +1291,15 @@ namespace OwnaudioNET.Features.Vocalremover
                                 nFft: _options.NFft
                             );
 
-                            Console.WriteLine($"Updated to: DimF={_modelParams.DimF}, DimT={_modelParams.DimT}");
+                            Log.Info($"Updated to: DimF={_modelParams.DimF}, DimT={_modelParams.DimT}");
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Warning: Could not auto-detect model dimensions: {ex.Message}");
-                Console.WriteLine("Using provided configuration parameters...");
+                Log.Warning($"Could not auto-detect model dimensions: {ex.Message}");
+                Log.Info("Using provided configuration parameters...");
             }
         }
         #endregion
@@ -1687,7 +1688,7 @@ namespace OwnaudioNET.Features.Vocalremover
         #endregion
 
         #region Private Methods - Statistics and File I/O
-        
+
         /// <summary>
         /// Save audio data to WAV file with normalization
         /// </summary>
@@ -1719,7 +1720,7 @@ namespace OwnaudioNET.Features.Vocalremover
                     interleaved[i * channels + ch] = audio[ch, i] * scale;
                 }
             }
-            
+
             OwnaudioNET.Recording.WaveFile.Create(filePath, interleaved, sampleRate, channels, 16);
         }
 

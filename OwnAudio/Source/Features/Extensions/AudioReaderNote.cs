@@ -1,5 +1,6 @@
 ﻿using Melanchall.DryWetMidi.Common;
 using Melanchall.DryWetMidi.Core;
+using Logger;
 using Microsoft.ML.OnnxRuntime;
 using System;
 using System.Collections.Generic;
@@ -353,7 +354,7 @@ public class ModelOutputHelper
             return new Tensor(null, null);
         }
 
-        #nullable disable
+#nullable disable
         var nOlap = Constants.N_OVERLAPPING_FRAMES / 2;
         var nOutputFramesOri = totalFrames * Constants.ANNOTATIONS_FPS / Constants.AUDIO_SAMPLE_RATE;
         var step = (int)t[0].Shape![t[0].Shape.Length - 1]; // Last dimension
@@ -361,7 +362,7 @@ public class ModelOutputHelper
         var shape0 = Math.Min(oriShape[0] * oriShape[1] - nOlap * 2, nOutputFramesOri);
         var rangeStart = nOlap * step;
         var rangeCount = (oriShape[1] - nOlap) * step - rangeStart;
-        #nullable restore
+#nullable restore
 
         // Determine shape and required memory
         var shape = new nint[] { shape0, step };
@@ -670,8 +671,8 @@ public static class MidiWriter
             DetectedTempo = bpm;
         }
 
-        Console.WriteLine($"Generating MIDI file with BPM: {bpm}");
-        Console.WriteLine($"Number of notes: {notes.Count}");
+        Log.Info($"Generating MIDI file with BPM: {bpm}");
+        Log.Info($"Number of notes: {notes.Count}");
 
         var midiFile = new MidiFile();  // The complete MIDI file
         var track = new TrackChunk();   // One track to hold all our notes
@@ -755,9 +756,9 @@ public static class MidiWriter
         }
         midiFile.Write(outputPath);
 
-        Console.WriteLine($"MIDI file saved: {outputPath}");
-        Console.WriteLine($"Time division: 480 ticks per quarter note");
-        Console.WriteLine($"Tempo: {bpm} BPM ({microsecondsPerQuarterNote} μs per quarter note)");
+        Log.Info($"MIDI file saved: {outputPath}");
+        Log.Info($"Time division: 480 ticks per quarter note");
+        Log.Info($"Tempo: {bpm} BPM ({microsecondsPerQuarterNote} μs per quarter note)");
     }
 
     /// <summary>
@@ -828,12 +829,12 @@ public static class MidiWriter
         {
             if (Math.Abs(detectedBpm - commonTempo) <= 3)
             {
-                //Console.WriteLine($"Tempo detection: {detectedBpm} BPM -> snapped to common tempo {commonTempo} BPM");
+                //Log.Info($"Tempo detection: {detectedBpm} BPM -> snapped to common tempo {commonTempo} BPM");
                 return commonTempo;
             }
         }
 
-        //Console.WriteLine($"Tempo detection: {detectedBpm} BPM (confidence: {beatCandidates[detectedBpm]} votes)");
+        //Log.Info($"Tempo detection: {detectedBpm} BPM (confidence: {beatCandidates[detectedBpm]} votes)");
         return detectedBpm;
     }
 }
