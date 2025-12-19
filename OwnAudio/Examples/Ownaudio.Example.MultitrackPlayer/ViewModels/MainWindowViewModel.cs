@@ -502,14 +502,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
                 // NEW ARCHITECTURE: Set tempo on GhostTrack - automatically propagates to all sources
                 _audioService.Mixer.SetSyncGroupTempo("MainTracks", TempoPercent / 100.0f);
-                
-                // FIX: Prime the sources to prevent buffer underrun on startup.
-                // This reads the first chunk of audio from all tracks BEFORE playback starts.
-                // This moves the initial I/O latency from the real-time audio thread to here,
-                // where a small, one-time delay is acceptable.
-                int primeBufferSize = (_audioService.Mixer.WaveFormat.SampleRate / 5) * _audioService.Mixer.WaveFormat.Channels; // 200ms of audio data
-                float[] primeBuffer = new float[primeBufferSize];
-                _audioService.Mixer.Read(primeBuffer, 0, primeBuffer.Length);
 
                 // IMPORTANT: Reset the position back to the beginning after priming.
                 _audioService.Mixer.SeekSyncGroup("MainTracks", 0);
