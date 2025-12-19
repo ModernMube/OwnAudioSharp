@@ -47,16 +47,7 @@ namespace Ownaudio.Core
         /// <summary>
         /// Initializes the audio engine with the specified configuration.
         /// Must be called before Start().
-        ///
-        /// ⚠️ **WARNING:** This method BLOCKS the calling thread for 50-5000ms depending on platform!
-        /// - Windows WASAPI: 50-200ms
-        /// - Linux PulseAudio: 100-5000ms (longest!)
-        /// - macOS Core Audio: 50-300ms
-        ///
         /// **DO NOT call from UI thread!** Use InitializeAsync() extension method instead:
-        /// <code>
-        /// await engine.InitializeAsync(config);
-        /// </code>
         /// </summary>
         /// <param name="config">Audio configuration parameters.</param>
         /// <returns>0 on success, negative error code on failure.</returns>
@@ -70,15 +61,6 @@ namespace Ownaudio.Core
 
         /// <summary>
         /// Stops the audio engine gracefully. This method is thread-safe and idempotent.
-        ///
-        /// ⚠️ **WARNING:** This method BLOCKS the calling thread for up to 2000ms!
-        /// The method waits for the audio thread to finish gracefully.
-        /// If the thread doesn't stop within 2 seconds, it will be forcefully aborted.
-        ///
-        /// **DO NOT call from UI thread!** Use StopAsync() extension method instead:
-        /// <code>
-        /// await engine.StopAsync();
-        /// </code>
         /// </summary>
         /// <returns>0 on success, negative error code on failure.</returns>
         int Stop();
@@ -86,12 +68,6 @@ namespace Ownaudio.Core
         /// <summary>
         /// Sends audio samples to the output device in a blocking manner.
         /// This method is zero-allocation and real-time safe.
-        ///
-        /// ⚠️ **WARNING:** This method BLOCKS 1-20ms when buffer is full!
-        ///
-        /// **DO NOT call directly from UI thread!**
-        /// Use AudioEngineWrapper or AudioMixer which use lock-free ring buffers
-        /// to decouple UI thread from audio processing.
         /// </summary>
         /// <param name="samples">Audio samples in Float32 format, interleaved.</param>
         /// <exception cref="AudioException">Thrown when device write fails.</exception>
@@ -104,11 +80,6 @@ namespace Ownaudio.Core
         /// <summary>
         /// Receives audio samples from the input device.
         /// Uses a pre-allocated buffer pool to minimize allocations.
-        ///
-        /// ⚠️ **WARNING:** This method BLOCKS 1-20ms when buffer is empty!
-        ///
-        /// **DO NOT call directly from UI thread!**
-        /// Use AudioEngineWrapper which uses lock-free ring buffers.
         /// </summary>
         /// <param name="samples">Output array containing captured audio samples.</param>
         /// <returns>0 on success, negative error code on failure.</returns>

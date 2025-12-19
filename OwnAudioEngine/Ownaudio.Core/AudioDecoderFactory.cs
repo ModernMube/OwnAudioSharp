@@ -31,22 +31,6 @@ public static class AudioDecoderFactory
     /// <exception cref="ArgumentNullException">Thrown when filePath is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown when file does not exist.</exception>
     /// <exception cref="AudioException">Thrown when format is unsupported or file cannot be opened.</exception>
-    /// <example>
-    /// <code>
-    /// // No conversion - use source format
-    /// using var decoder = AudioDecoderFactory.Create("audio.mp3");
-    ///
-    /// // Convert 22kHz mono to 48kHz stereo
-    /// using var decoder2 = AudioDecoderFactory.Create("audio.wav", targetSampleRate: 48000, targetChannels: 2);
-    ///
-    /// while (true)
-    /// {
-    ///     var result = decoder.DecodeNextFrame();
-    ///     if (result.IsEOF) break;
-    ///     // Process result.Frame.Data
-    /// }
-    /// </code>
-    /// </example>
     public static IAudioDecoder Create(string filePath, int targetSampleRate = 0, int targetChannels = 0)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -67,9 +51,7 @@ public static class AudioDecoderFactory
 
         if (format == AudioFormat.Unknown)
             throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException($"Unable to detect audio format for file: {filePath}"));
-
-        // PRIMARY: Try MiniAudio decoder first for all formats (MP3, WAV, FLAC, etc.)
-        // The sf_ functions are custom wrapper functions implemented in library.c
+        
         try
         {
             var assembly = System.Reflection.Assembly.Load("Ownaudio.Native");
@@ -92,7 +74,6 @@ public static class AudioDecoderFactory
             Console.WriteLine("Falling back to managed decoder...");
         }
 
-        // FALLBACK: Use managed decoders
         // For MP3, use platform-specific decoders if available
         if (format == AudioFormat.Mp3)
         {

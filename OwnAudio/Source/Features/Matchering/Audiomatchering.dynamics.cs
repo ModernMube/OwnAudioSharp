@@ -61,28 +61,7 @@ namespace OwnaudioNET.Features.Matchering
 
             Console.WriteLine($"Dynamics Match: Source Crest {sourceCrest:F1}dB vs Target {targetCrest:F1}dB");
             Console.WriteLine($"Calculated Compressor: Thresh {compThreshold:F1}dB, Ratio {compRatio:F1}:1");
-
-            // Store compressor settings in the (abused) DynamicAmpSettings or return a tuple
-            // Since we only have DynamicAmpSettings type defined in the signature context of ProcessEQMatching,
-            // we will piggyback these values or assume the structure is modified/extended.
-            // Wait, I cannot modify DynamicAmpSettings struct definition easily if it's in another file I haven't seen?
-            // "Audiomatchering.dynamics.cs" is partial. I should check if DynamicAmpSettings is defined here or elsewhere.
-            // It wasn't in the file view. It's likely a struct/class in another file. 
-            // I will optimize by packing these into the returned object if possible, 
-            // BUT looking at the previous code, DynamicAmpSettings seemed to have specific fields (TargetLevel, Attack...).
-            // I will use `TargetLevel` effectively, but I need to pass Ratio/Threshold to the main process.
-            // 
-            // Workaround: I will return a special struct or just use the fields creatively?
-            // No, the best way in C# within the same partial class is to just have this method return the values 
-            // and the caller uses them. But the signature was:
-            // DynamicAmpSettings CalculateDynamicAmpSettings(...)
-            //
-            // Let's assume for now I will use standard DynamicAmpSettings for the Amp, 
-            // AND I will add a new method `CalculateCompressorSettings`.
-            
-            // Let's stick to the original function for Amp, and I'll add a new one for Compressor. 
-            // Retaining original logic for Amp but tuning it:
-            
+                        
             return new DynamicAmpSettings
             {
                 TargetLevel = targetLoudnessDb, // Match loudness directly

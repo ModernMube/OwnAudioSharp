@@ -53,10 +53,7 @@ public static class OwnaudioNet
     /// <summary>
     /// Initializes the OwnaudioNET library with custom configuration.
     /// This method should be called once at application startup.
-    ///
-    /// ⚠️ **WARNING:** This method BLOCKS for 50-5000ms depending on platform!
-    /// For UI applications, use InitializeAsync() instead to prevent UI freezing.
-    /// </summary>
+   /// </summary>
     /// <param name="config">The audio configuration.</param>
     /// <param name="useMockEngine">If true, uses MockAudioEngine for testing (no hardware required).</param>
     /// <exception cref="ArgumentNullException">Thrown if config is null.</exception>
@@ -73,8 +70,6 @@ public static class OwnaudioNet
 
             try
             {
-                // Create engine via factory (use fully qualified name to avoid ambiguity)
-                // NOTE: Factory methods already initialize the engine internally
                 IAudioEngine engine;
                 if (useMockEngine)
                 {
@@ -84,8 +79,6 @@ public static class OwnaudioNet
                 {
                     engine = OwnaudioNET.Engine.AudioEngineFactory.CreateEngine(config);
                 }
-
-                // No need to call Initialize() here - factory already did it
 
                 // Create wrapper
                 _engineWrapper = new AudioEngineWrapper(engine, config);
@@ -272,14 +265,7 @@ public static class OwnaudioNet
     /// <summary>
     /// Initializes the OwnaudioNET library asynchronously with default configuration.
     /// This method prevents UI thread blocking by running initialization on a background thread.
-    ///
     /// Recommended for UI applications (WPF, WinForms, MAUI, Avalonia).
-    ///
-    /// Usage:
-    /// <code>
-    /// await OwnaudioNet.InitializeAsync();
-    /// OwnaudioNet.Start();
-    /// </code>
     /// </summary>
     /// <param name="cancellationToken">Cancellation token to abort initialization.</param>
     /// <exception cref="AudioEngineException">Thrown if initialization fails.</exception>
@@ -298,20 +284,6 @@ public static class OwnaudioNet
     /// <summary>
     /// Initializes the OwnaudioNET library asynchronously with custom configuration.
     /// This method prevents UI thread blocking by running initialization on a background thread.
-    ///
-    /// Platform initialization times (on background thread):
-    /// - Windows WASAPI: 50-200ms
-    /// - Linux PulseAudio: 100-5000ms (longest!)
-    /// - macOS Core Audio: 50-300ms
-    ///
-    /// Recommended for UI applications (WPF, WinForms, MAUI, Avalonia).
-    ///
-    /// Usage:
-    /// <code>
-    /// var config = new AudioConfig { SampleRate = 48000, Channels = 2, BufferSize = 512 };
-    /// await OwnaudioNet.InitializeAsync(config);
-    /// OwnaudioNet.Start();
-    /// </code>
     /// </summary>
     /// <param name="config">The audio configuration.</param>
     /// <param name="useMockEngine">If true, uses MockAudioEngine for testing (no hardware required).</param>
@@ -335,17 +307,6 @@ public static class OwnaudioNet
     /// <summary>
     /// Initializes the OwnaudioNET library asynchronously with a pre-initialized audio engine.
     /// This is useful for platforms not automatically detected (e.g., custom engine implementations).
-    ///
-    /// Note: This overload is rarely needed since Android is now automatically detected.
-    ///
-    /// Usage:
-    /// <code>
-    /// var customEngine = new CustomAudioEngine();
-    /// var config = new AudioConfig { SampleRate = 48000, Channels = 2, BufferSize = 512 };
-    /// await Task.Run(() => customEngine.Initialize(config));
-    /// await OwnaudioNet.InitializeAsync(customEngine, config);
-    /// OwnaudioNet.Start();
-    /// </code>
     /// </summary>
     /// <param name="engine">A pre-initialized IAudioEngine instance.</param>
     /// <param name="config">The audio configuration used to initialize the engine.</param>
@@ -386,24 +347,11 @@ public static class OwnaudioNet
     /// <summary>
     /// Stops the audio engine asynchronously.
     /// This method prevents UI thread blocking by running stop on a background thread.
-    ///
-    /// The stop operation waits for the audio thread to finish gracefully (up to 2 seconds).
-    ///
-    /// Recommended for UI applications (WPF, WinForms, MAUI, Avalonia).
-    ///
-    /// Usage:
-    /// <code>
-    /// await OwnaudioNet.StopAsync();
-    /// </code>
     /// </summary>
     /// <param name="cancellationToken">Cancellation token to abort the wait (not the stop itself).</param>
     /// <exception cref="InvalidOperationException">Thrown if not initialized.</exception>
     /// <exception cref="AudioEngineException">Thrown if stop fails.</exception>
-    /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
-    /// <remarks>
-    /// Note: Even if cancelled, the engine will still attempt to stop gracefully.
-    /// The cancellation only affects the async wait, not the engine stop operation itself.
-    /// </remarks>
+    /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception> 
     public static async Task StopAsync(CancellationToken cancellationToken = default)
     {
         await Task.Run(() =>
@@ -423,13 +371,6 @@ public static class OwnaudioNet
     /// <summary>
     /// Shuts down the OwnaudioNET library asynchronously and releases all resources.
     /// This method prevents UI thread blocking by running shutdown on a background thread.
-    ///
-    /// Automatically stops the engine if running.
-    ///
-    /// Usage:
-    /// <code>
-    /// await OwnaudioNet.ShutdownAsync();
-    /// </code>
     /// </summary>
     /// <param name="cancellationToken">Cancellation token to abort the operation.</param>
     /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
@@ -460,17 +401,6 @@ public static class OwnaudioNet
     /// <summary>
     /// Gets the list of available output devices asynchronously.
     /// This method prevents UI thread blocking by running device enumeration on a background thread.
-    ///
-    /// Typical duration: 10-50ms (on background thread).
-    ///
-    /// Usage:
-    /// <code>
-    /// var devices = await OwnaudioNet.GetOutputDevicesAsync();
-    /// foreach (var device in devices)
-    /// {
-    ///     Console.WriteLine($"Device: {device.Name}");
-    /// }
-    /// </code>
     /// </summary>
     /// <param name="cancellationToken">Cancellation token to abort the operation.</param>
     /// <returns>List of output device information.</returns>
@@ -492,17 +422,6 @@ public static class OwnaudioNet
     /// <summary>
     /// Gets the list of available input devices asynchronously.
     /// This method prevents UI thread blocking by running device enumeration on a background thread.
-    ///
-    /// Typical duration: 10-50ms (on background thread).
-    ///
-    /// Usage:
-    /// <code>
-    /// var devices = await OwnaudioNet.GetInputDevicesAsync();
-    /// foreach (var device in devices)
-    /// {
-    ///     Console.WriteLine($"Input Device: {device.Name}");
-    /// }
-    /// </code>
     /// </summary>
     /// <param name="cancellationToken">Cancellation token to abort the operation.</param>
     /// <returns>List of input device information.</returns>

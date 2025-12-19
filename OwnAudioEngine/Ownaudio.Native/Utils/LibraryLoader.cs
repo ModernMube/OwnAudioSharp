@@ -44,19 +44,14 @@ namespace Ownaudio.Native.Utils
         /// <param name="libraryName">Name of the library (without extension or lib prefix)</param>
         public LibraryLoader(string libraryName)
         {
-            // STRATEGY: Let .NET runtime handle library resolution using DllImportResolver
-            // This is more reliable than manual path resolution, especially for RID-specific libraries
             var assembly = Assembly.GetExecutingAssembly();
 
-            // Try to load the library using .NET's default resolver first
-            // This handles runtimes/{rid}/native/ folder structure automatically
             if (NativeLibrary.TryLoad(libraryName, assembly, null, out _handle))
             {
                 _libraryPath = libraryName; // Store the name since .NET handled resolution
                 return;
             }
 
-            // FALLBACK: Try manual path resolution if .NET's resolver failed
             _libraryPath = ResolvePlatformLibraryPath(libraryName);
 
             if (!File.Exists(_libraryPath))

@@ -172,8 +172,6 @@ public sealed class GhostTrackSource : BaseAudioSource
         if (outputChannels <= 0)
             throw new ArgumentException("Output channels must be positive.", nameof(outputChannels));
 
-        // Ghost track uses minimal resources internally (mono)
-        // but outputs in the target channel count
         _config = new AudioConfig
         {
             SampleRate = sampleRate,

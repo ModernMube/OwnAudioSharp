@@ -184,9 +184,6 @@ public sealed class AudioSynchronizer
 
             var ghostTrack = groupInfo.GhostTrack;
 
-            // NEW ARCHITECTURE: Just operate on the GhostTrack
-            // All attached sources will automatically follow via observer pattern
-
             // Step 1: Seek to beginning
             ghostTrack.Seek(0);
 
@@ -220,8 +217,6 @@ public sealed class AudioSynchronizer
 
             var ghostTrack = groupInfo.GhostTrack;
 
-            // NEW ARCHITECTURE: Just seek the GhostTrack
-            // All attached sources will automatically seek via OnGhostTrackPositionChanged callback
             ghostTrack.Seek(positionInSeconds);
 
             // Update master position
@@ -248,8 +243,6 @@ public sealed class AudioSynchronizer
             if (!_syncGroups.TryGetValue(groupId, out var groupInfo))
                 return;
 
-            // NEW ARCHITECTURE: Just pause the GhostTrack
-            // All attached sources will automatically pause via OnGhostTrackStateChanged callback
             groupInfo.GhostTrack.Pause();
         }
     }
@@ -266,8 +259,6 @@ public sealed class AudioSynchronizer
             if (!_syncGroups.TryGetValue(groupId, out var groupInfo))
                 return;
 
-            // NEW ARCHITECTURE: Just resume (play) the GhostTrack
-            // All attached sources will automatically resume via OnGhostTrackStateChanged callback
             groupInfo.GhostTrack.Play();
         }
     }
@@ -284,8 +275,6 @@ public sealed class AudioSynchronizer
             if (!_syncGroups.TryGetValue(groupId, out var groupInfo))
                 return;
 
-            // NEW ARCHITECTURE: Just stop the GhostTrack
-            // All attached sources will automatically stop via OnGhostTrackStateChanged callback
             groupInfo.GhostTrack.Stop();
 
             // Reset positions
@@ -461,7 +450,6 @@ public sealed class AudioSynchronizer
             groupInfo.Sources.Add(source);
             RegisterSource(source);
 
-            // NEW ARCHITECTURE: Attach FileSource to GhostTrack
             if (source is OwnaudioNET.Sources.FileSource fileSource)
             {
                 fileSource.AttachToGhostTrack(groupInfo.GhostTrack);
@@ -498,7 +486,6 @@ public sealed class AudioSynchronizer
             if (!groupInfo.Sources.Remove(source))
                 return false;
 
-            // NEW ARCHITECTURE: Detach FileSource from GhostTrack
             if (source is OwnaudioNET.Sources.FileSource fileSource)
             {
                 fileSource.DetachFromGhostTrack();
@@ -534,8 +521,6 @@ public sealed class AudioSynchronizer
             if (!_syncGroups.TryGetValue(groupId, out var groupInfo))
                 return false;
 
-            // NEW ARCHITECTURE: Just set tempo on GhostTrack
-            // All attached sources will automatically update via OnGhostTrackTempoChanged callback
             groupInfo.GhostTrack.Tempo = tempo;
 
             return true;

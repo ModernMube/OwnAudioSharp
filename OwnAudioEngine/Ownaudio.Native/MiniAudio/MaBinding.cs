@@ -618,9 +618,6 @@ internal static partial class MaBinding
 
     private static unsafe void ZeroMemory(IntPtr ptr, ulong size)
     {
-        //byte[] zeroBytes = new byte[size];
-        //Marshal.Copy(zeroBytes, 0, ptr, (int)size);
-
         //Using native memset - much faster
         byte* p = (byte*)ptr.ToPointer();
         ulong i = 0;

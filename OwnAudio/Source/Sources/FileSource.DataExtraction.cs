@@ -46,8 +46,6 @@ public partial class FileSource
                 throw new AudioException($"Failed to seek to position {position}: {seekError}");
             }
 
-            // CRITICAL FIX: If duration is null, read until ACTUAL EOF instead of using Duration property
-            // The Duration property might be inaccurate or rounded, causing premature stop
             bool readUntilEOF = (duration == null);
 
             // Calculate target bytes ONLY if duration was explicitly specified

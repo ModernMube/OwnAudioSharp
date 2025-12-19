@@ -54,11 +54,7 @@ namespace OwnaudioAndroidExample
 
         protected override void OnCreate(Bundle? savedInstanceState)
         {
-            base.OnCreate(savedInstanceState);
-
-            // Initialize file logger FIRST
-            //Ownaudio.Android.Common.FileLogger.Initialize(this);
-            //Android.Util.Log.Info("OwnaudioAndroidTest", $"Log file: {Ownaudio.Android.Common.FileLogger.LogFilePath}");
+            base.OnCreate(savedInstanceState);            
 
             // Set layout
             SetContentView(Resource.Layout.activity_simple);
@@ -206,13 +202,6 @@ namespace OwnaudioAndroidExample
                 }
                 catch(Exception)
                 {
-                    //Ownaudio.Android.Common.FileLogger.Error("SimpleMainActivity", $"FILE LOADING ERROR: {ex.GetType().Name}: {ex.Message}");
-
-                    //if (ex.InnerException != null)
-                    //{
-                    //    Ownaudio.Android.Common.FileLogger.Error("SimpleMainActivity", $"Inner: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
-                    //}
-
                     //System.Diagnostics.Debug.WriteLine("Failed to load audio files.", ex);
                     throw;
                 }
@@ -632,10 +621,6 @@ namespace OwnaudioAndroidExample
         {
             base.OnPause();
 
-            // ✅ CRITICAL FIX: Run blocking operations asynchronously to prevent UI freeze
-            // OnPause runs on UI thread - blocking here causes ANR (Application Not Responding)
-            // NOTE: Cannot use async void here as it may cause app crashes during lifecycle events
-            // Using Task.Run without await - fire and forget pattern for cleanup
             Task.Run(() =>
             {
                 try
@@ -660,11 +645,7 @@ namespace OwnaudioAndroidExample
 
             // Dispose timer (fast, no blocking)
             _progressTimer?.Dispose();
-
-            // ✅ CRITICAL FIX: Run all cleanup asynchronously to prevent ANR
-            // OnDestroy runs on UI thread - blocking here can cause ANR on slow devices
-            // NOTE: Cannot use async void here as it may cause app crashes during lifecycle events
-            // Using Task.Run without await - fire and forget pattern for cleanup
+            
             Task.Run(async () =>
             {
                 try

@@ -166,18 +166,18 @@ internal static partial class PaBinding
     public struct PaAsioStreamInfo
     {
         public uint size;             // unsigned long -> uint
-        public PaHostApiTypeId hostApiType; // Enum marad
+        public PaHostApiTypeId hostApiType; // Enum remains
         public uint version;          // unsigned long -> uint
         public uint flags;            // unsigned long -> uint
 
         /// <summary>
-        /// Ha a `paAsioUseChannelSelectors` flag be van állítva, 
-        /// akkor ez egy mutató egy int tömbre, amely a használt ASIO csatornákat adja meg.
+        /// If the `paAsioUseChannelSelectors` flag is set,
+        /// then this is a pointer to an int array specifying the ASIO channels used.
         /// </summary>
-        public IntPtr channelSelectors; // int* -> IntPtr (mutató C#-ban)
+        public IntPtr channelSelectors; // int* -> IntPtr (pointer C#-ban)
 
         /// <summary>
-        /// Visszaadja a csatornaválasztó tömböt, ha van.
+        /// Returns the channel selector array, if any.
         /// </summary>
         public int[] GetChannelSelectors(int channelCount)
         {
@@ -190,7 +190,7 @@ internal static partial class PaBinding
         }
 
         /// <summary>
-        /// Beállítja a csatornaválasztó tömböt.
+        /// Sets the channel selection array.
         /// </summary>
         public void SetChannelSelectors(int[] selectors)
         {
@@ -210,7 +210,7 @@ internal static partial class PaBinding
         }
 
         /// <summary>
-        /// Felszabadítja az erőforrásokat.
+        /// Frees resources.
         /// </summary>
         public void Free()
         {

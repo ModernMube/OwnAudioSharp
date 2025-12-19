@@ -24,11 +24,6 @@ namespace OwnaudioNET.Sources;
 /// - Delegates all IAudioSource methods to the inner source
 /// - Intercepts ReadSamples() to apply effect chain
 /// - Thread-safe effect management
-///
-/// Performance:
-/// - Zero allocation in hot path (after initialization)
-/// - Effects processed in order they were added
-/// - Minimal overhead when no effects are active
 /// </summary>
 public sealed class SourceWithEffects : IAudioSource
 {

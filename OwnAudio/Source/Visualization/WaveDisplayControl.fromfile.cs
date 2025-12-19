@@ -23,15 +23,6 @@ namespace OwnaudioNET.Visualization
         /// <param name="sampleRate">Desired sample rate for decoding (default: 44100).</param>
         /// <returns>True if the file was loaded successfully, false otherwise.</returns>
         /// <exception cref="ArgumentNullException">Thrown when filePath is null or empty.</exception>
-        /// <remarks>
-        /// This method optimizes memory usage by:
-        /// - Processing audio in small chunks instead of loading everything at once
-        /// - Downsampling the data for visualization purposes
-        /// - Using ArrayPool for temporary buffers
-        /// - Disposing of the decoder immediately after processing
-        /// - Automatically falling back between decoder types
-        /// The resulting audio data will be suitable for waveform display while keeping memory usage minimal.
-        /// </remarks>
         public bool LoadFromAudioFile(string filePath, int maxSamples = 100000, bool preferFFmpeg = false,
             int channels = 1, int sampleRate = 44100)
         {

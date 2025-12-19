@@ -60,9 +60,7 @@ public abstract partial class BaseAudioSource : ISynchronizable
     /// Uses lock-free Interlocked.Read for sample position access.
     /// </remarks>
     public virtual void ResyncTo(long samplePosition)
-    {
-        // Calculate tolerance (10ms at current sample rate, reduced from 100ms)
-        // This provides sample-accurate sync while avoiding excessive seeking
+    {        
         long tolerance = (long)(0.01 * Config.SampleRate);  // 10ms = ~480 frames @ 48kHz
         long currentPosition = Interlocked.Read(ref _samplePosition);
         long drift = Math.Abs(currentPosition - samplePosition);

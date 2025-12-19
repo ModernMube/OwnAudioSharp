@@ -251,28 +251,12 @@ namespace OwnaudioNET.Effects
                     // Unrolled loop for Filter Array? 
                     // 20 iterations is small enough for modern CPU branch prediction
                     for (int f = 0; f < totalFilters; f++)
-                    {
-                        // Direct Form II Transposed
-                        // y = b0*x + z1
-                        // z1 = b1*x - a1*y + z2
-                        // z2 = b2*x - a2*y
-                        
+                    {                        
                         float output = _b0[f] * sample + z1[f];
                         z1[f] = _b1[f] * sample - _a1[f] * output + z2[f];
                         z2[f] = _b2[f] * sample - _a2[f] * output;
                         
                         sample = output;
-                        
-                        // Note: If gain is 0, coeffs are b0=1, a1/a2/b1/b2=0? 
-                        // Actually standard calculation gives Identity coeffs if Gain=0?
-                        // Yes: A=1, alpha=sin/2Q.
-                        // b0 = 1+alpha, a0 = 1+alpha -> b0/a0 = 1.
-                        // b1 = -2cos, a1 = -2cos -> equal.
-                        // b2 = 1-alpha, a2 = 1-alpha -> equal.
-                        // y = x + z1...
-                        // If fully identity, we could optimize by skipping bands with 0 gain.
-                        // But branching might cost more than MUL. 
-                        // Vectorization (SIMD) would be best here but hard in pure C#.
                     }
                     
                     // Apply Soft Limit to prevent clipping from EQ Boost

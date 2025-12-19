@@ -28,16 +28,12 @@ namespace Ownaudio.Core
 
             IAudioEngine engine;
 
-            // Try to use NativeAudioEngine first (PortAudio/MiniAudio hybrid)
-            // This is the preferred cross-platform solution
             try
             {
                 engine = CreateNativeEngine();
             }
             catch (Exception)
             {
-                // Fallback to platform-specific engines if NativeAudioEngine fails
-
                 // Detect platform and create appropriate engine
                 if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
@@ -119,8 +115,6 @@ namespace Ownaudio.Core
 
         private static IAudioEngine CreateNativeEngine()
         {
-            // Use reflection to avoid hard dependency on Native assembly
-            // NativeAudioEngine uses PortAudio (preferred) or MiniAudio (fallback)
             var assembly = System.Reflection.Assembly.Load("Ownaudio.Native");
             var type = assembly.GetType("Ownaudio.Native.NativeAudioEngine");
             return (IAudioEngine)Activator.CreateInstance(type);
