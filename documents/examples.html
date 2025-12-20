@@ -267,31 +267,68 @@ fileSource3.Volume = 1.0f;</code></pre>
             </ul>
 
             <h2 id="step6-playback">Step 6: Synchronized Playback Setup</h2>
-            <p>Add sources to the mixer and configure synchronized playback with drift correction.</p>
+            <p>Add sources to the mixer and configure Master Clock synchronization for sample-accurate playback.</p>
+
+            <div class="alert alert-info">
+                <strong>Master Clock Synchronization (v2.1.0+)</strong>
+                This example uses the new timeline-based Master Clock system for professional DAW-style synchronization.
+            </div>
 
             <div class="code-block">
-                <div class="code-header">Mixer Configuration and Sync Group</div>
+                <div class="code-header">Mixer Configuration and Master Clock Sync</div>
                 <pre><code class="language-csharp">mixer.AddSource(fileSource0);
 mixer.AddSource(fileSource1);
 mixer.AddSource(fileSource2);
 mixer.AddSource(fileSource3);
 
-var syncGroup = mixer.CreateSyncGroup("Demo", fileSource0, fileSource1, fileSource2, fileSource3);
+// Attach all sources to Master Clock for sample-accurate sync
+fileSource0.AttachToClock(mixer.MasterClock);
+fileSource1.AttachToClock(mixer.MasterClock);
+fileSource2.AttachToClock(mixer.MasterClock);
+fileSource3.AttachToClock(mixer.MasterClock);
 
+// Optional: Set timeline positions (all start at 0.0 by default)
+fileSource0.StartOffset = 0.0;  // Drums start immediately
+fileSource1.StartOffset = 0.0;  // Bass starts immediately
+fileSource2.StartOffset = 0.0;  // Other starts immediately
+fileSource3.StartOffset = 0.0;  // Vocals start immediately
+
+// Start mixer
 mixer.Start();
 
-mixer.StartSyncGroup("Demo");</code></pre>
+// Start all sources for playback
+fileSource0.Play();
+fileSource1.Play();
+fileSource2.Play();
+fileSource3.Play();
+
+// All attached sources now play in perfect sync</code></pre>
             </div>
 
             <p><strong>What happens here:</strong></p>
             <ul>
                 <li>Add all four audio sources to the mixer's processing pipeline</li>
-                <li>Create a synchronization group named "Demo" containing all sources</li>
-                <li>Start the mixer's internal processing (begins requesting audio from sources)</li>
-                <li>Start the sync group to play all sources simultaneously</li>
-                <li>The sync group ensures all tracks play in perfect synchronization with drift correction</li>
-                <li>Drift correction compensates for any timing differences between sources</li>
+                <li><strong>Attach to Master Clock:</strong> Each source subscribes to the mixer's timeline</li>
+                <li><strong>StartOffset property:</strong> Positions tracks on the timeline (DAW-style regions)</li>
+                <li>Start the mixer to begin the mixing engine</li>
+                <li><strong>Play() each source:</strong> Explicitly start playback for each attached source</li>
+                <li><strong>Sample-accurate sync:</strong> Master Clock ensures precise timing alignment</li>
+                <li><strong>Automatic drift correction:</strong> Tracks resync if drift exceeds 10ms (~480 samples @ 48kHz)</li>
+                <li><strong>Timeline control:</strong> Use <code>mixer.MasterClock.SeekTo(time)</code> to jump to any position</li>
+                <li><strong>Dropout events:</strong> Subscribe to <code>mixer.TrackDropout</code> to monitor buffer underruns</li>
             </ul>
+
+            <div class="alert alert-success">
+                <strong>Master Clock Benefits</strong>
+                Unlike legacy sync groups, Master Clock provides:
+                <ul>
+                    <li>Timeline-based positioning with start offsets</li>
+                    <li>Sample-accurate synchronization (not just frame-accurate)</li>
+                    <li>Realtime and Offline rendering modes</li>
+                    <li>Automatic tempo-independent timing</li>
+                    <li>Per-track tempo control with synchronized master timeline</li>
+                </ul>
+            </div>
 
             <h2 id="step7-monitoring">Step 7: Real-time Monitoring and Dynamic Effects</h2>
             <p>Monitor playback progress and peak levels in real-time, with dynamic effect activation during playback.</p>

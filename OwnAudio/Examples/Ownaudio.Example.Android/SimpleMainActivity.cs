@@ -254,21 +254,41 @@ namespace OwnaudioAndroidExample
                 UpdateStatus("✓ Vocal effects added");
 
                 // ==========================================
-                // Step 5: Add sources to mixer and create sync group
+                // Step 5: Add sources to mixer and setup Master Clock sync
                 // ==========================================
-                UpdateStatus("\n[5/6] Setting up synchronized playback...");
+                UpdateStatus("\n[5/6] Setting up Master Clock synchronization...");
 
                 _mixer.AddSource(_fileSource0);
                 _mixer.AddSource(_fileSource1);
                 _mixer.AddSource(_fileSource2);
                 _mixer.AddSource(_fileSource3Effect);
 
-                // Create sync group for synchronized playback
-                _mixer.CreateSyncGroup("Demo", _fileSource0, _fileSource1, _fileSource2, _fileSource3);
-                _mixer.SetSyncGroupTempo("Demo", 1.0f);
+                // ==========================================
+                // NEW MASTER CLOCK ARCHITECTURE (v2.1.0+)
+                // ==========================================
+                // Attach sources to Master Clock for sample-accurate synchronization
+                _fileSource0.AttachToClock(_mixer.MasterClock);
+                _fileSource1.AttachToClock(_mixer.MasterClock);
+                _fileSource2.AttachToClock(_mixer.MasterClock);
+                _fileSource3.AttachToClock(_mixer.MasterClock);
 
-                UpdateStatus($"✓ Sync group created with 4 tracks");
+                // Optional: Set timeline positions (all start at 0.0 by default)
+                _fileSource0.StartOffset = 0.0;  // Drums start immediately
+                _fileSource1.StartOffset = 0.0;  // Bass start immediately
+                _fileSource2.StartOffset = 0.0;  // Other start immediately
+                _fileSource3.StartOffset = 0.0;  // Vocals start immediately
+
+                // Subscribe to dropout events for monitoring
+                _mixer.TrackDropout += (sender, e) =>
+                {
+                    UpdateStatus($"! Track dropout: {e.TrackName} at {e.MasterTimestamp:F3}s");
+                    Android.Util.Log.Warn("OwnaudioAndroidTest",
+                        $"Track dropout: {e.TrackName}, Reason: {e.Reason}, Missed frames: {e.MissedFrames}");
+                };
+
+                UpdateStatus($"✓ Master Clock sync configured");
                 UpdateStatus($"✓ Active sources: {_mixer.SourceCount}");
+                UpdateStatus($"✓ Clock mode: {_mixer.MasterClock.Mode}");
 
                 UpdateStatus("\n[6/6] Ready to play!");
 
@@ -379,8 +399,13 @@ namespace OwnaudioAndroidExample
                 // Start mixer
                 _mixer.Start();
 
-                // Start the sync group for synchronized playback
-                _mixer.StartSyncGroup("Demo");
+                // Start all sources for playback (IMPORTANT with Master Clock!)
+                _fileSource0.Play();
+                _fileSource1.Play();
+                _fileSource2.Play();
+                _fileSource3.Play();
+
+                // All attached sources now play in perfect sync with Master Clock
 
                 // Record start time for tempo accuracy calculation
                 _startTime = DateTime.Now;
@@ -431,6 +456,8 @@ namespace OwnaudioAndroidExample
                     UpdateStatus($"Total underruns: {_mixer.TotalUnderruns}");
                     UpdateStatus($"Real-time elapsed: {elapsed.TotalSeconds:F2}s");
                     UpdateStatus($"Audio position: {finalPosition:F2}s");
+                    UpdateStatus($"Master Clock timestamp: {_mixer.MasterClock.CurrentTimestamp:F2}s");
+                    UpdateStatus($"Master Clock samples: {_mixer.MasterClock.CurrentSamplePosition}");
 
                     // Calculate tempo accuracy
                     if (elapsed.TotalSeconds > 0)
@@ -451,8 +478,7 @@ namespace OwnaudioAndroidExample
                 // ✅ CRITICAL FIX: Run all blocking operations asynchronously to prevent UI freeze
                 await Task.Run(() =>
                 {
-                    // Stop sync group
-                    _mixer?.StopSyncGroup("Demo");
+                    // Note: No need to stop sync group - Master Clock handles cleanup automatically
 
                     // Stop and dispose all sources
                     if (_mixer != null)
@@ -650,7 +676,7 @@ namespace OwnaudioAndroidExample
             {
                 try
                 {
-                    _mixer?.StopSyncGroup("Demo");
+                    // Note: No need to stop sync group - Master Clock handles cleanup automatically
                     _mixer?.Stop();
                     _mixer?.Dispose();
 

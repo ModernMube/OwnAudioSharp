@@ -263,28 +263,57 @@ public class TestProgram
             mixer.AddSource(fileSource2);
             mixer.AddSource(fileSource3Effect);
 
-            // NEW ARCHITECTURE: Create sync group - automatically attaches sources to GhostTrack
-            mixer.CreateSyncGroup("Demo", fileSource0, fileSource1, fileSource2, fileSource3);
+            // ==========================================
+            // NEW MASTER CLOCK ARCHITECTURE (v2.1.0+)
+            // ==========================================
+            // Attach sources to Master Clock for sample-accurate synchronization
+            fileSource0.AttachToClock(mixer.MasterClock);
+            fileSource1.AttachToClock(mixer.MasterClock);
+            fileSource2.AttachToClock(mixer.MasterClock);
+            fileSource3.AttachToClock(mixer.MasterClock);
 
-            // NEW ARCHITECTURE: Set tempo on GhostTrack - automatically propagates to all sources
-            mixer.SetSyncGroupTempo("Demo", 1.0f);
+            // Optional: Set timeline positions (all start at 0.0 by default)
+            fileSource0.StartOffset = 0.0;  // Drums start immediately
+            fileSource1.StartOffset = 0.0;  // Bass start immediately
+            fileSource2.StartOffset = 0.0;  // Other start immediately
+            fileSource3.StartOffset = 0.0;  // Vocals start immediately
 
-            // NEW ARCHITECTURE: No need for manual drift correction!
-            // Each FileSource continuously checks drift in ReadSamples() automatically
-            // - Continuous check every ~10ms (vs old: once per second)
-            // - Tight tolerance: 10ms (vs old: 100ms)
-            // - Zero overhead, lock-free design
+            // Master Clock Features:
+            // - Timeline-based synchronization (timestamp in seconds)
+            // - Sample-accurate precision (not just frame-accurate)
+            // - Automatic drift correction (<10ms tolerance, ~480 samples @ 48kHz)
+            // - Start offsets for DAW-style track positioning
+            // - Realtime/Offline rendering modes
+            // - Tempo-independent master timeline
 
-            Console.WriteLine($"  ✓ Source added to mixer");
+            Console.WriteLine($"  ✓ Sources added to mixer");
+            Console.WriteLine($"  ✓ Sources attached to Master Clock");
             Console.WriteLine($"  ✓ Active sources: {mixer.SourceCount}");
+            Console.WriteLine($"  ✓ Master Clock mode: {mixer.MasterClock.Mode}");
             Console.WriteLine($"  ✓ File source state: {fileSource0.State}");
 
-            mixer.Start();
-            mixer.StartSyncGroup("Demo");                 
+            // Subscribe to dropout events for monitoring
+            mixer.TrackDropout += (sender, e) =>
+            {
+                Console.WriteLine($"\n  ! Track dropout: {e.TrackName}");
+                Console.WriteLine($"    At time: {e.MasterTimestamp:F3}s");
+                Console.WriteLine($"    Missed frames: {e.MissedFrames}");
+                Console.WriteLine($"    Reason: {e.Reason}");
+            };
 
-            // IMPORTANT: Start the mixer BEFORE adding sources
-            // This ensures the mixer's AddSource() method will automatically start the source
-            Console.WriteLine($"  ✓ Mixer started: {mixer.IsRunning}");               
+            mixer.Start();
+
+            // Start all sources for playback
+            // With Master Clock, sources must be explicitly started
+            fileSource0.Play();
+            fileSource1.Play();
+            fileSource2.Play();
+            fileSource3.Play();
+
+            // IMPORTANT: Start the mixer to begin playback
+            // All attached sources will play in perfect sync with the Master Clock
+            Console.WriteLine($"  ✓ Mixer started: {mixer.IsRunning}");
+            Console.WriteLine($"  ✓ All sources playing");               
             
             // ==========================================
             // Step 6: Playback Progress Display
@@ -311,6 +340,10 @@ public class TestProgram
             {
                 // Update progress every 100ms
                 Thread.Sleep(100);
+
+                // Get position from Master Clock (timeline timestamp)
+                double masterTimestamp = mixer.MasterClock.CurrentTimestamp;
+                long masterSamplePosition = mixer.MasterClock.CurrentSamplePosition;
 
                 double position = fileSource0.Position;
                 double duration = fileSource0.Duration;
@@ -340,9 +373,10 @@ public class TestProgram
 
                 string infoLine = $"  Position: {new TimeSpan(0,0,(int)position).ToString()} / {new TimeSpan(0, 0, (int)duration).ToString()}s  [{progressBar}] {progressPercent}%  ";
                 string peakLine = $"| Peaks: L={mixer.LeftPeak:F2} R={mixer.RightPeak:F2}  ";
+                string clockLine = $"| MClock: {masterTimestamp:F2}s  ";
 
-                Console.Write(infoLine + peakLine);
-                
+                Console.Write(infoLine + peakLine + clockLine);
+
                 if (statusLine == -1)
                 {
                     Console.WriteLine();
@@ -410,6 +444,8 @@ public class TestProgram
             Console.WriteLine($"  Master volume: {mixer.MasterVolume:P0}");
             Console.WriteLine($"  Source state: {fileSource0.State}");
             Console.WriteLine($"  Final position: {fileSource0.Position:F2}s / {fileSource0.Duration:F2}s");
+            Console.WriteLine($"  Master Clock timestamp: {mixer.MasterClock.CurrentTimestamp:F2}s");
+            Console.WriteLine($"  Master Clock sample position: {mixer.MasterClock.CurrentSamplePosition}");
 
             // ==========================================
             // Cleanup
@@ -418,7 +454,7 @@ public class TestProgram
 
             Console.WriteLine("  Stopping mixer...");
             mixer.Stop();
-            mixer.StopSyncGroup("Demo");
+            // Note: No need to stop sync group - Master Clock handles cleanup automatically
 
             Console.WriteLine("  Disposing mixer...");
             mixer.Dispose();
