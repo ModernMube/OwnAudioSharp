@@ -12,7 +12,13 @@ namespace OwnaudioNET.Interfaces;
 /// - Sources automatically follow the GhostTrack's state changes
 /// - No manual synchronization calls needed
 /// - Zero overhead when not attached to a GhostTrack
+///
+/// DEPRECATED: Implement IMasterClockSource instead.
+/// This interface is maintained for backward compatibility and will be removed in v3.0.0.
 /// </summary>
+[Obsolete("IGhostTrackObserver is deprecated. Implement IMasterClockSource instead. " +
+          "This interface will be removed in v3.0.0.",
+          error: false)]
 public interface IGhostTrackObserver
 {
     /// <summary>

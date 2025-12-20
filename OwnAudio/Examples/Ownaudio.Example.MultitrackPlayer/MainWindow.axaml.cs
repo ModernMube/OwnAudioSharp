@@ -1,6 +1,9 @@
 using System;
 using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using MultitrackPlayer.ViewModels;
@@ -32,6 +35,31 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = new MainWindowViewModel();
+
+        // FIX: Sliders in Avalonia often handle PointerPressed/Released internally.
+        // We must use AddHandler with handledEventsToo: true to ensure our methods are called.
+        
+        // Seek Slider
+        var seekSlider = this.FindControl<Slider>("SeekSlider");
+        if (seekSlider != null)
+        {
+            seekSlider.AddHandler(PointerPressedEvent, OnSliderSeekStart, RoutingStrategies.Tunnel, true);
+            seekSlider.AddHandler(PointerReleasedEvent, OnSliderSeekEnd, RoutingStrategies.Bubble, true);
+        }
+
+        // Tempo Slider
+        var tempoSlider = this.FindControl<Slider>("TempoSlider");
+        if (tempoSlider != null)
+        {
+            tempoSlider.AddHandler(PointerReleasedEvent, OnTempoSliderDragEnd, RoutingStrategies.Bubble, true);
+        }
+
+        // Pitch Slider
+        var pitchSlider = this.FindControl<Slider>("PitchSlider");
+        if (pitchSlider != null)
+        {
+            pitchSlider.AddHandler(PointerReleasedEvent, OnPitchSliderDragEnd, RoutingStrategies.Bubble, true);
+        }
     }
 
     #endregion
@@ -91,7 +119,7 @@ public partial class MainWindow : Window
     /// </summary>
     /// <param name="sender">The slider that raised the event.</param>
     /// <param name="e">Pointer event arguments.</param>
-    private void OnSliderSeekStart(object? sender, Avalonia.Input.PointerPressedEventArgs e)
+    private void OnSliderSeekStart(object? sender, PointerPressedEventArgs e)
     {
         ViewModel?.BeginSeekCommand.Execute(null);
     }
@@ -102,11 +130,84 @@ public partial class MainWindow : Window
     /// </summary>
     /// <param name="sender">The slider that raised the event.</param>
     /// <param name="e">Pointer event arguments.</param>
-    private void OnSliderSeekEnd(object? sender, Avalonia.Input.PointerReleasedEventArgs e)
+    private void OnSliderSeekEnd(object? sender, PointerReleasedEventArgs e)
     {
         if (sender is Slider slider)
         {
             ViewModel?.EndSeekCommand.Execute(slider.Value);
+        }
+    }
+
+    #endregion
+
+    #region Event Handlers - Slider Drag Optimization
+
+    /// <summary>
+    /// Handles ValueChanged event on the tempo slider.
+    /// Updates ONLY the UI display, does NOT update audio engine during drag.
+    /// </summary>
+    private void OnTempoSliderValueChanged(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Slider slider)
+        { 
+            if(TempoValueText != null)
+            {
+                TempoValueText.Text = $"{slider.Value:F0}%";
+            }
+        }
+    }
+
+    /// <summary>
+    /// Handles PointerReleased event on the tempo slider.
+    /// Applies the FINAL tempo value to audio engine ONLY when user releases mouse.
+    /// </summary>
+    private void OnTempoSliderDragEnd(object? sender, PointerReleasedEventArgs e)
+    {
+        if (sender is Slider slider && ViewModel != null)
+        {
+            // Apply final value to audio engine
+            float finalValue = (float)slider.Value;
+            ViewModel.ApplyTempoChange(finalValue);
+
+            // Also update ViewModel property for binding consistency
+            ViewModel.TempoPercent = finalValue;
+        }
+    }
+
+    /// <summary>
+    /// Handles ValueChanged event on the pitch slider.
+    /// Updates ONLY the UI display, does NOT update audio engine during drag.
+    /// </summary>
+    private void OnPitchSliderValueChanged(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Slider slider)
+        {
+            // Update UI TextBlock only (visual feedback during drag)
+            var textBlock = this.FindControl<TextBlock>("PitchValueText");
+            if (textBlock != null)
+            {
+                int pitchValue = (int)slider.Value;
+                textBlock.Text = $"{pitchValue:F0} st";
+            }
+
+            // Do NOT update audio engine here - that happens on PointerReleased
+        }
+    }
+
+    /// <summary>
+    /// Handles PointerReleased event on the pitch slider.
+    /// Applies the FINAL pitch value to audio engine ONLY when user releases mouse.
+    /// </summary>
+    private void OnPitchSliderDragEnd(object? sender, PointerReleasedEventArgs e)
+    {
+        if (sender is Slider slider && ViewModel != null)
+        {
+            // Apply final value to audio engine
+            int finalValue = (int)slider.Value;
+            ViewModel.ApplyPitchChange(finalValue);
+
+            // Also update ViewModel property for binding consistency
+            ViewModel.PitchSemitones = finalValue;
         }
     }
 

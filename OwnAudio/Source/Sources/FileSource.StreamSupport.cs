@@ -40,12 +40,12 @@ public partial class FileSource
     }
 
     /// <summary>
-    /// Internal constructor that accepts a pre-configured decoder.
-    /// Used by other constructors to initialize the FileSource.
+    /// Creates a new FileSource with a custom audio decoder.
+    /// Useful for dependency injection or using custom decoder implementations.
     /// </summary>
     /// <param name="decoder">Pre-configured audio decoder.</param>
     /// <param name="bufferSizeInFrames">Size of the internal buffer in frames.</param>
-    private FileSource(IAudioDecoder decoder, int bufferSizeInFrames)
+    public FileSource(IAudioDecoder decoder, int bufferSizeInFrames = 8192)
     {
         if (decoder == null)
             throw new ArgumentNullException(nameof(decoder));
@@ -53,6 +53,8 @@ public partial class FileSource
         _bufferSizeInFrames = bufferSizeInFrames;
         _decoder = decoder;
         _streamInfo = _decoder.StreamInfo;
+        // Default file path for stream-based sources
+        _filePath = "stream_source";
 
         _config = new AudioConfig
         {
@@ -73,6 +75,9 @@ public partial class FileSource
         _soundTouchInputBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 4];
         _soundTouchAccumulationBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 8];
         _soundTouchAccumulationCount = 0;
+        
+        // ZERO-ALLOC: Pre-allocate a reusable buffer for the decoder.
+        _decodeBuffer = new byte[bufferSizeInFrames * _streamInfo.Channels * sizeof(float)];
 
         // Initialize synchronization primitives
         _pauseEvent = new ManualResetEventSlim(false);

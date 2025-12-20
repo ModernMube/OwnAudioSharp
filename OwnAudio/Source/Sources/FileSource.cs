@@ -1,6 +1,7 @@
 using Ownaudio;
 using Ownaudio.Core;
 using Ownaudio.Decoders;
+using Ownaudio.Synchronization;
 using OwnaudioNET.BufferManagement;
 using OwnaudioNET.Core;
 using OwnaudioNET.Events;
@@ -16,13 +17,14 @@ namespace OwnaudioNET.Sources;
 /// Supports pitch shifting and tempo control via SoundTouch.NET.
 /// Implements ISynchronizable for sample-accurate multi-track synchronization with drift correction.
 ///
-/// NEW ARCHITECTURE (GhostTrack Observer Pattern):
-/// - Implements IGhostTrackObserver to receive automatic notifications from GhostTrack
-/// - Zero overhead when not attached to a GhostTrack (single null check)
+/// DUAL MODE SYNCHRONIZATION (v2.4.0 - Backward Compatible):
+/// - NEW: Implements IMasterClockSource for timeline-based master clock synchronization
+/// - LEGACY: Implements IGhostTrackObserver for backward compatibility (deprecated)
+/// - Zero overhead when not attached to either synchronization method
 /// - Automatic state/position/tempo/pitch synchronization
 /// - Continuous drift correction in ReadSamples hot path
 /// </summary>
-public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackObserver
+public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackObserver, IMasterClockSource
 {
     private readonly IAudioDecoder _decoder;
     private readonly CircularBuffer _buffer;
@@ -38,7 +40,6 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     private float[] _soundTouchInputBuffer;  // Pre-allocated buffer for PutSamples
     private float[] _soundTouchAccumulationBuffer;  // Accumulation buffer (like working code)
     private int _soundTouchAccumulationCount;  // Tracks samples in accumulation buffer
-    private bool _wasUsingSoundTouch = false; // Tracks if SoundTouch was active in previous frame
 
     private volatile bool _shouldStop;
     private volatile bool _seekRequested;
@@ -48,12 +49,29 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     private float _tempo = 1.0f;
     private float _pitchShift = 0.0f;
     private bool _disposed;
+    private volatile bool _isPreBuffering = false;
+
+    // Transition and Sync Logic
+    private long _ignoreSyncUntil = 0;         // Grace period end frame for sync
 
     // ZERO-ALLOC: Reusable buffer for the decoder.
     private readonly byte[] _decodeBuffer = null!;
 
-    // NEW: GhostTrack observer pattern (replaces old sync gate mechanism)
+    // LEGACY: GhostTrack observer pattern (deprecated but functional)
     private GhostTrackSource? _ghostTrack = null;  // null = not synchronized (zero overhead)
+
+    // NEW: MasterClock support (v2.4.0+)
+    private MasterClock? _masterClock = null;  // null = not attached to master clock
+    private double _startOffset = 0.0;  // Track start offset on timeline (seconds)
+    private double _trackLocalTime = 0.0;  // Track's own timeline position (tempo-adjusted)
+    private double _fractionalFrameAccumulator = 0.0; // Accumulator for fractional frame advancement
+
+    /// <summary>
+    /// Gets or sets the synchronization tolerance in seconds.
+    /// Default is 0.010 (10ms).
+    /// If the drift exceeds this value, a corrective seek will be performed.
+    /// </summary>
+    public double SyncTolerance { get; set; } = 0.010;
 
     /// <inheritdoc/>
     public override AudioConfig Config => _config;
@@ -70,47 +88,144 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     /// <inheritdoc/>
     public override bool IsEndOfStream => _isEndOfStream;
 
+    // ========================================
+    // IMasterClockSource Implementation (NEW - v2.4.0+)
+    // ========================================
+
+    /// <inheritdoc/>
+    public double StartOffset
+    {
+        get => _startOffset;
+        set => _startOffset = value;
+    }
+
+    /// <inheritdoc/>
+    public bool IsAttachedToClock => _masterClock != null;
+
     /// <summary>
     /// Gets or sets the playback tempo multiplier (1.0 = normal speed).
     /// Valid range: 0.5x to 2.0x (converted to -50% to +100% for SoundTouch).
+    /// This property clears the SoundTouch buffer on change - use SetTempoSmooth() for slider adjustments.
     /// </summary>
     public override float Tempo
     {
         get => _tempo;
-        set
+        set => SetTempoInternal(value, clearBuffer: true, setGracePeriod: true);
+    }
+
+    /// <summary>
+    /// Sets tempo smoothly without clearing buffers - ideal for real-time slider adjustments.
+    /// Use this for continuous tempo changes to avoid audio glitches with many tracks.
+    /// </summary>
+    /// <param name="tempo">The tempo multiplier (0.5x to 2.0x).</param>
+    public void SetTempoSmooth(float tempo)
+    {
+        SetTempoInternal(tempo, clearBuffer: false, setGracePeriod: false);
+    }
+
+    /// <summary>
+    /// Internal method to set tempo with configurable buffer clearing and grace period.
+    /// </summary>
+    /// <param name="value">The tempo multiplier.</param>
+    /// <param name="clearBuffer">Whether to clear SoundTouch buffer (true for reset, false for smooth slider).</param>
+    /// <param name="setGracePeriod">Whether to set sync grace period (true for reset, false for smooth slider).</param>
+    private void SetTempoInternal(float value, bool clearBuffer, bool setGracePeriod)
+    {
+        // Clamp to 0.5x to 2.0x range
+        float clamped = Math.Clamp(value, 0.5f, 2.0f);
+        if (Math.Abs(_tempo - clamped) < 0.001f)
+            return;
+
+        _tempo = clamped;
+
+        lock (_soundTouchLock)
         {
-            // Clamp to 0.5x to 2.0x range
-            float clamped = Math.Clamp(value, 0.5f, 2.0f);
-            if (Math.Abs(_tempo - clamped) < 0.001f)
-                return;
-
-            _tempo = clamped;
-
             // Convert multiplier to percentage for SoundTouch
-            // Tempo multiplier: 0.5 = -50%, 1.0 = 0%, 2.0 = +100%
             float tempoChangePercent = (_tempo - 1.0f) * 100.0f;
             _soundTouch.TempoChange = tempoChangePercent;
+
+            if (clearBuffer)
+            {
+                // Clear SoundTouch internal buffer to remove old samples and prevent glitches
+                _soundTouch.Clear();
+            }
+        }
+
+        if (clearBuffer)
+        {
+            // Reset accumulation buffer to prevent stale data
+            _soundTouchAccumulationCount = 0;
+        }
+
+        if (setGracePeriod)
+        {
+            // SYNC STABILIZATION: Trigger grace period to prevent chaotic resync
+            long gracePeriodEnd = SamplePosition + (_streamInfo.SampleRate / 2);
+            Interlocked.Exchange(ref _ignoreSyncUntil, gracePeriodEnd);
         }
     }
 
     /// <summary>
     /// Gets or sets the pitch shift in semitones (0 = no shift).
     /// Valid range: -12 to +12 semitones (1 octave down to 1 octave up).
+    /// This property clears the SoundTouch buffer on change - use SetPitchSmooth() for slider adjustments.
     /// </summary>
     public override float PitchShift
     {
         get => _pitchShift;
-        set
-        {
-            // Clamp to -12 to +12 semitones
-            float clamped = Math.Clamp(value, -12.0f, 12.0f);
-            if (Math.Abs(_pitchShift - clamped) < 0.001f)
-                return;
+        set => SetPitchInternal(value, clearBuffer: true, setGracePeriod: true);
+    }
 
-            _pitchShift = clamped;
+    /// <summary>
+    /// Sets pitch smoothly without clearing buffers - ideal for real-time slider adjustments.
+    /// Use this for continuous pitch changes to avoid audio glitches with many tracks.
+    /// </summary>
+    /// <param name="pitchSemitones">The pitch shift in semitones (-12 to +12).</param>
+    public void SetPitchSmooth(float pitchSemitones)
+    {
+        SetPitchInternal(pitchSemitones, clearBuffer: false, setGracePeriod: false);
+    }
+
+    /// <summary>
+    /// Internal method to set pitch with configurable buffer clearing and grace period.
+    /// </summary>
+    /// <param name="value">The pitch shift in semitones.</param>
+    /// <param name="clearBuffer">Whether to clear SoundTouch buffer (true for reset, false for smooth slider).</param>
+    /// <param name="setGracePeriod">Whether to set sync grace period (true for reset, false for smooth slider).</param>
+    private void SetPitchInternal(float value, bool clearBuffer, bool setGracePeriod)
+    {
+        // Clamp to -12 to +12 semitones
+        float clamped = Math.Clamp(value, -12.0f, 12.0f);
+        if (Math.Abs(_pitchShift - clamped) < 0.001f)
+            return;
+
+        _pitchShift = clamped;
+
+        lock (_soundTouchLock)
+        {
             _soundTouch.PitchSemiTones = _pitchShift;
+
+            if (clearBuffer)
+            {
+                // Clear SoundTouch internal buffer to remove old pitch-processed samples
+                _soundTouch.Clear();
+            }
+        }
+
+        if (clearBuffer)
+        {
+            // Reset accumulation buffer to prevent stale data
+            _soundTouchAccumulationCount = 0;
+        }
+
+        if (setGracePeriod)
+        {
+            // SYNC STABILIZATION: Trigger grace period to prevent chaotic resync
+            long gracePeriodEnd = SamplePosition + (_streamInfo.SampleRate / 2);
+            Interlocked.Exchange(ref _ignoreSyncUntil, gracePeriodEnd);
         }
     }
+
 
     /// <summary>
     /// Initializes a new instance of the FileSource class.
@@ -145,8 +260,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             BufferSize = bufferSizeInFrames
         };
 
-        // Initialize circular buffer with 4x size for better buffering (like Ownaudio SourceManager)
-        // This prevents underruns during temporary decoder delays
+        // Initialize circular buffer with 4x size for better buffering and underrun prevention
         int bufferSizeInSamples = bufferSizeInFrames * _streamInfo.Channels * 4;
         _buffer = new CircularBuffer(bufferSizeInSamples);
 
@@ -155,15 +269,13 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         _soundTouchOutputBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 2]; // Buffer for ReceiveSamples
 
         // Pre-allocate input buffer with generous headroom to avoid reallocations
-        // Max decoder frame size is typically ~8192 samples, so 4x is safe
         _soundTouchInputBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 4]; // Increased from 2x to 4x
 
         // Accumulation buffer with 8x size to handle tempo changes (2x tempo = 2x samples)
         _soundTouchAccumulationBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 8]; // Increased from 4x to 8x
         _soundTouchAccumulationCount = 0;
 
-        // ZERO-ALLOC: Pre-allocate a reusable buffer for the decoder.
-        // The decoder will write directly into this buffer instead of allocating a new byte[] on every frame.
+        // ZERO-ALLOC: Pre-allocate a reusable buffer for the decoder
         _decodeBuffer = new byte[bufferSizeInFrames * _streamInfo.Channels * sizeof(float)];
 
         // Initialize synchronization primitives
@@ -193,7 +305,20 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             FillWithSilence(buffer, frameCount * _streamInfo.Channels);
             return frameCount;
         }
-        
+
+        // PRIORITY 1: NEW - If attached to MasterClock, delegate to ReadSamplesAtTime()
+        if (_masterClock != null)
+        {
+            bool success = ReadSamplesAtTime(
+                _masterClock.CurrentTimestamp,
+                buffer,
+                frameCount,
+                out ReadResult result);
+
+            return result.FramesRead;
+        }
+
+        // PRIORITY 2: LEGACY - If attached to GhostTrack, use legacy sync logic
         if (_ghostTrack != null)
         {
             if (_buffer.Available > 0)
@@ -203,13 +328,16 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                 long myPosition = SamplePosition;
                 long drift = Math.Abs(ghostPosition - myPosition);
 
-                if (drift > 512)
+                // SYNC CHECK: Only check drift if we are past the grace period
+                if (drift > 512 && myPosition > _ignoreSyncUntil)
                 {
                     // Drift detected - resync immediately
                     ResyncTo(ghostPosition);
                 }
             }
         }
+
+        // PRIORITY 3: Standalone mode (no sync) - EXISTING CODE
 
         int samplesToRead = frameCount * _streamInfo.Channels;
         int samplesRead = _buffer.Read(buffer.Slice(0, samplesToRead));
@@ -218,7 +346,12 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         // Update position
         if (framesRead > 0)
         {
-            int sourceFramesAdvanced = (int)(framesRead * _tempo);
+            // ACCUMULATE FRACTIONAL FRAMES (fixes precision drift)
+            double exactSourceFrames = framesRead * _tempo;
+            _fractionalFrameAccumulator += exactSourceFrames;
+            int sourceFramesAdvanced = (int)_fractionalFrameAccumulator;
+            _fractionalFrameAccumulator -= sourceFramesAdvanced;
+
             UpdateSamplePosition(sourceFramesAdvanced);
 
             double frameDuration = 1.0 / _streamInfo.SampleRate;
@@ -240,8 +373,13 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             FillWithSilence(buffer.Slice(samplesRead), remainingSamples);
 
             int silenceFrames = frameCount - framesRead;
-            // Scale by Tempo here as well
-            int silenceSourceFrames = (int)(silenceFrames * _tempo);
+            
+            // ACCUMULATE FRACTIONAL FRAMES for silence
+            double exactSilenceFrames = silenceFrames * _tempo;
+            _fractionalFrameAccumulator += exactSilenceFrames;
+            int silenceSourceFrames = (int)_fractionalFrameAccumulator;
+            _fractionalFrameAccumulator -= silenceSourceFrames;
+
             UpdateSamplePosition(silenceSourceFrames);
             
             double frameDuration = 1.0 / _streamInfo.SampleRate;
@@ -307,6 +445,9 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                         SetSamplePosition((long)(positionInSeconds * _streamInfo.SampleRate));
                         _isEndOfStream = false;
 
+                        // CRITICAL FIX: Clear circular buffer to remove stale data
+                        _buffer.Clear();
+
                         // Clear SoundTouch buffer
                         lock (_soundTouchLock)
                         {
@@ -357,9 +498,13 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     /// Attaches this FileSource to a GhostTrack for automatic synchronization.
     /// After attachment, this source will automatically follow the GhostTrack's
     /// state (play/pause/stop), position (seek), tempo, and pitch changes.
+    ///
+    /// DEPRECATED: Use AttachToClock(MasterClock) instead.
+    /// This method is maintained for backward compatibility and will be removed in v3.0.0.
     /// </summary>
     /// <param name="ghostTrack">The GhostTrack to attach to.</param>
     /// <exception cref="ArgumentNullException">Thrown when ghostTrack is null.</exception>
+    [Obsolete("Use AttachToClock(MasterClock) instead. This method will be removed in v3.0.0.", error: false)]
     internal void AttachToGhostTrack(GhostTrackSource ghostTrack)
     {
         if (ghostTrack == null)
@@ -379,7 +524,11 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     /// <summary>
     /// Detaches this FileSource from its GhostTrack.
     /// After detachment, this source operates independently.
+    ///
+    /// DEPRECATED: Use DetachFromClock() instead.
+    /// This method is maintained for backward compatibility and will be removed in v3.0.0.
     /// </summary>
+    [Obsolete("Use DetachFromClock() instead. This method will be removed in v3.0.0.", error: false)]
     internal void DetachFromGhostTrack()
     {
         if (_ghostTrack != null)
@@ -448,28 +597,204 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         Loop = shouldLoop;
     }
 
+    // ========================================
+    // IMasterClockSource Methods (NEW - v2.4.0+)
+    // ========================================
+
+    /// <inheritdoc/>
+    public void AttachToClock(MasterClock clock)
+    {
+        if (clock == null)
+            throw new ArgumentNullException(nameof(clock));
+
+        // IMPORTANT: Detach from GhostTrack if attached (cannot use both)
+        if (_ghostTrack != null)
+        {
+            DetachFromGhostTrack();
+        }
+
+        // Detach from previous clock if any
+        DetachFromClock();
+
+        _masterClock = clock;
+        _trackLocalTime = 0.0;
+        _fractionalFrameAccumulator = 0.0;
+
+        // Mark as synchronized
+        IsSynchronized = true;
+    }
+
+    /// <inheritdoc/>
+    public void DetachFromClock()
+    {
+        if (_masterClock != null)
+        {
+            _masterClock = null;
+            _trackLocalTime = 0.0;
+
+            // Mark as not synchronized (unless attached to GhostTrack)
+            if (_ghostTrack == null)
+            {
+                IsSynchronized = false;
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    public bool ReadSamplesAtTime(double masterTimestamp, Span<float> buffer, int frameCount, out ReadResult result)
+    {
+        ThrowIfDisposed();
+
+        // 1. Calculate track-local timestamp (relative to start offset)
+        double relativeTimestamp = masterTimestamp - _startOffset;
+
+        // 2. Before track start → return silence
+        if (relativeTimestamp < 0)
+        {
+            FillWithSilence(buffer, frameCount * _streamInfo.Channels);
+            result = ReadResult.CreateSuccess(frameCount);
+            return true;
+        }
+
+        // 3. Target physical time (GLOBAL TEMPO - v2.4.0)
+        double targetTrackTime = relativeTimestamp;
+
+        // 4. Drift correction (configurable tolerance) comparing target and local time
+        double drift = Math.Abs(targetTrackTime - _trackLocalTime);
+
+        // SYNC STABILIZATION: Respect grace period (e.g. after tempo change)
+        long ignoreSyncUntil = Interlocked.Read(ref _ignoreSyncUntil);
+        bool gracePeriodActive = SamplePosition < ignoreSyncUntil;
+
+        if (!gracePeriodActive && drift > SyncTolerance)
+        {
+            // Significant drift detected - perform seek to resync
+            
+            // CORRECT CALCULATION FOR DYNAMIC TEMPO: Calculate relative jump based on current file position
+            double driftSeconds = targetTrackTime - _trackLocalTime;
+            double filePosition = _currentPosition + (driftSeconds * _tempo);
+
+            if (!Seek(filePosition))
+            {
+                // Seek failed - fill with silence and report failure
+                FillWithSilence(buffer, frameCount * _streamInfo.Channels);
+                result = ReadResult.CreateFailure(0, "Seek failed during drift correction");
+                return false;
+            }
+            _trackLocalTime = targetTrackTime; // Update physical time tracker
+        }
+
+        // 5. Read from circular buffer
+        int samplesToRead = frameCount * _streamInfo.Channels;
+        int samplesRead = _buffer.Read(buffer.Slice(0, samplesToRead));
+        int framesRead = samplesRead / _streamInfo.Channels;
+
+        // 6. Update track local time
+        if (framesRead > 0)
+        {
+            double frameDuration = 1.0 / _streamInfo.SampleRate;
+            _trackLocalTime += framesRead * frameDuration;
+
+            // Also update the base position tracking with FRACTIONAL ACCUMULATION
+            double exactSourceFrames = framesRead * _tempo;
+            _fractionalFrameAccumulator += exactSourceFrames;
+            int sourceFramesAdvanced = (int)_fractionalFrameAccumulator;
+            _fractionalFrameAccumulator -= sourceFramesAdvanced;
+            
+            UpdateSamplePosition(sourceFramesAdvanced);
+
+            double newPosition = _currentPosition + (framesRead * frameDuration * _tempo);
+            Interlocked.Exchange(ref _currentPosition, newPosition);
+        }
+
+        // 7. Underrun check (dropout occurred)
+        if (framesRead < frameCount && !_isEndOfStream)
+        {
+            // Fill remaining with silence
+            int remainingSamples = (frameCount - framesRead) * _streamInfo.Channels;
+            FillWithSilence(buffer.Slice(samplesRead), remainingSamples);
+
+            // Update position for silence frames too
+            int silenceFrames = frameCount - framesRead;
+            
+            // ACCUMULATE FRACTIONAL FRAMES for silence
+            double exactSilenceFrames = silenceFrames * _tempo;
+            _fractionalFrameAccumulator += exactSilenceFrames;
+            int silenceSourceFrames = (int)_fractionalFrameAccumulator;
+            _fractionalFrameAccumulator -= silenceSourceFrames;
+
+            UpdateSamplePosition(silenceSourceFrames);
+
+            double frameDuration = 1.0 / _streamInfo.SampleRate;
+            double silenceSeconds = silenceFrames * frameDuration;
+            _trackLocalTime += silenceSeconds;
+
+            double newPos = _currentPosition + (silenceSeconds * _tempo);
+            Interlocked.Exchange(ref _currentPosition, newPos);
+
+            // Report dropout
+            long currentFramePosition = (long)(Position * _streamInfo.SampleRate);
+            OnBufferUnderrun(new BufferUnderrunEventArgs(
+                frameCount - framesRead,
+                currentFramePosition));
+
+            result = ReadResult.CreateFailure(framesRead, "Buffer underrun");
+            return false; // Dropout occurred
+        }
+
+        // 8. Apply volume
+        ApplyVolume(buffer, frameCount * _streamInfo.Channels);
+
+        // 9. Check for end of stream with looping
+        if (_isEndOfStream && _buffer.IsEmpty)
+        {
+            if (Loop)
+            {
+                Seek(0);
+                _trackLocalTime = 0.0;
+            }
+            else
+            {
+                State = AudioState.EndOfStream;
+                result = ReadResult.CreateSuccess(framesRead);
+                return true;
+            }
+        }
+
+        result = ReadResult.CreateSuccess(framesRead);
+        return true;
+    }
+
     /// <inheritdoc/>
     public override void Play()
     {
         ThrowIfDisposed();
         
-        base.Play();
-        _pauseEvent.Set(); // Resume decoder thread (in case it's paused)
+        // Signal decoder to start pre-buffering
+        _isPreBuffering = true;
+        _pauseEvent.Set(); // Resume decoder thread
 
         // Start decoder thread if not already running (lazy start)
         if (!_decoderThread.IsAlive)
         {
             _decoderThread.Start();
-            
-            int bufferSizeInSamples = _bufferSizeInFrames * _streamInfo.Channels * 4;
-            int minBufferLevel = bufferSizeInSamples / 4;
-            int waitCount = 0;
-            while (_buffer.Available < minBufferLevel && waitCount < 1000) // Max 1000ms wait
-            {
-                Thread.Sleep(1);
-                waitCount++;
-            }
         }
+
+        // Wait for buffer to fill (CRITICAL for smooth start)
+        int bufferSizeInSamples = _bufferSizeInFrames * _streamInfo.Channels * 4;
+        // OPTIMIZED: Increased from 25% to 50% for better initial buffer
+        int minBufferLevel = bufferSizeInSamples / 2;
+        int waitCount = 0;
+
+        // OPTIMIZED: Reduced timeout from 1000ms to 500ms
+        while (_buffer.Available < minBufferLevel && waitCount < 500) // Max 500ms wait
+        {
+            Thread.Sleep(1);
+            waitCount++;
+        }
+
+        _isPreBuffering = false;
+        base.Play();
     }
 
     /// <inheritdoc/>
@@ -499,8 +824,8 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         {
             while (!_shouldStop)
             {
-                // Wait if paused
-                if (State != AudioState.Playing)
+                // Wait if paused (and not pre-buffering)
+                if (State != AudioState.Playing && !_isPreBuffering)
                 {
                     _pauseEvent.Wait(100);
                     continue;
@@ -531,7 +856,6 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                 }
 
                 // Check if buffer needs filling (keep buffer at least 75% full for better resilience)
-                // Using 75% instead of 50% provides more headroom for temporary decoder delays
                 int targetFillLevel = (_buffer.Capacity * 3) / 4;
                 if (_buffer.Available >= targetFillLevel)
                 {
@@ -540,21 +864,22 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                     continue;
                 }
 
-                            // ZERO-ALLOC: Decode into the reusable buffer instead of allocating a new frame.
+                            // ZERO-ALLOC: Decode into the reusable buffer instead of allocating a new frame
                             var readResult = _decoder.ReadFrames(_decodeBuffer);
                 
                             if (readResult.IsEOF)
                             {
                                 // End of file reached
                                 _isEndOfStream = true;
-                
-                                // Flush SoundTouch to get any remaining processed samples
-                                lock (_soundTouchLock)
+
+                                // CRITICAL OPTIMIZATION: Only flush SoundTouch if it was actually used
+                                if (_soundTouch.IsProcessingNeeded())
                                 {
-                                    if (_soundTouch.IsProcessingNeeded())
+                                    // Flush SoundTouch to get any remaining processed samples
+                                    lock (_soundTouchLock)
                                     {
                                         _soundTouch.Flush();
-                
+
                                         // Retrieve all remaining samples from SoundTouch and add to accumulation buffer
                                         while (true)
                                         {
@@ -562,11 +887,11 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                                             int framesReceived = _soundTouch.ReceiveSamples(_soundTouchOutputBuffer, maxFrames);
                                             if (framesReceived == 0)
                                                 break;
-                
+
                                             int samplesToAdd = framesReceived * _streamInfo.Channels;
                                             AddToSoundTouchAccumulationBuffer(_soundTouchOutputBuffer.AsSpan(0, samplesToAdd));
                                         }
-                
+
                                         // Flush accumulation buffer to CircularBuffer
                                         if (_soundTouchAccumulationCount > 0)
                                         {
@@ -612,64 +937,17 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                                 int bytesRead = readResult.FramesRead * _streamInfo.Channels * sizeof(float);
                                 var floatSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(_decodeBuffer.AsSpan(0, bytesRead));
                                 int frameCount = readResult.FramesRead;
-                
-                                // Check if SoundTouch processing is needed (cache check without lock for performance)
-                                bool needsSoundTouch = Math.Abs(_tempo - 1.0f) > 0.001f || Math.Abs(_pitchShift) > 0.001f;
 
-                                if (_wasUsingSoundTouch && !needsSoundTouch)
+                                // CRITICAL OPTIMIZATION: Bypass SoundTouch when tempo=1.0 AND pitch=0
+                                if (_soundTouch.IsProcessingNeeded())
                                 {
-                                    lock (_soundTouchLock)
-                                    {
-                                        _soundTouch.Flush();
-                                        
-                                        // Drain SoundTouch completely
-                                        while (true)
-                                        {
-                                            int maxFrames = _soundTouchOutputBuffer.Length / _streamInfo.Channels;
-                                            int framesReceived = _soundTouch.ReceiveSamples(_soundTouchOutputBuffer, maxFrames);
-                                            if (framesReceived == 0) break;
-                                            
-                                            AddToSoundTouchAccumulationBuffer(_soundTouchOutputBuffer.AsSpan(0, framesReceived * _streamInfo.Channels));
-                                        }
-
-                                        // Write remaining accumulation to main buffer
-                                        if (_soundTouchAccumulationCount > 0)
-                                        {
-                                            // Write directly, retry if buffer full
-                                            int samplesToWrite = _soundTouchAccumulationCount;
-                                            int offset = 0;
-                                            while (samplesToWrite > 0 && !_shouldStop)
-                                            {
-                                                int written = _buffer.Write(_soundTouchAccumulationBuffer.AsSpan(offset, samplesToWrite));
-                                                samplesToWrite -= written;
-                                                offset += written;
-                                                if (samplesToWrite > 0) Thread.Sleep(1);
-                                            }
-                                            _soundTouchAccumulationCount = 0;
-                                        }
-                                        
-                                        _soundTouch.Clear();
-                                    }
-                                }
-                                
-                                _wasUsingSoundTouch = needsSoundTouch;
-
-                                if (needsSoundTouch)
-                                {
-                                    // Process through SoundTouch
+                                    // Process through SoundTouch (tempo != 1.0 OR pitch != 0)
                                     ProcessWithSoundTouch(floatSpan, frameCount);
                                 }
                                 else
                                 {
-                                    // Write directly to circular buffer (no processing)
-                                    int samplesWritten = _buffer.Write(floatSpan);
-                
-                                    // Check if buffer is full (write failed)
-                                    if (samplesWritten < floatSpan.Length)
-                                    {
-                                        // Buffer full, wait briefly (1ms like Ownaudio)
-                                        Thread.Sleep(1);
-                                    }
+                                    // FAST PATH: Direct write to buffer (bypass SoundTouch)
+                                    _buffer.Write(floatSpan);
                                 }
                             }
                             else if (!readResult.IsSucceeded)
@@ -689,7 +967,8 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
 
     /// <summary>
     /// Processes audio samples through SoundTouch for pitch/tempo effects.
-    /// Uses accumulation buffer pattern (like working code) to ensure stable timing.
+    /// Uses accumulation buffer pattern to ensure stable timing.
+    /// OPTIMIZATION: This should only be called when tempo != 1.0 OR pitch != 0.
     /// </summary>
     /// <param name="samples">Input audio samples (interleaved if stereo).</param>
     /// <param name="frameCount">Number of input frames.</param>
@@ -699,6 +978,8 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         {
             try
             {
+                // OPTIMIZATION: Caller should check IsProcessingNeeded() before calling this method
+                
                 int requiredSize = samples.Length;
                 if (_soundTouchInputBuffer.Length < requiredSize)
                 {
@@ -716,7 +997,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
 
                 if (framesReceived > 0)
                 {
-                    // Add to accumulation buffer (like working code's AddToSoundTouchBuffer line 377)
+                    // Add to accumulation buffer
                     int samplesToAdd = framesReceived * _streamInfo.Channels;
                     AddToSoundTouchAccumulationBuffer(_soundTouchOutputBuffer.AsSpan(0, samplesToAdd));
                 }
@@ -796,7 +1077,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                 {
                     if (!_decoderThread.Join(TimeSpan.FromSeconds(2)))
                     {
-                        // Thread didn't exit in time, force abort (not ideal but necessary)
+                        // Thread didn't exit in time, force interrupt
                         try
                         {
                             _decoderThread.Interrupt();

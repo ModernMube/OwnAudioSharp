@@ -7,6 +7,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MultitrackPlayer.Models;
 using MultitrackPlayer.Services;
+using Ownaudio.Synchronization;
+using OwnaudioNET.Events;
 using OwnaudioNET.Interfaces;
 using OwnaudioNET.Sources;
 
@@ -46,6 +48,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// Indicates whether this instance has been disposed.
     /// </summary>
     private bool _disposed;
+
+
+    /// <summary>
+    /// Total dropout count for all tracks (NEW - v2.4.0+).
+    /// </summary>
+    private int _totalDropoutCount;
 
     #endregion
 
@@ -91,41 +99,47 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// Gets or sets the tempo percentage (100% = normal speed).
+    /// NOTE: This property is updated by code-behind AFTER PointerReleased, not during drag.
     /// </summary>
     [ObservableProperty]
     private float _tempoPercent = 100.0f;
 
     /// <summary>
-    /// Called when the tempo percentage changes.
-    /// Applies the tempo change to all tracks in the sync group.
+    /// Called when the tempo percentage changes programmatically (NOT during drag).
+    /// This is only triggered by code-behind after PointerReleased or by Reset button.
     /// </summary>
     /// <param name="value">The new tempo percentage.</param>
     partial void OnTempoPercentChanged(float value)
     {
+        // This is now called ONLY after PointerReleased or programmatic changes
+        // No debounce needed - the change is already final
+        // NOTE: ApplyTempoChange() is called directly from code-behind, not here
+    }
+
+    /// <summary>
+    /// Applies tempo change to all tracks.
+    /// PUBLIC: Called from code-behind on PointerReleased.
+    /// </summary>
+    public async void ApplyTempoChange(float tempoPercent)
+    {
         // Convert percentage to multiplier (100% = 1.0x)
-        float tempoMultiplier = value / 100.0f;
+        float tempoMultiplier = tempoPercent / 100.0f;
 
-        // Apply tempo to sync group (this controls all tracks together)
-        if (_audioService.Mixer != null)
-        {
-            try
-            {
-                _audioService.Mixer.SetSyncGroupTempo("MainTracks", tempoMultiplier);
-            }
-            catch
-            {
-                // Sync group doesn't exist yet, will be set when playing starts
-            }
-        }
+        // OPTIMIZED: Use SetTempoSmooth() and cache to array to avoid collection issues
+        var trackArray = Tracks.ToArray();
 
-        // Also update individual sources in case they're not in sync group yet
-        foreach (var track in Tracks)
+        await Task.Run(() =>
         {
-            if (track.TrackInfo.Source is FileSource fileSource)
+            // OPTIMIZED: Parallel processing for tracks to improve performance
+            System.Threading.Tasks.Parallel.ForEach(trackArray, track =>
             {
-                fileSource.Tempo = tempoMultiplier;
-            }
-        }
+                if (track.TrackInfo.Source is FileSource fileSource)
+                {
+                    // Use smooth tempo change without buffer clearing
+                    fileSource.SetTempoSmooth(tempoMultiplier);
+                }
+            });
+        });
     }
 
     /// <summary>
@@ -135,20 +149,35 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private int _pitchSemitones = 0;
 
     /// <summary>
-    /// Called when the pitch semitones property changes.
-    /// Applies the pitch shift to all loaded tracks.
+    /// Called when the pitch semitones property changes programmatically.
     /// </summary>
     /// <param name="value">The new pitch shift value in semitones.</param>
     partial void OnPitchSemitonesChanged(int value)
     {
-        // Apply pitch shift to all tracks (integer semitones)
-        foreach (var track in Tracks)
+        // Final change after PointerReleased, no debounce needed
+    }
+
+    /// <summary>
+    /// Applies pitch change to all tracks.
+    /// PUBLIC: Called from code-behind on PointerReleased.
+    /// </summary>
+    public async void ApplyPitchChange(int pitchSemitones)
+    {
+        // Cache to array for parallel processing
+        var trackArray = Tracks.ToArray();
+
+        await Task.Run(() =>
         {
-            if (track.TrackInfo.Source is FileSource fileSource)
+            // OPTIMIZED: Parallel processing for improved performance
+            System.Threading.Tasks.Parallel.ForEach(trackArray, track =>
             {
-                fileSource.PitchShift = value;
-            }
-        }
+                if (track.TrackInfo.Source is FileSource fileSource)
+                {
+                    // Use smooth pitch change without buffer clearing
+                    fileSource.SetPitchSmooth(pitchSemitones);
+                }
+            });
+        });
     }
 
     /// <summary>
@@ -175,6 +204,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _positionDisplay = "00:00 / 00:00";
 
+    /// <summary>
+    /// Gets or sets the total dropout count (NEW - v2.4.0+).
+    /// </summary>
+    [ObservableProperty]
+    private int _dropoutCount;
+
+    /// <summary>
+    /// Gets or sets the last dropout message (NEW - v2.4.0+).
+    /// </summary>
+    [ObservableProperty]
+    private string? _lastDropoutMessage;
+
     #endregion
 
     #region Constructor
@@ -188,8 +229,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _audioService = AudioService.Instance;
         Tracks = new ObservableCollection<TrackViewModel>();
 
-        // OPTIMIZATION: Increased from 100ms to 250ms (10 updates/sec → 4 updates/sec)
-        // This reduces GC pressure from property change notifications by 60%
+        // OPTIMIZATION: Reduced update frequency to 4/sec to lower GC pressure
         _playbackTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         _playbackTimer.Tick += Timer_Tick;
 
@@ -198,6 +238,38 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         // Initialize audio service
         Task.Run(InitializeAudioAsync);
+    }
+
+    /// <summary>
+    /// Initializes event handlers for the mixer (NEW - v2.4.0+).
+    /// </summary>
+    private void InitializeMixerEvents()
+    {
+        if (_audioService.Mixer == null)
+            return;
+
+        // Subscribe to TrackDropout events
+        _audioService.Mixer.TrackDropout += OnTrackDropout;
+    }
+
+    /// <summary>
+    /// Handles track dropout events (NEW - v2.4.0+).
+    /// </summary>
+    private void OnTrackDropout(object? sender, TrackDropoutEventArgs e)
+    {
+        _totalDropoutCount++;
+
+        Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            DropoutCount = _totalDropoutCount;
+            LastDropoutMessage = $"{e.TrackName}: {e.MissedFrames} frames @ {e.MasterTimestamp:F2}s";
+
+            // Optionally show status if dropout count is low
+            if (_totalDropoutCount < 10) 
+            {
+                StatusMessage = $"Dropout: {e.Reason}";
+            }
+        });
     }
 
     #endregion
@@ -218,7 +290,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
-            double position = _audioService.Mixer.GetSyncGroupPosition("MainTracks");
+            // NEW - v2.4.0+: Use MasterClock.CurrentTimestamp instead of GetSyncGroupPosition
+            double position = _audioService.Mixer.MasterClock.CurrentTimestamp;
 
             // Check if we reached the end of playback
             if (TrackDurationSeconds > 0 && position >= TrackDurationSeconds)
@@ -231,8 +304,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            // OPTIMIZATION: Only update if position changed significantly (> 0.1 sec)
-            // This reduces property change notifications by ~50%
+            // OPTIMIZATION: Only update UI if position changed significantly
             if (Math.Abs(position - CurrentPositionSeconds) > 0.1)
             {
                 CurrentPositionSeconds = position;
@@ -246,9 +318,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 PositionDisplay = $"{currentMinutes:D2}:{currentSeconds:D2} / {totalMinutes:D2}:{totalSeconds:D2}";
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Sync group might not exist anymore
+            System.Diagnostics.Debug.WriteLine($"Timer tick error: {ex.Message}");
         }
     }
 
@@ -271,6 +343,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 IsInitialized = true;
                 StatusMessage = "Ready";
+
+                // Initialize mixer event handlers (NEW - v2.4.0+)
+                InitializeMixerEvents();
             });
         }
         catch (Exception ex)
@@ -331,6 +406,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 fileSource.Volume = trackInfo.Volume;
                 fileSource.Tempo = currentTempo;
                 fileSource.PitchShift = currentPitch;
+                fileSource.SyncTolerance = 0.01; // 10ms tolerance for sync
             });
 
             // Add to collection on UI thread
@@ -401,8 +477,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void ResetControls()
     {
         MasterVolume = 100.0f;
+
+        // CRITICAL FIX: Apply changes immediately to prevent sync issues during reset
         TempoPercent = 100.0f;
         PitchSemitones = 0;
+
+        // Apply changes immediately to all tracks (bypass debounce)
+        foreach (var track in Tracks)
+        {
+            if (track.TrackInfo.Source is FileSource fileSource)
+            {
+                fileSource.Tempo = 1.0f;  // 100% = 1.0x multiplier
+                fileSource.PitchShift = 0;
+            }
+        }
+
         StatusMessage = "Reset controls to default values";
     }
 
@@ -432,10 +521,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
             await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Preparing audio..."; });
 
-            // FIX: The entire audio engine was restarted on every play command, causing a "cold start"
-            // that resulted in buffer underruns heard as audio glitches. The engine should be initialized
-            // once and run continuously.
-            // await _audioService.RestartAsync(); // This was the cause of the problem.
+            // ENGINE: Audio service should run continuously to prevent cold start glitches
 
             // OPTIMIZATION: Update cached arrays if needed (zero allocation in steady state)
             if (_cacheNeedsUpdate || _cachedTrackArray.Length != Tracks.Count)
@@ -445,7 +531,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 _cacheNeedsUpdate = false;
             }
 
-            // OPTIMIZATION: Handle solo and mute logic without LINQ (zero allocation)
+            // OPTIMIZATION: Handle solo and mute logic without LINQ
             bool hasSoloTracks = false;
             int validSourceCount = 0;
 
@@ -468,7 +554,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            // OPTIMIZATION: Allocate source array only once per play (not per frame)
+            // OPTIMIZATION: Allocate source array only once per play
             if (_cachedSourceArray.Length != validSourceCount)
             {
                 _cachedSourceArray = new IAudioSource[validSourceCount];
@@ -495,26 +581,45 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 }
             }
 
+            // Capture start position on UI thread to ensure thread safety
+            double startPosition = CurrentPositionSeconds;
+
             await Task.Run(() =>
             {
-                // NEW ARCHITECTURE: Create sync group - automatically attaches sources to GhostTrack
-                _audioService.Mixer.CreateSyncGroup("MainTracks", _cachedSourceArray);
+                // SYNC: MasterClock Timeline-Based Synchronization (v2.4.0+)
 
-                // NEW ARCHITECTURE: Set tempo on GhostTrack - automatically propagates to all sources
-                _audioService.Mixer.SetSyncGroupTempo("MainTracks", TempoPercent / 100.0f);
+                // 1. Sync MasterClock to match the UI's transport position
+                _audioService.Mixer.MasterClock.SeekTo(startPosition);
 
-                // IMPORTANT: Reset the position back to the beginning after priming.
-                _audioService.Mixer.SeekSyncGroup("MainTracks", 0);
+                // 2. Attach all tracks to the MasterClock
+                for (int i = 0; i < _cachedSourceArray.Length; i++)
+                {
+                    if (_cachedSourceArray[i] is IMasterClockSource clockSource)
+                    {
+                        clockSource.AttachToClock(_audioService.Mixer.MasterClock);
+                    }
+                }
 
-                // NEW ARCHITECTURE: No manual drift correction needed!
-                // - Automatic continuous drift check in ReadSamples() every ~10ms
-                // - Tight 10ms tolerance (vs old 100ms)
-                // - Lock-free, zero overhead design
+                // 2.5. CRITICAL: Seek all tracks to start position before pre-buffering
+                System.Threading.Tasks.Parallel.ForEach(_cachedSourceArray, source =>
+                {
+                    source.Seek(startPosition);
+                });
 
-                _audioService.Mixer.StartSyncGroup("MainTracks");
+                // 3. CRITICAL: Pre-buffer all tracks in parallel to prevent noise
+                System.Threading.Tasks.Parallel.ForEach(_cachedSourceArray, source =>
+                {
+                    source.Play();
+                });
+
+                // 4. CRITICAL: Add all tracks to mixer in parallel for atomic-like timing
+                System.Threading.Tasks.Parallel.ForEach(_cachedSourceArray, source =>
+                {
+                    _audioService.Mixer.AddSource(source);
+                });
             });
 
-            // OPTIMIZATION: Calculate longest track duration without LINQ (zero allocation)
+            // OPTIMIZATION: Calculate longest track duration without LINQ
             double longestDuration = 0.0;
             for (int i = 0; i < _cachedSourceArray.Length; i++)
             {
@@ -561,23 +666,22 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IsPlaying = false;
         await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Pausing..."; });
 
-        // FIX: Replaced full engine restart with a lightweight stop command.
-        // This prevents audio glitches when pausing and restarting playback.
-        if (_audioService.Mixer != null)
+        // NEW - v2.4.0+: Pause all tracks individually
+        await Task.Run(() =>
         {
-            await Task.Run(() =>
+            for (int i = 0; i < _cachedSourceArray.Length; i++)
             {
                 try
                 {
-                    _audioService.Mixer.StopSyncGroup("MainTracks");
+                    _cachedSourceArray[i].Pause();
                 }
                 catch
                 {
-                    // Ignore error if sync group doesn't exist
+                    // Ignore errors
                 }
-            });
-        }
-        
+            }
+        });
+
         await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Paused"; });
     }
 
@@ -594,23 +698,44 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IsPlaying = false;
         await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Stopping..."; });
 
-        // FIX: Replaced full engine restart with a lightweight stop/seek command.
-        if (_audioService.Mixer != null)
+        // NEW - v2.4.0+: Stop all tracks and reset master clock
+        await Task.Run(() =>
         {
-            await Task.Run(() =>
+            // Stop all tracks
+            for (int i = 0; i < _cachedSourceArray.Length; i++)
             {
                 try
                 {
-                    // Stop the group and seek to the beginning for the next playback.
-                    _audioService.Mixer.StopSyncGroup("MainTracks");
-                    _audioService.Mixer.SeekSyncGroup("MainTracks", 0);
+                    _cachedSourceArray[i].Stop();
                 }
                 catch
                 {
-                    // Ignore errors if the sync group doesn't exist.
+                    // Ignore errors
                 }
-            });
-        }
+            }
+
+            // Reset master clock to beginning
+            if (_audioService.Mixer != null)
+            {
+                _audioService.Mixer.MasterClock.SeekTo(0.0);
+            }
+
+            // Remove all tracks from mixer
+            if (_audioService.Mixer != null)
+            {
+                for (int i = 0; i < _cachedSourceArray.Length; i++)
+                {
+                    try
+                    {
+                        _audioService.Mixer.RemoveSource(_cachedSourceArray[i].Id);
+                    }
+                    catch
+                    {
+                        // Ignore errors
+                    }
+                }
+            }
+        });
 
         // Reset UI state after stopping
         CurrentPositionSeconds = 0;
@@ -660,12 +785,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             try
             {
-                _audioService.Mixer?.SeekSyncGroup("MainTracks", positionInSeconds);
+                // NEW - v2.4.0+: Seek master clock directly
+                _audioService.Mixer?.MasterClock.SeekTo(positionInSeconds);
                 CurrentPositionSeconds = positionInSeconds;
             }
-            catch
+            catch (Exception ex)
             {
-                // Sync group might not exist or other audio error
+                System.Diagnostics.Debug.WriteLine($"Seek error: {ex.Message}");
             }
         }
 
@@ -692,6 +818,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _playbackTimer.Tick -= Timer_Tick;
         _playbackTimer.Stop();
 
+        // Unsubscribe from mixer events (NEW - v2.4.0+)
+        if (_audioService.Mixer != null)
+        {
+            _audioService.Mixer.TrackDropout -= OnTrackDropout;
+        }
+
         foreach (var track in Tracks)
         {
             track.Dispose();
@@ -699,6 +831,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         Tracks.Clear();
 
         _audioService.Dispose();
+
         _disposed = true;
     }
 

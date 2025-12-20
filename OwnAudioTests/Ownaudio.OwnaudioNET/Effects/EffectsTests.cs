@@ -39,7 +39,7 @@ public class EffectsTests
     public void DelayEffect_Process_ShouldWork()
     {
         // Arrange
-        var effect = new DelayEffect(SampleRate, 0.1f, 0.5f, 0.5f, Channels);
+        var effect = new DelayEffect(sampleRate: SampleRate);
         effect.Initialize(CreateConfig());
 
         var buffer = GenerateImpulse(4800, SampleRate, Channels);
