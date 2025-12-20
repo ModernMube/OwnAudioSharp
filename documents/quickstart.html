@@ -430,9 +430,9 @@ guitar.Play();
 mixer.MasterVolume = 0.9f;</code></pre>
             </div>
 
-            <h3>Synchronized Playback</h3>
+            <h3>Synchronized Playback (Master Clock)</h3>
             <div class="code-block">
-                <div class="code-header">SyncPlayback.cs</div>
+                <div class="code-header">SyncPlayback.cs - New Master Clock API (v2.1.0+)</div>
                 <pre><code class="language-csharp">var drums = new FileSource("drums.wav");
 var bass = new FileSource("bass.wav");
 var guitar = new FileSource("guitar.wav");
@@ -441,13 +441,32 @@ mixer.AddSource(drums);
 mixer.AddSource(bass);
 mixer.AddSource(guitar);
 
-// Create sync group for perfect synchronization
-var syncGroup = mixer.CreateSyncGroup(drums, bass, guitar);
+// Attach sources to Master Clock for sample-accurate sync
+drums.AttachToClock(mixer.MasterClock);
+bass.AttachToClock(mixer.MasterClock);
+guitar.AttachToClock(mixer.MasterClock);
 
-// Start all sources simultaneously
-mixer.StartSyncGroup(syncGroup.Id);
+// Optional: Set start offsets on timeline
+guitar.StartOffset = 2.0;  // Guitar starts 2 seconds later
 
-// They will play in perfect sync with drift correction</code></pre>
+// Start mixer
+mixer.Start();
+
+// Start all sources for playback
+drums.Play();
+bass.Play();
+guitar.Play();
+
+// All sources now play in perfect sync with Master Clock
+
+// Timeline control
+mixer.MasterClock.SeekTo(10.0);  // Seek all tracks to 10 seconds</code></pre>
+            </div>
+
+            <div class="alert alert-info">
+                <strong>Master Clock Benefits</strong>
+                The new timeline-based system provides sample-accurate synchronization, start offsets for DAW-style track positioning,
+                automatic drift correction (&lt;10ms tolerance), and realtime/offline rendering modes.
             </div>
 
             <h3>Audio Effects</h3>
