@@ -2,6 +2,7 @@
   "solution": {
     "path": "Ownaudio.sln",
     "projects": [
+      "Logger\\Logger.csproj",
       "OwnAudioEngine\\Ownaudio.Core\\Ownaudio.Core.csproj",
       "OwnAudioEngine\\Ownaudio.Linux\\Ownaudio.Linux.csproj",
       "OwnAudioEngine\\Ownaudio.Native\\Ownaudio.Native.csproj",
@@ -15,7 +16,7 @@
       "OwnAudio\\Examples\\Ownaudio.Example.Matching\\Ownaudio.Example.Matching.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.MultitrackPlayer\\Ownaudio.Example.MultitrackPlayer.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.VocalRemover\\Ownaudio.Example.Vocalremover.csproj",
-      "OwnAudio\\Source\\OwnaudioNET.csproj",
+      "OwnAudio\\Source\\OwnaudioNET.csproj"
     ]
   }
 }

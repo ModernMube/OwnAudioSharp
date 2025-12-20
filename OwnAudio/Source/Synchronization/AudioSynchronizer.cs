@@ -13,7 +13,13 @@ namespace OwnaudioNET.Synchronization;
 /// - Ghost track length = longest source in the group
 /// - Ghost track automatically resizes when sources are added/removed
 /// - All drift correction uses the ghost track as reference
+///
+/// DEPRECATED: Use AudioMixer.MasterClock directly.
+/// This class is maintained for backward compatibility and will be removed in v3.0.0.
 /// </summary>
+[Obsolete("AudioSynchronizer is deprecated. Use AudioMixer.MasterClock directly. " +
+          "This class will be removed in v3.0.0.",
+          error: false)]
 public sealed class AudioSynchronizer
 {
     private readonly object _syncLock = new();

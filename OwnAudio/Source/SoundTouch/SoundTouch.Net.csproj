@@ -1,0 +1,73 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net9.0</TargetFrameworks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    <Nullable>enable</Nullable>
+    <NeutralLanguage>en</NeutralLanguage>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PackageDescription>The SoundTouch library is originally written by Olli Parviainen in c++. 
+Although a .NET wrapper library is available, this library aims to be a complete rewrite in C#
+It is an open-source audio processing library that allows changing the sound tempo, pitch and playback rate parameters independently from each other:
+* Change tempo while maintaining the original pitch
+* Change pitch while maintaining the original tempo
+* Change playback rate that affects both tempo and pitch at the same time
+* Change any combination of tempo/pitch/rate
+    </PackageDescription>
+    <PackageReleaseNotes>
+* Updated the source-code to be in line with the 2.1.2 c++ release.
+* Disable anti-alias filter when switch 
+  SOUNDTOUCH_PREVENT_CLICK_AT_RATE_CROSSOVER defined because anti-alias 
+  filter cause slight click if the rate change crosses zero during 
+  processing
+* Rewrite of the Beats-per-Minute analysis algorithm for more reliable BPM detection
+* Migrated project files to sdk-style format
+* Migrated to use C# 8 syntax
+* Packaged library for .net standard, .net framework and .net core
+* Replaced function parameter value asserts with runtime exceptions
+* Added functions to get initial processing latency, duration ratio between the original input and processed output tracks, and clarified reporting of input/output batch sizes
+* Fixed issue that added brief sequence of silence to beginning of output audio
+* Adjusted algorithm parameters to reduce reverberating effect at tempo slowdown
+* Bugfix: Fixed a glitch that could cause negative array indexing in quick seek algorithm
+* Bugfix: flush() didn't properly flush final samples from the pipeline on 2nd time in case that soundtouch object instance was recycled and used for processing a second audio stream.
+* Added C# example application that uses SoundTouch.NET library for processing mp3 files.
+    </PackageReleaseNotes>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Title>SoundTouch.Net</Title>
+    <Description>The SoundTouch Library is originally written by Olli Parviainen in C++. Although a .NET wrapper library is available, this library aims to be a complete rewrite in C#.</Description>
+    <RootNamespace>SoundTouch</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="JetBrains.Annotations" Version="2025.2.2" PrivateAssets="all" />
+  </ItemGroup>
+  
+  <ItemGroup Condition="'$(TargetFramework)' != 'netstandard2.1' and '$(TargetFramework)' != 'netcoreapp2.1'">
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Assets\Strings.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Strings.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Assets\Strings.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Strings.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="GitVersion.MsBuild" Version="6.4.0" />
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="8.0.0" />
+    <PackageReference Update="SonarAnalyzer.CSharp" Version="10.15.0.120848" />
+  </ItemGroup>
+
+</Project>

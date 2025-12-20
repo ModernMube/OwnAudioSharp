@@ -44,99 +44,161 @@
 **Commercial Quality, Free**: Professional tools without licensing costs
 **Truly Cross-Platform**: Windows, macOS, Linux, Android, iOS
 
-## 🚀 The Native Engine: Why We Moved Beyond Managed Code
+## 🎯 NEW in v2.4.0: MasterClock Timeline-Based Synchronization
 
-### The GC Challenge - An Honest Assessment
+### Revolutionary Multi-Track Synchronization
 
-During the development of OwnAudioSharp 2.0, we invested significant effort into creating a **pure managed C# audio engine** with zero external dependencies. We implemented:
+OwnAudioSharp v2.4.0 introduces **MasterClock**, a professional timeline-based synchronization system that replaces the legacy GhostTrack architecture. This is the most significant update to the synchronization layer since the project's inception.
 
-- ✅ **Zero-allocation design** - no allocations in real-time audio paths
-- ✅ **Lock-free ring buffers** - wait-free cross-thread communication
-- ✅ **SIMD optimization** - vectorized audio processing
-- ✅ **Object pooling** - reusing buffers to minimize GC pressure
-- ✅ **Span<T>** usage - stack-allocated audio data
+### Why MasterClock?
 
-Despite these optimizations, **the .NET Garbage Collector proved to be insurmountable** for professional real-time audio:
+The legacy **GhostTrack/AudioSynchronizer** system worked but had limitations:
 
-❌ **GC pauses are inevitable** - Even brief GC pauses (1-10ms) cause audible glitches and dropouts
-❌ **GC is inherent to managed code** - There's no way to completely avoid it in C#
-❌ **Unpredictable timing** - GC can trigger at any moment, breaking real-time guarantees
+❌ **Frame-based tracking** - synchronization tied to sample frames, not physical time
+❌ **Complex sync groups** - required manual group management and cascading updates
+❌ **No dropout visibility** - buffer underruns happened silently
+❌ **Limited flexibility** - couldn't support DAW-style timeline features
 
-### The Solution: Native C++ Audio Engine
+### The Solution: Timeline-Based MasterClock
 
-We introduced a **high-performance native C++ audio engine** that operates completely outside the GC's control:
+**MasterClock** provides professional-grade synchronization with a clean, modern API:
 
-✅ **Zero GC interference** - Native code runs independently of .NET's GC
-✅ **Deterministic timing** - Guaranteed real-time performance without glitches
-✅ **Professional quality** - Audio processing meets industry standards
-✅ **Default engine** - Automatically used unless you specify otherwise
+✅ **Timeline-based** - Physical time in seconds (double precision)
+✅ **Sample-accurate** - Long precision sample position tracking
+✅ **Automatic drift correction** - 10ms tolerance with automatic resyncing
+✅ **Dropout events** - Real-time notifications for buffer underruns
+✅ **Global tempo** - Tempo applied to all synchronized tracks (like professional DAWs)
+✅ **Start offset support** - DAW-style regions (tracks start at different timeline positions)
+✅ **Zero overhead** - Single null check when not using sync features
 
-### Native Engine Backend Priority
+### Migration from Legacy to v2.4.0+
 
-The native engine automatically selects the best available audio backend:
+**IMPORTANT:** The legacy GhostTrack/AudioSynchronizer system is **deprecated** and will be **removed in v3.0.0**.
 
-**1. PortAudio (Preferred)** - If installed on the system
-**2. miniaudio (Fallback)** - Bundled as embedded resource
-**3. Managed Engines (Development)** - Pure C# implementations (may experience GC glitches)
-
-### Installing PortAudio (Optional but Recommended)
-
-PortAudio provides the best cross-platform audio performance. Here's how to install it:
-
-#### Windows
-```powershell
-# Using Chocolatey
-choco install portaudio
-
-# Or download binaries from:
-# http://www.portaudio.com/download.html
-# Place portaudio.dll in your application directory
-```
-
-#### Linux
-```bash
-# Ubuntu/Debian
-sudo apt-get install portaudio19-dev
-
-# Fedora/RHEL
-sudo dnf install portaudio-devel
-
-# Arch Linux
-sudo pacman -S portaudio
-```
-
-#### macOS
-```bash
-# Using Homebrew
-brew install portaudio
-
-# Using MacPorts
-sudo port install portaudio
-```
-
-**Note:** If PortAudio is not found, OwnAudioSharp automatically falls back to the embedded miniaudio library - **no installation required for basic functionality**.
-
-### Managed Engines: Still Available
-
-The pure C# managed engines remain in the API for:
-- 🔧 **Development and debugging** - easier to step through C# code
-- 🧪 **Testing scenarios** - when GC pauses are acceptable
-- 📚 **Educational purposes** - learning audio engine architecture
-
-**To use managed engines explicitly:**
+#### Legacy Code (Deprecated - works until v3.0.0):
 ```csharp
-// Use managed engine (may experience GC glitches)
-using var engine = AudioEngineFactory.CreateManaged();
+// OLD: GhostTrack + AudioSynchronizer
+var synchronizer = new AudioSynchronizer();  // ⚠️ Deprecated
+var syncGroup = synchronizer.CreateSyncGroup("MainTracks", sources);
+synchronizer.SetSyncGroupTempo("MainTracks", 1.5f);
+synchronizer.StartSyncGroup("MainTracks");
 
-// Or platform-specific:
-#if WINDOWS
-    using var engine = new WasapiEngine();
-#elif LINUX
-    using var engine = new PulseAudioEngine();
-#elif MACOS
-    using var engine = new CoreAudioEngine();
-#endif
+// Get position
+double position = mixer.GetSyncGroupPosition("MainTracks");  // ⚠️ Deprecated
 ```
+
+#### NEW Code (v2.4.0+ - Required in v3.0.0):
+```csharp
+// NEW: MasterClock direct attachment
+foreach (var source in sources) {
+    if (source is IMasterClockSource clockSource) {
+        // Attach to master clock
+        clockSource.AttachToClock(mixer.MasterClock);
+
+        // Optional: Set start offset (DAW-style regions)
+        clockSource.StartOffset = 0.0; // Track starts at 0 seconds
+    }
+    mixer.AddSource(source);
+    source.Play();
+}
+
+// Get position
+double position = mixer.MasterClock.CurrentTimestamp;
+
+// Seek
+mixer.MasterClock.SeekTo(30.0); // Jump to 30 seconds
+```
+
+### Key Benefits
+
+| Feature | Legacy (GhostTrack) | NEW (MasterClock) |
+|---------|---------------------|-------------------|
+| **Time base** | Frame count | Physical time (seconds) |
+| **Drift tolerance** | 512 samples (~10ms) | Configurable (default 10ms) |
+| **Start offset** | ❌ Not supported | ✅ DAW-style regions |
+| **Dropout events** | ❌ Silent failures | ✅ Real-time notifications |
+| **Performance metrics** | ❌ None | ✅ CPU, buffer fill, dropout history |
+| **Tempo control** | ⚠️ Per-track (complex) | ✅ Global tempo (like DAWs) |
+| **Rendering modes** | ❌ Realtime only | ✅ Realtime / Offline |
+| **API simplicity** | ⚠️ Sync groups + observers | ✅ Direct clock attachment |
+
+**Note on Tempo**: When using MasterClock, tempo is **global** (affects all synchronized tracks equally), similar to professional DAWs like Ableton, Logic, or FL Studio. This ensures perfect synchronization across all tracks while SoundTouch processes the audio in real-time.
+
+### Advanced Features
+
+#### 1. DAW-Style Timeline Regions
+```csharp
+track1.AttachToClock(mixer.MasterClock);
+track1.StartOffset = 0.0;   // Intro starts at 0s
+
+track2.AttachToClock(mixer.MasterClock);
+track2.StartOffset = 4.0;   // Drums come in at 4s
+
+track3.AttachToClock(mixer.MasterClock);
+track3.StartOffset = 8.0;   // Bass enters at 8s
+```
+
+#### 2. Dropout Event Monitoring
+```csharp
+mixer.TrackDropout += (sender, e) => {
+    Console.WriteLine($"Dropout: {e.TrackName}");
+    Console.WriteLine($"  Timestamp: {e.MasterTimestamp:F3}s");
+    Console.WriteLine($"  Missed frames: {e.MissedFrames}");
+    Console.WriteLine($"  Reason: {e.Reason}");
+};
+```
+
+#### 3. Offline Rendering Mode
+```csharp
+// Deterministic rendering (no dropouts, blocks until ready)
+mixer.RenderingMode = ClockMode.Offline;
+
+mixer.MasterClock.SeekTo(0.0);
+foreach (var source in sources) {
+    source.Play();
+}
+
+// Render loop - waits for all tracks to be ready
+// Perfect for exporting to file
+```
+
+#### 4. Per-Track Performance Metrics
+```csharp
+// Access track metrics
+var metrics = mixer.GetTrackMetrics(trackId);
+Console.WriteLine($"CPU: {metrics.AverageCpuUsage:F2}%");
+Console.WriteLine($"Buffer fill: {metrics.BufferFillPercentage:F1}%");
+Console.WriteLine($"Dropouts: {metrics.TotalDropoutCount}");
+```
+
+### What's Deprecated (Removed in v3.0.0)
+
+The following classes and methods are marked `[Obsolete]` and will be **removed in v3.0.0**:
+
+⚠️ `GhostTrackSource` - Use `MasterClock` instead
+⚠️ `IGhostTrackObserver` - Implement `IMasterClockSource` instead
+⚠️ `AudioSynchronizer` - Use `AudioMixer.MasterClock` directly
+⚠️ `CreateSyncGroup()` / `StartSyncGroup()` / `StopSyncGroup()` - Attach tracks to MasterClock
+⚠️ `SetSyncGroupTempo()` - Set tempo directly on each track
+⚠️ `GetSyncGroupPosition()` - Use `mixer.MasterClock.CurrentTimestamp`
+⚠️ `SeekSyncGroup()` - Use `mixer.MasterClock.SeekTo()`
+
+### Migration Timeline
+
+- **v2.4.0** (Current): Legacy and new systems coexist, legacy shows deprecation warnings
+- **v2.5.0 - v2.9.0**: Transition period - update your code
+- **v3.0.0**: Legacy system removed, only MasterClock available
+
+**Action Required:** If you're using GhostTrack or AudioSynchronizer, migrate to MasterClock before v3.0.0.
+
+### See It In Action
+
+Check out the updated **MultitrackPlayer** example project to see the new MasterClock system in action:
+- [MultitrackPlayer Example](OwnAudio/Examples/Ownaudio.Example.MultitrackPlayer/)
+- Real-time dropout monitoring UI
+- Timeline-based seek operations
+- Per-track tempo control
+- Professional synchronization with zero glitches
 
 ## ⚠️ Version History
 

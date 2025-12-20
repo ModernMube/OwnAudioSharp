@@ -246,6 +246,7 @@ ClientBin/
 *.pfx
 *.publishsettings
 orleans.codegen.cs
+.DS_Store
 
 #Ownaudio developer folders
 .claude/
@@ -295,6 +296,9 @@ FakesAssemblies/
 # Node.js Tools for Visual Studio
 .ntvs_analysis.dat
 node_modules/
+
+#JetBrains IDE
+.idea/
 
 # Visual Studio 6 build log
 *.plg

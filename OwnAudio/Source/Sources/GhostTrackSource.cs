@@ -23,7 +23,14 @@ namespace OwnaudioNET.Sources;
 /// - Single source of truth for all sync group operations
 ///
 /// This is the "invisible conductor" that keeps all tracks perfectly in sync.
+///
+/// DEPRECATED: Use MasterClock with IMasterClockSource instead.
+/// This class is maintained for backward compatibility and will be removed in v3.0.0.
 /// </summary>
+[Obsolete("GhostTrackSource is deprecated. Use MasterClock with IMasterClockSource instead. " +
+          "This class will be removed in v3.0.0. " +
+          "See migration guide: https://github.com/modernmube/OwnAudioSharp/wiki/MasterClock-Migration",
+          error: false)]
 public sealed class GhostTrackSource : BaseAudioSource
 {
     private readonly AudioConfig _config;
