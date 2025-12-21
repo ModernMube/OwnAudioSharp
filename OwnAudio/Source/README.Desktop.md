@@ -14,34 +14,53 @@ OwnAudioSharp is a professional-grade audio engine providing high-performance au
   - AI-powered vocal removal (ONNX-based neural separation)
   - Audio matchering and mastering
   - Real-time chord detection
-  - Multi-track mixing with synchronization
+  - **Master Clock Synchronization**: Timeline-based multi-track playback with drift correction
   - Built-in effects and DSP routines
 
 ## Quick Start
 
 ```csharp
-using OwnAudioSharp;
+using OwnaudioNET;
+using OwnaudioNET.Features.Vocalremover;
 
 // Initialize the audio engine
-OwnaudioNet.Initialize(new AudioConfig
-{
-    SampleRate = 48000,
-    Channels = 2,
-    BufferSize = 512
-});
+OwnaudioNet.Initialize();
+OwnaudioNet.Start();
 
-// Play an audio file
-OwnaudioNet.PlayFile("music.mp3");
-
-// Use the audio mixer
-var mixer = new AudioMixer(engine);
-mixer.AddSource(audioSource1);
-mixer.AddSource(audioSource2);
+// Create the audio mixer using the underlying engine
+var mixer = new AudioMixer(OwnaudioNet.Engine.UnderlyingEngine);
 mixer.Start();
 
-// AI vocal removal
-var vocalRemover = new VocalRemover();
-vocalRemover.ProcessFile("song.mp3", "vocals.wav", "instrumental.wav");
+// Play an audio file
+var music = new FileSource("music.mp3");
+mixer.AddSource(music);
+
+// Synchronized Multi-track Playback (Master Clock)
+var vocals = new FileSource("vocals.wav");
+var backing = new FileSource("backing.mp3");
+
+mixer.AddSource(vocals);
+mixer.AddSource(backing);
+
+// Attach sources to the Master Clock for sample-accurate sync
+vocals.AttachToClock(mixer.MasterClock);
+backing.AttachToClock(mixer.MasterClock);
+
+// Start sources individually
+vocals.Play();
+backing.Play();
+
+// AI Vocal Removal
+var options = new SimpleSeparationOptions 
+{ 
+    Model = InternalModel.Best, 
+    OutputDirectory = "output" 
+};
+
+using var separator = new SimpleAudioSeparationService(options);
+separator.Initialize();
+var result = separator.Separate("song.mp3");
+// result.VocalsPath and result.InstrumentalPath contain the output files
 ```
 
 ## Platform Support
