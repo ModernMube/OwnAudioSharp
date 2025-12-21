@@ -7,25 +7,24 @@ using OwnaudioNET.Core;
 using OwnaudioNET.Events;
 using OwnaudioNET.Interfaces;
 using OwnaudioNET.Processing;
+using OwnaudioNET.Synchronization;
+//using System.Diagnostics;
 
 namespace OwnaudioNET.Sources;
 
 /// <summary>
-/// File-based audio source with background decoding and optional SoundTouch processing.
-/// Provides smooth playback by decoding audio data in a separate thread and buffering it.
-/// Uses Ownaudio.Core decoders (WavDecoder, Mp3Decoder, FlacDecoder) via AudioDecoderFactory.
-/// Supports pitch shifting and tempo control via SoundTouch.NET.
-/// Implements ISynchronizable for sample-accurate multi-track synchronization with drift correction.
-///
-/// DUAL MODE SYNCHRONIZATION (v2.4.0 - Backward Compatible):
-/// - NEW: Implements IMasterClockSource for timeline-based master clock synchronization
-/// - LEGACY: Implements IGhostTrackObserver for backward compatibility (deprecated)
-/// - Zero overhead when not attached to either synchronization method
-/// - Automatic state/position/tempo/pitch synchronization
-/// - Continuous drift correction in ReadSamples hot path
+/// Audio source that plays audio from a file with advanced features:
+/// - Background decoding thread for smooth playback
+/// - Circular buffer for zero-copy audio streaming
+/// - SoundTouch integration for real-time pitch/tempo control
+/// - Master clock synchronization for multi-track alignment
+/// - Soft sync system for gradual drift correction
 /// </summary>
 public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackObserver, IMasterClockSource
 {
+    #region Fields
+
+    // Core components
     private readonly IAudioDecoder _decoder;
     private readonly CircularBuffer _buffer;
     private Thread _decoderThread;
@@ -42,6 +41,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     private int _soundTouchAccumulationCount;
     private bool _wasSoundTouchProcessing = false;
 
+    // Playback state
     private volatile bool _shouldStop;
     private volatile bool _seekRequested;
     private double _seekTargetSeconds;
@@ -52,6 +52,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     private bool _disposed;
     private volatile bool _isPreBuffering = false;
 
+    // Synchronization state
     private double _gracePeriodEndTime = 0.0;
     private int _seekCount = 0;
     private double _lastSeekTime = 0.0;
@@ -60,10 +61,13 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     private const double GracePeriodSeconds = 1.0;
     private const double InitialGracePeriodSeconds = 0.5;
 
+    // Buffers
     private readonly byte[] _decodeBuffer = null!;
 
+    // Legacy synchronization (deprecated)
     private GhostTrackSource? _ghostTrack = null;
 
+    // Master clock synchronization
     private MasterClock? _masterClock = null;
     private double _startOffset = 0.0;
     private double _trackLocalTime = 0.0;
@@ -73,6 +77,10 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     private long _totalSamplesProcessedFromFile = 0;
     private readonly object _timingLock = new();
     private bool _isSoftSyncActive = false;  // Track if soft sync is currently active
+
+    #endregion
+
+    #region Properties
 
     /// <summary>
     /// Gets or sets the synchronization tolerance in seconds (Green Zone threshold).
@@ -84,9 +92,9 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     /// <summary>
     /// Soft sync tolerance in seconds (Yellow Zone threshold).
     /// Drift between SyncTolerance and SoftSyncTolerance triggers tempo adjustment.
-    /// Default is 0.050 (50ms).
+    /// Default is 0.150 (150ms) - increased from 50ms to reduce hard seek sensitivity with 22+ tracks.
     /// </summary>
-    public double SoftSyncTolerance { get; set; } = 0.050;
+    public double SoftSyncTolerance { get; set; } = 0.150;
 
     /// <summary>
     /// Maximum tempo adjustment percentage for soft sync.
@@ -122,6 +130,10 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
 
     /// <inheritdoc/>
     public bool IsAttachedToClock => _masterClock != null;
+
+    #endregion
+
+    #region Tempo and Pitch Control
 
     /// <summary>
     /// Gets or sets the playback tempo multiplier (1.0 = normal speed).
@@ -237,6 +249,10 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         }
     }
 
+    #endregion
+
+    #region Constructor
+
 
     /// <summary>
     /// Initializes a new instance of the FileSource class.
@@ -279,11 +295,13 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         _soundTouch = new SoundTouchProcessor(_streamInfo.SampleRate, _streamInfo.Channels);
         _soundTouchOutputBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 2];
 
-        // Pre-allocate input buffer with generous headroom
-        _soundTouchInputBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 4];
+        // Pre-allocate input buffer with generous headroom to prevent GC
+        // Worst case: tempo=0.5x means we need 2x the input buffer size
+        _soundTouchInputBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 8];
 
-        // Accumulation buffer with 8x size to handle tempo changes
-        _soundTouchAccumulationBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 8];
+        // Accumulation buffer with 16x size to handle worst-case tempo changes without reallocation
+        // This prevents GC in the hot path which causes sync chaos every 30-40 seconds
+        _soundTouchAccumulationBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 16];
         _soundTouchAccumulationCount = 0;
 
         // ZERO-ALLOC: Pre-allocate a reusable buffer for the decoder
@@ -301,9 +319,13 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         {
             Name = $"FileSource-Decoder-{Id}",
             IsBackground = true,
-            Priority = ThreadPriority.Normal
+            Priority = ThreadPriority.AboveNormal  // Boosted from Normal to reduce priority inversion with MixThread
         };
     }
+
+    #endregion
+
+    #region Core Playback Methods
 
     /// <inheritdoc/>
     public override int ReadSamples(Span<float> buffer, int frameCount)
@@ -518,6 +540,10 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         }
     }
 
+    #endregion
+
+    #region Synchronization - GhostTrack (Deprecated)
+
     /// <summary>
     /// Attaches this FileSource to a GhostTrack for automatic synchronization.
     /// After attachment, this source will automatically follow the GhostTrack's
@@ -621,6 +647,10 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         Loop = shouldLoop;
     }
 
+    #endregion
+
+    #region Synchronization - MasterClock
+
     // ========================================
     // IMasterClockSource Methods (NEW - v2.4.0+)
     // ========================================
@@ -676,6 +706,10 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             }
         }
     }
+
+    #endregion
+
+    #region Soft Sync Methods
 
     /// <summary>
     /// Applies soft synchronization by adjusting tempo to gradually correct drift.
@@ -883,7 +917,8 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             int remainingSamples = (frameCount - framesRead) * _streamInfo.Channels;
             FillWithSilence(buffer.Slice(samplesRead), remainingSamples);
 
-            // Do not update _trackLocalTime here to allow drift detection later
+            // NOTE: Do NOT advance _trackLocalTime here - it was already advanced above for framesRead
+            // We only need to update position tracking for the silence frames
             int silenceFrames = frameCount - framesRead;
             double exactSilenceFrames = silenceFrames * _tempo;
             _fractionalFrameAccumulator += exactSilenceFrames;
@@ -929,6 +964,10 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         result = ReadResult.CreateSuccess(framesRead);
         return true;
     }
+
+    #endregion
+
+    #region Playback Control
 
     /// <inheritdoc/>
     public override void Play()
@@ -1029,6 +1068,10 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         _buffer.Clear();
     }
 
+    #endregion
+
+    #region Decoder Thread
+
     /// <summary>
     /// Decoder thread procedure - runs in background and fills the buffer.
     /// Uses frame-based decoding via IAudioDecoder.DecodeNextFrame().
@@ -1084,7 +1127,8 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                     : (_buffer.Capacity * 3) / 4;    // 75% for direct playback
                 if (_buffer.Available >= targetFillLevel)
                 {
-                    // Buffer is full enough, sleep briefly
+                    // Buffer is full enough - sleep briefly
+                    // Note: Thread.Sleep(1) timing varies by platform but is acceptable here
                     Thread.Sleep(1);
                     continue;
                 }
@@ -1167,6 +1211,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                     int frameCount = readResult.FramesRead;
 
                     // Bypass SoundTouch when tempo=1.0 AND pitch=0
+                    // OPTIMIZATION: Check outside lock to reduce contention with MixThread
                     bool isProcessingNeeded = _soundTouch.IsProcessingNeeded();
 
                     // Detect transitions between SoundTouch processing and direct write
@@ -1268,8 +1313,12 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                 int requiredSize = samples.Length;
                 if (_soundTouchInputBuffer.Length < requiredSize)
                 {
-                    // 2x for growth
-                    _soundTouchInputBuffer = new float[requiredSize * 2]; 
+                    // CRITICAL: This should NEVER happen if buffers are pre-allocated correctly
+                    // Log error instead of reallocating to avoid GC in hot path
+                    OnError(new AudioErrorEventArgs(
+                        $"SoundTouch input buffer overflow: required={requiredSize}, available={_soundTouchInputBuffer.Length}. " +
+                        "Increase buffer size in constructor.", null));
+                    return;
                 }
 
                 // Copy to pre-allocated buffer
@@ -1326,15 +1375,12 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         int requiredCapacity = _soundTouchAccumulationCount + samples.Length;
         if (requiredCapacity > _soundTouchAccumulationBuffer.Length)
         {
-            int newCapacity = Math.Max(_soundTouchAccumulationBuffer.Length * 2, requiredCapacity);
-            var newBuffer = new float[newCapacity];
-
-            if (_soundTouchAccumulationCount > 0)
-            {
-                _soundTouchAccumulationBuffer.AsSpan(0, _soundTouchAccumulationCount).CopyTo(newBuffer);
-            }
-
-            _soundTouchAccumulationBuffer = newBuffer;
+            // CRITICAL: This should NEVER happen if buffers are pre-allocated correctly
+            // Log error instead of reallocating to avoid GC in hot path
+            OnError(new AudioErrorEventArgs(
+                $"SoundTouch accumulation buffer overflow: required={requiredCapacity}, available={_soundTouchAccumulationBuffer.Length}. " +
+                "Increase buffer size in constructor.", null));
+            return;
         }
 
         // Add samples to accumulation buffer
@@ -1420,4 +1466,6 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
 
         base.ResyncTo(targetSamplePosition);
     }
+
+    #endregion
 }
