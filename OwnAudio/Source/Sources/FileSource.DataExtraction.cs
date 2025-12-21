@@ -15,7 +15,13 @@ namespace OwnaudioNET.Sources;
 /// </summary>
 public partial class FileSource
 {
+    #region Fields
+
     private string? _filePath;
+
+    #endregion
+
+    #region Data Extraction Methods
 
     /// <summary>
     /// Extracts raw audio data as bytes at the specified position.
@@ -142,6 +148,10 @@ public partial class FileSource
         return floatData;
     }
 
+    #endregion
+
+    #region Output Level Monitoring
+
     /// <summary>
     /// Gets the current output levels (peak levels) for this source.
     /// This monitors the audio buffer for peak sample values.
@@ -207,4 +217,6 @@ public partial class FileSource
             return (0f, 0f);
         }
     }
+
+    #endregion
 }

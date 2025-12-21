@@ -17,6 +17,8 @@ namespace OwnaudioNET.Sources;
 /// </summary>
 public partial class FileSource
 {
+    #region Stream-Based Constructors
+
     /// <summary>
     /// Initializes a new instance of the FileSource class from a stream.
     /// Automatically detects audio format from stream header.
@@ -95,6 +97,10 @@ public partial class FileSource
         };
     }
 
+    #endregion
+
+    #region Helper Methods
+
     /// <summary>
     /// Creates an audio decoder from a stream.
     /// </summary>
@@ -116,4 +122,6 @@ public partial class FileSource
 
         return AudioDecoderFactory.Create(stream, format, targetSampleRate, targetChannels);
     }
+
+    #endregion
 }
