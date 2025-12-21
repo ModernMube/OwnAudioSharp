@@ -69,12 +69,30 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     private double _trackLocalTime = 0.0;
     private double _fractionalFrameAccumulator = 0.0;
 
+    // Input-driven timing tracking
+    private long _totalSamplesProcessedFromFile = 0;
+    private readonly object _timingLock = new();
+    private bool _isSoftSyncActive = false;  // Track if soft sync is currently active
+
     /// <summary>
-    /// Gets or sets the synchronization tolerance in seconds.
+    /// Gets or sets the synchronization tolerance in seconds (Green Zone threshold).
     /// Default is 0.010 (10ms).
-    /// If the drift exceeds this value, a corrective seek will be performed.
+    /// Drift below this value requires no correction.
     /// </summary>
     public double SyncTolerance { get; set; } = 0.010;
+
+    /// <summary>
+    /// Soft sync tolerance in seconds (Yellow Zone threshold).
+    /// Drift between SyncTolerance and SoftSyncTolerance triggers tempo adjustment.
+    /// Default is 0.050 (50ms).
+    /// </summary>
+    public double SoftSyncTolerance { get; set; } = 0.050;
+
+    /// <summary>
+    /// Maximum tempo adjustment percentage for soft sync.
+    /// Default is 0.02 (2%).
+    /// </summary>
+    public double SoftSyncMaxTempoAdjustment { get; set; } = 0.02;
 
     /// <inheritdoc/>
     public override AudioConfig Config => _config;
@@ -449,6 +467,12 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                             _soundTouchAccumulationCount = 0;
                         }
 
+                        // Reset input-driven timing counter
+                        lock (_timingLock)
+                        {
+                            _totalSamplesProcessedFromFile = (long)(positionInSeconds * _streamInfo.SampleRate);
+                        }
+
                         return true;
                     }
                     else
@@ -473,6 +497,12 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                     _soundTouchAccumulationCount = 0; 
                     // Reset transition tracking after Seek
                     _wasSoundTouchProcessing = false; 
+                }
+
+                // Reset input-driven timing counter
+                lock (_timingLock)
+                {
+                    _totalSamplesProcessedFromFile = (long)(positionInSeconds * _streamInfo.SampleRate);
                 }
 
                 // Reset EOF flag
@@ -618,6 +648,12 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         _trackLocalTime = currentClockTime - _startOffset; 
         _fractionalFrameAccumulator = 0.0;
 
+        // Reset input-driven timing counter
+        lock (_timingLock)
+        {
+            _totalSamplesProcessedFromFile = (long)(_trackLocalTime * _streamInfo.SampleRate);
+        }
+
         // Set short initial grace period at AttachToClock to prevent immediate Seek
         _gracePeriodEndTime = currentClockTime + InitialGracePeriodSeconds;
 
@@ -638,6 +674,57 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             {
                 IsSynchronized = false;
             }
+        }
+    }
+
+    /// <summary>
+    /// Applies soft synchronization by adjusting tempo to gradually correct drift.
+    /// This is used in the Yellow Zone (drift between SyncTolerance and SoftSyncTolerance).
+    /// </summary>
+    /// <param name="drift">The absolute drift value in seconds.</param>
+    /// <param name="targetTrackTime">The target track time we should be at.</param>
+    private void ApplySoftSync(double drift, double targetTrackTime)
+    {
+        lock (_soundTouchLock)
+        {
+            // Calculate tempo adjustment based on drift magnitude
+            // Scale linearly from 0% at SyncTolerance to MaxTempoAdjustment at SoftSyncTolerance
+            double driftRange = SoftSyncTolerance - SyncTolerance;
+            double driftInRange = drift - SyncTolerance;
+            double adjustmentFactor = Math.Min(driftInRange / driftRange, 1.0);
+            double adjustment = adjustmentFactor * SoftSyncMaxTempoAdjustment;
+
+            // Determine direction: are we behind or ahead?
+            if (targetTrackTime > _trackLocalTime)
+            {
+                // We're behind - speed up slightly
+                double newTempoChange = (_tempo - 1.0f) * 100.0f + (adjustment * 100.0f);
+                _soundTouch.TempoChange = (float)newTempoChange;
+            }
+            else
+            {
+                // We're ahead - slow down slightly
+                double newTempoChange = (_tempo - 1.0f) * 100.0f - (adjustment * 100.0f);
+                _soundTouch.TempoChange = (float)newTempoChange;
+            }
+
+            #if DEBUG
+            Console.WriteLine($"[SoftSync] Drift={drift:F4}s, Adjustment={adjustment:F4} ({(targetTrackTime > _trackLocalTime ? "speed up" : "slow down")})");
+            #endif
+        }
+    }
+
+    /// <summary>
+    /// Resets soft sync by restoring the original tempo setting.
+    /// Called when drift returns to Green Zone.
+    /// </summary>
+    private void ResetSoftSync()
+    {
+        lock (_soundTouchLock)
+        {
+            // Restore original tempo
+            double originalTempoChange = (_tempo - 1.0f) * 100.0f;
+            _soundTouch.TempoChange = (float)originalTempoChange;
         }
     }
 
@@ -672,52 +759,97 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         // Drift correction comparing target and local time
         double drift = Math.Abs(targetTrackTime - _trackLocalTime);
 
-        if (!gracePeriodActive && drift > SyncTolerance)
+        // Three-Zone Drift Correction System
+        if (!gracePeriodActive)
         {
-            // Check if we're Seeking too frequently
-            double timeSinceLastSeek = targetTrackTime - _lastSeekTime;
-
-            if (timeSinceLastSeek > SeekWindowSeconds)
+            if (drift <= SyncTolerance)
             {
-                // Reset counter if outside the window
-                _seekCount = 0;
-                _lastSeekTime = targetTrackTime;
+                // GREEN ZONE: No correction needed
+                // Reset soft sync ONLY if it was active
+                if (_isSoftSyncActive)
+                {
+                    ResetSoftSync();
+                    _isSoftSyncActive = false;
+                }
+
+                #if DEBUG
+                // Console.WriteLine($"[GreenZone] Drift={drift:F4}s - No correction");
+                #endif
             }
-
-            _seekCount++;
-
-            if (_seekCount > MaxSeeksPerWindow)
+            else if (drift <= SoftSyncTolerance)
             {
-                // Too many Seeks - disable drift correction for this track
+                // YELLOW ZONE: Apply soft sync (tempo adjustment)
+                ApplySoftSync(drift, targetTrackTime);
+                _isSoftSyncActive = true;
+
+                #if DEBUG
+                Console.WriteLine($"[YellowZone] Drift={drift:F4}s - Soft sync active");
+                #endif
+            }
+            else
+            {
+                // RED ZONE: Hard sync required (seek)
+                // Reset soft sync before seeking
+                if (_isSoftSyncActive)
+                {
+                    ResetSoftSync();
+                    _isSoftSyncActive = false;
+                }
+
+                // Check if we're Seeking too frequently
+                double timeSinceLastSeek = targetTrackTime - _lastSeekTime;
+
+                if (timeSinceLastSeek > SeekWindowSeconds)
+                {
+                    // Reset counter if outside the window
+                    _seekCount = 0;
+                    _lastSeekTime = targetTrackTime;
+                }
+
+                _seekCount++;
+
+                if (_seekCount > MaxSeeksPerWindow)
+                {
+                    // Too many Seeks - disable drift correction for this track
+                    FillWithSilence(buffer, frameCount * _streamInfo.Channels);
+                    // Force sync to prevent further attempts
+                    _trackLocalTime = targetTrackTime;
+                    result = ReadResult.CreateFailure(0, "Seek cascade detected - sync disabled");
+
+                    #if DEBUG
+                    Console.WriteLine($"[RedZone] Seek cascade detected - sync disabled");
+                    #endif
+
+                    return false;
+                }
+
+                // Perform seek to resync
+                double filePosition = targetTrackTime * _tempo;
+
+                #if DEBUG
+                Console.WriteLine($"[RedZone] Drift={drift:F4}s - Hard sync (seek to {filePosition:F4}s)");
+                #endif
+
+                if (!Seek(filePosition))
+                {
+                    // Seek failed - fill with silence and report failure
+                    FillWithSilence(buffer, frameCount * _streamInfo.Channels);
+                    result = ReadResult.CreateFailure(0, "Seek failed during drift correction");
+                    return false;
+                }
+
+                // Set grace period to prevent immediate re-seek
+                _gracePeriodEndTime = targetTrackTime + GracePeriodSeconds;
+
+                // Force sync to target time immediately
+                _trackLocalTime = targetTrackTime;
+
+                // Return silence immediately as SUCCESS to prevent cascade
                 FillWithSilence(buffer, frameCount * _streamInfo.Channels);
-                // Force sync to prevent further attempts
-                _trackLocalTime = targetTrackTime; 
-                result = ReadResult.CreateFailure(0, "Seek cascade detected - sync disabled");
-                return false;
+                // SUCCESS - intentional silence!
+                result = ReadResult.CreateSuccess(frameCount);
+                return true;
             }
-
-            // Perform seek to resync
-            double filePosition = targetTrackTime * _tempo;
-
-            if (!Seek(filePosition))
-            {
-                // Seek failed - fill with silence and report failure
-                FillWithSilence(buffer, frameCount * _streamInfo.Channels);
-                result = ReadResult.CreateFailure(0, "Seek failed during drift correction");
-                return false;
-            }
-
-            // Set grace period to prevent immediate re-seek
-            _gracePeriodEndTime = targetTrackTime + GracePeriodSeconds;
-
-            // Force sync to target time immediately
-            _trackLocalTime = targetTrackTime;
-
-            // Return silence immediately as SUCCESS to prevent cascade
-            FillWithSilence(buffer, frameCount * _streamInfo.Channels);
-            // SUCCESS - intentional silence!
-            result = ReadResult.CreateSuccess(frameCount); 
-            return true; 
         }
 
         // Read from circular buffer
@@ -725,7 +857,8 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         int samplesRead = _buffer.Read(buffer.Slice(0, samplesToRead));
         int framesRead = samplesRead / _streamInfo.Channels;
 
-        // Update track local time
+        // Update track local time using simple output-driven approach
+        // This is simpler and more stable than input-driven timing
         if (framesRead > 0)
         {
             double frameDuration = 1.0 / _streamInfo.SampleRate;
@@ -860,8 +993,11 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
 
         // Wait for buffer to fill
         int bufferSizeInSamples = _bufferSizeInFrames * _streamInfo.Channels * 4;
-        // Increased from 25% to 50% for better initial buffer
-        int minBufferLevel = bufferSizeInSamples / 2;
+        // Dynamic buffer sizing: higher target when SoundTouch is active
+        bool isSoundTouchActive = _soundTouch.IsProcessingNeeded();
+        int minBufferLevel = isSoundTouchActive 
+            ? (bufferSizeInSamples * 3) / 4  // 75% for SoundTouch
+            : bufferSizeInSamples / 2;        // 50% for direct playback
         int waitCount = 0;
 
         // Reduced timeout from 1000ms to 500ms
@@ -924,6 +1060,12 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                             // Sync SamplePosition with new time position
                             SetSamplePosition((long)(targetSeconds * _streamInfo.SampleRate));
                             _isEndOfStream = false;
+
+                            // Reset input-driven timing counter
+                            lock (_timingLock)
+                            {
+                                _totalSamplesProcessedFromFile = (long)(targetSeconds * _streamInfo.SampleRate);
+                            }
                         }
                         else
                         {
@@ -935,7 +1077,11 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                 }
 
                 // Check if buffer needs filling
-                int targetFillLevel = (_buffer.Capacity * 3) / 4;
+                // Dynamic buffer sizing: higher target when SoundTouch is active
+                bool isSoundTouchActive = _soundTouch.IsProcessingNeeded();
+                int targetFillLevel = isSoundTouchActive
+                    ? (_buffer.Capacity * 7) / 8     // 87.5% for SoundTouch
+                    : (_buffer.Capacity * 3) / 4;    // 75% for direct playback
                 if (_buffer.Available >= targetFillLevel)
                 {
                     // Buffer is full enough, sleep briefly
@@ -1070,6 +1216,12 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
 
                     // Update transition tracking
                     _wasSoundTouchProcessing = isProcessingNeeded;
+
+                    // Track total samples processed from file for input-driven timing
+                    lock (_timingLock)
+                    {
+                        _totalSamplesProcessedFromFile += frameCount;
+                    }
 
                     if (isProcessingNeeded)
                     {
