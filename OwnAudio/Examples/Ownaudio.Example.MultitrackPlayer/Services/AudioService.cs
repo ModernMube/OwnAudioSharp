@@ -149,7 +149,8 @@ public class AudioService : IDisposable
         // Create new mixer
         if (OwnaudioNet.Engine != null)
         {
-            _mixer = new AudioMixer(OwnaudioNet.Engine.UnderlyingEngine, bufferSizeInFrames: 512);
+            // Use same buffer size as InitializeAsync for consistency (4096 frames for 22+ tracks)
+            _mixer = new AudioMixer(OwnaudioNet.Engine.UnderlyingEngine, bufferSizeInFrames: 4096);
             _mixer.Start();
         }
     }

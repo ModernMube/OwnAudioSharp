@@ -681,9 +681,15 @@ public sealed partial class AudioMixer : IDisposable
                         _bufferSizeInFrames,
                         out ReadResult result);
 
-                    if (success && result.FramesRead > 0)
+                    // CRITICAL FIX: Always mix whatever we got (could be silence if underrun)
+                    // This ensures track timing stays aligned even during dropouts
+                    if (result.FramesRead > 0)
                     {
                         MixIntoBuffer(mixBuffer, sourceBuffer, result.FramesRead * _config.Channels);
+                    }
+
+                    if (success)
+                    {
                         activeSources++;
                     }
                     else

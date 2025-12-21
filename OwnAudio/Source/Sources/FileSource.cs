@@ -28,7 +28,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
 {
     private readonly IAudioDecoder _decoder;
     private readonly CircularBuffer _buffer;
-    private readonly Thread _decoderThread;
+    private Thread _decoderThread;
     private readonly object _seekLock = new();
     private readonly object _soundTouchLock = new();
     private readonly ManualResetEventSlim _pauseEvent;
@@ -36,10 +36,11 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     private readonly AudioConfig _config;
     private readonly AudioStreamInfo _streamInfo;
     private readonly SoundTouchProcessor _soundTouch;
-    private readonly float[] _soundTouchOutputBuffer;  // Buffer for receiving from SoundTouch
-    private float[] _soundTouchInputBuffer;  // Pre-allocated buffer for PutSamples
-    private float[] _soundTouchAccumulationBuffer;  // Accumulation buffer (like working code)
-    private int _soundTouchAccumulationCount;  // Tracks samples in accumulation buffer
+    private readonly float[] _soundTouchOutputBuffer;
+    private float[] _soundTouchInputBuffer;
+    private float[] _soundTouchAccumulationBuffer;
+    private int _soundTouchAccumulationCount;
+    private bool _wasSoundTouchProcessing = false;
 
     private volatile bool _shouldStop;
     private volatile bool _seekRequested;
@@ -51,20 +52,22 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     private bool _disposed;
     private volatile bool _isPreBuffering = false;
 
-    // Transition and Sync Logic
-    private long _ignoreSyncUntil = 0;         // Grace period end frame for sync
+    private double _gracePeriodEndTime = 0.0;
+    private int _seekCount = 0;
+    private double _lastSeekTime = 0.0;
+    private const int MaxSeeksPerWindow = 10;
+    private const double SeekWindowSeconds = 5.0;
+    private const double GracePeriodSeconds = 1.0;
+    private const double InitialGracePeriodSeconds = 0.5;
 
-    // ZERO-ALLOC: Reusable buffer for the decoder.
     private readonly byte[] _decodeBuffer = null!;
 
-    // LEGACY: GhostTrack observer pattern (deprecated but functional)
-    private GhostTrackSource? _ghostTrack = null;  // null = not synchronized (zero overhead)
+    private GhostTrackSource? _ghostTrack = null;
 
-    // NEW: MasterClock support (v2.4.0+)
-    private MasterClock? _masterClock = null;  // null = not attached to master clock
-    private double _startOffset = 0.0;  // Track start offset on timeline (seconds)
-    private double _trackLocalTime = 0.0;  // Track's own timeline position (tempo-adjusted)
-    private double _fractionalFrameAccumulator = 0.0; // Accumulator for fractional frame advancement
+    private MasterClock? _masterClock = null;
+    private double _startOffset = 0.0;
+    private double _trackLocalTime = 0.0;
+    private double _fractionalFrameAccumulator = 0.0;
 
     /// <summary>
     /// Gets or sets the synchronization tolerance in seconds.
@@ -146,22 +149,17 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
 
             if (clearBuffer)
             {
-                // Clear SoundTouch internal buffer to remove old samples and prevent glitches
+                // Clear SoundTouch internal buffer to remove old samples
                 _soundTouch.Clear();
+                // Clear accumulation buffer
+                _soundTouchAccumulationCount = 0; 
             }
-        }
-
-        if (clearBuffer)
-        {
-            // Reset accumulation buffer to prevent stale data
-            _soundTouchAccumulationCount = 0;
         }
 
         if (setGracePeriod)
         {
-            // SYNC STABILIZATION: Trigger grace period to prevent chaotic resync
-            long gracePeriodEnd = SamplePosition + (_streamInfo.SampleRate / 2);
-            Interlocked.Exchange(ref _ignoreSyncUntil, gracePeriodEnd);
+            // Trigger grace period to prevent chaotic resync
+            _gracePeriodEndTime = _trackLocalTime + GracePeriodSeconds;
         }
     }
 
@@ -209,20 +207,15 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             {
                 // Clear SoundTouch internal buffer to remove old pitch-processed samples
                 _soundTouch.Clear();
+                // Clear accumulation buffer
+                _soundTouchAccumulationCount = 0; 
             }
-        }
-
-        if (clearBuffer)
-        {
-            // Reset accumulation buffer to prevent stale data
-            _soundTouchAccumulationCount = 0;
         }
 
         if (setGracePeriod)
         {
-            // SYNC STABILIZATION: Trigger grace period to prevent chaotic resync
-            long gracePeriodEnd = SamplePosition + (_streamInfo.SampleRate / 2);
-            Interlocked.Exchange(ref _ignoreSyncUntil, gracePeriodEnd);
+            // Trigger grace period to prevent chaotic resync
+            _gracePeriodEndTime = _trackLocalTime + GracePeriodSeconds;
         }
     }
 
@@ -255,24 +248,24 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
 
         _config = new AudioConfig
         {
-            SampleRate = _streamInfo.SampleRate,  // Use decoder's actual output format
-            Channels = _streamInfo.Channels,      // Use decoder's actual output format
+            SampleRate = _streamInfo.SampleRate,
+            Channels = _streamInfo.Channels,
             BufferSize = bufferSizeInFrames
         };
 
-        // Initialize circular buffer with 4x size for better buffering and underrun prevention
+        // Initialize circular buffer with 4x size for better buffering
         int bufferSizeInSamples = bufferSizeInFrames * _streamInfo.Channels * 4;
         _buffer = new CircularBuffer(bufferSizeInSamples);
 
         // Initialize SoundTouch processor
         _soundTouch = new SoundTouchProcessor(_streamInfo.SampleRate, _streamInfo.Channels);
-        _soundTouchOutputBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 2]; // Buffer for ReceiveSamples
+        _soundTouchOutputBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 2];
 
-        // Pre-allocate input buffer with generous headroom to avoid reallocations
-        _soundTouchInputBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 4]; // Increased from 2x to 4x
+        // Pre-allocate input buffer with generous headroom
+        _soundTouchInputBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 4];
 
-        // Accumulation buffer with 8x size to handle tempo changes (2x tempo = 2x samples)
-        _soundTouchAccumulationBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 8]; // Increased from 4x to 8x
+        // Accumulation buffer with 8x size to handle tempo changes
+        _soundTouchAccumulationBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 8];
         _soundTouchAccumulationCount = 0;
 
         // ZERO-ALLOC: Pre-allocate a reusable buffer for the decoder
@@ -290,7 +283,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         {
             Name = $"FileSource-Decoder-{Id}",
             IsBackground = true,
-            Priority = ThreadPriority.Normal // Changed from AboveNormal to reduce CPU usage
+            Priority = ThreadPriority.Normal
         };
     }
 
@@ -306,7 +299,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             return frameCount;
         }
 
-        // PRIORITY 1: NEW - If attached to MasterClock, delegate to ReadSamplesAtTime()
+        // If attached to MasterClock, delegate to ReadSamplesAtTime()
         if (_masterClock != null)
         {
             bool success = ReadSamplesAtTime(
@@ -318,7 +311,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             return result.FramesRead;
         }
 
-        // PRIORITY 2: LEGACY - If attached to GhostTrack, use legacy sync logic
+        // If attached to GhostTrack, use legacy sync logic
         if (_ghostTrack != null)
         {
             if (_buffer.Available > 0)
@@ -328,8 +321,9 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                 long myPosition = SamplePosition;
                 long drift = Math.Abs(ghostPosition - myPosition);
 
-                // SYNC CHECK: Only check drift if we are past the grace period
-                if (drift > 512 && myPosition > _ignoreSyncUntil)
+                // Only check drift if we are past the grace period
+                long gracePeriodEndFrame = (long)(_gracePeriodEndTime * _streamInfo.SampleRate);
+                if (drift > 512 && myPosition > gracePeriodEndFrame)
                 {
                     // Drift detected - resync immediately
                     ResyncTo(ghostPosition);
@@ -337,7 +331,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             }
         }
 
-        // PRIORITY 3: Standalone mode (no sync) - EXISTING CODE
+        // Standalone mode (no sync)
 
         int samplesToRead = frameCount * _streamInfo.Channels;
         int samplesRead = _buffer.Read(buffer.Slice(0, samplesToRead));
@@ -346,7 +340,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         // Update position
         if (framesRead > 0)
         {
-            // ACCUMULATE FRACTIONAL FRAMES (fixes precision drift)
+            // ACCUMULATE FRACTIONAL FRAMES
             double exactSourceFrames = framesRead * _tempo;
             _fractionalFrameAccumulator += exactSourceFrames;
             int sourceFramesAdvanced = (int)_fractionalFrameAccumulator;
@@ -437,7 +431,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             {
                 if (!_decoderThread.IsAlive)
                 {
-                    // Direct seek on decoder (no thread involved)
+                    // Direct seek on decoder
                     var targetTimeSpan = TimeSpan.FromSeconds(positionInSeconds);
                     if (_decoder.TrySeek(targetTimeSpan, out string error))
                     {
@@ -445,7 +439,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                         SetSamplePosition((long)(positionInSeconds * _streamInfo.SampleRate));
                         _isEndOfStream = false;
 
-                        // CRITICAL FIX: Clear circular buffer to remove stale data
+                        // Clear circular buffer to remove stale data
                         _buffer.Clear();
 
                         // Clear SoundTouch buffer
@@ -475,14 +469,14 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                 lock (_soundTouchLock)
                 {
                     _soundTouch.Clear();
-                    _soundTouchAccumulationCount = 0; // Clear accumulation buffer
+                    // Clear accumulation buffer
+                    _soundTouchAccumulationCount = 0; 
+                    // Reset transition tracking after Seek
+                    _wasSoundTouchProcessing = false; 
                 }
 
                 // Reset EOF flag
                 _isEndOfStream = false;
-
-                // Wait a bit for decoder thread to process seek (reduced from 10ms to 5ms)
-                Thread.Sleep(5);
 
                 return true;
             }
@@ -607,7 +601,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         if (clock == null)
             throw new ArgumentNullException(nameof(clock));
 
-        // IMPORTANT: Detach from GhostTrack if attached (cannot use both)
+        // Detach from GhostTrack if attached
         if (_ghostTrack != null)
         {
             DetachFromGhostTrack();
@@ -617,8 +611,15 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         DetachFromClock();
 
         _masterClock = clock;
-        _trackLocalTime = 0.0;
+
+        // Initialize _trackLocalTime to match current clock position
+        double currentClockTime = _masterClock.CurrentTimestamp;
+        // Adjust for track start offset
+        _trackLocalTime = currentClockTime - _startOffset; 
         _fractionalFrameAccumulator = 0.0;
+
+        // Set short initial grace period at AttachToClock to prevent immediate Seek
+        _gracePeriodEndTime = currentClockTime + InitialGracePeriodSeconds;
 
         // Mark as synchronized
         IsSynchronized = true;
@@ -645,10 +646,10 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     {
         ThrowIfDisposed();
 
-        // 1. Calculate track-local timestamp (relative to start offset)
+        // Calculate track-local timestamp
         double relativeTimestamp = masterTimestamp - _startOffset;
 
-        // 2. Before track start → return silence
+        // Before track start return silence
         if (relativeTimestamp < 0)
         {
             FillWithSilence(buffer, frameCount * _streamInfo.Channels);
@@ -656,23 +657,47 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             return true;
         }
 
-        // 3. Target physical time (GLOBAL TEMPO - v2.4.0)
+        // Target physical time
         double targetTrackTime = relativeTimestamp;
 
-        // 4. Drift correction (configurable tolerance) comparing target and local time
-        double drift = Math.Abs(targetTrackTime - _trackLocalTime);
+        // Grace period handling
+        bool gracePeriodActive = targetTrackTime < _gracePeriodEndTime;
 
-        // SYNC STABILIZATION: Respect grace period (e.g. after tempo change)
-        long ignoreSyncUntil = Interlocked.Read(ref _ignoreSyncUntil);
-        bool gracePeriodActive = SamplePosition < ignoreSyncUntil;
+        if (gracePeriodActive)
+        {
+            // Force _trackLocalTime to sync with target to prevent re-seeking
+            _trackLocalTime = targetTrackTime;
+        }
+
+        // Drift correction comparing target and local time
+        double drift = Math.Abs(targetTrackTime - _trackLocalTime);
 
         if (!gracePeriodActive && drift > SyncTolerance)
         {
-            // Significant drift detected - perform seek to resync
-            
-            // CORRECT CALCULATION FOR DYNAMIC TEMPO: Calculate relative jump based on current file position
-            double driftSeconds = targetTrackTime - _trackLocalTime;
-            double filePosition = _currentPosition + (driftSeconds * _tempo);
+            // Check if we're Seeking too frequently
+            double timeSinceLastSeek = targetTrackTime - _lastSeekTime;
+
+            if (timeSinceLastSeek > SeekWindowSeconds)
+            {
+                // Reset counter if outside the window
+                _seekCount = 0;
+                _lastSeekTime = targetTrackTime;
+            }
+
+            _seekCount++;
+
+            if (_seekCount > MaxSeeksPerWindow)
+            {
+                // Too many Seeks - disable drift correction for this track
+                FillWithSilence(buffer, frameCount * _streamInfo.Channels);
+                // Force sync to prevent further attempts
+                _trackLocalTime = targetTrackTime; 
+                result = ReadResult.CreateFailure(0, "Seek cascade detected - sync disabled");
+                return false;
+            }
+
+            // Perform seek to resync
+            double filePosition = targetTrackTime * _tempo;
 
             if (!Seek(filePosition))
             {
@@ -681,15 +706,26 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                 result = ReadResult.CreateFailure(0, "Seek failed during drift correction");
                 return false;
             }
-            _trackLocalTime = targetTrackTime; // Update physical time tracker
+
+            // Set grace period to prevent immediate re-seek
+            _gracePeriodEndTime = targetTrackTime + GracePeriodSeconds;
+
+            // Force sync to target time immediately
+            _trackLocalTime = targetTrackTime;
+
+            // Return silence immediately as SUCCESS to prevent cascade
+            FillWithSilence(buffer, frameCount * _streamInfo.Channels);
+            // SUCCESS - intentional silence!
+            result = ReadResult.CreateSuccess(frameCount); 
+            return true; 
         }
 
-        // 5. Read from circular buffer
+        // Read from circular buffer
         int samplesToRead = frameCount * _streamInfo.Channels;
         int samplesRead = _buffer.Read(buffer.Slice(0, samplesToRead));
         int framesRead = samplesRead / _streamInfo.Channels;
 
-        // 6. Update track local time
+        // Update track local time
         if (framesRead > 0)
         {
             double frameDuration = 1.0 / _streamInfo.SampleRate;
@@ -707,28 +743,23 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             Interlocked.Exchange(ref _currentPosition, newPosition);
         }
 
-        // 7. Underrun check (dropout occurred)
+        // Underrun check
         if (framesRead < frameCount && !_isEndOfStream)
         {
             // Fill remaining with silence
             int remainingSamples = (frameCount - framesRead) * _streamInfo.Channels;
             FillWithSilence(buffer.Slice(samplesRead), remainingSamples);
 
-            // Update position for silence frames too
+            // Do not update _trackLocalTime here to allow drift detection later
             int silenceFrames = frameCount - framesRead;
-            
-            // ACCUMULATE FRACTIONAL FRAMES for silence
             double exactSilenceFrames = silenceFrames * _tempo;
             _fractionalFrameAccumulator += exactSilenceFrames;
             int silenceSourceFrames = (int)_fractionalFrameAccumulator;
             _fractionalFrameAccumulator -= silenceSourceFrames;
-
             UpdateSamplePosition(silenceSourceFrames);
 
             double frameDuration = 1.0 / _streamInfo.SampleRate;
             double silenceSeconds = silenceFrames * frameDuration;
-            _trackLocalTime += silenceSeconds;
-
             double newPos = _currentPosition + (silenceSeconds * _tempo);
             Interlocked.Exchange(ref _currentPosition, newPos);
 
@@ -738,14 +769,15 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                 frameCount - framesRead,
                 currentFramePosition));
 
-            result = ReadResult.CreateFailure(framesRead, "Buffer underrun");
-            return false; // Dropout occurred
+            // Return failure for underrun
+            result = ReadResult.CreateFailure(frameCount, "Buffer underrun");
+            return false; 
         }
 
-        // 8. Apply volume
+        // Apply volume
         ApplyVolume(buffer, frameCount * _streamInfo.Channels);
 
-        // 9. Check for end of stream with looping
+        // Check for end of stream with looping
         if (_isEndOfStream && _buffer.IsEmpty)
         {
             if (Loop)
@@ -769,31 +801,78 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     public override void Play()
     {
         ThrowIfDisposed();
-        
+
         // Signal decoder to start pre-buffering
         _isPreBuffering = true;
-        _pauseEvent.Set(); // Resume decoder thread
+        // Resume decoder thread
+        _pauseEvent.Set(); 
 
-        // Start decoder thread if not already running (lazy start)
+        // Recreate decoder thread if it's terminated
         if (!_decoderThread.IsAlive)
         {
+            // Check if thread was previously started
+            if (_decoderThread.ThreadState != ThreadState.Unstarted)
+            {
+                // Thread was started before and is now terminated - recreate it
+                _decoderThread = new Thread(DecoderThreadProc)
+                {
+                    Name = $"FileSource-Decoder-{Id}",
+                    IsBackground = true,
+                    Priority = ThreadPriority.Normal
+                };
+
+                // Reset state for fresh playback
+                _shouldStop = false;
+                _isEndOfStream = false;
+
+                // Reset Seek counter for fresh playback
+                _seekCount = 0;
+                _lastSeekTime = 0.0;
+
+                // If we ended due to EOF, seek back to beginning
+                if (Position >= Duration)
+                {
+                    _decoder.TrySeek(TimeSpan.Zero, out _);
+                    Interlocked.Exchange(ref _currentPosition, 0.0);
+                    SetSamplePosition(0);
+                    _trackLocalTime = 0.0;
+
+                    // Clear buffers
+                    _buffer.Clear();
+                    lock (_soundTouchLock)
+                    {
+                        _soundTouch.Clear();
+                        _soundTouchAccumulationCount = 0;
+                        // Reset transition tracking
+                        _wasSoundTouchProcessing = false; 
+                    }
+                }
+            }
+            else
+            {
+                // First time starting
+                _seekCount = 0;
+                _lastSeekTime = 0.0;
+            }
+
             _decoderThread.Start();
         }
 
-        // Wait for buffer to fill (CRITICAL for smooth start)
+        // Wait for buffer to fill
         int bufferSizeInSamples = _bufferSizeInFrames * _streamInfo.Channels * 4;
-        // OPTIMIZED: Increased from 25% to 50% for better initial buffer
+        // Increased from 25% to 50% for better initial buffer
         int minBufferLevel = bufferSizeInSamples / 2;
         int waitCount = 0;
 
-        // OPTIMIZED: Reduced timeout from 1000ms to 500ms
-        while (_buffer.Available < minBufferLevel && waitCount < 500) // Max 500ms wait
+        // Reduced timeout from 1000ms to 500ms
+        while (_buffer.Available < minBufferLevel && waitCount < 500) 
         {
             Thread.Sleep(1);
             waitCount++;
         }
 
         _isPreBuffering = false;
+
         base.Play();
     }
 
@@ -842,7 +921,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                         if (_decoder.TrySeek(targetTimeSpan, out string error))
                         {
                             Interlocked.Exchange(ref _currentPosition, targetSeconds);
-                            // IMPORTANT: Sync SamplePosition with new time position
+                            // Sync SamplePosition with new time position
                             SetSamplePosition((long)(targetSeconds * _streamInfo.SampleRate));
                             _isEndOfStream = false;
                         }
@@ -855,108 +934,162 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                     continue;
                 }
 
-                // Check if buffer needs filling (keep buffer at least 75% full for better resilience)
+                // Check if buffer needs filling
                 int targetFillLevel = (_buffer.Capacity * 3) / 4;
                 if (_buffer.Available >= targetFillLevel)
                 {
-                    // Buffer is full enough, sleep briefly (1ms like Ownaudio)
+                    // Buffer is full enough, sleep briefly
                     Thread.Sleep(1);
                     continue;
                 }
 
-                            // ZERO-ALLOC: Decode into the reusable buffer instead of allocating a new frame
-                            var readResult = _decoder.ReadFrames(_decodeBuffer);
-                
-                            if (readResult.IsEOF)
+                // ZERO-ALLOC: Decode into the reusable buffer
+                var readResult = _decoder.ReadFrames(_decodeBuffer);
+
+                if (readResult.IsEOF)
+                {
+                    // End of file reached
+                    _isEndOfStream = true;
+
+                    // Only flush SoundTouch if it was actually used
+                    if (_soundTouch.IsProcessingNeeded())
+                    {
+                        // Flush SoundTouch to get any remaining processed samples
+                        lock (_soundTouchLock)
+                        {
+                            _soundTouch.Flush();
+
+                            // Retrieve all remaining samples from SoundTouch and add to accumulation buffer
+                            while (true)
                             {
-                                // End of file reached
-                                _isEndOfStream = true;
-
-                                // CRITICAL OPTIMIZATION: Only flush SoundTouch if it was actually used
-                                if (_soundTouch.IsProcessingNeeded())
-                                {
-                                    // Flush SoundTouch to get any remaining processed samples
-                                    lock (_soundTouchLock)
-                                    {
-                                        _soundTouch.Flush();
-
-                                        // Retrieve all remaining samples from SoundTouch and add to accumulation buffer
-                                        while (true)
-                                        {
-                                            int maxFrames = _soundTouchOutputBuffer.Length / _streamInfo.Channels;
-                                            int framesReceived = _soundTouch.ReceiveSamples(_soundTouchOutputBuffer, maxFrames);
-                                            if (framesReceived == 0)
-                                                break;
-
-                                            int samplesToAdd = framesReceived * _streamInfo.Channels;
-                                            AddToSoundTouchAccumulationBuffer(_soundTouchOutputBuffer.AsSpan(0, samplesToAdd));
-                                        }
-
-                                        // Flush accumulation buffer to CircularBuffer
-                                        if (_soundTouchAccumulationCount > 0)
-                                        {
-                                            _buffer.Write(_soundTouchAccumulationBuffer.AsSpan(0, _soundTouchAccumulationCount));
-                                            _soundTouchAccumulationCount = 0;
-                                        }
-                                    }
-                                }
-                
-                                // If looping, seek to beginning
-                                if (Loop)
-                                {
-                                    if (_decoder.TrySeek(TimeSpan.Zero, out string error))
-                                    {
-                                        Interlocked.Exchange(ref _currentPosition, 0.0);
-                                        _isEndOfStream = false;
-                
-                                        // Clear SoundTouch on loop
-                                        lock (_soundTouchLock)
-                                        {
-                                            _soundTouch.Clear();
-                                            _soundTouchAccumulationCount = 0; // Clear accumulation buffer
-                                        }
-                                    }
-                                    else
-                                    {
-                                        OnError(new AudioErrorEventArgs($"Loop seek failed: {error}", null));
-                                        break;
-                                    }
-                                }
-                                else
-                                {
-                                    // Wait for buffer to drain
-                                    while (!_shouldStop && _buffer.Available > 0)
-                                    {
-                                        Thread.Sleep(10);
-                                    }
+                                int maxFrames = _soundTouchOutputBuffer.Length / _streamInfo.Channels;
+                                int framesReceived = _soundTouch.ReceiveSamples(_soundTouchOutputBuffer, maxFrames);
+                                if (framesReceived == 0)
                                     break;
-                                }
-                            }
-                            else if (readResult.IsSucceeded && readResult.FramesRead > 0)
-                            {
-                                int bytesRead = readResult.FramesRead * _streamInfo.Channels * sizeof(float);
-                                var floatSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(_decodeBuffer.AsSpan(0, bytesRead));
-                                int frameCount = readResult.FramesRead;
 
-                                // CRITICAL OPTIMIZATION: Bypass SoundTouch when tempo=1.0 AND pitch=0
-                                if (_soundTouch.IsProcessingNeeded())
+                                int samplesToAdd = framesReceived * _streamInfo.Channels;
+                                AddToSoundTouchAccumulationBuffer(_soundTouchOutputBuffer.AsSpan(0, samplesToAdd));
+                            }
+
+                            // Flush accumulation buffer to CircularBuffer
+                            if (_soundTouchAccumulationCount > 0)
+                            {
+                                _buffer.Write(_soundTouchAccumulationBuffer.AsSpan(0, _soundTouchAccumulationCount));
+                                _soundTouchAccumulationCount = 0;
+                            }
+                        }
+                    }
+
+                    // If looping, seek to beginning
+                    if (Loop)
+                    {
+                        if (_decoder.TrySeek(TimeSpan.Zero, out string error))
+                        {
+                            Interlocked.Exchange(ref _currentPosition, 0.0);
+                            _isEndOfStream = false;
+
+                            // Clear SoundTouch on loop
+                            lock (_soundTouchLock)
+                            {
+                                _soundTouch.Clear();
+                                // Clear accumulation buffer
+                                _soundTouchAccumulationCount = 0; 
+                                // Reset transition tracking
+                                _wasSoundTouchProcessing = false; 
+                            }
+                        }
+                        else
+                        {
+                            OnError(new AudioErrorEventArgs($"Loop seek failed: {error}", null));
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        // Wait for buffer to drain
+                        while (!_shouldStop && _buffer.Available > 0)
+                        {
+                            Thread.Sleep(10);
+                        }
+                        break;
+                    }
+                }
+                else if (readResult.IsSucceeded && readResult.FramesRead > 0)
+                {
+                    int bytesRead = readResult.FramesRead * _streamInfo.Channels * sizeof(float);
+                    var floatSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(_decodeBuffer.AsSpan(0, bytesRead));
+                    int frameCount = readResult.FramesRead;
+
+                    // Bypass SoundTouch when tempo=1.0 AND pitch=0
+                    bool isProcessingNeeded = _soundTouch.IsProcessingNeeded();
+
+                    // Detect transitions between SoundTouch processing and direct write
+                    if (_wasSoundTouchProcessing && !isProcessingNeeded)
+                    {
+                        // SoundTouch OFF (was ON) - Flush all remaining data
+                        lock (_soundTouchLock)
+                        {
+                            try
+                            {
+                                _soundTouch.Flush();
+
+                                // Extract all flushed samples
+                                while (true)
                                 {
-                                    // Process through SoundTouch (tempo != 1.0 OR pitch != 0)
-                                    ProcessWithSoundTouch(floatSpan, frameCount);
+                                    int maxFrames = _soundTouchOutputBuffer.Length / _streamInfo.Channels;
+                                    int framesReceived = _soundTouch.ReceiveSamples(_soundTouchOutputBuffer, maxFrames);
+                                    if (framesReceived == 0)
+                                        break;
+
+                                    int samplesToAdd = framesReceived * _streamInfo.Channels;
+                                    AddToSoundTouchAccumulationBuffer(_soundTouchOutputBuffer.AsSpan(0, samplesToAdd));
                                 }
-                                else
+
+                                // Write ALL accumulated data to buffer
+                                if (_soundTouchAccumulationCount > 0)
                                 {
-                                    // FAST PATH: Direct write to buffer (bypass SoundTouch)
-                                    _buffer.Write(floatSpan);
+                                    _buffer.Write(_soundTouchAccumulationBuffer.AsSpan(0, _soundTouchAccumulationCount));
+                                    _soundTouchAccumulationCount = 0;
                                 }
                             }
-                            else if (!readResult.IsSucceeded)
+                            catch (Exception ex)
                             {
-                                // Decode error
-                                OnError(new AudioErrorEventArgs($"Decode error: {readResult.ErrorMessage}", null));
-                                _isEndOfStream = true;
-                                break;
-                            }            }
+                                OnError(new AudioErrorEventArgs($"SoundTouch flush error: {ex.Message}", ex));
+                            }
+                        }
+                    }
+                    else if (!_wasSoundTouchProcessing && isProcessingNeeded)
+                    {
+                        // SoundTouch ON (was OFF) - Clear SoundTouch state
+                        lock (_soundTouchLock)
+                        {
+                            _soundTouch.Clear();
+                            _soundTouchAccumulationCount = 0;
+                        }
+                    }
+
+                    // Update transition tracking
+                    _wasSoundTouchProcessing = isProcessingNeeded;
+
+                    if (isProcessingNeeded)
+                    {
+                        // Process through SoundTouch
+                        ProcessWithSoundTouch(floatSpan, frameCount);
+                    }
+                    else
+                    {
+                        // Direct write to buffer
+                        _buffer.Write(floatSpan);
+                    }
+                }
+                else if (!readResult.IsSucceeded)
+                {
+                    // Decode error
+                    OnError(new AudioErrorEventArgs($"Decode error: {readResult.ErrorMessage}", null));
+                    _isEndOfStream = true;
+                    break;
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -978,15 +1111,16 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         {
             try
             {
-                // OPTIMIZATION: Caller should check IsProcessingNeeded() before calling this method
+                // Caller should check IsProcessingNeeded() before calling this method
                 
                 int requiredSize = samples.Length;
                 if (_soundTouchInputBuffer.Length < requiredSize)
                 {
-                    _soundTouchInputBuffer = new float[requiredSize * 2]; // 2x for growth
+                    // 2x for growth
+                    _soundTouchInputBuffer = new float[requiredSize * 2]; 
                 }
 
-                // Copy to pre-allocated buffer (avoid ToArray allocation)
+                // Copy to pre-allocated buffer
                 samples.CopyTo(_soundTouchInputBuffer.AsSpan(0, samples.Length));
 
                 // Put samples into SoundTouch
@@ -1002,19 +1136,19 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                     AddToSoundTouchAccumulationBuffer(_soundTouchOutputBuffer.AsSpan(0, samplesToAdd));
                 }
 
-                int samplesPerFrame = _bufferSizeInFrames * _streamInfo.Channels;
-                if (_soundTouchAccumulationCount >= samplesPerFrame)
+                // Write IMMEDIATELY whatever we have accumulated
+                if (_soundTouchAccumulationCount > 0)
                 {
-                    // Try to write ONE chunk at a time (not a loop!)
-                    int samplesWritten = _buffer.Write(_soundTouchAccumulationBuffer.AsSpan(0, samplesPerFrame));
+                    // Write ALL accumulated samples immediately
+                    int samplesWritten = _buffer.Write(_soundTouchAccumulationBuffer.AsSpan(0, _soundTouchAccumulationCount));
 
-                    if (samplesWritten == samplesPerFrame)
+                    if (samplesWritten > 0)
                     {
-                        // Successfully wrote, shift remaining samples
-                        int remainingSamples = _soundTouchAccumulationCount - samplesPerFrame;
+                        // Successfully wrote some/all samples - shift remaining
+                        int remainingSamples = _soundTouchAccumulationCount - samplesWritten;
                         if (remainingSamples > 0)
                         {
-                            _soundTouchAccumulationBuffer.AsSpan(samplesPerFrame, remainingSamples)
+                            _soundTouchAccumulationBuffer.AsSpan(samplesWritten, remainingSamples)
                                 .CopyTo(_soundTouchAccumulationBuffer.AsSpan(0, remainingSamples));
                         }
                         _soundTouchAccumulationCount = remainingSamples;
@@ -1051,7 +1185,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             _soundTouchAccumulationBuffer = newBuffer;
         }
 
-        // Add samples to accumulation buffer (zero-allocation)
+        // Add samples to accumulation buffer
         samples.CopyTo(_soundTouchAccumulationBuffer.AsSpan(_soundTouchAccumulationCount, samples.Length));
         _soundTouchAccumulationCount += samples.Length;
     }
@@ -1070,9 +1204,10 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
 
                 // Signal decoder thread to stop
                 _shouldStop = true;
-                _pauseEvent.Set(); // Wake up thread if waiting
+                // Wake up thread if waiting
+                _pauseEvent.Set(); 
 
-                // Wait for decoder thread to exit (with timeout)
+                // Wait for decoder thread to exit
                 if (_decoderThread.IsAlive)
                 {
                     if (!_decoderThread.Join(TimeSpan.FromSeconds(2)))
@@ -1092,7 +1227,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                 // Detach from GhostTrack
                 DetachFromGhostTrack();
 
-                // Dispose managed resources (now safe to dispose _pauseEvent)
+                // Dispose managed resources
                 _pauseEvent?.Dispose();
                 _decoder?.Dispose();
                 _soundTouch?.Dispose();
