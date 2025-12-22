@@ -175,7 +175,7 @@
                             <Slider Grid.Column="0"
                                    Name="TempoSlider"
                                    Value="{Binding TempoPercent}"
-                                   Minimum="50" Maximum="200"
+                                   Minimum="80" Maximum="120"
                                    VerticalAlignment="Center"
                                    ValueChanged="OnTempoSliderValueChanged"
                                    PointerReleased="OnTempoSliderDragEnd" />
@@ -186,7 +186,7 @@
                                       TextAlignment="Right"
                                       Margin="10,0,0,0" />
                         </Grid>
-                        <TextBlock Text="50% = half speed, 100% = normal, 200% = double speed"
+                        <TextBlock Text="80% = -20% speed, 100% = normal, 120% = +20% speed (HARD LIMIT for CPU)"
                                   FontSize="10" Foreground="#888888" />
                     </StackPanel>
 
@@ -257,7 +257,7 @@
                           Text="{Binding StatusMessage}"
                           Foreground="#CCCCCC" />
                 <TextBlock Grid.Column="1"
-                          Text="{Binding Tracks.Count, StringFormat='Tracks: {0}'}"
+                          Text="{Binding Tracks.Count, StringFormat='Tracks: {0}/25'}"
                           Foreground="#CCCCCC" />
             </Grid>
         </Border>

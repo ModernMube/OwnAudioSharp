@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using MultitrackPlayer.Models;
 using MultitrackPlayer.Services;
 using Ownaudio.Synchronization;
+using OwnaudioNET.Core;
 using OwnaudioNET.Events;
 using OwnaudioNET.Interfaces;
 using OwnaudioNET.Sources;
@@ -122,8 +123,23 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// </summary>
     public async void ApplyTempoChange(float tempoPercent)
     {
+        // HARD LIMIT: Clamp tempo to valid range (80% - 120%)
+        float minPercent = AudioConstants.MinTempo * 100.0f; // 80%
+        float maxPercent = AudioConstants.MaxTempo * 100.0f; // 120%
+        float clampedPercent = Math.Clamp(tempoPercent, minPercent, maxPercent);
+
+        // Update UI if clamped
+        if (Math.Abs(clampedPercent - tempoPercent) > 0.01f)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                TempoPercent = clampedPercent;
+                StatusMessage = $"Tempo limited to {minPercent:F0}%-{maxPercent:F0}% range";
+            });
+        }
+
         // Convert percentage to multiplier (100% = 1.0x)
-        float tempoMultiplier = tempoPercent / 100.0f;
+        float tempoMultiplier = clampedPercent / 100.0f;
 
         // OPTIMIZED: Use SetTempoSmooth() and cache to array to avoid collection issues
         var trackArray = Tracks.ToArray();
@@ -371,6 +387,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         try
         {
+            // HARD LIMIT: Check track count before adding
+            if (Tracks.Count >= AudioConstants.MaxAudioSources)
+            {
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    StatusMessage = $"Cannot add track: Maximum limit of {AudioConstants.MaxAudioSources} tracks reached.";
+                });
+                return;
+            }
+
             TrackInfo? trackInfo = null;
             TrackViewModel? trackViewModel = null;
 
@@ -413,7 +439,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 Tracks.Add(trackViewModel);
-                StatusMessage = $"Loaded {trackInfo.FileName}";
+                StatusMessage = $"Loaded {trackInfo.FileName} ({Tracks.Count}/{AudioConstants.MaxAudioSources} tracks)";
             });
         }
         catch (Exception ex)
@@ -472,27 +498,60 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Resets all audio control parameters to their default values.
     /// Sets master volume to 100%, tempo to 100%, and pitch shift to 0 semitones.
+    /// CRITICAL: Triggers full track resynchronization to prevent drift after extreme tempo changes.
     /// </summary>
     [RelayCommand]
-    private void ResetControls()
+    private async void ResetControls()
     {
-        MasterVolume = 100.0f;
+        //MasterVolume = 100.0f;
 
-        // CRITICAL FIX: Apply changes immediately to prevent sync issues during reset
+        // Update UI properties
         TempoPercent = 100.0f;
         PitchSemitones = 0;
 
-        // Apply changes immediately to all tracks (bypass debounce)
-        foreach (var track in Tracks)
-        {
-            if (track.TrackInfo.Source is FileSource fileSource)
-            {
-                fileSource.Tempo = 1.0f;  // 100% = 1.0x multiplier
-                fileSource.PitchShift = 0;
-            }
-        }
+        // CRITICAL FIX: Resynchronize all tracks after buffer clearing
+        // Setting Tempo/PitchShift properties clears SoundTouch buffers, which can cause
+        // permanent drift if tracks aren't resynced, especially after extreme tempo changes (80%/120%)
+        
+        bool wasPlaying = IsPlaying;
+        double currentPosition = CurrentPositionSeconds;
 
-        StatusMessage = "Reset controls to default values";
+        await Task.Run(() =>
+        {
+            // Cache tracks to array for thread-safe iteration
+            var trackArray = Tracks.ToArray();
+
+            // Step 1: Reset tempo and pitch on all tracks (this clears SoundTouch buffers)
+            System.Threading.Tasks.Parallel.ForEach(trackArray, track =>
+            {
+                if (track.TrackInfo.Source is FileSource fileSource)
+                {
+                    fileSource.Tempo = 1.0f;  // 100% = 1.0x multiplier
+                    fileSource.PitchShift = 0;
+                }
+            });
+
+            // Step 2: If playing, resync all tracks to current position to rebuild buffers in sync
+            if (wasPlaying && _audioService.Mixer != null)
+            {
+                // Resync MasterClock
+                _audioService.Mixer.MasterClock.SeekTo(currentPosition);
+
+                // Seek all tracks to current position to force buffer rebuild
+                System.Threading.Tasks.Parallel.ForEach(trackArray, track =>
+                {
+                    if (track.TrackInfo.Source is FileSource fileSource)
+                    {
+                        fileSource.Seek(currentPosition);
+                    }
+                });
+            }
+        });
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            StatusMessage = "Reset controls to default values";
+        });
     }
 
     #endregion

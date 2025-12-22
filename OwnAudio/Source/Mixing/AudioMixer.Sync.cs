@@ -1,3 +1,4 @@
+using OwnaudioNET.Core;
 using OwnaudioNET.Interfaces;
 using OwnaudioNET.Synchronization;
 
@@ -22,6 +23,7 @@ public sealed partial class AudioMixer
     /// <param name="sources">Array of audio sources to synchronize.</param>
     /// <exception cref="ArgumentNullException">Thrown when groupId is null or empty.</exception>
     /// <exception cref="ArgumentException">Thrown when sources array is null or empty.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when track limit would be exceeded.</exception>
     /// <exception cref="ObjectDisposedException">Thrown if mixer is disposed.</exception>
     /// <remarks>
     /// Example: mixer.CreateSyncGroup("karaoke", musicTrack, vocalsTrack, drumsTrack);
@@ -36,6 +38,15 @@ public sealed partial class AudioMixer
 
         if (sources == null || sources.Length == 0)
             throw new ArgumentException("Sources array cannot be null or empty.", nameof(sources));
+
+        // HARD LIMIT: Check if adding these sources would exceed the limit
+        int newSourceCount = sources.Count(s => !_sources.ContainsKey(s.Id));
+        if (_sources.Count + newSourceCount > AudioConstants.MaxAudioSources)
+        {
+            throw new InvalidOperationException(
+                $"Cannot create sync group: would exceed maximum track limit ({AudioConstants.MaxAudioSources}). " +
+                $"Current tracks: {_sources.Count}, attempting to add: {newSourceCount}.");
+        }
 
         // Ensure all sources are added to the mixer
         foreach (var source in sources)
