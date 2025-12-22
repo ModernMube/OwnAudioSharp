@@ -103,7 +103,8 @@ public sealed class GhostTrackSource : BaseAudioSource
     }
 
     /// <summary>
-    /// Gets or sets the tempo multiplier (1.0 = normal speed, 0.5 = half speed, 2.0 = double speed).
+    /// Gets or sets the tempo multiplier (1.0 = normal speed).
+    /// Valid range: 0.8x to 1.2x (-20% to +20%) - HARD LIMIT enforced for CPU performance.
     /// Changes to tempo AUTOMATICALLY affect all synchronized sources via observer pattern.
     /// </summary>
     public override float Tempo
@@ -119,7 +120,8 @@ public sealed class GhostTrackSource : BaseAudioSource
         {
             lock (_lock)
             {
-                float newTempo = Math.Clamp(value, 0.1f, 4.0f); // Reasonable tempo range
+                // HARD LIMIT: Clamp to 0.8x to 1.2x range for CPU performance
+                float newTempo = Math.Clamp(value, AudioConstants.MinTempo, AudioConstants.MaxTempo);
 
                 // Only notify if value actually changed
                 if (Math.Abs(_tempo - newTempo) < 0.001f)

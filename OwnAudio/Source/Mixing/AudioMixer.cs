@@ -292,7 +292,7 @@ public sealed partial class AudioMixer : IDisposable
     /// <param name="source">The audio source to add.</param>
     /// <returns>True if added successfully, false if source already exists.</returns>
     /// <exception cref="ArgumentNullException">Thrown when source is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when source format doesn't match mixer format.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when source format doesn't match mixer format or track limit exceeded.</exception>
     /// <exception cref="ObjectDisposedException">Thrown if mixer is disposed.</exception>
     public bool AddSource(IAudioSource source)
     {
@@ -300,6 +300,14 @@ public sealed partial class AudioMixer : IDisposable
 
         if (source == null)
             throw new ArgumentNullException(nameof(source));
+
+        // HARD LIMIT: Enforce maximum track count for CPU performance
+        if (_sources.Count >= AudioConstants.MaxAudioSources)
+        {
+            throw new InvalidOperationException(
+                $"Maximum track limit ({AudioConstants.MaxAudioSources}) reached. " +
+                $"Cannot add more sources. This limit ensures acceptable CPU performance with SoundTouch processing.");
+        }
 
         // Add to source dictionary
         bool added = _sources.TryAdd(source.Id, source);
