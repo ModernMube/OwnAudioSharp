@@ -149,7 +149,7 @@ mixer.AddMasterEffect(smartMaster);
 
 See the **[SmartMaster in MultitrackPlayer](OwnAudio/Examples/Ownaudio.Example.MultitrackPlayer/)** for a complete working example with full UI integration!
 
-> **📖 Detailed Documentation:** For comprehensive information about SmartMaster including all parameters, technical details, and advanced usage examples, see the **[Effects Documentation](documents/effects.html#master)**.
+> **📖 Detailed Documentation:** For comprehensive information about SmartMaster including all parameters, technical details, and advanced usage examples, see the **[Effects Documentation](https://modernmube.github.io/OwnAudioSharp/documents/api-net.html#sync)**.
 
 ## ⚠️ Version History
 
