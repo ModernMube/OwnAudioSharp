@@ -39,15 +39,21 @@ namespace Ownaudio.EngineTest
         }
 
         [TestMethod]
-        [ExpectedException(typeof(AudioException))]
         public void Factory_CreateWithNullConfig_ShouldThrow()
         {
-            // Act
-            using var engine = AudioEngineFactory.Create(null!);
+            // Act & Assert
+            try
+            {
+                using var engine = AudioEngineFactory.Create(null!);
+                Assert.Fail("Expected AudioException was not thrown");
+            }
+            catch (AudioException)
+            {
+                // Expected
+            }
         }
 
         [TestMethod]
-        [ExpectedException(typeof(AudioException))]
         public void Factory_CreateWithInvalidConfig_ShouldThrow()
         {
             // Arrange
@@ -58,8 +64,16 @@ namespace Ownaudio.EngineTest
                 BufferSize = 512
             };
 
-            // Act
-            using var engine = AudioEngineFactory.Create(config);
+            // Act & Assert
+            try
+            {
+                using var engine = AudioEngineFactory.Create(config);
+                Assert.Fail("Expected AudioException was not thrown");
+            }
+            catch (AudioException)
+            {
+                // Expected
+            }
         }
 
         [TestMethod]

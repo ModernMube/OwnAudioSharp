@@ -89,6 +89,17 @@ namespace OwnaudioNET.Effects
         private float _targetGain;
         private readonly float _sampleRate;
         private readonly int _maxBufferSize;
+        
+        // Sliding Window Maximum optimization (using array-based circular deque)
+        // ZERO-ALLOCATION: Pre-allocated arrays instead of LinkedList to avoid node allocations
+        private readonly long[] _dequeIndices;
+        private readonly float[] _dequeValues;
+        private int _dequeHead;
+        private int _dequeTail;
+        private int _dequeSize;
+
+        // Absolute sample index counter to track position correctly across buffer wraps
+        private long _absoluteSampleIndex;
 
         // Limiter parameters
         private float _threshold;
@@ -177,11 +188,21 @@ namespace OwnaudioNET.Effects
             // Allocate buffers at maximum size to prevent reallocation
             _delayBuffer = new float[_maxBufferSize];
             _envelopeBuffer = new float[_maxBufferSize];
+            
+            // Initialize envelope buffer to 1.0 (unity gain)
+            Array.Fill(_envelopeBuffer, 1.0f);
 
             _currentGain = 1.0f;
             _targetGain = 1.0f;
             _delayIndex = 0;
             _envelopeIndex = 0;
+            
+            // Initialize sliding window deque (array-based for zero allocation)
+            _dequeIndices = new long[_maxBufferSize];
+            _dequeValues = new float[_maxBufferSize];
+            _dequeHead = 0;
+            _dequeTail = 0;
+            _dequeSize = 0;
         }
 
         /// <summary>
@@ -212,11 +233,21 @@ namespace OwnaudioNET.Effects
             // Allocate buffers at maximum size to prevent reallocation
             _delayBuffer = new float[_maxBufferSize];
             _envelopeBuffer = new float[_maxBufferSize];
+            
+            // Initialize envelope buffer to 1.0 (unity gain)
+            Array.Fill(_envelopeBuffer, 1.0f);
 
             _currentGain = 1.0f;
             _targetGain = 1.0f;
             _delayIndex = 0;
             _envelopeIndex = 0;
+            
+            // Initialize sliding window deque (array-based for zero allocation)
+            _dequeIndices = new long[_maxBufferSize];
+            _dequeValues = new float[_maxBufferSize];
+            _dequeHead = 0;
+            _dequeTail = 0;
+            _dequeSize = 0;
 
             // Apply preset
             SetPreset(preset);
@@ -330,6 +361,15 @@ namespace OwnaudioNET.Effects
 
                 // Get smoothed gain from envelope buffer
                 float smoothGain = GetSmoothedGain();
+                
+                // SAFETY: Check for NaN/Inf in gain calculation
+                // If detected, reset to unity gain to prevent audio corruption
+                if (!float.IsFinite(smoothGain))
+                {
+                    smoothGain = 1.0f;
+                    _currentGain = 1.0f;
+                    _targetGain = 1.0f;
+                }
 
                 // Apply gain reduction to delayed sample
                 // Use _activeBufferSize for wrapping to support dynamic lookahead changes
@@ -344,6 +384,9 @@ namespace OwnaudioNET.Effects
                 // Update buffer indices - wrap at active buffer size
                 _delayIndex = (_delayIndex + 1) % _activeBufferSize;
                 _envelopeIndex = (_envelopeIndex + 1) % _activeBufferSize;
+                
+                // Increment absolute index
+                _absoluteSampleIndex++;
             }
         }
 
@@ -353,13 +396,23 @@ namespace OwnaudioNET.Effects
         /// </summary>
         public void Reset()
         {
-            // Only clear the active portion of buffers for efficiency
+            // Clear delay buffer
             Array.Clear(_delayBuffer, 0, _activeBufferSize);
-            Array.Clear(_envelopeBuffer, 0, _activeBufferSize);
+            
+            // Initialize envelope buffer to 1.0 (unity gain, no reduction)
+            // CRITICAL: Do NOT clear to 0.0, as that would cause full attenuation!
+            Array.Fill(_envelopeBuffer, 1.0f, 0, _activeBufferSize);
+            
             _currentGain = 1.0f;
             _targetGain = 1.0f;
             _delayIndex = 0;
             _envelopeIndex = 0;
+            _absoluteSampleIndex = 0;
+            
+            // Clear sliding window deque
+            _dequeHead = 0;
+            _dequeTail = 0;
+            _dequeSize = 0;
         }
 
         /// <summary>
@@ -480,21 +533,47 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Get peak level from look-ahead buffer
-        /// ZERO-ALLOCATION: Only scans active buffer portion
+        /// Get peak level from look-ahead buffer using Sliding Window Maximum
+        /// OPTIMIZED: O(1) amortized complexity using monotonic deque (array-based, ZERO-ALLOCATION)
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private float GetPeakLevel()
         {
-            float peak = 0.0f;
-            // Only scan active buffer portion for efficiency
-            for (int i = 0; i < _activeBufferSize; i++)
+            // Remove elements outside the current window from front
+            // Use absolute index to correctly handle buffer wrapping
+            long expireThreshold = _absoluteSampleIndex - _activeBufferSize;
+            
+            while (_dequeSize > 0 && _dequeIndices[_dequeHead] <= expireThreshold)
             {
-                float abs = Math.Abs(_delayBuffer[i]);
-                if (abs > peak)
-                    peak = abs;
+                // Pop front
+                _dequeHead = (_dequeHead + 1) % _maxBufferSize;
+                _dequeSize--;
             }
-            return peak;
+            
+            // Get current sample absolute value
+            float currentAbs = Math.Abs(_delayBuffer[_delayIndex]);
+            
+            // Remove smaller elements from the back (they can't be maximum anymore)
+            // This maintains the deque in decreasing order
+            while (_dequeSize > 0)
+            {
+                int backIdx = (_dequeTail - 1 + _maxBufferSize) % _maxBufferSize;
+                if (_dequeValues[backIdx] >= currentAbs)
+                    break;
+                    
+                // Pop back
+                _dequeTail = backIdx;
+                _dequeSize--;
+            }
+            
+            // Add current element to back with absolute index
+            _dequeIndices[_dequeTail] = _absoluteSampleIndex;
+            _dequeValues[_dequeTail] = currentAbs;
+            _dequeTail = (_dequeTail + 1) % _maxBufferSize;
+            _dequeSize++;
+            
+            // The front of the deque is the maximum
+            return _dequeSize > 0 ? _dequeValues[_dequeHead] : 0.0f;
         }
 
         /// <summary>
@@ -562,6 +641,13 @@ namespace OwnaudioNET.Effects
                  adaptiveRelease = Math.Clamp(adaptiveRelease, 0.0001f, 0.9999f);
 
                 _currentGain += (_targetGain - _currentGain) * adaptiveRelease;
+                
+                // CRITICAL FIX: Prevent drift by snapping to target when very close
+                // Exponential smoothing never fully reaches target, causing volume drift
+                if (Math.Abs(_targetGain - _currentGain) < 0.0001f)
+                {
+                    _currentGain = _targetGain;
+                }
             }
 
             return _currentGain;

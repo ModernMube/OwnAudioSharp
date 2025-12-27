@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,52 +15,62 @@
             padding: 1.5rem;
             margin-bottom: 2rem;
         }
+
         .effect-header {
             border-bottom: 2px solid var(--primary-color);
             padding-bottom: 0.5rem;
             margin-bottom: 1rem;
         }
+
         .effect-title {
             font-size: 1.5rem;
             color: var(--primary-color);
             margin: 0;
         }
+
         .effect-desc {
             color: var(--text-secondary);
             margin: 0.5rem 0 0 0;
             font-style: italic;
         }
+
         .params-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 1rem;
             margin: 1rem 0;
         }
+
         .param-item {
             background: var(--background);
             padding: 0.75rem;
             border-radius: 4px;
             border-left: 3px solid var(--accent);
         }
+
         .param-name {
             font-weight: 600;
             color: var(--primary-color);
         }
+
         .param-type {
             color: var(--text-secondary);
             font-size: 0.875rem;
         }
+
         .param-range {
             color: var(--accent);
             font-family: monospace;
             font-size: 0.875rem;
         }
+
         .presets-list {
             display: flex;
             flex-wrap: wrap;
             gap: 0.5rem;
             margin: 1rem 0;
         }
+
         .preset-tag {
             background: var(--surface-light);
             border: 1px solid var(--border-light);
@@ -68,6 +79,7 @@
             font-size: 0.875rem;
             color: var(--text-primary);
         }
+
         .category-badge {
             display: inline-block;
             padding: 0.25rem 0.75rem;
@@ -76,13 +88,34 @@
             font-weight: 600;
             margin-bottom: 0.5rem;
         }
-        .badge-dynamics { background: #7c3aed; color: white; }
-        .badge-frequency { background: #f59e0b; color: white; }
-        .badge-modulation { background: #10b981; color: white; }
-        .badge-spatial { background: #06b6d4; color: white; }
-        .badge-distortion { background: #ef4444; color: white; }
+
+        .badge-dynamics {
+            background: #7c3aed;
+            color: white;
+        }
+
+        .badge-frequency {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .badge-modulation {
+            background: #10b981;
+            color: white;
+        }
+
+        .badge-spatial {
+            background: #06b6d4;
+            color: white;
+        }
+
+        .badge-distortion {
+            background: #ef4444;
+            color: white;
+        }
     </style>
 </head>
+
 <body>
     <nav class="nav">
         <div class="nav-container">
@@ -111,6 +144,7 @@
                 <li><a href="#modulation">Modulation</a></li>
                 <li><a href="#spatial">Spatial</a></li>
                 <li><a href="#distortion">Distortion</a></li>
+                <li><a href="#master">Master Processing</a></li>
                 <li><a href="#usage">Usage Examples</a></li>
             </ul>
         </aside>
@@ -124,7 +158,8 @@
 
             <div class="alert alert-info">
                 <strong>Zero-Allocation Design</strong>
-                All effects are optimized for real-time audio with zero-allocation processing, SIMD operations where applicable,
+                All effects are optimized for real-time audio with zero-allocation processing, SIMD operations where
+                applicable,
                 and lock-free operation for professional audio applications.
             </div>
 
@@ -145,7 +180,8 @@
                 <div class="effect-header">
                     <span class="category-badge badge-dynamics">DYNAMICS</span>
                     <h3 class="effect-title">CompressorEffect</h3>
-                    <p class="effect-desc">Professional dynamic range compressor with soft-knee design, envelope following, and adaptive gain control.</p>
+                    <p class="effect-desc">Professional dynamic range compressor with soft-knee design, envelope
+                        following, and adaptive gain control.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -194,7 +230,8 @@
                 <div class="effect-header">
                     <span class="category-badge badge-dynamics">DYNAMICS</span>
                     <h3 class="effect-title">LimiterEffect</h3>
-                    <p class="effect-desc">Brick-wall peak limiter with look-ahead, adaptive release, and zero-allocation buffer management.</p>
+                    <p class="effect-desc">Brick-wall peak limiter with look-ahead, adaptive release, and
+                        zero-allocation buffer management.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -240,7 +277,8 @@
                 <div class="effect-header">
                     <span class="category-badge badge-dynamics">DYNAMICS</span>
                     <h3 class="effect-title">AutoGainEffect</h3>
-                    <p class="effect-desc">Automatic gain control with intelligent noise gating, look-ahead detection, and smooth gain transitions.</p>
+                    <p class="effect-desc">Automatic gain control with intelligent noise gating, look-ahead detection,
+                        and smooth gain transitions.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -292,7 +330,8 @@
                 <div class="effect-header">
                     <span class="category-badge badge-dynamics">DYNAMICS</span>
                     <h3 class="effect-title">DynamicAmpEffect</h3>
-                    <p class="effect-desc">Adaptive volume control with dual-window RMS detection, smart noise gating, and gain change limiting for transparent dynamics management.</p>
+                    <p class="effect-desc">Adaptive volume control with dual-window RMS detection, smart noise gating,
+                        and gain change limiting for transparent dynamics management.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -348,7 +387,8 @@
                 <div class="effect-header">
                     <span class="category-badge badge-frequency">FREQUENCY</span>
                     <h3 class="effect-title">EqualizerEffect (10-Band)</h3>
-                    <p class="effect-desc">Professional 10-band parametric equalizer with cascaded biquad filters (2 per band) and Direct Form II Transposed implementation for numerical stability.</p>
+                    <p class="effect-desc">Professional 10-band parametric equalizer with cascaded biquad filters (2 per
+                        band) and Direct Form II Transposed implementation for numerical stability.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -386,7 +426,8 @@
                 <div class="effect-header">
                     <span class="category-badge badge-frequency">FREQUENCY</span>
                     <h3 class="effect-title">Equalizer30BandEffect</h3>
-                    <p class="effect-desc">High-resolution 30-band graphic equalizer with professional frequencies from 20 Hz to 16 kHz, optimized Q factors, and single filter per band for natural sound.</p>
+                    <p class="effect-desc">High-resolution 30-band graphic equalizer with professional frequencies from
+                        20 Hz to 16 kHz, optimized Q factors, and single filter per band for natural sound.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -423,7 +464,8 @@
                 <div class="effect-header">
                     <span class="category-badge badge-frequency">FREQUENCY</span>
                     <h3 class="effect-title">EnhancerEffect</h3>
-                    <p class="effect-desc">Psychoacoustic enhancer with high-pass filtering, harmonic saturation, and soft clipping for added presence and clarity.</p>
+                    <p class="effect-desc">Psychoacoustic enhancer with high-pass filtering, harmonic saturation, and
+                        soft clipping for added presence and clarity.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -463,7 +505,8 @@
                 <div class="effect-header">
                     <span class="category-badge badge-modulation">MODULATION</span>
                     <h3 class="effect-title">ChorusEffect</h3>
-                    <p class="effect-desc">Multi-voice chorus with LFO modulation, fractional delay interpolation, and 2-6 independent voices for rich detuning effects.</p>
+                    <p class="effect-desc">Multi-voice chorus with LFO modulation, fractional delay interpolation, and
+                        2-6 independent voices for rich detuning effects.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -509,7 +552,8 @@
                 <div class="effect-header">
                     <span class="category-badge badge-modulation">MODULATION</span>
                     <h3 class="effect-title">FlangerEffect</h3>
-                    <p class="effect-desc">Classic flanging effect with variable delay modulation, feedback control, and LFO-driven comb filtering for sweeping tones.</p>
+                    <p class="effect-desc">Classic flanging effect with variable delay modulation, feedback control, and
+                        LFO-driven comb filtering for sweeping tones.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -554,7 +598,8 @@
                 <div class="effect-header">
                     <span class="category-badge badge-modulation">MODULATION</span>
                     <h3 class="effect-title">PhaserEffect</h3>
-                    <p class="effect-desc">Multi-stage phaser with all-pass filters (2-8 stages), LFO modulation sweeping from 200 Hz to 2 kHz, and feedback control.</p>
+                    <p class="effect-desc">Multi-stage phaser with all-pass filters (2-8 stages), LFO modulation
+                        sweeping from 200 Hz to 2 kHz, and feedback control.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -604,7 +649,8 @@
                 <div class="effect-header">
                     <span class="category-badge badge-modulation">MODULATION</span>
                     <h3 class="effect-title">RotaryEffect</h3>
-                    <p class="effect-desc">Leslie speaker simulator with separate horn and rotor, crossover filtering at 800 Hz, and fast/slow speed switching.</p>
+                    <p class="effect-desc">Leslie speaker simulator with separate horn and rotor, crossover filtering at
+                        800 Hz, and fast/slow speed switching.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -657,7 +703,8 @@
                 <div class="effect-header">
                     <span class="category-badge badge-spatial">SPATIAL</span>
                     <h3 class="effect-title">ReverbEffect</h3>
-                    <p class="effect-desc">Extended Freeverb algorithm with 8 comb filters + 4 all-pass filters per channel, 20ms pre-delay, stereo spread, and damping control.</p>
+                    <p class="effect-desc">Extended Freeverb algorithm with 8 comb filters + 4 all-pass filters per
+                        channel, 20ms pre-delay, stereo spread, and damping control.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -720,7 +767,8 @@
                 <div class="effect-header">
                     <span class="category-badge badge-spatial">SPATIAL</span>
                     <h3 class="effect-title">DelayEffect</h3>
-                    <p class="effect-desc">Echo/delay with feedback, damping filter, and up to 5 seconds delay time. Supports fractional delay with linear interpolation.</p>
+                    <p class="effect-desc">Echo/delay with feedback, damping filter, and up to 5 seconds delay time.
+                        Supports fractional delay with linear interpolation.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -768,7 +816,8 @@
                 <div class="effect-header">
                     <span class="category-badge badge-distortion">DISTORTION</span>
                     <h3 class="effect-title">DistortionEffect</h3>
-                    <p class="effect-desc">Soft-clipping distortion with drive control and output gain compensation. Uses smooth saturation curve for musical harmonics.</p>
+                    <p class="effect-desc">Soft-clipping distortion with drive control and output gain compensation.
+                        Uses smooth saturation curve for musical harmonics.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -809,7 +858,8 @@
                 <div class="effect-header">
                     <span class="category-badge badge-distortion">DISTORTION</span>
                     <h3 class="effect-title">OverdriveEffect</h3>
-                    <p class="effect-desc">Tube-style overdrive with asymmetric saturation, tone control (0=dark, 1=bright), and musical harmonics.</p>
+                    <p class="effect-desc">Tube-style overdrive with asymmetric saturation, tone control (0=dark,
+                        1=bright), and musical harmonics.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -847,6 +897,168 @@
                     <span class="preset-tag">Bass</span>
                     <span class="preset-tag">Screamer</span>
                 </div>
+            </div>
+
+            <h2 id="master" \>Master Processing</h2>
+
+            <!-- SmartMasterEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge" style="background: #8b5cf6; color: white;">MASTER</span>
+                    <h3 class="effect-title">SmartMasterEffect</h3>
+                    <p class="effect-desc">Comprehensive master processing chain with intelligent auto-calibration for
+                        optimal sound across different speaker systems. Combines professional-grade effects with
+                        measurement-based optimization.</p>
+                </div>
+
+                <h4>Overview</h4>
+                <p>SmartMaster is an all-in-one mastering solution that adapts to your specific speaker system and
+                    listening environment. It features factory presets for common playback systems and an intelligent
+                    calibration wizard that measures your actual speaker response.</p>
+
+                <div class="alert alert-warning">
+                    <strong>Measurement Microphone Required for Auto-Calibration</strong><br>
+                    The auto-calibration wizard requires an external <strong>measurement microphone</strong> to analyze
+                    your speaker system. Without a measurement microphone, you can use the factory presets which provide
+                    excellent results for common speaker types.
+                    <br><br>
+                    <strong>Important:</strong> The system optimizes audio for the <strong>measurement microphone's
+                        position</strong>. Place the microphone at your primary listening position for best results. The
+                    calibrated system will sound optimal at that specific location.
+                </div>
+
+                <h4>Processing Chain</h4>
+                <ol>
+                    <li><strong>31-Band Graphic EQ</strong> - Precise frequency shaping (20 Hz - 16 kHz)</li>
+                    <li><strong>Subharmonic Synthesizer</strong> - Enhanced low-frequency extension below speaker cutoff
+                    </li>
+                    <li><strong>Multiband Compressor</strong> - Dynamic range control across frequency bands</li>
+                    <li><strong>Crossover Filter</strong> - Linkwitz-Riley 4th order (configurable frequency)</li>
+                    <li><strong>Phase & Time Alignment</strong> - Delay compensation for multi-way systems</li>
+                    <li><strong>Brick-Wall Limiter</strong> - Peak protection and loudness maximization</li>
+                </ol>
+
+                <h4>Factory Presets</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Default</div>
+                        <div class="param-type">Transparent passthrough (no processing)</div>
+                        <div class="param-range">Use Case: Reference monitoring</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">HiFi</div>
+                        <div class="param-type">Bookshelf/tower speakers</div>
+                        <div class="param-range">+1.5dB bass, +1.0dB highs, 40Hz crossover</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Headphone</div>
+                        <div class="param-type">Studio/consumer headphones</div>
+                        <div class="param-range">+0.5dB bass, -1.0dB highs, balanced response</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Studio</div>
+                        <div class="param-type">Professional monitors</div>
+                        <div class="param-range">+0.3dB bass, flat mids/highs, 35Hz crossover</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Club</div>
+                        <div class="param-type">DJ/club systems</div>
+                        <div class="param-range">+4.0dB bass, +2.5dB highs, 100Hz crossover</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Concert</div>
+                        <div class="param-type">Live PA systems</div>
+                        <div class="param-range">+3.0dB bass, -0.8dB mids, +2.0dB highs, 80Hz crossover</div>
+                    </div>
+                </div>
+
+                <h4>Auto-Calibration Features</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Speaker Detection</div>
+                        <div class="param-type">Automatic analysis of speaker characteristics</div>
+                        <div class="param-range">Requires measurement microphone</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Frequency Response</div>
+                        <div class="param-type">FFT-based spectrum measurement</div>
+                        <div class="param-range">20 Hz - 20 kHz analysis</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Phase Alignment</div>
+                        <div class="param-type">Time-of-arrival detection</div>
+                        <div class="param-range">Compensates for multi-way speaker delays</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Auto-EQ Correction</div>
+                        <div class="param-type">Automatic EQ calculation</div>
+                        <div class="param-range">Based on measured response</div>
+                    </div>
+                </div>
+
+                <h4>Usage Example</h4>
+                <div class="code-block">
+                    <div class="code-header">SmartMaster with Factory Preset</div>
+                    <pre><code class="language-csharp">using OwnaudioNET.Effects.SmartMaster;
+
+// Initialize SmartMaster
+var smartMaster = new SmartMasterEffect();
+smartMaster.Initialize(engine.Config);
+
+// Option 1: Use factory preset
+smartMaster.LoadSpeakerPreset(SpeakerType.HiFi);
+smartMaster.Enabled = true;
+
+// Apply to mixer output
+mixer.AddMasterEffect(smartMaster);</code></pre>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">SmartMaster with Auto-Calibration</div>
+                    <pre><code class="language-csharp">// Option 2: Run auto-calibration (requires measurement microphone)
+// Place microphone at primary listening position
+await smartMaster.StartMeasurementAsync();
+
+// Monitor progress
+var status = smartMaster.GetMeasurementStatus();
+Console.WriteLine($"Progress: {status.Progress * 100:F0}%");
+Console.WriteLine($"Step: {status.CurrentStep}");
+
+// Save calibrated settings
+smartMaster.Save("my_listening_room");
+
+// Load later
+smartMaster.Load("my_listening_room");</code></pre>
+                </div>
+
+                <div class="alert alert-info">
+                    <strong>Position-Dependent Optimization</strong><br>
+                    The auto-calibration wizard measures the acoustic response at the <strong>microphone's
+                        location</strong>. The resulting calibration will optimize the sound specifically for that
+                    position in your room. For best results:
+                    <ul>
+                        <li>Place the measurement microphone at your primary listening position (e.g., your chair or
+                            desk)</li>
+                        <li>Ensure the room is quiet during measurement</li>
+                        <li>The calibrated system will sound best when you're at the same position as the microphone was
+                            during measurement</li>
+                        <li>Different listening positions may require separate calibrations</li>
+                    </ul>
+                </div>
+
+                <h4>Advanced Features</h4>
+                <p><strong>Subharmonic Synthesis:</strong> Generates harmonically-related low frequencies below the
+                    speaker's natural cutoff frequency, enhancing bass response on smaller systems without requiring
+                    larger drivers.</p>
+                <p><strong>Phase Alignment:</strong> Automatically compensates for time-of-arrival differences between
+                    drivers in multi-way speaker systems (woofer vs. tweeter), ensuring coherent sound and proper
+                    imaging.</p>
+                <p><strong>Adaptive Crossover:</strong> Linkwitz-Riley 4th order filters provide perfect reconstruction
+                    when summed, maintaining phase coherence across the crossover region for seamless frequency
+                    transitions.</p>
+                <p><strong>Measurement Engine:</strong> Uses white noise test signals and FFT analysis to measure actual
+                    speaker response in your room, then calculates optimal EQ correction automatically to compensate for
+                    room acoustics and speaker characteristics.</p>
             </div>
 
             <h2 id="usage">Usage Examples</h2>
@@ -1019,13 +1231,16 @@ Console.WriteLine(compressor.ToString());
 
             <hr>
             <p class="footer-note">
-                <strong>Performance Note:</strong> All effects use zero-allocation processing with pre-allocated buffers.
+                <strong>Performance Note:</strong> All effects use zero-allocation processing with pre-allocated
+                buffers.
                 Parameter changes are thread-safe and can be automated during playback without clicks or artifacts.
             </p>
         </main>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
 </body>
+
 </html>

@@ -109,6 +109,91 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Handles the "Save SmartMaster Preset" button click event.
+    /// Opens a save file dialog to allow the user to save the current SmartMaster settings.
+    /// </summary>
+    /// <param name="sender">The button that raised the event.</param>
+    /// <param name="e">Event arguments.</param>
+    private async void OnSaveSmartMasterPresetClicked(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel == null)
+            return;
+
+        var fileTypes = new FilePickerFileType[]
+        {
+            new("SmartMaster Preset")
+            {
+                Patterns = new[] { "*.smartmaster.json" }
+            }
+        };
+
+        var options = new FilePickerSaveOptions
+        {
+            Title = "Save SmartMaster Preset",
+            FileTypeChoices = fileTypes,
+            SuggestedFileName = $"preset_{DateTime.Now:yyyyMMdd_HHmmss}",
+            DefaultExtension = ".smartmaster.json"
+        };
+
+        var result = await StorageProvider.SaveFilePickerAsync(options);
+
+        if (result != null)
+        {
+            var path = result.TryGetLocalPath();
+            if (!string.IsNullOrEmpty(path))
+            {
+                // Ensure the path ends with .smartmaster.json
+                if (!path.EndsWith(".smartmaster.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Remove any existing extension and add .smartmaster.json
+                    var pathWithoutExt = System.IO.Path.ChangeExtension(path, null);
+                    path = pathWithoutExt + ".smartmaster.json";
+                }
+
+                await ViewModel.SaveCustomPresetAsync(path);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Handles the "Load SmartMaster Preset" button click event.
+    /// Opens an open file dialog to allow the user to load a SmartMaster preset.
+    /// </summary>
+    /// <param name="sender">The button that raised the event.</param>
+    /// <param name="e">Event arguments.</param>
+    private async void OnLoadSmartMasterPresetClicked(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel == null)
+            return;
+
+        var fileTypes = new FilePickerFileType[]
+        {
+            new("SmartMaster Preset")
+            {
+                Patterns = new[] { "*.smartmaster.json" }
+            }
+        };
+
+        var options = new FilePickerOpenOptions
+        {
+            Title = "Load SmartMaster Preset",
+            AllowMultiple = false,
+            FileTypeFilter = fileTypes
+        };
+
+        var result = await StorageProvider.OpenFilePickerAsync(options);
+
+        if (result != null && result.Count > 0)
+        {
+            var path = result[0].TryGetLocalPath();
+            if (!string.IsNullOrEmpty(path))
+            {
+                await ViewModel.LoadCustomPresetAsync(path);
+            }
+        }
+    }
+
     #endregion
 
     #region Event Handlers - Seek Operations

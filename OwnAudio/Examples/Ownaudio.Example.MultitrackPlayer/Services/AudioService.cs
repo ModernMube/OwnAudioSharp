@@ -102,7 +102,10 @@ public class AudioService : IDisposable
             return;
 
         // Initialize the audio engine (may block up to 5000ms on Linux)
-        await OwnaudioNet.InitializeAsync();
+        var config = OwnaudioNet.CreateDefaultConfig();
+        config.EnableInput = true;
+        config.HostType = Ownaudio.Core.EngineHostType.None;
+        await OwnaudioNet.InitializeAsync(config);
 
         // CRITICAL: Start the audio engine BEFORE creating mixer
         OwnaudioNet.Start();
@@ -110,7 +113,8 @@ public class AudioService : IDisposable
         // Create the mixer with the underlying engine (not the wrapper)
         if (OwnaudioNet.Engine != null)
         {
-            // Increased buffer to 4096 frames (~85ms) to handle high track counts (e.g. 22 tracks) without drift/glitches
+            // Reverting to 4096 frames (~85ms) for stability with heavy DSP (SmartMaster)
+            // The corresponding AudioEngineWrapper buffer must be increased to accommodate this size!
             _mixer = new AudioMixer(OwnaudioNet.Engine.UnderlyingEngine, bufferSizeInFrames: 4096);
             // Start the mixer once and leave it running
             _mixer.Start();

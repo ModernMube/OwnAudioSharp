@@ -44,161 +44,112 @@
 **Commercial Quality, Free**: Professional tools without licensing costs
 **Truly Cross-Platform**: Windows, macOS, Linux, Android, iOS
 
-## 🎯 NEW in v2.4.0: MasterClock Timeline-Based Synchronization
+## 🎯 NEW in v2.5.0: Professional Audio Features
 
-### Revolutionary Multi-Track Synchronization
+### MasterClock Timeline-Based Synchronization
 
-OwnAudioSharp v2.4.0 introduces **MasterClock**, a professional timeline-based synchronization system that replaces the legacy GhostTrack architecture. This is the most significant update to the synchronization layer since the project's inception.
+OwnAudioSharp v2.4.0 introduces **MasterClock**, a professional timeline-based synchronization system replacing the legacy GhostTrack architecture. MasterClock provides sample-accurate synchronization with automatic drift correction, dropout event monitoring, DAW-style timeline regions, and global tempo control. The legacy GhostTrack/AudioSynchronizer system is deprecated and will be removed in v3.0.0. See the [MultitrackPlayer example](OwnAudio/Examples/Ownaudio.Example.MultitrackPlayer/) for a complete implementation with real-time dropout monitoring and professional synchronization.
 
-### Why MasterClock?
+### 🎚️ SmartMaster Effect - Intelligent Audio Mastering
 
-The legacy **GhostTrack/AudioSynchronizer** system worked but had limitations:
+OwnAudioSharp v2.5.0 introduces **SmartMaster** is a comprehensive master processing chain that combines professional-grade effects with intelligent auto-calibration for optimal sound across different speaker systems.
 
-❌ **Frame-based tracking** - synchronization tied to sample frames, not physical time
-❌ **Complex sync groups** - required manual group management and cascading updates
-❌ **No dropout visibility** - buffer underruns happened silently
-❌ **Limited flexibility** - couldn't support DAW-style timeline features
+#### Key Features
 
-### The Solution: Timeline-Based MasterClock
+✅ **Factory Presets** - Pre-configured settings for different playback systems:
+- **Default** - Transparent passthrough (no processing)
+- **HiFi** - Bookshelf/tower speakers with gentle bass enhancement
+- **Headphone** - Balanced response for studio/consumer headphones
+- **Studio** - Professional monitors with flat, accurate response
+- **Club** - DJ/club systems with heavy bass and presence boost
+- **Concert** - Medium PA systems with compensated frequency response
 
-**MasterClock** provides professional-grade synchronization with a clean, modern API:
+✅ **Auto-Calibration Wizard** - Intelligent measurement system:
+- **Requires measurement microphone** (external hardware needed for calibration)
+- Automatic speaker detection and analysis
+- Frequency response measurement with FFT analysis
+- Phase alignment detection
+- Time-of-arrival (TOA) measurement
+- Automatic EQ correction based on measurements
+- **Note:** Without a measurement microphone, only factory presets are available
 
-✅ **Timeline-based** - Physical time in seconds (double precision)
-✅ **Sample-accurate** - Long precision sample position tracking
-✅ **Automatic drift correction** - 10ms tolerance with automatic resyncing
-✅ **Dropout events** - Real-time notifications for buffer underruns
-✅ **Global tempo** - Tempo applied to all synchronized tracks (like professional DAWs)
-✅ **Start offset support** - DAW-style regions (tracks start at different timeline positions)
-✅ **Zero overhead** - Single null check when not using sync features
+✅ **Professional Processing Chain**:
+1. **31-Band Graphic EQ** - Precise frequency shaping
+2. **Subharmonic Synthesizer** - Enhanced low-frequency extension
+3. **Multiband Compressor** - Dynamic range control
+4. **Crossover Filter** - Linkwitz-Riley 4th order (configurable frequency)
+5. **Phase & Time Alignment** - Delay compensation for multi-way systems
+6. **Brick-Wall Limiter** - Peak protection and loudness maximization
 
-### Migration from Legacy to v2.4.0+
+✅ **Custom Preset Management**:
+- Save your calibrated settings
+- Load and share custom presets
+- Reset to factory defaults anytime
 
-**IMPORTANT:** The legacy GhostTrack/AudioSynchronizer system is **deprecated** and will be **removed in v3.0.0**.
+#### Try It Now!
 
-#### Legacy Code (Deprecated - works until v3.0.0):
-```csharp
-// OLD: GhostTrack + AudioSynchronizer
-var synchronizer = new AudioSynchronizer();  // ⚠️ Deprecated
-var syncGroup = synchronizer.CreateSyncGroup("MainTracks", sources);
-synchronizer.SetSyncGroupTempo("MainTracks", 1.5f);
-synchronizer.StartSyncGroup("MainTracks");
+**SmartMaster is fully integrated into the MultitrackPlayer example application!**
 
-// Get position
-double position = mixer.GetSyncGroupPosition("MainTracks");  // ⚠️ Deprecated
+```bash
+# Run the MultitrackPlayer example
+cd OwnAudio/Examples/Ownaudio.Example.MultitrackPlayer
+dotnet run
 ```
 
-#### NEW Code (v2.4.0+ - Required in v3.0.0):
+The MultitrackPlayer UI includes:
+- **Enable/Disable Toggle** - Turn SmartMaster on/off in real-time
+- **Factory Preset Selection** - Choose from 6 speaker-specific presets
+- **Auto Calibration** - Run the measurement wizard with progress tracking
+- **Custom Presets** - Save and load your own configurations
+
+#### Quick Start - Code Example
+
 ```csharp
-// NEW: MasterClock direct attachment
-foreach (var source in sources) {
-    if (source is IMasterClockSource clockSource) {
-        // Attach to master clock
-        clockSource.AttachToClock(mixer.MasterClock);
+using OwnaudioNET.Effects.SmartMaster;
 
-        // Optional: Set start offset (DAW-style regions)
-        clockSource.StartOffset = 0.0; // Track starts at 0 seconds
-    }
-    mixer.AddSource(source);
-    source.Play();
-}
+// Initialize SmartMaster
+var smartMaster = new SmartMasterEffect();
+smartMaster.Initialize(engine.Config);
 
-// Get position
-double position = mixer.MasterClock.CurrentTimestamp;
+// Option 1: Use factory preset
+smartMaster.LoadSpeakerPreset(SpeakerType.HiFi);
+smartMaster.Enabled = true;
 
-// Seek
-mixer.MasterClock.SeekTo(30.0); // Jump to 30 seconds
+// Option 2: Run auto-calibration
+await smartMaster.StartMeasurementAsync();
+// Measurement wizard guides through speaker detection and analysis
+
+// Option 3: Load custom preset
+smartMaster.Load("my_custom_setup");
+
+// Apply to mixer output
+mixer.AddMasterEffect(smartMaster);
 ```
 
-### Key Benefits
+#### Factory Preset Characteristics
 
-| Feature | Legacy (GhostTrack) | NEW (MasterClock) |
-|---------|---------------------|-------------------|
-| **Time base** | Frame count | Physical time (seconds) |
-| **Drift tolerance** | 512 samples (~10ms) | Configurable (default 10ms) |
-| **Start offset** | ❌ Not supported | ✅ DAW-style regions |
-| **Dropout events** | ❌ Silent failures | ✅ Real-time notifications |
-| **Performance metrics** | ❌ None | ✅ CPU, buffer fill, dropout history |
-| **Tempo control** | ⚠️ Per-track (complex) | ✅ Global tempo (like DAWs) |
-| **Rendering modes** | ❌ Realtime only | ✅ Realtime / Offline |
-| **API simplicity** | ⚠️ Sync groups + observers | ✅ Direct clock attachment |
+| Preset | Use Case | Bass | Mids | Highs | Crossover | Compression |
+|--------|----------|------|------|-------|-----------|-------------|
+| **Default** | Reference | Flat | Flat | Flat | None | Off |
+| **HiFi** | Home stereo | +1.5dB | Flat | +1.0dB | 40Hz | Light |
+| **Headphone** | Personal listening | +0.5dB | Flat | -1.0dB | None | Gentle |
+| **Studio** | Production | +0.3dB | Flat | Flat | 35Hz | Minimal |
+| **Club** | DJ/Dance | +4.0dB | Flat | +2.5dB | 100Hz | Moderate |
+| **Concert** | Live PA | +3.0dB | -0.8dB | +2.0dB | 80Hz | Moderate |
 
-**Note on Tempo**: When using MasterClock, tempo is **global** (affects all synchronized tracks equally), similar to professional DAWs like Ableton, Logic, or FL Studio. This ensures perfect synchronization across all tracks while SoundTouch processes the audio in real-time.
+#### Advanced Features
 
-### Advanced Features
+**Subharmonic Synthesis**: Generates harmonically-related low frequencies below the speaker's natural cutoff, enhancing bass response on smaller systems.
 
-#### 1. DAW-Style Timeline Regions
-```csharp
-track1.AttachToClock(mixer.MasterClock);
-track1.StartOffset = 0.0;   // Intro starts at 0s
+**Phase Alignment**: Automatically compensates for time-of-arrival differences between drivers in multi-way speaker systems, ensuring coherent sound.
 
-track2.AttachToClock(mixer.MasterClock);
-track2.StartOffset = 4.0;   // Drums come in at 4s
+**Adaptive Crossover**: Linkwitz-Riley 4th order filters provide perfect reconstruction when summed, maintaining phase coherence across the crossover region.
 
-track3.AttachToClock(mixer.MasterClock);
-track3.StartOffset = 8.0;   // Bass enters at 8s
-```
+**Measurement Engine**: Uses white noise test signals and FFT analysis to measure actual speaker response, then calculates optimal EQ correction automatically.
 
-#### 2. Dropout Event Monitoring
-```csharp
-mixer.TrackDropout += (sender, e) => {
-    Console.WriteLine($"Dropout: {e.TrackName}");
-    Console.WriteLine($"  Timestamp: {e.MasterTimestamp:F3}s");
-    Console.WriteLine($"  Missed frames: {e.MissedFrames}");
-    Console.WriteLine($"  Reason: {e.Reason}");
-};
-```
+See the **[SmartMaster in MultitrackPlayer](OwnAudio/Examples/Ownaudio.Example.MultitrackPlayer/)** for a complete working example with full UI integration!
 
-#### 3. Offline Rendering Mode
-```csharp
-// Deterministic rendering (no dropouts, blocks until ready)
-mixer.RenderingMode = ClockMode.Offline;
-
-mixer.MasterClock.SeekTo(0.0);
-foreach (var source in sources) {
-    source.Play();
-}
-
-// Render loop - waits for all tracks to be ready
-// Perfect for exporting to file
-```
-
-#### 4. Per-Track Performance Metrics
-```csharp
-// Access track metrics
-var metrics = mixer.GetTrackMetrics(trackId);
-Console.WriteLine($"CPU: {metrics.AverageCpuUsage:F2}%");
-Console.WriteLine($"Buffer fill: {metrics.BufferFillPercentage:F1}%");
-Console.WriteLine($"Dropouts: {metrics.TotalDropoutCount}");
-```
-
-### What's Deprecated (Removed in v3.0.0)
-
-The following classes and methods are marked `[Obsolete]` and will be **removed in v3.0.0**:
-
-⚠️ `GhostTrackSource` - Use `MasterClock` instead
-⚠️ `IGhostTrackObserver` - Implement `IMasterClockSource` instead
-⚠️ `AudioSynchronizer` - Use `AudioMixer.MasterClock` directly
-⚠️ `CreateSyncGroup()` / `StartSyncGroup()` / `StopSyncGroup()` - Attach tracks to MasterClock
-⚠️ `SetSyncGroupTempo()` - Set tempo directly on each track
-⚠️ `GetSyncGroupPosition()` - Use `mixer.MasterClock.CurrentTimestamp`
-⚠️ `SeekSyncGroup()` - Use `mixer.MasterClock.SeekTo()`
-
-### Migration Timeline
-
-- **v2.4.0** (Current): Legacy and new systems coexist, legacy shows deprecation warnings
-- **v2.5.0 - v2.9.0**: Transition period - update your code
-- **v3.0.0**: Legacy system removed, only MasterClock available
-
-**Action Required:** If you're using GhostTrack or AudioSynchronizer, migrate to MasterClock before v3.0.0.
-
-### See It In Action
-
-Check out the updated **MultitrackPlayer** example project to see the new MasterClock system in action:
-- [MultitrackPlayer Example](OwnAudio/Examples/Ownaudio.Example.MultitrackPlayer/)
-- Real-time dropout monitoring UI
-- Timeline-based seek operations
-- Per-track tempo control
-- Professional synchronization with zero glitches
+> **📖 Detailed Documentation:** For comprehensive information about SmartMaster including all parameters, technical details, and advanced usage examples, see the **[Effects Documentation](documents/effects.html#master)**.
 
 ## ⚠️ Version History
 

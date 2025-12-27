@@ -136,10 +136,11 @@ public sealed class AudioEngineWrapper : IDisposable
         // Calculate buffer size in samples (frames * channels)
         _engineBufferSize = FramesPerBuffer * _config.Channels;
 
-        // Create output circular buffer (2x engine buffer size for ~21ms buffering @ 48kHz)
-        // Reduced from 4x to 2x to minimize latency while maintaining adequate buffering
-        // The SIMD-optimized mixing and Normal-priority decoder threads provide stable flow
-        int circularBufferSize = _engineBufferSize * 2;
+        // Create output circular buffer
+        // Increased from 2x to 8x to accommodate large mixer buffers (4096 frames) and heavy DSP.
+        // If EngineBuffer is 1024, 2x = 2048 < 4096 (Mixer) -> Overflow!
+        // 8x = 8192 > 4096 -> OK! Plus safety margin for jitter.
+        int circularBufferSize = _engineBufferSize * 8;
         _outputBuffer = new CircularBuffer(circularBufferSize);
 
         // Create input buffer pool
@@ -369,7 +370,7 @@ public sealed class AudioEngineWrapper : IDisposable
                 return null;
             }
 
-            sampleCount = samples.Length;
+            sampleCount = result; // FIXED: Use actual samples read, not buffer size
             return samples;
         }
         catch

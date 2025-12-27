@@ -160,7 +160,7 @@ public class OwnaudioNetTests : IDisposable
 
         // Assert
         version.Should().NotBeNull();
-        version.Major.Should().BeGreaterOrEqualTo(1);
+        version.Major.Should().BeGreaterThanOrEqualTo(1);
     }
 
     [Fact]

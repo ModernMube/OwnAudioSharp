@@ -36,19 +36,33 @@ namespace Ownaudio.EngineTest
         }
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentException))]
         public void Constructor_WithZeroCapacity_ShouldThrow()
         {
-            // Act
-            var buffer = new LockFreeRingBuffer<float>(0);
+            // Act & Assert
+            try
+            {
+                var buffer = new LockFreeRingBuffer<float>(0);
+                Assert.Fail("Expected ArgumentException was not thrown");
+            }
+            catch (ArgumentException)
+            {
+                // Expected
+            }
         }
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentException))]
         public void Constructor_WithNegativeCapacity_ShouldThrow()
         {
-            // Act
-            var buffer = new LockFreeRingBuffer<float>(-1);
+            // Act & Assert
+            try
+            {
+                var buffer = new LockFreeRingBuffer<float>(-1);
+                Assert.Fail("Expected ArgumentException was not thrown");
+            }
+            catch (ArgumentException)
+            {
+                // Expected
+            }
         }
 
         [TestMethod]

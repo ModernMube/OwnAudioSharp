@@ -32,7 +32,6 @@ namespace Ownaudio.EngineTest
         }
 
         [TestMethod]
-        [ExpectedException(typeof(AudioException))]
         public void Send_WithoutStarting_ShouldThrow()
         {
             // Arrange
@@ -41,8 +40,16 @@ namespace Ownaudio.EngineTest
 
             float[] samples = GenerateSilence(config.Channels * 100);
 
-            // Act (should throw AudioException)
-            engine.Send(samples.AsSpan());
+            // Act & Assert
+            try
+            {
+                engine.Send(samples.AsSpan());
+                Assert.Fail("Expected AudioException was not thrown");
+            }
+            catch (AudioException)
+            {
+                // Expected
+            }
         }
 
         [TestMethod]
@@ -131,7 +138,15 @@ namespace Ownaudio.EngineTest
             float[] samples = GenerateSilence(config.Channels * 100);
 
             // Act & Assert
-            Assert.ThrowsException<AudioException>(() => engine.Send(samples.AsSpan()));
+            try
+            {
+                engine.Send(samples.AsSpan());
+                Assert.Fail("Expected AudioException was not thrown");
+            }
+            catch (AudioException)
+            {
+                // Expected
+            }
         }
 
         [TestMethod]
