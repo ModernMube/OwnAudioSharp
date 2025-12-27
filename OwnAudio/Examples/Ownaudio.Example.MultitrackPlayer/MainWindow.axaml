@@ -3,11 +3,11 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:MultitrackPlayer.ViewModels"
-        mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+        mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="870"
         x:Class="MultitrackPlayer.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Ownaudio Multitrack Player"
-        Width="1000" Height="700"
+        Width="1000" Height="870"
         MinWidth="800" MinHeight="600"
         Background="#1E1E1E">
 
@@ -244,6 +244,162 @@
                                       FontSize="9"
                                       Foreground="#888888"
                                       Margin="0,5,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- SmartMaster Effect Panel -->
+                    <Border Grid.Row="5" Background="#3E3E42" CornerRadius="4" Padding="10" Margin="0,0,0,10">
+                        <StackPanel Spacing="8">
+                            <!-- Header with Enable/Disable Toggle -->
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <TextBlock Grid.Column="0"
+                                          Text="Smart Master"
+                                          FontWeight="Bold"
+                                          Foreground="#4EC9B0"
+                                          VerticalAlignment="Center" />
+                                <ToggleSwitch Grid.Column="2"
+                                             IsChecked="{Binding IsSmartMasterEnabled}"
+                                             OnContent="On"
+                                             OffContent="Off"
+                                             HorizontalAlignment="Right" />
+                            </Grid>
+
+                            <!-- Factory Preset Selection -->
+                            <StackPanel Spacing="5" IsEnabled="{Binding IsSmartMasterEnabled}">
+                                <TextBlock Text="Speaker Preset" Foreground="#CCCCCC" FontSize="11" />
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <ComboBox Grid.Column="0"
+                                             ItemsSource="{Binding AvailableSpeakerPresets}"
+                                             SelectedItem="{Binding SelectedSpeakerPreset}"
+                                             Margin="0,0,5,0" />
+                                    <Button Grid.Column="1"
+                                           Content="Load"
+                                           Command="{Binding LoadFactoryPresetCommand}"
+                                           Background="#0E639C"
+                                           Foreground="White"
+                                           Padding="15,5"
+                                           CornerRadius="4" />
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- Microphone Setup Section -->
+                            <StackPanel Spacing="5" IsEnabled="{Binding IsSmartMasterEnabled}">
+                                <TextBlock Text="Microphone Setup" Foreground="#CCCCCC" FontSize="11" />
+                                
+                                <!-- Microphone Volume Slider -->
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Grid.Column="0"
+                                              Text="Mic Volume:"
+                                              Foreground="#CCCCCC"
+                                              VerticalAlignment="Center"
+                                              Margin="0,0,10,0" />
+                                    <Slider Grid.Column="1"
+                                           Value="{Binding MicVolume}"
+                                           Minimum="0.0" Maximum="2.0"
+                                           TickFrequency="0.1"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,10,0" />
+                                    <TextBlock Grid.Column="2"
+                                              Text="{Binding MicVolume, StringFormat='{}{0:F1}x'}"
+                                              Foreground="White"
+                                              Width="40"
+                                              TextAlignment="Right"
+                                              VerticalAlignment="Center" />
+                                </Grid>
+                                
+                                <!-- Microphone Level Meter -->
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Grid.Column="0"
+                                              Text="Mic Level:"
+                                              Foreground="#CCCCCC"
+                                              VerticalAlignment="Center"
+                                              Margin="0,0,10,0" />
+                                    <ProgressBar Grid.Column="1"
+                                                Minimum="-60"
+                                                Maximum="0"
+                                                Value="{Binding MicLevel}"
+                                                Height="20"
+                                                VerticalAlignment="Center"
+                                                Foreground="#0E7A0D"
+                                                Margin="0,0,10,0" />
+                                    <TextBlock Grid.Column="2"
+                                              Text="{Binding MicLevel, StringFormat='{}{0:F1} dB'}"
+                                              Foreground="White"
+                                              Width="60"
+                                              TextAlignment="Right"
+                                              VerticalAlignment="Center" />
+                                </Grid>
+                                
+                                <!-- Test Microphone Button -->
+                                <Button Content="Test Microphone"
+                                       Command="{Binding ToggleMicMonitoringCommand}"
+                                       Background="#0E639C"
+                                       Foreground="White"
+                                       Padding="10,5"
+                                       CornerRadius="4"
+                                       Margin="0,5,0,0" />
+                            </StackPanel>
+
+                            <!-- Measurement Section -->
+                            <StackPanel Spacing="5" IsEnabled="{Binding IsSmartMasterEnabled}">
+                                <TextBlock Text="Auto Calibration" Foreground="#CCCCCC" FontSize="11" />
+                                <Button Content="Start Measurement"
+                                       Command="{Binding StartMeasurementCommand}"
+                                       Background="#0E7A0D"
+                                       Foreground="White"
+                                       Padding="10,5"
+                                       CornerRadius="4"
+                                       IsVisible="{Binding !IsMeasuring}" />
+                                
+                                <!-- Measurement Progress -->
+                                <StackPanel Spacing="3" IsVisible="{Binding IsMeasuring}">
+                                    <ProgressBar Value="{Binding MeasurementProgress}"
+                                                Minimum="0"
+                                                Maximum="100"
+                                                Height="20" />
+                                    <TextBlock Text="{Binding MeasurementStatusText}"
+                                              Foreground="#CCCCCC"
+                                              FontSize="10"
+                                              TextWrapping="Wrap" />
+                                    <Button Content="Cancel"
+                                           Command="{Binding CancelMeasurementCommand}"
+                                           Background="#A1260D"
+                                           Foreground="White"
+                                           Padding="10,5"
+                                           CornerRadius="4" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Custom Presets -->
+                            <StackPanel Spacing="5" IsEnabled="{Binding IsSmartMasterEnabled}">
+                                <TextBlock Text="Custom Presets" Foreground="#CCCCCC" FontSize="11" />
+                                <Grid ColumnDefinitions="*,*,*">
+                                    <Button Grid.Column="0"
+                                           Content="Save..."
+                                           Click="OnSaveSmartMasterPresetClicked"
+                                           Background="#555555"
+                                           Foreground="White"
+                                           Padding="10,5"
+                                           CornerRadius="4"
+                                           Margin="0,0,5,0" />
+                                    <Button Grid.Column="1"
+                                           Content="Load..."
+                                           Click="OnLoadSmartMasterPresetClicked"
+                                           Background="#555555"
+                                           Foreground="White"
+                                           Padding="10,5"
+                                           CornerRadius="4" />
+                                    <Button Grid.Column="2"
+                                        Content="Load Measured Settings"
+                                       Command="{Binding LoadMeasuredPresetCommand}"
+                                       Background="#0E7A0D"
+                                       Foreground="White"
+                                       Padding="10,5"
+                                       CornerRadius="4"
+                                       Margin="0,5,0,0"
+                                       ToolTip.Tip="Load the settings from the last measurement" />
+                                </Grid>                                
+                            </StackPanel>
                         </StackPanel>
                     </Border>
                 </Grid>

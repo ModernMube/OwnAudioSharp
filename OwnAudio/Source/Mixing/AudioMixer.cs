@@ -226,7 +226,7 @@ public sealed partial class AudioMixer : IDisposable
     }
 
     /// <summary>
-    /// Starts the audio mixer.
+    /// Starts or resumes the audio mixer.
     /// Sources can be added dynamically after starting.
     /// </summary>
     /// <exception cref="ObjectDisposedException">Thrown if mixer is disposed.</exception>
@@ -243,6 +243,24 @@ public sealed partial class AudioMixer : IDisposable
 
         if (!_mixThread.IsAlive)
             _mixThread.Start();
+    }
+
+    /// <summary>
+    /// Pauses the audio mixer without stopping the thread.
+    /// Use <see cref="Start"/> to resume.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown if mixer is disposed.</exception>
+    public void Pause()
+    {
+        ThrowIfDisposed();
+
+        if (!_isRunning)
+            return;
+
+        // Set running flag to false but keep thread alive
+        // The thread loop will wait on _pauseEvent
+        _isRunning = false;
+        _pauseEvent.Reset();
     }
 
     /// <summary>

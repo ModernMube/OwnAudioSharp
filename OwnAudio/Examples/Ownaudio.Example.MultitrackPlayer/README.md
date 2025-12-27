@@ -28,6 +28,13 @@ A professional multitrack audio player built with Avalonia UI and the OwnAudioSh
   - Pitch shift (-12 to +12 semitones)
   - Reset button for all controls
 
+- **NEW: SmartMaster Effect** (v2.5.0+):
+  - Enable/Disable toggle for intelligent audio mastering
+  - Factory preset selection (Default, HiFi, Headphone, Studio, Club, Concert)
+  - Auto-calibration wizard with progress tracking (requires measurement microphone)
+  - Custom preset save/load functionality
+  - Professional processing chain: 31-band EQ, subharmonic synthesis, compression, crossover, phase alignment, limiter
+
 - **NEW: Sync Statistics Panel** (v2.4.0+):
   - Real-time dropout count display
   - Last dropout message (track name, missed frames, timestamp)

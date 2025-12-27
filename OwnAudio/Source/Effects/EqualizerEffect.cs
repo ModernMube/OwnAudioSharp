@@ -54,6 +54,9 @@ namespace OwnaudioNET.Effects
         private readonly float[] _gains;
         private readonly float[] _qFactors;
         private float _sampleRate = 44100;
+        
+        // Active bands optimization - track which bands have non-zero gain
+        private readonly List<int> _activeBands;
 
         // ISO Frequencies
         private static readonly float[] StandardFrequencies = {
@@ -106,6 +109,9 @@ namespace OwnaudioNET.Effects
             // Set Initial Gains from constructor
             _gains[0] = band0Gain; _gains[1] = band1Gain; _gains[2] = band2Gain; _gains[3] = band3Gain; _gains[4] = band4Gain;
             _gains[5] = band5Gain; _gains[6] = band6Gain; _gains[7] = band7Gain; _gains[8] = band8Gain; _gains[9] = band9Gain;
+            
+            // Initialize active bands list
+            _activeBands = new List<int>(Bands);
 
             RecalculateAllFilters();
         }
@@ -158,6 +164,19 @@ namespace OwnaudioNET.Effects
             {
                 _gains[index] = Math.Clamp(gain, -12f, 12f);
                 UpdateFilter(index);
+                
+                // Update active bands list
+                bool isActive = Math.Abs(_gains[index]) > 0.01f;
+                bool wasActive = _activeBands.Contains(index);
+                
+                if (isActive && !wasActive)
+                {
+                    _activeBands.Add(index);
+                }
+                else if (!isActive && wasActive)
+                {
+                    _activeBands.Remove(index);
+                }
             }
         }
 
@@ -225,8 +244,10 @@ namespace OwnaudioNET.Effects
         {
             if (_config == null || !_enabled) return;
             
+            // Early exit if no active bands
+            if (_activeBands.Count == 0) return;
+            
             int channels = _config.Channels;
-            int totalFilters = Bands * FiltersPerBand;
             int samples = frameCount * channels;
 
             // Optimization: If mix is 0? 
@@ -247,15 +268,23 @@ namespace OwnaudioNET.Effects
                 {
                     float sample = buffer[i];
                     
-                    // Cascade filters
-                    // Unrolled loop for Filter Array? 
-                    // 20 iterations is small enough for modern CPU branch prediction
-                    for (int f = 0; f < totalFilters; f++)
-                    {                        
+                    // Cascade filters - only process active bands
+                    foreach (int band in _activeBands)
+                    {
+                        int baseIdx = band * FiltersPerBand;
+                        
+                        // Filter 1
+                        int f = baseIdx;
                         float output = _b0[f] * sample + z1[f];
                         z1[f] = _b1[f] * sample - _a1[f] * output + z2[f];
                         z2[f] = _b2[f] * sample - _a2[f] * output;
+                        sample = output;
                         
+                        // Filter 2
+                        f = baseIdx + 1;
+                        output = _b0[f] * sample + z1[f];
+                        z1[f] = _b1[f] * sample - _a1[f] * output + z2[f];
+                        z2[f] = _b2[f] * sample - _a2[f] * output;
                         sample = output;
                     }
                     

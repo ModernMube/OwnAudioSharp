@@ -2,6 +2,8 @@ using OwnaudioNET;
 using OwnaudioNET.Sources;
 using OwnaudioNET.Effects;
 using OwnaudioNET.Mixing;
+using OwnaudioNET.Core;
+using System.Globalization;
 
 namespace OwnaudioInput
 {
@@ -19,7 +21,10 @@ namespace OwnaudioInput
             Console.WriteLine();
 
             // Initialize the OwnAudio engine
-            OwnaudioNet.Initialize();
+            var config = OwnaudioNet.CreateDefaultConfig();
+            config.EnableInput = true;
+            config.HostType = Ownaudio.Core.EngineHostType.None; // Force WASAPI for better compatibility
+            OwnaudioNet.Initialize(config);
 
             if (!OwnaudioNet.IsInitialized)
             {
@@ -45,6 +50,43 @@ namespace OwnaudioInput
                 }
 
                 Console.WriteLine("Audio engine started successfully.");
+                Console.WriteLine();
+
+                // List and select input device
+                var inputDevices = OwnaudioNet.Engine.GetInputDevices();
+                Console.WriteLine("Available Input Devices:");
+                for (int i = 0; i < inputDevices.Count; i++)
+                {
+                    Console.WriteLine($"  {i}: {inputDevices[i].Name} {(inputDevices[i].IsDefault ? "(Default)" : "")}");
+                }
+                Console.WriteLine();
+                
+                // If multiple devices, or debugging needed, let's pick one (optional - hardcoding 0 or asking user)
+                // For now, let's keep it simple: just listing them helps debug. 
+                // If the user sees the wrong one is default, we can add selection logic.
+                // But generally, let's actually ASK for selection to be sure.
+                
+                Console.Write("Select input device index (or press Enter for default): ");
+                string? deviceChoice = Console.ReadLine();
+                if (int.TryParse(deviceChoice, out int deviceIndex) && deviceIndex >= 0 && deviceIndex < inputDevices.Count)
+                {
+                    var selectedDevice = inputDevices[deviceIndex];
+                    Console.WriteLine($"Selecting device: {selectedDevice.Name}");
+                    
+                    // Note: Changing device usually requires engine to be stopped, but we just started it.
+                    // Let's try setting it. The wrapper might throw if running.
+                    // If so, we should set it BEFORE Start(), but we need Engine initialized to get devices.
+                    // Catch-22? No, Initialize creates the engine, Start starts it.
+                    // We are after Start(). So we must Stop(), Set, Start().
+                    
+                    OwnaudioNet.Stop();
+                    OwnaudioNet.Engine.SetInputDeviceByName(selectedDevice.Name);
+                    OwnaudioNet.Start();
+                }
+                else
+                {
+                    Console.WriteLine("Using default device.");
+                }
                 Console.WriteLine();
 
                 // Create InputSource for microphone/line-in capture
@@ -75,8 +117,10 @@ namespace OwnaudioInput
                 // Create mixer and add the source
                 var Engine = OwnaudioNet.Engine!.UnderlyingEngine;
 
-                var mixer = new AudioMixer(Engine);
+                var mixer = new AudioMixer(Engine);                
                 mixer.AddSource(sourceWithEffects);
+
+                mixer.Start();
 
                 // Start playback (begin capturing and processing)
                 sourceWithEffects.Play();
@@ -92,11 +136,17 @@ namespace OwnaudioInput
                 Console.WriteLine("  3 - Change Delay preset");
                 Console.WriteLine("  4 - Change Chorus preset");
                 Console.WriteLine("  V - Adjust volume");
+                Console.WriteLine("  R - Start/Stop Recording");
+                Console.WriteLine("  P - Stop Recording & Start Playback");
                 Console.WriteLine("  I - Show info");
                 Console.WriteLine("  Q - Quit");
                 Console.WriteLine();
 
                 bool running = true;
+                bool isRecording = false;
+                string recordFilePath = "input_record.wav";
+                FileSource? playbackSource = null;
+
                 while (running)
                 {
                     if (Console.KeyAvailable)
@@ -105,6 +155,62 @@ namespace OwnaudioInput
 
                         switch (key.KeyChar)
                         {
+                            case 'r':
+                            case 'R':
+                                if (!isRecording)
+                                {
+                                    Console.WriteLine("Starting recording...");
+                                    mixer.StartRecording(recordFilePath);
+                                    isRecording = true;
+                                }
+                                else
+                                {
+                                    Console.WriteLine("Stopping recording...");
+                                    mixer.StopRecording();
+                                    isRecording = false;
+                                }
+                                break;
+
+                            case 'p':
+                            case 'P':
+                                if (isRecording)
+                                {
+                                    Console.WriteLine("Stopping recording and starting playback...");
+                                    mixer.StopRecording();
+                                    isRecording = false;
+                                }
+
+                                if (File.Exists(recordFilePath))
+                                {
+                                    // Remove old playback source if exists
+                                    if (playbackSource != null)
+                                    {
+                                        mixer.RemoveSource(playbackSource);
+                                        playbackSource.Dispose();
+                                    }
+
+                                    Console.WriteLine("Playing back recorded audio...");
+                                    
+                                    // Mute input during playback to hear recording clearly
+                                    inputSource.Volume = 0.0f;
+
+                                    playbackSource = new FileSource(recordFilePath);
+                                    playbackSource.StateChanged += (s, e) => {
+                                        if (e.NewState == AudioState.EndOfStream)
+                                        {
+                                            Console.WriteLine("Playback ended. Resuming microphone...");
+                                            inputSource.Volume = 1.0f;
+                                        }
+                                    };
+
+                                    mixer.AddSource(playbackSource);
+                                    playbackSource.Play();
+                                }
+                                else
+                                {
+                                    Console.WriteLine("No recording found to play!");
+                                }
+                                break;
                             case '1':
                                 delayEffect.Enabled = !delayEffect.Enabled;
                                 Console.WriteLine($"Delay effect: {(delayEffect.Enabled ? "ENABLED" : "DISABLED")}");
@@ -141,7 +247,10 @@ namespace OwnaudioInput
                         }
                     }
 
-                    await Task.Delay(100);
+                    // Show Peak Meter (Increased precision to see low signals)
+                    Console.Write($"\rPeak: L={mixer.LeftPeak:P2} R={mixer.RightPeak:P2}   ");
+
+                    await Task.Delay(50);
                 }
 
                 // Cleanup
@@ -246,12 +355,13 @@ namespace OwnaudioInput
         static void AdjustVolume(SourceWithEffects source)
         {
             Console.WriteLine();
-            Console.Write($"Current volume: {source.Volume:F2} - Enter new volume (0.0 - 2.0): ");
+            Console.Write($"Current volume: {source.Volume:F2} - Enter new volume (0.0 - 20.0): ");
             var input = Console.ReadLine();
 
-            if (float.TryParse(input, out float volume))
+            if (float.TryParse(input, NumberStyles.Float, CultureInfo.InvariantCulture, out float volume) || 
+                float.TryParse(input, out volume))
             {
-                source.Volume = Math.Clamp(volume, 0.0f, 2.0f);
+                source.Volume = Math.Clamp(volume, 0.0f, 20.0f);
                 Console.WriteLine($"Volume set to: {source.Volume:F2}");
             }
             else

@@ -51,6 +51,9 @@ namespace OwnaudioNET.Effects
         private readonly float[] _frequencies;
         private readonly float[] _qFactors;
         private float _sampleRate;
+        
+        // Active bands optimization - track which bands have non-zero gain
+        private readonly List<int> _activeBands;
 
         // IEffectProcessor implementation
         private Guid _id;
@@ -102,6 +105,9 @@ namespace OwnaudioNET.Effects
             _gains = new float[BANDS];
             _frequencies = new float[BANDS];
             _qFactors = new float[BANDS];
+            
+            // Initialize active bands list
+            _activeBands = new List<int>(BANDS);
 
             InitializeFilters();
 
@@ -262,6 +268,19 @@ namespace OwnaudioNET.Effects
                 _qFactors[band] = q;
                 _gains[band] = gainDB;
                 UpdateFilter(band);
+                
+                // Update active bands list
+                bool isActive = Math.Abs(gainDB) > 0.01f;
+                bool wasActive = _activeBands.Contains(band);
+                
+                if (isActive && !wasActive)
+                {
+                    _activeBands.Add(band);
+                }
+                else if (!isActive && wasActive)
+                {
+                    _activeBands.Remove(band);
+                }
             }
         }
 
@@ -314,10 +333,12 @@ namespace OwnaudioNET.Effects
         public void Process(Span<float> samples, int frameCount)
         {
             if (_config == null || !_enabled) return;
+            
+            // Early exit if no active bands
+            if (_activeBands.Count == 0) return;
 
             int channels = _config.Channels;
             int totalSamples = frameCount * channels;
-            int totalFilters = TOTAL_FILTERS;
 
             for (int ch = 0; ch < channels; ch++)
             {
@@ -329,10 +350,11 @@ namespace OwnaudioNET.Effects
                 {
                     float input = samples[i];
                     
-                    // Filter Chain
-                    // 60 filters length
-                    for (int f = 0; f < totalFilters; f++)
+                    // Filter Chain - only process active bands
+                    foreach (int band in _activeBands)
                     {
+                        int f = band * FILTERS_PER_BAND;
+                        
                         // Direct Form II Transposed
                         float output = _b0[f] * input + z1[f];
                         z1[f] = _b1[f] * input - _a1[f] * output + z2[f];

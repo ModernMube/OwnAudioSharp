@@ -202,6 +202,41 @@ namespace OwnaudioNET.Effects
             // Soft Knee bounds
             _kneeLowerBoundDb = _thresholdDb - KneeHalfWidth;
             _kneeUpperBoundDb = _thresholdDb + KneeHalfWidth;
+            
+            // Auto Makeup Gain Calculation
+            // Estimate typical gain reduction and compensate
+            CalculateAutoMakeupGain();
+        }
+        
+        /// <summary>
+        /// Calculate automatic makeup gain based on threshold and ratio
+        /// Compensates for typical gain reduction to maintain perceived loudness
+        /// </summary>
+        private void CalculateAutoMakeupGain()
+        {
+            // Typical music signal RMS is around -12 to -18 dB
+            // We'll use -12 dB as reference for makeup gain calculation
+            const float typicalInputDb = -12.0f;
+            
+            // If threshold is above typical input, no makeup needed
+            if (typicalInputDb < _thresholdDb)
+            {
+                _makeupGain = 1.0f;
+                return;
+            }
+            
+            // Calculate expected gain reduction at typical input level
+            float overThresholdDb = typicalInputDb - _thresholdDb;
+            
+            // Gain reduction in dB (negative value)
+            // For soft knee, we approximate with 50% of the full reduction
+            float gainReductionDb = _slope * overThresholdDb * 0.5f;
+            
+            // Makeup gain compensates 80% of the reduction (for natural dynamics)
+            float makeupDb = -gainReductionDb * 0.8f;
+            
+            // Convert to linear and clamp
+            _makeupGain = FastClamp(MathF.Pow(10.0f, makeupDb / 20.0f), 0.1f, 10.0f);
         }
 
         /// <summary>
@@ -292,14 +327,8 @@ namespace OwnaudioNET.Effects
                 // Apply makeup gain and compression
                 float combinedGain = currentGain * mkp;
 
-                // 5. Output Limiting / Safety
-                // Hard limit at 0dB (1.0) to prevent clipping if makeup is too high
-                // This is a safety feature for the "internal" professional sound
-                float output = input * combinedGain;
-                if (output > 1.0f) output = 1.0f;
-                else if (output < -1.0f) output = -1.0f;
-
-                buffer[i] = output;
+                // 5. Apply gain
+                buffer[i] = input * combinedGain;
             }
 
             // Save state

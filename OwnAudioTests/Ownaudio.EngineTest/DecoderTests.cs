@@ -147,11 +147,18 @@ namespace Ownaudio.EngineTest
         }
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentNullException))]
         public void WavDecoder_WithNullStream_ShouldThrow()
         {
-            // Act
-            using var decoder = new WavDecoder(null!);
+            // Act & Assert
+            try
+            {
+                using var decoder = new WavDecoder(null!);
+                Assert.Fail("Expected ArgumentNullException was not thrown");
+            }
+            catch (ArgumentNullException)
+            {
+                // Expected
+            }
         }
 
         [TestMethod]

@@ -293,7 +293,7 @@ public class SampleSourceTests : IDisposable
 
         // Assert
         buffer.Where(s => s != 0f).Should().AllSatisfy(s =>
-            Math.Abs(s).Should().BeLessOrEqualTo(0.6f)); // Should be attenuated
+            Math.Abs(s).Should().BeLessThanOrEqualTo(0.6f)); // Should be attenuated
     }
 
     [Fact]
