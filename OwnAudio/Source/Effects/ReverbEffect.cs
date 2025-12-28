@@ -6,20 +6,63 @@ using OwnaudioNET.Interfaces;
 namespace OwnaudioNET.Effects
 {
     /// <summary>
-    /// Reverb presets for different acoustic environments and audio processing scenarios
+    /// Reverb presets for different acoustic environments and audio processing scenarios.
     /// </summary>
     public enum ReverbPreset
     {
+        /// <summary>
+        /// Default balanced reverb settings.
+        /// </summary>
         Default,
+        
+        /// <summary>
+        /// Small room acoustic simulation.
+        /// </summary>
         SmallRoom,
+        
+        /// <summary>
+        /// Large concert hall acoustic simulation.
+        /// </summary>
         LargeHall,
+        
+        /// <summary>
+        /// Cathedral acoustic simulation with long decay.
+        /// </summary>
         Cathedral,
+        
+        /// <summary>
+        /// Plate reverb emulation.
+        /// </summary>
         Plate,
+        
+        /// <summary>
+        /// Spring reverb emulation.
+        /// </summary>
         Spring,
+        
+        /// <summary>
+        /// Ambient pad with long, smooth decay.
+        /// </summary>
         AmbientPad,
+        
+        /// <summary>
+        /// Vocal booth acoustic simulation.
+        /// </summary>
         VocalBooth,
+        
+        /// <summary>
+        /// Drum room acoustic simulation.
+        /// </summary>
         DrumRoom,
+        
+        /// <summary>
+        /// Gated reverb effect.
+        /// </summary>
         Gated,
+        
+        /// <summary>
+        /// Subtle reverb for gentle enhancement.
+        /// </summary>
         Subtle
     }
 
@@ -54,8 +97,7 @@ namespace OwnaudioNET.Effects
 
         // --- DSP State (Flat Arrays for Performance) ---
         
-        // Comb Filters State
-        // [Channel 0=L, 1=R][FilterIndex]
+        // Comb Filters State [Channel 0=L, 1=R][FilterIndex]
         private readonly float[][][] _combBuffers; 
         private readonly int[][] _combIndices;
         private readonly int[][] _combLengths;
@@ -91,60 +133,103 @@ namespace OwnaudioNET.Effects
         private readonly object _lock = new object();
 
         // --- Properties ---
+        /// <summary>
+        /// Gets the unique identifier for this effect instance.
+        /// </summary>
         public Guid Id => _id;
+        
+        /// <summary>
+        /// Gets or sets the name of this effect instance.
+        /// </summary>
         public string Name { get => _name; set => _name = value ?? "Reverb"; }
+        
+        /// <summary>
+        /// Gets or sets whether this effect is enabled.
+        /// </summary>
         public bool Enabled { get => _enabled; set => _enabled = value; }
 
+        /// <summary>
+        /// Gets or sets the room size (0.0 to 1.0). Larger values create longer reverb tails.
+        /// </summary>
         public float RoomSize
         {
             get => _roomSize;
             set { _roomSize = FastClamp(value, 0f, 1f); UpdateCoefficients(); }
         }
 
+        /// <summary>
+        /// Gets or sets the damping amount (0.0 to 1.0). Higher values create darker, more damped reverb.
+        /// </summary>
         public float Damping
         {
             get => _damping;
             set { _damping = FastClamp(value, 0f, 1f); UpdateCoefficients(); }
         }
 
+        /// <summary>
+        /// Gets or sets the dry/wet mix (0.0 to 1.0). 0 = fully dry, 1 = fully wet.
+        /// </summary>
         public float Mix
         {
             get => _mix;
             set => _mix = FastClamp(value, 0f, 1f);
         }
 
+        /// <summary>
+        /// Gets or sets the stereo width (0.0 to 2.0). Higher values create wider stereo image.
+        /// </summary>
         public float Width
         {
             get => _width;
             set { _width = FastClamp(value, 0f, 2f); UpdateCoefficients(); }
         }
 
-        // Backward compatibility alias
+        /// <summary>
+        /// Gets or sets the stereo width (backward compatibility alias for Width).
+        /// </summary>
         public float StereoWidth
         {
             get => _width;
             set => Width = value;
         }
 
+        /// <summary>
+        /// Gets or sets the wet signal level (0.0 to 1.0).
+        /// </summary>
         public float WetLevel
         {
             get => _wet;
             set { _wet = FastClamp(value, 0f, 1f); UpdateCoefficients(); }
         }
 
+        /// <summary>
+        /// Gets or sets the dry signal level (0.0 to 1.0).
+        /// </summary>
         public float DryLevel
         {
             get => _dry;
             set => _dry = FastClamp(value, 0f, 1f);
         }
 
+        /// <summary>
+        /// Gets or sets the input gain multiplier.
+        /// </summary>
         public float Gain
         {
             get => _gain;
             set => _gain = Math.Max(0f, value);
         }
 
-        // Constructor with backward compatible parameter names
+        /// <summary>
+        /// Initializes a new instance of the ReverbEffect with custom parameters.
+        /// </summary>
+        /// <param name="size">Room size (0.0 to 1.0, default: 0.5).</param>
+        /// <param name="damp">Damping amount (0.0 to 1.0, default: 0.5).</param>
+        /// <param name="wet">Wet signal level (0.0 to 1.0, default: 0.33).</param>
+        /// <param name="dry">Dry signal level (0.0 to 1.0, default: 0.67).</param>
+        /// <param name="stereoWidth">Stereo width (0.0 to 2.0, default: 1.0).</param>
+        /// <param name="mix">Dry/wet mix (0.0 to 1.0, default: 0.5).</param>
+        /// <param name="gainLevel">Input gain multiplier (default: 1.0).</param>
         public ReverbEffect(float size = 0.5f, float damp = 0.5f, float wet = 0.33f, float dry = 0.67f, float stereoWidth = 1.0f, float mix = 0.5f, float gainLevel = 1.0f)
         {
             _id = Guid.NewGuid();
@@ -188,11 +273,20 @@ namespace OwnaudioNET.Effects
             UpdateCoefficients();
         }
 
+        /// <summary>
+        /// Initializes a new instance of the ReverbEffect using a preset configuration.
+        /// </summary>
+        /// <param name="preset">The preset configuration to use.</param>
         public ReverbEffect(ReverbPreset preset) : this()
         {
             SetPreset(preset);
         }
 
+        /// <summary>
+        /// Initializes the effect with the specified audio configuration.
+        /// </summary>
+        /// <param name="config">The audio configuration.</param>
+        /// <exception cref="ArgumentNullException">Thrown when config is null.</exception>
         public void Initialize(AudioConfig config)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
@@ -208,6 +302,10 @@ namespace OwnaudioNET.Effects
             }
         }
 
+        /// <summary>
+        /// Resizes all internal buffers based on the new sample rate.
+        /// </summary>
+        /// <param name="newSampleRate">The new sample rate in Hz.</param>
         private void ResizeBuffers(float newSampleRate)
         {
             float scale = newSampleRate / 44100f;
@@ -243,6 +341,9 @@ namespace OwnaudioNET.Effects
             }
         }
 
+        /// <summary>
+        /// Updates internal coefficients based on current parameter values.
+        /// </summary>
         private void UpdateCoefficients()
         {
             _roomSizeVal = (_roomSize * ScaleRoom) + OffsetRoom;
@@ -253,6 +354,11 @@ namespace OwnaudioNET.Effects
             _wet2 = _wet * ((1.0f - _width) * 0.5f);
         }
 
+        /// <summary>
+        /// Processes the audio buffer with reverb effect.
+        /// </summary>
+        /// <param name="buffer">The audio buffer to process.</param>
+        /// <param name="frameCount">The number of frames in the buffer.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
@@ -397,6 +503,10 @@ namespace OwnaudioNET.Effects
             }
         }
 
+        /// <summary>
+        /// Applies a preset configuration to the reverb effect.
+        /// </summary>
+        /// <param name="preset">The preset to apply.</param>
         public void SetPreset(ReverbPreset preset)
         {
             switch (preset)
@@ -425,6 +535,9 @@ namespace OwnaudioNET.Effects
             }
         }
 
+        /// <summary>
+        /// Resets all reverb buffers and state to initial values.
+        /// </summary>
         public void Reset()
         {
             lock (_lock)
@@ -445,6 +558,9 @@ namespace OwnaudioNET.Effects
             }
         }
 
+        /// <summary>
+        /// Disposes the effect and releases resources.
+        /// </summary>
         public void Dispose()
         {
             if (_disposed) return;
@@ -452,11 +568,22 @@ namespace OwnaudioNET.Effects
             _disposed = true;
         }
 
+        /// <summary>
+        /// Fast clamp utility method to constrain a value between min and max.
+        /// </summary>
+        /// <param name="value">The value to clamp.</param>
+        /// <param name="min">Minimum allowed value.</param>
+        /// <param name="max">Maximum allowed value.</param>
+        /// <returns>Clamped value.</returns>
         private static float FastClamp(float value, float min, float max)
         {
             return value < min ? min : (value > max ? max : value);
         }
 
+        /// <summary>
+        /// Returns a string representation of the effect's current state.
+        /// </summary>
+        /// <returns>A string describing the effect state.</returns>
         public override string ToString()
         {
             return $"Reverb: Room={_roomSize:F2}, Damp={_damping:F2}, Width={_width:F2}, Mix={_mix:F2}";

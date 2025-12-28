@@ -605,7 +605,7 @@ internal static partial class MaBinding
         if (_maFree == null)
             throw new NotSupportedException("Memory free operation is not supported.");
 
-        if (string.IsNullOrEmpty(message)) Log.Write(message);
+        if (string.IsNullOrEmpty(message)) Log.Info(message);
         _maFree(ptr, pUserData);
     }
 

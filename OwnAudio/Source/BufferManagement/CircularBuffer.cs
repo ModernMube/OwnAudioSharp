@@ -212,8 +212,6 @@ public sealed class CircularBuffer
             _readPos = 0;
             _available = 0;
         }
-        // Note: We do NOT clear the array - unnecessary and expensive (192KB @ 48000 samples)
-        // Old data will be overwritten on next Write() operations
     }
 
     /// <summary>
@@ -229,8 +227,7 @@ public sealed class CircularBuffer
             _readPos = 0;
             _available = 0;
         }
-        // Zero out the entire buffer to prevent residual sounds
-        // This is more expensive than Clear() but necessary for clean synchronized starts
+
         Array.Clear(_buffer, 0, _capacity);
     }
 

@@ -16,13 +16,21 @@ public static class Log
     }
     public static Level LoggerLevel { get; set; } = Level.Info; // Let the user choose the desired LogLevel before any engine stuff;
 
-    public static void Write(string message, Level requiredLogLevel = Level.Info, string end = "\n")
+    private static void Write(string message, Level requiredLogLevel = Level.Info, string end = "\n")
     {
         if (LoggerLevel >= requiredLogLevel)
         {
             Console.Write(message + end);
         }
     }
+
+    private static void DebugWrite(string message)
+    {
+        #if DEBUG
+        System.Diagnostics.Debug.WriteLine(message);
+        #endif
+    }
+
     public static void InfoDateless(string message)
     {
         Write($"[INFO] {message}", Level.Info);
@@ -53,5 +61,10 @@ public static class Log
         {
             Console.WriteLine($"Exception: {ex.GetType().Name} {ex.Message}");
         }
+    }
+
+    public static void Debug(string message)
+    {
+        DebugWrite($"[{DateTime.Now:HH:mm:ss}] {message}");
     }
 }

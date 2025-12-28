@@ -51,7 +51,7 @@ namespace OwnaudioNET.Effects.SmartMaster
             UpdateStatus(status, statusCallback, MeasurementStatus.Initializing, 0.0f, "Initializing measurement...");
 
             // VERIFICATION: Check if input is enabled in engine configuration
-            if (!OwnaudioNET.OwnaudioNet.Engine.Config.EnableInput)
+            if (!OwnaudioNET.OwnaudioNet.Engine!.Config.EnableInput)
             {
                 throw new InvalidOperationException(
                     "Audio Input is NOT enabled in OwnAudio configuration. Please set 'audioConfig.EnableInput = true' before initializing OwnAudioNet.");
@@ -281,7 +281,10 @@ namespace OwnaudioNET.Effects.SmartMaster
                     await Task.Delay(1, cancellationToken);
                 }
                 
-                // 7. Stop
+                // 7. Fade out to prevent clicks
+                await FadeOutSourceAsync(noiseSource, cancellationToken);
+                
+                // 8. Stop
                 noiseSource.Stop();
                 inputSource.Stop();
                 
@@ -434,7 +437,10 @@ namespace OwnaudioNET.Effects.SmartMaster
                     await Task.Delay(1, cancellationToken);
                 }
                 
-                // 7. Stop
+                // 7. Fade out to prevent clicks
+                await FadeOutSourceAsync(noiseSource, cancellationToken);
+
+                // 8. Stop
                 noiseSource.Stop();
                 inputSource.Stop();
                 
@@ -586,7 +592,10 @@ namespace OwnaudioNET.Effects.SmartMaster
                     await Task.Delay(1, cancellationToken);
                 }
                 
-                // 7. Stop
+                // 7. Fade out to prevent clicks
+                await FadeOutSourceAsync(noiseSource, cancellationToken);
+
+                // 8. Stop
                 noiseSource.Stop();
                 inputSource.Stop();
                 
@@ -714,6 +723,80 @@ namespace OwnaudioNET.Effects.SmartMaster
             results.Warnings = warnings;
             
             Log.Warning($"[SmartMaster] {warning}");
+        }
+
+        /// <summary>
+        /// Continues playing the source for a short time with a fade-out to prevent clicks.
+        /// </summary>
+        private async Task FadeOutSourceAsync(SampleSource source, CancellationToken cancellationToken)
+        {
+            try
+            {
+                // 100ms fade out
+                int fadeFrames = _config.SampleRate / 10;
+                // Ensure valid duration
+                if (fadeFrames <= 0) fadeFrames = 4800; // Default ~100ms at 48k
+
+                int channels = _config.Channels;
+                float[] buffer = new float[fadeFrames * channels];
+
+                // Read next chunk from source
+                int framesRead = source.ReadSamples(buffer.AsSpan(), fadeFrames);
+
+                if (framesRead > 0)
+                {
+                    // Apply Fade Out
+                    for (int frame = 0; frame < framesRead; frame++)
+                    {
+                        float gain = 1.0f - ((float)frame / framesRead);
+                        // Apply gain to all channels
+                        for (int ch = 0; ch < channels; ch++)
+                        {
+                            buffer[frame * channels + ch] *= gain;
+                        }
+                    }
+
+                    // Send to Engine
+                    int totalBytes = framesRead * channels;
+                    int sent = 0;
+                    
+                    int engineBufferCapacity = OwnaudioNET.OwnaudioNet.Engine.FramesPerBuffer * channels * 2;
+
+                    // We need to pump this data
+                    while (sent < totalBytes)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        int available = OwnaudioNET.OwnaudioNet.Engine.OutputBufferAvailable;
+                        int free = engineBufferCapacity - available;
+
+                        if (free >= 64 * channels)
+                        {
+                            int remaining = totalBytes - sent;
+                            int spaceInFrames = free / channels;
+                            
+                            int framesToSend = Math.Min(remaining / channels, spaceInFrames);
+                            framesToSend = Math.Min(framesToSend, 1024); // Chunk limit
+
+                            if (framesToSend > 0)
+                            {
+                                int samplesToSend = framesToSend * channels;
+                                OwnaudioNET.OwnaudioNet.Send(buffer.AsSpan(sent, samplesToSend));
+                                sent += samplesToSend;
+                            }
+                        }
+
+                        if (sent < totalBytes)
+                        {
+                            await Task.Delay(1, cancellationToken);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"[SmartMaster] Fade out error: {ex.Message}");
+            }
         }
     }
 }

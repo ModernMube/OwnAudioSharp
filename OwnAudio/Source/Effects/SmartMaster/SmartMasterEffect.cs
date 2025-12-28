@@ -35,8 +35,6 @@ namespace OwnaudioNET.Effects.SmartMaster
         // Measurement cancellation
         private CancellationTokenSource? _measurementCancellation;
         
-        // Silence detection for auto-reset
-        private bool _wasSilentLastFrame = false;
         private const float SILENCE_THRESHOLD = 0.0001f;
         
         #endregion
@@ -115,7 +113,6 @@ namespace OwnaudioNET.Effects.SmartMaster
             // CRITICAL: Check for empty buffer (Pause/Stop scenario)
             if (buffer.Length == 0 || frameCount == 0)
             {
-                _wasSilentLastFrame = true;
                 return;
             }
             
@@ -140,9 +137,6 @@ namespace OwnaudioNET.Effects.SmartMaster
             {
                 return;
             }
-            
-            // Mark as not silent
-            _wasSilentLastFrame = false;
             
             // LOCK-FREE READ: Audio chain reference is atomically swapped during configuration changes
             // No lock needed here for maximum performance
@@ -174,7 +168,6 @@ namespace OwnaudioNET.Effects.SmartMaster
             lock (_configLock)
             {
                 _audioChain?.Reset();
-                _wasSilentLastFrame = true;
             }
         }
         

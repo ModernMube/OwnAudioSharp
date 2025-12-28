@@ -170,7 +170,7 @@ namespace OwnaudioAndroidExample
                 // Add master effects
                 _mixer.AddMasterEffect(_equalizer);
                 _mixer.AddMasterEffect(_compressor);
-                _mixer.AddMasterEffect(new DynamicAmpEffect(DynamicAmpPreset.Live));
+                _mixer.AddMasterEffect(new DynamicAmpEffect(DynamicAmpPreset.Music));
 
                 // Start disabled, will enable at 30s like desktop version
                 _equalizer.Enabled = false;

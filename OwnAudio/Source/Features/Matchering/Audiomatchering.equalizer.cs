@@ -56,7 +56,7 @@ namespace OwnaudioNET.Features.Matchering
             var adjustments = ApplyIntelligentScaling(rawAdjustments);
 
             // COMPREHENSIVE DEBUG OUTPUT
-            Log.Write("\n=== CALCULATED EQ ADJUSTMENTS ===");
+            Log.Info("\n=== CALCULATED EQ ADJUSTMENTS ===");
             string[] bandNames = new[] {
                 "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", "63Hz", "80Hz", "100Hz", "125Hz", "160Hz",
                 "200Hz", "250Hz", "315Hz", "400Hz", "500Hz", "630Hz", "800Hz", "1kHz", "1.25kHz", "1.6kHz",
@@ -260,7 +260,7 @@ namespace OwnaudioNET.Features.Matchering
                 // 4. Limiter acts as final safety net for peaks
                 // =======================================================================
 
-                Log.Write("\n=== MASTERING CHAIN CONFIGURATION ===");
+                Log.Info("\n=== MASTERING CHAIN CONFIGURATION ===");
 
                 // 1. Compressor (First - Stabilizes Dynamics)
                 // Use the calculated threshold and ratio from Crest Factor analysis
@@ -312,14 +312,14 @@ namespace OwnaudioNET.Features.Matchering
                 );
 
                 Log.Info($"\n[3] DYNAMIC AMPLIFIER (AGC):");
-                Log.Write($"    Target Level: {dynamicAmp.TargetLevel:F1} dB");
-                Log.Write($"    Attack: 1.5s, Release: 4.0s (Musical)");
-                Log.Write($"    RMS Window: 0.8s (Long-term averaging)");
-                Log.Write($"    Max Gain: {totalMaxGain:F2}x ({20 * MathF.Log10(totalMaxGain):+F1} dB)");
-                Log.Write($"    Max Reduction: 8 dB (Gentle compression)");
-                Log.Write($"    Gain Change Rate: 4 dB/s (Transparent)");
-                Log.Write($"    Noise Gate: -65 dB (Very low, preserves tail)");
-                Log.Write($"    Initial Gain: {headroomRecoveryGain:F2}x ({20 * MathF.Log10(headroomRecoveryGain):+F1} dB compensation)");
+                Log.Info($"    Target Level: {dynamicAmp.TargetLevel:F1} dB");
+                Log.Info($"    Attack: 1.5s, Release: 4.0s (Musical)");
+                Log.Info($"    RMS Window: 0.8s (Long-term averaging)");
+                Log.Info($"    Max Gain: {totalMaxGain:F2}x ({20 * MathF.Log10(totalMaxGain):+F1} dB)");
+                Log.Info($"    Max Reduction: 8 dB (Gentle compression)");
+                Log.Info($"    Gain Change Rate: 4 dB/s (Transparent)");
+                Log.Info($"    Noise Gate: -65 dB (Very low, preserves tail)");
+                Log.Info($"    Initial Gain: {headroomRecoveryGain:F2}x ({20 * MathF.Log10(headroomRecoveryGain):+F1} dB compensation)");
 
                 // 4. Limiter (Fourth - Final Safety/Peak Control)
                 // Transparent mastering settings
@@ -332,8 +332,8 @@ namespace OwnaudioNET.Features.Matchering
                 );
 
                 Log.Info($"\n[4] LIMITER (True Peak):");
-                Log.Write($"    Threshold: -0.5 dB, Ceiling: -0.2 dB");
-                Log.Write($"    Release: 60ms, Lookahead: 5ms");
+                Log.Info($"    Threshold: -0.5 dB, Ceiling: -0.2 dB");
+                Log.Info($"    Release: 60ms, Lookahead: 5ms");
 
                 // Initialize all effects
                 var audioConfig = new Ownaudio.Core.AudioConfig
@@ -348,11 +348,11 @@ namespace OwnaudioNET.Features.Matchering
                 dynamicAmplifier.Initialize(audioConfig);
                 outputLimiter.Initialize(audioConfig);
 
-                Log.Write("\n=== PROCESSING AUDIO ===");
-                Log.Write($"Chain: Compressor \u2192 EQ \u2192 DynamicAmp \u2192 Limiter");
-                Log.Write($"Sample Rate: {sampleRate} Hz, Channels: {channels}");
-                Log.Write($"Total Samples: {audioData.Length:N0}, Total Frames: {audioData.Length / channels:N0}");
-                Log.Write($"Buffer Size: 512 frames\n");
+                Log.Info("\n=== PROCESSING AUDIO ===");
+                Log.Info($"Chain: Compressor \u2192 EQ \u2192 DynamicAmp \u2192 Limiter");
+                Log.Info($"Sample Rate: {sampleRate} Hz, Channels: {channels}");
+                Log.Info($"Total Samples: {audioData.Length:N0}, Total Frames: {audioData.Length / channels:N0}");
+                Log.Info($"Buffer Size: 512 frames\n");
 
                 // Process audio in chunks (frame-based to prevent sample loss)
                 var processedData = new List<float>(audioData.Length);
@@ -387,11 +387,11 @@ namespace OwnaudioNET.Features.Matchering
 
                     processedSamples += samplesToProcess;
                     float progress = (float)processedSamples / totalSamples * 100f;
-                    Log.Write($"\rProcessing: {progress:F1}%", end: "");
+                    Log.Info($"\rProcessing: {progress:F1}%");
                 }
 
                 // Verify all samples were processed
-                Log.Write($"\n");
+                Log.Info($"\n");
                 if (processedData.Count != audioData.Length)
                 {
                     Log.Warning($"Sample count mismatch!");
