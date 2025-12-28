@@ -47,16 +47,25 @@ public sealed partial class AudioMixer
 
                 // 2. Mix sources based on rendering mode
                 int activeSources;
+                bool dropoutDetected = false;
+                
                 if (_masterClock.Mode == ClockMode.Realtime)
                 {
-                    // Realtime mode: Non-blocking, dropouts → silence + event
-                    activeSources = MixSourcesRealtime(mixBuffer, sourceBuffer, currentTimestamp);
+                    // Realtime mode: Non-blocking, dropouts → silence + event + smart resync
+                    dropoutDetected = MixSourcesRealtime(mixBuffer, sourceBuffer, currentTimestamp, out activeSources);
+                    
+                    // Smart Resync: If dropout detected, resync only drifted sources
+                    if (dropoutDetected)
+                    {
+                        ResyncSources(currentTimestamp);
+                    }
                 }
                 else
                 {
                     // Offline mode: Blocking, deterministic
                     activeSources = MixSourcesOffline(mixBuffer, sourceBuffer, currentTimestamp);
                 }
+
 
                 // 3-7. Process mixed audio
                 if (activeSources > 0)
@@ -115,9 +124,11 @@ public sealed partial class AudioMixer
     /// Mixes sources in realtime mode (non-blocking, dropout handling).
     /// NEW - v2.4.0+ Master Clock System
     /// </summary>
-    private int MixSourcesRealtime(float[] mixBuffer, float[] sourceBuffer, double timestamp)
+    /// <returns>True if any dropout was detected, false otherwise</returns>
+    private bool MixSourcesRealtime(float[] mixBuffer, float[] sourceBuffer, double timestamp, out int activeSources)
     {
-        int activeSources = 0;
+        activeSources = 0;
+        bool dropoutDetected = false;
 
         for (int i = 0; i < _cachedSourcesArray.Length; i++)
         {
@@ -151,7 +162,9 @@ public sealed partial class AudioMixer
                     }
                     else
                     {
-                        // Dropout occurred - fire event
+                        // Dropout occurred - fire event and mark for resync
+                        dropoutDetected = true;
+                        
                         OnTrackDropout(new TrackDropoutEventArgs(
                             source.Id,
                             source.GetType().Name,
@@ -191,7 +204,7 @@ public sealed partial class AudioMixer
             }
         }
 
-        return activeSources;
+        return dropoutDetected;
     }
 
     /// <summary>
@@ -297,5 +310,33 @@ public sealed partial class AudioMixer
     private void OnTrackDropout(TrackDropoutEventArgs e)
     {
         TrackDropout?.Invoke(this, e);
+    }
+
+    /// <summary>
+    /// Fast parallel resynchronization: Seeks ALL playing sources simultaneously to the master timestamp.
+    /// Uses Parallel.ForEach to prevent sequential drift accumulation with 20+ tracks.
+    /// </summary>
+    /// <param name="masterTimestamp">Current MasterClock timestamp in seconds</param>
+    private void ResyncSources(double masterTimestamp)
+    {
+        // Parallel seek all playing sources to prevent sequential drift
+        System.Threading.Tasks.Parallel.ForEach(_cachedSourcesArray, source =>
+        {
+            try
+            {
+                // Only resync playing sources
+                if (source.State != AudioState.Playing)
+                    return;
+
+                // Force seek to master timestamp
+                source.Seek(masterTimestamp);
+            }
+            catch (Exception ex)
+            {
+                // Source error during resync - report but continue with other sources
+                OnSourceError(source, new AudioErrorEventArgs(
+                    $"Error resyncing source {source.Id}: {ex.Message}", ex));
+            }
+        });
     }
 }
