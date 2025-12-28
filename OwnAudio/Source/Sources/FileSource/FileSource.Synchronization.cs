@@ -5,6 +5,8 @@ using OwnaudioNET.Core;
 using OwnaudioNET.Events;
 using OwnaudioNET.Interfaces;
 
+using Logger;
+
 namespace OwnaudioNET.Sources;
 
 /// <summary>
@@ -164,7 +166,7 @@ public partial class FileSource
         _lastDrift = drift;
 
         #if DEBUG
-        Console.WriteLine($"[SoftSync-{correctionMode}] Drift={drift:F4}s, Rate={correctionRate:P0}, Correction={correctionAmount:F6}s ({(isBehind ? "speed up" : "slow down")})");
+        Log.Debug($"[SoftSync-{correctionMode}] Drift={drift:F4}s, Rate={correctionRate:P0}, Correction={correctionAmount:F6}s ({(isBehind ? "speed up" : "slow down")})");
         #endif
     }
 

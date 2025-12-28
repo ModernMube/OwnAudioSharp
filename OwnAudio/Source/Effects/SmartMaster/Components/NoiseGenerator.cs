@@ -92,7 +92,6 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
             float[] whiteNoise = GenerateWhiteNoise(sampleCount, amplitude);
             
             // Simple low-pass filter (around 100Hz)
-            // Cutoff frequency: 100Hz
             float cutoffFreq = 100.0f;
             float rc = 1.0f / (2.0f * (float)Math.PI * cutoffFreq);
             float dt = 1.0f / sampleRate;

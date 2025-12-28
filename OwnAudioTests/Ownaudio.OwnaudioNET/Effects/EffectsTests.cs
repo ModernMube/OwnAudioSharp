@@ -119,7 +119,7 @@ public class EffectsTests
     public void AutoGainEffect_Process_ShouldWork()
     {
         // Arrange
-        var effect = new AutoGainEffect(SampleRate, Channels);
+        var effect = new AutoGainEffect(AutoGainPreset.Default);
         effect.Initialize(CreateConfig());
 
         var buffer = GenerateSineWave(4800, 440, SampleRate, Channels, amplitude: 0.1f);

@@ -97,7 +97,8 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     /// Drift between SyncTolerance and SoftSyncTolerance triggers tempo adjustment.
     /// Default is 0.150 (150ms) - increased from 50ms to reduce hard seek sensitivity with 22+ tracks.
     /// </summary>
-    public double SoftSyncTolerance { get; set; } = 0.150;
+    //public double SoftSyncTolerance { get; set; } = 0.150;
+    public double SoftSyncTolerance { get; set; } = 0.030; // 30ms
 
     /// <summary>
     /// Maximum tempo adjustment percentage for soft sync.

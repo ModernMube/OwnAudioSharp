@@ -5,15 +5,49 @@ using OwnaudioNET.Interfaces;
 
 namespace OwnaudioNET.Effects
 {
+    /// <summary>
+    /// Equalizer preset enumeration for common audio enhancement scenarios.
+    /// </summary>
     public enum EqualizerPreset
     {
+        /// <summary>
+        /// Flat response with no gain adjustments.
+        /// </summary>
         Default,
+        
+        /// <summary>
+        /// Enhanced low-frequency response.
+        /// </summary>
         Bass,
+        
+        /// <summary>
+        /// Enhanced high-frequency response.
+        /// </summary>
         Treble,
+        
+        /// <summary>
+        /// Rock music optimization with enhanced bass and treble.
+        /// </summary>
         Rock,
+        
+        /// <summary>
+        /// Classical music optimization with natural dynamics.
+        /// </summary>
         Classical,
+        
+        /// <summary>
+        /// Pop music optimization with vocal clarity.
+        /// </summary>
         Pop,
+        
+        /// <summary>
+        /// Jazz music optimization with balanced response.
+        /// </summary>
         Jazz,
+        
+        /// <summary>
+        /// Voice optimization with enhanced mid-range.
+        /// </summary>
         Voice
     }
 
@@ -32,9 +66,7 @@ namespace OwnaudioNET.Effects
         private const int Bands = 10;
         private const int FiltersPerBand = 2; // Cascaded for steeper slopes
         
-        // Filter Coefficients (Flattened: [Band][Filter][Coeff])
-        // Instead of 3D array, we use 1D arrays with striding or separate arrays for each coeff type
-        // Struct-of-Arrays for SIMD friendliness
+        // Filter Coefficients (Flattened: [Band][Filter][Coeff]) - Struct-of-Arrays for SIMD friendliness
         
         // Coefficients: b0, b1, b2, a1, a2 (a0 normalized to 1)
         private readonly float[] _b0;
@@ -43,9 +75,7 @@ namespace OwnaudioNET.Effects
         private readonly float[] _a1;
         private readonly float[] _a2;
         
-        // State: z1, z2 (Per Channel, Per Filter)
-        // Assume Max Channels = 2 for now, or dynamic.
-        // Dynamic: [Channel][TotalFilters]
+        // State: z1, z2 (Per Channel, Per Filter) - Dynamic: [Channel][TotalFilters]
         private float[][] _z1;
         private float[][] _z2;
         
@@ -63,11 +93,40 @@ namespace OwnaudioNET.Effects
             31.25f, 62.5f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f
         };
 
+        /// <summary>
+        /// Gets the unique identifier for this effect instance.
+        /// </summary>
         public Guid Id => _id;
+        
+        /// <summary>
+        /// Gets or sets the name of this effect instance.
+        /// </summary>
         public string Name { get => _name; set => _name = value ?? "Equalizer"; }
+        
+        /// <summary>
+        /// Gets or sets whether this effect is enabled.
+        /// </summary>
         public bool Enabled { get => _enabled; set => _enabled = value; }
+        
+        /// <summary>
+        /// Gets or sets the wet/dry mix. Always 1.0 for Equalizer (no dry signal mixing).
+        /// </summary>
         public float Mix { get; set; } = 1.0f;
 
+        /// <summary>
+        /// Initializes a new instance of the EqualizerEffect with custom band gains.
+        /// </summary>
+        /// <param name="sampleRate">Sample rate in Hz (default: 44100).</param>
+        /// <param name="band0Gain">Gain for band 0 (31.25 Hz) in dB (default: 0).</param>
+        /// <param name="band1Gain">Gain for band 1 (62.5 Hz) in dB (default: 0).</param>
+        /// <param name="band2Gain">Gain for band 2 (125 Hz) in dB (default: 0).</param>
+        /// <param name="band3Gain">Gain for band 3 (250 Hz) in dB (default: 0).</param>
+        /// <param name="band4Gain">Gain for band 4 (500 Hz) in dB (default: 0).</param>
+        /// <param name="band5Gain">Gain for band 5 (1000 Hz) in dB (default: 0).</param>
+        /// <param name="band6Gain">Gain for band 6 (2000 Hz) in dB (default: 0).</param>
+        /// <param name="band7Gain">Gain for band 7 (4000 Hz) in dB (default: 0).</param>
+        /// <param name="band8Gain">Gain for band 8 (8000 Hz) in dB (default: 0).</param>
+        /// <param name="band9Gain">Gain for band 9 (16000 Hz) in dB (default: 0).</param>
         public EqualizerEffect(float sampleRate = 44100,
                         float band0Gain = 0.0f, float band1Gain = 0.0f, float band2Gain = 0.0f, float band3Gain = 0.0f, float band4Gain = 0.0f,
                         float band5Gain = 0.0f, float band6Gain = 0.0f, float band7Gain = 0.0f, float band8Gain = 0.0f, float band9Gain = 0.0f)
@@ -116,11 +175,21 @@ namespace OwnaudioNET.Effects
             RecalculateAllFilters();
         }
 
+        /// <summary>
+        /// Initializes a new instance of the EqualizerEffect using a preset configuration.
+        /// </summary>
+        /// <param name="preset">The preset configuration to use.</param>
+        /// <param name="sampleRate">Sample rate in Hz (default: 44100).</param>
         public EqualizerEffect(EqualizerPreset preset, float sampleRate = 44100) : this(sampleRate)
         {
             SetPreset(preset);
         }
 
+        /// <summary>
+        /// Initializes the effect with the specified audio configuration.
+        /// </summary>
+        /// <param name="config">The audio configuration.</param>
+        /// <exception cref="ArgumentNullException">Thrown when config is null.</exception>
         public void Initialize(AudioConfig config)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
@@ -146,17 +215,61 @@ namespace OwnaudioNET.Effects
         }
 
         // Propeties for Bands
+        /// <summary>
+        /// Gets or sets the gain for band 0 (31.25 Hz) in dB.
+        /// </summary>
         public float Band0Gain { get => _gains[0]; set => SetBand(0, value); }
+        
+        /// <summary>
+        /// Gets or sets the gain for band 1 (62.5 Hz) in dB.
+        /// </summary>
         public float Band1Gain { get => _gains[1]; set => SetBand(1, value); }
+        
+        /// <summary>
+        /// Gets or sets the gain for band 2 (125 Hz) in dB.
+        /// </summary>
         public float Band2Gain { get => _gains[2]; set => SetBand(2, value); }
+        
+        /// <summary>
+        /// Gets or sets the gain for band 3 (250 Hz) in dB.
+        /// </summary>
         public float Band3Gain { get => _gains[3]; set => SetBand(3, value); }
+        
+        /// <summary>
+        /// Gets or sets the gain for band 4 (500 Hz) in dB.
+        /// </summary>
         public float Band4Gain { get => _gains[4]; set => SetBand(4, value); }
+        
+        /// <summary>
+        /// Gets or sets the gain for band 5 (1000 Hz) in dB.
+        /// </summary>
         public float Band5Gain { get => _gains[5]; set => SetBand(5, value); }
+        
+        /// <summary>
+        /// Gets or sets the gain for band 6 (2000 Hz) in dB.
+        /// </summary>
         public float Band6Gain { get => _gains[6]; set => SetBand(6, value); }
+        
+        /// <summary>
+        /// Gets or sets the gain for band 7 (4000 Hz) in dB.
+        /// </summary>
         public float Band7Gain { get => _gains[7]; set => SetBand(7, value); }
+        
+        /// <summary>
+        /// Gets or sets the gain for band 8 (8000 Hz) in dB.
+        /// </summary>
         public float Band8Gain { get => _gains[8]; set => SetBand(8, value); }
+        
+        /// <summary>
+        /// Gets or sets the gain for band 9 (16000 Hz) in dB.
+        /// </summary>
         public float Band9Gain { get => _gains[9]; set => SetBand(9, value); }
 
+        /// <summary>
+        /// Sets the gain for a specific band and updates the filter.
+        /// </summary>
+        /// <param name="index">Band index (0-9).</param>
+        /// <param name="gain">Gain value in dB (-12 to +12).</param>
         private void SetBand(int index, float gain)
         {
             if (index < 0 || index >= Bands) return;
@@ -180,6 +293,13 @@ namespace OwnaudioNET.Effects
             }
         }
 
+        /// <summary>
+        /// Sets the gain, frequency, and Q factor for a specific band.
+        /// </summary>
+        /// <param name="band">Band index (0-9).</param>
+        /// <param name="frequency">Center frequency in Hz (20-20000).</param>
+        /// <param name="q">Q factor (0.1-10.0).</param>
+        /// <param name="gainDB">Gain in dB (-12 to +12).</param>
         public void SetBandGain(int band, float frequency, float q, float gainDB)
         {
              if (band < 0 || band >= Bands) return;
@@ -188,11 +308,18 @@ namespace OwnaudioNET.Effects
              SetBand(band, gainDB);
         }
 
+        /// <summary>
+        /// Recalculates all filter coefficients for all bands.
+        /// </summary>
         private void RecalculateAllFilters()
         {
             for(int i=0; i<Bands; i++) UpdateFilter(i);
         }
 
+        /// <summary>
+        /// Updates the filter coefficients for a specific band.
+        /// </summary>
+        /// <param name="bandIndex">Band index (0-9).</param>
         private void UpdateFilter(int bandIndex)
         {
             float freq = _frequencies[bandIndex];
@@ -239,6 +366,11 @@ namespace OwnaudioNET.Effects
             _a1[baseIdx+1] = fa1; _a2[baseIdx+1] = fa2;
         }
 
+        /// <summary>
+        /// Processes the audio buffer with equalization.
+        /// </summary>
+        /// <param name="buffer">The audio buffer to process.</param>
+        /// <param name="frameCount">The number of frames in the buffer.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
@@ -250,12 +382,10 @@ namespace OwnaudioNET.Effects
             int channels = _config.Channels;
             int samples = frameCount * channels;
 
-            // Optimization: If mix is 0? 
-            // EQ usually doesn't have Mix 0 often, but standard Check.
+            // Optimization: Early exit if mix is near zero
             if (Mix < 0.01f) return;
 
-            // Process per channel
-            // Since samples are interleaved, we jump step = channels
+            // Process per channel (samples are interleaved, jump step = channels)
             
             for (int ch = 0; ch < channels; ch++)
             {
@@ -294,16 +424,17 @@ namespace OwnaudioNET.Effects
                         sample = 0.95f * MathF.Tanh(sample); 
                     }
 
-                    // Mix
-                    // buffer[i] is input (we overwrote sample variable, but buffer[i] is still orig until we write)
-                    // Wait, I used 'sample = buffer[i]' then modified 'sample'.
-                    // So 'sample' is now Wet.
+                    // Mix (sample is now wet, buffer[i] still contains original dry)
                     
                     buffer[i] = buffer[i] * (1.0f - Mix) + sample * Mix;
                 }
             }
         }
 
+        /// <summary>
+        /// Applies a preset configuration to the equalizer.
+        /// </summary>
+        /// <param name="preset">The preset to apply.</param>
         public void SetPreset(EqualizerPreset preset)
         {
             float[] gains = new float[10];
@@ -319,13 +450,15 @@ namespace OwnaudioNET.Effects
                 default: break;
             }
             
-            for(int i=0; i<10; i++) Band0Gain = gains[i]; // Actually need to set each by index.
-            // Optimized Set:
+             // Set all gains and recalculate filters
              _gains[0] = gains[0]; _gains[1] = gains[1]; _gains[2] = gains[2]; _gains[3] = gains[3]; _gains[4] = gains[4];
              _gains[5] = gains[5]; _gains[6] = gains[6]; _gains[7] = gains[7]; _gains[8] = gains[8]; _gains[9] = gains[9];
              RecalculateAllFilters();
         }
 
+        /// <summary>
+        /// Resets the filter state to initial values.
+        /// </summary>
         public void Reset()
         {
             for(int c=0; c<_z1.Length; c++) {
@@ -334,10 +467,17 @@ namespace OwnaudioNET.Effects
             }
         }
 
+        /// <summary>
+        /// Disposes the effect and releases resources.
+        /// </summary>
         public void Dispose()
         {
         }
 
+        /// <summary>
+        /// Returns a string representation of the effect's current state.
+        /// </summary>
+        /// <returns>A string describing the effect state.</returns>
         public override string ToString() => $"Equalizer: Enabled={_enabled}";
     }
 }

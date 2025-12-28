@@ -5,14 +5,44 @@ using System.Runtime.CompilerServices;
 
 namespace OwnaudioNET.Effects
 {
+    /// <summary>
+    /// Preset configurations for the DynamicAmpEffect.
+    /// </summary>
     public enum DynamicAmpPreset
     {
+        /// <summary>
+        /// Balanced settings suitable for general use.
+        /// </summary>
         Default,
+        
+        /// <summary>
+        /// Quick response optimized for speech clarity with higher noise gate.
+        /// </summary>
         Speech,
+        
+        /// <summary>
+        /// Gentle, musical settings that preserve natural dynamics.
+        /// </summary>
         Music,
+        
+        /// <summary>
+        /// Tight control for consistent broadcast levels.
+        /// </summary>
         Broadcast,
+        
+        /// <summary>
+        /// Subtle, transparent mastering-grade dynamics processing.
+        /// </summary>
         Mastering,
+        
+        /// <summary>
+        /// Fast response for live performance with feedback prevention.
+        /// </summary>
         Live,
+        
+        /// <summary>
+        /// Minimal processing maintaining natural dynamics.
+        /// </summary>
         Transparent
     }
 
@@ -49,15 +79,43 @@ namespace OwnaudioNET.Effects
         private float _lastGainDb;
         private bool _isAboveNoiseGate; 
 
+        /// <summary>
+        /// Gets the unique identifier for this effect instance.
+        /// </summary>
         public Guid Id => _id;
+        
+        /// <summary>
+        /// Gets the name of this effect instance.
+        /// </summary>
         public string Name => _name;
+        
+        /// <summary>
+        /// Gets or sets whether this effect is enabled.
+        /// </summary>
         public bool Enabled
         {
             get => _enabled;
             set => _enabled = value;
         }
+        
+        /// <summary>
+        /// Gets or sets the wet/dry mix. Always 1.0 for DynamicAmp (no dry signal mixing).
+        /// </summary>
         public float Mix { get; set; } = 1.0f;
 
+        /// <summary>
+        /// Initializes a new instance of the DynamicAmpEffect with custom parameters.
+        /// </summary>
+        /// <param name="targetLevel">Target RMS level in dB (default: -12.0).</param>
+        /// <param name="attackTimeSeconds">Attack time in seconds (default: 0.5).</param>
+        /// <param name="releaseTimeSeconds">Release time in seconds (default: 2.0).</param>
+        /// <param name="noiseThresholdDbOrLinear">Noise gate threshold in dB or linear (0-1 for legacy compatibility) (default: -50.0).</param>
+        /// <param name="maxGainValue">Maximum gain multiplier (default: 6.0).</param>
+        /// <param name="sampleRateHz">Sample rate in Hz (default: 44100.0).</param>
+        /// <param name="rmsWindowSeconds">RMS averaging window in seconds (default: 0.5).</param>
+        /// <param name="initialGain">Initial gain value (default: 1.0).</param>
+        /// <param name="maxGainChangePerSecondDb">Maximum gain change rate in dB/second (default: 12.0).</param>
+        /// <param name="maxGainReductionDb">Maximum gain reduction in dB (default: 12.0).</param>
         public DynamicAmpEffect(float targetLevel = -12.0f, float attackTimeSeconds = 0.5f,
                          float releaseTimeSeconds = 2.0f, float noiseThresholdDbOrLinear = -50.0f,
                          float maxGainValue = 6.0f, float sampleRateHz = 44100.0f,
@@ -72,9 +130,7 @@ namespace OwnaudioNET.Effects
             ValidateAndSetAttackTime(attackTimeSeconds);
             ValidateAndSetReleaseTime(releaseTimeSeconds);
 
-            // Backward compatibility: Auto-detect linear vs dB values
-            // If value is between 0 and 1, treat as linear and convert to dB
-            // Otherwise, treat as dB value
+            // Backward compatibility: Auto-detect linear vs dB values (0-1 = linear, otherwise dB)
             float noiseThresholdDb;
             if (noiseThresholdDbOrLinear >= 0.0f && noiseThresholdDbOrLinear <= 1.0f)
             {
@@ -107,6 +163,12 @@ namespace OwnaudioNET.Effects
             _isAboveNoiseGate = false;
         }
 
+        /// <summary>
+        /// Initializes a new instance of the DynamicAmpEffect using a preset configuration.
+        /// </summary>
+        /// <param name="preset">The preset configuration to use.</param>
+        /// <param name="sampleRateHz">Sample rate in Hz (default: 44100.0).</param>
+        /// <param name="rmsWindowSeconds">RMS averaging window in seconds (default: 0.5).</param>
         public DynamicAmpEffect(DynamicAmpPreset preset, float sampleRateHz = 44100.0f, float rmsWindowSeconds = 0.5f)
         {
             _id = Guid.NewGuid();
@@ -128,6 +190,10 @@ namespace OwnaudioNET.Effects
             _isAboveNoiseGate = false;
         }
 
+        /// <summary>
+        /// Initializes the effect with the specified audio configuration.
+        /// </summary>
+        /// <param name="config">The audio configuration.</param>
         public void Initialize(AudioConfig config)
         {
             _config = config;
@@ -138,10 +204,13 @@ namespace OwnaudioNET.Effects
             }
         }
 
+        /// <summary>
+        /// Calculates dual-window IIR coefficients for RMS averaging.
+        /// Fast window is 1/10 of main window for quick peak reaction.
+        /// </summary>
         private void CalculateRmsCoeffs()
         {
-            // Dual-window IIR coefficients for RMS averaging
-            // Fast window: 1/10 of main window for quick reaction to peaks
+            // Dual-window IIR coefficients: fast (1/10 window) for peaks, slow for musical tracking
             float fastWindow = Math.Max(0.01f, rmsWindowSeconds * 0.1f);
             float slowWindow = Math.Max(0.1f, rmsWindowSeconds);
 
@@ -149,15 +218,46 @@ namespace OwnaudioNET.Effects
             _rmsSlowCoeff = MathF.Exp(-1.0f / (slowWindow * sampleRate));
         }
 
-        // Validation helpers with improved ranges
+        /// <summary>
+        /// Validates and sets the target RMS level in dB (-60.0 to -3.0).
+        /// </summary>
         private void ValidateAndSetTargetLevel(float levelDb) { targetRmsLevelDb = Math.Clamp(levelDb, -60.0f, -3.0f); }
+        
+        /// <summary>
+        /// Validates and sets the attack time in seconds (minimum 0.05).
+        /// </summary>
         private void ValidateAndSetAttackTime(float t) { attackTime = Math.Max(0.05f, t); }
+        
+        /// <summary>
+        /// Validates and sets the release time in seconds (minimum 0.2).
+        /// </summary>
         private void ValidateAndSetReleaseTime(float t) { releaseTime = Math.Max(0.2f, t); }
+        
+        /// <summary>
+        /// Validates and sets the noise gate threshold in dB (-80.0 to -30.0).
+        /// </summary>
         private void ValidateAndSetNoiseGateDb(float db) { noiseGateThresholdDb = Math.Clamp(db, -80.0f, -30.0f); }
+        
+        /// <summary>
+        /// Validates and sets the maximum gain (1.0 to 20.0).
+        /// </summary>
         private void ValidateAndSetMaxGain(float g) { maxGain = Math.Clamp(g, 1.0f, 20.0f); }
+        
+        /// <summary>
+        /// Validates and sets the maximum gain reduction in dB (3.0 to 40.0).
+        /// </summary>
         private void ValidateAndSetMaxGainReduction(float db) { maxGainReductionDb = Math.Clamp(db, 3.0f, 40.0f); }
+        
+        /// <summary>
+        /// Validates and sets the sample rate in Hz (minimum 8000.0).
+        /// </summary>
         private void ValidateAndSetSampleRate(float r) { sampleRate = Math.Max(8000.0f, r); }
 
+        /// <summary>
+        /// Processes the audio buffer with adaptive dynamics control.
+        /// </summary>
+        /// <param name="buffer">The audio buffer to process.</param>
+        /// <param name="frameCount">The number of frames in the buffer.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
@@ -268,6 +368,10 @@ namespace OwnaudioNET.Effects
             _lastGainDb = LinearToDb(currentGain);
         }
 
+        /// <summary>
+        /// Applies a preset configuration to the effect.
+        /// </summary>
+        /// <param name="preset">The preset to apply.</param>
         public void SetPreset(DynamicAmpPreset preset)
         {
             switch (preset)
@@ -351,14 +455,27 @@ namespace OwnaudioNET.Effects
             }
         }
         
+        /// <summary>
+        /// Converts decibels to linear gain.
+        /// </summary>
+        /// <param name="db">Value in decibels.</param>
+        /// <returns>Linear gain value.</returns>
         private static float DbToLinear(float db) => MathF.Pow(10.0f, db / 20.0f);
 
+        /// <summary>
+        /// Converts linear gain to decibels.
+        /// </summary>
+        /// <param name="linear">Linear gain value.</param>
+        /// <returns>Value in decibels.</returns>
         private static float LinearToDb(float linear)
         {
             if (linear <= 1e-6f) return -120.0f;
             return 20.0f * MathF.Log10(linear);
         }
 
+        /// <summary>
+        /// Resets the effect state to initial values.
+        /// </summary>
         public void Reset()
         {
             currentGain = 1.0f;
@@ -369,10 +486,17 @@ namespace OwnaudioNET.Effects
             _isAboveNoiseGate = false;
         }
 
+        /// <summary>
+        /// Disposes the effect and releases resources.
+        /// </summary>
         public void Dispose()
         {
         }
         
+        /// <summary>
+        /// Returns a string representation of the effect's current state.
+        /// </summary>
+        /// <returns>A string describing the effect state.</returns>
         public override string ToString() => $"{_name} (ID: {_id}, Enabled: {_enabled})";
     }
 }
