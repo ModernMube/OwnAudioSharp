@@ -41,7 +41,11 @@ public partial class FileSource
                 // Check if buffer needs filling
                 if (!ShouldFillBuffer())
                 {
-                    Thread.Sleep(1);
+                    // OPTIMIZATION (Phase 2): Event-driven waiting instead of polling
+                    // Replaces Thread.Sleep(1) which causes ~1000 context switches/sec/track
+                    // WaitOne(10) waits for signal or 10ms timeout, whichever comes first
+                    // This reduces CPU overhead dramatically with 20+ decoder threads
+                    _bufferNeedsRefillEvent.WaitOne(10);
                     continue;
                 }
 

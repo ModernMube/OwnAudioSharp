@@ -51,14 +51,18 @@ public sealed partial class AudioMixer
                 
                 if (_masterClock.Mode == ClockMode.Realtime)
                 {
-                    // Realtime mode: Non-blocking, dropouts → silence + event + smart resync
+                    // Realtime mode: Non-blocking, dropouts → silence + event
                     dropoutDetected = MixSourcesRealtime(mixBuffer, sourceBuffer, currentTimestamp, out activeSources);
                     
-                    // Smart Resync: If dropout detected, resync only drifted sources
-                    if (dropoutDetected)
-                    {
-                        ResyncSources(currentTimestamp);
-                    }
+                    // OPTIMIZATION (Phase 1): Global resync removed to prevent "Thundering Herd"
+                    // The FileSource's built-in "Three-Zone" drift correction (Green/Yellow/Red)
+                    // handles individual track recovery more efficiently without causing
+                    // massive CPU spikes from 20+ simultaneous Seek() operations.
+                    // Each track self-corrects using:
+                    //   - Green Zone (< 20ms): No correction
+                    //   - Yellow Zone (20-100ms): Soft sync via tempo adjustment
+                    //   - Red Zone (> 100ms): Buffer skip or predictive seek
+                    // This approach prevents cascade failures and maintains stable CPU usage.
                 }
                 else
                 {
@@ -313,22 +317,30 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Fast parallel resynchronization: Seeks ALL playing sources simultaneously to the master timestamp.
-    /// Uses Parallel.ForEach to prevent sequential drift accumulation with 20+ tracks.
+    /// Resynchronizes sources to the master timestamp.
+    /// OPTIMIZATION (Phase 1): Modified to only affect legacy sources not attached to MasterClock.
+    /// MasterClock sources self-correct via their built-in Three-Zone drift correction system.
+    /// This prevents the "Thundering Herd" effect with 20+ tracks.
     /// </summary>
     /// <param name="masterTimestamp">Current MasterClock timestamp in seconds</param>
     private void ResyncSources(double masterTimestamp)
     {
-        // Parallel seek all playing sources to prevent sequential drift
-        System.Threading.Tasks.Parallel.ForEach(_cachedSourcesArray, source =>
+        // OPTIMIZATION: Sequential iteration instead of Parallel.ForEach
+        // Reduces CPU overhead and prevents simultaneous buffer clears
+        foreach (var source in _cachedSourcesArray)
         {
             try
             {
                 // Only resync playing sources
                 if (source.State != AudioState.Playing)
-                    return;
+                    continue;
 
-                // Force seek to master timestamp
+                // CRITICAL: Skip MasterClock-attached sources
+                // These sources have sophisticated drift correction and self-heal efficiently
+                if (source is IMasterClockSource clockSource && clockSource.IsAttachedToClock)
+                    continue;
+
+                // Only legacy sources (GhostTrack sync or standalone) reach here
                 source.Seek(masterTimestamp);
             }
             catch (Exception ex)
@@ -337,6 +349,6 @@ public sealed partial class AudioMixer
                 OnSourceError(source, new AudioErrorEventArgs(
                     $"Error resyncing source {source.Id}: {ex.Message}", ex));
             }
-        });
+        }
     }
 }

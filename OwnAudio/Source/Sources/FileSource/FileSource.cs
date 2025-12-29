@@ -77,6 +77,11 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     private readonly object _timingLock = new();
     private bool _isSoftSyncActive = false;  // Track if soft sync is currently active
 
+    // OPTIMIZATION (Phase 2): Event-driven decoder thread signaling
+    // Replaces Thread.Sleep(1) polling with efficient event-based waiting
+    // Reduces CPU overhead significantly with 20+ decoder threads
+    private readonly AutoResetEvent _bufferNeedsRefillEvent = new(false);
+
     // Adaptive drift correction tracking
     private int _consecutiveUnderruns = 0;  // Counter for post-dropout aggressive recovery
     private double _lastDrift = 0.0;  // Track drift history for velocity detection
@@ -87,18 +92,17 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
 
     /// <summary>
     /// Gets or sets the synchronization tolerance in seconds (Green Zone threshold).
-    /// Default is 0.010 (10ms).
+    /// OPTIMIZATION (Phase 3): Increased from 10ms to 20ms for 20+ track stability.
     /// Drift below this value requires no correction.
     /// </summary>
-    public double SyncTolerance { get; set; } = 0.010;
+    public double SyncTolerance { get; set; } = 0.020; // 20ms (was 10ms)
 
     /// <summary>
     /// Soft sync tolerance in seconds (Yellow Zone threshold).
+    /// OPTIMIZATION (Phase 3): Increased from 30ms to 100ms for 20+ track stability.
     /// Drift between SyncTolerance and SoftSyncTolerance triggers tempo adjustment.
-    /// Default is 0.150 (150ms) - increased from 50ms to reduce hard seek sensitivity with 22+ tracks.
     /// </summary>
-    //public double SoftSyncTolerance { get; set; } = 0.150;
-    public double SoftSyncTolerance { get; set; } = 0.030; // 30ms
+    public double SoftSyncTolerance { get; set; } = 0.100; // 100ms (was 30ms)
 
     /// <summary>
     /// Maximum tempo adjustment percentage for soft sync.
@@ -310,9 +314,11 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         // Worst case: tempo=0.5x means we need 2x the input buffer size
         _soundTouchInputBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 8];
 
-        // Accumulation buffer with 16x size to handle worst-case tempo changes without reallocation
+        // Accumulation buffer with 32x size to handle worst-case tempo changes without reallocation
+        // BUGFIX: Increased from 16x to 32x to prevent overflow (required=262688, available=262144)
         // This prevents GC in the hot path which causes sync chaos every 30-40 seconds
-        _soundTouchAccumulationBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 16];
+        // The larger buffer handles extreme pitch/tempo combinations safely
+        _soundTouchAccumulationBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 32];
         _soundTouchAccumulationCount = 0;
 
         // ZERO-ALLOC: Pre-allocate a reusable buffer for the decoder
@@ -368,6 +374,12 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         int samplesToRead = frameCount * _streamInfo.Channels;
         int samplesRead = _buffer.Read(buffer.Slice(0, samplesToRead));
         int framesRead = samplesRead / _streamInfo.Channels;
+
+        // OPTIMIZATION (Phase 2): Signal decoder thread if buffer is getting low
+        if (_buffer.Available < _buffer.Capacity / 2)
+        {
+            _bufferNeedsRefillEvent.Set();
+        }
 
         // Update position
         if (framesRead > 0)
@@ -680,6 +692,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                 _pauseEvent?.Dispose();
                 _decoder?.Dispose();
                 _soundTouch?.Dispose();
+                _bufferNeedsRefillEvent?.Dispose(); // OPTIMIZATION (Phase 2): Dispose event
             }
             else
             {
