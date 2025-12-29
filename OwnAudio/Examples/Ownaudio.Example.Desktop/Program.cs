@@ -197,9 +197,9 @@ public class TestProgram
             fileSource2.PitchShift = 0.0f;
             fileSource3.PitchShift = 0.0f;
 
-            fileSource0.Volume = .7f;
-            fileSource1.Volume = .7f;
-            fileSource2.Volume = .7f;
+            fileSource0.Volume = 1.0f;
+            fileSource1.Volume = 1.0f;
+            fileSource2.Volume = 1.0f;
             fileSource3.Volume = 1.0f;
 
             Console.WriteLine($"  ✓ File source created");
@@ -318,7 +318,9 @@ public class TestProgram
             // ==========================================
             // Step 6: Playback Progress Display
             // ==========================================
-            Console.WriteLine("\n[6/6] Playing audio...\n");
+            Console.WriteLine("\n[6/6] Playing audio...");
+            Console.WriteLine("VOCAL effects: compressor -> delay -> reverb");
+            Console.WriteLine("MASTER effects (from 30 seconds): equalizer -> compressor -> dynamicamp\n");
             Console.WriteLine("Press any key to stop playback early.\n");
 
             // Display playback progress

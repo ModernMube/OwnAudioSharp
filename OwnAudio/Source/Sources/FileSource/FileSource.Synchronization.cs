@@ -367,6 +367,13 @@ public partial class FileSource
         int samplesRead = _buffer.Read(buffer.Slice(0, samplesToRead));
         int framesRead = samplesRead / _streamInfo.Channels;
 
+        // OPTIMIZATION (Phase 2): Signal decoder thread if buffer is getting low
+        // This wakes the decoder thread immediately when more data is needed
+        if (_buffer.Available < _buffer.Capacity / 2)
+        {
+            _bufferNeedsRefillEvent.Set();
+        }
+
         // Update track local time using simple output-driven approach
         // This is simpler and more stable than input-driven timing
         if (framesRead > 0)
