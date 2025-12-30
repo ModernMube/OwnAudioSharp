@@ -12,6 +12,7 @@ public sealed partial class AudioMixer
     /// Mix thread loop - continuously mixes sources and sends to engine.
     /// This is the hot path - must be zero-allocation.
     /// OPTIMIZATION: Uses cached array instead of ConcurrentDictionary.Values to avoid enumerator allocation.
+    /// OPTIMIZATION: Parallel multi-threaded source processing.
     /// </summary>
     private void MixThreadLoop()
     {
@@ -19,6 +20,19 @@ public sealed partial class AudioMixer
         int bufferSizeInSamples = _bufferSizeInFrames * _config.Channels;
         float[] mixBuffer = new float[bufferSizeInSamples];
         float[] sourceBuffer = new float[bufferSizeInSamples];
+
+        // Initialize parallel buffers
+        int procCount = Environment.ProcessorCount;
+        lock (_parallelMixLock)
+        {
+            _parallelMixBuffers = new float[procCount][];
+            _parallelReadBuffers = new float[procCount][];
+            for (int i = 0; i < procCount; i++)
+            {
+                _parallelMixBuffers[i] = new float[bufferSizeInSamples];
+                _parallelReadBuffers[i] = new float[bufferSizeInSamples];
+            }
+        }
 
         while (!_shouldStop)
         {
@@ -29,6 +43,19 @@ public sealed partial class AudioMixer
                 {
                     _pauseEvent.Wait(100);
                     continue;
+                }
+
+                // Check buffer size consistency
+                if (_parallelMixBuffers[0].Length != bufferSizeInSamples)
+                {
+                    lock (_parallelMixLock)
+                    {
+                        for (int i = 0; i < procCount; i++)
+                        {
+                            _parallelMixBuffers[i] = new float[bufferSizeInSamples];
+                            _parallelReadBuffers[i] = new float[bufferSizeInSamples];
+                        }
+                    }
                 }
 
                 // OPTIMIZATION: Update cached sources array if needed (zero allocation in steady state)
@@ -127,6 +154,7 @@ public sealed partial class AudioMixer
     /// <summary>
     /// Mixes sources in realtime mode (non-blocking, dropout handling).
     /// NEW - v2.4.0+ Master Clock System
+    /// Reverted to sequential processing for stability.
     /// </summary>
     /// <returns>True if any dropout was detected, false otherwise</returns>
     private bool MixSourcesRealtime(float[] mixBuffer, float[] sourceBuffer, double timestamp, out int activeSources)
@@ -134,17 +162,20 @@ public sealed partial class AudioMixer
         activeSources = 0;
         bool dropoutDetected = false;
 
-        for (int i = 0; i < _cachedSourcesArray.Length; i++)
+        // SEQUENTIAL MIXING (Restored for stability)
+        // Parallel.For caused thread scheduling jitter which led to sync drift and dropouts.
+        // The overhead of managing threads for each mix cycle outweighed the benefits.
+        
+        var sources = _cachedSourcesArray;
+        for (int i = 0; i < sources.Length; i++)
         {
-            var source = _cachedSourcesArray[i];
+            var source = sources[i];
 
             try
             {
-                // Only mix playing sources
                 if (source.State != AudioState.Playing)
                     continue;
 
-                // PRIORITY 1: NEW - IMasterClockSource (if attached to clock)
                 if (source is IMasterClockSource clockSource && clockSource.IsAttachedToClock)
                 {
                     bool success = clockSource.ReadSamplesAtTime(
@@ -153,8 +184,6 @@ public sealed partial class AudioMixer
                         _bufferSizeInFrames,
                         out ReadResult result);
 
-                    // CRITICAL FIX: Always mix whatever we got (could be silence if underrun)
-                    // This ensures track timing stays aligned even during dropouts
                     if (result.FramesRead > 0)
                     {
                         MixIntoBuffer(mixBuffer, sourceBuffer, result.FramesRead * _config.Channels);
@@ -166,7 +195,6 @@ public sealed partial class AudioMixer
                     }
                     else
                     {
-                        // Dropout occurred - fire event and mark for resync
                         dropoutDetected = true;
                         
                         OnTrackDropout(new TrackDropoutEventArgs(
@@ -177,7 +205,6 @@ public sealed partial class AudioMixer
                             _bufferSizeInFrames - result.FramesRead,
                             result.ErrorMessage ?? "Buffer underrun"));
 
-                        // Record dropout in metrics
                         lock (_metricsLock)
                         {
                             if (_trackMetrics.TryGetValue(source.Id, out var metrics))
@@ -187,10 +214,8 @@ public sealed partial class AudioMixer
                         }
                     }
                 }
-                // PRIORITY 2: LEGACY - Standard IAudioSource (GhostTrack sync or standalone)
                 else
                 {
-                    // Legacy path: use existing ReadSamples() method
                     int framesRead = source.ReadSamples(sourceBuffer, _bufferSizeInFrames);
 
                     if (framesRead > 0)
@@ -202,7 +227,6 @@ public sealed partial class AudioMixer
             }
             catch (Exception ex)
             {
-                // Source error - report but continue mixing other sources
                 OnSourceError(source, new AudioErrorEventArgs(
                     $"Error reading from source {source.Id}: {ex.Message}", ex));
             }

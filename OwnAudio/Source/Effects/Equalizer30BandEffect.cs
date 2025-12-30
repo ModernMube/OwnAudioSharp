@@ -91,6 +91,7 @@ namespace OwnaudioNET.Effects
         
         // Active bands optimization - track which bands have non-zero gain
         private readonly List<int> _activeBands;
+        private int[] _activeBandsArray = Array.Empty<int>(); // Cached array for lock-free iteration
 
         // IEffectProcessor implementation
         private Guid _id;
@@ -374,10 +375,12 @@ namespace OwnaudioNET.Effects
                 if (isActive && !wasActive)
                 {
                     _activeBands.Add(band);
+                    _activeBandsArray = _activeBands.ToArray(); // Update cache
                 }
                 else if (!isActive && wasActive)
                 {
                     _activeBands.Remove(band);
+                    _activeBandsArray = _activeBands.ToArray(); // Update cache
                 }
             }
         }
@@ -433,50 +436,66 @@ namespace OwnaudioNET.Effects
 
         /// <summary>
         /// Processes the audio buffer with equalization.
+        /// Optimized: Parallel channel processing with unsafe pointers.
         /// </summary>
         /// <param name="samples">The audio buffer to process.</param>
         /// <param name="frameCount">The number of frames in the buffer.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Process(Span<float> samples, int frameCount)
+        public unsafe void Process(Span<float> samples, int frameCount)
         {
             if (_config == null || !_enabled) return;
             
             // Early exit if no active bands
-            if (_activeBands.Count == 0) return;
+            var activeBands = _activeBandsArray;
+            if (activeBands.Length == 0) return;
 
             int channels = _config.Channels;
-            int totalSamples = frameCount * channels;
 
-            for (int ch = 0; ch < channels; ch++)
+            // Use unsafe pointers to bypass Span capture restriction in Parallel.For
+            fixed (float* samplesPtr = samples)
             {
-                float[] z1 = _z1[ch];
-                float[] z2 = _z2[ch];
-
-                int stride = channels;
-                for (int i = ch; i < totalSamples; i += stride)
+                float* pSamples = samplesPtr;
+                int totalLen = samples.Length;
+                
+                // Parallel channel processing
+                Parallel.For(0, channels, ch =>
                 {
-                    float input = samples[i];
-                    
-                    // Filter Chain - only process active bands
-                    foreach (int band in _activeBands)
+                    float[] z1 = _z1[ch];
+                    float[] z2 = _z2[ch];
+                    int stride = channels;
+                    int[] bands = activeBands;
+
+                    for (int i = ch; i < totalLen; i += stride)
                     {
-                        int f = band * FILTERS_PER_BAND;
+                        float input = pSamples[i];
                         
-                        // Direct Form II Transposed
-                        float output = _b0[f] * input + z1[f];
-                        z1[f] = _b1[f] * input - _a1[f] * output + z2[f];
-                        z2[f] = _b2[f] * input - _a2[f] * output;
-                        input = output;
-                    }
+                        // Filter Chain
+                        for (int b = 0; b < bands.Length; b++)
+                        {
+                            int band = bands[b];
+                            int f = band * FILTERS_PER_BAND;
+                            
+                            float b0 = _b0[f];
+                            float b1 = _b1[f];
+                            float b2 = _b2[f];
+                            float a1 = _a1[f];
+                            float a2 = _a2[f];
 
-                    // Hard clip prevention only (let downstream limiter handle peaks)
-                    if (Math.Abs(input) > 1.5f)
-                    {
-                        input = Math.Sign(input) * 1.5f; // Safety hard clip only
-                    }
+                            float output = b0 * input + z1[f];
+                            z1[f] = b1 * input - a1 * output + z2[f];
+                            z2[f] = b2 * input - a2 * output;
+                            input = output;
+                        }
 
-                    samples[i] = input;
-                }
+                        // Hard clip prevention
+                        if (Math.Abs(input) > 1.5f)
+                        {
+                            input = Math.Sign(input) * 1.5f;
+                        }
+
+                        pSamples[i] = input;
+                    }
+                });
             }
         }
 

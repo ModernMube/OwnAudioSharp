@@ -101,6 +101,7 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
         
         /// <summary>
         /// Processes audio through phase alignment (delay and phase inversion).
+        /// Optimized: Removed modulo operator for better performance.
         /// </summary>
         /// <param name="buffer">Audio buffer to process.</param>
         /// <param name="channel">Channel index (0 = L, 1 = R, 2 = Sub).</param>
@@ -127,8 +128,10 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
                 // Write to delay buffer
                 delayBuffer[writeIndex] = input;
                 
-                // Read from delay buffer
-                int readIndex = (writeIndex - delaySamples + bufferSize) % bufferSize;
+                // Read from delay buffer (optimized: avoid modulo)
+                int readIndex = writeIndex - delaySamples;
+                if (readIndex < 0) readIndex += bufferSize;
+                
                 float output = delayBuffer[readIndex];
                 
                 // Phase inversion
@@ -137,8 +140,9 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
                 
                 buffer[i] = output;
                 
-                // Update index
-                writeIndex = (writeIndex + 1) % bufferSize;
+                // Update index (optimized: avoid modulo)
+                writeIndex++;
+                if (writeIndex >= bufferSize) writeIndex = 0;
             }
             
             _delayBufferIndices[channel] = writeIndex;

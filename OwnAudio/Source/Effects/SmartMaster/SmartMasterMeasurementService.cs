@@ -760,7 +760,7 @@ namespace OwnaudioNET.Effects.SmartMaster
                     int totalBytes = framesRead * channels;
                     int sent = 0;
                     
-                    int engineBufferCapacity = OwnaudioNET.OwnaudioNet.Engine.FramesPerBuffer * channels * 2;
+                    int engineBufferCapacity = OwnaudioNET.OwnaudioNet.Engine!.FramesPerBuffer * channels * 2;
 
                     // We need to pump this data
                     while (sent < totalBytes)
