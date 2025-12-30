@@ -207,8 +207,10 @@ namespace OwnaudioNET.Effects
             }
             else
             {
+#nullable disable
                 Array.Clear(_delayBufferL, 0, _delayBufferL.Length);
                 Array.Clear(_delayBufferR, 0, _delayBufferR.Length);
+#nullable restore
             }
             _writeIndex = 0;
             _lastOutputL = 0.0f;

@@ -61,6 +61,11 @@ public sealed partial class AudioMixer : IDisposable
     private volatile float _leftPeak;
     private volatile float _rightPeak;
 
+    // Parallel mixing buffers (Per-core buffers to avoid locking during mix)
+    private float[][] _parallelMixBuffers = Array.Empty<float[]>();
+    private float[][] _parallelReadBuffers = Array.Empty<float[]>();
+    private readonly object _parallelMixLock = new();
+
     // Statistics
     private long _totalMixedFrames;
 #pragma warning disable CS0649 // Field is never assigned to, and will always have its default value

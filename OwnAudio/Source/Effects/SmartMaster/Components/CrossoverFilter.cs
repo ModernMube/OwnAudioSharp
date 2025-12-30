@@ -142,6 +142,7 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
         
         /// <summary>
         /// Processes audio through the crossover filter, splitting into high and low frequency bands.
+        /// Optimized: Removed channel validation for hot path performance.
         /// </summary>
         /// <param name="input">Input audio samples.</param>
         /// <param name="outputLR">Output buffer for high frequencies (L/R).</param>
@@ -150,8 +151,8 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
         /// <param name="channel">Channel index (0 = left, 1 = right).</param>
         public void Process(Span<float> input, Span<float> outputLR, Span<float> outputSub, int frameCount, int channel = 0)
         {
-            // Clamp channel to valid range
-            channel = Math.Clamp(channel, 0, 1);
+            // OPTIMIZATION: Removed Math.Clamp - caller ensures valid channel (0 or 1)
+            // This is a hot path method called thousands of times per second
             
             // Local variables for faster access (channel-specific)
             float lpZ1_1 = _lpZ1_1[channel], lpZ2_1 = _lpZ2_1[channel];
