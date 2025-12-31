@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
     <link rel="stylesheet" href="docs.css">
 </head>
+
 <body>
     <nav class="nav">
         <div class="nav-container">
@@ -17,9 +19,10 @@
                 <li><a href="api-net.html">NET API</a></li>
                 <li><a href="examples.html">Examples</a></li>
                 <li><a href="effects.html">Effects</a></li>
-                <li><a href="matchering.html">Matchering</a></li>
-                <li><a href="vocalremover.html" class="active">Vocal Remover</a></li>
-                <li><a href="chorddetect.html">Chord Detection</a></li>
+                <li><a href="networksync.html">Net Sync</a></li>
+                <li><a href="matchering.html">Mastering</a></li>
+                <li><a href="vocalremover.html" class="active">Vocal Sep</a></li>
+                <li><a href="chorddetect.html">Chords</a></li>
                 <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
             </ul>
         </div>
@@ -43,8 +46,10 @@
         <main class="content">
             <h1><span class="badge badge-net">NET</span> Vocal Remover API</h1>
             <p>
-                Advanced AI-powered audio separation technology for splitting music tracks into vocals and instrumental components.
-                Utilizes state-of-the-art ONNX neural network models with STFT-based processing and intelligent noise reduction.
+                Advanced AI-powered audio separation technology for splitting music tracks into vocals and instrumental
+                components.
+                Utilizes state-of-the-art ONNX neural network models with STFT-based processing and intelligent noise
+                reduction.
             </p>
 
             <div class="alert alert-info">
@@ -55,13 +60,17 @@
 
             <h2 id="overview">Overview</h2>
             <p>
-                The Vocal Remover system enables professional-grade audio source separation by leveraging advanced AI models:
+                The Vocal Remover system enables professional-grade audio source separation by leveraging advanced AI
+                models:
             </p>
             <ul>
-                <li><strong>AI-Powered Separation:</strong> Uses ONNX neural network models for accurate vocal/instrumental separation</li>
-                <li><strong>Multiple Model Options:</strong> Choose between Default, Best, and Karaoke models for different use cases</li>
+                <li><strong>AI-Powered Separation:</strong> Uses ONNX neural network models for accurate
+                    vocal/instrumental separation</li>
+                <li><strong>Multiple Model Options:</strong> Choose between Default, Best, and Karaoke models for
+                    different use cases</li>
                 <li><strong>GPU Acceleration:</strong> Automatic CUDA support for faster processing when available</li>
-                <li><strong>Chunked Processing:</strong> Handles long audio files with configurable chunk sizes and overlap margins</li>
+                <li><strong>Chunked Processing:</strong> Handles long audio files with configurable chunk sizes and
+                    overlap margins</li>
                 <li><strong>Noise Reduction:</strong> Optional advanced denoising for cleaner results</li>
                 <li><strong>Progress Tracking:</strong> Real-time progress updates with detailed status information</li>
             </ul>
@@ -70,25 +79,30 @@
             <div class="feature-grid">
                 <div class="feature-card">
                     <h4>AI Model Selection</h4>
-                    <p>Three pre-trained models optimized for different scenarios: Default for balanced quality and speed, Best for maximum quality, and Karaoke for preserving background vocals.</p>
+                    <p>Three pre-trained models optimized for different scenarios: Default for balanced quality and
+                        speed, Best for maximum quality, and Karaoke for preserving background vocals.</p>
                 </div>
                 <div class="feature-card">
                     <h4>STFT Processing</h4>
-                    <p>Short-Time Fourier Transform based processing with configurable FFT size, Hanning window, and frequency/time dimensions for precise spectral analysis.</p>
+                    <p>Short-Time Fourier Transform based processing with configurable FFT size, Hanning window, and
+                        frequency/time dimensions for precise spectral analysis.</p>
                 </div>
                 <div class="feature-card">
                     <h4>Smart Chunking</h4>
-                    <p>Intelligent audio segmentation with overlapping margins for seamless processing of files of any length without memory constraints.</p>
+                    <p>Intelligent audio segmentation with overlapping margins for seamless processing of files of any
+                        length without memory constraints.</p>
                 </div>
                 <div class="feature-card">
                     <h4>Hardware Acceleration</h4>
-                    <p>Automatic detection and utilization of CUDA-enabled GPUs for significantly faster processing, with CPU fallback for compatibility.</p>
+                    <p>Automatic detection and utilization of CUDA-enabled GPUs for significantly faster processing,
+                        with CPU fallback for compatibility.</p>
                 </div>
             </div>
 
             <h2 id="service">SimpleAudioSeparationService Class</h2>
             <p>
-                The <code>SimpleAudioSeparationService</code> class provides the core functionality for audio separation.
+                The <code>SimpleAudioSeparationService</code> class provides the core functionality for audio
+                separation.
             </p>
 
             <div class="code-block">
@@ -250,7 +264,8 @@ Console.WriteLine($"Processing time: {result.ProcessingTime}");</code></pre>
 
             <h3>Available Models</h3>
             <p>
-                Three built-in models optimized for different use cases, each embedded in the library for seamless usage:
+                Three built-in models optimized for different use cases, each embedded in the library for seamless
+                usage:
             </p>
 
             <table class="api-table">
@@ -267,19 +282,22 @@ Console.WriteLine($"Processing time: {result.ProcessingTime}");</code></pre>
                         <td><code>Default</code></td>
                         <td>Good</td>
                         <td>Fast</td>
-                        <td>General purpose separation with balanced quality and processing time. Ideal for quick previews and batch processing.</td>
+                        <td>General purpose separation with balanced quality and processing time. Ideal for quick
+                            previews and batch processing.</td>
                     </tr>
                     <tr>
                         <td><code>Best</code></td>
                         <td>Excellent</td>
                         <td>Slower</td>
-                        <td>Maximum quality separation for professional applications. Produces the cleanest vocal and instrumental tracks with minimal artifacts.</td>
+                        <td>Maximum quality separation for professional applications. Produces the cleanest vocal and
+                            instrumental tracks with minimal artifacts.</td>
                     </tr>
                     <tr>
                         <td><code>Karaoke</code></td>
                         <td>Specialized</td>
                         <td>Medium</td>
-                        <td>Removes lead vocals while preserving background vocals. Perfect for creating karaoke tracks with choir or backing vocal presence.</td>
+                        <td>Removes lead vocals while preserving background vocals. Perfect for creating karaoke tracks
+                            with choir or backing vocal presence.</td>
                     </tr>
                 </tbody>
             </table>
@@ -310,9 +328,15 @@ var options4 = new SimpleSeparationOptions
 
             <h3>Model Characteristics</h3>
             <ul>
-                <li><strong>Default Model:</strong> The most balanced option, providing good quality separation with relatively fast processing times. Suitable for most use cases where a reasonable quality-speed tradeoff is acceptable.</li>
-                <li><strong>Best Model:</strong> Utilizes a larger and more complex neural network architecture, resulting in superior separation quality with cleaner vocals and instrumental tracks. Processing time is approximately 2-3x longer than the Default model.</li>
-                <li><strong>Karaoke Model:</strong> Specifically trained to remove only the lead vocal while preserving backing vocals, harmonies, and vocal effects. This creates a more authentic karaoke experience compared to complete vocal removal.</li>
+                <li><strong>Default Model:</strong> The most balanced option, providing good quality separation with
+                    relatively fast processing times. Suitable for most use cases where a reasonable quality-speed
+                    tradeoff is acceptable.</li>
+                <li><strong>Best Model:</strong> Utilizes a larger and more complex neural network architecture,
+                    resulting in superior separation quality with cleaner vocals and instrumental tracks. Processing
+                    time is approximately 2-3x longer than the Default model.</li>
+                <li><strong>Karaoke Model:</strong> Specifically trained to remove only the lead vocal while preserving
+                    backing vocals, harmonies, and vocal effects. This creates a more authentic karaoke experience
+                    compared to complete vocal removal.</li>
             </ul>
 
             <h2 id="configuration">Advanced Configuration</h2>
@@ -334,32 +358,38 @@ var options4 = new SimpleSeparationOptions
                     <tr>
                         <td><code>ChunkSizeSeconds</code></td>
                         <td>15</td>
-                        <td>Length of each processing chunk in seconds. Smaller values use less memory but increase processing overhead.</td>
+                        <td>Length of each processing chunk in seconds. Smaller values use less memory but increase
+                            processing overhead.</td>
                     </tr>
                     <tr>
                         <td><code>Margin</code></td>
                         <td>44100</td>
-                        <td>Overlap margin in samples between chunks. Prevents artifacts at chunk boundaries. Should be at least 0.5 seconds.</td>
+                        <td>Overlap margin in samples between chunks. Prevents artifacts at chunk boundaries. Should be
+                            at least 0.5 seconds.</td>
                     </tr>
                     <tr>
                         <td><code>NFft</code></td>
                         <td>6144</td>
-                        <td>FFT size for spectral analysis. Higher values provide better frequency resolution but increase computation time.</td>
+                        <td>FFT size for spectral analysis. Higher values provide better frequency resolution but
+                            increase computation time.</td>
                     </tr>
                     <tr>
                         <td><code>DimF</code></td>
                         <td>2048</td>
-                        <td>Frequency dimension for model input. Auto-detected from model metadata if not specified.</td>
+                        <td>Frequency dimension for model input. Auto-detected from model metadata if not specified.
+                        </td>
                     </tr>
                     <tr>
                         <td><code>DimT</code></td>
                         <td>8</td>
-                        <td>Time dimension as power of 2 (2^8 = 256 time frames). Auto-detected from model metadata if not specified.</td>
+                        <td>Time dimension as power of 2 (2^8 = 256 time frames). Auto-detected from model metadata if
+                            not specified.</td>
                     </tr>
                     <tr>
                         <td><code>DisableNoiseReduction</code></td>
                         <td>false</td>
-                        <td>When false, applies advanced noise reduction using phase inversion technique for cleaner results.</td>
+                        <td>When false, applies advanced noise reduction using phase inversion technique for cleaner
+                            results.</td>
                     </tr>
                 </tbody>
             </table>
@@ -706,7 +736,8 @@ var result = service.Separate("test.wav");</code></pre>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <script>
         // Active sidebar navigation
         const sections = document.querySelectorAll('h2[id], h3[id]');
@@ -744,4 +775,5 @@ var result = service.Separate("test.wav");</code></pre>
         });
     </script>
 </body>
+
 </html>

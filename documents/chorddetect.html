@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
     <link rel="stylesheet" href="docs.css">
 </head>
+
 <body>
     <nav class="nav">
         <div class="nav-container">
@@ -17,9 +19,10 @@
                 <li><a href="api-net.html">NET API</a></li>
                 <li><a href="examples.html">Examples</a></li>
                 <li><a href="effects.html">Effects</a></li>
-                <li><a href="matchering.html">Matchering</a></li>
-                <li><a href="vocalremover.html">Vocal Remover</a></li>
-                <li><a href="chorddetect.html" class="active">Chord Detection</a></li>
+                <li><a href="networksync.html">Net Sync</a></li>
+                <li><a href="matchering.html">Mastering</a></li>
+                <li><a href="vocalremover.html">Vocal Sep</a></li>
+                <li><a href="chorddetect.html" class="active">Chords</a></li>
                 <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
             </ul>
         </div>
@@ -42,7 +45,8 @@
         <main class="content">
             <h1><span class="badge badge-net">NET</span> OwnChordDetect API Reference</h1>
             <p>
-                Advanced musical chord detection and analysis library with support for real-time and file-based processing.
+                Advanced musical chord detection and analysis library with support for real-time and file-based
+                processing.
                 Features key detection, extended chord recognition, and configurable detection modes.
             </p>
 
@@ -59,7 +63,8 @@
             <ul>
                 <li><strong>File-based analysis</strong> - Detect chords from audio files with timing information</li>
                 <li><strong>Real-time detection</strong> - Process notes as they come in for live applications</li>
-                <li><strong>Key detection</strong> - Automatic musical key detection using Krumhansl-Schmuckler algorithm</li>
+                <li><strong>Key detection</strong> - Automatic musical key detection using Krumhansl-Schmuckler
+                    algorithm</li>
                 <li><strong>Extended chords</strong> - Support for 7th, 9th, 11th, 13th, sus, dim, aug chords</li>
                 <li><strong>Multiple detection modes</strong> - Basic, Extended, Optimized, and KeyAware modes</li>
                 <li><strong>Configurable sensitivity</strong> - Adjustable confidence and ambiguity thresholds</li>
@@ -825,7 +830,8 @@ foreach (var kvp in templates.Take(10))
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <script>
         // Active sidebar navigation
         const sections = document.querySelectorAll('h2[id], h3[id]');
@@ -863,4 +869,5 @@ foreach (var kvp in templates.Take(10))
         });
     </script>
 </body>
+
 </html>
