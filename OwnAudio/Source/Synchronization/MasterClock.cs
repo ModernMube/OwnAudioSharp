@@ -56,6 +56,13 @@ namespace Ownaudio.Synchronization
         public int Channels => _channels;
 
         /// <summary>
+        /// Gets or sets whether the clock is controlled by network synchronization.
+        /// When true, the clock is synchronized from network (client mode).
+        /// When false, the clock advances normally (server or standalone mode).
+        /// </summary>
+        public bool IsNetworkControlled { get; set; }
+
+        /// <summary>
         /// Initializes a new instance of the MasterClock class.
         /// </summary>
         /// <param name="sampleRate">Sample rate in Hz (typically 48000)</param>
@@ -192,6 +199,18 @@ namespace Ownaudio.Synchronization
         /// Offline mode: Blocking, waits for all tracks to be ready.
         /// Used for deterministic rendering to file.
         /// </summary>
-        Offline
+        Offline,
+
+        /// <summary>
+        /// Network server mode: Acts as timing source for network synchronization.
+        /// Uses internal timer and broadcasts to clients.
+        /// </summary>
+        NetworkServer,
+
+        /// <summary>
+        /// Network client mode: Synchronizes with network server.
+        /// Receives timing updates from server.
+        /// </summary>
+        NetworkClient
     }
 }

@@ -11,11 +11,12 @@ OwnAudioSharp is a professional-grade audio engine providing high-performance au
 - **Multi-format Support**: Built-in decoders for MP3, WAV, and FLAC
 - **Real-time Processing**: Zero-allocation design with lock-free buffers for professional-grade performance
 - **Advanced Audio Features**:
+  - **Network Synchronization**: Multi-device audio sync across local network (< 5ms accuracy on LAN)
+  - **Master Clock**: Sample-accurate timeline synchronization for multi-track playback
+  - **SmartMaster Effect**: Intelligent audio mastering with auto-calibration
   - AI-powered vocal removal (ONNX-based neural separation)
   - Audio matchering and mastering
   - Real-time chord detection
-  - **Master Clock Synchronization**: Timeline-based multi-track playback with drift correction
-  - **SmartMaster Effect**: Intelligent audio mastering with auto-calibration and factory presets for different speaker systems
   - Built-in effects and DSP routines
 
 ## Quick Start
@@ -50,6 +51,18 @@ backing.AttachToClock(mixer.MasterClock);
 // Start sources individually
 vocals.Play();
 backing.Play();
+
+// Network Synchronization - Multi-Device Audio
+// Server mode (control device)
+await OwnaudioNet.StartNetworkSyncServerAsync(port: 9876);
+
+// Client mode (follower devices)
+await OwnaudioNet.StartNetworkSyncClientAsync(
+    serverAddress: "192.168.1.100",  // Or null for auto-discovery
+    allowOfflinePlayback: true);
+
+// All clients automatically follow server commands
+// Perfect for multi-room audio, DJ setups, installations
 
 // AI Vocal Removal
 var options = new SimpleSeparationOptions 

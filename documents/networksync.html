@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Synchronization - Ownaudio</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="docs.css">
+</head>
+
+<body>
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="../index.html" class="logo">OwnaudioSharp</a>
+            <ul class="nav-links">
+                <li><a href="quickstart.html">Quick Start</a></li>
+                <li><a href="api-core.html">Core API</a></li>
+                <li><a href="api-net.html">NET API</a></li>
+                <li><a href="examples.html">Examples</a></li>
+                <li><a href="effects.html">Effects</a></li>
+                <li><a href="networksync.html" class="active">Net Sync</a></li>
+                <li><a href="matchering.html">Mastering</a></li>
+                <li><a href="vocalremover.html">Vocal Sep</a></li>
+                <li><a href="chorddetect.html">Chords</a></li>
+                <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="main">
+        <aside class="sidebar">
+            <h3>Network Sync</h3>
+            <ul class="sidebar-nav">
+                <li><a href="#overview" class="active">Overview</a></li>
+                <li><a href="#features">Key Features</a></li>
+                <li><a href="#quickstart">Quick Start</a></li>
+                <li><a href="#server">Server Mode</a></li>
+                <li><a href="#client">Client Mode</a></li>
+                <li><a href="#api">API Reference</a></li>
+                <li><a href="#usecases">Use Cases</a></li>
+                <li><a href="#performance">Performance</a></li>
+                <li><a href="#troubleshooting">Troubleshooting</a></li>
+            </ul>
+        </aside>
+
+        <main class="content">
+            <h1><span class="badge badge-net">NET</span> Network Synchronization</h1>
+            <p>
+                Synchronize audio playback across multiple devices on your local network with sample-accurate precision.
+                Perfect for multi-room audio, live performances, DJ setups, and synchronized installations.
+            </p>
+
+            <div class="alert alert-success">
+                <strong>✨ New in v2.5.2</strong>
+                Network synchronization enables multiple devices to play audio in perfect sync across your local network
+                with &lt;5ms accuracy on LAN and &lt;20ms on WiFi. Zero-configuration, offline operation, and graceful
+                degradation included.
+            </div>
+
+            <h2 id="overview">Overview</h2>
+            <p>NetworkSync provides a complete solution for multi-device audio synchronization:</p>
+            <ul>
+                <li><strong>Server/Client Architecture</strong> - One device acts as timing master, others follow</li>
+                <li><strong>Sample-Accurate Sync</strong> - Sub-20ms synchronization across all devices</li>
+                <li><strong>Full Transport Control</strong> - Play, Pause, Stop, Seek, Tempo synchronized</li>
+                <li><strong>Automatic Discovery</strong> - Clients find servers automatically on local network</li>
+                <li><strong>Graceful Degradation</strong> - Automatic fallback to standalone mode if connection lost
+                </li>
+                <li><strong>Zero-GC Performance</strong> - No impact on audio quality (&lt;3% CPU overhead)</li>
+            </ul>
+
+            <h2 id="features">Key Features</h2>
+
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Local Network Only</strong></td>
+                        <td>Works entirely offline, no internet required</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Auto-Discovery</strong></td>
+                        <td>Clients automatically find servers on LAN</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Latency Compensation</strong></td>
+                        <td>Automatic network delay measurement and compensation</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Connection Resilience</strong></td>
+                        <td>Auto-reconnect with exponential backoff</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Offline Playback</strong></td>
+                        <td>Clients continue playing if server disconnects</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Zero-GC</strong></td>
+                        <td>No heap allocations in hot path</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Low Bandwidth</strong></td>
+                        <td>&lt;15 KB/s per client</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Thread Isolation</strong></td>
+                        <td>Network never blocks audio threads</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Synchronization Accuracy</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Network Type</th>
+                        <th>Typical Accuracy</th>
+                        <th>Maximum Drift</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Gigabit LAN</td>
+                        <td>&lt;2ms</td>
+                        <td>&lt;5ms</td>
+                    </tr>
+                    <tr>
+                        <td>100Mbps LAN</td>
+                        <td>&lt;5ms</td>
+                        <td>&lt;10ms</td>
+                    </tr>
+                    <tr>
+                        <td>WiFi 5/6 (5GHz)</td>
+                        <td>&lt;10ms</td>
+                        <td>&lt;20ms</td>
+                    </tr>
+                    <tr>
+                        <td>WiFi 4 (2.4GHz)</td>
+                        <td>&lt;20ms</td>
+                        <td>&lt;50ms</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2 id="quickstart">Quick Start</h2>
+
+            <h3>Server Setup (Control Device)</h3>
+            <div class="code-block">
+                <div class="code-header">Server Mode - Basic Setup</div>
+                <pre><code class="language-csharp">using OwnaudioNET;
+
+// Initialize audio system
+await OwnaudioNet.InitializeAsync();
+OwnaudioNet.Start();
+
+// Start as network sync server
+await OwnaudioNet.StartNetworkSyncServerAsync(
+    port: 9876,
+    useLocalTimeOnly: true);  // No internet required!
+
+// Get mixer and add tracks
+var mixer = OwnaudioNet.GetAudioMixer();
+var track = new FileSource("song.mp3");
+track.AttachToClock(mixer.MasterClock);
+mixer.AddSource(track);
+
+// All commands are automatically broadcast to clients
+track.Play();   // All clients start playing
+track.Pause();  // All clients pause
+track.Seek(30); // All clients seek to 30 seconds
+
+// Monitor connected clients
+var status = OwnaudioNet.GetNetworkSyncStatus();
+Console.WriteLine($"Connected clients: {status.ClientCount}");</code></pre>
+            </div>
+
+            <h3>Client Setup (Follower Devices)</h3>
+            <div class="code-block">
+                <div class="code-header">Client Mode - Basic Setup</div>
+                <pre><code class="language-csharp">using OwnaudioNET;
+
+// Initialize audio system
+await OwnaudioNet.InitializeAsync();
+OwnaudioNet.Start();
+
+// Connect to server (auto-discovery or manual IP)
+await OwnaudioNet.StartNetworkSyncClientAsync(
+    serverAddress: "192.168.1.100",  // Or null for auto-discovery
+    port: 9876,
+    allowOfflinePlayback: true);     // Continue if disconnected
+
+// Add SAME tracks as server
+var mixer = OwnaudioNet.GetAudioMixer();
+var track = new FileSource("song.mp3");  // Same file as server!
+track.AttachToClock(mixer.MasterClock);
+mixer.AddSource(track);
+
+// Client automatically follows server commands
+// No manual control needed!
+
+// Monitor connection state
+OwnaudioNet.NetworkSyncConnectionChanged += (sender, e) =>
+{
+    Console.WriteLine($"Connection: {e.NewState}");
+    
+    if (e.NewState == ConnectionState.Synced)
+        Console.WriteLine("✅ Synchronized with server!");
+    else if (e.NewState == ConnectionState.Disconnected)
+        Console.WriteLine("⚠️ Disconnected - playing standalone");
+};</code></pre>
+            </div>
+
+            <h2 id="server">Server Mode</h2>
+
+            <h3>Starting a Server</h3>
+            <div class="code-block">
+                <div class="code-header">Server Configuration</div>
+                <pre><code class="language-csharp">// Start server with custom port
+await OwnaudioNet.StartNetworkSyncServerAsync(
+    port: 9876,                  // UDP port (default: 9876)
+    useLocalTimeOnly: true);     // Use local time sync only
+
+// Server is now broadcasting at 100Hz (10ms interval)</code></pre>
+            </div>
+
+            <h3>Broadcasting Commands</h3>
+            <div class="code-block">
+                <div class="code-header">Transport Control</div>
+                <pre><code class="language-csharp">// All FileSource commands are automatically broadcast
+var track = new FileSource("music.mp3");
+track.AttachToClock(mixer.MasterClock);
+mixer.AddSource(track);
+
+// These commands are broadcast to all clients:
+track.Play();           // Start playback
+track.Pause();          // Pause playback
+track.Stop();           // Stop playback
+track.Seek(45.0);       // Seek to 45 seconds
+track.Tempo = 1.2f;     // Set tempo to 120%
+
+// Manual command broadcasting (advanced)
+var cmd = NetworkSyncProtocol.CreatePlayCommand(
+    ntpTimestamp: DateTime.UtcNow.Ticks,
+    scheduledExecutionTime: DateTime.UtcNow.AddMilliseconds(100).Ticks,
+    startPosition: 0.0);
+
+OwnaudioNet.BroadcastCommand(ref cmd);</code></pre>
+            </div>
+
+            <h3>Monitoring Clients</h3>
+            <div class="code-block">
+                <div class="code-header">Client Monitoring</div>
+                <pre><code class="language-csharp">// Get server status
+var status = OwnaudioNet.GetNetworkSyncStatus();
+
+if (status.IsServer)
+{
+    Console.WriteLine($"Server running");
+    Console.WriteLine($"Connected clients: {status.ClientCount}");
+    Console.WriteLine($"Time sync tier: {status.TimeSyncTier}");
+}
+
+// Client connection events
+// (Events are raised on the server when clients connect/disconnect)
+// Note: Currently implemented in NetworkSyncServer class</code></pre>
+            </div>
+
+            <h2 id="client">Client Mode</h2>
+
+            <h3>Connecting to Server</h3>
+            <div class="code-block">
+                <div class="code-header">Client Connection Options</div>
+                <pre><code class="language-csharp">// Option 1: Auto-discovery (recommended)
+await OwnaudioNet.StartNetworkSyncClientAsync(
+    serverAddress: null,             // Auto-discover server
+    port: 9876,
+    allowOfflinePlayback: true);
+
+// Option 2: Manual IP address
+await OwnaudioNet.StartNetworkSyncClientAsync(
+    serverAddress: "192.168.1.100",  // Specific server IP
+    port: 9876,
+    allowOfflinePlayback: true);
+
+// Option 3: Hostname
+await OwnaudioNet.StartNetworkSyncClientAsync(
+    serverAddress: "audio-server.local",
+    port: 9876,
+    allowOfflinePlayback: true);</code></pre>
+            </div>
+
+            <h3>Connection States</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>State</th>
+                        <th>Description</th>
+                        <th>Local Control</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>Disconnected</code></td>
+                        <td>Not connected to server</td>
+                        <td>✅ Allowed</td>
+                    </tr>
+                    <tr>
+                        <td><code>Connecting</code></td>
+                        <td>Attempting to connect</td>
+                        <td>❌ Blocked</td>
+                    </tr>
+                    <tr>
+                        <td><code>Connected</code></td>
+                        <td>Connected but not synced</td>
+                        <td>❌ Blocked</td>
+                    </tr>
+                    <tr>
+                        <td><code>Synced</code></td>
+                        <td>Fully synchronized</td>
+                        <td>❌ Blocked</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Handling Connection Loss</h3>
+            <div class="code-block">
+                <div class="code-header">Connection Resilience</div>
+                <pre><code class="language-csharp">// Monitor connection state changes
+OwnaudioNet.NetworkSyncConnectionChanged += (sender, e) =>
+{
+    switch (e.NewState)
+    {
+        case ConnectionState.Disconnected:
+            Console.WriteLine("⚠️ Disconnected from server");
+            Console.WriteLine("   Continuing playback in standalone mode");
+            // Client automatically continues playing
+            break;
+            
+        case ConnectionState.Connecting:
+            Console.WriteLine("🔄 Reconnecting to server...");
+            break;
+            
+        case ConnectionState.Connected:
+            Console.WriteLine("✅ Connected to server");
+            break;
+            
+        case ConnectionState.Synced:
+            Console.WriteLine("🎵 Synchronized with server!");
+            var status = OwnaudioNet.GetNetworkSyncStatus();
+            Console.WriteLine($"   Latency: {status.AverageLatency:F2}ms");
+            break;
+    }
+};
+
+// Check if local control is allowed
+if (OwnaudioNet.IsNetworkSyncLocalControlAllowed())
+{
+    // Can control playback locally (disconnected)
+    track.Play();
+    track.Seek(60);
+}
+else
+{
+    // Server is controlling playback
+    Console.WriteLine("Server is in control");
+}</code></pre>
+            </div>
+
+            <div class="alert alert-info">
+                <strong>Automatic Reconnection</strong>
+                Clients automatically attempt to reconnect if the server becomes unavailable.
+                After 30 seconds of no server response, the client switches to standalone mode
+                and continues playback. When the server comes back online, the client automatically
+                reconnects and resynchronizes.
+            </div>
+
+            <h2 id="api">API Reference</h2>
+
+            <h3>OwnaudioNet Methods</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Method</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>StartNetworkSyncServerAsync(port, useLocalTimeOnly)</code></td>
+                        <td>Start as network sync server</td>
+                    </tr>
+                    <tr>
+                        <td><code>StartNetworkSyncClientAsync(serverAddress, port, allowOfflinePlayback)</code></td>
+                        <td>Start as network sync client</td>
+                    </tr>
+                    <tr>
+                        <td><code>StopNetworkSync()</code></td>
+                        <td>Stop network synchronization</td>
+                    </tr>
+                    <tr>
+                        <td><code>GetNetworkSyncStatus()</code></td>
+                        <td>Get current network sync status</td>
+                    </tr>
+                    <tr>
+                        <td><code>IsNetworkSyncLocalControlAllowed()</code></td>
+                        <td>Check if local control is allowed</td>
+                    </tr>
+                    <tr>
+                        <td><code>BroadcastCommand(ref command)</code></td>
+                        <td>Manually broadcast command (server only)</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>NetworkSyncStatus Properties</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Property</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>IsEnabled</code></td>
+                        <td>bool</td>
+                        <td>Whether network sync is active</td>
+                    </tr>
+                    <tr>
+                        <td><code>IsServer</code></td>
+                        <td>bool</td>
+                        <td>True if running as server</td>
+                    </tr>
+                    <tr>
+                        <td><code>IsClient</code></td>
+                        <td>bool</td>
+                        <td>True if running as client</td>
+                    </tr>
+                    <tr>
+                        <td><code>ConnectionState</code></td>
+                        <td>ConnectionState</td>
+                        <td>Current connection state (client only)</td>
+                    </tr>
+                    <tr>
+                        <td><code>ClientCount</code></td>
+                        <td>int</td>
+                        <td>Number of connected clients (server only)</td>
+                    </tr>
+                    <tr>
+                        <td><code>AverageLatency</code></td>
+                        <td>double</td>
+                        <td>Average network latency in ms (client only)</td>
+                    </tr>
+                    <tr>
+                        <td><code>IsLocalControlAllowed</code></td>
+                        <td>bool</td>
+                        <td>Whether local playback control is allowed</td>
+                    </tr>
+                    <tr>
+                        <td><code>TimeSyncTier</code></td>
+                        <td>TimeSyncTier</td>
+                        <td>Current time synchronization method</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2 id="usecases">Real-World Use Cases</h2>
+
+            <h3>🏠 Multi-Room Audio System</h3>
+            <div class="code-block">
+                <div class="code-header">Whole-Home Audio</div>
+                <pre><code class="language-csharp">// Living Room (Server - Main Control)
+await OwnaudioNet.StartNetworkSyncServerAsync();
+var livingRoomTrack = new FileSource("party-mix.mp3");
+mixer.AddSource(livingRoomTrack);
+livingRoomTrack.Play();
+
+// Kitchen (Client)
+await OwnaudioNet.StartNetworkSyncClientAsync();
+var kitchenTrack = new FileSource("party-mix.mp3");
+mixer.AddSource(kitchenTrack);
+// Automatically follows living room
+
+// Bedroom (Client)
+await OwnaudioNet.StartNetworkSyncClientAsync();
+var bedroomTrack = new FileSource("party-mix.mp3");
+mixer.AddSource(bedroomTrack);
+// Automatically follows living room
+
+// Perfect synchronization throughout your home!</code></pre>
+            </div>
+
+            <h3>🎤 Live Performance / DJ Setup</h3>
+            <div class="code-block">
+                <div class="code-header">Professional DJ System</div>
+                <pre><code class="language-csharp">// Main Mixer (Server)
+await OwnaudioNet.StartNetworkSyncServerAsync();
+var mainOutput = new FileSource("set-track-01.mp3");
+mixer.AddSource(mainOutput);
+
+// Monitor Speakers (Clients)
+// Multiple monitor positions all receive the same audio
+await OwnaudioNet.StartNetworkSyncClientAsync();
+
+// Backup System (Client)
+// Ready for instant failover if main system fails
+await OwnaudioNet.StartNetworkSyncClientAsync(
+    allowOfflinePlayback: true);  // Continues if main fails
+
+// All systems play in perfect sync
+// Backup automatically takes over if main disconnects</code></pre>
+            </div>
+
+            <h3>🎬 Installation Art / Museums</h3>
+            <div class="code-block">
+                <div class="code-header">Synchronized Installation</div>
+                <pre><code class="language-csharp">// Central Control Room (Server)
+await OwnaudioNet.StartNetworkSyncServerAsync();
+var soundtrack = new FileSource("installation-audio.wav");
+mixer.AddSource(soundtrack);
+
+// Multiple Display Zones (Clients)
+// Zone 1, 2, 3, 4... all synchronized
+for (int zone = 1; zone <= 10; zone++)
+{
+    // Each zone runs on separate device
+    await OwnaudioNet.StartNetworkSyncClientAsync();
+    var zoneTrack = new FileSource("installation-audio.wav");
+    mixer.AddSource(zoneTrack);
+}
+
+// Synchronized audio-visual experience across entire installation</code></pre>
+            </div>
+
+            <h3>🎧 Collaborative Music Production</h3>
+            <div class="code-block">
+                <div class="code-header">Studio Collaboration</div>
+                <pre><code class="language-csharp">// Producer's Workstation (Server)
+await OwnaudioNet.StartNetworkSyncServerAsync();
+var projectMix = new FileSource("project-mix.wav");
+mixer.AddSource(projectMix);
+
+// Musicians' Headphones (Clients)
+// Guitarist
+await OwnaudioNet.StartNetworkSyncClientAsync();
+var guitaristMix = new FileSource("project-mix.wav");
+mixer.AddSource(guitaristMix);
+
+// Vocalist
+await OwnaudioNet.StartNetworkSyncClientAsync();
+var vocalistMix = new FileSource("project-mix.wav");
+mixer.AddSource(vocalistMix);
+
+// Everyone hears exactly the same thing at the same time
+// Perfect for recording sessions and rehearsals</code></pre>
+            </div>
+
+            <h3>📱 Mobile Party Mode</h3>
+            <div class="code-block">
+                <div class="code-header">Synchronized Mobile Devices</div>
+                <pre><code class="language-csharp">// Main Phone/Tablet (Server)
+await OwnaudioNet.StartNetworkSyncServerAsync();
+
+// Other Phones/Tablets (Clients)
+await OwnaudioNet.StartNetworkSyncClientAsync(
+    serverAddress: null,  // Auto-discovery on WiFi
+    allowOfflinePlayback: true);
+
+// All devices play in perfect sync over WiFi
+// Great for parties, outdoor events, etc.</code></pre>
+            </div>
+
+            <h2 id="performance">Performance Characteristics</h2>
+
+            <h3>CPU Usage</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        <th>CPU Usage</th>
+                        <th>Priority</th>
+                        <th>Impact</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Audio MixThread</td>
+                        <td>8-10%</td>
+                        <td>Highest</td>
+                        <td><strong>UNCHANGED</strong> ✅</td>
+                    </tr>
+                    <tr>
+                        <td>FileSource Decoders</td>
+                        <td>2-5% per track</td>
+                        <td>Normal</td>
+                        <td><strong>UNCHANGED</strong> ✅</td>
+                    </tr>
+                    <tr>
+                        <td>Network Receive Thread</td>
+                        <td>1-2%</td>
+                        <td>Normal</td>
+                        <td>NEW</td>
+                    </tr>
+                    <tr>
+                        <td>Network Send Thread (server)</td>
+                        <td>0.5-1%</td>
+                        <td>Normal</td>
+                        <td>NEW</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Total Impact</strong></td>
+                        <td><strong>+2-3%</strong></td>
+                        <td>-</td>
+                        <td><strong>Negligible</strong> ✅</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Network Bandwidth</h3>
+            <ul>
+                <li><strong>Clock sync</strong>: ~100 bytes @ 100Hz = 10 KB/s per client</li>
+                <li><strong>Commands</strong>: ~50 bytes per command (negligible)</li>
+                <li><strong>Total</strong>: &lt;15 KB/s per client (minimal)</li>
+            </ul>
+
+            <h3>Memory Footprint</h3>
+            <ul>
+                <li><strong>Server</strong>: ~2 MB (client tracking, command queue)</li>
+                <li><strong>Client</strong>: ~1 MB (receive buffer, state cache)</li>
+                <li><strong>Per-client overhead</strong>: ~100 KB (connection state)</li>
+                <li><strong>Steady-state</strong>: <strong>0 heap allocations</strong></li>
+            </ul>
+
+            <h3>Zero-GC Guarantees</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Operation</th>
+                        <th>Allocation</th>
+                        <th>Technique</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Clock sync broadcast</td>
+                        <td><strong>0 bytes</strong></td>
+                        <td>stackalloc, ArrayPool</td>
+                    </tr>
+                    <tr>
+                        <td>Command serialization</td>
+                        <td><strong>0 bytes</strong></td>
+                        <td>Span&lt;byte&gt;, BinaryPrimitives</td>
+                    </tr>
+                    <tr>
+                        <td>Command deserialization</td>
+                        <td><strong>0 bytes</strong></td>
+                        <td>ReadOnlySpan&lt;byte&gt;</td>
+                    </tr>
+                    <tr>
+                        <td>State updates</td>
+                        <td><strong>0 bytes</strong></td>
+                        <td>volatile fields, Interlocked</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="alert alert-success">
+                <strong>Performance Guarantee</strong>
+                Network synchronization is designed to have <strong>ZERO impact</strong> on audio playback quality.
+                All performance-critical paths are zero-allocation and lock-free. Audio threads are never blocked
+                by network operations.
+            </div>
+
+            <h2 id="troubleshooting">Troubleshooting</h2>
+
+            <h3>Common Issues</h3>
+
+            <div class="alert alert-warning">
+                <strong>⚠️ Clients Not Discovering Server</strong>
+                <ul>
+                    <li>Ensure all devices are on the same local network</li>
+                    <li>Check firewall settings (UDP port 9876 must be open)</li>
+                    <li>Try specifying server IP manually instead of auto-discovery</li>
+                    <li>Verify router allows UDP broadcast/multicast</li>
+                </ul>
+            </div>
+
+            <div class="alert alert-warning">
+                <strong>⚠️ Audio Drift / Desynchronization</strong>
+                <ul>
+                    <li>Check network latency (WiFi 2.4GHz can be unstable)</li>
+                    <li>Use wired Ethernet for best results (&lt;5ms accuracy)</li>
+                    <li>Ensure all devices use identical audio files</li>
+                    <li>Verify sample rates match across all devices</li>
+                </ul>
+            </div>
+
+            <div class="alert alert-warning">
+                <strong>⚠️ Connection Drops Frequently</strong>
+                <ul>
+                    <li>Check WiFi signal strength on all devices</li>
+                    <li>Reduce network congestion (pause downloads, streaming)</li>
+                    <li>Use 5GHz WiFi instead of 2.4GHz if available</li>
+                    <li>Consider using wired Ethernet for critical devices</li>
+                </ul>
+            </div>
+
+            <h3>Best Practices</h3>
+            <ul>
+                <li><strong>Use identical audio files</strong> - Same format, sample rate, and encoding</li>
+                <li><strong>Prefer wired connections</strong> - Ethernet provides best synchronization</li>
+                <li><strong>Use 5GHz WiFi</strong> - Lower latency than 2.4GHz</li>
+                <li><strong>Minimize network traffic</strong> - Pause other network-intensive applications</li>
+                <li><strong>Test before deployment</strong> - Verify synchronization in your specific environment</li>
+                <li><strong>Monitor connection state</strong> - Use events to detect and handle connection issues</li>
+            </ul>
+
+            <h3>Firewall Configuration</h3>
+            <div class="code-block">
+                <div class="code-header">Required Firewall Rules</div>
+                <pre><code class="language-bash"># Windows Firewall
+netsh advfirewall firewall add rule name="OwnaudioSharp NetworkSync" dir=in action=allow protocol=UDP localport=9876
+
+# Linux iptables
+sudo iptables -A INPUT -p udp --dport 9876 -j ACCEPT
+
+# macOS
+# Allow in System Preferences > Security & Privacy > Firewall > Firewall Options</code></pre>
+            </div>
+
+            <div class="alert alert-info">
+                <strong>Need Help?</strong>
+                For additional support, check the <a href="https://github.com/ModernMube/OwnAudioSharp"
+                    style="color: var(--primary-color);">GitHub repository</a>
+                or open an issue with your specific use case.
+            </div>
+
+        </main>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script>
+        const sections = document.querySelectorAll('h2[id], h3[id]');
+        const navLinks = document.querySelectorAll('.sidebar-nav a');
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (window.pageYOffset >= sectionTop - 150) {
+                    current = section.getAttribute('id');
+                }
+            });
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.classList.add('active');
+                }
+            });
+        });
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
     <link rel="stylesheet" href="docs.css">
 </head>
+
 <body>
     <nav class="nav">
         <div class="nav-container">
@@ -17,9 +19,10 @@
                 <li><a href="api-net.html">NET API</a></li>
                 <li><a href="examples.html">Examples</a></li>
                 <li><a href="effects.html">Effects</a></li>
-				<li><a href="matchering.html">Matchering</a></li>
-                <li><a href="vocalremover.html">Vocal Remover</a></li>
-                <li><a href="chorddetect.html">Chord Detection</a></li>
+                <li><a href="networksync.html">Net Sync</a></li>
+                <li><a href="matchering.html">Mastering</a></li>
+                <li><a href="vocalremover.html">Vocal Sep</a></li>
+                <li><a href="chorddetect.html">Chords</a></li>
                 <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
             </ul>
         </div>
@@ -48,9 +51,12 @@
 
             <div class="alert alert-warning">
                 <strong>🚀 Native Engine (Default)</strong>
-                The native C++ engine is now the default, providing GC-free, glitch-free audio. Despite extensive optimization
-                efforts with managed code (zero-allocation design, lock-free structures), the .NET Garbage Collector proved to be
-                an insurmountable challenge for real-time audio. The managed engines remain available for development/testing.
+                The native C++ engine is now the default, providing GC-free, glitch-free audio. Despite extensive
+                optimization
+                efforts with managed code (zero-allocation design, lock-free structures), the .NET Garbage Collector
+                proved to be
+                an insurmountable challenge for real-time audio. The managed engines remain available for
+                development/testing.
             </div>
 
             <div class="alert alert-info">
@@ -65,7 +71,8 @@
             </p>
             <ul>
                 <li><strong>Native C++ engine (default)</strong> - GC-free, deterministic real-time audio</li>
-                <li><strong>Managed C# engines (optional)</strong> - Pure C# implementations for testing/development</li>
+                <li><strong>Managed C# engines (optional)</strong> - Pure C# implementations for testing/development
+                </li>
                 <li><strong>Platform-native APIs</strong> for optimal performance</li>
                 <li><strong>Built-in decoders</strong> for WAV, MP3, and FLAC</li>
                 <li><strong>Device management</strong> with hot-plug support</li>
@@ -260,7 +267,8 @@ engine.Stop();</code></pre>
             </div>
 
             <h3>IAudioDecoder</h3>
-            <p>Audio file decoder interface for WAV, MP3, and FLAC formats, designed for high-performance, zero-allocation reading.</p>
+            <p>Audio file decoder interface for WAV, MP3, and FLAC formats, designed for high-performance,
+                zero-allocation reading.</p>
 
             <div class="code-block">
                 <div class="code-header">IAudioDecoder Interface</div>
@@ -310,7 +318,8 @@ engine.Stop();</code></pre>
                     <tr>
                         <td><code>ReadFrames(byte[] buffer)</code></td>
                         <td>AudioDecoderResult</td>
-                        <td><span class="badge badge-success">Recommended</span> Reads audio into a pre-allocated buffer. Zero-allocation.</td>
+                        <td><span class="badge badge-success">Recommended</span> Reads audio into a pre-allocated
+                            buffer. Zero-allocation.</td>
                     </tr>
                     <tr>
                         <td><code>TrySeek(TimeSpan, out string)</code></td>
@@ -320,7 +329,8 @@ engine.Stop();</code></pre>
                     <tr>
                         <td><code>DecodeNextFrame()</code></td>
                         <td>AudioDecoderResult</td>
-                        <td><span class="badge badge-danger">Obsolete</span> Decodes the next frame, but allocates memory. Use <code>ReadFrames</code> instead.</td>
+                        <td><span class="badge badge-danger">Obsolete</span> Decodes the next frame, but allocates
+                            memory. Use <code>ReadFrames</code> instead.</td>
                     </tr>
                 </tbody>
             </table>
@@ -836,7 +846,8 @@ public enum AudioDeviceState
                         <a href="examples.html" style="color: var(--primary-color);">💡 Code Examples</a>
                     </li>
                     <li style="margin-bottom: 0.5rem;">
-                        <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" style="color: var(--primary-color);">🔗 GitHub Repository</a>
+                        <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank"
+                            style="color: var(--primary-color);">🔗 GitHub Repository</a>
                     </li>
                 </ul>
             </div>
@@ -844,7 +855,8 @@ public enum AudioDeviceState
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <script>
         // Active sidebar navigation
         const sections = document.querySelectorAll('h2[id], h3[id]');
@@ -882,4 +894,5 @@ public enum AudioDeviceState
         });
     </script>
 </body>
+
 </html>

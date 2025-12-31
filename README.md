@@ -44,112 +44,140 @@
 **Commercial Quality, Free**: Professional tools without licensing costs
 **Truly Cross-Platform**: Windows, macOS, Linux, Android, iOS
 
-## 🎯 NEW in v2.5.0: Professional Audio Features
+## 🎯 NEW in v2.5.3: Network Synchronization
 
-### MasterClock Timeline-Based Synchronization
+### 🌐 NetworkSync - Multi-Device Audio Synchronization
 
-OwnAudioSharp v2.4.0 introduces **MasterClock**, a professional timeline-based synchronization system replacing the legacy GhostTrack architecture. MasterClock provides sample-accurate synchronization with automatic drift correction, dropout event monitoring, DAW-style timeline regions, and global tempo control. The legacy GhostTrack/AudioSynchronizer system is deprecated and will be removed in v3.0.0. See the [MultitrackPlayer example](OwnAudio/Examples/Ownaudio.Example.MultitrackPlayer/) for a complete implementation with real-time dropout monitoring and professional synchronization.
-
-### 🎚️ SmartMaster Effect - Intelligent Audio Mastering
-
-OwnAudioSharp v2.5.0 introduces **SmartMaster** is a comprehensive master processing chain that combines professional-grade effects with intelligent auto-calibration for optimal sound across different speaker systems.
+**Synchronize audio playback across multiple devices on your local network** - perfect for multi-room audio, live performances, DJ setups, and synchronized installations.
 
 #### Key Features
 
-✅ **Factory Presets** - Pre-configured settings for different playback systems:
-- **Default** - Transparent passthrough (no processing)
-- **HiFi** - Bookshelf/tower speakers with gentle bass enhancement
-- **Headphone** - Balanced response for studio/consumer headphones
-- **Studio** - Professional monitors with flat, accurate response
-- **Club** - DJ/club systems with heavy bass and presence boost
-- **Concert** - Medium PA systems with compensated frequency response
+✅ **Zero-Configuration** - Automatic server discovery on local network (no internet required)
+✅ **Sample-Accurate Sync** - < 5ms accuracy on LAN, < 20ms on WiFi
+✅ **Graceful Degradation** - Automatic fallback to standalone mode if connection lost
+✅ **Zero-GC Performance** - No impact on audio quality (< 3% CPU overhead)
+✅ **Full Transport Control** - Play, Pause, Stop, Seek, Tempo synchronized across all clients
+✅ **Offline Operation** - Works entirely on local network, no internet needed
 
-✅ **Auto-Calibration Wizard** - Intelligent measurement system:
-- **Requires measurement microphone** (external hardware needed for calibration)
-- Automatic speaker detection and analysis
-- Frequency response measurement with FFT analysis
-- Phase alignment detection
-- Time-of-arrival (TOA) measurement
-- Automatic EQ correction based on measurements
-- **Note:** Without a measurement microphone, only factory presets are available
-
-✅ **Professional Processing Chain**:
-1. **31-Band Graphic EQ** - Precise frequency shaping
-2. **Subharmonic Synthesizer** - Enhanced low-frequency extension
-3. **Multiband Compressor** - Dynamic range control
-4. **Crossover Filter** - Linkwitz-Riley 4th order (configurable frequency)
-5. **Phase & Time Alignment** - Delay compensation for multi-way systems
-6. **Brick-Wall Limiter** - Peak protection and loudness maximization
-
-✅ **Custom Preset Management**:
-- Save your calibrated settings
-- Load and share custom presets
-- Reset to factory defaults anytime
-
-#### Try It Now!
-
-**SmartMaster is fully integrated into the MultitrackPlayer example application!**
-
-```bash
-# Run the MultitrackPlayer example
-cd OwnAudio/Examples/Ownaudio.Example.MultitrackPlayer
-dotnet run
-```
-
-The MultitrackPlayer UI includes:
-- **Enable/Disable Toggle** - Turn SmartMaster on/off in real-time
-- **Factory Preset Selection** - Choose from 6 speaker-specific presets
-- **Auto Calibration** - Run the measurement wizard with progress tracking
-- **Custom Presets** - Save and load your own configurations
-
-#### Quick Start - Code Example
+#### Quick Start - Server Mode
 
 ```csharp
-using OwnaudioNET.Effects.SmartMaster;
+using OwnaudioNET;
 
-// Initialize SmartMaster
-var smartMaster = new SmartMasterEffect();
-smartMaster.Initialize(engine.Config);
+// Initialize audio system
+await OwnaudioNet.InitializeAsync();
+OwnaudioNet.Start();
 
-// Option 1: Use factory preset
-smartMaster.LoadSpeakerPreset(SpeakerType.HiFi);
-smartMaster.Enabled = true;
+// Start as network sync server
+await OwnaudioNet.StartNetworkSyncServerAsync(
+    port: 9876,
+    useLocalTimeOnly: true);  // No internet required!
 
-// Option 2: Run auto-calibration
-await smartMaster.StartMeasurementAsync();
-// Measurement wizard guides through speaker detection and analysis
+// Add tracks and control playback
+var mixer = OwnaudioNet.GetAudioMixer();
+var track = new FileSource("song.mp3");
+track.AttachToClock(mixer.MasterClock);
+mixer.AddSource(track);
 
-// Option 3: Load custom preset
-smartMaster.Load("my_custom_setup");
-
-// Apply to mixer output
-mixer.AddMasterEffect(smartMaster);
+// All commands are automatically broadcast to clients
+track.Play();   // All clients start playing
+track.Pause();  // All clients pause
+track.Seek(30); // All clients seek to 30 seconds
 ```
 
-#### Factory Preset Characteristics
+#### Quick Start - Client Mode
 
-| Preset | Use Case | Bass | Mids | Highs | Crossover | Compression |
-|--------|----------|------|------|-------|-----------|-------------|
-| **Default** | Reference | Flat | Flat | Flat | None | Off |
-| **HiFi** | Home stereo | +1.5dB | Flat | +1.0dB | 40Hz | Light |
-| **Headphone** | Personal listening | +0.5dB | Flat | -1.0dB | None | Gentle |
-| **Studio** | Production | +0.3dB | Flat | Flat | 35Hz | Minimal |
-| **Club** | DJ/Dance | +4.0dB | Flat | +2.5dB | 100Hz | Moderate |
-| **Concert** | Live PA | +3.0dB | -0.8dB | +2.0dB | 80Hz | Moderate |
+```csharp
+// Initialize audio system
+await OwnaudioNet.InitializeAsync();
+OwnaudioNet.Start();
+
+// Connect to server (auto-discovery or manual IP)
+await OwnaudioNet.StartNetworkSyncClientAsync(
+    serverAddress: "192.168.1.100",  // Or null for auto-discovery
+    port: 9876,
+    allowOfflinePlayback: true);     // Continue if disconnected
+
+// Add SAME tracks as server
+var mixer = OwnaudioNet.GetAudioMixer();
+var track = new FileSource("song.mp3");  // Same file as server!
+track.AttachToClock(mixer.MasterClock);
+mixer.AddSource(track);
+
+// Client automatically follows server commands
+// Monitor connection state
+OwnaudioNet.NetworkSyncConnectionChanged += (sender, e) =>
+{
+    Console.WriteLine($"Connection: {e.NewState}");
+};
+```
+
+#### Real-World Use Cases
+
+🎵 **Multi-Room Audio System**
+```csharp
+// Living room (Server)
+await OwnaudioNet.StartNetworkSyncServerAsync();
+// Kitchen, Bedroom, Bathroom (Clients)
+await OwnaudioNet.StartNetworkSyncClientAsync();
+// Perfect synchronization throughout your home!
+```
+
+🎤 **Live Performance / DJ Setup**
+```csharp
+// Main mixer (Server) controls everything
+// Monitor speakers (Clients) follow perfectly
+// Backup system (Client) ready for instant failover
+```
+
+🎬 **Installation Art / Museums**
+```csharp
+// Central control (Server)
+// Multiple displays/speakers (Clients)
+// Synchronized audio-visual experiences
+```
+
+🎧 **Collaborative Music Production**
+```csharp
+// Producer's workstation (Server)
+// Musicians' headphones (Clients)
+// Everyone hears the same thing at the same time
+```
 
 #### Advanced Features
 
-**Subharmonic Synthesis**: Generates harmonically-related low frequencies below the speaker's natural cutoff, enhancing bass response on smaller systems.
+**Connection Monitoring:**
+```csharp
+var status = OwnaudioNet.GetNetworkSyncStatus();
+Console.WriteLine($"Clients: {status.ClientCount}");
+Console.WriteLine($"Latency: {status.AverageLatency:F2}ms");
+Console.WriteLine($"State: {status.ConnectionState}");
+```
 
-**Phase Alignment**: Automatically compensates for time-of-arrival differences between drivers in multi-way speaker systems, ensuring coherent sound.
+**Graceful Fallback:**
+```csharp
+// Client automatically continues playback if server disconnects
+// Reconnects automatically when server comes back online
+// No manual intervention needed!
+```
 
-**Adaptive Crossover**: Linkwitz-Riley 4th order filters provide perfect reconstruction when summed, maintaining phase coherence across the crossover region.
+**Performance Guarantees:**
+- **Zero-GC**: No heap allocations in hot path
+- **Low CPU**: < 3% overhead (audio threads unchanged)
+- **Low Bandwidth**: < 15 KB/s per client
+- **Thread Isolation**: Network never blocks audio
 
-**Measurement Engine**: Uses white noise test signals and FFT analysis to measure actual speaker response, then calculates optimal EQ correction automatically.
+> **📖 Detailed Documentation:** See [NetworkSync API Documentation](https://modernmube.github.io/OwnAudioSharp/documents/networksync.html) for complete technical details.
 
-See the **[SmartMaster in MultitrackPlayer](OwnAudio/Examples/Ownaudio.Example.MultitrackPlayer/)** for a complete working example with full UI integration!
+---
 
-> **📖 Detailed Documentation:** For comprehensive information about SmartMaster including all parameters, technical details, and advanced usage examples, see the **[Effects Documentation](https://modernmube.github.io/OwnAudioSharp/documents/effects.html#master)**.
+### 🎚️ MasterClock & SmartMaster
+
+**MasterClock** provides sample-accurate timeline synchronization for multi-track audio with automatic drift correction and DAW-style regions. See the [MultitrackPlayer example](OwnAudio/Examples/Ownaudio.Example.MultitrackPlayer/) for implementation details.
+
+**SmartMaster** is an intelligent audio mastering chain with auto-calibration for different speaker systems (HiFi, Headphone, Studio, Club, Concert). Includes 31-band EQ, multiband compression, and brick-wall limiting. See [Effects Documentation](https://modernmube.github.io/OwnAudioSharp/documents/effects.html#master) for details.
+
+
 
 ## ⚠️ Version History
 

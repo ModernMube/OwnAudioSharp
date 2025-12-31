@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
+        function gtag() { dataLayer.push(arguments); }
         gtag('js', new Date());
 
         gtag('config', 'G-93P1X5V4Z5');
@@ -16,19 +17,21 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
     <link rel="stylesheet" href="docs.css">
 </head>
+
 <body>
     <nav class="nav">
         <div class="nav-container">
             <a href="../index.html" class="logo">OwnaudioSharp</a>
             <ul class="nav-links">
-				<li><a href="quickstart.html" class="active">Quick Start</a></li>
+                <li><a href="quickstart.html" class="active">Quick Start</a></li>
                 <li><a href="api-core.html">Core API</a></li>
                 <li><a href="api-net.html">NET API</a></li>
                 <li><a href="examples.html">Examples</a></li>
                 <li><a href="effects.html">Effects</a></li>
-                <li><a href="matchering.html">Matchering</a></li>
-                <li><a href="vocalremover.html">Vocal Remover</a></li>
-                <li><a href="chorddetect.html">Chord Detection</a></li>
+                <li><a href="networksync.html">Net Sync</a></li>
+                <li><a href="matchering.html">Mastering</a></li>
+                <li><a href="vocalremover.html">Vocal Sep</a></li>
+                <li><a href="chorddetect.html">Chords</a></li>
                 <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
             </ul>
         </div>
@@ -49,15 +52,19 @@
 
         <main class="content">
             <h1>Quick Start Guide</h1>
-            <p>Get up and running with Ownaudio in minutes. Choose between the low-level Core API for maximum control or the high-level NET API for rapid development.</p>
+            <p>Get up and running with Ownaudio in minutes. Choose between the low-level Core API for maximum control or
+                the high-level NET API for rapid development.</p>
 
             <h2 id="introduction">Introduction</h2>
 
             <div class="alert alert-warning">
                 <strong>🚀 Native Engine - GC-Free Audio!</strong>
-                Ownaudio now uses a high-performance C++ native engine by default, eliminating GC pauses for glitch-free audio.
-                Despite our best efforts with managed code, the .NET Garbage Collector proved insurmountable for professional
-                real-time audio. The native engine is now the default, but managed C# engines remain available for testing/development.
+                Ownaudio now uses a high-performance C++ native engine by default, eliminating GC pauses for glitch-free
+                audio.
+                Despite our best efforts with managed code, the .NET Garbage Collector proved insurmountable for
+                professional
+                real-time audio. The native engine is now the default, but managed C# engines remain available for
+                testing/development.
             </div>
 
             <div class="alert alert-info">
@@ -68,11 +75,13 @@
             <div class="feature-grid">
                 <div class="feature-card">
                     <h4><span class="badge badge-core">Core</span></h4>
-                    <p>Low-level audio engine with direct platform API access. Perfect for custom audio pipelines and maximum performance.</p>
+                    <p>Low-level audio engine with direct platform API access. Perfect for custom audio pipelines and
+                        maximum performance.</p>
                 </div>
                 <div class="feature-card">
                     <h4><span class="badge badge-net">NET</span></h4>
-                    <p>High-level API with built-in mixing, effects, and multi-track support. Ideal for production applications.</p>
+                    <p>High-level API with built-in mixing, effects, and multi-track support. Ideal for production
+                        applications.</p>
                 </div>
             </div>
 
@@ -103,7 +112,8 @@ dotnet add package OwnAudioSharp</code></pre>
 
             <div class="alert alert-info">
                 <strong>Core API</strong>
-                Direct access to audio engine. Native engine (default) provides GC-free operation, or use managed engines for pure C# code.
+                Direct access to audio engine. Native engine (default) provides GC-free operation, or use managed
+                engines for pure C# code.
             </div>
 
             <h3>Native Engine (Default - Recommended)</h3>
@@ -269,7 +279,8 @@ engine.Stop();</code></pre>
                     <li><code>StopAsync()</code> instead of <code>Stop()</code></li>
                     <li><code>ShutdownAsync()</code> instead of <code>Shutdown()</code></li>
                 </ul>
-                This prevents your application from freezing during audio initialization (50-5000ms) and shutdown (up to 2 seconds).
+                This prevents your application from freezing during audio initialization (50-5000ms) and shutdown (up to
+                2 seconds).
             </div>
 
             <h3>Basic Playback (Console Applications)</h3>
@@ -465,7 +476,8 @@ mixer.MasterClock.SeekTo(10.0);  // Seek all tracks to 10 seconds</code></pre>
 
             <div class="alert alert-info">
                 <strong>Master Clock Benefits</strong>
-                The new timeline-based system provides sample-accurate synchronization, start offsets for DAW-style track positioning,
+                The new timeline-based system provides sample-accurate synchronization, start offsets for DAW-style
+                track positioning,
                 automatic drift correction (&lt;10ms tolerance), and realtime/offline rendering modes.
             </div>
 
@@ -617,7 +629,8 @@ Console.WriteLine($"Platform: {platformInfo}");
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <script>
         // Active sidebar navigation
         const sections = document.querySelectorAll('h2[id]');
@@ -656,4 +669,5 @@ Console.WriteLine($"Platform: {platformInfo}");
         });
     </script>
 </body>
+
 </html>

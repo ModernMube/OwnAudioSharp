@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
     <link rel="stylesheet" href="docs.css">
 </head>
+
 <body>
     <nav class="nav">
         <div class="nav-container">
@@ -17,9 +19,10 @@
                 <li><a href="api-net.html" class="active">NET API</a></li>
                 <li><a href="examples.html">Examples</a></li>
                 <li><a href="effects.html">Effects</a></li>
-				<li><a href="matchering.html">Matchering</a></li>
-                <li><a href="vocalremover.html">Vocal Remover</a></li>
-                <li><a href="chorddetect.html">Chord Detection</a></li>
+                <li><a href="networksync.html">Net Sync</a></li>
+                <li><a href="matchering.html">Mastering</a></li>
+                <li><a href="vocalremover.html">Vocal Sep</a></li>
+                <li><a href="chorddetect.html">Chords</a></li>
                 <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
             </ul>
         </div>
@@ -57,7 +60,8 @@
             <ul>
                 <li><strong>Multi-track mixing</strong> with unlimited simultaneous sources</li>
                 <li><strong>15+ professional effects</strong> including reverb, compressor, EQ</li>
-                <li><strong>Master Clock synchronization</strong> with timeline-based sync, start offsets, and drift correction (&lt;10ms)</li>
+                <li><strong>Master Clock synchronization</strong> with timeline-based sync, start offsets, and drift
+                    correction (&lt;10ms)</li>
                 <li><strong>DAW-style features</strong> including realtime/offline rendering modes</li>
                 <li><strong>Tempo and pitch control</strong> via SoundTouch integration</li>
                 <li><strong>Recording</strong> to WAV format</li>
@@ -84,7 +88,8 @@
                     </tr>
                     <tr>
                         <td>Synchronization</td>
-                        <td>Master Clock with timeline-based sync, start offsets, sample-accurate precision (&lt;10ms drift tolerance)</td>
+                        <td>Master Clock with timeline-based sync, start offsets, sample-accurate precision (&lt;10ms
+                            drift tolerance)</td>
                     </tr>
                     <tr>
                         <td>Real-time Processing</td>
@@ -604,7 +609,8 @@ mixer.Dispose();</code></pre>
             <div class="alert alert-info">
                 <strong>Complete Effects Documentation</strong>
                 For detailed information about all effects, parameters, presets, and usage examples,
-                see the dedicated <a href="effects.html" style="color: var(--primary-color); font-weight: 600;">Audio Effects Reference</a>.
+                see the dedicated <a href="effects.html" style="color: var(--primary-color); font-weight: 600;">Audio
+                    Effects Reference</a>.
             </div>
 
             <h3>Quick Start - Adding Effects to Sources</h3>
@@ -665,19 +671,24 @@ mixer.Start();</code></pre>
             </table>
 
             <p style="margin-top: 1.5rem;">
-                <strong>See Also:</strong> <a href="effects.html" style="color: var(--primary-color);">Full Effects Documentation</a>
+                <strong>See Also:</strong> <a href="effects.html" style="color: var(--primary-color);">Full Effects
+                    Documentation</a>
                 for detailed parameters, all presets, technical details, and advanced usage examples.
             </p>
 
             <h2 id="sync">Synchronization</h2>
 
             <h3>Master Clock Architecture</h3>
-            <p>OwnaudioNET uses a professional DAW-style master clock for sample-accurate synchronization. The new timeline-based system provides superior timing precision and advanced features compared to traditional sync groups.</p>
+            <p>OwnaudioNET uses a professional DAW-style master clock for sample-accurate synchronization. The new
+                timeline-based system provides superior timing precision and advanced features compared to traditional
+                sync groups.</p>
 
-			<div class="alert alert-success">
+            <div class="alert alert-success">
                 <strong>New Master Clock System</strong>
-                Version 2.4.0+ introduces timeline-based synchronization with Master Clock architecture, replacing the legacy GhostTrack system.
-                This provides sample-accurate sync, start offsets, realtime/offline rendering modes, and automatic drift correction.
+                Version 2.4.0+ introduces timeline-based synchronization with Master Clock architecture, replacing the
+                legacy GhostTrack system.
+                This provides sample-accurate sync, start offsets, realtime/offline rendering modes, and automatic drift
+                correction.
             </div>
 
             <div class="code-block">
@@ -777,7 +788,8 @@ mixer.MasterClock.SeekTo(20.0);  // Jump to 20 seconds - all tracks sync</code><
             </div>
 
             <h3>Legacy Sync Group API</h3>
-            <p><strong>Deprecated:</strong> The legacy sync group API is still available but deprecated. Use Master Clock for new projects.</p>
+            <p><strong>Deprecated:</strong> The legacy sync group API is still available but deprecated. Use Master
+                Clock for new projects.</p>
             <div class="code-block">
                 <div class="code-header">Legacy Sync Group (Deprecated)</div>
                 <pre><code class="language-csharp">// ⚠️ DEPRECATED - Use Master Clock instead
@@ -788,7 +800,8 @@ mixer.StopSyncGroup(syncGroup.Id);</code></pre>
 
             <div class="alert alert-success">
                 <strong>Best Practices</strong>
-                Use identical file formats (WAV recommended) for best synchronization. MP3 files may have slight timing inaccuracies due to encoder delays and frame structure.
+                Use identical file formats (WAV recommended) for best synchronization. MP3 files may have slight timing
+                inaccuracies due to encoder delays and frame structure.
             </div>
 
             <h2 id="interfaces">Interfaces</h2>
@@ -907,7 +920,8 @@ mixer.StopSyncGroup(syncGroup.Id);</code></pre>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <script>
         const sections = document.querySelectorAll('h2[id], h3[id]');
         const navLinks = document.querySelectorAll('.sidebar-nav a');
@@ -937,4 +951,5 @@ mixer.StopSyncGroup(syncGroup.Id);</code></pre>
         });
     </script>
 </body>
+
 </html>

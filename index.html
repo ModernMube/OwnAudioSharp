@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
+        function gtag() { dataLayer.push(arguments); }
         gtag('js', new Date());
 
         gtag('config', 'G-93P1X5V4Z5');
@@ -600,6 +601,7 @@
         }
     </style>
 </head>
+
 <body>
     <!-- Navigation -->
     <nav class="nav">
@@ -638,29 +640,40 @@
                 Two-layer architecture with native C++ engine core and high-level .NET API
             </p>
 
-            <div class="alert alert-info" style="max-width: 900px; margin: 0 auto 3rem; background: rgba(251, 191, 36, 0.1); border: 2px solid var(--warning); border-radius: 12px; padding: 2rem;">
-                <h3 style="color: var(--warning); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 28px; height: 28px;">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                        <line x1="12" y1="9" x2="12" y2="13"/>
-                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+            <div class="alert alert-info"
+                style="max-width: 900px; margin: 0 auto 3rem; background: rgba(251, 191, 36, 0.1); border: 2px solid var(--warning); border-radius: 12px; padding: 2rem;">
+                <h3
+                    style="color: var(--warning); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        style="width: 28px; height: 28px;">
+                        <path
+                            d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                        <line x1="12" y1="9" x2="12" y2="13" />
+                        <line x1="12" y1="17" x2="12.01" y2="17" />
                     </svg>
                     The GC Challenge: Why We Moved to Native
                 </h3>
                 <p style="color: var(--text-secondary); line-height: 1.8; margin-bottom: 1rem;">
-                    <strong>The Reality of Managed Audio:</strong> Despite our best efforts with pure managed C# code, zero-allocation design,
-                    and lock-free structures, the .NET Garbage Collector proved to be an insurmountable challenge for real-time audio.
-                    The GC is an inherent part of managed code, and its unpredictable pauses - even brief ones - caused audible glitches
+                    <strong>The Reality of Managed Audio:</strong> Despite our best efforts with pure managed C# code,
+                    zero-allocation design,
+                    and lock-free structures, the .NET Garbage Collector proved to be an insurmountable challenge for
+                    real-time audio.
+                    The GC is an inherent part of managed code, and its unpredictable pauses - even brief ones - caused
+                    audible glitches
                     and dropouts in audio playback.
                 </p>
                 <p style="color: var(--text-secondary); line-height: 1.8; margin-bottom: 1rem;">
-                    <strong>The Solution:</strong> We introduced a <strong style="color: var(--warning);">native C++ audio engine</strong>
-                    that operates completely outside the GC's influence. This native engine is now the <strong>default</strong> for all
+                    <strong>The Solution:</strong> We introduced a <strong style="color: var(--warning);">native C++
+                        audio engine</strong>
+                    that operates completely outside the GC's influence. This native engine is now the
+                    <strong>default</strong> for all
                     platforms, ensuring glitch-free, professional-grade audio performance.
                 </p>
                 <p style="color: var(--text-secondary); line-height: 1.8;">
-                    <strong>Maximum Flexibility:</strong> The managed audio engines remain available in the API for scenarios where
-                    GC pauses are acceptable or for development/testing purposes. You have the freedom to choose based on your needs!
+                    <strong>Maximum Flexibility:</strong> The managed audio engines remain available in the API for
+                    scenarios where
+                    GC pauses are acceptable or for development/testing purposes. You have the freedom to choose based
+                    on your needs!
                 </p>
             </div>
 
@@ -692,14 +705,20 @@
                 <!-- Native Engine Layer -->
                 <div class="layer" style="border-color: var(--warning);">
                     <div class="layer-header">
-                        <span class="layer-badge" style="background: rgba(251, 191, 36, 0.2); color: var(--warning);">Native Engine</span>
-                        <h3>C++ Audio Core <span style="font-size: 0.7rem; background: var(--warning); color: var(--background); padding: 0.25rem 0.5rem; border-radius: 4px; margin-left: 0.5rem;">DEFAULT</span></h3>
+                        <span class="layer-badge"
+                            style="background: rgba(251, 191, 36, 0.2); color: var(--warning);">Native Engine</span>
+                        <h3>C++ Audio Core <span
+                                style="font-size: 0.7rem; background: var(--warning); color: var(--background); padding: 0.25rem 0.5rem; border-radius: 4px; margin-left: 0.5rem;">DEFAULT</span>
+                        </h3>
                     </div>
                     <div class="layer-content">
                         <p>
-                            <strong>High-performance native C++ engine that eliminates GC interference.</strong> After extensive testing
-                            with managed code, we found that the .NET Garbage Collector inevitably causes audio glitches. The native
-                            engine provides deterministic, glitch-free audio processing by operating outside the GC's control.
+                            <strong>High-performance native C++ engine that eliminates GC interference.</strong> After
+                            extensive testing
+                            with managed code, we found that the .NET Garbage Collector inevitably causes audio
+                            glitches. The native
+                            engine provides deterministic, glitch-free audio processing by operating outside the GC's
+                            control.
                         </p>
                         <div class="layer-features">
                             <div class="feature-tag" style="border-color: var(--warning);">No GC Pauses</div>
@@ -716,12 +735,16 @@
                 <div class="layer">
                     <div class="layer-header">
                         <span class="layer-badge core">Ownaudio.Core</span>
-                        <h3>Managed Audio Engines <span style="font-size: 0.7rem; background: var(--core-color); color: var(--background); padding: 0.25rem 0.5rem; border-radius: 4px; margin-left: 0.5rem;">OPTIONAL</span></h3>
+                        <h3>Managed Audio Engines <span
+                                style="font-size: 0.7rem; background: var(--core-color); color: var(--background); padding: 0.25rem 0.5rem; border-radius: 4px; margin-left: 0.5rem;">OPTIONAL</span>
+                        </h3>
                     </div>
                     <div class="layer-content">
                         <p>
-                            Pure managed C# implementations remain available for scenarios where GC pauses are acceptable
-                            or for development/testing. While we achieved zero-allocation design and lock-free structures,
+                            Pure managed C# implementations remain available for scenarios where GC pauses are
+                            acceptable
+                            or for development/testing. While we achieved zero-allocation design and lock-free
+                            structures,
                             the GC remains an unavoidable part of managed code that can impact real-time audio.
                         </p>
                         <div class="layer-features">
@@ -754,9 +777,11 @@
                     justify-content: center;
                     margin-bottom: 1rem;
                 }
+
                 .platform-icon svg {
                     transition: transform 0.3s ease;
                 }
+
                 .platform-card:hover .platform-icon svg {
                     transform: scale(1.1);
                 }
@@ -766,7 +791,8 @@
                 <div class="platform-card">
                     <div class="platform-icon">
                         <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
-                            <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+                            <path
+                                d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
                         </svg>
                     </div>
                     <div class="platform-name">Windows</div>
@@ -776,7 +802,8 @@
                 <div class="platform-card">
                     <div class="platform-icon">
                         <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
-                            <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/>
+                            <path
+                                d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701" />
                         </svg>
                     </div>
                     <div class="platform-name">macOS</div>
@@ -786,7 +813,8 @@
                 <div class="platform-card">
                     <div class="platform-icon">
                         <svg viewBox="0 0 304.998 304.998" fill="currentColor" width="48" height="48">
-                            <path d="M274.659,244.888c-8.944-3.663-12.77-8.524-12.4-15.777c0.381-8.466-4.422-14.667-6.703-17.117c1.378-5.264,5.405-23.474,0.004-39.291c-5.804-16.93-23.524-42.787-41.808-68.204c-7.485-10.438-7.839-21.784-8.248-34.922c-0.392-12.531-0.834-26.735-7.822-42.525C190.084,9.859,174.838,0,155.851,0c-11.295,0-22.889,3.53-31.811,9.684c-18.27,12.609-15.855,40.1-14.257,58.291c0.219,2.491,0.425,4.844,0.545,6.853c1.064,17.816,0.096,27.206-1.17,30.06c-0.819,1.865-4.851,7.173-9.118,12.793c-4.413,5.812-9.416,12.4-13.517,18.539c-4.893,7.387-8.843,18.678-12.663,29.597c-2.795,7.99-5.435,15.537-8.005,20.047c-4.871,8.676-3.659,16.766-2.647,20.505c-1.844,1.281-4.508,3.803-6.757,8.557c-2.718,5.8-8.233,8.917-19.701,11.122c-5.27,1.078-8.904,3.294-10.804,6.586c-2.765,4.791-1.259,10.811,0.115,14.925c2.03,6.048,0.765,9.876-1.535,16.826c-0.53,1.604-1.131,3.42-1.74,5.423c-0.959,3.161-0.613,6.035,1.026,8.542c4.331,6.621,16.969,8.956,29.979,10.492c7.768,0.922,16.27,4.029,24.493,7.035c8.057,2.944,16.388,5.989,23.961,6.913c1.151,0.145,2.291,0.218,3.39,0.218c11.434,0,16.6-7.587,18.238-10.704c4.107-0.838,18.272-3.522,32.871-3.882c14.576-0.416,28.679,2.462,32.674,3.357c1.256,2.404,4.567,7.895,9.845,10.724c2.901,1.586,6.938,2.495,11.073,2.495c0.001,0,0,0,0.001,0c4.416,0,12.817-1.044,19.466-8.039c6.632-7.028,23.202-16,35.302-22.551c2.7-1.462,5.226-2.83,7.441-4.065c6.797-3.768,10.506-9.152,10.175-14.771C282.445,250.905,279.356,246.811,274.659,244.888z M124.189,243.535c-0.846-5.96-8.513-11.871-17.392-18.715c-7.26-5.597-15.489-11.94-17.756-17.312c-4.685-11.082-0.992-30.568,5.447-40.602c3.182-5.024,5.781-12.643,8.295-20.011c2.714-7.956,5.521-16.182,8.66-19.783c4.971-5.622,9.565-16.561,10.379-25.182c4.655,4.444,11.876,10.083,18.547,10.083c1.027,0,2.024-0.134,2.977-0.403c4.564-1.318,11.277-5.197,17.769-8.947c5.597-3.234,12.499-7.222,15.096-7.585c4.453,6.394,30.328,63.655,32.972,82.044c2.092,14.55-0.118,26.578-1.229,31.289c-0.894-0.122-1.96-0.221-3.08-0.221c-7.207,0-9.115,3.934-9.612,6.283c-1.278,6.103-1.413,25.618-1.427,30.003c-2.606,3.311-15.785,18.903-34.706,21.706c-7.707,1.12-14.904,1.688-21.39,1.688c-5.544,0-9.082-0.428-10.551-0.651l-9.508-10.879C121.429,254.489,125.177,250.583,124.189,243.535z M136.254,64.149c-0.297,0.128-0.589,0.265-0.876,0.411c-0.029-0.644-0.096-1.297-0.199-1.952c-1.038-5.975-5-10.312-9.419-10.312c-0.327,0-0.656,0.025-1.017,0.08c-2.629,0.438-4.691,2.413-5.821,5.213c0.991-6.144,4.472-10.693,8.602-10.693c4.85,0,8.947,6.536,8.947,14.272C136.471,62.143,136.4,63.113,136.254,64.149z M173.94,68.756c0.444-1.414,0.684-2.944,0.684-4.532c0-7.014-4.45-12.509-10.131-12.509c-5.552,0-10.069,5.611-10.069,12.509c0,0.47,0.023,0.941,0.067,1.411c-0.294-0.113-0.581-0.223-0.861-0.329c-0.639-1.935-0.962-3.954-0.962-6.015c0-8.387,5.36-15.211,11.95-15.211c6.589,0,11.95,6.824,11.95,15.211C176.568,62.78,175.605,66.11,173.94,68.756z M169.081,85.08c-0.095,0.424-0.297,0.612-2.531,1.774c-1.128,0.587-2.532,1.318-4.289,2.388l-1.174,0.711c-4.718,2.86-15.765,9.559-18.764,9.952c-2.037,0.274-3.297-0.516-6.13-2.441c-0.639-0.435-1.319-0.897-2.044-1.362c-5.107-3.351-8.392-7.042-8.763-8.485c1.665-1.287,5.792-4.508,7.905-6.415c4.289-3.988,8.605-6.668,10.741-6.668c0.113,0,0.215,0.008,0.321,0.028c2.51,0.443,8.701,2.914,13.223,4.718c2.09,0.834,3.895,1.554,5.165,2.01C166.742,82.664,168.828,84.422,169.081,85.08z M205.028,271.45c2.257-10.181,4.857-24.031,4.436-32.196c-0.097-1.855-0.261-3.874-0.42-5.826c-0.297-3.65-0.738-9.075-0.283-10.684c0.09-0.042,0.19-0.078,0.301-0.109c0.019,4.668,1.033,13.979,8.479,17.226c2.219,0.968,4.755,1.458,7.537,1.458c7.459,0,15.735-3.659,19.125-7.049c1.996-1.996,3.675-4.438,4.851-6.372c0.257,0.753,0.415,1.737,0.332,3.005c-0.443,6.885,2.903,16.019,9.271,19.385l0.927,0.487c2.268,1.19,8.292,4.353,8.389,5.853c-0.001,0.001-0.051,0.177-0.387,0.489c-1.509,1.379-6.82,4.091-11.956,6.714c-9.111,4.652-19.438,9.925-24.076,14.803c-6.53,6.872-13.916,11.488-18.376,11.488c-0.537,0-1.026-0.068-1.461-0.206C206.873,288.406,202.886,281.417,205.028,271.45z M39.917,245.477c-0.494-2.312-0.884-4.137-0.465-5.905c0.304-1.31,6.771-2.714,9.533-3.313c3.883-0.843,7.899-1.714,10.525-3.308c3.551-2.151,5.474-6.118,7.17-9.618c1.228-2.531,2.496-5.148,4.005-6.007c0.085-0.05,0.215-0.108,0.463-0.108c2.827,0,8.759,5.943,12.177,11.262c0.867,1.341,2.473,4.028,4.331,7.139c5.557,9.298,13.166,22.033,17.14,26.301c3.581,3.837,9.378,11.214,7.952,17.541c-1.044,4.909-6.602,8.901-7.913,9.784c-0.476,0.108-1.065,0.163-1.758,0.163c-7.606,0-22.662-6.328-30.751-9.728l-1.197-0.503c-4.517-1.894-11.891-3.087-19.022-4.241c-5.674-0.919-13.444-2.176-14.732-3.312c-1.044-1.171,0.167-4.978,1.235-8.337c0.769-2.414,1.563-4.91,1.998-7.523C41.225,251.596,40.499,248.203,39.917,245.477z"/>
+                            <path
+                                d="M274.659,244.888c-8.944-3.663-12.77-8.524-12.4-15.777c0.381-8.466-4.422-14.667-6.703-17.117c1.378-5.264,5.405-23.474,0.004-39.291c-5.804-16.93-23.524-42.787-41.808-68.204c-7.485-10.438-7.839-21.784-8.248-34.922c-0.392-12.531-0.834-26.735-7.822-42.525C190.084,9.859,174.838,0,155.851,0c-11.295,0-22.889,3.53-31.811,9.684c-18.27,12.609-15.855,40.1-14.257,58.291c0.219,2.491,0.425,4.844,0.545,6.853c1.064,17.816,0.096,27.206-1.17,30.06c-0.819,1.865-4.851,7.173-9.118,12.793c-4.413,5.812-9.416,12.4-13.517,18.539c-4.893,7.387-8.843,18.678-12.663,29.597c-2.795,7.99-5.435,15.537-8.005,20.047c-4.871,8.676-3.659,16.766-2.647,20.505c-1.844,1.281-4.508,3.803-6.757,8.557c-2.718,5.8-8.233,8.917-19.701,11.122c-5.27,1.078-8.904,3.294-10.804,6.586c-2.765,4.791-1.259,10.811,0.115,14.925c2.03,6.048,0.765,9.876-1.535,16.826c-0.53,1.604-1.131,3.42-1.74,5.423c-0.959,3.161-0.613,6.035,1.026,8.542c4.331,6.621,16.969,8.956,29.979,10.492c7.768,0.922,16.27,4.029,24.493,7.035c8.057,2.944,16.388,5.989,23.961,6.913c1.151,0.145,2.291,0.218,3.39,0.218c11.434,0,16.6-7.587,18.238-10.704c4.107-0.838,18.272-3.522,32.871-3.882c14.576-0.416,28.679,2.462,32.674,3.357c1.256,2.404,4.567,7.895,9.845,10.724c2.901,1.586,6.938,2.495,11.073,2.495c0.001,0,0,0,0.001,0c4.416,0,12.817-1.044,19.466-8.039c6.632-7.028,23.202-16,35.302-22.551c2.7-1.462,5.226-2.83,7.441-4.065c6.797-3.768,10.506-9.152,10.175-14.771C282.445,250.905,279.356,246.811,274.659,244.888z M124.189,243.535c-0.846-5.96-8.513-11.871-17.392-18.715c-7.26-5.597-15.489-11.94-17.756-17.312c-4.685-11.082-0.992-30.568,5.447-40.602c3.182-5.024,5.781-12.643,8.295-20.011c2.714-7.956,5.521-16.182,8.66-19.783c4.971-5.622,9.565-16.561,10.379-25.182c4.655,4.444,11.876,10.083,18.547,10.083c1.027,0,2.024-0.134,2.977-0.403c4.564-1.318,11.277-5.197,17.769-8.947c5.597-3.234,12.499-7.222,15.096-7.585c4.453,6.394,30.328,63.655,32.972,82.044c2.092,14.55-0.118,26.578-1.229,31.289c-0.894-0.122-1.96-0.221-3.08-0.221c-7.207,0-9.115,3.934-9.612,6.283c-1.278,6.103-1.413,25.618-1.427,30.003c-2.606,3.311-15.785,18.903-34.706,21.706c-7.707,1.12-14.904,1.688-21.39,1.688c-5.544,0-9.082-0.428-10.551-0.651l-9.508-10.879C121.429,254.489,125.177,250.583,124.189,243.535z M136.254,64.149c-0.297,0.128-0.589,0.265-0.876,0.411c-0.029-0.644-0.096-1.297-0.199-1.952c-1.038-5.975-5-10.312-9.419-10.312c-0.327,0-0.656,0.025-1.017,0.08c-2.629,0.438-4.691,2.413-5.821,5.213c0.991-6.144,4.472-10.693,8.602-10.693c4.85,0,8.947,6.536,8.947,14.272C136.471,62.143,136.4,63.113,136.254,64.149z M173.94,68.756c0.444-1.414,0.684-2.944,0.684-4.532c0-7.014-4.45-12.509-10.131-12.509c-5.552,0-10.069,5.611-10.069,12.509c0,0.47,0.023,0.941,0.067,1.411c-0.294-0.113-0.581-0.223-0.861-0.329c-0.639-1.935-0.962-3.954-0.962-6.015c0-8.387,5.36-15.211,11.95-15.211c6.589,0,11.95,6.824,11.95,15.211C176.568,62.78,175.605,66.11,173.94,68.756z M169.081,85.08c-0.095,0.424-0.297,0.612-2.531,1.774c-1.128,0.587-2.532,1.318-4.289,2.388l-1.174,0.711c-4.718,2.86-15.765,9.559-18.764,9.952c-2.037,0.274-3.297-0.516-6.13-2.441c-0.639-0.435-1.319-0.897-2.044-1.362c-5.107-3.351-8.392-7.042-8.763-8.485c1.665-1.287,5.792-4.508,7.905-6.415c4.289-3.988,8.605-6.668,10.741-6.668c0.113,0,0.215,0.008,0.321,0.028c2.51,0.443,8.701,2.914,13.223,4.718c2.09,0.834,3.895,1.554,5.165,2.01C166.742,82.664,168.828,84.422,169.081,85.08z M205.028,271.45c2.257-10.181,4.857-24.031,4.436-32.196c-0.097-1.855-0.261-3.874-0.42-5.826c-0.297-3.65-0.738-9.075-0.283-10.684c0.09-0.042,0.19-0.078,0.301-0.109c0.019,4.668,1.033,13.979,8.479,17.226c2.219,0.968,4.755,1.458,7.537,1.458c7.459,0,15.735-3.659,19.125-7.049c1.996-1.996,3.675-4.438,4.851-6.372c0.257,0.753,0.415,1.737,0.332,3.005c-0.443,6.885,2.903,16.019,9.271,19.385l0.927,0.487c2.268,1.19,8.292,4.353,8.389,5.853c-0.001,0.001-0.051,0.177-0.387,0.489c-1.509,1.379-6.82,4.091-11.956,6.714c-9.111,4.652-19.438,9.925-24.076,14.803c-6.53,6.872-13.916,11.488-18.376,11.488c-0.537,0-1.026-0.068-1.461-0.206C206.873,288.406,202.886,281.417,205.028,271.45z M39.917,245.477c-0.494-2.312-0.884-4.137-0.465-5.905c0.304-1.31,6.771-2.714,9.533-3.313c3.883-0.843,7.899-1.714,10.525-3.308c3.551-2.151,5.474-6.118,7.17-9.618c1.228-2.531,2.496-5.148,4.005-6.007c0.085-0.05,0.215-0.108,0.463-0.108c2.827,0,8.759,5.943,12.177,11.262c0.867,1.341,2.473,4.028,4.331,7.139c5.557,9.298,13.166,22.033,17.14,26.301c3.581,3.837,9.378,11.214,7.952,17.541c-1.044,4.909-6.602,8.901-7.913,9.784c-0.476,0.108-1.065,0.163-1.758,0.163c-7.606,0-22.662-6.328-30.751-9.728l-1.197-0.503c-4.517-1.894-11.891-3.087-19.022-4.241c-5.674-0.919-13.444-2.176-14.732-3.312c-1.044-1.171,0.167-4.978,1.235-8.337c0.769-2.414,1.563-4.91,1.998-7.523C41.225,251.596,40.499,248.203,39.917,245.477z" />
                         </svg>
                     </div>
                     <div class="platform-name">Linux</div>
@@ -796,7 +824,8 @@
                 <div class="platform-card">
                     <div class="platform-icon">
                         <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
-                            <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/>
+                            <path
+                                d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701" />
                         </svg>
                     </div>
                     <div class="platform-name">iOS</div>
@@ -806,7 +835,8 @@
                 <div class="platform-card">
                     <div class="platform-icon">
                         <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
-                            <path d="M17.6 9.48l1.84-3.18c.16-.31.04-.69-.26-.85-.29-.15-.65-.06-.83.22l-1.88 3.24c-2.86-1.21-6.08-1.21-8.94 0L5.65 5.67c-.19-.28-.55-.37-.83-.22-.3.16-.42.54-.26.85l1.84 3.18C2.92 11.03 1 14.21 1 17.74h22c0-3.53-1.92-6.71-5.4-8.26zM8.06 15.2c-.66 0-1.2-.54-1.2-1.2 0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2 0 .66-.54 1.2-1.2 1.2zm7.88 0c-.66 0-1.2-.54-1.2-1.2 0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2 0 .66-.54 1.2-1.2 1.2z"/>
+                            <path
+                                d="M17.6 9.48l1.84-3.18c.16-.31.04-.69-.26-.85-.29-.15-.65-.06-.83.22l-1.88 3.24c-2.86-1.21-6.08-1.21-8.94 0L5.65 5.67c-.19-.28-.55-.37-.83-.22-.3.16-.42.54-.26.85l1.84 3.18C2.92 11.03 1 14.21 1 17.74h22c0-3.53-1.92-6.71-5.4-8.26zM8.06 15.2c-.66 0-1.2-.54-1.2-1.2 0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2 0 .66-.54 1.2-1.2 1.2zm7.88 0c-.66 0-1.2-.54-1.2-1.2 0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2 0 .66-.54 1.2-1.2 1.2z" />
                         </svg>
                     </div>
                     <div class="platform-name">Android</div>
@@ -825,40 +855,44 @@
                 <div class="feature-card">
                     <div class="feature-icon" style="background: rgba(251, 191, 36, 0.1);">
                         <svg viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2">
-                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                         </svg>
                     </div>
                     <h3>Native Engine Core</h3>
-                    <p>High-performance C++ audio engine eliminates GC pauses for glitch-free, professional audio. Managed engines also available.</p>
+                    <p>High-performance C++ audio engine eliminates GC pauses for glitch-free, professional audio.
+                        Managed engines also available.</p>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"/>
-                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                            <circle cx="12" cy="12" r="10" />
+                            <path
+                                d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                         </svg>
                     </div>
                     <h3>Cross-Platform</h3>
-                    <p>Single codebase works on Windows, macOS, Linux, Android, and iOS with platform-optimized backends.</p>
+                    <p>Single codebase works on Windows, macOS, Linux, Android, and iOS with platform-optimized
+                        backends.</p>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                         </svg>
                     </div>
                     <h3>Deterministic Real-Time</h3>
-                    <p>Native engine ensures deterministic timing without GC interference. Glitch-free audio processing for professional applications.</p>
+                    <p>Native engine ensures deterministic timing without GC interference. Glitch-free audio processing
+                        for professional applications.</p>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M9 18V5l12-2v13M9 13l12-2"/>
-                            <circle cx="6" cy="18" r="3"/>
-                            <circle cx="18" cy="16" r="3"/>
+                            <path d="M9 18V5l12-2v13M9 13l12-2" />
+                            <circle cx="6" cy="18" r="3" />
+                            <circle cx="18" cy="16" r="3" />
                         </svg>
                     </div>
                     <h3>Format Support</h3>
@@ -868,12 +902,12 @@
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="4" y1="21" x2="4" y2="14"/>
-                            <line x1="4" y1="10" x2="4" y2="3"/>
-                            <line x1="12" y1="21" x2="12" y2="12"/>
-                            <line x1="12" y1="8" x2="12" y2="3"/>
-                            <line x1="20" y1="21" x2="20" y2="16"/>
-                            <line x1="20" y1="12" x2="20" y2="3"/>
+                            <line x1="4" y1="21" x2="4" y2="14" />
+                            <line x1="4" y1="10" x2="4" y2="3" />
+                            <line x1="12" y1="21" x2="12" y2="12" />
+                            <line x1="12" y1="8" x2="12" y2="3" />
+                            <line x1="20" y1="21" x2="20" y2="16" />
+                            <line x1="20" y1="12" x2="20" y2="3" />
                         </svg>
                     </div>
                     <h3>Audio Effects</h3>
@@ -883,9 +917,9 @@
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                            <line x1="9" y1="9" x2="15" y2="9"/>
-                            <line x1="9" y1="15" x2="15" y2="15"/>
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                            <line x1="9" y1="9" x2="15" y2="9" />
+                            <line x1="9" y1="15" x2="15" y2="15" />
                         </svg>
                     </div>
                     <h3>Device Management</h3>
@@ -895,17 +929,33 @@
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                            <path
+                                d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
                         </svg>
                     </div>
                     <h3>Master Clock Sync</h3>
-                    <p>DAW-style timeline synchronization with sample-accurate precision, start offsets, and automatic drift correction (&lt;10ms tolerance).</p>
+                    <p>DAW-style timeline synchronization with sample-accurate precision, start offsets, and automatic
+                        drift correction (&lt;10ms tolerance).</p>
                 </div>
 
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                            <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+                            <path d="M1.42 9a16 16 0 0 1 21.16 0" />
+                            <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+                            <line x1="12" y1="20" x2="12.01" y2="20" />
+                        </svg>
+                    </div>
+                    <h3>Network Synchronization</h3>
+                    <p>Multi-device audio sync across local network with &lt;5ms accuracy on LAN. Perfect for multi-room
+                        audio, DJ setups, and installations.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                         </svg>
                     </div>
                     <h3>Audio Analysis</h3>
@@ -1098,16 +1148,17 @@ source.Seek(30.0); // seconds</code></pre>
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                            <polyline points="14 2 14 8 20 8"/>
-                            <line x1="16" y1="13" x2="8" y2="13"/>
-                            <line x1="16" y1="17" x2="8" y2="17"/>
-                            <polyline points="10 9 9 9 8 9"/>
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                            <line x1="16" y1="17" x2="8" y2="17" />
+                            <polyline points="10 9 9 9 8 9" />
                         </svg>
                     </div>
                     <h3>Quick Start</h3>
                     <p>Get up and running in minutes with our step-by-step guide for both Core and NET APIs.</p>
-                    <a href="documents/quickstart.html" style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
+                    <a href="documents/quickstart.html"
+                        style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
                         Read Guide →
                     </a>
                 </div>
@@ -1115,14 +1166,16 @@ source.Seek(30.0); // seconds</code></pre>
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"/>
-                            <line x1="2" y1="12" x2="22" y2="12"/>
-                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="2" y1="12" x2="22" y2="12" />
+                            <path
+                                d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                         </svg>
                     </div>
                     <h3>Core API Reference</h3>
                     <p>Complete reference for the low-level Core API with zero-allocation audio engine.</p>
-                    <a href="documents/api-core.html" style="color: var(--core-color); text-decoration: none; font-weight: 500;">
+                    <a href="documents/api-core.html"
+                        style="color: var(--core-color); text-decoration: none; font-weight: 500;">
                         View API Docs →
                     </a>
                 </div>
@@ -1130,14 +1183,15 @@ source.Seek(30.0); // seconds</code></pre>
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                            <line x1="9" y1="9" x2="15" y2="9"/>
-                            <line x1="9" y1="15" x2="15" y2="15"/>
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                            <line x1="9" y1="9" x2="15" y2="9" />
+                            <line x1="9" y1="15" x2="15" y2="15" />
                         </svg>
                     </div>
                     <h3>NET API Reference</h3>
                     <p>High-level API documentation with mixing, effects, and multi-track support.</p>
-                    <a href="documents/api-net.html" style="color: var(--net-color); text-decoration: none; font-weight: 500;">
+                    <a href="documents/api-net.html"
+                        style="color: var(--net-color); text-decoration: none; font-weight: 500;">
                         View API Docs →
                     </a>
                 </div>
@@ -1145,13 +1199,14 @@ source.Seek(30.0); // seconds</code></pre>
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="16 18 22 12 16 6"/>
-                            <polyline points="8 6 2 12 8 18"/>
+                            <polyline points="16 18 22 12 16 6" />
+                            <polyline points="8 6 2 12 8 18" />
                         </svg>
                     </div>
                     <h3>Code Examples</h3>
                     <p>Learn from practical examples covering various use cases and scenarios.</p>
-                    <a href="documents/examples.html" style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
+                    <a href="documents/examples.html"
+                        style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
                         Browse Examples →
                     </a>
                 </div>
@@ -1159,17 +1214,18 @@ source.Seek(30.0); // seconds</code></pre>
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="4" y1="21" x2="4" y2="14"/>
-                            <line x1="4" y1="10" x2="4" y2="3"/>
-                            <line x1="12" y1="21" x2="12" y2="12"/>
-                            <line x1="12" y1="8" x2="12" y2="3"/>
-                            <line x1="20" y1="21" x2="20" y2="16"/>
-                            <line x1="20" y1="12" x2="20" y2="3"/>
+                            <line x1="4" y1="21" x2="4" y2="14" />
+                            <line x1="4" y1="10" x2="4" y2="3" />
+                            <line x1="12" y1="21" x2="12" y2="12" />
+                            <line x1="12" y1="8" x2="12" y2="3" />
+                            <line x1="20" y1="21" x2="20" y2="16" />
+                            <line x1="20" y1="12" x2="20" y2="3" />
                         </svg>
                     </div>
                     <h3>Audio Matchering</h3>
                     <p>Professional audio mastering with intelligent EQ and psychoacoustic analysis.</p>
-                    <a href="documents/matchering.html" style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
+                    <a href="documents/matchering.html"
+                        style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
                         Learn More →
                     </a>
                 </div>
@@ -1177,14 +1233,15 @@ source.Seek(30.0); // seconds</code></pre>
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M9 18V5l12-2v13"/>
-                            <circle cx="6" cy="18" r="3"/>
-                            <circle cx="18" cy="16" r="3"/>
+                            <path d="M9 18V5l12-2v13" />
+                            <circle cx="6" cy="18" r="3" />
+                            <circle cx="18" cy="16" r="3" />
                         </svg>
                     </div>
                     <h3>Chord Detection</h3>
                     <p>Advanced musical chord detection with timed analysis and confidence scoring.</p>
-                    <a href="documents/chorddetect.html" style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
+                    <a href="documents/chorddetect.html"
+                        style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
                         Learn More →
                     </a>
                 </div>
@@ -1192,12 +1249,30 @@ source.Seek(30.0); // seconds</code></pre>
                 <div class="feature-card">
                     <div class="feature-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 3v18M9 12l3-3 3 3M9 15l3 3 3-3"/>
+                            <path d="M12 3v18M9 12l3-3 3 3M9 15l3 3 3-3" />
                         </svg>
                     </div>
                     <h3>Vocal Remover</h3>
                     <p>AI-powered audio separation for splitting music into vocals and instrumental tracks.</p>
-                    <a href="documents/vocalremover.html" style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
+                    <a href="documents/vocalremover.html"
+                        style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
+                        Learn More →
+                    </a>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+                            <path d="M1.42 9a16 16 0 0 1 21.16 0" />
+                            <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+                            <line x1="12" y1="20" x2="12.01" y2="20" />
+                        </svg>
+                    </div>
+                    <h3>Network Synchronization</h3>
+                    <p>Multi-device audio sync across local network with sample-accurate precision.</p>
+                    <a href="documents/networksync.html"
+                        style="color: var(--primary-color); text-decoration: none; font-weight: 500;">
                         Learn More →
                     </a>
                 </div>
@@ -1214,6 +1289,7 @@ source.Seek(30.0); // seconds</code></pre>
                 <a href="documents/api-net.html">NET API</a>
                 <a href="documents/examples.html">Examples</a>
                 <a href="documents/effects.html">Effects</a>
+                <a href="documents/networksync.html">Network Sync</a>
                 <a href="documents/matchering.html">Matchering</a>
                 <a href="documents/vocalremover.html">Vocal Remover</a>
                 <a href="documents/chorddetect.html">Chord Detection</a>
@@ -1224,7 +1300,8 @@ source.Seek(30.0); // seconds</code></pre>
 
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <script>
         // Tab switching
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1232,7 +1309,7 @@ source.Seek(30.0); // seconds</code></pre>
                 // Remove active class from all tabs
                 document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                
+
                 // Add active class to clicked tab
                 btn.classList.add('active');
                 document.getElementById(btn.dataset.tab).classList.add('active');
@@ -1321,4 +1398,5 @@ source.Seek(30.0); // seconds</code></pre>
         updateCountdown();
     </script>
 </body>
+
 </html>

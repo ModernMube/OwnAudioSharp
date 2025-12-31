@@ -8,7 +8,7 @@ namespace OwnaudioNET;
 /// Main entry point for the OwnaudioNET library.
 /// Provides factory methods and global configuration for the audio system.
 /// </summary>
-public static class OwnaudioNet
+public static partial class OwnaudioNet
 {
     private static bool _initialized;
     private static AudioEngineWrapper? _engineWrapper;
@@ -27,7 +27,7 @@ public static class OwnaudioNet
     /// <summary>
     /// Gets the version of the OwnaudioNET library.
     /// </summary>
-    public static Version Version { get; } = new Version(2, 5, 0);
+    public static Version Version { get; } = new Version(2, 5, 3);
 
     /// <summary>
     /// Gets the current audio engine wrapper (null if not initialized).

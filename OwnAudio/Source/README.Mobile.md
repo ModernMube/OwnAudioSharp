@@ -11,10 +11,11 @@ OwnAudioSharp.Mobile is a professional-grade audio engine providing high-perform
 - **Multi-format Support**: Built-in decoders for MP3, WAV, and FLAC
 - **Real-time Processing**: Zero-allocation design with lock-free buffers for professional-grade performance
 - **Advanced Audio Features**:
+  - **Network Synchronization**: Multi-device audio sync across WiFi (< 20ms accuracy)
+  - **Master Clock**: Sample-accurate timeline synchronization for multi-track playback
   - AI-powered vocal removal (ONNX-based neural separation)
   - Audio matchering and mastering
   - Real-time chord detection
-  - **Master Clock Synchronization**: Timeline-based multi-track playback with drift correction
   - Built-in effects and DSP routines
 
 ## Quick Start
@@ -49,6 +50,19 @@ backing.AttachToClock(mixer.MasterClock);
 // Start sources individually
 vocals.Play();
 backing.Play();
+
+// Network Synchronization - Multi-Device Audio
+// Perfect for: Party mode, car audio sync, wireless speakers
+// Server mode (main phone/tablet)
+await OwnaudioNet.StartNetworkSyncServerAsync(port: 9876);
+
+// Client mode (other devices on WiFi)
+await OwnaudioNet.StartNetworkSyncClientAsync(
+    serverAddress: null,  // Auto-discovery on WiFi
+    allowOfflinePlayback: true);
+
+// All devices play in perfect sync over WiFi
+// Automatic reconnection if WiFi drops
 
 // AI Vocal Removal
 var options = new SimpleSeparationOptions 
