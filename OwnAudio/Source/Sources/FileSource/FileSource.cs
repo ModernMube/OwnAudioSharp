@@ -1,7 +1,6 @@
 using Ownaudio;
 using Ownaudio.Core;
 using Ownaudio.Decoders;
-using Ownaudio.Synchronization;
 using OwnaudioNET.BufferManagement;
 using OwnaudioNET.Core;
 using OwnaudioNET.Events;

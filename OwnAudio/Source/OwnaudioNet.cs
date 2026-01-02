@@ -1,6 +1,7 @@
 ﻿using Ownaudio.Core;
 using OwnaudioNET.Engine;
 using OwnaudioNET.Exceptions;
+using OwnaudioNET.Mixing;
 
 namespace OwnaudioNET;
 
@@ -13,6 +14,10 @@ public static partial class OwnaudioNet
     private static bool _initialized;
     private static AudioEngineWrapper? _engineWrapper;
     private static readonly object _initLock = new();
+
+    // AudioMixer registry for NetworkSync
+    private static AudioMixer? _registeredMixer;
+    private static readonly object _mixerRegistryLock = new();
 
     /// <summary>
     /// Gets whether the audio system has been initialized.
@@ -144,6 +149,74 @@ public static partial class OwnaudioNet
             {
                 _initialized = false;
             }
+        }
+    }
+
+    /// <summary>
+    /// Registers an AudioMixer instance for NetworkSync usage.
+    /// Called automatically by AudioMixer constructor.
+    /// If multiple mixers exist, the most recently created one is registered.
+    /// </summary>
+    /// <param name="mixer">The AudioMixer instance to register.</param>
+    internal static void RegisterAudioMixer(AudioMixer mixer)
+    {
+        if (mixer == null)
+            return;
+
+        lock (_mixerRegistryLock)
+        {
+            _registeredMixer = mixer;
+        }
+    }
+
+    /// <summary>
+    /// Unregisters an AudioMixer instance.
+    /// Called automatically by AudioMixer.Dispose().
+    /// </summary>
+    /// <param name="mixer">The AudioMixer instance to unregister.</param>
+    internal static void UnregisterAudioMixer(AudioMixer mixer)
+    {
+        if (mixer == null)
+            return;
+
+        lock (_mixerRegistryLock)
+        {
+            // Only unregister if this is the currently registered mixer
+            if (_registeredMixer?.MixerId == mixer.MixerId)
+            {
+                _registeredMixer = null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Explicitly sets the primary AudioMixer for NetworkSync operations.
+    /// Use this when you have multiple AudioMixer instances and want to specify
+    /// which one should be used for network synchronization.
+    /// </summary>
+    /// <param name="mixer">The AudioMixer instance to use for NetworkSync.</param>
+    /// <exception cref="ArgumentNullException">Thrown if mixer is null.</exception>
+    public static void SetPrimaryAudioMixer(AudioMixer mixer)
+    {
+        if (mixer == null)
+            throw new ArgumentNullException(nameof(mixer));
+
+        lock (_mixerRegistryLock)
+        {
+            _registeredMixer = mixer;
+        }
+    }
+
+    /// <summary>
+    /// Gets the currently registered AudioMixer instance.
+    /// Returns null if no mixer is registered.
+    /// </summary>
+    /// <returns>The registered AudioMixer, or null if none exists.</returns>
+    public static AudioMixer? GetRegisteredAudioMixer()
+    {
+        lock (_mixerRegistryLock)
+        {
+            return _registeredMixer;
         }
     }
 

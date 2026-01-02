@@ -90,6 +90,9 @@ public sealed partial class AudioMixer
         if (_disposed)
             return;
 
+        // Unregister from OwnaudioNet API
+        OwnaudioNet.UnregisterAudioMixer(this);
+
         // Stop mixer
         if (_isRunning)
         {

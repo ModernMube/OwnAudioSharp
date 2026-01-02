@@ -2,7 +2,7 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
-using Ownaudio.Synchronization;
+using OwnaudioNET.Synchronization;
 
 namespace OwnaudioNET.NetworkSync;
 
@@ -92,8 +92,9 @@ public sealed class NetworkSyncServer : IDisposable
 
         try
         {
-            // Try to sync time (local NTP or system time)
-            await _timeProvider.TrySyncAsync();
+            // Skip NTP sync - use system time directly (faster startup, works for local network)
+            // The LocalTimeProvider will fallback to system time automatically
+            // await _timeProvider.TrySyncAsync();  // Disabled for fast startup
 
             // Create UDP client
             _udpClient = new UdpClient(_port);

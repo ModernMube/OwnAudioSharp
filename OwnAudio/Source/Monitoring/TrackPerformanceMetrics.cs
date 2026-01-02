@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Ownaudio.Monitoring
+namespace OwnaudioNET.Monitoring
 {
     /// <summary>
     /// Tracks performance metrics for individual audio tracks in the mixer.

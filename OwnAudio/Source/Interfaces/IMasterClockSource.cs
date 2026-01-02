@@ -1,5 +1,6 @@
 using System;
-using Ownaudio.Synchronization;
+using OwnaudioNET.Core;
+using OwnaudioNET.Synchronization;
 
 namespace OwnaudioNET.Interfaces
 {

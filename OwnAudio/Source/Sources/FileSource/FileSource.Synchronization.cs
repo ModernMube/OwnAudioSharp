@@ -1,6 +1,6 @@
 using Ownaudio;
 using Ownaudio.Core;
-using Ownaudio.Synchronization;
+using OwnaudioNET.Synchronization;
 using OwnaudioNET.Core;
 using OwnaudioNET.Events;
 using OwnaudioNET.Interfaces;
@@ -223,6 +223,13 @@ public partial class FileSource
             if (drift <= SyncTolerance)
             {
                 // GREEN ZONE: No correction needed
+                
+                // EXIT RECOVERY: If we are in sync, reset underrun counter
+                if (_consecutiveUnderruns > 0)
+                {
+                    _consecutiveUnderruns = 0;
+                }
+
                 // Reset soft sync ONLY if it was active
                 if (_isSoftSyncActive)
                 {
@@ -234,9 +241,11 @@ public partial class FileSource
                 // Console.WriteLine($"[GreenZone] Drift={drift:F4}s - No correction");
                 #endif
             }
-            else if (drift <= SoftSyncTolerance)
+            else if (drift <= SoftSyncTolerance && _consecutiveUnderruns == 0)
             {
                 // YELLOW ZONE: Apply soft sync (tempo adjustment)
+                // OPTIMIZATION: Skip Soft Sync during recovery (_consecutiveUnderruns > 0)
+                // Soft Sync uses SoundTouch which increases CPU load, causing further underruns on weak CPUs
                 ApplySoftSync(drift, targetTrackTime);
                 _isSoftSyncActive = true;
 
@@ -247,6 +256,7 @@ public partial class FileSource
             else
             {
                 // RED ZONE: Hard sync required
+                // Also triggered during recovery if drift > SyncTolerance (bypass Yellow Zone)
                 // Reset soft sync before correction
                 if (_isSoftSyncActive)
                 {
@@ -308,22 +318,26 @@ public partial class FileSource
 
                         if (_seekCount > SyncConfig.MaxSeeksPerWindow)
                         {
-                            // Too many Seeks - disable drift correction for this track
+                            // Too many Seeks - SYSTEM FAILURE IMMINENT
+                            // Instead of disabling sync (which just kills audio), perform a HARD RESET
+                            // This mimics the "Reset" button logic that the user confirmed works
+                            PerformHardReset(targetTrackTime);
+                            
+                            // Return silence for one frame to allow reset to take effect
                             FillWithSilence(buffer, frameCount * _streamInfo.Channels);
-                            // Force sync to prevent further attempts
-                            _trackLocalTime = targetTrackTime;
-                            result = ReadResult.CreateFailure(0, "Seek cascade detected - sync disabled");
+                            result = ReadResult.CreateSuccess(frameCount); // Return success to prevent further error handling in mixer
 
                             #if DEBUG
-                            Console.WriteLine($"[RedZone] Seek cascade detected - sync disabled");
+                            Console.WriteLine($"[RedZone] Seek cascade detected - Triggered HARD RESET");
                             #endif
 
-                            return false;
+                            return true;
                         }
 
                         // PREDICTIVE SEEK: Seek slightly ahead to account for decoding latency
                         // This prevents the "instant stale" problem where data arrives too late
-                        double seekLatencyCompensation = 0.100; // 100ms ahead
+                        // OPTIMIZATION: Increase compensation during recovery to prevent immediate re-underrun
+                        double seekLatencyCompensation = _consecutiveUnderruns > 0 ? 0.300 : 0.100; // 300ms during recovery, 100ms normally
                         double filePosition = (targetTrackTime + seekLatencyCompensation) * _tempo;
 
                         #if DEBUG
@@ -391,6 +405,13 @@ public partial class FileSource
 
             double newPosition = _currentPosition + (framesRead * frameDuration * _tempo);
             Interlocked.Exchange(ref _currentPosition, newPosition);
+
+            // SUCCESSFUL READ: If we are in grace period and reading data, we are "recovering"
+            if (gracePeriodActive && _consecutiveUnderruns > 0)
+            {
+                 // Decay underrun counter on success
+                 _consecutiveUnderruns--; 
+            }
         }
 
         // Underrun check
@@ -463,6 +484,39 @@ public partial class FileSource
             out ReadResult result);
 
         return result.FramesRead;
+    }
+
+    /// <summary>
+    /// Performs a "Hard Reset" of the synchronization state.
+    /// Used when the system detects a seek cascade or unrecoverable drift.
+    /// Mimics the behavior of the manual Reset button.
+    /// </summary>
+    private void PerformHardReset(double targetTime)
+    {
+        #if DEBUG
+        Console.WriteLine($"[HardReset] Triggered at {targetTime:F4}s - Clearing all buffers and state");
+        #endif
+
+        // 1. Clear SoundTouch state (Critical for fixing "chaos")
+        lock (_soundTouchLock)
+        {
+            _soundTouch.Clear();
+            _soundTouchAccumulationCount = 0;
+            _wasSoundTouchProcessing = false;
+        }
+
+        // 2. Seek to target (clears circular buffer)
+        Seek(targetTime);
+
+        // 3. Reset logic state
+        _consecutiveUnderruns = 0;
+        _seekCount = 0;
+        _lastSeekTime = targetTime;
+        _gracePeriodEndTime = targetTime + SyncConfig.GracePeriodSeconds;
+        _trackLocalTime = targetTime; // Force alignment
+        
+        // 4. Ensure Tempo is clean (if we had soft sync adjustment pending)
+        ResetSoftSync();
     }
 
     #endregion

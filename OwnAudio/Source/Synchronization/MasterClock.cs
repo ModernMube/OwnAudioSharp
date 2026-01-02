@@ -1,7 +1,9 @@
 using System;
 using System.Threading;
+using OwnaudioNET.Core;
+using OwnaudioNET.Interfaces;
 
-namespace Ownaudio.Synchronization
+namespace OwnaudioNET.Synchronization
 {
     /// <summary>
     /// Master clock for timeline-based audio synchronization.

@@ -1,6 +1,6 @@
 using OwnaudioNET.NetworkSync;
 using OwnaudioNET.Mixing;
-using Ownaudio.Synchronization;
+using OwnaudioNET.Synchronization;
 
 namespace OwnaudioNET;
 
@@ -196,13 +196,22 @@ public static partial class OwnaudioNet
     }
 
     /// <summary>
-    /// Gets the AudioMixer instance (internal helper).
+    /// Gets the registered AudioMixer instance for NetworkSync operations.
     /// </summary>
-    private static AudioMixer? GetAudioMixer()
+    /// <returns>The registered AudioMixer instance.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if no AudioMixer is registered.</exception>
+    private static AudioMixer GetAudioMixer()
     {
-        // This assumes AudioMixer is accessible through the engine wrapper
-        // You may need to adjust this based on your actual architecture
-        // For now, return null - this will be implemented when integrating with AudioMixer
-        return null;  // TODO: Implement AudioMixer access
+        var mixer = OwnaudioNet.GetRegisteredAudioMixer();
+        
+        if (mixer == null)
+        {
+            throw new InvalidOperationException(
+                "No AudioMixer is registered for NetworkSync. " +
+                "Create an AudioMixer instance before starting NetworkSync, or use " +
+                "OwnaudioNet.SetPrimaryAudioMixer() to explicitly set one.");
+        }
+        
+        return mixer;
     }
 }
