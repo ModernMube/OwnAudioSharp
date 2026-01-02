@@ -1,5 +1,5 @@
-using Ownaudio.Core;
-using Ownaudio.Synchronization;
+using System.Runtime.CompilerServices;
+using OwnaudioNET.Synchronization;
 using OwnaudioNET.Core;
 using OwnaudioNET.Events;
 using OwnaudioNET.Interfaces;

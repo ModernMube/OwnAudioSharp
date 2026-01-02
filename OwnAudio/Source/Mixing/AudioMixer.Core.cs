@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
 using Ownaudio;
 using Ownaudio.Core;
-using Ownaudio.Monitoring;
-using Ownaudio.Synchronization;
+using OwnaudioNET.Monitoring;
+using OwnaudioNET.Synchronization;
 using OwnaudioNET.Core;
 using OwnaudioNET.Engine;
 using OwnaudioNET.Events;
@@ -83,8 +83,16 @@ public sealed partial class AudioMixer : IDisposable
     private IEffectProcessor[] _cachedEffects = Array.Empty<IEffectProcessor>(); // Cached snapshot to avoid ToArray() in hot path
     private volatile bool _effectsChanged = false; // Flag to indicate effects list changed
 
+    // Unique identifier for this mixer instance
+    private readonly Guid _mixerId;
+
     // Dispose flag
     private bool _disposed;
+
+    /// <summary>
+    /// Gets the unique identifier for this AudioMixer instance.
+    /// </summary>
+    public Guid MixerId => _mixerId;
 
     /// <summary>
     /// Gets the audio configuration being used by the mixer.
@@ -177,6 +185,9 @@ public sealed partial class AudioMixer : IDisposable
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
 
+        // Generate unique identifier
+        _mixerId = Guid.NewGuid();
+
         _config = new AudioConfig
         {
             SampleRate = 48000, // Default, will be overridden
@@ -225,6 +236,9 @@ public sealed partial class AudioMixer : IDisposable
             IsBackground = true,
             Priority = ThreadPriority.Highest
         };
+
+        // Automatic registration with OwnaudioNet API
+        OwnaudioNet.RegisterAudioMixer(this);
     }
 
     /// <summary>

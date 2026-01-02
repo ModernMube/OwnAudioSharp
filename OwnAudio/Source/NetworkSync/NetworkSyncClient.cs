@@ -1,7 +1,8 @@
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
-using Ownaudio.Synchronization;
+using OwnaudioNET.Synchronization;
 
 namespace OwnaudioNET.NetworkSync;
 

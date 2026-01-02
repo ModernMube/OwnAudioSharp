@@ -87,7 +87,7 @@ public sealed class LocalTimeProvider : IDisposable
     /// </summary>
     /// <param name="timeout">Timeout in milliseconds.</param>
     /// <returns>True if successful, false otherwise.</returns>
-    public async Task<bool> TrySyncWithLocalNtpAsync(int timeout = 1000)
+    public async Task<bool> TrySyncWithLocalNtpAsync(int timeout = 200)
     {
         foreach (var server in LocalNtpServers)
         {
@@ -204,7 +204,17 @@ public sealed class LocalTimeProvider : IDisposable
     {
         try
         {
-            var addresses = await Dns.GetHostAddressesAsync(server);
+            // Wrap DNS resolution with timeout (DNS can hang indefinitely)
+            var dnsTask = Dns.GetHostAddressesAsync(server);
+            var timeoutTask = Task.Delay(timeout);
+            
+            if (await Task.WhenAny(dnsTask, timeoutTask) == timeoutTask)
+            {
+                // DNS resolution timed out
+                return null;
+            }
+            
+            var addresses = await dnsTask;
             if (addresses.Length == 0)
                 return null;
 
