@@ -6,7 +6,7 @@ using Moq;
 using Ownaudio.Core;
 using Ownaudio.Core.Common;
 using Ownaudio.Decoders;
-using Ownaudio.Synchronization;
+using OwnaudioNET.Synchronization;
 using OwnaudioNET.Sources;
 using Xunit;
 

@@ -8,7 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MultitrackPlayer.Models;
 using MultitrackPlayer.Services;
-using Ownaudio.Synchronization;
+using OwnaudioNET.Synchronization;
 using OwnaudioNET.Core;
 using OwnaudioNET.Effects.SmartMaster;
 using OwnaudioNET.Events;

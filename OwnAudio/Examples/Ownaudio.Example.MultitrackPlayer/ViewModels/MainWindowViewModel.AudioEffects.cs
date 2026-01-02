@@ -5,7 +5,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MultitrackPlayer.Models;
-using Ownaudio.Synchronization;
+using OwnaudioNET.Synchronization;
 using OwnaudioNET.Core;
 using OwnaudioNET.Sources;
 
