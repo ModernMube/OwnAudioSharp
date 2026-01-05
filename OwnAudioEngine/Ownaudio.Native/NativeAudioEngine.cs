@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
+using Logger;
 using Ownaudio.Core;
 using Ownaudio.Core.Common;
 using Ownaudio.Native.Utils;
@@ -203,7 +204,7 @@ namespace Ownaudio.Native
                 // If PortAudio fails, try MiniAudio as fallback
                 if (_backend == AudioEngineBackend.PortAudio)
                 {
-                    Console.WriteLine($"PortAudio initialization failed: {ex.Message}. Falling back to MiniAudio...");
+                    Log.Error($"PortAudio initialization failed: {ex.Message}. Falling back to MiniAudio...");
                     _backend = AudioEngineBackend.MiniAudio;
                     return InitializeMiniAudio();
                 }
@@ -222,29 +223,29 @@ namespace Ownaudio.Native
             {
                 _portAudioLoader = new LibraryLoader("libportaudio");
                 PaBinding.InitializeBindings(_portAudioLoader);
-                Console.WriteLine($"PortAudio loaded successfully from: {_portAudioLoader.LibraryPath}");
+                Log.Info($"PortAudio loaded successfully from: {_portAudioLoader.LibraryPath}");
                 return AudioEngineBackend.PortAudio;
             }
             catch (DllNotFoundException ex)
             {
                 // PortAudio not available - this is expected on most platforms
-                Console.WriteLine($"PortAudio not found: {ex.Message}");
-                Console.WriteLine("Falling back to MiniAudio (bundled with application)");
+                Log.Warning($"PortAudio not found: {ex.Message}");
+                Log.Warning("Falling back to MiniAudio (bundled with application)");
                 _portAudioLoader?.Dispose();
                 _portAudioLoader = null;
             }
             catch (Exception ex)
             {
                 // PortAudio found but failed to initialize
-                Console.WriteLine($"PortAudio initialization failed: {ex.Message}");
-                Console.WriteLine("Falling back to MiniAudio");
+                Log.Error($"PortAudio initialization failed: {ex.Message}");
+                Log.Error("Falling back to MiniAudio");
                 _portAudioLoader?.Dispose();
                 _portAudioLoader = null;
             }
 
             // Fallback: Use MiniAudio (bundled for all platforms)
             MaBinding.EnsureInitialized();
-            Console.WriteLine($"MiniAudio loaded successfully"); // LibraryPath not available directly via MaBinding
+            Log.Info($"MiniAudio loaded successfully"); // LibraryPath not available directly via MaBinding
             return AudioEngineBackend.MiniAudio;
         }
 
@@ -324,11 +325,11 @@ namespace Ownaudio.Native
 
             if (_config.HostType != EngineHostType.None)
             {
-                Console.WriteLine($"PortAudio: Requesting host API '{_config.HostType}'");
+                Log.Info($"PortAudio: Requesting host API '{_config.HostType}'");
             }
             else
             {
-                Console.WriteLine("PortAudio: Using default host API");
+                Log.Info("PortAudio: Using default host API");
             }
 
             // Get devices based on host API selection
@@ -368,7 +369,7 @@ namespace Ownaudio.Native
             int ringBufferSize = _config.BufferSize * _config.Channels * 4; // 4x buffer
             if (_outputRing == null || _outputRing.Capacity != ringBufferSize)
                 _outputRing = new LockFreeRingBuffer<float>(ringBufferSize);
-            
+
             if (_config.EnableInput && (_inputRing == null || _inputRing.Capacity != ringBufferSize))
                 _inputRing = new LockFreeRingBuffer<float>(ringBufferSize);
 
@@ -385,7 +386,7 @@ namespace Ownaudio.Native
                 if (hostApiInfoPtr != IntPtr.Zero)
                 {
                     var hostApiInfo = Marshal.PtrToStructure<PaHostApiInfo>(hostApiInfoPtr);
-                    Console.WriteLine($"PortAudio: Using host API '{hostApiInfo.type}' with device '{deviceInfo.name}'");
+                    Log.Info($"PortAudio: Using host API '{hostApiInfo.type}' with device '{deviceInfo.name}'");
                 }
             }
 
@@ -542,7 +543,7 @@ namespace Ownaudio.Native
         {
             if (_config.HostType != EngineHostType.None)
             {
-                Console.WriteLine($"Note: HostType '{_config.HostType}' is ignored when using MiniAudio backend. MiniAudio uses platform defaults.");
+                Log.Warning($"Note: HostType '{_config.HostType}' is ignored when using MiniAudio backend. MiniAudio uses platform defaults.");
             }
 
             // Allocate context
@@ -898,7 +899,7 @@ namespace Ownaudio.Native
                 {
                     selectedHostApiIndex = Pa_HostApiTypeIdToHostApiIndex(_selectedHostApiType);
                 }
-                
+
                 // Identify the actual system default device for the selected host
                 int defaultDeviceIndex = GetDeviceIndexForHost(_selectedHostApiType, false);
 
@@ -957,7 +958,7 @@ namespace Ownaudio.Native
 
                     if (result != MaResult.Success)
                     {
-                        Console.WriteLine($"MiniAudio device enumeration failed: {result}");
+                        Log.Error($"MiniAudio device enumeration failed: {result}");
                         return devices;
                     }
 
@@ -990,7 +991,7 @@ namespace Ownaudio.Native
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"MiniAudio output device enumeration error: {ex.Message}");
+                    Log.Error($"MiniAudio output device enumeration error: {ex.Message}");
                 }
             }
 
@@ -1072,7 +1073,7 @@ namespace Ownaudio.Native
 
                     if (result != MaResult.Success)
                     {
-                        Console.WriteLine($"MiniAudio device enumeration failed: {result}");
+                        Log.Error($"MiniAudio device enumeration failed: {result}");
                         return devices;
                     }
 
@@ -1105,7 +1106,7 @@ namespace Ownaudio.Native
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"MiniAudio input device enumeration error: {ex.Message}");
+                    Log.Error($"MiniAudio input device enumeration error: {ex.Message}");
                 }
             }
 
