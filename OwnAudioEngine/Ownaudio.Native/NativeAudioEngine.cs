@@ -142,18 +142,6 @@ namespace Ownaudio.Native
         private LockFreeRingBuffer<float> _inputRing = null!;
 
         /// <summary>
-        /// Temporary buffer for output audio samples.
-        /// Initialized in Initialize() method.
-        /// </summary>
-        private float[] _tempOutputBuffer = null!;
-
-        /// <summary>
-        /// Temporary buffer for input audio samples.
-        /// Initialized in Initialize() method.
-        /// </summary>
-        private float[] _tempInputBuffer = null!;
-
-        /// <summary>
         /// Raised when the output device changes.
         /// </summary>
 #pragma warning disable CS0067 // Event is never used
@@ -384,12 +372,6 @@ namespace Ownaudio.Native
             if (_config.EnableInput && (_inputRing == null || _inputRing.Capacity != ringBufferSize))
                 _inputRing = new LockFreeRingBuffer<float>(ringBufferSize);
 
-            if (_tempOutputBuffer == null || _tempOutputBuffer.Length != _config.BufferSize * _config.Channels)
-                _tempOutputBuffer = new float[_config.BufferSize * _config.Channels];
-            
-            if (_config.EnableInput && (_tempInputBuffer == null || _tempInputBuffer.Length != _config.BufferSize * _config.Channels))
-                _tempInputBuffer = new float[_config.BufferSize * _config.Channels];
-
             // Get output device info and log the actual device being used
             IntPtr outputDeviceInfoPtr = Pa_GetDeviceInfo(_activeOutputDeviceIndex);
             double outputLatency = _config.BufferSize / (double)_config.SampleRate;
@@ -506,22 +488,18 @@ namespace Ownaudio.Native
                         if (_config.EnableInput && input != null)
                         {
                             Span<float> inputSpan = new Span<float>(input, sampleCount);
-                            inputSpan.CopyTo(_tempInputBuffer.AsSpan(0, sampleCount));
-                            _inputRing.Write(_tempInputBuffer.AsSpan(0, sampleCount));
+                            _inputRing.Write(inputSpan);
                         }
 
                         return PaStreamCallbackResult.paContinue;
                     }
                 }
 
-                // Normal playback mode
-                int samplesRead = _outputRing.Read(_tempOutputBuffer.AsSpan(0, sampleCount));
+                // Normal playback mode - Zero-copy: read directly to output
+                int samplesRead = _outputRing.Read(outputSpan);
 
                 if (samplesRead > 0)
                 {
-                    // Copy samples to output
-                    _tempOutputBuffer.AsSpan(0, samplesRead).CopyTo(outputSpan);
-
                     // Fill remaining samples with silence if underrun
                     if (samplesRead < sampleCount)
                     {
@@ -536,12 +514,11 @@ namespace Ownaudio.Native
                     outputSpan.Clear();
                 }
 
-                // Handle input if enabled
+                // Handle input if enabled - Zero-copy: write directly from input
                 if (_config.EnableInput && input != null)
                 {
                     Span<float> inputSpan = new Span<float>(input, sampleCount);
-                    inputSpan.CopyTo(_tempInputBuffer.AsSpan(0, sampleCount));
-                    _inputRing.Write(_tempInputBuffer.AsSpan(0, sampleCount));
+                    _inputRing.Write(inputSpan);
                 }
 
                 return PaStreamCallbackResult.paContinue;
@@ -664,10 +641,6 @@ namespace Ownaudio.Native
             if (_config.EnableInput)
                 _inputRing = new LockFreeRingBuffer<float>(ringBufferSize);
 
-            _tempOutputBuffer = new float[_config.BufferSize * _config.Channels];
-            if (_config.EnableInput)
-                _tempInputBuffer = new float[_config.BufferSize * _config.Channels];
-
             return 0;
         }
 
@@ -708,22 +681,18 @@ namespace Ownaudio.Native
                             if (_config.EnableInput && pInput != null)
                             {
                                 Span<float> inputSpan = new Span<float>(pInput, sampleCount);
-                                inputSpan.CopyTo(_tempInputBuffer.AsSpan(0, sampleCount));
-                                _inputRing.Write(_tempInputBuffer.AsSpan(0, sampleCount));
+                                _inputRing.Write(inputSpan);
                             }
 
                             return;
                         }
                     }
 
-                    // Normal playback mode
-                    int samplesRead = _outputRing.Read(_tempOutputBuffer.AsSpan(0, sampleCount));
+                    // Normal playback mode - Zero-copy: read directly to output
+                    int samplesRead = _outputRing.Read(outputSpan);
 
                     if (samplesRead > 0)
                     {
-                        // Copy samples to output
-                        _tempOutputBuffer.AsSpan(0, samplesRead).CopyTo(outputSpan);
-
                         // Fill remaining samples with silence if underrun
                         if (samplesRead < sampleCount)
                         {
@@ -739,12 +708,11 @@ namespace Ownaudio.Native
                     }
                 }
 
-                // Handle input (recording)
+                // Handle input (recording) - Zero-copy: write directly from input
                 if (_config.EnableInput && pInput != null)
                 {
                     Span<float> inputSpan = new Span<float>(pInput, sampleCount);
-                    inputSpan.CopyTo(_tempInputBuffer.AsSpan(0, sampleCount));
-                    _inputRing.Write(_tempInputBuffer.AsSpan(0, sampleCount));
+                    _inputRing.Write(inputSpan);
                 }
             }
             catch
@@ -830,6 +798,8 @@ namespace Ownaudio.Native
 
             int totalSamples = samples.Length;
             int written = 0;
+            var lastProgressTime = Environment.TickCount64;
+            const int timeoutMs = 1000; // Increased timeout to 1s to be safe
 
             // Write samples in a loop, blocking until all samples are written
             while (written < totalSamples && _isRunning == 1)
@@ -840,11 +810,21 @@ namespace Ownaudio.Native
                 if (samplesWritten > 0)
                 {
                     written += samplesWritten;
+                    lastProgressTime = Environment.TickCount64; // Reset timeout on progress
                 }
                 else
                 {
-                    int sleepMs = Math.Max(1, (_framesPerBuffer / 4 * 1000) / _config.SampleRate);
-                    Thread.Sleep(sleepMs);
+                    // Check for timeout (every ~15ms is enough resolution)
+                    long currentTime = Environment.TickCount64;
+                    if (currentTime - lastProgressTime > timeoutMs)
+                    {
+                        throw new AudioException($"Send timeout: No progress for {timeoutMs}ms. Audio thread may have stopped.");
+                    }
+
+                    // Buffer is full. Wait for the consumer (audio hardware) to play some samples.
+                    // Using Thread.Sleep(1) yields the CPU and prevents thread starvation, 
+                    // which is crucial for the high-priority audio callback thread to run smoothly.
+                    Thread.Sleep(1);
                 }
             }
         }
