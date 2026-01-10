@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <!-- Multi-targeting for mobile platforms only -->
-    <TargetFrameworks>net9.0-android35.0;net9.0-ios18.0</TargetFrameworks>
+    <TargetFrameworks>net9.0-android;net9.0-ios</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

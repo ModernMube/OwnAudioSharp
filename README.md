@@ -44,138 +44,51 @@
 **Commercial Quality, Free**: Professional tools without licensing costs
 **Truly Cross-Platform**: Windows, macOS, Linux, Android, iOS
 
-## 🎯 NEW in v2.5.3: Network Synchronization
+## 🎯 Advanced API Features
 
-### 🌐 NetworkSync - Multi-Device Audio Synchronization
+OwnAudioSharp includes professional-grade features typically found only in commercial software. These APIs provide powerful capabilities for advanced audio processing, synchronization, and analysis:
 
-**Synchronize audio playback across multiple devices on your local network** - perfect for multi-room audio, live performances, DJ setups, and synchronized installations.
+### 🎚️ **MasterClock** - Sample-Accurate Multi-Track Synchronization
+Perfect timeline synchronization for multi-track audio with automatic drift correction and DAW-style regions. Essential for professional music production, video editing, and any application requiring precise timing across multiple audio sources.
 
-#### Key Features
+**Use cases:** Multi-track recording, audio/video sync, live performance systems
 
-✅ **Zero-Configuration** - Automatic server discovery on local network (no internet required)
-✅ **Sample-Accurate Sync** - < 5ms accuracy on LAN, < 20ms on WiFi
-✅ **Graceful Degradation** - Automatic fallback to standalone mode if connection lost
-✅ **Zero-GC Performance** - No impact on audio quality (< 3% CPU overhead)
-✅ **Full Transport Control** - Play, Pause, Stop, Seek, Tempo synchronized across all clients
-✅ **Offline Operation** - Works entirely on local network, no internet needed
+### 🎛️ **SmartMaster** - Intelligent Audio Mastering Chain with Auto-Calibration
+Professional audio mastering system with automatic speaker calibration using an external measurement microphone. The system analyzes your speakers' frequency response and automatically optimizes the audio output for optimal sound quality. Includes speaker profiles (HiFi, Headphone, Studio, Club, Concert), 31-band EQ, multiband compression, and brick-wall limiting.
 
-#### Quick Start - Server Mode
+**Use cases:** Automatic room correction, speaker calibration, broadcast preparation, professional mastering
 
-```csharp
-using OwnaudioNET;
+### 🌐 **NetworkSync** - Multi-Device Audio Synchronization
+Synchronize audio playback across multiple devices on your local network with sample-accurate precision (<5ms on LAN). Zero-configuration with automatic server discovery, perfect for multi-room audio, live performances, DJ setups, and synchronized installations.
 
-// Initialize audio system
-await OwnaudioNet.InitializeAsync();
-OwnaudioNet.Start();
+**Use cases:** Multi-room audio systems, live PA setups, museum installations, collaborative production
 
-// Start as network sync server
-await OwnaudioNet.StartNetworkSyncServerAsync(
-    port: 9876,
-    useLocalTimeOnly: true);  // No internet required!
+### 🎵 **Audio Matchering** - AI-Driven Audio Mastering
+Reference-based mastering that analyzes your favorite tracks and applies their sonic characteristics to your audio. Automatic EQ matching and spectral processing deliver professional mastering results without expensive plugins.
 
-// Add tracks and control playback
-var mixer = OwnaudioNet.GetAudioMixer();
-var track = new FileSource("song.mp3");
-track.AttachToClock(mixer.MasterClock);
-mixer.AddSource(track);
+**Use cases:** Music production, podcast mastering, audio restoration
 
-// All commands are automatically broadcast to clients
-track.Play();   // All clients start playing
-track.Pause();  // All clients pause
-track.Seek(30); // All clients seek to 30 seconds
-```
+### 🎤 **Vocal Remover** - AI Vocal Separation with HTDemucs
+State-of-the-art vocal and instrumental track separation using ONNX neural networks. Features the advanced **HTDemucs** model for professional-grade 4-stem separation (vocals, drums, bass, other) with margin-trimming technology to eliminate chunk boundary artifacts. Multiple quality models available including `htdemucs` (4-stem), `default`, `best`, and `karaoke` models. Provides professional-grade stem isolation for remixing, karaoke, and audio analysis.
 
-#### Quick Start - Client Mode
+**HTDemucs Features:**
+- **4-Stem Separation**: Isolate vocals, drums, bass, and other instruments independently
+- **Margin-Trimming**: Advanced processing eliminates volume fluctuations at chunk boundaries
+- **High Quality**: Superior separation quality using hybrid transformer architecture
+- **Example Code**: See [VocalRemover Example](OwnAudio/Examples/Ownaudio.Example.HTDemucs/) for complete implementation
 
-```csharp
-// Initialize audio system
-await OwnaudioNet.InitializeAsync();
-OwnaudioNet.Start();
+**Use cases:** Karaoke creation, remixing, vocal analysis, instrumental extraction, stem mastering
 
-// Connect to server (auto-discovery or manual IP)
-await OwnaudioNet.StartNetworkSyncClientAsync(
-    serverAddress: "192.168.1.100",  // Or null for auto-discovery
-    port: 9876,
-    allowOfflinePlayback: true);     // Continue if disconnected
+### 🎸 **Chord Detection** - Advanced Musical Analysis
+Real-time and offline chord recognition supporting major, minor, diminished, augmented, and extended chords (7th, 9th, 11th, 13th). Chromagram-based analysis provides accurate recognition from simple to professional chord structures.
 
-// Add SAME tracks as server
-var mixer = OwnaudioNet.GetAudioMixer();
-var track = new FileSource("song.mp3");  // Same file as server!
-track.AttachToClock(mixer.MasterClock);
-mixer.AddSource(track);
-
-// Client automatically follows server commands
-// Monitor connection state
-OwnaudioNet.NetworkSyncConnectionChanged += (sender, e) =>
-{
-    Console.WriteLine($"Connection: {e.NewState}");
-};
-```
-
-#### Real-World Use Cases
-
-🎵 **Multi-Room Audio System**
-```csharp
-// Living room (Server)
-await OwnaudioNet.StartNetworkSyncServerAsync();
-// Kitchen, Bedroom, Bathroom (Clients)
-await OwnaudioNet.StartNetworkSyncClientAsync();
-// Perfect synchronization throughout your home!
-```
-
-🎤 **Live Performance / DJ Setup**
-```csharp
-// Main mixer (Server) controls everything
-// Monitor speakers (Clients) follow perfectly
-// Backup system (Client) ready for instant failover
-```
-
-🎬 **Installation Art / Museums**
-```csharp
-// Central control (Server)
-// Multiple displays/speakers (Clients)
-// Synchronized audio-visual experiences
-```
-
-🎧 **Collaborative Music Production**
-```csharp
-// Producer's workstation (Server)
-// Musicians' headphones (Clients)
-// Everyone hears the same thing at the same time
-```
-
-#### Advanced Features
-
-**Connection Monitoring:**
-```csharp
-var status = OwnaudioNet.GetNetworkSyncStatus();
-Console.WriteLine($"Clients: {status.ClientCount}");
-Console.WriteLine($"Latency: {status.AverageLatency:F2}ms");
-Console.WriteLine($"State: {status.ConnectionState}");
-```
-
-**Graceful Fallback:**
-```csharp
-// Client automatically continues playback if server disconnects
-// Reconnects automatically when server comes back online
-// No manual intervention needed!
-```
-
-**Performance Guarantees:**
-- **Zero-GC**: No heap allocations in hot path
-- **Low CPU**: < 3% overhead (audio threads unchanged)
-- **Low Bandwidth**: < 15 KB/s per client
-- **Thread Isolation**: Network never blocks audio
-
-> **📖 Detailed Documentation:** See [NetworkSync API Documentation](https://modernmube.github.io/OwnAudioSharp/documents/networksync.html) for complete technical details.
+**Use cases:** Music transcription, chord chart generation, music education, DJ software
 
 ---
 
-### 🎚️ MasterClock & SmartMaster
+**📚 Complete Documentation:** Visit the [OwnAudioSharp website](https://modernmube.github.io/OwnAudioSharp/) for detailed API documentation, tutorials, and usage examples.
 
-**MasterClock** provides sample-accurate timeline synchronization for multi-track audio with automatic drift correction and DAW-style regions. See the [MultitrackPlayer example](OwnAudio/Examples/Ownaudio.Example.MultitrackPlayer/) for implementation details.
-
-**SmartMaster** is an intelligent audio mastering chain with auto-calibration for different speaker systems (HiFi, Headphone, Studio, Club, Concert). Includes 31-band EQ, multiband compression, and brick-wall limiting. See [Effects Documentation](https://modernmube.github.io/OwnAudioSharp/documents/effects.html#master) for details.
+**💻 Working Examples:** See the [Examples directory](OwnAudio/Examples/) for complete, runnable projects demonstrating each feature in action.
 
 
 
@@ -186,25 +99,6 @@ Console.WriteLine($"State: {status.ConnectionState}");
 **Version 2.0.0** - Attempted pure managed code (GC issues discovered)
 
 **Pre-2.0.0** - Native libraries (miniaudio, portaudio, ffmpeg)
-
-## ✨ Key Features
-
-### Professional Audio Features (Free!)
-
-Features you typically only find in commercial software:
-
-- **AI Vocal Separation**: State-of-the-art vocal and instrumental track separation using ONNX neural networks
-  - Multiple quality models: `default`, `best`, `karaoke`
-  - Professional-grade stem isolation
-
-- **Audio Mastering**: AI-driven matchering - master your tracks to match reference audio
-  - Automatic EQ matching and spectral analysis
-  - Professional mastering without expensive plugins
-
-- **Advanced Chord Detection**: Musical chord recognition from simple to professional
-  - Real-time and offline analysis
-  - Major, minor, diminished, augmented, extended chords (7th, 9th, 11th, 13th)
-  - Chromagram-based recognition
 
 ### Core Engine Features
 
@@ -271,114 +165,6 @@ The website includes:
 - Architecture and design documentation
 - Best practices and performance tips
 - Professional feature guides (vocal removal, mastering, chord detection)
-
-### 🔧 Engine Architecture Documentation
-
-OwnAudioSharp's audio engine is built on a modular architecture with platform-specific implementations. Detailed documentation is available for each component:
-
-#### Core Components
-- **[Ownaudio.Core](OwnAudioEngine/Ownaudio.Core/README.md)** - Cross-platform interfaces, audio decoders (MP3/WAV/FLAC), lock-free buffers, and zero-allocation primitives
-
-#### Platform-Specific Implementations
-- **[Ownaudio.Windows](OwnAudioEngine/Ownaudio.Windows/README.md)** - WASAPI implementation for Windows (10+)
-- **[Ownaudio.Linux](OwnAudioEngine/Ownaudio.Linux/README.md)** - PulseAudio implementation for Linux
-- **[Ownaudio.macOS](OwnAudioEngine/Ownaudio.macOS/README.md)** - Core Audio implementation for macOS
-- **[Ownaudio.Android](OwnAudioEngine/Ownaudio.Android/README.md)** - AAudio implementation for Android (API 26+)
-
-Each platform implementation includes:
-- Architecture overview and native API details
-- Performance characteristics and latency information
-- Platform-specific requirements and dependencies
-- Usage examples and best practices
-- Troubleshooting guides
-
-For low-level engine development or platform-specific optimization, check out the individual platform documentation.
-
-## 🚀 Quick Start Examples
-
-### Using the Native Engine (Recommended)
-
-```csharp
-using Ownaudio.Core;
-
-// Create NATIVE audio engine (DEFAULT - GC-free!)
-// Automatically uses PortAudio if available, otherwise miniaudio
-using var engine = AudioEngineFactory.CreateDefault();
-
-// Configure and start the engine
-var config = new AudioConfig
-{
-    SampleRate = 48000,
-    Channels = 2,
-    BufferSize = 512
-};
-engine.Initialize(config);
-engine.Start();
-
-// Create decoder and play audio
-using var decoder = AudioDecoderFactory.Create("music.mp3",
-    targetSampleRate: 48000,
-    targetChannels: 2);
-
-while (true)
-{
-    var result = decoder.DecodeNextFrame();
-    if (result.IsEOF) break;
-
-    // Native engine - no GC glitches!
-    engine.Send(result.Frame.Samples);
-}
-
-engine.Stop();
-```
-
-### Using OwnaudioNET (High-Level API)
-
-```csharp
-// Initialize OwnaudioNET (uses native engine by default)
-await OwnaudioNet.InitializeAsync();
-
-// Create file source
-var source = new FileSource("music.mp3");
-
-// Create mixer and add source
-var mixer = new AudioMixer(OwnaudioNet.Engine);
-mixer.AddSource(source);
-mixer.Start();
-
-// Play the source
-source.Play();
-
-// Apply professional effects
-var reverb = new ReverbEffect { Mix = 0.3f, RoomSize = 0.7f };
-var compressor = new CompressorEffect(threshold: 0.5f, ratio: 4.0f, sampleRate: 48000f);
-var sourceWithEffects = new SourceWithEffects(source, reverb, compressor);
-
-// Control playback
-source.Volume = 0.8f;
-source.Seek(30.0); // seconds
-```
-
-### Using Managed Engines (Optional)
-
-```csharp
-// Create MANAGED audio engine (pure C#)
-// Note: May experience GC-related audio glitches
-using var engine = AudioEngineFactory.CreateManaged();
-
-// Or platform-specific:
-#if WINDOWS
-    using var engine = new WasapiEngine();
-#elif LINUX
-    using var engine = new PulseAudioEngine();
-#elif MACOS
-    using var engine = new CoreAudioEngine();
-#endif
-
-engine.Initialize(AudioConfig.Default);
-engine.Start();
-// ... rest of your code
-```
 
 ## 💡 Support
 

@@ -923,7 +923,8 @@ namespace OwnaudioNET.Features.Vocalremover
         None,
         Default,
         Best,
-        Karaoke
+        Karaoke,
+        HTDemucs
     }
 
     /// <summary>
@@ -1124,6 +1125,9 @@ namespace OwnaudioNET.Features.Vocalremover
                     break;
                 case InternalModel.Karaoke:
                     resourceName = "karaoke.onnx";
+                    break;
+                case InternalModel.HTDemucs:
+                    resourceName = "htdemucs.onnx";
                     break;
             }
 

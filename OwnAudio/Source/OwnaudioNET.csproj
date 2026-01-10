@@ -47,6 +47,7 @@
     <EmbeddedResource Include="best.onnx" />
     <EmbeddedResource Include="default.onnx" />
     <EmbeddedResource Include="karaoke.onnx" />
+    <EmbeddedResource Include="htdemucs.onnx" />
     <EmbeddedResource Include="basesample.bin" />
   </ItemGroup>
 

@@ -53,6 +53,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.Example.NetworkSyn
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.Example.NetworkSyncServer", "OwnAudio\Examples\Ownaudio.Example.NetworkSyncServer\Ownaudio.Example.NetworkSyncServer.csproj", "{60F5D14F-F19E-48DB-A94E-94BE0DEF8AD3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.Example.HTDemucs", "OwnAudio\Examples\Ownaudio.Example.HTDemucs\Ownaudio.Example.HTDemucs.csproj", "{3784A1B5-840A-0560-B590-1BD2C154332E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -336,6 +338,18 @@ Global
 		{60F5D14F-F19E-48DB-A94E-94BE0DEF8AD3}.Release|x64.Build.0 = Release|Any CPU
 		{60F5D14F-F19E-48DB-A94E-94BE0DEF8AD3}.Release|x86.ActiveCfg = Release|Any CPU
 		{60F5D14F-F19E-48DB-A94E-94BE0DEF8AD3}.Release|x86.Build.0 = Release|Any CPU
+		{3784A1B5-840A-0560-B590-1BD2C154332E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3784A1B5-840A-0560-B590-1BD2C154332E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3784A1B5-840A-0560-B590-1BD2C154332E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3784A1B5-840A-0560-B590-1BD2C154332E}.Debug|x64.Build.0 = Debug|Any CPU
+		{3784A1B5-840A-0560-B590-1BD2C154332E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3784A1B5-840A-0560-B590-1BD2C154332E}.Debug|x86.Build.0 = Debug|Any CPU
+		{3784A1B5-840A-0560-B590-1BD2C154332E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3784A1B5-840A-0560-B590-1BD2C154332E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3784A1B5-840A-0560-B590-1BD2C154332E}.Release|x64.ActiveCfg = Release|Any CPU
+		{3784A1B5-840A-0560-B590-1BD2C154332E}.Release|x64.Build.0 = Release|Any CPU
+		{3784A1B5-840A-0560-B590-1BD2C154332E}.Release|x86.ActiveCfg = Release|Any CPU
+		{3784A1B5-840A-0560-B590-1BD2C154332E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -362,6 +376,7 @@ Global
 		{3005EDB1-6CFF-42D6-A9BB-C8D80FD8D1BA} = {F8B29F87-CAE2-4246-ADC9-00FCFD26C22F}
 		{452577B4-C938-C807-904C-B85E430F3547} = {C3D4E5F6-A7B8-9012-CDEF-123456789012}
 		{60F5D14F-F19E-48DB-A94E-94BE0DEF8AD3} = {C3D4E5F6-A7B8-9012-CDEF-123456789012}
+		{3784A1B5-840A-0560-B590-1BD2C154332E} = {C3D4E5F6-A7B8-9012-CDEF-123456789012}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {1F9E84F3-54D4-4849-89A2-B6D0BF288902}

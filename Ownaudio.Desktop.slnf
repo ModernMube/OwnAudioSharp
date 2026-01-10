@@ -12,6 +12,7 @@
       "OwnAudioTests\\Ownaudio.OwnaudioNET\\Ownaudio.Test.OwnaudioNET.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.ChordDetect\\Ownaudio.Example.ChordDetect.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.Desktop\\Ownaudio.Example.Desktop.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.HTDemucs\\Ownaudio.Example.HTDemucs.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.Input\\Ownaudio.Example.Input.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.Matching\\Ownaudio.Example.Matching.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.MultitrackPlayer\\Ownaudio.Example.MultitrackPlayer.csproj",
