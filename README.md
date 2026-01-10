@@ -77,6 +77,14 @@ State-of-the-art vocal and instrumental track separation using ONNX neural netwo
 - **High Quality**: Superior separation quality using hybrid transformer architecture
 - **Example Code**: See [VocalRemover Example](OwnAudio/Examples/Ownaudio.Example.HTDemucs/) for complete implementation
 
+> [!IMPORTANT]
+> **HTDemucs Model Setup Required**
+> 
+> Before using HTDemucs, download the model file and place it in your models directory:
+> 1. Download: [htdemucs.onnx](https://huggingface.co/ModernMube/HTDemucs_onnx/resolve/main/htdemucs.onnx) (166 MB)
+> 2. Copy to the same directory as other vocal remover models
+> 3. The model will be automatically detected by the API
+
 **Use cases:** Karaoke creation, remixing, vocal analysis, instrumental extraction, stem mastering
 
 ### 🎸 **Chord Detection** - Advanced Musical Analysis
