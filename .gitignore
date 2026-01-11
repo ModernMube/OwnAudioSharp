@@ -136,6 +136,7 @@ _ReSharper*/
 .claude/
 .markdowns/
 ClearFolders.bat
+ClearFolders.sh
 CLAUDE.md
 GEMINI.md
 
