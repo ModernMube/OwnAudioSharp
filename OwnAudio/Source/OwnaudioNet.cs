@@ -32,7 +32,7 @@ public static partial class OwnaudioNet
     /// <summary>
     /// Gets the version of the OwnaudioNET library.
     /// </summary>
-    public static Version Version { get; } = new Version(2, 5, 3);
+    public static Version Version { get; } = new Version(2, 5, 4);
 
     /// <summary>
     /// Gets the current audio engine wrapper (null if not initialized).
