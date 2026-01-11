@@ -1,450 +1,135 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
-<head>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
-    <script>
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
 
-        gtag('config', 'G-93P1X5V4Z5');
-    </script>
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Effects - OwnAudioSharp</title>
+    <title>Audio Effects Reference - Ownaudio</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="docs.css">
     <style>
-        :root {
-            --primary-color: #6366f1;
-            --primary-dark: #4f46e5;
-            --secondary-color: #ec4899;
-            --background: #0f0f23;
-            --surface: #1a1a2e;
-            --surface-light: #16213e;
-            --text-primary: #e2e8f0;
-            --text-secondary: #94a3b8;
-            --accent: #00d9ff;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --border: #334155;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--background);
-            color: var(--text-primary);
-            line-height: 1.6;
-        }
-
-        .nav {
-            background: rgba(26, 26, 46, 0.95);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid var(--border);
-            position: fixed;
-            top: 0;
-            width: 100%;
-            z-index: 1000;
-            padding: 1rem 0;
-        }
-
-        .nav-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--primary-color), var(--accent));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            text-decoration: none;
-        }
-
-        .nav-links {
-            display: flex;
-            list-style: none;
-            gap: 2rem;
-        }
-
-            .nav-links a {
-                color: var(--text-secondary);
-                text-decoration: none;
-                font-weight: 500;
-                transition: color 0.3s ease;
-            }
-
-                .nav-links a:hover, .nav-links a.active {
-                    color: var(--primary-color);
-                }
-
-        .main {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 100px 2rem 2rem;
-            display: grid;
-            grid-template-columns: 280px 1fr;
-            gap: 3rem;
-        }
-
-        .sidebar {
-            background: var(--surface);
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            padding: 2rem;
-            height: fit-content;
-            position: sticky;
-            top: 120px;
-            max-height: calc(100vh - 140px);
-            overflow-y: auto;
-        }
-
-            .sidebar h3 {
-                color: var(--text-primary);
-                margin-bottom: 1rem;
-                font-size: 1.1rem;
-            }
-
-        .sidebar-nav {
-            list-style: none;
-        }
-
-            .sidebar-nav > li {
-                margin-bottom: 1rem;
-            }
-
-            .sidebar-nav .section-title {
-                color: var(--primary-color);
-                font-weight: 600;
-                font-size: 0.9rem;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                margin-bottom: 0.5rem;
-            }
-
-            .sidebar-nav ul {
-                list-style: none;
-                margin-left: 1rem;
-            }
-
-                .sidebar-nav ul li {
-                    margin-bottom: 0.3rem;
-                }
-
-            .sidebar-nav a {
-                color: var(--text-secondary);
-                text-decoration: none;
-                font-size: 0.875rem;
-                transition: color 0.3s ease;
-                display: block;
-                padding: 0.25rem 0;
-            }
-
-                .sidebar-nav a:hover,
-                .sidebar-nav a.active {
-                    color: var(--primary-color);
-                }
-
-        .content {
-            background: var(--surface);
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            padding: 3rem;
-        }
-
-            .content h1 {
-                font-size: 2.5rem;
-                margin-bottom: 1rem;
-                color: var(--text-primary);
-            }
-
-            .content h2 {
-                font-size: 1.8rem;
-                margin: 2.5rem 0 1rem;
-                color: var(--text-primary);
-                border-bottom: 2px solid var(--border);
-                padding-bottom: 0.5rem;
-            }
-
-            .content h3 {
-                font-size: 1.3rem;
-                margin: 2rem 0 0.75rem;
-                color: var(--primary-color);
-            }
-
-            .content h4 {
-                font-size: 1.1rem;
-                margin: 1.5rem 0 0.5rem;
-                color: var(--text-primary);
-            }
-
-            .content p {
-                margin-bottom: 1rem;
-                color: var(--text-secondary);
-            }
-
-            .content ul, .content ol {
-                margin-bottom: 1rem;
-                padding-left: 2rem;
-                color: var(--text-secondary);
-            }
-
-            .content li {
-                margin-bottom: 0.5rem;
-            }
-
-        .effects-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 2rem;
-            margin: 2rem 0;
-        }
-
         .effect-card {
-            background: var(--surface-light);
+            background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 2rem;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
         }
-
-            .effect-card:hover {
-                transform: translateY(-5px);
-                border-color: var(--primary-color);
-                box-shadow: 0 10px 30px rgba(99, 102, 241, 0.2);
-            }
-
-            .effect-card::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                height: 4px;
-                background: linear-gradient(90deg, var(--primary-color), var(--accent));
-            }
 
         .effect-header {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 0.5rem;
             margin-bottom: 1rem;
         }
 
-        .effect-icon {
-            width: 50px;
-            height: 50px;
-            background: linear-gradient(135deg, var(--primary-color), var(--accent));
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
+        .effect-title {
             font-size: 1.5rem;
-        }
-
-        .effect-card h4 {
+            color: var(--primary-color);
             margin: 0;
-            color: var(--text-primary);
         }
 
-        .effect-description {
+        .effect-desc {
             color: var(--text-secondary);
-            margin-bottom: 1.5rem;
-            font-size: 0.9rem;
+            margin: 0.5rem 0 0 0;
+            font-style: italic;
         }
 
-        .parameter-list {
-            background: var(--background);
-            border-radius: 8px;
-            padding: 1rem;
+        .params-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
             margin: 1rem 0;
-            border: 1px solid var(--border);
         }
 
-            .parameter-list h5 {
-                color: var(--primary-color);
-                margin-bottom: 0.5rem;
-                font-size: 0.9rem;
-            }
-
-            .parameter-list ul {
-                margin: 0;
-                padding-left: 1rem;
-            }
-
-            .parameter-list li {
-                font-size: 0.85rem;
-                margin-bottom: 0.3rem;
-            }
-
-        .code-block {
-            background: var(--surface-light);
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            margin: 1.5rem 0;
-            overflow: hidden;
-        }
-
-        .code-header {
+        .param-item {
             background: var(--background);
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid var(--border);
+            padding: 0.75rem;
+            border-radius: 4px;
+            border-left: 3px solid var(--accent);
+        }
+
+        .param-name {
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .param-type {
+            color: var(--text-secondary);
             font-size: 0.875rem;
-            color: var(--text-secondary);
+        }
+
+        .param-range {
+            color: var(--accent);
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+
+        .presets-list {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .effect-type-badge {
-            background: var(--secondary-color);
-            color: white;
-            padding: 0.2rem 0.6rem;
-            border-radius: 12px;
-            font-size: 0.7rem;
-            font-weight: 500;
-        }
-
-            .effect-type-badge.spatial {
-                background: var(--primary-color);
-            }
-
-            .effect-type-badge.temporal {
-                background: var(--accent);
-            }
-
-            .effect-type-badge.dynamic {
-                background: var(--warning);
-            }
-
-            .effect-type-badge.spectral {
-                background: var(--success);
-            }
-
-        pre {
-            margin: 0;
-            padding: 1.5rem;
-            overflow-x: auto;
-            background: transparent !important;
-        }
-
-        .parameter-table {
-            width: 100%;
-            border-collapse: collapse;
+            flex-wrap: wrap;
+            gap: 0.5rem;
             margin: 1rem 0;
+        }
+
+        .preset-tag {
             background: var(--surface-light);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-            .parameter-table th,
-            .parameter-table td {
-                padding: 0.75rem;
-                text-align: left;
-                border-bottom: 1px solid var(--border);
-            }
-
-            .parameter-table th {
-                background: var(--background);
-                color: var(--text-primary);
-                font-weight: 600;
-            }
-
-            .parameter-table td {
-                color: var(--text-secondary);
-            }
-
-            .parameter-table code {
-                background: var(--background);
-                padding: 0.2rem 0.4rem;
-                border-radius: 4px;
-                font-size: 0.85rem;
-            }
-
-        .alert {
-            padding: 1rem;
-            border-radius: 8px;
-            margin: 1.5rem 0;
-            border-left: 4px solid;
-        }
-
-        .alert-info {
-            background: rgba(99, 102, 241, 0.1);
-            border-color: var(--primary-color);
+            border: 1px solid var(--border-light);
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
             color: var(--text-primary);
         }
 
-        .alert-warning {
-            background: rgba(245, 158, 11, 0.1);
-            border-color: var(--warning);
-            color: var(--text-primary);
+        .category-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
         }
 
-        .alert-success {
-            background: rgba(16, 185, 129, 0.1);
-            border-color: var(--success);
-            color: var(--text-primary);
+        .badge-dynamics {
+            background: #7c3aed;
+            color: white;
         }
 
-        .feature-highlight {
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(0, 217, 255, 0.1));
-            border: 1px solid var(--primary-color);
-            border-radius: 12px;
-            padding: 2rem;
-            margin: 2rem 0;
+        .badge-frequency {
+            background: #f59e0b;
+            color: white;
         }
 
-            .feature-highlight h3 {
-                margin-top: 0;
-                color: var(--primary-color);
-            }
+        .badge-modulation {
+            background: #10b981;
+            color: white;
+        }
 
-        @media (max-width: 1024px) {
-            .main {
-                grid-template-columns: 1fr;
-                padding-top: 80px;
-            }
+        .badge-spatial {
+            background: #06b6d4;
+            color: white;
+        }
 
-            .sidebar {
-                position: static;
-                order: 2;
-                max-height: none;
-            }
-
-            .nav-links {
-                display: none;
-            }
-
-            .effects-grid {
-                grid-template-columns: 1fr;
-            }
+        .badge-distortion {
+            background: #ef4444;
+            color: white;
         }
     </style>
 </head>
+
 <body>
     <nav class="nav">
         <div class="nav-container">
-            <a href="../index.html" class="logo">OwnAudioSharp</a>
+            <a href="../index.html" class="logo">OwnaudioSharp</a>
             <ul class="nav-links">
-                <li><a href="../index.html#features">Features</a></li>
                 <li><a href="quickstart.html">Quick Start</a></li>
-                <li><a href="api-reference.html">API Reference</a></li>
+                <li><a href="api-core.html">Core API</a></li>
+                <li><a href="api-net.html">NET API</a></li>
                 <li><a href="examples.html">Examples</a></li>
+                <li><a href="effects.html" class="active">Effects</a></li>
+                <li><a href="networksync.html">Net Sync</a></li>
+                <li><a href="matchering.html">Mastering</a></li>
+                <li><a href="vocalremover.html">Vocal Sep</a></li>
+                <li><a href="chorddetect.html">Chords</a></li>
                 <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
             </ul>
         </div>
@@ -454,723 +139,1138 @@
         <aside class="sidebar">
             <h3>Audio Effects</h3>
             <ul class="sidebar-nav">
-                <li>
-                    <div class="section-title">Spatial Effects</div>
-                    <ul>
-                        <li><a href="#reverb">Reverb</a></li>
-                        <li><a href="#delay">Delay</a></li>
-                        <li><a href="#chorus">Chorus</a></li>
-                        <li><a href="#flanger">Flanger</a></li>
-                        <li><a href="#phaser">Phaser</a></li>
-                    </ul>
-                </li>
-                <li>
-                    <div class="section-title">Dynamic Effects</div>
-                    <ul>
-                        <li><a href="#compressor">Compressor</a></li>
-                        <li><a href="#limiter">Limiter</a></li>
-                        <!--<li><a href="#dynamic-amp">Dynamic Amp</a></li>-->
-                    </ul>
-                </li>
-                <li>
-                    <div class="section-title">Spectral Effects</div>
-                    <ul>
-                        <li><a href="#equalizer">Equalizer</a></li>
-                        <!--<li><a href="#enhancer">Enhancer</a></li>-->
-                    </ul>
-                </li>
-                <li>
-                    <div class="section-title">Distortion</div>
-                    <ul>
-                        <li><a href="#distortion">Distortion</a></li>
-                        <!--<li><a href="#overdrive">Overdrive</a></li>-->
-                    </ul>
-                </li>
-                <li>
-                    <div class="section-title">Specialty</div>
-                    <ul>
-                        <li><a href="#rotary">Rotary Speaker</a></li>
-                        <li><a href="#custom-effects">Custom Effects</a></li>
-                    </ul>
-                </li>
+                <li><a href="#overview" class="active">Overview</a></li>
+                <li><a href="#dynamics">Dynamics</a></li>
+                <li><a href="#frequency">Frequency</a></li>
+                <li><a href="#modulation">Modulation</a></li>
+                <li><a href="#spatial">Spatial</a></li>
+                <li><a href="#distortion">Distortion</a></li>
+                <li><a href="#master">Master Processing</a></li>
+                <li><a href="#usage">Usage Examples</a></li>
             </ul>
         </aside>
 
         <main class="content">
-            <h1>Audio Effects Library</h1>
-            <p>OwnAudioSharp includes a comprehensive collection of professional audio effects. Each effect is optimized for real-time processing and provides studio-quality results.</p>
+            <h1>Professional Audio Effects Reference</h1>
+            <p>
+                Complete reference for all 15+ professional-grade audio effects with detailed parameter specifications,
+                preset configurations, and usage examples.
+            </p>
 
             <div class="alert alert-info">
-                <strong>Professional Quality:</strong> All effects are based on industry-standard algorithms and provide broadcast-quality audio processing suitable for commercial applications.
+                <strong>Zero-Allocation Design</strong>
+                All effects are optimized for real-time audio with zero-allocation processing, SIMD operations where
+                applicable,
+                and lock-free operation for professional audio applications.
             </div>
 
-            <div class="effects-grid">
-                <div class="effect-card">
-                    <div class="effect-header">
-                        <div class="effect-icon">🏛️</div>
-                        <div>
-                            <h4>Reverb <span class="effect-type-badge spatial">Spatial</span></h4>
-                            <div class="effect-description">Professional quality reverb based on Freeverb algorithm</div>
-                        </div>
-                    </div>
-                    <a href="#reverb" style="color: var(--primary-color); text-decoration: none;">Learn more →</a>
-                </div>
-
-                <div class="effect-card">
-                    <div class="effect-header">
-                        <div class="effect-icon">🔁</div>
-                        <div>
-                            <h4>Delay <span class="effect-type-badge temporal">Temporal</span></h4>
-                            <div class="effect-description">Echo effect with configurable feedback and timing</div>
-                        </div>
-                    </div>
-                    <a href="#delay" style="color: var(--primary-color); text-decoration: none;">Learn more →</a>
-                </div>
-
-                <div class="effect-card">
-                    <div class="effect-header">
-                        <div class="effect-icon">🎛️</div>
-                        <div>
-                            <h4>Compressor <span class="effect-type-badge dynamic">Dynamic</span></h4>
-                            <div class="effect-description">Dynamic range compression with professional controls</div>
-                        </div>
-                    </div>
-                    <a href="#compressor" style="color: var(--primary-color); text-decoration: none;">Learn more →</a>
-                </div>
-
-                <div class="effect-card">
-                    <div class="effect-header">
-                        <div class="effect-icon">📊</div>
-                        <div>
-                            <h4>Equalizer <span class="effect-type-badge spectral">Spectral</span></h4>
-                            <div class="effect-description">30-band parametric EQ with dynamic Q-factor optimization</div>
-                        </div>
-                    </div>
-                    <a href="#equalizer" style="color: var(--primary-color); text-decoration: none;">Learn more →</a>
-                </div>
-            </div>
-
-            <h2 id="reverb">Reverb Effect</h2>
-            <p>Professional quality reverb effect based on the renowned Freeverb algorithm. Creates natural-sounding spatial ambience from small rooms to large halls.</p>
-
-            <div class="code-block">
-                <div class="code-header">
-                    <span>Basic Reverb Usage</span>
-                    <span class="effect-type-badge spatial">Spatial</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio.Processors;
-
-// Create hall reverb
-var hallReverb = new Reverb(
-    roomSize: 0.8f,    // Large space
-    damping: 0.2f,     // Minimal high-frequency damping
-    wetLevel: 0.4f,    // 40% reverb signal
-    dryLevel: 0.7f     // 70% original signal
-);
-
-sourceManager.CustomSampleProcessor = hallReverb;</code></pre>
-            </div>
-
-            <h3>Parameters</h3>
-            <table class="parameter-table">
-                <thead>
-                    <tr>
-                        <th>Parameter</th>
-                        <th>Range</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>roomSize</code></td>
-                        <td>0.0 - 1.0</td>
-                        <td>Size of the reverberant space. 0.1 = small room, 0.9 = cathedral</td>
-                    </tr>
-                    <tr>
-                        <td><code>damping</code></td>
-                        <td>0.0 - 1.0</td>
-                        <td>High frequency absorption. 0.0 = bright, 1.0 = very damped</td>
-                    </tr>
-                    <tr>
-                        <td><code>wetLevel</code></td>
-                        <td>0.0 - 1.0</td>
-                        <td>Level of the reverb effect in the output mix</td>
-                    </tr>
-                    <tr>
-                        <td><code>dryLevel</code></td>
-                        <td>0.0 - 1.0</td>
-                        <td>Level of the original (dry) signal in the output mix</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="code-block">
-                <div class="code-header">Reverb Presets</div>
-                <pre><code class="language-csharp">// Small room reverb
-var roomReverb = new Reverb(0.3f, 0.7f, 0.25f, 0.8f);
-
-// Concert hall reverb
-var concertHall = new Reverb(0.9f, 0.1f, 0.5f, 0.6f);
-
-// Plate reverb (bright and smooth)
-var plateReverb = new Reverb(0.5f, 0.3f, 0.4f, 0.7f);
-
-// Vocal booth (tight, controlled)
-var vocalBooth = new Reverb(0.2f, 0.8f, 0.15f, 0.9f);</code></pre>
-            </div>
-
-            <h2 id="delay">Delay Effect</h2>
-            <p>High-quality digital delay with feedback control. Perfect for creating echoes, ping-pong effects, and rhythmic delays.</p>
-
-            <div class="code-block">
-                <div class="code-header">
-                    <span>Delay Configuration</span>
-                    <span class="effect-type-badge temporal">Temporal</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio.Processors;
-
-// Create echo delay
-var echoDelay = new Delay(
-    delayMs: 500,      // 500ms delay time
-    feedback: 0.4f,    // 40% feedback for natural echoes
-    wetLevel: 0.3f,    // 30% effect level
-    sampleRate: 44100  // Audio sample rate
-);
-
-sourceManager.CustomSampleProcessor = echoDelay;</code></pre>
-            </div>
-
-            <h3>Parameters</h3>
-            <table class="parameter-table">
-                <thead>
-                    <tr>
-                        <th>Parameter</th>
-                        <th>Range</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>delayMs</code></td>
-                        <td>1 - 2000</td>
-                        <td>Delay time in milliseconds. Lower values for doubling, higher for echoes</td>
-                    </tr>
-                    <tr>
-                        <td><code>feedback</code></td>
-                        <td>0.0 - 0.95</td>
-                        <td>Amount of delayed signal fed back. Higher values create more repeats</td>
-                    </tr>
-                    <tr>
-                        <td><code>wetLevel</code></td>
-                        <td>0.0 - 1.0</td>
-                        <td>Level of the delayed signal in the mix</td>
-                    </tr>
-                    <tr>
-                        <td><code>sampleRate</code></td>
-                        <td>22050 - 96000</td>
-                        <td>Audio sample rate for accurate timing calculations</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="code-block">
-                <div class="code-header">Delay Presets</div>
-                <pre><code class="language-csharp">// Short slap-back delay
-var slapback = new Delay(120, 0.2f, 0.2f, 44100);
-
-// Ping-pong delay
-var pingPong = new Delay(250, 0.6f, 0.4f, 44100);
-
-// Long atmospheric delay
-var atmosphere = new Delay(800, 0.5f, 0.3f, 44100);
-
-// Rhythmic delay (1/8 note at 120 BPM)
-var rhythmic = new Delay(250, 0.4f, 0.25f, 44100);</code></pre>
-            </div>
-
-            <h2 id="compressor">Compressor Effect</h2>
-            <p>Professional dynamic range compressor with configurable attack, release, ratio, and makeup gain. Essential for controlling dynamics and adding punch to audio.</p>
-
-            <div class="code-block">
-                <div class="code-header">
-                    <span>Compressor Setup</span>
-                    <span class="effect-type-badge dynamic">Dynamic</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio.Processors;
-
-// Create vocal compressor
-var vocalComp = new Compressor(
-    threshold: 0.6f,   // Start compressing at 60% level
-    ratio: 3.0f,       // 3:1 compression ratio
-    attackMs: 5f,      // Fast 5ms attack
-    releaseMs: 50f,    // Medium 50ms release
-    makeupGain: 1.3f,  // Compensate for level reduction
-    sampleRate: 44100f
-);
-
-sourceManager.CustomSampleProcessor = vocalComp;</code></pre>
-            </div>
-
-            <h3>Parameters</h3>
-            <table class="parameter-table">
-                <thead>
-                    <tr>
-                        <th>Parameter</th>
-                        <th>Range</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>threshold</code></td>
-                        <td>0.0 - 1.0</td>
-                        <td>Level above which compression begins. Lower = more compression</td>
-                    </tr>
-                    <tr>
-                        <td><code>ratio</code></td>
-                        <td>1.0 - 20.0</td>
-                        <td>Compression ratio. 2:1 = gentle, 10:1 = heavy limiting</td>
-                    </tr>
-                    <tr>
-                        <td><code>attackMs</code></td>
-                        <td>0.1 - 100</td>
-                        <td>Time to reach full compression. Fast for transients, slow for smooth</td>
-                    </tr>
-                    <tr>
-                        <td><code>releaseMs</code></td>
-                        <td>1 - 1000</td>
-                        <td>Time to return to normal. Fast for punch, slow for smoothness</td>
-                    </tr>
-                    <tr>
-                        <td><code>makeupGain</code></td>
-                        <td>0.1 - 5.0</td>
-                        <td>Compensate for level reduction caused by compression</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="code-block">
-                <div class="code-header">Compressor Presets</div>
-                <pre><code class="language-csharp">// Gentle bus compressor
-var busComp = new Compressor(0.7f, 2.0f, 30f, 100f, 1.1f, 44100f);
-
-// Drum compressor (punchy)
-var drumComp = new Compressor(0.5f, 4.0f, 1f, 30f, 1.5f, 44100f);
-
-// Vocal compressor (smooth)
-var vocalComp = new Compressor(0.6f, 3.0f, 5f, 50f, 1.3f, 44100f);
-
-// Limiter (brick wall)
-var limiter = new Compressor(0.95f, 20.0f, 0.1f, 5f, 1.0f, 44100f);</code></pre>
-            </div>
-
-            <h2 id="equalizer">Equalizer Effect</h2>
-            <p>Advanced 30-band parametric equalizer with dynamic Q-factor optimization. Features precise frequency control and psychoacoustic modeling.</p>
-
-            <div class="code-block">
-                <div class="code-header">
-                    <span>Equalizer Configuration</span>
-                    <span class="effect-type-badge spectral">Spectral</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio.Processors;
-
-// Create 30-band equalizer
-var equalizer = new Equalizer(44100);
-
-// Boost bass frequencies
-equalizer.SetBandGain(0, 60f, 3.0f, 1.0f);    // 60Hz +3dB
-equalizer.SetBandGain(1, 100f, 2.5f, 1.2f);   // 100Hz +2.5dB
-
-// Cut muddy mids
-equalizer.SetBandGain(8, 400f, -2.0f, 2.0f);   // 400Hz -2dB
-
-// Enhance presence
-equalizer.SetBandGain(15, 3000f, 2.5f, 1.5f);  // 3kHz +2.5dB
-
-// Smooth highs
-equalizer.SetBandGain(25, 10000f, 1.5f, 0.8f); // 10kHz +1.5dB
-
-sourceManager.CustomSampleProcessor = equalizer;</code></pre>
-            </div>
-
-            <h3>30-Band Frequency Distribution</h3>
-            <div class="parameter-list">
-                <h5>Low Frequencies (20Hz - 200Hz)</h5>
-                <ul>
-                    <li>Bands 0-9: Sub-bass and bass fundamentals</li>
-                    <li>Critical for kick drums, bass guitar, and low-end warmth</li>
-                </ul>
-            </div>
-
-            <div class="parameter-list">
-                <h5>Mid Frequencies (250Hz - 2.5kHz)</h5>
-                <ul>
-                    <li>Bands 10-19: Vocal fundamentals and body</li>
-                    <li>Important for clarity and presence of most instruments</li>
-                </ul>
-            </div>
-
-            <div class="parameter-list">
-                <h5>High Frequencies (3.15kHz - 16kHz)</h5>
-                <ul>
-                    <li>Bands 20-29: Presence, air, and harmonics</li>
-                    <li>Controls brightness, detail, and spatial perception</li>
-                </ul>
-            </div>
-
-            <h3>SetBandGain Method</h3>
-            <table class="parameter-table">
-                <thead>
-                    <tr>
-                        <th>Parameter</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>band</code></td>
-                        <td>Band index (0-29) corresponding to frequency ranges</td>
-                    </tr>
-                    <tr>
-                        <td><code>frequency</code></td>
-                        <td>Center frequency in Hz for the band</td>
-                    </tr>
-                    <tr>
-                        <td><code>gain</code></td>
-                        <td>Gain adjustment in dB (-20 to +20)</td>
-                    </tr>
-                    <tr>
-                        <td><code>q</code></td>
-                        <td>Q-factor (bandwidth). Lower = wider, higher = narrower</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="code-block">
-                <div class="code-header">EQ Presets</div>
-                <pre><code class="language-csharp">// Rock/Pop master EQ
-var rockEQ = new Equalizer(44100);
-rockEQ.SetBandGain(2, 80f, 2.0f, 1.0f);      // Kick punch
-rockEQ.SetBandGain(7, 200f, -1.5f, 2.0f);    // Reduce muddiness
-rockEQ.SetBandGain(12, 1000f, 1.0f, 1.2f);   // Vocal presence
-rockEQ.SetBandGain(20, 5000f, 2.5f, 1.5f);   // Brightness
-rockEQ.SetBandGain(27, 12000f, 1.5f, 0.8f);  // Air
-
-// Vocal enhancement EQ
-var vocalEQ = new Equalizer(44100);
-vocalEQ.SetBandGain(3, 100f, -3.0f, 0.8f);   // Remove rumble
-vocalEQ.SetBandGain(9, 300f, -1.0f, 2.0f);   // Reduce boxiness
-vocalEQ.SetBandGain(14, 2500f, 2.0f, 1.5f);  // Presence boost
-vocalEQ.SetBandGain(18, 5000f, 1.5f, 2.0f);  // Clarity
-vocalEQ.SetBandGain(22, 8000f, -0.5f, 1.0f); // Reduce harshness</code></pre>
-            </div>
-
-            <h2 id="chorus">Chorus Effect</h2>
-            <p>Multi-voice modulation effect that creates the illusion of multiple performers. Adds richness and depth to audio signals.</p>
-
-            <div class="code-block">
-                <div class="code-header">
-                    <span>Chorus Implementation</span>
-                    <span class="effect-type-badge spatial">Spatial</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio.Processors;
-
-// Create lush chorus effect
-var chorus = new Chorus(
-    rate: 0.5f,        // Slow modulation rate (0.5 Hz)
-    depth: 0.3f,       // Moderate depth
-    voices: 3,         // 3 chorus voices
-    feedback: 0.2f,    // Light feedback
-    wetLevel: 0.4f     // 40% effect level
-);
-
-sourceManager.CustomSampleProcessor = chorus;</code></pre>
-            </div>
-
-            <h2 id="flanger">Flanger Effect</h2>
-            <p>Variable delay modulation creating characteristic "whoosh" sweeping sounds. Perfect for guitars and creative sound design.</p>
-
-            <div class="code-block">
-                <div class="code-header">
-                    <span>Flanger Setup</span>
-                    <span class="effect-type-badge spatial">Spatial</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio.Processors;
-
-// Create classic flanger
-var flanger = new Flanger(
-    rate: 0.3f,        // Slow sweep rate
-    depth: 0.8f,       // Deep modulation
-    feedback: 0.6f,    // Strong feedback for jet-like sound
-    wetLevel: 0.5f     // 50% effect level
-);
-
-sourceManager.CustomSampleProcessor = flanger;</code></pre>
-            </div>
-
-            <h2 id="phaser">Phaser Effect</h2>
-            <p>All-pass filter stages create sweeping notches in the frequency spectrum. Classic effect for keyboards and guitars.</p>
-
-            <div class="code-block">
-                <div class="code-header">
-                    <span>Phaser Configuration</span>
-                    <span class="effect-type-badge spectral">Spectral</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio.Processors;
-
-// Create 6-stage phaser
-var phaser = new Phaser(
-    rate: 0.4f,        // Moderate sweep rate
-    depth: 0.7f,       // Strong effect
-    stages: 6,         // 6 all-pass stages
-    feedback: 0.5f,    // Moderate feedback
-    wetLevel: 0.6f     // 60% effect level
-);
-
-sourceManager.CustomSampleProcessor = phaser;</code></pre>
-            </div>
-
-            <h2 id="distortion">Distortion Effect</h2>
-            <p>Harmonic distortion with soft clipping and overdrive characteristics. Adds warmth and character to audio signals.</p>
-
-            <div class="code-block">
-                <div class="code-header">
-                    <span>Distortion Application</span>
-                    <span class="effect-type-badge">Harmonic</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio.Processors;
-
-// Create warm overdrive
-var overdrive = new Distortion(
-    drive: 0.6f,       // Moderate drive amount
-    tone: 0.7f,        // Bright tone
-    level: 0.8f,       // Output level
-    type: DistortionType.SoftClipping
-);
-
-sourceManager.CustomSampleProcessor = overdrive;</code></pre>
-            </div>
-
-            <h2 id="limiter">Limiter Effect</h2>
-            <p>Transparent peak limiting with look-ahead and smooth gain reduction. Essential for preventing digital clipping.</p>
-
-            <div class="code-block">
-                <div class="code-header">
-                    <span>Professional Limiter</span>
-                    <span class="effect-type-badge dynamic">Dynamic</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio.Processors;
-
-// Create transparent limiter
-var limiter = new Limiter(
-    threshold: 0.95f,  // Limit at -0.5dB
-    release: 50f,      // Fast release
-    lookahead: 5f,     // 5ms lookahead
-    ceiling: 0.99f     // Absolute ceiling
-);
-
-sourceManager.CustomSampleProcessor = limiter;</code></pre>
-            </div>
-
-            <h2 id="rotary">Rotary Speaker Effect</h2>
-            <p>Simulation of classic Leslie rotary speaker cabinets with separate rotor and horn modeling.</p>
-
-            <div class="code-block">
-                <div class="code-header">
-                    <span>Rotary Speaker Simulation</span>
-                    <span class="effect-type-badge specialty">Specialty</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio.Processors;
-
-// Create Leslie-style rotary
-var rotary = new RotarySpeaker(
-    rotorSpeed: 0.8f,    // Rotor speed (slow/fast)
-    hornSpeed: 1.2f,     // Horn speed
-    separation: 0.6f,    // Stereo separation
-    wetLevel: 0.7f       // Effect level
-);
-
-sourceManager.CustomSampleProcessor = rotary;</code></pre>
-            </div>
-
-            <div id="effect-chain" class="feature-highlight">
-                <h3>🔗 Effect Chaining and Custom Processors</h3>
-                <p>Create complex effect chains by implementing custom processors that combine multiple effects.</p>
-
-                <div class="code-block">
-                    <div class="code-header">Custom Effect Chain</div>
-                    <pre><code class="language-csharp">public class GuitarEffectChain : SampleProcessorBase
-{
-    private readonly Overdrive overdrive;
-    private readonly Equalizer eq;
-    private readonly Delay delay;
-    private readonly Reverb reverb;
-    
-    public GuitarEffectChain()
-    {
-        // Build effect chain
-        overdrive = new Overdrive(0.5f, 0.7f, 0.8f);
-        eq = new Equalizer(44100);
-        delay = new Delay(300, 0.4f, 0.3f, 44100);
-        reverb = new Reverb(0.4f, 0.6f, 0.25f, 0.8f);
-        
-        // Configure EQ for guitar
-        eq.SetBandGain(5, 150f, -2.0f, 1.5f);  // Cut mud
-        eq.SetBandGain(12, 1200f, 2.0f, 1.2f); // Presence
-        eq.SetBandGain(18, 4000f, 1.5f, 2.0f); // Brightness
-    }
-    
-    public override void Process(Span<float> samples)
-    {
-        // Process through effect chain
-        overdrive.Process(samples);
-        eq.Process(samples);
-        delay.Process(samples);
-        reverb.Process(samples);
-    }
-    
-    public override void Reset()
-    {
-        overdrive.Reset();
-        eq.Reset();
-        delay.Reset();
-        reverb.Reset();
-    }
-}
-
-// Apply custom effect chain
-var guitarChain = new GuitarEffectChain();
-sourceManager.CustomSampleProcessor = guitarChain;</code></pre>
-                </div>
-            </div>
-
-            <h2 id="custom-effects">Creating Custom Effects</h2>
-            <p>Implement your own audio effects by extending the SampleProcessorBase class.</p>
-
-            <div class="code-block">
-                <div class="code-header">Custom Effect Example</div>
-                <pre><code class="language-csharp">using Ownaudio.Processors;
-using System;
-
-public class BitCrusher : SampleProcessorBase
-{
-    private readonly float bitDepth;
-    private readonly float sampleRateReduction;
-    private float lastSample = 0f;
-    private int sampleCounter = 0;
-    
-    public BitCrusher(float bitDepth = 8f, float sampleRateReduction = 4f)
-    {
-        this.bitDepth = bitDepth;
-        this.sampleRateReduction = sampleRateReduction;
-    }
-    
-    public override void Process(Span<float> samples)
-    {
-        float quantizationStep = 1f / (float)Math.Pow(2, bitDepth - 1);
-        
-        for (int i = 0; i < samples.Length; i++)
-        {
-            // Sample rate reduction
-            if (sampleCounter % (int)sampleRateReduction == 0)
-            {
-                // Bit depth reduction (quantization)
-                float quantized = (float)Math.Round(samples[i] / quantizationStep) * quantizationStep;
-                lastSample = Math.Clamp(quantized, -1f, 1f);
-            }
-            
-            samples[i] = lastSample;
-            sampleCounter++;
-        }
-    }
-    
-    public override void Reset()
-    {
-        lastSample = 0f;
-        sampleCounter = 0;
-    }
-}
-
-// Use custom effect
-var bitCrusher = new BitCrusher(6f, 3f); // 6-bit, 1/3 sample rate
-sourceManager.CustomSampleProcessor = bitCrusher;</code></pre>
-            </div>
-
-            <div class="alert alert-success">
-                <strong>Effect Performance:</strong> All OwnAudioSharp effects are optimized for real-time processing with minimal CPU usage. They use efficient algorithms and memory management suitable for professional audio applications.
-            </div>
-
-            <h3>Best Practices for Audio Effects</h3>
+            <h2 id="overview">Overview</h2>
+            <p>Every effect in OwnaudioSharp implements the <code>IEffectProcessor</code> interface and provides:</p>
             <ul>
-                <li><strong>Order Matters:</strong> Place EQ before compression, and modulation effects before reverb</li>
-                <li><strong>Gain Staging:</strong> Monitor levels between effects to prevent clipping</li>
-                <li><strong>CPU Usage:</strong> Use fewer effect instances for better performance on mobile devices</li>
-                <li><strong>Parameter Automation:</strong> Create smooth parameter changes to avoid audio artifacts</li>
-                <li><strong>Bypass Switching:</strong> Implement bypass functionality for A/B comparisons</li>
+                <li><strong>Real-time Processing</strong> - Sample-accurate, low-latency processing</li>
+                <li><strong>Preset System</strong> - Pre-configured settings for common scenarios</li>
+                <li><strong>Parameter Ranges</strong> - Validated min/max ranges for all parameters</li>
+                <li><strong>Bypass Support</strong> - Enable/disable without removing from chain</li>
+                <li><strong>Mix Controls</strong> - Wet/dry blending where applicable</li>
             </ul>
 
-            <div class="alert alert-info">
-                <strong>Advanced Usage:</strong> For more complex audio processing scenarios, check out the <a href="examples.html" style="color: var(--primary-color);">Examples</a> page or explore the <a href="https://github.com/ModernMube/OwnAudioSharpDemo" target="_blank" style="color: var(--primary-color);">demo application</a> which demonstrates real-time effect control with a GUI interface.
+            <h2 id="dynamics">Dynamics Processing</h2>
+
+            <!-- CompressorEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge badge-dynamics">DYNAMICS</span>
+                    <h3 class="effect-title">CompressorEffect</h3>
+                    <p class="effect-desc">Professional dynamic range compressor with soft-knee design, envelope
+                        following, and adaptive gain control.</p>
+                </div>
+
+                <h4>Parameters</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Threshold</div>
+                        <div class="param-type">float - Compression threshold level</div>
+                        <div class="param-range">Range: 0.0 - 1.0 (linear amplitude)</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Ratio</div>
+                        <div class="param-type">float - Compression ratio</div>
+                        <div class="param-range">Range: 1.0 - 100.0 (N:1)</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">AttackTime</div>
+                        <div class="param-type">float - Attack time in milliseconds</div>
+                        <div class="param-range">Range: 0.1 - 1000.0 ms</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">ReleaseTime</div>
+                        <div class="param-type">float - Release time in milliseconds</div>
+                        <div class="param-range">Range: 1.0 - 2000.0 ms</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">MakeupGain</div>
+                        <div class="param-type">float - Output gain compensation</div>
+                        <div class="param-range">Range: 0.1 - 10.0 (linear multiplier)</div>
+                    </div>
+                </div>
+
+                <h4>Presets</h4>
+                <div class="presets-list">
+                    <span class="preset-tag">Default</span>
+                    <span class="preset-tag">VocalGentle</span>
+                    <span class="preset-tag">VocalAggressive</span>
+                    <span class="preset-tag">Drums</span>
+                    <span class="preset-tag">Bass</span>
+                    <span class="preset-tag">MasteringLimiter</span>
+                    <span class="preset-tag">Vintage</span>
+                </div>
             </div>
+
+            <!-- LimiterEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge badge-dynamics">DYNAMICS</span>
+                    <h3 class="effect-title">LimiterEffect</h3>
+                    <p class="effect-desc">Brick-wall peak limiter with look-ahead, adaptive release, and
+                        zero-allocation buffer management.</p>
+                </div>
+
+                <h4>Parameters</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Threshold</div>
+                        <div class="param-type">float - Threshold in dB</div>
+                        <div class="param-range">Range: -20.0 - 0.0 dB</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Ceiling</div>
+                        <div class="param-type">float - Output ceiling in dB</div>
+                        <div class="param-range">Range: -2.0 - 0.0 dB</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Release</div>
+                        <div class="param-type">float - Release time in milliseconds</div>
+                        <div class="param-range">Range: 1.0 - 1000.0 ms</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">LookAheadMs</div>
+                        <div class="param-type">float - Look-ahead time in milliseconds</div>
+                        <div class="param-range">Range: 1.0 - 20.0 ms</div>
+                    </div>
+                </div>
+
+                <h4>Presets</h4>
+                <div class="presets-list">
+                    <span class="preset-tag">Default</span>
+                    <span class="preset-tag">Mastering</span>
+                    <span class="preset-tag">Broadcast</span>
+                    <span class="preset-tag">Live</span>
+                    <span class="preset-tag">DrumBus</span>
+                    <span class="preset-tag">VocalSafety</span>
+                    <span class="preset-tag">Bass</span>
+                    <span class="preset-tag">Podcast</span>
+                    <span class="preset-tag">Aggressive</span>
+                </div>
+            </div>
+
+            <!-- AutoGainEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge badge-dynamics">DYNAMICS</span>
+                    <h3 class="effect-title">AutoGainEffect</h3>
+                    <p class="effect-desc">Automatic gain control with intelligent noise gating, look-ahead detection,
+                        and smooth gain transitions.</p>
+                </div>
+
+                <h4>Parameters</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">TargetLevel</div>
+                        <div class="param-type">float - Target output level</div>
+                        <div class="param-range">Range: 0.01 - 1.0 (linear amplitude)</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">AttackCoefficient</div>
+                        <div class="param-type">float - Attack smoothing coefficient</div>
+                        <div class="param-range">Range: 0.9 - 0.999</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">ReleaseCoefficient</div>
+                        <div class="param-type">float - Release smoothing coefficient</div>
+                        <div class="param-range">Range: 0.9 - 0.9999</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">GateThreshold</div>
+                        <div class="param-type">float - Noise gate threshold</div>
+                        <div class="param-range">Range: 0.0001 - 0.01</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">MaximumGain</div>
+                        <div class="param-type">float - Maximum gain limit</div>
+                        <div class="param-range">Range: 1.0 - 10.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">MinimumGain</div>
+                        <div class="param-type">float - Minimum gain limit</div>
+                        <div class="param-range">Range: 0.1 - 1.0</div>
+                    </div>
+                </div>
+
+                <h4>Presets</h4>
+                <div class="presets-list">
+                    <span class="preset-tag">Default</span>
+                    <span class="preset-tag">Music</span>
+                    <span class="preset-tag">Voice</span>
+                    <span class="preset-tag">Broadcast</span>
+                    <span class="preset-tag">Live</span>
+                </div>
+            </div>
+
+            <!-- DynamicAmpEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge badge-dynamics">DYNAMICS</span>
+                    <h3 class="effect-title">DynamicAmpEffect</h3>
+                    <p class="effect-desc">Adaptive volume control with dual-window RMS detection, smart noise gating,
+                        and gain change limiting for transparent dynamics management.</p>
+                </div>
+
+                <h4>Parameters</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">TargetLevel</div>
+                        <div class="param-type">float - Target RMS level in dB</div>
+                        <div class="param-range">Range: -60.0 - -3.0 dB</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">AttackTime</div>
+                        <div class="param-type">float - Attack time in seconds</div>
+                        <div class="param-range">Range: 0.05 - ∞ seconds</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">ReleaseTime</div>
+                        <div class="param-type">float - Release time in seconds</div>
+                        <div class="param-range">Range: 0.2 - ∞ seconds</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">NoiseGateThreshold</div>
+                        <div class="param-type">float - Noise gate threshold in dB</div>
+                        <div class="param-range">Range: -80.0 - -30.0 dB</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">MaxGain</div>
+                        <div class="param-type">float - Maximum gain value</div>
+                        <div class="param-range">Range: 1.0 - 20.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">MaxGainReduction</div>
+                        <div class="param-type">float - Maximum gain reduction in dB</div>
+                        <div class="param-range">Range: 3.0 - 40.0 dB</div>
+                    </div>
+                </div>
+
+                <h4>Presets</h4>
+                <div class="presets-list">
+                    <span class="preset-tag">Default</span>
+                    <span class="preset-tag">Speech</span>
+                    <span class="preset-tag">Music</span>
+                    <span class="preset-tag">Broadcast</span>
+                    <span class="preset-tag">Mastering</span>
+                    <span class="preset-tag">Live</span>
+                    <span class="preset-tag">Transparent</span>
+                </div>
+            </div>
+
+            <h2 id="frequency">Frequency Processing</h2>
+
+            <!-- EqualizerEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge badge-frequency">FREQUENCY</span>
+                    <h3 class="effect-title">EqualizerEffect (10-Band)</h3>
+                    <p class="effect-desc">Professional 10-band parametric equalizer with cascaded biquad filters (2 per
+                        band) and Direct Form II Transposed implementation for numerical stability.</p>
+                </div>
+
+                <h4>Parameters</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Band0-9 Gain</div>
+                        <div class="param-type">float - Gain for each band in dB</div>
+                        <div class="param-range">Range: -12.0 - +12.0 dB</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Mix</div>
+                        <div class="param-type">float - Wet/dry mix</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                </div>
+
+                <h4>ISO Frequencies</h4>
+                <p><strong>31.25 Hz, 62.5 Hz, 125 Hz, 250 Hz, 500 Hz, 1 kHz, 2 kHz, 4 kHz, 8 kHz, 16 kHz</strong></p>
+
+                <h4>Presets</h4>
+                <div class="presets-list">
+                    <span class="preset-tag">Default</span>
+                    <span class="preset-tag">Bass</span>
+                    <span class="preset-tag">Treble</span>
+                    <span class="preset-tag">Rock</span>
+                    <span class="preset-tag">Classical</span>
+                    <span class="preset-tag">Pop</span>
+                    <span class="preset-tag">Jazz</span>
+                    <span class="preset-tag">Voice</span>
+                </div>
+            </div>
+
+            <!-- Equalizer30BandEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge badge-frequency">FREQUENCY</span>
+                    <h3 class="effect-title">Equalizer30BandEffect</h3>
+                    <p class="effect-desc">High-resolution 30-band graphic equalizer with professional frequencies from
+                        20 Hz to 16 kHz, optimized Q factors, and single filter per band for natural sound.</p>
+                </div>
+
+                <h4>Parameters</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Band[0-29] Gain</div>
+                        <div class="param-type">float - Gain for each band in dB</div>
+                        <div class="param-range">Range: -18.0 - +18.0 dB</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Mix</div>
+                        <div class="param-type">float - Wet/dry mix</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                </div>
+
+                <h4>Presets</h4>
+                <div class="presets-list">
+                    <span class="preset-tag">Default</span>
+                    <span class="preset-tag">Bass</span>
+                    <span class="preset-tag">Treble</span>
+                    <span class="preset-tag">Rock</span>
+                    <span class="preset-tag">Classical</span>
+                    <span class="preset-tag">Pop</span>
+                    <span class="preset-tag">Jazz</span>
+                    <span class="preset-tag">Voice</span>
+                    <span class="preset-tag">Electronic</span>
+                    <span class="preset-tag">Acoustic</span>
+                </div>
+            </div>
+
+            <!-- EnhancerEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge badge-frequency">FREQUENCY</span>
+                    <h3 class="effect-title">EnhancerEffect</h3>
+                    <p class="effect-desc">Psychoacoustic enhancer with high-pass filtering, harmonic saturation, and
+                        soft clipping for added presence and clarity.</p>
+                </div>
+
+                <h4>Parameters</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Mix</div>
+                        <div class="param-type">float - Wet/dry mix amount</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Gain</div>
+                        <div class="param-type">float - Pre-saturation amplification</div>
+                        <div class="param-range">Range: 0.1 - 10.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">CutoffFrequency</div>
+                        <div class="param-type">float - High-pass filter cutoff in Hz</div>
+                        <div class="param-range">Range: 100.0 - 20000.0 Hz</div>
+                    </div>
+                </div>
+
+                <h4>Presets</h4>
+                <div class="presets-list">
+                    <span class="preset-tag">Default</span>
+                    <span class="preset-tag">VocalClarity</span>
+                    <span class="preset-tag">RockEdge</span>
+                    <span class="preset-tag">AcousticSparkle</span>
+                    <span class="preset-tag">MixCutter</span>
+                    <span class="preset-tag">Broadcast</span>
+                </div>
+            </div>
+
+            <h2 id="modulation">Modulation Effects</h2>
+
+            <!-- ChorusEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge badge-modulation">MODULATION</span>
+                    <h3 class="effect-title">ChorusEffect</h3>
+                    <p class="effect-desc">Multi-voice chorus with LFO modulation, fractional delay interpolation, and
+                        2-6 independent voices for rich detuning effects.</p>
+                </div>
+
+                <h4>Parameters</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Rate</div>
+                        <div class="param-type">float - LFO modulation rate in Hz</div>
+                        <div class="param-range">Range: 0.1 - 10.0 Hz</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Depth</div>
+                        <div class="param-type">float - Modulation depth</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Mix</div>
+                        <div class="param-type">float - Wet/dry mix</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Voices</div>
+                        <div class="param-type">int - Number of chorus voices</div>
+                        <div class="param-range">Range: 2 - 6</div>
+                    </div>
+                </div>
+
+                <h4>Presets</h4>
+                <div class="presets-list">
+                    <span class="preset-tag">Default</span>
+                    <span class="preset-tag">VocalSubtle</span>
+                    <span class="preset-tag">VocalLush</span>
+                    <span class="preset-tag">GuitarClassic</span>
+                    <span class="preset-tag">GuitarShimmer</span>
+                    <span class="preset-tag">SynthPad</span>
+                    <span class="preset-tag">StringEnsemble</span>
+                    <span class="preset-tag">VintageAnalog</span>
+                    <span class="preset-tag">Extreme</span>
+                </div>
+            </div>
+
+            <!-- FlangerEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge badge-modulation">MODULATION</span>
+                    <h3 class="effect-title">FlangerEffect</h3>
+                    <p class="effect-desc">Classic flanging effect with variable delay modulation, feedback control, and
+                        LFO-driven comb filtering for sweeping tones.</p>
+                </div>
+
+                <h4>Parameters</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Rate</div>
+                        <div class="param-type">float - LFO rate in Hz</div>
+                        <div class="param-range">Range: 0.1 - 5.0 Hz</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Depth</div>
+                        <div class="param-type">float - Modulation depth</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Feedback</div>
+                        <div class="param-type">float - Feedback amount</div>
+                        <div class="param-range">Range: 0.0 - 0.95</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Mix</div>
+                        <div class="param-type">float - Wet/dry mix</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                </div>
+
+                <h4>Presets</h4>
+                <div class="presets-list">
+                    <span class="preset-tag">Default</span>
+                    <span class="preset-tag">Classic</span>
+                    <span class="preset-tag">JetPlane</span>
+                    <span class="preset-tag">SubtleChorus</span>
+                    <span class="preset-tag">VocalDoubling</span>
+                    <span class="preset-tag">GuitarLead</span>
+                    <span class="preset-tag">AmbientWash</span>
+                    <span class="preset-tag">Percussive</span>
+                </div>
+            </div>
+
+            <!-- PhaserEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge badge-modulation">MODULATION</span>
+                    <h3 class="effect-title">PhaserEffect</h3>
+                    <p class="effect-desc">Multi-stage phaser with all-pass filters (2-8 stages), LFO modulation
+                        sweeping from 200 Hz to 2 kHz, and feedback control.</p>
+                </div>
+
+                <h4>Parameters</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Rate</div>
+                        <div class="param-type">float - LFO rate in Hz</div>
+                        <div class="param-range">Range: 0.1 - 10.0 Hz</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Depth</div>
+                        <div class="param-type">float - Modulation depth</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Feedback</div>
+                        <div class="param-type">float - Feedback amount</div>
+                        <div class="param-range">Range: 0.0 - 0.95</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Mix</div>
+                        <div class="param-type">float - Wet/dry mix</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Stages</div>
+                        <div class="param-type">int - Number of all-pass filter stages</div>
+                        <div class="param-range">Range: 2 - 8</div>
+                    </div>
+                </div>
+
+                <h4>Presets</h4>
+                <div class="presets-list">
+                    <span class="preset-tag">Default</span>
+                    <span class="preset-tag">Vintage</span>
+                    <span class="preset-tag">Ambient</span>
+                    <span class="preset-tag">Tremolo</span>
+                    <span class="preset-tag">DeepSpace</span>
+                    <span class="preset-tag">GuitarSolo</span>
+                    <span class="preset-tag">Vocal</span>
+                    <span class="preset-tag">SynthPad</span>
+                </div>
+            </div>
+
+            <!-- RotaryEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge badge-modulation">MODULATION</span>
+                    <h3 class="effect-title">RotaryEffect</h3>
+                    <p class="effect-desc">Leslie speaker simulator with separate horn and rotor, crossover filtering at
+                        800 Hz, and fast/slow speed switching.</p>
+                </div>
+
+                <h4>Parameters</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">HornSpeed</div>
+                        <div class="param-type">float - Horn rotation speed in Hz</div>
+                        <div class="param-range">Range: 2.0 - 15.0 Hz</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">RotorSpeed</div>
+                        <div class="param-type">float - Rotor rotation speed in Hz</div>
+                        <div class="param-range">Range: 0.5 - 5.0 Hz</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Intensity</div>
+                        <div class="param-type">float - Effect intensity</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Mix</div>
+                        <div class="param-type">float - Wet/dry mix</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">IsFast</div>
+                        <div class="param-type">bool - Fast/slow speed switch</div>
+                        <div class="param-range">true = fast (3x horn, 2x rotor)</div>
+                    </div>
+                </div>
+
+                <h4>Presets</h4>
+                <div class="presets-list">
+                    <span class="preset-tag">Default</span>
+                    <span class="preset-tag">Hammond</span>
+                    <span class="preset-tag">Gospel</span>
+                    <span class="preset-tag">Rock</span>
+                    <span class="preset-tag">Jazz</span>
+                    <span class="preset-tag">Psychedelic</span>
+                    <span class="preset-tag">VintageSlow</span>
+                    <span class="preset-tag">VintageFast</span>
+                    <span class="preset-tag">Subtle</span>
+                </div>
+            </div>
+
+            <h2 id="spatial">Spatial Effects</h2>
+
+            <!-- ReverbEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge badge-spatial">SPATIAL</span>
+                    <h3 class="effect-title">ReverbEffect</h3>
+                    <p class="effect-desc">Extended Freeverb algorithm with 8 comb filters + 4 all-pass filters per
+                        channel, 20ms pre-delay, stereo spread, and damping control.</p>
+                </div>
+
+                <h4>Parameters</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">RoomSize</div>
+                        <div class="param-type">float - Room size</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Damping</div>
+                        <div class="param-type">float - High-frequency damping</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">WetLevel</div>
+                        <div class="param-type">float - Wet signal level</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">DryLevel</div>
+                        <div class="param-type">float - Dry signal level</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Width (StereoWidth)</div>
+                        <div class="param-type">float - Stereo width</div>
+                        <div class="param-range">Range: 0.0 - 2.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Mix</div>
+                        <div class="param-type">float - Master wet/dry mix</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Gain</div>
+                        <div class="param-type">float - Output gain</div>
+                        <div class="param-range">Range: 0.0 - ∞</div>
+                    </div>
+                </div>
+
+                <h4>Presets</h4>
+                <div class="presets-list">
+                    <span class="preset-tag">Default</span>
+                    <span class="preset-tag">SmallRoom</span>
+                    <span class="preset-tag">LargeHall</span>
+                    <span class="preset-tag">Cathedral</span>
+                    <span class="preset-tag">Plate</span>
+                    <span class="preset-tag">Spring</span>
+                    <span class="preset-tag">AmbientPad</span>
+                    <span class="preset-tag">VocalBooth</span>
+                    <span class="preset-tag">DrumRoom</span>
+                    <span class="preset-tag">Gated</span>
+                    <span class="preset-tag">Subtle</span>
+                </div>
+            </div>
+
+            <!-- DelayEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge badge-spatial">SPATIAL</span>
+                    <h3 class="effect-title">DelayEffect</h3>
+                    <p class="effect-desc">Echo/delay with feedback, damping filter, and up to 5 seconds delay time.
+                        Supports fractional delay with linear interpolation.</p>
+                </div>
+
+                <h4>Parameters</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Time</div>
+                        <div class="param-type">int - Delay time in milliseconds</div>
+                        <div class="param-range">Range: 1 - 5000 ms</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Repeat</div>
+                        <div class="param-type">float - Feedback amount</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Mix</div>
+                        <div class="param-type">float - Wet/dry mix</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Damping</div>
+                        <div class="param-type">float - High-frequency damping in feedback</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                </div>
+
+                <h4>Presets</h4>
+                <div class="presets-list">
+                    <span class="preset-tag">Default</span>
+                    <span class="preset-tag">SlapBack</span>
+                    <span class="preset-tag">ClassicEcho</span>
+                    <span class="preset-tag">Ambient</span>
+                    <span class="preset-tag">Rhythmic</span>
+                    <span class="preset-tag">PingPong</span>
+                    <span class="preset-tag">TapeEcho</span>
+                    <span class="preset-tag">Dub</span>
+                    <span class="preset-tag">Thickening</span>
+                </div>
+            </div>
+
+            <h2 id="distortion">Distortion Effects</h2>
+
+            <!-- DistortionEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge badge-distortion">DISTORTION</span>
+                    <h3 class="effect-title">DistortionEffect</h3>
+                    <p class="effect-desc">Soft-clipping distortion with drive control and output gain compensation.
+                        Uses smooth saturation curve for musical harmonics.</p>
+                </div>
+
+                <h4>Parameters</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Drive</div>
+                        <div class="param-type">float - Drive amount</div>
+                        <div class="param-range">Range: 1.0 - 10.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Mix</div>
+                        <div class="param-type">float - Wet/dry mix</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">OutputGain</div>
+                        <div class="param-type">float - Output gain compensation</div>
+                        <div class="param-range">Range: 0.1 - 1.0</div>
+                    </div>
+                </div>
+
+                <h4>Presets</h4>
+                <div class="presets-list">
+                    <span class="preset-tag">Default</span>
+                    <span class="preset-tag">WarmOverdrive</span>
+                    <span class="preset-tag">ClassicRock</span>
+                    <span class="preset-tag">HeavyMetal</span>
+                    <span class="preset-tag">VintageTube</span>
+                    <span class="preset-tag">BassDrive</span>
+                    <span class="preset-tag">FuzzBox</span>
+                    <span class="preset-tag">VocalSaturation</span>
+                    <span class="preset-tag">DigitalCrush</span>
+                </div>
+            </div>
+
+            <!-- OverdriveEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge badge-distortion">DISTORTION</span>
+                    <h3 class="effect-title">OverdriveEffect</h3>
+                    <p class="effect-desc">Tube-style overdrive with asymmetric saturation, tone control (0=dark,
+                        1=bright), and musical harmonics.</p>
+                </div>
+
+                <h4>Parameters</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Gain</div>
+                        <div class="param-type">float - Input gain</div>
+                        <div class="param-range">Range: 1.0 - 5.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Tone</div>
+                        <div class="param-type">float - Tone control</div>
+                        <div class="param-range">Range: 0.0 - 1.0 (0=dark, 1=bright)</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Mix</div>
+                        <div class="param-type">float - Wet/dry mix</div>
+                        <div class="param-range">Range: 0.0 - 1.0</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">OutputLevel</div>
+                        <div class="param-type">float - Output level</div>
+                        <div class="param-range">Range: 0.1 - 1.0</div>
+                    </div>
+                </div>
+
+                <h4>Presets</h4>
+                <div class="presets-list">
+                    <span class="preset-tag">Default</span>
+                    <span class="preset-tag">CleanBoost</span>
+                    <span class="preset-tag">Blues</span>
+                    <span class="preset-tag">RockCrunch</span>
+                    <span class="preset-tag">Lead</span>
+                    <span class="preset-tag">VintageTube</span>
+                    <span class="preset-tag">Bass</span>
+                    <span class="preset-tag">Screamer</span>
+                </div>
+            </div>
+
+            <h2 id="master" \>Master Processing</h2>
+
+            <!-- SmartMasterEffect -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge" style="background: #8b5cf6; color: white;">MASTER</span>
+                    <h3 class="effect-title">SmartMasterEffect</h3>
+                    <p class="effect-desc">Comprehensive master processing chain with intelligent auto-calibration for
+                        optimal sound across different speaker systems. Combines professional-grade effects with
+                        measurement-based optimization.</p>
+                </div>
+
+                <h4>Overview</h4>
+                <p>SmartMaster is an all-in-one mastering solution that adapts to your specific speaker system and
+                    listening environment. It features factory presets for common playback systems and an intelligent
+                    calibration wizard that measures your actual speaker response.</p>
+
+                <div class="alert alert-warning">
+                    <strong>Measurement Microphone Required for Auto-Calibration</strong><br>
+                    The auto-calibration wizard requires an external <strong>measurement microphone</strong> to analyze
+                    your speaker system. Without a measurement microphone, you can use the factory presets which provide
+                    excellent results for common speaker types.
+                    <br><br>
+                    <strong>Important:</strong> The system optimizes audio for the <strong>measurement microphone's
+                        position</strong>. Place the microphone at your primary listening position for best results. The
+                    calibrated system will sound optimal at that specific location.
+                </div>
+
+                <h4>Processing Chain</h4>
+                <ol>
+                    <li><strong>31-Band Graphic EQ</strong> - Precise frequency shaping (20 Hz - 16 kHz)</li>
+                    <li><strong>Subharmonic Synthesizer</strong> - Enhanced low-frequency extension below speaker cutoff
+                    </li>
+                    <li><strong>Multiband Compressor</strong> - Dynamic range control across frequency bands</li>
+                    <li><strong>Crossover Filter</strong> - Linkwitz-Riley 4th order (configurable frequency)</li>
+                    <li><strong>Phase & Time Alignment</strong> - Delay compensation for multi-way systems</li>
+                    <li><strong>Brick-Wall Limiter</strong> - Peak protection and loudness maximization</li>
+                </ol>
+
+                <h4>Factory Presets</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Default</div>
+                        <div class="param-type">Transparent passthrough (no processing)</div>
+                        <div class="param-range">Use Case: Reference monitoring</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">HiFi</div>
+                        <div class="param-type">Bookshelf/tower speakers</div>
+                        <div class="param-range">+1.5dB bass, +1.0dB highs, 40Hz crossover</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Headphone</div>
+                        <div class="param-type">Studio/consumer headphones</div>
+                        <div class="param-range">+0.5dB bass, -1.0dB highs, balanced response</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Studio</div>
+                        <div class="param-type">Professional monitors</div>
+                        <div class="param-range">+0.3dB bass, flat mids/highs, 35Hz crossover</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Club</div>
+                        <div class="param-type">DJ/club systems</div>
+                        <div class="param-range">+4.0dB bass, +2.5dB highs, 100Hz crossover</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Concert</div>
+                        <div class="param-type">Live PA systems</div>
+                        <div class="param-range">+3.0dB bass, -0.8dB mids, +2.0dB highs, 80Hz crossover</div>
+                    </div>
+                </div>
+
+                <h4>Auto-Calibration Features</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Speaker Detection</div>
+                        <div class="param-type">Automatic analysis of speaker characteristics</div>
+                        <div class="param-range">Requires measurement microphone</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Frequency Response</div>
+                        <div class="param-type">FFT-based spectrum measurement</div>
+                        <div class="param-range">20 Hz - 20 kHz analysis</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Phase Alignment</div>
+                        <div class="param-type">Time-of-arrival detection</div>
+                        <div class="param-range">Compensates for multi-way speaker delays</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Auto-EQ Correction</div>
+                        <div class="param-type">Automatic EQ calculation</div>
+                        <div class="param-range">Based on measured response</div>
+                    </div>
+                </div>
+
+                <h4>Usage Example</h4>
+                <div class="code-block">
+                    <div class="code-header">SmartMaster with Factory Preset</div>
+                    <pre><code class="language-csharp">using OwnaudioNET.Effects.SmartMaster;
+
+// Initialize SmartMaster
+var smartMaster = new SmartMasterEffect();
+smartMaster.Initialize(engine.Config);
+
+// Option 1: Use factory preset
+smartMaster.LoadSpeakerPreset(SpeakerType.HiFi);
+smartMaster.Enabled = true;
+
+// Apply to mixer output
+mixer.AddMasterEffect(smartMaster);</code></pre>
+                </div>
+
+                <div class="code-block">
+                    <div class="code-header">SmartMaster with Auto-Calibration</div>
+                    <pre><code class="language-csharp">// Option 2: Run auto-calibration (requires measurement microphone)
+// Place microphone at primary listening position
+await smartMaster.StartMeasurementAsync();
+
+// Monitor progress
+var status = smartMaster.GetMeasurementStatus();
+Console.WriteLine($"Progress: {status.Progress * 100:F0}%");
+Console.WriteLine($"Step: {status.CurrentStep}");
+
+// Save calibrated settings
+smartMaster.Save("my_listening_room");
+
+// Load later
+smartMaster.Load("my_listening_room");</code></pre>
+                </div>
+
+                <div class="alert alert-info">
+                    <strong>Position-Dependent Optimization</strong><br>
+                    The auto-calibration wizard measures the acoustic response at the <strong>microphone's
+                        location</strong>. The resulting calibration will optimize the sound specifically for that
+                    position in your room. For best results:
+                    <ul>
+                        <li>Place the measurement microphone at your primary listening position (e.g., your chair or
+                            desk)</li>
+                        <li>Ensure the room is quiet during measurement</li>
+                        <li>The calibrated system will sound best when you're at the same position as the microphone was
+                            during measurement</li>
+                        <li>Different listening positions may require separate calibrations</li>
+                    </ul>
+                </div>
+
+                <h4>Advanced Features</h4>
+                <p><strong>Subharmonic Synthesis:</strong> Generates harmonically-related low frequencies below the
+                    speaker's natural cutoff frequency, enhancing bass response on smaller systems without requiring
+                    larger drivers.</p>
+                <p><strong>Phase Alignment:</strong> Automatically compensates for time-of-arrival differences between
+                    drivers in multi-way speaker systems (woofer vs. tweeter), ensuring coherent sound and proper
+                    imaging.</p>
+                <p><strong>Adaptive Crossover:</strong> Linkwitz-Riley 4th order filters provide perfect reconstruction
+                    when summed, maintaining phase coherence across the crossover region for seamless frequency
+                    transitions.</p>
+                <p><strong>Measurement Engine:</strong> Uses white noise test signals and FFT analysis to measure actual
+                    speaker response in your room, then calculates optimal EQ correction automatically to compensate for
+                    room acoustics and speaker characteristics.</p>
+            </div>
+
+            <h2 id="usage">Usage Examples</h2>
+
+            <h3>Basic Effect Usage</h3>
+            <div class="code-block">
+                <div class="code-header">Single Effect</div>
+                <pre><code class="language-csharp">// Create source
+var fileSource = new FileSource("audio.mp3");
+
+// Wrap source with effects capability
+var source = new SourceWithEffects(fileSource);
+
+// Create and add effect with preset
+var compressor = new CompressorEffect(CompressorPreset.VocalGentle);
+source.AddEffect(compressor);
+
+// Or create with custom parameters
+var reverb = new ReverbEffect(
+    size: 0.7f,
+    damp: 0.5f,
+    wet: 0.33f,
+    dry: 0.67f,
+    stereoWidth: 1.0f,
+    mix: 0.5f
+);
+source.AddEffect(reverb);
+
+// Control effect
+compressor.Enabled = true;
+compressor.Threshold = 0.6f;
+
+// Add to mixer
+mixer.AddSource(source);
+mixer.Start();</code></pre>
+            </div>
+
+            <h3>Effect Chain</h3>
+            <div class="code-block">
+                <div class="code-header">Multiple Effects in Series</div>
+                <pre><code class="language-csharp">// Create source and wrap with effects capability
+var fileSource = new FileSource("guitar.wav");
+var source = new SourceWithEffects(fileSource);
+
+// Build effect chain in order
+var compressor = new CompressorEffect(CompressorPreset.Default);
+var eq = new EqualizerEffect(EqualizerPreset.Rock);
+var chorus = new ChorusEffect(ChorusPreset.GuitarClassic);
+var reverb = new ReverbEffect(ReverbPreset.Plate);
+var limiter = new LimiterEffect(48000f, LimiterPreset.Mastering);
+
+// Add in order (signal flows top to bottom)
+source.AddEffect(compressor);  // 1. Control dynamics
+source.AddEffect(eq);           // 2. Shape frequency
+source.AddEffect(chorus);       // 3. Add movement
+source.AddEffect(reverb);       // 4. Add space
+source.AddEffect(limiter);      // 5. Final peak protection
+
+mixer.AddSource(source);</code></pre>
+            </div>
+
+            <h3>Parallel Processing</h3>
+            <div class="code-block">
+                <div class="code-header">Dry/Wet Parallel Chains</div>
+                <pre><code class="language-csharp">// Create two instances of same source
+var dryFileSource = new FileSource("vocal.wav");
+var wetFileSource = new FileSource("vocal.wav");
+
+// Wrap wet source with effects
+var wetSource = new SourceWithEffects(wetFileSource);
+
+// Process wet chain only
+var reverb = new ReverbEffect(ReverbPreset.Cathedral);
+reverb.Mix = 1.0f;  // 100% wet
+wetSource.AddEffect(reverb);
+
+// Set levels for parallel blend
+dryFileSource.Volume = 0.8f;  // 80% dry
+wetSource.Volume = 0.2f;       // 20% wet
+
+// Mix both
+mixer.AddSource(dryFileSource);
+mixer.AddSource(wetSource);</code></pre>
+            </div>
+
+            <h3>Dynamic Parameter Control</h3>
+            <div class="code-block">
+                <div class="code-header">Real-time Parameter Automation</div>
+                <pre><code class="language-csharp">// Create source with effects
+var fileSource = new FileSource("music.mp3");
+var source = new SourceWithEffects(fileSource);
+
+// Create and add effect
+var flanger = new FlangerEffect(FlangerPreset.Classic);
+source.AddEffect(flanger);
+
+// Animate parameters
+Task.Run(async () =>
+{
+    while (fileSource.State == AudioState.Playing)
+    {
+        // Sweep rate from 0.2 to 2.0 Hz
+        float time = DateTime.Now.Ticks / 10000000.0f;
+        float rate = 0.2f + (float)Math.Sin(time) * 0.9f + 0.9f;
+        flanger.Rate = rate;
+
+        await Task.Delay(50);
+    }
+});</code></pre>
+            </div>
+
+            <h3>Bypassing Effects</h3>
+            <div class="code-block">
+                <div class="code-header">Toggle Effects On/Off</div>
+                <pre><code class="language-csharp">// Create source with effects
+var fileSource = new FileSource("audio.mp3");
+var source = new SourceWithEffects(fileSource);
+
+// Add effects
+var reverb = new ReverbEffect(ReverbPreset.Plate);
+var chorus = new ChorusEffect(ChorusPreset.GuitarClassic);
+source.AddEffect(reverb);
+source.AddEffect(chorus);
+
+// Toggle bypass
+reverb.Enabled = false;  // Bypass (signal passes through)
+reverb.Enabled = true;   // Re-enable
+
+// Conditional processing
+if (fileSource.Position > 30.0)
+{
+    // Enable effect after 30 seconds
+    chorus.Enabled = true;
+}
+
+// Remove effect from chain
+source.RemoveEffect(chorus);</code></pre>
+            </div>
+
+            <h3>Reading Effect State</h3>
+            <div class="code-block">
+                <div class="code-header">Monitor Effect Status</div>
+                <pre><code class="language-csharp">// Check limiter activity
+if (limiter.IsLimiting)
+{
+    float reduction = limiter.GetGainReductionDb();
+    Console.WriteLine($"Limiter active: {reduction:F1}dB gain reduction");
+}
+
+// Read current gain from auto-gain
+float currentGain = autoGain.CurrentGain;
+float inputLevel = autoGain.InputLevel;
+Console.WriteLine($"AutoGain: {currentGain:F2}x, Input: {inputLevel:F3}");
+
+// Display effect info
+Console.WriteLine(compressor.ToString());
+// Output: "Compressor: Threshold=0.50, Ratio=4.0:1, Attack=100.0ms, Release=200.0ms, Enabled=True"</code></pre>
+            </div>
+
+            <div class="alert alert-warning">
+                <h4>Best Practices</h4>
+                <ul>
+                    <li><strong>Effect Order:</strong> Dynamics → EQ → Modulation → Spatial → Limiter</li>
+                    <li><strong>CPU Usage:</strong> Reverb and 30-band EQ are most intensive</li>
+                    <li><strong>Latency:</strong> Limiter adds 1-20ms lookahead delay</li>
+                    <li><strong>Memory:</strong> Delay/Reverb use up to 4MB per instance</li>
+                    <li><strong>Thread Safety:</strong> Initialize effects before adding to source</li>
+                </ul>
+            </div>
+
+            <hr>
+            <p class="footer-note">
+                <strong>Performance Note:</strong> All effects use zero-allocation processing with pre-allocated
+                buffers.
+                Parameter changes are thread-safe and can be automated during playback without clicks or artifacts.
+            </p>
         </main>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+
     <script>
-        // Smooth scrolling for sidebar links
-        document.querySelectorAll('.sidebar-nav a').forEach(link => {
-        link.addEventListener('click', function(e) {
-        e.preventDefault();
-        const targetId = this.getAttribute('href').substring(1);
-        const targetElement = document.getElementById(targetId);
-
-        if (targetElement) {
-        targetElement.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-        });
-        }
-
-        // Update active link
-        document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-        this.classList.add('active');
-        });
-        });
-
-        // Update active sidebar link on scroll
-        window.addEventListener('scroll', () => {
         const sections = document.querySelectorAll('h2[id], h3[id]');
-        const scrollPos = window.scrollY + 150;
-
-        let activeSection = null;
-        sections.forEach(section => {
-        const sectionTop = section.offsetTop;
-        const sectionHeight = section.offsetHeight;
-
-        if (scrollPos >= sectionTop && scrollPos < sectionTop + sectionHeight) {
-        activeSection = section.getAttribute('id');
-        }
+        const navLinks = document.querySelectorAll('.sidebar-nav a');
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (window.pageYOffset >= sectionTop - 150) {
+                    current = section.getAttribute('id');
+                }
+            });
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.classList.add('active');
+                }
+            });
         });
-
-        if (activeSection) {
-        document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-        document.querySelector(`.sidebar-nav a[href="#${activeSection}"]`)?.classList.add('active');
-        }
-        });
-
-        // Effect card hover animations
-        document.querySelectorAll('.effect-card').forEach(card => {
-        card.addEventListener('mouseenter', () => {
-        card.style.transform = 'translateY(-5px) scale(1.02)';
-        card.style.boxShadow = '0 15px 35px rgba(99, 102, 241, 0.3)';
-        });
-
-        card.addEventListener('mouseleave', () => {
-        card.style.transform = 'translateY(0) scale(1)';
-        card.style.boxShadow = 'none';
-        });
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
         });
     </script>
 </body>
+
 </html>

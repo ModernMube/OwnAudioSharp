@@ -1,303 +1,37 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
+
 <head>
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
+        function gtag() { dataLayer.push(arguments); }
         gtag('js', new Date());
 
         gtag('config', 'G-93P1X5V4Z5');
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quick Start - OwnAudioSharp</title>
+    <title>Quick Start - Ownaudio</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="../styles/docs.css">
-    <style>
-        :root {
-            --primary-color: #6366f1;
-            --primary-dark: #4f46e5;
-            --secondary-color: #ec4899;
-            --background: #0f0f23;
-            --surface: #1a1a2e;
-            --surface-light: #16213e;
-            --text-primary: #e2e8f0;
-            --text-secondary: #94a3b8;
-            --accent: #00d9ff;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --border: #334155;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--background);
-            color: var(--text-primary);
-            line-height: 1.6;
-        }
-
-        .nav {
-            background: rgba(26, 26, 46, 0.95);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid var(--border);
-            position: fixed;
-            top: 0;
-            width: 100%;
-            z-index: 1000;
-            padding: 1rem 0;
-        }
-
-        .nav-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--primary-color), var(--accent));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            text-decoration: none;
-        }
-
-        .nav-links {
-            display: flex;
-            list-style: none;
-            gap: 2rem;
-        }
-
-            .nav-links a {
-                color: var(--text-secondary);
-                text-decoration: none;
-                font-weight: 500;
-                transition: color 0.3s ease;
-            }
-
-                .nav-links a:hover {
-                    color: var(--primary-color);
-                }
-
-        .main {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 100px 2rem 2rem;
-            display: grid;
-            grid-template-columns: 250px 1fr;
-            gap: 3rem;
-        }
-
-        .sidebar {
-            background: var(--surface);
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            padding: 2rem;
-            height: fit-content;
-            position: sticky;
-            top: 120px;
-        }
-
-            .sidebar h3 {
-                color: var(--text-primary);
-                margin-bottom: 1rem;
-                font-size: 1.1rem;
-            }
-
-        .sidebar-nav {
-            list-style: none;
-        }
-
-            .sidebar-nav li {
-                margin-bottom: 0.5rem;
-            }
-
-            .sidebar-nav a {
-                color: var(--text-secondary);
-                text-decoration: none;
-                font-size: 0.9rem;
-                transition: color 0.3s ease;
-            }
-
-                .sidebar-nav a:hover,
-                .sidebar-nav a.active {
-                    color: var(--primary-color);
-                }
-
-        .content {
-            background: var(--surface);
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            padding: 3rem;
-        }
-
-            .content h1 {
-                font-size: 2.5rem;
-                margin-bottom: 1rem;
-                color: var(--text-primary);
-            }
-
-            .content h2 {
-                font-size: 1.8rem;
-                margin: 2rem 0 1rem;
-                color: var(--text-primary);
-                border-bottom: 2px solid var(--border);
-                padding-bottom: 0.5rem;
-            }
-
-            .content h3 {
-                font-size: 1.3rem;
-                margin: 1.5rem 0 0.75rem;
-                color: var(--primary-color);
-            }
-
-            .content p {
-                margin-bottom: 1rem;
-                color: var(--text-secondary);
-            }
-
-            .content ul, .content ol {
-                margin-bottom: 1rem;
-                padding-left: 2rem;
-                color: var(--text-secondary);
-            }
-
-            .content li {
-                margin-bottom: 0.5rem;
-            }
-
-        .code-block {
-            background: var(--surface-light);
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            margin: 1.5rem 0;
-            overflow: hidden;
-        }
-
-        .code-header {
-            background: var(--background);
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid var(--border);
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-        }
-
-        pre {
-            margin: 0;
-            padding: 1.5rem;
-            overflow-x: auto;
-            background: transparent !important;
-        }
-
-        .alert {
-            padding: 1rem;
-            border-radius: 8px;
-            margin: 1.5rem 0;
-            border-left: 4px solid;
-        }
-
-        .alert-info {
-            background: rgba(99, 102, 241, 0.1);
-            border-color: var(--primary-color);
-            color: var(--text-primary);
-        }
-
-        .alert-warning {
-            background: rgba(245, 158, 11, 0.1);
-            border-color: var(--warning);
-            color: var(--text-primary);
-        }
-
-        .alert-success {
-            background: rgba(16, 185, 129, 0.1);
-            border-color: var(--success);
-            color: var(--text-primary);
-        }
-
-        .btn {
-            display: inline-block;
-            padding: 0.75rem 1.5rem;
-            background: var(--primary-color);
-            color: white;
-            text-decoration: none;
-            border-radius: 8px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            margin: 0.5rem 0.5rem 0.5rem 0;
-        }
-
-            .btn:hover {
-                background: var(--primary-dark);
-                transform: translateY(-2px);
-            }
-
-        .platform-tabs {
-            display: flex;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 1rem;
-        }
-
-        .platform-tab {
-            padding: 0.75rem 1.5rem;
-            background: transparent;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border-bottom: 2px solid transparent;
-        }
-
-            .platform-tab.active {
-                color: var(--primary-color);
-                border-bottom-color: var(--primary-color);
-            }
-
-        .platform-content {
-            display: none;
-        }
-
-            .platform-content.active {
-                display: block;
-            }
-
-        @media (max-width: 768px) {
-            .main {
-                grid-template-columns: 1fr;
-                padding-top: 80px;
-            }
-
-            .sidebar {
-                position: static;
-                order: 2;
-            }
-
-            .nav-links {
-                display: none;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="docs.css">
 </head>
+
 <body>
     <nav class="nav">
         <div class="nav-container">
-            <a href="../index.html" class="logo">OwnAudioSharp</a>
+            <a href="../index.html" class="logo">OwnaudioSharp</a>
             <ul class="nav-links">
-                <li><a href="../index.html#features">Features</a></li>
                 <li><a href="quickstart.html" class="active">Quick Start</a></li>
-                <li><a href="api-reference.html">API Reference</a></li>
+                <li><a href="api-core.html">Core API</a></li>
+                <li><a href="api-net.html">NET API</a></li>
                 <li><a href="examples.html">Examples</a></li>
+                <li><a href="effects.html">Effects</a></li>
+                <li><a href="networksync.html">Net Sync</a></li>
+                <li><a href="matchering.html">Mastering</a></li>
+                <li><a href="vocalremover.html">Vocal Sep</a></li>
+                <li><a href="chorddetect.html">Chords</a></li>
                 <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
             </ul>
         </div>
@@ -307,21 +41,48 @@
         <aside class="sidebar">
             <h3>Quick Start Guide</h3>
             <ul class="sidebar-nav">
-                <li><a href="#installation" class="active">Installation</a></li>
-                <li><a href="#dependencies">Dependencies</a></li>
-                <li><a href="#basic-usage">Basic Usage</a></li>
+                <li><a href="#introduction" class="active">Introduction</a></li>
+                <li><a href="#installation">Installation</a></li>
+                <li><a href="#core-usage">Core Usage</a></li>
+                <li><a href="#net-usage">NET Usage</a></li>
                 <li><a href="#platform-setup">Platform Setup</a></li>
-                <li><a href="#first-project">First Project</a></li>
                 <li><a href="#next-steps">Next Steps</a></li>
             </ul>
         </aside>
 
         <main class="content">
             <h1>Quick Start Guide</h1>
-            <p>Get up and running with OwnAudioSharp in minutes. This guide will help you install the library and create your first audio application.</p>
+            <p>Get up and running with Ownaudio in minutes. Choose between the low-level Core API for maximum control or
+                the high-level NET API for rapid development.</p>
+
+            <h2 id="introduction">Introduction</h2>
+
+            <div class="alert alert-warning">
+                <strong>🚀 Native Engine - GC-Free Audio!</strong>
+                Ownaudio now uses a high-performance C++ native engine by default, eliminating GC pauses for glitch-free
+                audio.
+                Despite our best efforts with managed code, the .NET Garbage Collector proved insurmountable for
+                professional
+                real-time audio. The native engine is now the default, but managed C# engines remain available for
+                testing/development.
+            </div>
 
             <div class="alert alert-info">
-                <strong>Zero Dependencies:</strong> OwnAudioSharp includes MiniAudio by default, so you can start immediately without installing any external libraries.
+                <strong>Zero External Dependencies</strong>
+                Ownaudio uses native system audio APIs - no external libraries required!
+            </div>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4><span class="badge badge-core">Core</span></h4>
+                    <p>Low-level audio engine with direct platform API access. Perfect for custom audio pipelines and
+                        maximum performance.</p>
+                </div>
+                <div class="feature-card">
+                    <h4><span class="badge badge-net">NET</span></h4>
+                    <p>High-level API with built-in mixing, effects, and multi-track support. Ideal for production
+                        applications.</p>
+                </div>
             </div>
 
             <h2 id="installation">Installation</h2>
@@ -329,396 +90,584 @@
             <h3>NuGet Package Manager</h3>
             <div class="code-block">
                 <div class="code-header">Package Manager Console</div>
-                <pre><code class="language-powershell">Install-Package OwnAudioSharp</code></pre>
+                <pre><code class="language-powershell"># For Core API
+Install-Package OwnAudioSharp</code></pre>
             </div>
 
             <h3>.NET CLI</h3>
             <div class="code-block">
                 <div class="code-header">Command Line</div>
-                <pre><code class="language-bash">dotnet add package OwnAudioSharp</code></pre>
+                <pre><code class="language-bash"># For Core API
+dotnet add package OwnAudioSharp</code></pre>
             </div>
 
-            <h3>PackageReference</h3>
-            <div class="code-block">
-                <div class="code-header">Project File (.csproj)</div>
-                <pre><code class="language-xml">&lt;PackageReference Include="OwnAudioSharp" Version="1.0.0" /&gt;</code></pre>
-            </div>
-
-            <h2 id="dependencies">Dependencies</h2>
-
-            <div class="alert alert-success">
-                <strong>Ready to Go:</strong> MiniAudio is included and works out of the box on all platforms without any setup.
-            </div>
-
-            <p>For enhanced functionality, you can optionally install:</p>
+            <h3>Requirements</h3>
             <ul>
-                <li><strong>FFmpeg 6</strong> - Extended audio format support (MP3, AAC, OGG, etc.)</li>
-                <li><strong>PortAudio 2</strong> - Professional audio I/O with lower latency</li>
+                <li><strong>.NET 8.0</strong> or later</li>
+                <li><strong>No external dependencies</strong> - uses system audio APIs</li>
+                <li><strong>Cross-platform</strong> - Windows, macOS, Linux, IOS, Android</li>
             </ul>
 
-            <div class="platform-tabs">
-                <button class="platform-tab active" onclick="showPlatform('windows')">Windows</button>
-                <button class="platform-tab" onclick="showPlatform('macos')">macOS</button>
-                <button class="platform-tab" onclick="showPlatform('linux')">Linux</button>
-                <button class="platform-tab" onclick="showPlatform('mobile')">Mobile</button>
+            <h2 id="core-usage">Ownaudio.Core Usage</h2>
+
+            <div class="alert alert-info">
+                <strong>Core API</strong>
+                Direct access to audio engine. Native engine (default) provides GC-free operation, or use managed
+                engines for pure C# code.
             </div>
 
-            <div id="windows" class="platform-content active">
-                <h3>Windows Setup</h3>
-                <ol>
-                    <li>Download FFmpeg 6 binaries and PortAudio DLL</li>
-                    <li>Extract to a folder (e.g., <code>C:\AudioLibs\</code>)</li>
-                    <li>Point to the folder when initializing OwnAudio</li>
-                </ol>
-                <div class="code-block">
-                    <div class="code-header">C# Initialization</div>
-                    <pre><code class="language-csharp">OwnAudio.Initialize(@"C:\AudioLibs\");</code></pre>
-                </div>
-            </div>
-
-            <div id="macos" class="platform-content">
-                <h3>macOS Setup</h3>
-                <p>Use Homebrew for easy installation:</p>
-                <div class="code-block">
-                    <div class="code-header">Terminal</div>
-                    <pre><code class="language-bash">brew install portaudio
-brew install ffmpeg@6</code></pre>
-                </div>
-                <p>Libraries are automatically detected after installation.</p>
-            </div>
-
-            <div id="linux" class="platform-content">
-                <h3>Linux Setup</h3>
-                <p>Install using your distribution's package manager:</p>
-                <div class="code-block">
-                    <div class="code-header">Ubuntu/Debian</div>
-                    <pre><code class="language-bash">sudo apt update
-sudo apt install portaudio19-dev ffmpeg</code></pre>
-                </div>
-                <div class="code-block">
-                    <div class="code-header">CentOS/RHEL</div>
-                    <pre><code class="language-bash">sudo yum install portaudio-devel ffmpeg</code></pre>
-                </div>
-            </div>
-
-            <div id="mobile" class="platform-content">
-                <h3>Android & iOS</h3>
-                <p>Mobile platforms use MiniAudio exclusively - no additional setup required!</p>
-                <div class="alert alert-info">
-                    MiniAudio provides excellent performance on mobile devices with built-in format support for MP3, WAV, and FLAC.
-                </div>
-            </div>
-
-            <h2 id="basic-usage">Basic Usage</h2>
-
-            <h3>Simple Audio Playback</h3>
+            <h3>Native Engine (Default - Recommended)</h3>
             <div class="code-block">
-                <div class="code-header">Program.cs</div>
-                <pre><code class="language-csharp">using Ownaudio;
-using Ownaudio.Sources;
-using System;
-using System.Threading.Tasks;
+                <div class="code-header">NativeEngine.cs</div>
+                <pre><code class="language-csharp">using Ownaudio.Core;
 
-try 
+// Create NATIVE audio engine (DEFAULT - GC-free!)
+using var engine = AudioEngineFactory.CreateDefault();
+// Or explicitly: AudioEngineFactory.CreateNative();
+
+// Native engine runs outside GC - no audio glitches!
+engine.Initialize(AudioConfig.Default);
+engine.Start();</code></pre>
+            </div>
+
+            <h3>Managed Engine (Optional - Pure C#)</h3>
+            <div class="code-block">
+                <div class="code-header">ManagedEngine.cs</div>
+                <pre><code class="language-csharp">using Ownaudio.Core;
+
+// Create MANAGED audio engine (pure C#)
+// Note: May experience GC-related audio glitches
+using var engine = AudioEngineFactory.CreateManaged();
+
+// Or create platform-specific managed engine:
+#if WINDOWS
+    using var engine = new WasapiEngine();
+#elif LINUX
+    using var engine = new PulseAudioEngine();
+#elif MACOS
+    using var engine = new CoreAudioEngine();
+#endif
+
+engine.Initialize(AudioConfig.Default);
+engine.Start();</code></pre>
+            </div>
+
+            <h3>Basic Playback</h3>
+            <div class="code-block">
+                <div class="code-header">BasicPlayback.cs</div>
+                <pre><code class="language-csharp">using Ownaudio.Core;
+using Ownaudio.Decoders;
+
+// Create audio engine with default settings (48kHz, stereo, 512 frames)
+using var engine = AudioEngineFactory.CreateDefault();
+
+// Initialize and start the engine
+engine.Initialize(AudioConfig.Default);
+engine.Start();
+
+// Create decoder for audio file
+using var decoder = AudioDecoderFactory.Create(
+    "music.mp3",
+    targetSampleRate: 48000,
+    targetChannels: 2
+);
+
+// Decode and play frames
+while (true)
 {
-    // Initialize OwnAudio (uses MiniAudio by default)
-    OwnAudio.Initialize();
-
-    // Create a source manager
-    var sourceManager = SourceManager.Instance;
-
-    // Add an audio file
-    await sourceManager.AddOutputSource("path/to/audio.mp3");
-
-    // Play the audio
-    sourceManager.Play();
-
-    // Wait for user input
-    Console.WriteLine("Press any key to stop playback...");
-    Console.ReadKey();
-
-    // Stop playback and clean up
-    sourceManager.Stop();
+    var result = decoder.DecodeNextFrame();
+    if (result.IsEOF) break;
+    
+    // Send samples to engine (zero-allocation)
+    engine.Send(result.Frame.Samples);
 }
-catch (Exception ex)
+
+// Stop the engine
+engine.Stop();</code></pre>
+            </div>
+
+            <h3>Custom Configuration</h3>
+            <div class="code-block">
+                <div class="code-header">CustomConfig.cs</div>
+                <pre><code class="language-csharp">// Create custom audio configuration
+var config = new AudioConfig
 {
-    Console.WriteLine($"Audio error: {ex.Message}");
+    SampleRate = 44100,
+    Channels = 2,
+    BufferSize = 256,        // Low latency
+    EnableOutput = true,
+    EnableInput = false
+};
+
+// Create engine with custom config
+using var engine = AudioEngineFactory.Create(config);
+engine.Initialize(config);
+engine.Start();
+
+// Use the engine...
+engine.Stop();</code></pre>
+            </div>
+
+            <h3>Device Management</h3>
+            <div class="code-block">
+                <div class="code-header">DeviceManagement.cs</div>
+                <pre><code class="language-csharp">using var engine = AudioEngineFactory.CreateDefault();
+engine.Initialize(AudioConfig.Default);
+
+// List available output devices
+var devices = engine.GetOutputDevices();
+foreach (var device in devices)
+{
+    Console.WriteLine($"{device.Name} - {(device.IsDefault ? "Default" : "")}");
 }
-finally
+
+// Switch to specific device
+engine.Stop();
+engine.SetOutputDeviceByName("Speakers (Realtek Audio)");
+engine.Start();
+
+// Handle device change events
+engine.OutputDeviceChanged += (sender, e) =>
 {
-    OwnAudio.Free();
+    Console.WriteLine($"Output device changed: {e.DeviceName}");
+};</code></pre>
+            </div>
+
+            <h3>Recording Audio</h3>
+            <div class="code-block">
+                <div class="code-header">Recording.cs</div>
+                <pre><code class="language-csharp">// Enable input in configuration
+var config = new AudioConfig
+{
+    SampleRate = 48000,
+    Channels = 2,
+    BufferSize = 512,
+    EnableInput = true,
+    EnableOutput = false
+};
+
+using var engine = AudioEngineFactory.Create(config);
+engine.Initialize(config);
+engine.Start();
+
+// Receive audio samples from input
+var buffer = new float[config.BufferSize * config.Channels];
+int samplesReceived = engine.Receives(out buffer);
+
+if (samplesReceived > 0)
+{
+    // Process received audio samples
+    ProcessAudioInput(buffer, samplesReceived);
+}
+
+engine.Stop();</code></pre>
+            </div>
+
+            <h2 id="net-usage">OwnaudioNET Usage</h2>
+
+            <div class="alert alert-info">
+                <strong>NET API</strong>
+                High-level API with professional features for production-ready applications.
+            </div>
+
+            <div class="alert alert-warning">
+                <strong>⚠️ IMPORTANT FOR UI APPLICATIONS</strong>
+                When building desktop (WPF, WinForms, MAUI, Avalonia) or mobile applications,
+                ALWAYS use the async API methods to prevent UI thread blocking:
+                <ul>
+                    <li><code>InitializeAsync()</code> instead of <code>Initialize()</code></li>
+                    <li><code>StopAsync()</code> instead of <code>Stop()</code></li>
+                    <li><code>ShutdownAsync()</code> instead of <code>Shutdown()</code></li>
+                </ul>
+                This prevents your application from freezing during audio initialization (50-5000ms) and shutdown (up to
+                2 seconds).
+            </div>
+
+            <h3>Basic Playback (Console Applications)</h3>
+            <div class="code-block">
+                <div class="code-header">BasicPlayback.cs</div>
+                <pre><code class="language-csharp">using OwnaudioNET;
+using OwnaudioNET.Sources;
+
+// Initialize OwnaudioNET (synchronous - OK for console apps)
+OwnaudioNet.Initialize();
+
+// Create file source
+var source = new FileSource("music.mp3");
+
+// Create mixer and add source
+var mixer = new AudioMixer(OwnaudioNet.Engine);
+mixer.AddSource(source);
+mixer.Start();
+
+// Play the source
+source.Play();
+
+// Wait for playback to finish
+while (!source.IsEndOfStream)
+{
+    Thread.Sleep(100);
+}
+
+// Clean up
+mixer.Stop();
+mixer.Dispose();
+source.Dispose();
+OwnaudioNet.Shutdown();</code></pre>
+            </div>
+
+            <h3>UI Application Playback (WPF/MAUI/Avalonia) ⭐ RECOMMENDED</h3>
+            <div class="code-block">
+                <div class="code-header">UIApplication.cs</div>
+                <pre><code class="language-csharp">using OwnaudioNET;
+using OwnaudioNET.Sources;
+
+public class AudioPlayerViewModel
+{
+    private AudioMixer? _mixer;
+    private FileSource? _source;
+
+    // Initialize asynchronously (UI remains responsive!)
+    public async Task InitializeAsync()
+    {
+        // ✅ Async initialization prevents UI freezing
+        await OwnaudioNet.InitializeAsync();
+
+        _mixer = new AudioMixer(OwnaudioNet.Engine);
+        _mixer.Start();
+    }
+
+    // Play audio file
+    public void Play(string filePath)
+    {
+        _source?.Dispose();
+        _source = new FileSource(filePath);
+
+        _mixer?.AddSource(_source);
+        _source.Play();
+    }
+
+    // Stop playback
+    public void Stop()
+    {
+        _source?.Stop();
+    }
+
+    // Shutdown asynchronously (UI remains responsive!)
+    public async Task ShutdownAsync()
+    {
+        _source?.Dispose();
+
+        _mixer?.Stop();
+        _mixer?.Dispose();
+
+        // ✅ Async shutdown prevents UI freezing
+        await OwnaudioNet.ShutdownAsync();
+    }
+}
+
+// Usage in UI event handler (e.g., WPF Button Click)
+private async void InitButton_Click(object sender, RoutedEventArgs e)
+{
+    InitButton.IsEnabled = false;
+    StatusText.Text = "Initializing audio...";
+
+    try
+    {
+        await _audioPlayer.InitializeAsync(); // UI stays responsive!
+        StatusText.Text = "Audio system ready!";
+        PlayButton.IsEnabled = true;
+    }
+    catch (Exception ex)
+    {
+        StatusText.Text = $"Error: {ex.Message}";
+    }
+    finally
+    {
+        InitButton.IsEnabled = true;
+    }
 }</code></pre>
             </div>
 
-            <h3>Adding Multiple Audio Sources</h3>
+            <h3>Volume Control and Seeking</h3>
             <div class="code-block">
-                <div class="code-header">Multiple Sources Example</div>
-                <pre><code class="language-csharp">// Add multiple audio files with names
-await sourceManager.AddOutputSource("background.mp3", "BackgroundMusic");
-await sourceManager.AddOutputSource("sfx.wav", "SoundEffect");
+                <div class="code-header">VolumeControl.cs</div>
+                <pre><code class="language-csharp">var source = new FileSource("music.mp3");
+
+// Volume control (0.0 - 1.0)
+source.Volume = 0.8f;
+
+// Seek to position (in seconds)
+source.Seek(30.0);
+
+// Loop playback
+source.Loop = true;
+
+// Check playback state
+if (source.State == AudioState.Playing)
+{
+    Console.WriteLine($"Position: {source.Position:F2}s / {source.Duration:F2}s");
+}</code></pre>
+            </div>
+
+            <h3>Multiple Sources (Multi-Track)</h3>
+            <div class="code-block">
+                <div class="code-header">MultiTrack.cs</div>
+                <pre><code class="language-csharp">OwnaudioNet.Initialize();
+
+var mixer = new AudioMixer(OwnaudioNet.Engine);
+mixer.Start();
+
+// Add multiple sources
+var drums = new FileSource("drums.wav");
+var bass = new FileSource("bass.wav");
+var guitar = new FileSource("guitar.wav");
+
+mixer.AddSource(drums);
+mixer.AddSource(bass);
+mixer.AddSource(guitar);
 
 // Control individual volumes
-sourceManager["BackgroundMusic"].Volume = 0.6f;  // 60% volume
-sourceManager["SoundEffect"].Volume = 0.8f;      // 80% volume
+drums.Volume = 0.8f;
+bass.Volume = 0.7f;
+guitar.Volume = 0.6f;
 
-// Play all sources simultaneously
-sourceManager.Play();</code></pre>
+// Play all sources
+drums.Play();
+bass.Play();
+guitar.Play();
+
+// Master volume control
+mixer.MasterVolume = 0.9f;</code></pre>
+            </div>
+
+            <h3>Synchronized Playback (Master Clock)</h3>
+            <div class="code-block">
+                <div class="code-header">SyncPlayback.cs - New Master Clock API (v2.1.0+)</div>
+                <pre><code class="language-csharp">var drums = new FileSource("drums.wav");
+var bass = new FileSource("bass.wav");
+var guitar = new FileSource("guitar.wav");
+
+mixer.AddSource(drums);
+mixer.AddSource(bass);
+mixer.AddSource(guitar);
+
+// Attach sources to Master Clock for sample-accurate sync
+drums.AttachToClock(mixer.MasterClock);
+bass.AttachToClock(mixer.MasterClock);
+guitar.AttachToClock(mixer.MasterClock);
+
+// Optional: Set start offsets on timeline
+guitar.StartOffset = 2.0;  // Guitar starts 2 seconds later
+
+// Start mixer
+mixer.Start();
+
+// Start all sources for playback
+drums.Play();
+bass.Play();
+guitar.Play();
+
+// All sources now play in perfect sync with Master Clock
+
+// Timeline control
+mixer.MasterClock.SeekTo(10.0);  // Seek all tracks to 10 seconds</code></pre>
+            </div>
+
+            <div class="alert alert-info">
+                <strong>Master Clock Benefits</strong>
+                The new timeline-based system provides sample-accurate synchronization, start offsets for DAW-style
+                track positioning,
+                automatic drift correction (&lt;10ms tolerance), and realtime/offline rendering modes.
+            </div>
+
+            <h3>Audio Effects</h3>
+            <div class="code-block">
+                <div class="code-header">Effects.cs</div>
+                <pre><code class="language-csharp">using OwnaudioNET.Effects;
+
+var source = new FileSource("guitar.wav");
+
+// Create effects
+var reverb = new ReverbEffect
+{
+    Mix = 0.3f,
+    RoomSize = 0.7f,
+    Damping = 0.5f
+};
+
+var compressor = new CompressorEffect(
+    threshold: 0.5f,       // 0.5 = -6dB threshold
+    ratio: 4.0f,
+    attackTime: 10.0f,
+    releaseTime: 100.0f,
+    sampleRate: 48000f
+);
+
+// Apply effects to source
+var sourceWithEffects = new SourceWithEffects(source, reverb, compressor);
+
+mixer.AddSource(sourceWithEffects);
+sourceWithEffects.Play();
+
+// Master effects (applied to final mix)
+var limiter = new LimiterEffect(sampleRate: 48000f, threshold: -0.5f);
+mixer.AddMasterEffect(limiter);</code></pre>
+            </div>
+
+            <h3>Tempo and Pitch Control</h3>
+            <div class="code-block">
+                <div class="code-header">TempoAndPitch.cs</div>
+                <pre><code class="language-csharp">var source = new FileSource("vocal.wav");
+
+// Change tempo (speed) without affecting pitch
+source.Tempo = 1.2f;  // 20% faster
+
+// Change pitch without affecting tempo
+source.PitchShift = -2.0f;  // 2 semitones lower
+
+// Both can be used together
+source.Tempo = 0.9f;      // 10% slower
+source.PitchShift = 3.0f;  // 3 semitones higher</code></pre>
+            </div>
+
+            <h3>Recording</h3>
+            <div class="code-block">
+                <div class="code-header">Recording.cs</div>
+                <pre><code class="language-csharp">var config = new AudioConfig
+{
+    SampleRate = 48000,
+    Channels = 2,
+    BufferSize = 512
+};
+
+OwnaudioNet.Initialize(config);
+
+var mixer = new AudioMixer(OwnaudioNet.Engine);
+mixer.Start();
+
+// Start recording output to file
+mixer.StartRecording("output.wav");
+
+// ... play sources ...
+
+// Stop recording
+mixer.StopRecording();</code></pre>
             </div>
 
             <h2 id="platform-setup">Platform-Specific Setup</h2>
 
-            <h3>Cross-Platform Initialization</h3>
-            <div class="code-block">
-                <div class="code-header">Smart Initialization</div>
-                <pre><code class="language-csharp">using System.Runtime.InteropServices;
-
-// Platform-specific library paths
-string libraryPath = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) 
-    ? @"C:\AudioLibs\" 
-    : RuntimeInformation.IsOSPlatform(OSPlatform.OSX) 
-        ? "/usr/local/lib/" 
-        : "/usr/lib/";
-
-// Initialize with automatic fallback to MiniAudio
-OwnAudio.Initialize(libraryPath);</code></pre>
+            <div class="alert alert-success">
+                <strong>No Setup Required!</strong>
+                Ownaudio automatically detects your platform and uses the appropriate native audio API.
             </div>
 
-            <h3>Engine Configuration</h3>
-            <div class="code-block">
-                <div class="code-header">Audio Engine Options</div>
-                <pre><code class="language-csharp">using Ownaudio.Engines;
-
-// Initialize first
-OwnAudio.Initialize();
-
-// Configure output for low-latency applications
-SourceManager.OutputEngineOptions = new AudioEngineOutputOptions(
-    OwnAudioEngine.EngineChannels.Stereo, 
-    44100,    // Sample rate
-    0.02      // Low latency (20ms)
-);
-
-// Configure input for recording
-SourceManager.InputEngineOptions = new AudioEngineInputOptions(
-    OwnAudioEngine.EngineChannels.Mono, 
-    44100, 
-    0.02
-);
-
-// Set buffer size for optimal performance
-SourceManager.EngineFramesPerBuffer = 512;</code></pre>
+            <h3>Supported Platforms</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>Windows</h4>
+                    <p><strong>WASAPI</strong> - Windows Audio Session API for low-latency audio</p>
+                </div>
+                <div class="feature-card">
+                    <h4>macOS</h4>
+                    <p><strong>Core Audio</strong> - Native macOS audio framework</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Linux</h4>
+                    <p><strong>PulseAudio</strong> - Standard Linux audio server</p>
+                </div>
+                <div class="feature-card">
+                    <h4>iOS</h4>
+                    <p><strong>Core Audio</strong> - Native iOS audio framework</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Android</h4>
+                    <p><strong>AAudio</strong> - Modern Android audio API</p>
+                </div>
             </div>
 
-            <h2 id="first-project">Your First Audio Project</h2>
-
-            <p>Let's create a simple console application that demonstrates key features:</p>
-
+            <h3>Platform Detection</h3>
             <div class="code-block">
-                <div class="code-header">Complete Example - AudioPlayer.cs</div>
-                <pre><code class="language-csharp">using Ownaudio;
-using Ownaudio.Sources;
-using Ownaudio.Processors;
-using System;
-using System.Threading.Tasks;
+                <div class="code-header">PlatformInfo.cs</div>
+                <pre><code class="language-csharp">// Get platform information
+string platformInfo = AudioEngineFactory.GetPlatformInfo();
+Console.WriteLine($"Platform: {platformInfo}");
 
-class AudioPlayer
-{
-    private static SourceManager sourceManager;
-
-    static async Task Main(string[] args)
-    {
-        try
-        {
-            // Initialize the audio system
-            Console.WriteLine("Initializing OwnAudio...");
-            OwnAudio.Initialize();
-            
-            sourceManager = SourceManager.Instance;
-
-            // Load an audio file
-            Console.WriteLine("Loading audio file...");
-            await sourceManager.AddOutputSource("demo.mp3", "DemoTrack");
-
-            // Start playback
-            Console.WriteLine("Starting playback...");
-            sourceManager.Play();
-
-            // Interactive menu
-            await RunInteractiveMenu();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error: {ex.Message}");
-        }
-        finally
-        {
-            OwnAudio.Free();
-        }
-    }
-
-    static async Task RunInteractiveMenu()
-    {
-        while (true)
-        {
-            Console.WriteLine("\n=== Audio Player ===");
-            Console.WriteLine("1. Play/Pause");
-            Console.WriteLine("2. Adjust Volume");
-            Console.WriteLine("3. Apply Reverb");
-            Console.WriteLine("4. Seek Position");
-            Console.WriteLine("5. Exit");
-            Console.Write("Choose option: ");
-
-            var key = Console.ReadKey().KeyChar;
-            Console.WriteLine();
-
-            switch (key)
-            {
-                case '1':
-                    TogglePlayback();
-                    break;
-                case '2':
-                    AdjustVolume();
-                    break;
-                case '3':
-                    ApplyReverb();
-                    break;
-                case '4':
-                    SeekPosition();
-                    break;
-                case '5':
-                    return;
-            }
-        }
-    }
-
-    static void TogglePlayback()
-    {
-        if (sourceManager.IsPlaying)
-        {
-            sourceManager.Pause();
-            Console.WriteLine("Paused");
-        }
-        else
-        {
-            sourceManager.Play();
-            Console.WriteLine("Playing");
-        }
-    }
-
-    static void AdjustVolume()
-    {
-        Console.Write("Enter volume (0.0 - 1.0): ");
-        if (float.TryParse(Console.ReadLine(), out float volume))
-        {
-            sourceManager["DemoTrack"].Volume = Math.Clamp(volume, 0f, 1f);
-            Console.WriteLine($"Volume set to {volume:F2}");
-        }
-    }
-
-    static void ApplyReverb()
-    {
-        var reverb = new Reverb(0.7f, 0.5f, 0.3f, 0.8f);
-        sourceManager.CustomSampleProcessor = reverb;
-        Console.WriteLine("Reverb effect applied");
-    }
-
-    static void SeekPosition()
-    {
-        Console.Write("Enter position in seconds: ");
-        if (double.TryParse(Console.ReadLine(), out double seconds))
-        {
-            sourceManager.Seek(TimeSpan.FromSeconds(seconds));
-            Console.WriteLine($"Seeked to {seconds:F1} seconds");
-        }
-    }
-}</code></pre>
+// Output examples:
+// "Windows-WASAPI"
+// "macOS-CoreAudio"
+// "Linux-PulseAudio"
+// "iOS-CoreAudio"
+// "Android-AAudio"</code></pre>
             </div>
 
             <h2 id="next-steps">Next Steps</h2>
 
-            <div class="alert alert-info">
-                <strong>Explore More:</strong> Now that you have the basics working, dive deeper into OwnAudioSharp's advanced features.
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>📚 CORE API Reference</h4>
+                    <p>Low-level cross-platform audio engine.</p>
+                    <a href="api-core.html" style="color: var(--primary-color);">View CORE Docs →</a>
+                </div>
+                <div class="feature-card">
+                    <h4>📚 NET API Reference</h4>
+                    <p>High-level audio API with professional features.</p>
+                    <a href="api-net.html" style="color: var(--primary-color);">View NET Docs →</a>
+                </div>
+                <div class="feature-card">
+                    <h4>🎛️ Examples</h4>
+                    <p>Discover all available audio effects and how to use them effectively.</p>
+                    <a href="examples.html" style="color: var(--primary-color);">Browse example →</a>
+                </div>
             </div>
 
-            <p>Continue your journey with these resources:</p>
-
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 2rem 0;">
-                <a href="api-reference.html" class="btn">📚 API Reference</a>
-                <a href="examples.html" class="btn">💡 Code Examples</a>
-                <a href="effects.html" class="btn">🎛️ Audio Effects</a>
-                <a href="matchering.html" class="btn">🎚️ Professional Mastering</a>
-            </div>
-
-            <h3>Key Concepts to Learn Next</h3>
-            <ul>
-                <li><strong>Audio Effects:</strong> Apply professional effects like reverb, delay, and compression</li>
-                <li><strong>Real-Time Processing:</strong> Generate and stream audio in real-time</li>
-                <li><strong>Chord Detection:</strong> Analyze musical content and extract chord progressions</li>
-                <li><strong>Audio Visualization:</strong> Create waveform displays with Avalonia</li>
-                <li><strong>Professional Mastering:</strong> Use intelligent audio matchering for studio-quality results</li>
-            </ul>
-
-            <div class="alert alert-success">
-                <strong>Need Help?</strong> Check out the <a href="https://github.com/ModernMube/OwnAudioSharpDemo" target="_blank" style="color: var(--success);">demo application</a> for a complete Avalonia MVVM example, or visit the <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" style="color: var(--success);">GitHub repository</a> for documentation and community support.
-            </div>
+            <!--<div class="alert alert-info">
+                <strong>Need Help?</strong>
+                Check out our <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" style="color: var(--primary-color);">GitHub repository</a> for issues, discussions, and community support.
+            </div>-->
         </main>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <script>
-        function showPlatform(platform) {
-        // Hide all platform content
-        document.querySelectorAll('.platform-content').forEach(content => {
-        content.classList.remove('active');
-        });
-
-        // Remove active class from all tabs
-        document.querySelectorAll('.platform-tab').forEach(tab => {
-        tab.classList.remove('active');
-        });
-
-        // Show selected platform content
-        document.getElementById(platform).classList.add('active');
-        event.target.classList.add('active');
-        }
-
-        // Smooth scrolling for sidebar links
-        document.querySelectorAll('.sidebar-nav a').forEach(link => {
-        link.addEventListener('click', function(e) {
-        e.preventDefault();
-        const targetId = this.getAttribute('href').substring(1);
-        const targetElement = document.getElementById(targetId);
-
-        if (targetElement) {
-        targetElement.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-        });
-        }
-
-        // Update active link
-        document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-        this.classList.add('active');
-        });
-        });
-
-        // Update active sidebar link on scroll
-        window.addEventListener('scroll', () => {
+        // Active sidebar navigation
         const sections = document.querySelectorAll('h2[id]');
-        const scrollPos = window.scrollY + 150;
+        const navLinks = document.querySelectorAll('.sidebar-nav a');
 
-        sections.forEach(section => {
-        const sectionTop = section.offsetTop;
-        const sectionHeight = section.offsetHeight;
-        const sectionId = section.getAttribute('id');
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                const sectionHeight = section.clientHeight;
+                if (window.pageYOffset >= sectionTop - 150) {
+                    current = section.getAttribute('id');
+                }
+            });
 
-        if (scrollPos >= sectionTop && scrollPos < sectionTop + sectionHeight) {
-        document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-        document.querySelector(`.sidebar-nav a[href="#${sectionId}"]`)?.classList.add('active');
-        }
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.classList.add('active');
+                }
+            });
         });
+
+        // Smooth scrolling
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
         });
     </script>
 </body>
+
 </html>

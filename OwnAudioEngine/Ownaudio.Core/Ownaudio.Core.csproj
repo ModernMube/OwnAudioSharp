@@ -1,0 +1,169 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Enable mobile targets only when explicitly building for mobile -->
+    <TargetFrameworks Condition="'$(BuildingForMobile)' == 'true'">net9.0;net9.0-android35.0;net9.0-ios18.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(BuildingForMobile)' != 'true'">net9.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Suppress nullable and documentation warnings for cleaner build -->
+    <NoWarn>$(NoWarn);CS8600;CS8603;CS8604;CS8602;CS8625;CS1591;CS0649;CS0675;CS0672;CA2014</NoWarn>
+    <Authors>Ownaudio Team</Authors>
+    <Company>Ownaudio</Company>
+    <Product>Ownaudio Core</Product>
+    <Description>Cross-platform audio engine core library with zero-allocation guarantees (Windows, Linux, macOS, Android, iOS)</Description>
+    <Copyright>Copyright © 2025</Copyright>
+    <PackageProjectUrl>https://github.com/yourusername/ownaudio</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/yourusername/ownaudio</RepositoryUrl>
+    <PackageTags>audio;real-time;low-latency;zero-allocation;gc-free;android;ios;mobile</PackageTags>
+    <Version>3.0.0</Version>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(DefineConstants);WINDOWS</DefineConstants>
+    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Linux'))">$(DefineConstants);LINUX</DefineConstants>
+    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('OSX'))">$(DefineConstants);MACOS</DefineConstants>
+    <DefineConstants Condition="$(TargetFramework.Contains('android'))">$(DefineConstants);ANDROID</DefineConstants>
+    <DefineConstants Condition="$(TargetFramework.Contains('ios'))">$(DefineConstants);IOS</DefineConstants>
+  </PropertyGroup>
+
+  <!-- Platform-independent logger -->
+  <ItemGroup>
+  <ProjectReference Include="..\..\Logger\Logger.csproj" />
+  </ItemGroup>
+
+  <!-- Android-specific settings -->
+  <PropertyGroup Condition="$(TargetFramework.Contains('android'))">
+    <SupportedOSPlatformVersion>21.0</SupportedOSPlatformVersion>
+    <AndroidEnableProfiledAot>true</AndroidEnableProfiledAot>
+    <AndroidUseInterpreter>false</AndroidUseInterpreter>
+  </PropertyGroup>
+
+  <!-- iOS-specific settings -->
+  <PropertyGroup Condition="$(TargetFramework.Contains('ios'))">
+    <SupportedOSPlatformVersion>11.0</SupportedOSPlatformVersion>
+    <RuntimeIdentifiers>ios-arm64;iossimulator-arm64;iossimulator-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <Optimize>true</Optimize>
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <Optimize>false</Optimize>
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+
+  <!-- Include native libraries for all platforms from Ownaudio.Native -->
+  <!-- Note: Ownaudio.Core does not reference Ownaudio.Native directly to avoid circular dependency -->
+  <!-- The Native engine is integrated at the OwnaudioNET layer -->
+  <ItemGroup>
+    <!-- Windows x64 - PortAudio (primary) and MiniAudio (fallback) -->
+    <Content Include="..\Ownaudio.Native\runtimes\win-x64\native\libportaudio.dll" Condition="Exists('..\Ownaudio.Native\runtimes\win-x64\native\libportaudio.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\win-x64\native\libportaudio.dll</Link>
+      <PackagePath>runtimes\win-x64\native\</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+    <Content Include="..\Ownaudio.Native\runtimes\win-x64\native\libminiaudio.dll" Condition="Exists('..\Ownaudio.Native\runtimes\win-x64\native\libminiaudio.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\win-x64\native\libminiaudio.dll</Link>
+      <PackagePath>runtimes\win-x64\native\</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+
+    <!-- Windows x86 - MiniAudio only -->
+    <Content Include="..\Ownaudio.Native\runtimes\win-x86\native\libminiaudio.dll" Condition="Exists('..\Ownaudio.Native\runtimes\win-x86\native\libminiaudio.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\win-x86\native\libminiaudio.dll</Link>
+      <PackagePath>runtimes\win-x86\native\</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+
+    <!-- Windows ARM64 - MiniAudio only -->
+    <Content Include="..\Ownaudio.Native\runtimes\win-arm64\native\libminiaudio.dll" Condition="Exists('..\Ownaudio.Native\runtimes\win-arm64\native\libminiaudio.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\win-arm64\native\libminiaudio.dll</Link>
+      <PackagePath>runtimes\win-arm64\native\</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+
+    <!-- Linux x64 - MiniAudio -->
+    <Content Include="..\Ownaudio.Native\runtimes\linux-x64\native\libminiaudio.so" Condition="Exists('..\Ownaudio.Native\runtimes\linux-x64\native\libminiaudio.so')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\linux-x64\native\libminiaudio.so</Link>
+      <PackagePath>runtimes\linux-x64\native\</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+
+    <!-- Linux ARM - MiniAudio -->
+    <Content Include="..\Ownaudio.Native\runtimes\linux-arm\native\libminiaudio.so" Condition="Exists('..\Ownaudio.Native\runtimes\linux-arm\native\libminiaudio.so')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\linux-arm\native\libminiaudio.so</Link>
+      <PackagePath>runtimes\linux-arm\native\</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+
+    <!-- Linux ARM64 - MiniAudio -->
+    <Content Include="..\Ownaudio.Native\runtimes\linux-arm64\native\libminiaudio.so" Condition="Exists('..\Ownaudio.Native\runtimes\linux-arm64\native\libminiaudio.so')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\linux-arm64\native\libminiaudio.so</Link>
+      <PackagePath>runtimes\linux-arm64\native\</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+
+    <!-- macOS x64 - MiniAudio -->
+    <Content Include="..\Ownaudio.Native\runtimes\osx-x64\native\libminiaudio.dylib" Condition="Exists('..\Ownaudio.Native\runtimes\osx-x64\native\libminiaudio.dylib')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\osx-x64\native\libminiaudio.dylib</Link>
+      <PackagePath>runtimes\osx-x64\native\</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+
+    <!-- macOS ARM64 - MiniAudio -->
+    <Content Include="..\Ownaudio.Native\runtimes\osx-arm64\native\libminiaudio.dylib" Condition="Exists('..\Ownaudio.Native\runtimes\osx-arm64\native\libminiaudio.dylib')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\osx-arm64\native\libminiaudio.dylib</Link>
+      <PackagePath>runtimes\osx-arm64\native\</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+
+    <!-- Android ARM - MiniAudio -->
+    <Content Include="..\Ownaudio.Native\runtimes\android-arm\native\libminiaudio.so" Condition="Exists('..\Ownaudio.Native\runtimes\android-arm\native\libminiaudio.so')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\android-arm\native\libminiaudio.so</Link>
+      <PackagePath>runtimes\android-arm\native\</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+
+    <!-- Android ARM64 - MiniAudio -->
+    <Content Include="..\Ownaudio.Native\runtimes\android-arm64\native\libminiaudio.so" Condition="Exists('..\Ownaudio.Native\runtimes\android-arm64\native\libminiaudio.so')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\android-arm64\native\libminiaudio.so</Link>
+      <PackagePath>runtimes\android-arm64\native\</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+
+    <!-- Android x64 - MiniAudio -->
+    <Content Include="..\Ownaudio.Native\runtimes\android-x64\native\libminiaudio.so" Condition="Exists('..\Ownaudio.Native\runtimes\android-x64\native\libminiaudio.so')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\android-x64\native\libminiaudio.so</Link>
+      <PackagePath>runtimes\android-x64\native\</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+
+    <!-- iOS ARM64 - MiniAudio Framework -->
+    <Content Include="..\Ownaudio.Native\runtimes\iOS-arm64\native\miniaudio.framework\**\*" Condition="Exists('..\Ownaudio.Native\runtimes\iOS-arm64\native\miniaudio.framework')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\iOS-arm64\native\miniaudio.framework\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\iOS-arm64\native\miniaudio.framework\</PackagePath>
+      <Pack>true</Pack>
+    </Content>
+  </ItemGroup>
+
+</Project>

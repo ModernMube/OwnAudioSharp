@@ -1,502 +1,28 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
-<head>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
-    <script>
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
 
-        gtag('config', 'G-93P1X5V4Z5');
-    </script>
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Professional Audio Matchering - OwnAudioSharp</title>
+    <title>Audio Matchering API - Ownaudio</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-    <style>
-        :root {
-            --primary-color: #6366f1;
-            --primary-dark: #4f46e5;
-            --secondary-color: #ec4899;
-            --background: #0f0f23;
-            --surface: #1a1a2e;
-            --surface-light: #16213e;
-            --text-primary: #e2e8f0;
-            --text-secondary: #94a3b8;
-            --accent: #00d9ff;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --border: #334155;
-            --gold: #fbbf24;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--background);
-            color: var(--text-primary);
-            line-height: 1.6;
-        }
-
-        .nav {
-            background: rgba(26, 26, 46, 0.95);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid var(--border);
-            position: fixed;
-            top: 0;
-            width: 100%;
-            z-index: 1000;
-            padding: 1rem 0;
-        }
-
-        .nav-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--primary-color), var(--accent));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            text-decoration: none;
-        }
-
-        .nav-links {
-            display: flex;
-            list-style: none;
-            gap: 2rem;
-        }
-
-            .nav-links a {
-                color: var(--text-secondary);
-                text-decoration: none;
-                font-weight: 500;
-                transition: color 0.3s ease;
-            }
-
-                .nav-links a:hover, .nav-links a.active {
-                    color: var(--primary-color);
-                }
-
-        .main {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 100px 2rem 2rem;
-            display: grid;
-            grid-template-columns: 300px 1fr;
-            gap: 3rem;
-        }
-
-        .sidebar {
-            background: var(--surface);
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            padding: 2rem;
-            height: fit-content;
-            position: sticky;
-            top: 120px;
-            max-height: calc(100vh - 140px);
-            overflow-y: auto;
-        }
-
-            .sidebar h3 {
-                color: var(--text-primary);
-                margin-bottom: 1rem;
-                font-size: 1.1rem;
-            }
-
-        .sidebar-nav {
-            list-style: none;
-        }
-
-            .sidebar-nav > li {
-                margin-bottom: 1rem;
-            }
-
-            .sidebar-nav .section-title {
-                color: var(--gold);
-                font-weight: 600;
-                font-size: 0.9rem;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                margin-bottom: 0.5rem;
-            }
-
-            .sidebar-nav ul {
-                list-style: none;
-                margin-left: 1rem;
-            }
-
-                .sidebar-nav ul li {
-                    margin-bottom: 0.3rem;
-                }
-
-            .sidebar-nav a {
-                color: var(--text-secondary);
-                text-decoration: none;
-                font-size: 0.875rem;
-                transition: color 0.3s ease;
-                display: block;
-                padding: 0.25rem 0;
-            }
-
-                .sidebar-nav a:hover,
-                .sidebar-nav a.active {
-                    color: var(--gold);
-                }
-
-        .content {
-            background: var(--surface);
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            padding: 3rem;
-        }
-
-        .hero-section {
-            background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(99, 102, 241, 0.1));
-            border: 2px solid var(--gold);
-            border-radius: 16px;
-            padding: 3rem;
-            margin-bottom: 3rem;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
-
-            .hero-section::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: radial-gradient(circle at 50% 50%, rgba(251, 191, 36, 0.05) 0%, transparent 70%);
-            }
-
-            .hero-section h1 {
-                font-size: 2.8rem;
-                margin-bottom: 1rem;
-                background: linear-gradient(135deg, var(--gold), var(--primary-color));
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-                position: relative;
-                z-index: 1;
-            }
-
-            .hero-section p {
-                font-size: 1.2rem;
-                color: var(--text-secondary);
-                margin-bottom: 2rem;
-                position: relative;
-                z-index: 1;
-            }
-
-        .content h2 {
-            font-size: 1.8rem;
-            margin: 2.5rem 0 1rem;
-            color: var(--text-primary);
-            border-bottom: 2px solid var(--border);
-            padding-bottom: 0.5rem;
-        }
-
-        .content h3 {
-            font-size: 1.3rem;
-            margin: 2rem 0 0.75rem;
-            color: var(--gold);
-        }
-
-        .content h4 {
-            font-size: 1.1rem;
-            margin: 1.5rem 0 0.5rem;
-            color: var(--text-primary);
-        }
-
-        .content p {
-            margin-bottom: 1rem;
-            color: var(--text-secondary);
-        }
-
-        .content ul, .content ol {
-            margin-bottom: 1rem;
-            padding-left: 2rem;
-            color: var(--text-secondary);
-        }
-
-        .content li {
-            margin-bottom: 0.5rem;
-        }
-
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            margin: 2rem 0;
-        }
-
-        .feature-card {
-            background: var(--surface-light);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 2rem;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-
-            .feature-card:hover {
-                transform: translateY(-5px);
-                border-color: var(--gold);
-                box-shadow: 0 10px 30px rgba(251, 191, 36, 0.2);
-            }
-
-            .feature-card::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                height: 4px;
-                background: linear-gradient(90deg, var(--gold), var(--primary-color));
-            }
-
-        .feature-icon {
-            width: 60px;
-            height: 60px;
-            background: linear-gradient(135deg, var(--gold), var(--primary-color));
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1.8rem;
-            margin-bottom: 1rem;
-        }
-
-        .feature-card h4 {
-            margin: 0 0 0.5rem 0;
-            color: var(--text-primary);
-        }
-
-        .feature-card p {
-            font-size: 0.9rem;
-            margin: 0;
-        }
-
-        .code-block {
-            background: var(--surface-light);
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            margin: 1.5rem 0;
-            overflow: hidden;
-        }
-
-        .code-header {
-            background: var(--background);
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid var(--border);
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .studio-badge {
-            background: var(--gold);
-            color: var(--background);
-            padding: 0.2rem 0.6rem;
-            border-radius: 12px;
-            font-size: 0.7rem;
-            font-weight: 600;
-        }
-
-        pre {
-            margin: 0;
-            padding: 1.5rem;
-            overflow-x: auto;
-            background: transparent !important;
-        }
-
-        .comparison-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 2rem 0;
-            background: var(--surface-light);
-            border-radius: 12px;
-            overflow: hidden;
-        }
-
-            .comparison-table th,
-            .comparison-table td {
-                padding: 1rem;
-                text-align: left;
-                border-bottom: 1px solid var(--border);
-            }
-
-            .comparison-table th {
-                background: var(--background);
-                color: var(--gold);
-                font-weight: 600;
-            }
-
-            .comparison-table td {
-                color: var(--text-secondary);
-            }
-
-            .comparison-table tr:hover {
-                background: rgba(251, 191, 36, 0.05);
-            }
-
-        .preset-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin: 2rem 0;
-        }
-
-        .preset-card {
-            background: var(--surface-light);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 1.5rem;
-            transition: all 0.3s ease;
-        }
-
-            .preset-card:hover {
-                border-color: var(--gold);
-                transform: translateY(-3px);
-            }
-
-            .preset-card h5 {
-                color: var(--gold);
-                margin-bottom: 0.5rem;
-                font-size: 1rem;
-            }
-
-            .preset-card p {
-                font-size: 0.85rem;
-                margin: 0;
-            }
-
-        .alert {
-            padding: 1.5rem;
-            border-radius: 12px;
-            margin: 2rem 0;
-            border-left: 4px solid;
-            background: rgba(251, 191, 36, 0.1);
-            border-color: var(--gold);
-            color: var(--text-primary);
-        }
-
-        .alert-pro {
-            background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(99, 102, 241, 0.1));
-            border: 2px solid var(--gold);
-            border-radius: 12px;
-            padding: 2rem;
-            margin: 2rem 0;
-        }
-
-            .alert-pro h4 {
-                color: var(--gold);
-                margin-top: 0;
-                display: flex;
-                align-items: center;
-                gap: 0.5rem;
-            }
-
-        .workflow-steps {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.5rem;
-            margin: 2rem 0;
-        }
-
-        .workflow-step {
-            background: var(--surface-light);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.5rem;
-            text-align: center;
-            position: relative;
-        }
-
-            .workflow-step::before {
-                content: attr(data-step);
-                position: absolute;
-                top: -15px;
-                left: 50%;
-                transform: translateX(-50%);
-                background: var(--gold);
-                color: var(--background);
-                width: 30px;
-                height: 30px;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-weight: 600;
-                font-size: 0.9rem;
-            }
-
-            .workflow-step h5 {
-                color: var(--text-primary);
-                margin: 1rem 0 0.5rem;
-            }
-
-            .workflow-step p {
-                font-size: 0.85rem;
-                margin: 0;
-            }
-
-        @media (max-width: 1024px) {
-            .main {
-                grid-template-columns: 1fr;
-                padding-top: 80px;
-            }
-
-            .sidebar {
-                position: static;
-                order: 2;
-                max-height: none;
-            }
-
-            .nav-links {
-                display: none;
-            }
-
-            .hero-section h1 {
-                font-size: 2.2rem;
-            }
-
-            .features-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="docs.css">
 </head>
+
 <body>
     <nav class="nav">
         <div class="nav-container">
-            <a href="../index.html" class="logo">OwnAudioSharp</a>
+            <a href="../index.html" class="logo">OwnaudioSharp</a>
             <ul class="nav-links">
-                <li><a href="../index.html#features">Features</a></li>
                 <li><a href="quickstart.html">Quick Start</a></li>
-                <li><a href="api-reference.html">API Reference</a></li>
+                <li><a href="api-core.html">Core API</a></li>
+                <li><a href="api-net.html">NET API</a></li>
                 <li><a href="examples.html">Examples</a></li>
+                <li><a href="effects.html">Effects</a></li>
+                <li><a href="networksync.html">Net Sync</a></li>
+                <li><a href="matchering.html" class="active">Mastering</a></li>
+                <li><a href="vocalremover.html">Vocal Sep</a></li>
+                <li><a href="chorddetect.html">Chords</a></li>
                 <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
             </ul>
         </div>
@@ -504,666 +30,692 @@
 
     <div class="main">
         <aside class="sidebar">
-            <h3>Professional Matchering</h3>
+            <h3>Audio Matchering</h3>
             <ul class="sidebar-nav">
-                <li>
-                    <div class="section-title">Overview</div>
-                    <ul>
-                        <li><a href="#introduction">Introduction</a></li>
-                        <li><a href="#core-technology">Core Technology</a></li>
-                        <li><a href="#features">Key Features</a></li>
-                    </ul>
-                </li>
-                <li>
-                    <div class="section-title">Quick Start</div>
-                    <ul>
-                        <li><a href="#basic-usage">Basic Usage</a></li>
-                        <li><a href="#presets">Playback Presets</a></li>
-                        <li><a href="#workflow">Professional Workflow</a></li>
-                    </ul>
-                </li>
-                <li>
-                    <div class="section-title">Technical</div>
-                    <ul>
-                        <li><a href="#algorithms">Advanced Algorithms</a></li>
-                        <li><a href="#analysis">Spectrum Analysis</a></li>
-                        <li><a href="#safety">Safety Systems</a></li>
-                    </ul>
-                </li>
-                <li>
-                    <div class="section-title">Applications</div>
-                    <ul>
-                        <li><a href="#music-production">Music Production</a></li>
-                        <li><a href="#broadcasting">Broadcasting</a></li>
-                        <li><a href="#post-production">Post-Production</a></li>
-                    </ul>
-                </li>
+                <li><a href="#overview" class="active">Overview</a></li>
+                <li><a href="#analyzer">AudioAnalyzer</a></li>
+                <li><a href="#data-classes">Data Classes</a></li>
+                <li><a href="#analysis-methods">Analysis Methods</a></li>
+                <li><a href="#eq-processing">EQ Processing</a></li>
+                <li><a href="#presets">Playback Presets</a></li>
+                <li><a href="#segmented">Segmented Analysis</a></li>
+                <li><a href="#examples">Usage Examples</a></li>
             </ul>
         </aside>
 
         <main class="content">
-            <div class="hero-section">
-                <h1>🎚️ Professional Audio Matchering</h1>
-                <p>Studio-quality mastering with advanced intelligent analysis - with a single line of code!</p>
+            <h1><span class="badge badge-net">NET</span> Audio Matchering API</h1>
+            <p>
+                Advanced audio spectrum analysis and EQ matching functionality for professional audio mastering.
+                Implements FFT-based frequency analysis, intelligent EQ adjustment algorithms, and psychoacoustic
+                optimization.
+            </p>
 
-                <div class="code-block" style="text-align: left; max-width: 600px; margin: 0 auto;">
-                    <div class="code-header">
-                        <span>Professional Matchering</span>
-                        <span class="studio-badge">Studio Quality</span>
-                    </div>
-                    <pre><code class="language-csharp">// Transform your audio to professional quality
-analyzer.ProcessEQMatching(
-    "my_track.wav",      // Your source audio
-    "reference.wav",     // Professional reference
-    "mastered.wav"       // Studio-quality output
-);</code></pre>
+            <div class="alert alert-info">
+                <strong>Professional Audio Processing</strong>
+                The Matchering API provides sophisticated tools for matching audio characteristics between source and
+                target files,
+                with support for segmented analysis, dynamic Q-factor optimization, and playback system presets.
+            </div>
+
+            <h2 id="overview">Overview</h2>
+            <p>
+                The Audio Matchering system enables professional-grade audio mastering by analyzing and matching
+                spectral characteristics:
+            </p>
+            <ul>
+                <li><strong>Segmented Analysis:</strong> Divides audio into overlapping segments for robust analysis
+                </li>
+                <li><strong>30-Band ISO EQ:</strong> Professional frequency bands from 20Hz to 16kHz</li>
+                <li><strong>Dynamic Q Optimization:</strong> Automatic Q-factor calculation for musical results</li>
+                <li><strong>Playback Presets:</strong> Pre-configured settings for 10 different playback systems</li>
+                <li><strong>Psychoacoustic Processing:</strong> Intelligent scaling and spectral balance control</li>
+                <li><strong>Outlier Detection:</strong> Statistical filtering of non-representative audio segments</li>
+            </ul>
+
+            <h3>Key Features</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>Spectral Analysis</h4>
+                    <p>FFT-based frequency analysis with Flat-Top windowing for accurate amplitude measurements across
+                        30 ISO-standard bands.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Intelligent EQ Matching</h4>
+                    <p>Automatically calculates and applies EQ adjustments to match source audio to target
+                        characteristics with musical results.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Segmented Approach</h4>
+                    <p>Analyzes audio in overlapping segments with weighted averaging and outlier filtering for robust
+                        analysis.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>System Presets</h4>
+                    <p>Pre-configured frequency response curves for concert PA, club systems, hi-fi speakers,
+                        headphones, and more.</p>
                 </div>
             </div>
 
-            <h2 id="introduction">Introduction</h2>
-            <p>OwnAudioSharp's professional audio matching system is a breakthrough in automated mastering technology. Using advanced psychoacoustic analysis and intelligent features, it automatically analyzes and adjusts the spectral and dynamic properties of the source audio to match the characteristics of the reference tracks with studio-quality accuracy.</p>
-
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">🎯</div>
-                    <h4>Intelligent Analysis</h4>
-                    <p>30-band precision EQ with psychoacoustic weighting and spectral balance analysis</p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">🔬</div>
-                    <h4>Advanced Processing</h4>
-                    <p>Dynamic Q-factor optimization with frequency-specific safety limiting</p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">🎚️</div>
-                    <h4>Professional Results</h4>
-                    <p>Broadcast-quality output with temporal stability and harmonic preservation</p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">⚡</div>
-                    <h4>One-Line Solution</h4>
-                    <p>Complex mastering algorithms accessible through simple API calls</p>
-                </div>
-            </div>
-
-            <h2 id="core-technology">Core Technology</h2>
-
-            <h3>Advanced Frequency Analysis</h3>
-            <ul>
-                <li><strong>30-band precision EQ:</strong> High-resolution frequency analysis from 20Hz to 16kHz</li>
-                <li><strong>Overlapped FFT processing:</strong> 87.5% overlap with Blackman-Harris windowing</li>
-                <li><strong>Adaptive window sizing:</strong> Optimal FFT sizes (4096-16384 samples) based on sample rate</li>
-                <li><strong>Psychoacoustic weighting:</strong> Frequency-specific energy calculations with perceptual modeling</li>
-            </ul>
-
-            <h3>Intelligent Processing Algorithms</h3>
-            <ul>
-                <li><strong>Dynamic Q-factor optimization:</strong> Automatic bandwidth adjustment based on correction requirements</li>
-                <li><strong>Spectral balance analysis:</strong> Multi-band energy distribution with intelligent smoothing</li>
-                <li><strong>Neighboring band correlation:</strong> Context-aware frequency adjustments for musical naturalness</li>
-                <li><strong>Safety-first processing:</strong> Built-in distortion protection with frequency-specific limits</li>
-            </ul>
-
-            <h2 id="basic-usage">Basic Usage</h2>
-            <p>Professional audio matchering is incredibly simple to use while delivering studio-quality results.</p>
+            <h2 id="analyzer">AudioAnalyzer Class</h2>
+            <p>
+                The <code>AudioAnalyzer</code> partial class provides the core functionality for audio analysis and EQ
+                matching.
+            </p>
 
             <div class="code-block">
-                <div class="code-header">
-                    <span>Simple Matchering</span>
-                    <span class="studio-badge">Professional</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio.Utilities.Matchering;
+                <div class="code-header">AudioAnalyzer Namespace</div>
+                <pre><code class="language-csharp">using OwnaudioNET.Features.Matchering;
 
-// Initialize analyzer
+// Create analyzer instance
 var analyzer = new AudioAnalyzer();
 
-// Process source audio to match reference characteristics
+// Analyze audio file
+AudioSpectrum spectrum = analyzer.AnalyzeAudioFile("input.wav");
+
+// Perform EQ matching
 analyzer.ProcessEQMatching(
-    sourceFile: "input_track.wav",     // Audio to be processed
-    targetFile: "reference.wav",       // Professional reference track
-    outputFile: "mastered_track.wav"   // Studio-quality output
-);
-
-// The system automatically performs:
-// 1. Advanced 30-band spectral analysis with psychoacoustic weighting
-// 2. Dynamic Q-factor optimization for surgical frequency corrections
-// 3. Intelligent EQ curve calculation with spectral balance consideration
-// 4. Multi-band compression with frequency-specific settings
-// 5. Dynamic amplification with temporal stability analysis
-// 6. Distortion-protected output generation with safety limiting</code></pre>
+    sourceFile: "source.wav",
+    targetFile: "target.wav", 
+    outputFile: "matched.wav"
+);</code></pre>
             </div>
 
-            <div class="alert-pro">
-                <h4>🏆 Professional Results</h4>
-                <p>Your source audio will sound exactly like the reference track with the same tonal balance, dynamics, and perceived loudness - achieving professional mastering studio quality with a single function call.</p>
-            </div>
-
-            <h2 id="presets">Playback System Presets</h2>
-            <p>Target your master for specific listening environments with optimized processing presets.</p>
-
-            <div class="code-block">
-                <div class="code-header">Playback System Optimization</div>
-                <pre><code class="language-csharp">// Optimize for different playback systems
-analyzer.ProcessWithEnhancedPreset("source.wav", "hifi_output.wav", 
-    PlaybackSystem.HiFiSpeakers);
-    
-analyzer.ProcessWithEnhancedPreset("source.wav", "club_output.wav", 
-    PlaybackSystem.ClubPA);
-    
-analyzer.ProcessWithEnhancedPreset("source.wav", "streaming_output.wav", 
-    PlaybackSystem.RadioBroadcast);</code></pre>
-            </div>
-
-            <div class="preset-grid">
-                <div class="preset-card">
-                    <h5>🎵 HiFi Speakers</h5>
-                    <p>Neutral response for critical listening and audiophile systems</p>
-                </div>
-
-                <div class="preset-card">
-                    <h5>🎧 Headphones</h5>
-                    <p>Compensated for typical headphone response curves and acoustics</p>
-                </div>
-
-                <div class="preset-card">
-                    <h5>🕺 Club PA</h5>
-                    <p>Dance music optimization with enhanced bass and crowd-friendly dynamics</p>
-                </div>
-
-                <div class="preset-card">
-                    <h5>🎤 Studio Monitors</h5>
-                    <p>Reference standard for professional mixing environments</p>
-                </div>
-
-                <div class="preset-card">
-                    <h5>📻 Radio Broadcast</h5>
-                    <p>FM/AM transmission standards with dialogue clarity enhancement</p>
-                </div>
-
-                <div class="preset-card">
-                    <h5>🚗 Car Stereo</h5>
-                    <p>Road noise and cabin acoustics compensation</p>
-                </div>
-
-                <div class="preset-card">
-                    <h5>📱 Smartphone</h5>
-                    <p>Small speaker compensation with midrange focus</p>
-                </div>
-
-                <div class="preset-card">
-                    <h5>🎭 Concert PA</h5>
-                    <p>Large venue sound reinforcement optimization</p>
-                </div>
-            </div>
-
-            <h2 id="analysis">Advanced Spectrum Analysis</h2>
-            <p>Get detailed insights into your audio with comprehensive analysis metrics.</p>
-
-            <div class="code-block">
-                <div class="code-header">Detailed Analysis</div>
-                <pre><code class="language-csharp">// Comprehensive spectrum analysis
-var sourceSpectrum = analyzer.AnalyzeAudioFile("source.wav");
-
-Console.WriteLine($"RMS level: {sourceSpectrum.RMSLevel:F3}");
-Console.WriteLine($"Peak level: {sourceSpectrum.PeakLevel:F3}");
-Console.WriteLine($"Dynamic range: {sourceSpectrum.DynamicRange:F1} dB");
-Console.WriteLine($"Perceived loudness: {sourceSpectrum.Loudness:F1} LUFS");
-
-// Access 30-band frequency analysis
-var frequencies = new[] {
-    20f, 25f, 31.5f, 40f, 50f, 63f, 80f, 100f, 125f, 160f,
-    200f, 250f, 315f, 400f, 500f, 630f, 800f, 1000f, 1250f, 1600f,
-    2000f, 2500f, 3150f, 4000f, 5000f, 6300f, 8000f, 10000f, 12500f, 16000f
-};
-
-for (int i = 0; i < sourceSpectrum.FrequencyBands.Length; i++)
-{
-    Console.WriteLine($"{frequencies[i]}Hz: {sourceSpectrum.FrequencyBands[i]:F3}");
-}</code></pre>
-            </div>
-
-            <h2 id="workflow">Professional Workflow</h2>
-            <p>Step-by-step guide to professional audio matchering workflow.</p>
-
-            <div class="workflow-steps">
-                <div class="workflow-step" data-step="1">
-                    <h5>Source Analysis</h5>
-                    <p>Analyze source material for RMS, peak levels, dynamic range, and spectral content</p>
-                </div>
-
-                <div class="workflow-step" data-step="2">
-                    <h5>Reference Analysis</h5>
-                    <p>Extract target characteristics from professionally mastered reference track</p>
-                </div>
-
-                <div class="workflow-step" data-step="3">
-                    <h5>EQ Matching</h5>
-                    <p>Apply intelligent 30-band EQ with dynamic Q-factor optimization</p>
-                </div>
-
-                <div class="workflow-step" data-step="4">
-                    <h5>Dynamics Processing</h5>
-                    <p>Multi-band compression and limiting with temporal stability analysis</p>
-                </div>
-
-                <div class="workflow-step" data-step="5">
-                    <h5>Safety Processing</h5>
-                    <p>Distortion protection and final limiting for broadcast-ready output</p>
-                </div>
-
-                <div class="workflow-step" data-step="6">
-                    <h5>Quality Assurance</h5>
-                    <p>Automated analysis and verification of professional standards compliance</p>
-                </div>
-            </div>
-
-            <div class="code-block">
-                <div class="code-header">Complete Professional Workflow</div>
-                <pre><code class="language-csharp">// Step 1: Analyze source material
-var sourceAnalysis = analyzer.AnalyzeAudioFile("my_track.wav");
-Console.WriteLine($"Source loudness: {sourceAnalysis.Loudness:F1} LUFS");
-Console.WriteLine($"Dynamic range: {sourceAnalysis.DynamicRange:F1} dB");
-
-// Step 2: Analyze reference track
-var referenceAnalysis = analyzer.AnalyzeAudioFile("commercial_reference.wav");
-Console.WriteLine($"Reference loudness: {referenceAnalysis.Loudness:F1} LUFS");
-
-// Step 3: Apply professional matchering
-analyzer.ProcessEQMatching("my_track.wav", "commercial_reference.wav", "mastered_track.wav");
-
-// Step 4: Create delivery versions for different platforms
-analyzer.ProcessWithEnhancedPreset("mastered_track.wav", "streaming_version.wav", 
-    PlaybackSystem.RadioBroadcast);
-analyzer.ProcessWithEnhancedPreset("mastered_track.wav", "club_version.wav", 
-    PlaybackSystem.ClubPA);
-analyzer.ProcessWithEnhancedPreset("mastered_track.wav", "audiophile_version.wav", 
-    PlaybackSystem.HiFiSpeakers);
-
-Console.WriteLine("✅ Professional mastering workflow complete!");</code></pre>
-            </div>
-
-            <h2 id="algorithms">Technical Specifications</h2>
-
-            <h3>30-Band Frequency Analysis</h3>
-            <table class="comparison-table">
+            <h3>Public API Methods</h3>
+            <table class="api-table">
                 <thead>
                     <tr>
-                        <th>Specification</th>
-                        <th>Value</th>
+                        <th>Method</th>
+                        <th>Return</th>
                         <th>Description</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td>Frequency Range</td>
-                        <td>20 Hz - 16 kHz</td>
-                        <td>Extended range with logarithmic distribution</td>
+                        <td><code>AnalyzeAudioFile(string)</code></td>
+                        <td>AudioSpectrum</td>
+                        <td>Performs enhanced segmented audio analysis with weighted averaging</td>
                     </tr>
                     <tr>
-                        <td>FFT Window</td>
-                        <td>4096-16384 samples</td>
-                        <td>Adaptive sizing based on sample rate</td>
+                        <td><code>ProcessEQMatching(string, string, string)</code></td>
+                        <td>void</td>
+                        <td>Analyzes both files and applies optimal EQ matching to source</td>
                     </tr>
                     <tr>
-                        <td>Window Function</td>
-                        <td>Blackman-Harris</td>
-                        <td>87.5% overlap for minimal spectral leakage</td>
+                        <td><code>ProcessWithEnhancedPreset(...)</code></td>
+                        <td>void</td>
+                        <td>Applies playback system preset with base sample reference</td>
                     </tr>
                     <tr>
-                        <td>Psychoacoustic Model</td>
-                        <td>Bark scale</td>
-                        <td>Frequency-dependent bandwidth calculation</td>
+                        <td><code>BatchProcessWithEnhancedPreset(...)</code></td>
+                        <td>void</td>
+                        <td>Batch processes multiple files with the same preset</td>
                     </tr>
                     <tr>
-                        <td>Spectral Accuracy</td>
-                        <td>Sub-band interpolation</td>
-                        <td>Weighted RMS with energy distribution</td>
+                        <td><code>GetAvailablePresets()</code></td>
+                        <td>Dictionary</td>
+                        <td>Returns all available playback system presets</td>
                     </tr>
                 </tbody>
             </table>
 
-            <h3>Dynamic Q-Factor Optimization</h3>
+            <h2 id="data-classes">Data Classes</h2>
+
+            <h3>AudioSpectrum</h3>
+            <p>Contains comprehensive audio spectrum analysis results including frequency bands, dynamics, and loudness.
+            </p>
+
+            <div class="code-block">
+                <div class="code-header">AudioSpectrum Class</div>
+                <pre><code class="language-csharp">public class AudioSpectrum
+{
+    // Frequency band energy levels (30 ISO bands)
+    public float[] FrequencyBands { get; set; } = new float[30];
+    
+    // RMS level of the audio
+    public float RMSLevel { get; set; }
+    
+    // Peak level of the audio
+    public float PeakLevel { get; set; }
+    
+    // Dynamic range in dB
+    public float DynamicRange { get; set; }
+    
+    // Perceived loudness in LUFS
+    public float Loudness { get; set; }
+}</code></pre>
+            </div>
+
+            <h3>DynamicsInfo</h3>
+            <p>Contains audio dynamics analysis information for compression and level management.</p>
+
+            <div class="code-block">
+                <div class="code-header">DynamicsInfo Class</div>
+                <pre><code class="language-csharp">public class DynamicsInfo
+{
+    public float RMS { get; set; }           // Root Mean Square level
+    public float Peak { get; set; }          // Peak level
+    public float DynamicRange { get; set; }  // Dynamic range in dB
+    public float Loudness { get; set; }      // Loudness in LUFS
+}</code></pre>
+            </div>
+
+            <h3>CompressionSettings</h3>
+            <p>Defines compression parameters for audio dynamics processing.</p>
+
+            <div class="code-block">
+                <div class="code-header">CompressionSettings Class</div>
+                <pre><code class="language-csharp">public class CompressionSettings
+{
+    public float Threshold { get; set; }    // Compression threshold in dB
+    public float Ratio { get; set; }        // Compression ratio
+    public float AttackTime { get; set; }   // Attack time in milliseconds
+    public float ReleaseTime { get; set; }  // Release time in milliseconds
+    public float MakeupGain { get; set; }   // Makeup gain in dB
+}</code></pre>
+            </div>
+
+            <h3>DynamicAmpSettings</h3>
+            <p>Configuration for dynamic amplification processing.</p>
+
+            <div class="code-block">
+                <div class="code-header">DynamicAmpSettings Class</div>
+                <pre><code class="language-csharp">public class DynamicAmpSettings
+{
+    public float TargetLevel { get; set; }  // Target level in dB
+    public float AttackTime { get; set; }   // Attack time in seconds
+    public float ReleaseTime { get; set; }  // Release time in seconds
+    public float MaxGain { get; set; }      // Maximum gain in dB
+}</code></pre>
+            </div>
+
+            <h2 id="analysis-methods">Analysis Methods</h2>
+
+            <h3>Spectrum Analysis</h3>
+            <p>
+                The analysis engine uses FFT with Flat-Top windowing for superior amplitude accuracy.
+                Audio is analyzed across 30 ISO-standard frequency bands from 20Hz to 16kHz.
+            </p>
+
+            <div class="code-block">
+                <div class="code-header">ISO Frequency Bands</div>
+                <pre><code class="language-csharp">// Standard ISO frequency bands in Hz
+private readonly float[] FrequencyBands = {
+    20f, 25f, 31.5f, 40f, 50f, 63f, 80f, 100f, 125f, 160f,      // Sub-bass to bass
+    200f, 250f, 315f, 400f, 500f, 630f, 800f, 1000f, 1250f,     // Low-mid
+    1600f, 2000f, 2500f, 3150f, 4000f, 5000f,                   // Mid to presence
+    6300f, 8000f, 10000f, 12500f, 16000f                        // Brilliance to air
+};</code></pre>
+            </div>
+
+            <h3>Dynamic Analysis</h3>
+            <p>Calculates absolute dynamic characteristics including RMS, peak levels, and LUFS loudness measurements.
+            </p>
+
+            <div class="code-block">
+                <div class="code-header">Dynamic Analysis Example</div>
+                <pre><code class="language-csharp">// Analyze dynamics
+DynamicsInfo dynamics = AnalyzeAbsoluteDynamics(audioData);
+
+Console.WriteLine($"RMS: {dynamics.RMS:F6}");
+Console.WriteLine($"Peak: {dynamics.Peak:F6}");
+Console.WriteLine($"Loudness: {dynamics.Loudness:F1} dBFS");
+Console.WriteLine($"Dynamic Range: {dynamics.DynamicRange:F1} dB");</code></pre>
+            </div>
+
+            <h2 id="eq-processing">EQ Processing & Q-Factor Optimization</h2>
+
+            <h3>Intelligent EQ Adjustments</h3>
+            <p>
+                The system calculates EQ adjustments using psychoacoustic principles and intelligent scaling
+                to maintain spectral balance and musicality.
+            </p>
+
+            <div class="code-block">
+                <div class="code-header">EQ Adjustment Process</div>
+                <pre><code class="language-csharp">// Calculate raw spectrum differences
+float[] rawAdjustments = new float[30];
+for (int i = 0; i < 30; i++)
+{
+    float sourceLevel = 20 * Math.Log10(source.FrequencyBands[i]);
+    float targetLevel = 20 * Math.Log10(target.FrequencyBands[i]);
+    rawAdjustments[i] = targetLevel - sourceLevel;
+}
+
+// Apply intelligent scaling for musical results
+float[] adjustments = ApplyIntelligentScaling(rawAdjustments);</code></pre>
+            </div>
+
+            <h3>Dynamic Q-Factor Calculation</h3>
+            <p>
+                Automatically calculates optimal Q factors for each frequency band based on multiple analysis
+                techniques:
+            </p>
             <ul>
-                <li><strong>Frequency-dependent base Q:</strong> Optimized for psychoacoustic perception</li>
-                <li><strong>Gain-adaptive adjustment:</strong> Surgical corrections for large adjustments</li>
-                <li><strong>Neighboring band correlation:</strong> Context-aware smoothing for musical results</li>
-                <li><strong>Spectral density analysis:</strong> Adaptive bandwidth based on energy distribution</li>
+                <li><strong>Psychoacoustic base Q:</strong> Frequency-dependent Q values based on hearing research</li>
+                <li><strong>Gain-based adjustment:</strong> Larger corrections use narrower Q for surgical precision
+                </li>
+                <li><strong>Neighbor correlation:</strong> Similar adjustments in adjacent bands use wider Q</li>
+                <li><strong>Spectral density:</strong> Sharp spectral features use narrower Q values</li>
             </ul>
 
-            <h2 id="safety">Advanced Safety Systems</h2>
-            <p>Professional-grade protection ensures musical quality while preventing distortion.</p>
-
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">🛡️</div>
-                    <h4>Frequency-Specific Limits</h4>
-                    <p>2.5-5.5 dB maximum boost depending on frequency range for natural sound</p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">📊</div>
-                    <h4>Dynamic Headroom</h4>
-                    <p>Crest factor and loudness-based protection with intelligent limiting</p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">🎵</div>
-                    <h4>Musical Preservation</h4>
-                    <p>Natural-sounding frequency transitions with harmonic integrity</p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">⚡</div>
-                    <h4>Real-Time Protection</h4>
-                    <p>Multi-stage limiting at -0.5dB with automatic clipping detection</p>
-                </div>
-            </div>
-
             <div class="code-block">
-                <div class="code-header">Real-World Processing Example</div>
-                <pre><code class="language-plaintext">=== PROFESSIONAL MATCHERING ANALYSIS ===
-Source Analysis:
-  RMS: 0.123, Peak: 0.876, Loudness: -14.2 LUFS
-  Dynamic Range: 12.4 dB, Crest Factor: 15.1 dB
+                <div class="code-header">Q-Factor Optimization</div>
+                <pre><code class="language-csharp">// Calculate optimal Q factors
+float[] qFactors = CalculateOptimalQFactors(
+    eqAdjustments,
+    sourceSpectrum,
+    targetSpectrum
+);
 
-Target Analysis:
-  RMS: 0.187, Peak: 0.932, Loudness: -9.8 LUFS
-  Dynamic Range: 8.9 dB, Crest Factor: 13.9 dB
-
-30-Band EQ Adjustments (with Q-factor optimization):
-20Hz: +2.1 dB (Q=0.35)    25Hz: +2.8 dB (Q=0.38)    31Hz: +3.4 dB (Q=0.42)
-40Hz: +2.9 dB (Q=0.45)    50Hz: +2.2 dB (Q=0.48)    63Hz: +1.8 dB (Q=0.52)
-80Hz: +1.4 dB (Q=0.55)    100Hz: +0.9 dB (Q=0.58)   125Hz: +0.4 dB (Q=0.62)
-160Hz: -0.1 dB (Q=0.65)   200Hz: -0.5 dB (Q=0.68)   250Hz: -0.8 dB (Q=0.72)
-315Hz: -0.6 dB (Q=0.78)   400Hz: -0.2 dB (Q=0.85)   500Hz: +0.3 dB (Q=0.92)
-630Hz: +0.8 dB (Q=1.02)   800Hz: +1.2 dB (Q=1.15)   1kHz: +1.6 dB (Q=1.28)
-1.25kHz: +1.4 dB (Q=1.35) 1.6kHz: +1.1 dB (Q=1.28)  2kHz: +0.8 dB (Q=1.15)
-2.5kHz: +0.4 dB (Q=1.08)  3.15kHz: -0.1 dB (Q=1.02) 4kHz: -0.6 dB (Q=0.95)
-5kHz: -1.1 dB (Q=0.88)    6.3kHz: -1.4 dB (Q=0.82)  8kHz: -1.8 dB (Q=0.75)
-10kHz: -1.5 dB (Q=0.68)   12.5kHz: -1.1 dB (Q=0.62) 16kHz: -0.7 dB (Q=0.58)
-
-Spectral Balance Analysis:
-  Low (20-125Hz): +11.8dB    Low-Mid (160-630Hz): -1.2dB
-  Mid (800-2.5kHz): +5.4dB   Presence (3.15-5kHz): -2.8dB
-  High (6.3kHz+): -6.5dB
-
-Safety Analysis:
-  Total boost applied: 18.3dB
-  Distortion risk: LOW
-  Maximum single boost: +3.4dB (31Hz)
-  Frequency dominance: BALANCED
-
-Professional Processing Applied:
-✓ 30-band psychoacoustic EQ with dynamic Q-factors
-✓ Intelligent spectral balance optimization  
-✓ Frequency-specific distortion protection
-✓ Advanced dynamics control with temporal stability
-✓ Professional safety limiting (-0.5dB ceiling)
-✓ Real-time clipping detection and prevention
-✓ Harmonic preservation algorithms
-✓ Stereo field integrity maintenance</code></pre>
-            </div>
-
-            <h2 id="music-production">Music Production Applications</h2>
-
-            <h3>Album Mastering</h3>
-            <p>Achieve consistent sound across tracks with different recording characteristics.</p>
-            <div class="code-block">
-                <div class="code-header">Album Consistency</div>
-                <pre><code class="language-csharp">// Master album tracks to consistent reference
-string[] albumTracks = { "track01.wav", "track02.wav", "track03.wav" };
-string albumReference = "commercial_hit.wav";
-
-foreach (string track in albumTracks)
+// Apply EQ with optimized Q factors
+var eq = new Equalizer30BandEffect(sampleRate);
+for (int i = 0; i < FrequencyBands.Length; i++)
 {
-    string outputFile = track.Replace(".wav", "_mastered.wav");
-    analyzer.ProcessEQMatching(track, albumReference, outputFile);
-    
-    Console.WriteLine($"✅ Mastered: {track}");
+    eq.SetBandGain(i, FrequencyBands[i], qFactors[i], eqAdjustments[i]);
 }</code></pre>
             </div>
 
-            <h3>Genre Adaptation</h3>
-            <p>Adapt masters for different musical styles and target audiences.</p>
-            <div class="code-block">
-                <div class="code-header">Genre-Specific Mastering</div>
-                <pre><code class="language-csharp">// Rock/Metal mastering
-analyzer.ProcessEQMatching("rock_song.wav", "metal_reference.wav", "rock_mastered.wav");
+            <h3>Spectral Balance Control</h3>
+            <p>
+                Prevents excessive frequency range dominance with automatic balance correction:
+            </p>
 
-// Electronic/Dance mastering  
-analyzer.ProcessEQMatching("edm_track.wav", "dance_reference.wav", "club_ready.wav");
-
-// Jazz/Acoustic mastering
-analyzer.ProcessEQMatching("jazz_song.wav", "acoustic_reference.wav", "audiophile.wav");</code></pre>
-            </div>
-
-            <h2 id="broadcasting">Broadcasting and Streaming</h2>
-
-            <h3>Podcast Production</h3>
-            <p>Professional audio quality for spoken content with dialogue clarity.</p>
-            <div class="code-block">
-                <div class="code-header">Podcast Optimization</div>
-                <pre><code class="language-csharp">// Optimize podcast for streaming platforms
-analyzer.ProcessWithEnhancedPreset("podcast_raw.wav", "podcast_final.wav", 
-    PlaybackSystem.RadioBroadcast);
-
-// Alternative: Match to professional podcast reference
-analyzer.ProcessEQMatching("podcast_raw.wav", "pro_podcast_ref.wav", "podcast_pro.wav");</code></pre>
-            </div>
-
-            <h3>Platform-Specific Optimization</h3>
-            <p>Meet specific loudness targets for different streaming platforms.</p>
-            <div class="code-block">
-                <div class="code-header">Streaming Platform Delivery</div>
-                <pre><code class="language-csharp">// Spotify (-14 LUFS target)
-analyzer.ProcessWithEnhancedPreset("song.wav", "spotify_master.wav", PlaybackSystem.RadioBroadcast);
-
-// Apple Music (-16 LUFS target)  
-analyzer.ProcessWithEnhancedPreset("song.wav", "apple_master.wav", PlaybackSystem.HiFiSpeakers);
-
-// YouTube (-13 LUFS target)
-analyzer.ProcessWithEnhancedPreset("song.wav", "youtube_master.wav", PlaybackSystem.Television);</code></pre>
-            </div>
-
-            <h2 id="post-production">Post-Production Applications</h2>
-
-            <h3>Film and TV</h3>
-            <p>Match dialogue, music, and effects to industry standards.</p>
-            <div class="code-block">
-                <div class="code-header">Film Post-Production</div>
-                <pre><code class="language-csharp">// Match film music to industry standards
-analyzer.ProcessEQMatching("film_score.wav", "hollywood_reference.wav", "final_score.wav");
-
-// TV broadcast preparation
-analyzer.ProcessWithEnhancedPreset("tv_audio.wav", "broadcast_ready.wav", PlaybackSystem.Television);</code></pre>
-            </div>
-
-            <h3>Game Audio</h3>
-            <p>Consistent audio atmosphere across different game elements.</p>
-            <div class="code-block">
-                <div class="code-header">Game Audio Mastering</div>
-                <pre><code class="language-csharp">// Master game music tracks
-string[] gameTracks = { "menu_music.wav", "level1_music.wav", "boss_music.wav" };
-string gameReference = "aaa_game_reference.wav";
-
-foreach (string track in gameTracks)
-{
-    string mastered = track.Replace(".wav", "_mastered.wav");
-    analyzer.ProcessEQMatching(track, gameReference, mastered);
-}</code></pre>
-            </div>
-
-            <div class="alert-pro">
-                <h4>🎯 Professional Tips</h4>
-                <ul style="margin: 1rem 0; padding-left: 1.5rem;">
-                    <li><strong>Choose appropriate references:</strong> Use commercially mastered tracks in the same genre</li>
-                    <li><strong>Consider your target audience:</strong> Different playback systems require different approaches</li>
-                    <li><strong>Preserve dynamics:</strong> The system automatically protects musical dynamics while matching loudness</li>
-                    <li><strong>Monitor the output:</strong> Always listen to the processed audio in your target environment</li>
-                    <li><strong>Use presets strategically:</strong> Match your delivery format to the intended playback system</li>
-                </ul>
-            </div>
-
-            <h2>Performance and Compatibility</h2>
-
-            <h3>System Requirements</h3>
-            <table class="comparison-table">
+            <table class="api-table">
                 <thead>
                     <tr>
-                        <th>Component</th>
-                        <th>Minimum</th>
-                        <th>Recommended</th>
+                        <th>Frequency Range</th>
+                        <th>Control Method</th>
+                        <th>Purpose</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td>.NET Framework</td>
-                        <td>6.0 or higher</td>
-                        <td>8.0 or higher</td>
+                        <td>2.5-5kHz (Vocal Presence)</td>
+                        <td>Intelligent limiting</td>
+                        <td>Prevents harsh or fatiguing sound</td>
                     </tr>
                     <tr>
-                        <td>RAM</td>
-                        <td>4GB</td>
-                        <td>8GB+ for large files</td>
+                        <td>20-125Hz (Low End)</td>
+                        <td>Dominance reduction</td>
+                        <td>Maintains clarity and definition</td>
                     </tr>
                     <tr>
-                        <td>CPU</td>
-                        <td>Dual-core</td>
-                        <td>Multi-core (auto-parallelized)</td>
-                    </tr>
-                    <tr>
-                        <td>Storage</td>
-                        <td>Available space</td>
-                        <td>For temporary processing files</td>
+                        <td>All Ranges</td>
+                        <td>Proportional scaling</td>
+                        <td>Overall spectral coherence</td>
                     </tr>
                 </tbody>
             </table>
 
-            <h3>File Format Support</h3>
-            <ul>
-                <li><strong>Input formats:</strong> WAV, FLAC, MP3, AAC, OGG (via FFmpeg)</li>
-                <li><strong>Output format:</strong> 24-bit WAV (industry standard for mastering)</li>
-                <li><strong>Sample rates:</strong> 44.1kHz, 48kHz, 88.2kHz, 96kHz (automatic detection)</li>
-                <li><strong>Channel support:</strong> Mono, stereo, and multi-channel audio</li>
-            </ul>
+            <h2 id="presets">Playback System Presets</h2>
 
-            <h3>Processing Performance</h3>
-            <ul>
-                <li><strong>Real-time capable:</strong> Processing faster than real-time playback</li>
-                <li><strong>Memory efficient:</strong> Streaming processing for large files</li>
-                <li><strong>Thread-safe:</strong> Parallel processing on multi-core systems</li>
-                <li><strong>Scalable:</strong> Handles files from seconds to hours in length</li>
-            </ul>
+            <h3>Available Presets</h3>
+            <p>
+                Ten pre-configured presets optimized for different playback systems, each with custom
+                frequency response curves, dynamics settings, and loudness targets.
+            </p>
 
-            <div class="alert">
-                <strong>🚀 Getting Started:</strong> The OwnAudioSharp Matchering system represents the state-of-the-art in automated mastering technology, bringing professional studio capabilities to developers and content creators. Whether you're building a music production application, podcast platform, or content delivery system, the matchering algorithms ensure broadcast-quality audio output with minimal complexity.
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Preset</th>
+                        <th>Description</th>
+                        <th>Target Loudness</th>
+                        <th>Dynamic Range</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>ConcertPA</code></td>
+                        <td>Large venue sound reinforcement</td>
+                        <td>-16 LUFS</td>
+                        <td>18 dB</td>
+                    </tr>
+                    <tr>
+                        <td><code>ClubPA</code></td>
+                        <td>Dance music with enhanced bass</td>
+                        <td>-11 LUFS</td>
+                        <td>8 dB</td>
+                    </tr>
+                    <tr>
+                        <td><code>HiFiSpeakers</code></td>
+                        <td>Neutral response for critical listening</td>
+                        <td>-18 LUFS</td>
+                        <td>20 dB</td>
+                    </tr>
+                    <tr>
+                        <td><code>StudioMonitors</code></td>
+                        <td>Professional mixing reference standard</td>
+                        <td>-20 LUFS</td>
+                        <td>22 dB</td>
+                    </tr>
+                    <tr>
+                        <td><code>Headphones</code></td>
+                        <td>Over-ear headphone compensation</td>
+                        <td>-16 LUFS</td>
+                        <td>16 dB</td>
+                    </tr>
+                    <tr>
+                        <td><code>Earbuds</code></td>
+                        <td>In-ear monitors with bass boost</td>
+                        <td>-14 LUFS</td>
+                        <td>12 dB</td>
+                    </tr>
+                    <tr>
+                        <td><code>CarStereo</code></td>
+                        <td>Road noise and cabin compensation</td>
+                        <td>-12 LUFS</td>
+                        <td>10 dB</td>
+                    </tr>
+                    <tr>
+                        <td><code>Television</code></td>
+                        <td>Dialogue clarity focused</td>
+                        <td>-15 LUFS</td>
+                        <td>12 dB</td>
+                    </tr>
+                    <tr>
+                        <td><code>RadioBroadcast</code></td>
+                        <td>FM/AM transmission standards</td>
+                        <td>-9 LUFS</td>
+                        <td>6 dB</td>
+                    </tr>
+                    <tr>
+                        <td><code>Smartphone</code></td>
+                        <td>Small speaker midrange focus</td>
+                        <td>-10 LUFS</td>
+                        <td>8 dB</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>PlaybackPreset Class</h3>
+            <div class="code-block">
+                <div class="code-header">PlaybackPreset Structure</div>
+                <pre><code class="language-csharp">public class PlaybackPreset
+{
+    public string Name { get; set; }                      // Preset name
+    public string Description { get; set; }               // Detailed description
+    public float[] FrequencyResponse { get; set; }        // 30-band EQ curve in dB
+    public float TargetLoudness { get; set; }            // Target LUFS
+    public float DynamicRange { get; set; }              // Recommended dB range
+    public CompressionSettings Compression { get; set; }  // Compressor settings
+    public DynamicAmpSettings DynamicAmp { get; set; }   // Dynamic amp settings
+}</code></pre>
             </div>
 
+            <h3>Using Presets</h3>
             <div class="code-block">
-                <div class="code-header">Complete Integration Example</div>
-                <pre><code class="language-csharp">using Ownaudio.Utilities.Matchering;
-using System;
+                <div class="code-header">Preset Processing Example</div>
+                <pre><code class="language-csharp">var analyzer = new AudioAnalyzer();
 
-class ProfessionalMastering
+// Process with specific preset
+analyzer.ProcessWithEnhancedPreset(
+    sourceFile: "input.wav",
+    outputFile: "output.wav",
+    system: PlaybackSystem.Headphones,
+    eqOnlyMode: true  // Apply only EQ, no dynamics
+);
+
+// Batch process multiple files
+analyzer.BatchProcessWithEnhancedPreset(
+    sourceFiles: new[] { "song1.wav", "song2.wav", "song3.wav" },
+    baseSampleFile: "reference.flac",
+    outputDirectory: @"C:\Output",
+    system: PlaybackSystem.ClubPA,
+    fileNameSuffix: "_club"
+);
+
+// Get all available presets
+var presets = AudioAnalyzer.GetAvailablePresets();
+foreach (var preset in presets)
 {
-    static void Main(string[] args)
-    {
-        try
-        {
-            var analyzer = new AudioAnalyzer();
-            
-            Console.WriteLine("🎚️ Professional Audio Matchering");
-            
-            // Basic matchering - one line of code!
-            analyzer.ProcessEQMatching("my_track.wav", "reference.wav", "mastered.wav");
-            Console.WriteLine("✅ Basic mastering complete!");
-            
-            // Advanced workflow with analysis
-            var sourceAnalysis = analyzer.AnalyzeAudioFile("my_track.wav");
-            Console.WriteLine($"Source: {sourceAnalysis.Loudness:F1} LUFS, {sourceAnalysis.DynamicRange:F1} dB DR");
-            
-            // Create delivery versions
-            analyzer.ProcessWithEnhancedPreset("mastered.wav", "streaming.wav", PlaybackSystem.RadioBroadcast);
-            analyzer.ProcessWithEnhancedPreset("mastered.wav", "club.wav", PlaybackSystem.ClubPA);
-            analyzer.ProcessWithEnhancedPreset("mastered.wav", "audiophile.wav", PlaybackSystem.HiFiSpeakers);
-            
-            Console.WriteLine("🏆 Professional mastering workflow complete!");
-            Console.WriteLine("Your audio now meets broadcast industry standards.");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Mastering error: {ex.Message}");
-        }
-    }
+    Console.WriteLine($"{preset.Key}: {preset.Value.Name}");
 }</code></pre>
+            </div>
+
+            <h2 id="segmented">Segmented Analysis Configuration</h2>
+
+            <h3>SegmentedAnalysisConfig</h3>
+            <p>
+                Configures the segmented analysis approach for more accurate and robust spectrum analysis.
+                Audio is divided into overlapping segments, analyzed individually, and combined with weighted averaging.
+            </p>
+
+            <div class="code-block">
+                <div class="code-header">SegmentedAnalysisConfig Class</div>
+                <pre><code class="language-csharp">public class SegmentedAnalysisConfig
+{
+    // Segment length in seconds (default: 10.0)
+    public float SegmentLengthSeconds { get; set; } = 10.0f;
+    
+    // Overlap ratio between segments (default: 0.2 = 20%)
+    public float OverlapRatio { get; set; } = 0.2f;
+    
+    // Outlier detection threshold in standard deviations (default: 2.5)
+    public float OutlierThreshold { get; set; } = 2.5f;
+    
+    // Use weighted averaging for final spectrum (default: true)
+    public bool UseWeightedAveraging { get; set; } = true;
+    
+    // Minimum energy threshold in dBFS for segment inclusion (default: -60.0)
+    public float MinSegmentEnergyThreshold { get; set; } = -60.0f;
+}</code></pre>
+            </div>
+
+            <h3>Segmented Analysis Process</h3>
+            <ol>
+                <li><strong>Segment Creation:</strong> Audio divided into overlapping segments (default 10s with 20%
+                    overlap)</li>
+                <li><strong>Individual Analysis:</strong> Each segment analyzed for frequency spectrum and dynamics</li>
+                <li><strong>Energy Filtering:</strong> Segments below energy threshold are excluded</li>
+                <li><strong>Outlier Detection:</strong> Statistical analysis identifies and removes non-representative
+                    segments</li>
+                <li><strong>Weighted Averaging:</strong> Remaining segments combined with energy-based weighting</li>
+            </ol>
+
+            <h3>AudioSegment & SegmentAnalysis</h3>
+            <div class="code-block">
+                <div class="code-header">Segment Data Classes</div>
+                <pre><code class="language-csharp">// Audio segment with metadata
+public class AudioSegment
+{
+    public float[] Data { get; set; }        // Audio data
+    public float StartTime { get; set; }     // Start time in seconds
+    public float Duration { get; set; }      // Duration in seconds
+    public float EnergyLevel { get; set; }   // Energy level in dBFS
+    public int SampleRate { get; set; }      // Sample rate in Hz
+}
+
+// Segment analysis results
+public class SegmentAnalysis
+{
+    public int SegmentIndex { get; set; }             // Segment index
+    public float StartTime { get; set; }              // Start time
+    public float Duration { get; set; }               // Duration
+    public float EnergyLevel { get; set; }            // Energy in dBFS
+    public float[] FrequencySpectrum { get; set; }    // Frequency spectrum
+    public DynamicsInfo Dynamics { get; set; }        // Dynamics info
+    public float Weight { get; set; }                 // Averaging weight
+    public float OutlierScore { get; set; }           // Outlier score
+}</code></pre>
+            </div>
+
+            <h2 id="examples">Usage Examples</h2>
+
+            <h3>Basic EQ Matching</h3>
+            <div class="code-block">
+                <div class="code-header">Simple EQ Matching</div>
+                <pre><code class="language-csharp">using OwnaudioNET.Features.Matchering;
+
+var analyzer = new AudioAnalyzer();
+
+// Match source audio to target characteristics
+analyzer.ProcessEQMatching(
+    sourceFile: @"C:\Audio\my_track.wav",
+    targetFile: @"C:\Audio\reference_track.wav",
+    outputFile: @"C:\Audio\my_track_matched.wav"
+);
+
+// Console output shows:
+// - Segment analysis progress
+// - Calculated EQ adjustments
+// - Safety features active
+// - Final processing status</code></pre>
+            </div>
+
+            <h3>Preset-Based Processing</h3>
+            <div class="code-block">
+                <div class="code-header">Using Playback Presets</div>
+                <pre><code class="language-csharp">var analyzer = new AudioAnalyzer();
+
+// Optimize for headphone playback
+analyzer.ProcessWithEnhancedPreset(
+    sourceFile: "original.wav",
+    outputFile: "headphone_optimized.wav",
+    system: PlaybackSystem.Headphones,
+    tempDirectory: @"C:\Temp",
+    eqOnlyMode: true
+);
+
+// Optimize for car stereo
+analyzer.ProcessWithEnhancedPreset(
+    sourceFile: "original.wav",
+    outputFile: "car_optimized.wav",
+    system: PlaybackSystem.CarStereo,
+    eqOnlyMode: false  // Include dynamics processing
+);</code></pre>
+            </div>
+
+            <h3>Advanced Analysis</h3>
+            <div class="code-block">
+                <div class="code-header">Detailed Spectrum Analysis</div>
+                <pre><code class="language-csharp">var analyzer = new AudioAnalyzer();
+
+// Analyze audio file
+AudioSpectrum spectrum = analyzer.AnalyzeAudioFile("audio.wav");
+
+// Access analysis results
+Console.WriteLine($"RMS Level: {spectrum.RMSLevel:F3}");
+Console.WriteLine($"Peak Level: {spectrum.PeakLevel:F3}");
+Console.WriteLine($"Dynamic Range: {spectrum.DynamicRange:F1} dB");
+Console.WriteLine($"Loudness: {spectrum.Loudness:F1} LUFS");
+
+// Examine frequency bands
+string[] bandNames = { 
+    "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", /* ... */ "16kHz" 
+};
+
+for (int i = 0; i < spectrum.FrequencyBands.Length; i++)
+{
+    float energyDB = 20 * (float)Math.Log10(spectrum.FrequencyBands[i]);
+    Console.WriteLine($"{bandNames[i]}: {energyDB:F1} dB");
+}</code></pre>
+            </div>
+
+            <h3>Batch Processing</h3>
+            <div class="code-block">
+                <div class="code-header">Batch Preset Processing</div>
+                <pre><code class="language-csharp">var analyzer = new AudioAnalyzer();
+
+// Process multiple tracks with club preset
+string[] tracks = Directory.GetFiles(@"C:\Album", "*.wav");
+
+analyzer.BatchProcessWithEnhancedPreset(
+    sourceFiles: tracks,
+    baseSampleFile: "club_reference.flac",
+    outputDirectory: @"C:\Album\Club",
+    system: PlaybackSystem.ClubPA,
+    fileNameSuffix: "_club"
+);
+
+// Output files will be named:
+// track01_club.wav
+// track02_club.wav
+// etc.</code></pre>
+            </div>
+
+            <div class="alert alert-warning">
+                <strong>Performance Note</strong>
+                Audio analysis is CPU-intensive. Processing time depends on file length, sample rate,
+                and number of segments. Typical processing time is 2-5x real-time on modern CPUs.
+            </div>
+
+            <div class="alert alert-success">
+                <strong>Safety Features</strong>
+                The Matchering API includes multiple safety mechanisms:
+                <ul style="margin-top: 0.5rem;">
+                    <li>Frequency-specific boost limits to prevent distortion</li>
+                    <li>Dynamic headroom calculation for clean processing</li>
+                    <li>Psychoacoustic weighting for musical results</li>
+                    <li>EQ curve smoothing to prevent harsh corrections</li>
+                    <li>Real-time clipping detection and soft limiting</li>
+                    <li>Automatic level management to prevent overload</li>
+                </ul>
+            </div>
+
+            <div style="margin-top: 4rem; padding: 2rem; background: var(--surface); border-radius: 8px;">
+                <h3>Related Documentation</h3>
+                <ul style="list-style: none; padding: 0;">
+                    <li style="margin-bottom: 0.5rem;">
+                        <a href="quickstart.html" style="color: var(--primary-color);">📖 Quick Start Guide</a>
+                    </li>
+                    <li style="margin-bottom: 0.5rem;">
+                        <a href="api-core.html" style="color: var(--core-color);">⚙️ Core API Reference</a>
+                    </li>
+                    <li style="margin-bottom: 0.5rem;">
+                        <a href="api-net.html" style="color: var(--net-color);">🎛️ NET API Reference</a>
+                    </li>
+                    <li style="margin-bottom: 0.5rem;">
+                        <a href="examples.html" style="color: var(--primary-color);">💡 Code Examples</a>
+                    </li>
+                    <!--<li style="margin-bottom: 0.5rem;">
+                        <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" style="color: var(--primary-color);">🔗 GitHub Repository</a>
+                    </li>-->
+                </ul>
             </div>
         </main>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <script>
-        // Smooth scrolling for sidebar links
-        document.querySelectorAll('.sidebar-nav a').forEach(link => {
-        link.addEventListener('click', function(e) {
-        e.preventDefault();
-        const targetId = this.getAttribute('href').substring(1);
-        const targetElement = document.getElementById(targetId);
-
-        if (targetElement) {
-        targetElement.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-        });
-        }
-
-        // Update active link
-        document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-        this.classList.add('active');
-        });
-        });
-
-        // Update active sidebar link on scroll
-        window.addEventListener('scroll', () => {
+        // Active sidebar navigation
         const sections = document.querySelectorAll('h2[id], h3[id]');
-        const scrollPos = window.scrollY + 150;
+        const navLinks = document.querySelectorAll('.sidebar-nav a');
 
-        let activeSection = null;
-        sections.forEach(section => {
-        const sectionTop = section.offsetTop;
-        const sectionHeight = section.offsetHeight;
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (window.pageYOffset >= sectionTop - 150) {
+                    current = section.getAttribute('id');
+                }
+            });
 
-        if (scrollPos >= sectionTop && scrollPos < sectionTop + sectionHeight) {
-        activeSection = section.getAttribute('id');
-        }
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.classList.add('active');
+                }
+            });
         });
 
-        if (activeSection) {
-        document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-        document.querySelector(`.sidebar-nav a[href="#${activeSection}"]`)?.classList.add('active');
-        }
-        });
-
-        // Feature card animations
-        document.querySelectorAll('.feature-card, .preset-card').forEach(card => {
-        card.addEventListener('mouseenter', () => {
-        card.style.transform = 'translateY(-5px) scale(1.02)';
-        card.style.boxShadow = '0 15px 35px rgba(251, 191, 36, 0.3)';
-        });
-
-        card.addEventListener('mouseleave', () => {
-        card.style.transform = 'translateY(0) scale(1)';
-        card.style.boxShadow = 'none';
-        });
-        });
-
-        // Workflow step animations
-        document.querySelectorAll('.workflow-step').forEach((step, index) => {
-        step.style.animationDelay = `${index * 0.1}s`;
+        // Smooth scrolling
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
         });
     </script>
 </body>
+
 </html>

@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chord Detection API Reference - Ownaudio</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="docs.css">
+</head>
+
+<body>
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="../index.html" class="logo">OwnaudioSharp</a>
+            <ul class="nav-links">
+                <li><a href="quickstart.html">Quick Start</a></li>
+                <li><a href="api-core.html">Core API</a></li>
+                <li><a href="api-net.html">NET API</a></li>
+                <li><a href="examples.html">Examples</a></li>
+                <li><a href="effects.html">Effects</a></li>
+                <li><a href="networksync.html">Net Sync</a></li>
+                <li><a href="matchering.html">Mastering</a></li>
+                <li><a href="vocalremover.html">Vocal Sep</a></li>
+                <li><a href="chorddetect.html" class="active">Chords</a></li>
+                <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="main">
+        <aside class="sidebar">
+            <h3>Chord Detection</h3>
+            <ul class="sidebar-nav">
+                <li><a href="#overview" class="active">Overview</a></li>
+                <li><a href="#main-api">Main API</a></li>
+                <li><a href="#detectors">Detectors</a></li>
+                <li><a href="#analysis">Analysis</a></li>
+                <li><a href="#core">Core Classes</a></li>
+                <li><a href="#detection-modes">Detection Modes</a></li>
+                <li><a href="#examples">Usage Examples</a></li>
+            </ul>
+        </aside>
+
+        <main class="content">
+            <h1><span class="badge badge-net">NET</span> OwnChordDetect API Reference</h1>
+            <p>
+                Advanced musical chord detection and analysis library with support for real-time and file-based
+                processing.
+                Features key detection, extended chord recognition, and configurable detection modes.
+            </p>
+
+            <div class="alert alert-success">
+                <strong>Key Features</strong>
+                Real-time chord detection, automatic key detection, extended chord support (9th, 11th, 13th),
+                key-aware note naming, and configurable detection sensitivity.
+            </div>
+
+            <h2 id="overview">Overview</h2>
+            <p>
+                OwnChordDetect provides comprehensive chord detection capabilities:
+            </p>
+            <ul>
+                <li><strong>File-based analysis</strong> - Detect chords from audio files with timing information</li>
+                <li><strong>Real-time detection</strong> - Process notes as they come in for live applications</li>
+                <li><strong>Key detection</strong> - Automatic musical key detection using Krumhansl-Schmuckler
+                    algorithm</li>
+                <li><strong>Extended chords</strong> - Support for 7th, 9th, 11th, 13th, sus, dim, aug chords</li>
+                <li><strong>Multiple detection modes</strong> - Basic, Extended, Optimized, and KeyAware modes</li>
+                <li><strong>Configurable sensitivity</strong> - Adjustable confidence and ambiguity thresholds</li>
+            </ul>
+
+            <h2 id="main-api">Main API - ChordDetect</h2>
+            <p>The main entry point for chord detection functionality.</p>
+
+            <div class="code-block">
+                <div class="code-header">ChordDetect Static Class</div>
+                <pre><code class="language-csharp">public static class ChordDetect
+{
+    // File-based chord detection with key and tempo detection
+    public static (List&lt;TimedChord&gt;, MusicalKey, int) DetectFromFile(
+        string audioFile,
+        float intervalSecond = 1.0f);
+    
+    // Real-time chord detection from note list
+    public static (string chord, float stability) DetectRealtime(
+        List&lt;Note&gt; notes,
+        DetectionMode mode = DetectionMode.Optimized,
+        int buffersize = 5);
+}</code></pre>
+            </div>
+
+            <h3>DetectFromFile</h3>
+            <p>Analyzes an audio file and returns timed chord progression with key and tempo.</p>
+
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>audioFile</code></td>
+                        <td>string</td>
+                        <td>Path to the audio file to analyze</td>
+                    </tr>
+                    <tr>
+                        <td><code>intervalSecond</code></td>
+                        <td>float</td>
+                        <td>Analysis window size in seconds (default: 1.0f)</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Returns</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>List&lt;TimedChord&gt;</code></td>
+                        <td>List of detected chords with timing information</td>
+                    </tr>
+                    <tr>
+                        <td><code>MusicalKey</code></td>
+                        <td>Detected musical key of the song</td>
+                    </tr>
+                    <tr>
+                        <td><code>int</code></td>
+                        <td>Detected tempo in BPM</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>DetectRealtime</h3>
+            <p>Processes a list of notes for real-time chord detection with stability tracking.</p>
+
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>notes</code></td>
+                        <td>List&lt;Note&gt;</td>
+                        <td>List of notes to analyze</td>
+                    </tr>
+                    <tr>
+                        <td><code>mode</code></td>
+                        <td>DetectionMode</td>
+                        <td>Detection mode to use (default: Optimized)</td>
+                    </tr>
+                    <tr>
+                        <td><code>buffersize</code></td>
+                        <td>int</td>
+                        <td>Buffer size for stability analysis (default: 5)</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2 id="detectors">Chord Detectors</h2>
+            <p>Various chord detector implementations for different use cases.</p>
+
+            <h3>ChordDetector (Base)</h3>
+            <p>Core chord detection engine with multiple detection modes.</p>
+
+            <div class="code-block">
+                <div class="code-header">ChordDetector Constructor</div>
+                <pre><code class="language-csharp">public class ChordDetector
+{
+    public ChordDetector(
+        DetectionMode mode = DetectionMode.Basic,
+        float confidenceThreshold = 0.7f,
+        float ambiguityThreshold = 0.0f,
+        int bufferSize = 0);
+    
+    // Main detection methods
+    public (string chord, float confidence) DetectChord(List&lt;Note&gt; notes);
+    public ChordAnalysis AnalyzeChord(List&lt;Note&gt; notes);
+    public (string chord, float stability) ProcessNotes(List&lt;Note&gt; newNotes);
+    
+    // Key management
+    public MusicalKey DetectKeyFromNotes(List&lt;Note&gt; notes);
+    public void SetKey(MusicalKey key);
+}</code></pre>
+            </div>
+
+            <h3>BaseChordDetector</h3>
+            <p>Basic chord detection for triads and simple chords.</p>
+
+            <div class="code-block">
+                <div class="code-header">BaseChordDetector</div>
+                <pre><code class="language-csharp">public class BaseChordDetector : ChordDetector
+{
+    public BaseChordDetector(float confidenceThreshold = 0.7f)
+        : base(DetectionMode.Basic, confidenceThreshold) { }
+}</code></pre>
+            </div>
+
+            <h3>ExtendedChordDetector</h3>
+            <p>Extended chord detection including 7th, 9th, 11th, 13th chords.</p>
+
+            <div class="code-block">
+                <div class="code-header">ExtendedChordDetector</div>
+                <pre><code class="language-csharp">public class ExtendedChordDetector : ChordDetector
+{
+    public ExtendedChordDetector(float confidenceThreshold = 0.6f)
+        : base(DetectionMode.Extended, confidenceThreshold) { }
+}</code></pre>
+            </div>
+
+            <h3>OptimizedChordDetector</h3>
+            <p>Optimized detection with ambiguity analysis and alternative suggestions.</p>
+
+            <div class="code-block">
+                <div class="code-header">OptimizedChordDetector</div>
+                <pre><code class="language-csharp">public class OptimizedChordDetector : ChordDetector
+{
+    public OptimizedChordDetector(
+        float confidenceThreshold = 0.6f,
+        float ambiguityThreshold = 0.1f)
+        : base(DetectionMode.Optimized, confidenceThreshold, ambiguityThreshold) { }
+    
+    public (string chord, float confidence, bool isAmbiguous, string[] alternatives) 
+        DetectChordAdvanced(List&lt;Note&gt; notes);
+}</code></pre>
+            </div>
+
+            <h3>KeyAwareChordDetector</h3>
+            <p>Key-aware detection with appropriate note naming (sharps vs flats).</p>
+
+            <div class="code-block">
+                <div class="code-header">KeyAwareChordDetector</div>
+                <pre><code class="language-csharp">public class KeyAwareChordDetector : ChordDetector
+{
+    public KeyAwareChordDetector(
+        float confidenceThreshold = 0.6f,
+        float ambiguityThreshold = 0.0f)
+        : base(DetectionMode.KeyAware, confidenceThreshold, ambiguityThreshold) { }
+}</code></pre>
+            </div>
+
+            <h3>RealTimeChordDetector</h3>
+            <p>Real-time chord detector with stability tracking for continuous analysis.</p>
+
+            <div class="code-block">
+                <div class="code-header">RealTimeChordDetector</div>
+                <pre><code class="language-csharp">public class RealTimeChordDetector
+{
+    public RealTimeChordDetector(
+        int bufferSize = 5,
+        DetectionMode mode = DetectionMode.Optimized);
+    
+    public (string chord, float stability) ProcessNotes(List&lt;Note&gt; newNotes);
+}</code></pre>
+            </div>
+
+            <h2 id="analysis">Analysis Classes</h2>
+
+            <h3>SongChordAnalyzer</h3>
+            <p>Analyzes complete songs and extracts timed chord progressions with key awareness.</p>
+
+            <div class="code-block">
+                <div class="code-header">SongChordAnalyzer</div>
+                <pre><code class="language-csharp">public class SongChordAnalyzer
+{
+    public SongChordAnalyzer(
+        float windowSize = 1.0f,
+        float hopSize = 0.5f,
+        float minimumChordDuration = 0.8f,
+        float confidence = 0.6f);
+    
+    public MusicalKey? DetectedKey { get; }
+    
+    public List&lt;TimedChord&gt; AnalyzeSong(List&lt;Note&gt; songNotes);
+    public List&lt;TimedChord&gt; AnalyzeSongInKey(List&lt;Note&gt; songNotes, MusicalKey key);
+}</code></pre>
+            </div>
+
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Description</th>
+                        <th>Default</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>windowSize</code></td>
+                        <td>Analysis window size in seconds</td>
+                        <td>1.0f</td>
+                    </tr>
+                    <tr>
+                        <td><code>hopSize</code></td>
+                        <td>Step size between windows in seconds</td>
+                        <td>0.5f</td>
+                    </tr>
+                    <tr>
+                        <td><code>minimumChordDuration</code></td>
+                        <td>Minimum chord duration to include in results</td>
+                        <td>0.8f</td>
+                    </tr>
+                    <tr>
+                        <td><code>confidence</code></td>
+                        <td>Minimum confidence threshold</td>
+                        <td>0.6f</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>TimedChord</h3>
+            <p>Represents a detected chord with timing information.</p>
+
+            <div class="code-block">
+                <div class="code-header">TimedChord Class</div>
+                <pre><code class="language-csharp">public class TimedChord
+{
+    public float StartTime { get; }      // Start time in seconds
+    public float EndTime { get; }        // End time in seconds
+    public string ChordName { get; }     // Chord name (e.g., "Cm7")
+    public float Confidence { get; }     // Detection confidence (0.0 to 1.0)
+    public string[] Notes { get; }       // Note names in the chord
+    
+    public override string ToString();
+}</code></pre>
+            </div>
+
+            <h3>ChordAnalysis</h3>
+            <p>Detailed chord analysis result with ambiguity detection.</p>
+
+            <div class="code-block">
+                <div class="code-header">ChordAnalysis Class</div>
+                <pre><code class="language-csharp">public class ChordAnalysis
+{
+    public string ChordName { get; }      // Detected chord name
+    public float Confidence { get; }      // Confidence level (0.0 to 1.0)
+    public string Explanation { get; }    // Detailed explanation
+    public string[] NoteNames { get; }    // Notes forming the chord
+    public bool IsAmbiguous { get; set; } // Whether detection is ambiguous
+    public string[] Alternatives { get; set; } // Alternative chord names
+    public int[] PitchClasses { get; set; }    // Pitch classes used
+    public float[] Chromagram { get; set; }    // Chromagram data
+    
+    public override string ToString();
+}</code></pre>
+            </div>
+
+            <h2 id="core">Core Classes</h2>
+
+            <h3>MusicalKey</h3>
+            <p>Represents a musical key with signature and note naming preferences.</p>
+
+            <div class="code-block">
+                <div class="code-header">MusicalKey Class</div>
+                <pre><code class="language-csharp">public class MusicalKey
+{
+    public string KeyName { get; }              // Key name (e.g., "C", "F#", "Bb")
+    public bool IsMajor { get; }                // Major (true) or Minor (false)
+    public int Sharps { get; }                  // Number of sharps (0-7)
+    public int Flats { get; }                   // Number of flats (0-7)
+    public string[] PreferredNoteNames { get; } // Note naming preference
+    
+    public override string ToString(); // Returns "KeyName major/minor"
+}</code></pre>
+            </div>
+
+            <h3>KeyDetector</h3>
+            <p>Detects musical key using the Krumhansl-Schmuckler algorithm.</p>
+
+            <div class="code-block">
+                <div class="code-header">KeyDetector Class</div>
+                <pre><code class="language-csharp">public class KeyDetector
+{
+    public MusicalKey DetectKey(List&lt;Note&gt; notes);
+}</code></pre>
+            </div>
+
+            <h3>ChordTemplates</h3>
+            <p>Manages chord templates and note name conversion with key-aware naming.</p>
+
+            <div class="code-block">
+                <div class="code-header">ChordTemplates Static Class</div>
+                <pre><code class="language-csharp">public static class ChordTemplates
+{
+    // Get note name for pitch class with key context
+    public static string GetNoteName(int pitchClass, MusicalKey? key = null);
+    
+    // Create chord template from pitch classes
+    public static float[] CreateTemplate(int[] pitchClasses);
+    
+    // Create all chord templates with key-aware naming
+    public static Dictionary&lt;string, float[]&gt; CreateAllTemplates(
+        MusicalKey? key = null,
+        bool includeExtended = true);
+}</code></pre>
+            </div>
+
+            <h2 id="detection-modes">Detection Modes</h2>
+            <p>Different detection modes for various use cases.</p>
+
+            <div class="code-block">
+                <div class="code-header">DetectionMode Enum</div>
+                <pre><code class="language-csharp">public enum DetectionMode
+{
+    Basic,      // Basic triads and simple chords only
+    Extended,   // Includes 7th, 9th, 11th, 13th chords
+    Optimized,  // Extended + ambiguity analysis
+    KeyAware    // Optimized + key-aware note naming
+}</code></pre>
+            </div>
+
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Mode</th>
+                        <th>Chord Types</th>
+                        <th>Features</th>
+                        <th>Use Case</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>Basic</code></td>
+                        <td>Major, Minor, 7th, maj7, m7</td>
+                        <td>Fast, simple</td>
+                        <td>Simple songs, quick analysis</td>
+                    </tr>
+                    <tr>
+                        <td><code>Extended</code></td>
+                        <td>Basic + sus2/4, dim, aug, add9, 6th, 9th, 11th, 13th</td>
+                        <td>Comprehensive chord set</td>
+                        <td>Complex songs, jazz</td>
+                    </tr>
+                    <tr>
+                        <td><code>Optimized</code></td>
+                        <td>All extended chords</td>
+                        <td>Ambiguity detection, alternatives</td>
+                        <td>Professional analysis</td>
+                    </tr>
+                    <tr>
+                        <td><code>KeyAware</code></td>
+                        <td>All extended chords</td>
+                        <td>Optimized + key-aware naming</td>
+                        <td>Music theory applications</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Supported Chord Types</h3>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Suffix</th>
+                        <th>Example</th>
+                        <th>Intervals</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Major</td>
+                        <td>(none)</td>
+                        <td>C</td>
+                        <td>0, 4, 7</td>
+                    </tr>
+                    <tr>
+                        <td>Minor</td>
+                        <td>m</td>
+                        <td>Cm</td>
+                        <td>0, 3, 7</td>
+                    </tr>
+                    <tr>
+                        <td>Dominant 7th</td>
+                        <td>7</td>
+                        <td>C7</td>
+                        <td>0, 4, 7, 10</td>
+                    </tr>
+                    <tr>
+                        <td>Major 7th</td>
+                        <td>maj7</td>
+                        <td>Cmaj7</td>
+                        <td>0, 4, 7, 11</td>
+                    </tr>
+                    <tr>
+                        <td>Minor 7th</td>
+                        <td>m7</td>
+                        <td>Cm7</td>
+                        <td>0, 3, 7, 10</td>
+                    </tr>
+                    <tr>
+                        <td>Suspended 2nd</td>
+                        <td>sus2</td>
+                        <td>Csus2</td>
+                        <td>0, 2, 7</td>
+                    </tr>
+                    <tr>
+                        <td>Suspended 4th</td>
+                        <td>sus4</td>
+                        <td>Csus4</td>
+                        <td>0, 5, 7</td>
+                    </tr>
+                    <tr>
+                        <td>Diminished</td>
+                        <td>dim</td>
+                        <td>Cdim</td>
+                        <td>0, 3, 6</td>
+                    </tr>
+                    <tr>
+                        <td>Augmented</td>
+                        <td>aug</td>
+                        <td>Caug</td>
+                        <td>0, 4, 8</td>
+                    </tr>
+                    <tr>
+                        <td>Add 9</td>
+                        <td>add9</td>
+                        <td>Cadd9</td>
+                        <td>0, 4, 7, 2</td>
+                    </tr>
+                    <tr>
+                        <td>6th</td>
+                        <td>6</td>
+                        <td>C6</td>
+                        <td>0, 4, 7, 9</td>
+                    </tr>
+                    <tr>
+                        <td>Minor 6th</td>
+                        <td>m6</td>
+                        <td>Cm6</td>
+                        <td>0, 3, 7, 9</td>
+                    </tr>
+                    <tr>
+                        <td>9th</td>
+                        <td>9</td>
+                        <td>C9</td>
+                        <td>0, 4, 7, 10, 2</td>
+                    </tr>
+                    <tr>
+                        <td>Minor 9th</td>
+                        <td>m9</td>
+                        <td>Cm9</td>
+                        <td>0, 3, 7, 10, 2</td>
+                    </tr>
+                    <tr>
+                        <td>Major 9th</td>
+                        <td>maj9</td>
+                        <td>Cmaj9</td>
+                        <td>0, 4, 7, 11, 2</td>
+                    </tr>
+                    <tr>
+                        <td>11th</td>
+                        <td>11</td>
+                        <td>C11</td>
+                        <td>0, 4, 7, 10, 2, 5</td>
+                    </tr>
+                    <tr>
+                        <td>Minor 11th</td>
+                        <td>m11</td>
+                        <td>Cm11</td>
+                        <td>0, 3, 7, 10, 2, 5</td>
+                    </tr>
+                    <tr>
+                        <td>13th</td>
+                        <td>13</td>
+                        <td>C13</td>
+                        <td>0, 4, 7, 10, 2, 9</td>
+                    </tr>
+                    <tr>
+                        <td>Minor 13th</td>
+                        <td>m13</td>
+                        <td>Cm13</td>
+                        <td>0, 3, 7, 10, 2, 9</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2 id="examples">Usage Examples</h2>
+
+            <h3>File-Based Analysis</h3>
+            <div class="code-block">
+                <div class="code-header">Example: Analyze Audio File</div>
+                <pre><code class="language-csharp">using OwnaudioNET.Features.OwnChordDetect;
+
+// Detect chords from audio file
+var (chords, key, tempo) = ChordDetect.DetectFromFile(
+    audioFile: "song.mp3",
+    intervalSecond: 1.0f
+);
+
+Console.WriteLine($"Detected key: {key}");
+Console.WriteLine($"Detected tempo: {tempo} BPM");
+Console.WriteLine($"Found {chords.Count} chords:");
+
+foreach (var chord in chords)
+{
+    Console.WriteLine($"  {chord.StartTime:F1}s - {chord.EndTime:F1}s: " +
+                     $"{chord.ChordName} (confidence: {chord.Confidence:F2})");
+    Console.WriteLine($"    Notes: {string.Join(", ", chord.Notes)}");
+}</code></pre>
+            </div>
+
+            <h3>Real-Time Detection</h3>
+            <div class="code-block">
+                <div class="code-header">Example: Real-Time Chord Detection</div>
+                <pre><code class="language-csharp">using OwnaudioNET.Features.OwnChordDetect;
+using OwnaudioNET.Features.OwnChordDetect.Detectors;
+
+// Initialize real-time detector
+var detector = new RealTimeChordDetector(
+    bufferSize: 5,
+    mode: DetectionMode.Optimized
+);
+
+// Process incoming notes
+List&lt;Note&gt; currentNotes = GetCurrentNotes(); // Your note input
+
+var (chord, stability) = detector.ProcessNotes(currentNotes);
+
+Console.WriteLine($"Current chord: {chord}");
+Console.WriteLine($"Stability: {stability:P1}");
+
+// Alternative using static method
+var (chord2, stability2) = ChordDetect.DetectRealtime(
+    currentNotes,
+    DetectionMode.Optimized,
+    buffersize: 5
+);</code></pre>
+            </div>
+
+            <h3>Custom Analysis with SongChordAnalyzer</h3>
+            <div class="code-block">
+                <div class="code-header">Example: Custom Song Analysis</div>
+                <pre><code class="language-csharp">using OwnaudioNET.Features.OwnChordDetect.Analysis;
+
+// Create analyzer with custom parameters
+var analyzer = new SongChordAnalyzer(
+    windowSize: 1.0f,           // 1 second windows
+    hopSize: 0.5f,              // 0.5 second steps
+    minimumChordDuration: 1.0f, // Min 1 second chords
+    confidence: 0.90f           // 90% confidence threshold
+);
+
+// Analyze song (auto-detect key)
+List&lt;Note&gt; songNotes = GetNotesFromAudio(); // Your note extraction
+var chords = analyzer.AnalyzeSong(songNotes);
+
+Console.WriteLine($"Detected key: {analyzer.DetectedKey}");
+
+// Or analyze with specified key
+var key = new MusicalKey("F#", true, 6, 0, sharpNoteNames);
+var chordsInKey = analyzer.AnalyzeSongInKey(songNotes, key);</code></pre>
+            </div>
+
+            <h3>Advanced Chord Detection</h3>
+            <div class="code-block">
+                <div class="code-header">Example: Advanced Detection with Alternatives</div>
+                <pre><code class="language-csharp">using OwnaudioNET.Features.OwnChordDetect.Detectors;
+
+// Use optimized detector with ambiguity detection
+var detector = new OptimizedChordDetector(
+    confidenceThreshold: 0.6f,
+    ambiguityThreshold: 0.1f
+);
+
+List&lt;Note&gt; notes = GetNotes();
+var (chord, confidence, isAmbiguous, alternatives) = 
+    detector.DetectChordAdvanced(notes);
+
+Console.WriteLine($"Detected: {chord} (confidence: {confidence:F2})");
+
+if (isAmbiguous)
+{
+    Console.WriteLine("Ambiguous detection!");
+    Console.WriteLine($"Alternatives: {string.Join(", ", alternatives)}");
+}
+
+// Get detailed analysis
+var analysis = detector.AnalyzeChord(notes);
+Console.WriteLine(analysis.ToString());</code></pre>
+            </div>
+
+            <h3>Key Detection</h3>
+            <div class="code-block">
+                <div class="code-header">Example: Standalone Key Detection</div>
+                <pre><code class="language-csharp">using OwnaudioNET.Features.OwnChordDetect.Core;
+
+// Create key detector
+var keyDetector = new KeyDetector();
+
+// Detect key from notes
+List&lt;Note&gt; notes = GetNotesFromSong();
+var key = keyDetector.DetectKey(notes);
+
+Console.WriteLine($"Detected key: {key.KeyName} {(key.IsMajor ? "major" : "minor")}");
+Console.WriteLine($"Sharps: {key.Sharps}, Flats: {key.Flats}");
+Console.WriteLine($"Preferred notes: {string.Join(", ", key.PreferredNoteNames)}");
+
+// Use key for chord detection
+var detector = new KeyAwareChordDetector();
+detector.SetKey(key);
+var (chord, confidence) = detector.DetectChord(notes);</code></pre>
+            </div>
+
+            <h3>Custom Chord Templates</h3>
+            <div class="code-block">
+                <div class="code-header">Example: Working with Chord Templates</div>
+                <pre><code class="language-csharp">using OwnaudioNET.Features.OwnChordDetect.Core;
+
+// Get note name with key context
+var key = new MusicalKey("Bb", true, 0, 2, flatNoteNames);
+string noteName = ChordTemplates.GetNoteName(10, key); // Returns "Bb"
+
+// Create custom chord template
+int[] pitchClasses = { 0, 4, 7 }; // Major triad
+float[] template = ChordTemplates.CreateTemplate(pitchClasses);
+
+// Get all chord templates for a key
+var templates = ChordTemplates.CreateAllTemplates(
+    key: key,
+    includeExtended: true
+);
+
+Console.WriteLine($"Generated {templates.Count} chord templates");
+foreach (var kvp in templates.Take(10))
+{
+    Console.WriteLine($"{kvp.Key}: {string.Join(", ", kvp.Value.Select(v => v.ToString("F2")))}");
+}</code></pre>
+            </div>
+
+            <div class="alert alert-info">
+                <strong>Performance Tips</strong>
+                For real-time applications, use <code>DetectionMode.Optimized</code> with appropriate buffer size.
+                For analysis of complete songs, use <code>SongChordAnalyzer</code> with suitable window and hop sizes.
+                Lower confidence thresholds detect more chords but may increase false positives.
+            </div>
+
+            <div class="alert alert-warning">
+                <strong>Note Recognition Required</strong>
+                OwnChordDetect requires musical notes (pitch + timing) as input. Use the included note detection
+                from <code>DetectFromFile</code> or implement your own note extraction for custom audio sources.
+            </div>
+
+            <h3>Configuration Guidelines</h3>
+
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Low Value</th>
+                        <th>Default</th>
+                        <th>High Value</th>
+                        <th>Effect</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>confidenceThreshold</code></td>
+                        <td>0.4f</td>
+                        <td>0.6f - 0.7f</td>
+                        <td>0.9f</td>
+                        <td>Lower = more detections, higher = stricter</td>
+                    </tr>
+                    <tr>
+                        <td><code>ambiguityThreshold</code></td>
+                        <td>0.05f</td>
+                        <td>0.1f</td>
+                        <td>0.2f</td>
+                        <td>Lower = more alternatives suggested</td>
+                    </tr>
+                    <tr>
+                        <td><code>windowSize</code></td>
+                        <td>0.5f</td>
+                        <td>1.0f</td>
+                        <td>2.0f</td>
+                        <td>Smaller = more responsive, larger = more stable</td>
+                    </tr>
+                    <tr>
+                        <td><code>hopSize</code></td>
+                        <td>0.25f</td>
+                        <td>0.5f</td>
+                        <td>1.0f</td>
+                        <td>Smaller = finer resolution, more processing</td>
+                    </tr>
+                    <tr>
+                        <td><code>minimumChordDuration</code></td>
+                        <td>0.5f</td>
+                        <td>0.8f - 1.0f</td>
+                        <td>2.0f</td>
+                        <td>Filters out short/transient chords</td>
+                    </tr>
+                    <tr>
+                        <td><code>bufferSize</code></td>
+                        <td>3</td>
+                        <td>5</td>
+                        <td>10</td>
+                        <td>Real-time stability (higher = more stable)</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div style="margin-top: 4rem; padding: 2rem; background: var(--surface); border-radius: 8px;">
+                <h3>Related Documentation</h3>
+                <ul style="list-style: none; padding: 0;">
+                    <li style="margin-bottom: 0.5rem;">
+                        <a href="quickstart.html" style="color: var(--primary-color);">📖 Quick Start Guide</a>
+                    </li>
+                    <li style="margin-bottom: 0.5rem;">
+                        <a href="api-net.html" style="color: var(--net-color);">🎛️ NET API Reference</a>
+                    </li>
+                    <li style="margin-bottom: 0.5rem;">
+                        <a href="examples.html" style="color: var(--primary-color);">💡 Code Examples</a>
+                    </li>
+                    <!--<li style="margin-bottom: 0.5rem;">
+                        <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" style="color: var(--primary-color);">🔗 GitHub Repository</a>
+                    </li>-->
+                </ul>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script>
+        // Active sidebar navigation
+        const sections = document.querySelectorAll('h2[id], h3[id]');
+        const navLinks = document.querySelectorAll('.sidebar-nav a');
+
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (window.pageYOffset >= sectionTop - 150) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.classList.add('active');
+                }
+            });
+        });
+
+        // Smooth scrolling
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

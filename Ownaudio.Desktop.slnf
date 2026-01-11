@@ -1,0 +1,25 @@
+{
+  "solution": {
+    "path": "Ownaudio.sln",
+    "projects": [
+      "Logger\\Logger.csproj",
+      "OwnAudioEngine\\Ownaudio.Core\\Ownaudio.Core.csproj",
+      "OwnAudioEngine\\Ownaudio.Linux\\Ownaudio.Linux.csproj",
+      "OwnAudioEngine\\Ownaudio.Native\\Ownaudio.Native.csproj",
+      "OwnAudioEngine\\Ownaudio.Windows\\Ownaudio.Windows.csproj",
+      "OwnAudioEngine\\Ownaudio.macOS\\Ownaudio.macOS.csproj",
+      "OwnAudioTests\\Ownaudio.EngineTest\\Ownaudio.Test.Engine.csproj",
+      "OwnAudioTests\\Ownaudio.OwnaudioNET\\Ownaudio.Test.OwnaudioNET.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.ChordDetect\\Ownaudio.Example.ChordDetect.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.Desktop\\Ownaudio.Example.Desktop.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.HTDemucs\\Ownaudio.Example.HTDemucs.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.Input\\Ownaudio.Example.Input.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.Matching\\Ownaudio.Example.Matching.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.MultitrackPlayer\\Ownaudio.Example.MultitrackPlayer.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.NetworkSyncClient\\Ownaudio.Example.NetworkSyncClient.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.NetworkSyncServer\\Ownaudio.Example.NetworkSyncServer.csproj",
+      "OwnAudio\\Examples\\Ownaudio.Example.VocalRemover\\Ownaudio.Example.Vocalremover.csproj",
+      "OwnAudio\\Source\\OwnaudioNET.csproj"
+    ]
+  }
+}

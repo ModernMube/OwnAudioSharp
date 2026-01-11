@@ -1,0 +1,64 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net9.0-android35.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationId>com.ownaudio.androidtest</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
+    <AndroidGenerateResourceDesigner>true</AndroidGenerateResourceDesigner>
+  </PropertyGroup>
+
+  <!-- Debug configuration: use interpreter for hot reload -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
+    <AndroidUseInterpreter>true</AndroidUseInterpreter>
+  </PropertyGroup>
+
+  <!-- Release configuration: use AOT for performance -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <AndroidEnableProfiledAot>true</AndroidEnableProfiledAot>
+    <AndroidUseInterpreter>false</AndroidUseInterpreter>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net9.0-android|AnyCPU'">
+    <AndroidUseAapt2>True</AndroidUseAapt2>
+    <AndroidCreatePackagePerAbi>False</AndroidCreatePackagePerAbi>
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Xamarin.AndroidX.AppCompat" Version="1.7.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\OwnAudioEngine\Ownaudio.Android\Ownaudio.Android.csproj" />
+    <ProjectReference Include="..\..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" />
+    <ProjectReference Include="..\..\Source\OwnaudioNET.Mobile.csproj" />
+  </ItemGroup>
+
+  <!-- Android Resources -->
+  <ItemGroup>
+    <AndroidResource Include="Resources\**\*" />
+  </ItemGroup>
+
+  <!-- Copy media files to Android assets -->
+  <ItemGroup>
+    <AndroidAsset Include="..\Ownaudio.Example.Desktop\media\bass.wav">
+      <Link>Assets\bass.wav</Link>
+    </AndroidAsset>
+    <AndroidAsset Include="..\Ownaudio.Example.Desktop\media\drums.wav">
+      <Link>Assets\drums.wav</Link>
+    </AndroidAsset>
+    <AndroidAsset Include="..\Ownaudio.Example.Desktop\media\other.wav">
+      <Link>Assets\other.wav</Link>
+    </AndroidAsset>
+    <AndroidAsset Include="..\Ownaudio.Example.Desktop\media\vocals.wav">
+      <Link>Assets\vocals.wav</Link>
+    </AndroidAsset>
+  </ItemGroup>
+
+</Project>

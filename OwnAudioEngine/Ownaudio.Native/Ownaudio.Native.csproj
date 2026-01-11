@@ -1,0 +1,111 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net9.0;net9.0-android;net9.0-ios</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- Suppress nullable warnings (fields initialized in Initialize method) and XML doc warnings -->
+    <NoWarn>$(NoWarn);CS8618;CS1587</NoWarn>
+    <Authors>Ownaudio Team</Authors>
+    <Company>Ownaudio</Company>
+    <Product>Ownaudio Native</Product>
+    <Description>Native cross-platform audio engine using PortAudio/MiniAudio with MiniAudio decoder (Windows, Linux, macOS, Android, iOS)</Description>
+    <Copyright>Copyright © 2025</Copyright>
+    <PackageProjectUrl>https://github.com/modernmube/OwnAudioSharp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/modernmube/OwnAudioSharp</RepositoryUrl>
+    <PackageTags>audio;portaudio;miniaudio;cross-platform;real-time;low-latency;decoder;android;ios;mobile</PackageTags>
+    <Version>3.0.0</Version>
+    <Platforms>AnyCPU;x64;x86</Platforms>
+    <!-- Exclude runtimes folder from default wildcard inclusions to prevent Android build from picking up wrong ABIs -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);runtimes\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <!-- Android-specific settings -->
+  <PropertyGroup Condition="$(TargetFramework.Contains('android')) AND '$(TargetFramework)' != 'net9.0'">
+    <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <!-- iOS-specific settings -->
+  <PropertyGroup Condition="$(TargetFramework.Contains('ios')) AND '$(TargetFramework)' != 'net9.0'">
+    <SupportedOSPlatformVersion>12.2</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <Optimize>true</Optimize>
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <Optimize>false</Optimize>
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ownaudio.Core\Ownaudio.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+    <None Include="runtimes\win-x64\**\*.*">
+      <Link>runtimes\win-x64\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\win-x64</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Pack>true</Pack>
+    </None>
+    <None Include="runtimes\win-x86\**\*.*">
+      <Link>runtimes\win-x86\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\win-x86</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Pack>true</Pack>
+    </None>
+    <None Include="runtimes\linux-x64\**\*.*">
+      <Link>runtimes\linux-x64\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\linux-x64</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Pack>true</Pack>
+    </None>
+    <None Include="runtimes\linux-arm\**\*.*">
+      <Link>runtimes\linux-arm\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\linux-arm</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Pack>true</Pack>
+    </None>
+    <None Include="runtimes\linux-arm64\**\*.*">
+      <Link>runtimes\linux-arm64\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\linux-arm64</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Pack>true</Pack>
+    </None>
+    <None Include="runtimes\osx-x64\**\*.*">
+      <Link>runtimes\osx-x64\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\osx-x64</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Pack>true</Pack>
+    </None>
+    <None Include="runtimes\osx-arm64\**\*.*">
+      <Link>runtimes\osx-arm64\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\osx-arm64</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Pack>true</Pack>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net9.0-android'))">
+    <AndroidNativeLibrary Include="runtimes\android-arm\native\*.so">
+      <Abi>armeabi-v7a</Abi>
+      <Link>libs\armeabi-v7a\%(Filename)%(Extension)</Link>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="runtimes\android-arm64\native\*.so">
+      <Abi>arm64-v8a</Abi>
+      <Link>libs\arm64-v8a\%(Filename)%(Extension)</Link>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="runtimes\android-x64\native\*.so">
+      <Abi>x86_64</Abi>
+      <Link>libs\x86_64\%(Filename)%(Extension)</Link>
+    </AndroidNativeLibrary>
+  </ItemGroup>
+
+</Project>

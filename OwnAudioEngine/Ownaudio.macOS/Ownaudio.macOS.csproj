@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Authors>Ownaudio Team</Authors>
+    <Company>Ownaudio</Company>
+    <Product>Ownaudio macOS</Product>
+    <Description>macOS Core Audio implementation for Ownaudio with zero-allocation guarantees</Description>
+    <Copyright>Copyright © 2025</Copyright>
+    <PackageProjectUrl>https://github.com/yourusername/ownaudio</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/yourusername/ownaudio</RepositoryUrl>
+    <PackageTags>audio;macos;core-audio;real-time;low-latency;zero-allocation</PackageTags>
+    <Version>1.0.0</Version>
+    <RuntimeIdentifiers>osx-x64;osx-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <Optimize>true</Optimize>
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <Optimize>false</Optimize>
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ownaudio.Core\Ownaudio.Core.csproj" />
+  </ItemGroup>
+
+</Project>

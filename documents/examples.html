@@ -1,374 +1,37 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
+
 <head>
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
+        function gtag() { dataLayer.push(arguments); }
         gtag('js', new Date());
 
         gtag('config', 'G-93P1X5V4Z5');
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Examples - OwnAudioSharp</title>
+    <title>Examples - Ownaudio</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-    <style>
-        :root {
-            --primary-color: #6366f1;
-            --primary-dark: #4f46e5;
-            --secondary-color: #ec4899;
-            --background: #0f0f23;
-            --surface: #1a1a2e;
-            --surface-light: #16213e;
-            --text-primary: #e2e8f0;
-            --text-secondary: #94a3b8;
-            --accent: #00d9ff;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --border: #334155;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--background);
-            color: var(--text-primary);
-            line-height: 1.6;
-        }
-
-        .nav {
-            background: rgba(26, 26, 46, 0.95);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid var(--border);
-            position: fixed;
-            top: 0;
-            width: 100%;
-            z-index: 1000;
-            padding: 1rem 0;
-        }
-
-        .nav-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--primary-color), var(--accent));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            text-decoration: none;
-        }
-
-        .nav-links {
-            display: flex;
-            list-style: none;
-            gap: 2rem;
-        }
-
-            .nav-links a {
-                color: var(--text-secondary);
-                text-decoration: none;
-                font-weight: 500;
-                transition: color 0.3s ease;
-            }
-
-                .nav-links a:hover, .nav-links a.active {
-                    color: var(--primary-color);
-                }
-
-        .main {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 100px 2rem 2rem;
-            display: grid;
-            grid-template-columns: 280px 1fr;
-            gap: 3rem;
-        }
-
-        .sidebar {
-            background: var(--surface);
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            padding: 2rem;
-            height: fit-content;
-            position: sticky;
-            top: 120px;
-            max-height: calc(100vh - 140px);
-            overflow-y: auto;
-        }
-
-            .sidebar h3 {
-                color: var(--text-primary);
-                margin-bottom: 1rem;
-                font-size: 1.1rem;
-            }
-
-        .sidebar-nav {
-            list-style: none;
-        }
-
-            .sidebar-nav > li {
-                margin-bottom: 1rem;
-            }
-
-            .sidebar-nav .section-title {
-                color: var(--primary-color);
-                font-weight: 600;
-                font-size: 0.9rem;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                margin-bottom: 0.5rem;
-            }
-
-            .sidebar-nav ul {
-                list-style: none;
-                margin-left: 1rem;
-            }
-
-                .sidebar-nav ul li {
-                    margin-bottom: 0.3rem;
-                }
-
-            .sidebar-nav a {
-                color: var(--text-secondary);
-                text-decoration: none;
-                font-size: 0.875rem;
-                transition: color 0.3s ease;
-                display: block;
-                padding: 0.25rem 0;
-            }
-
-                .sidebar-nav a:hover,
-                .sidebar-nav a.active {
-                    color: var(--primary-color);
-                }
-
-        .content {
-            background: var(--surface);
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            padding: 3rem;
-        }
-
-            .content h1 {
-                font-size: 2.5rem;
-                margin-bottom: 1rem;
-                color: var(--text-primary);
-            }
-
-            .content h2 {
-                font-size: 1.8rem;
-                margin: 2.5rem 0 1rem;
-                color: var(--text-primary);
-                border-bottom: 2px solid var(--border);
-                padding-bottom: 0.5rem;
-            }
-
-            .content h3 {
-                font-size: 1.3rem;
-                margin: 2rem 0 0.75rem;
-                color: var(--primary-color);
-            }
-
-            .content h4 {
-                font-size: 1.1rem;
-                margin: 1.5rem 0 0.5rem;
-                color: var(--text-primary);
-            }
-
-            .content p {
-                margin-bottom: 1rem;
-                color: var(--text-secondary);
-            }
-
-            .content ul, .content ol {
-                margin-bottom: 1rem;
-                padding-left: 2rem;
-                color: var(--text-secondary);
-            }
-
-            .content li {
-                margin-bottom: 0.5rem;
-            }
-
-        .code-block {
-            background: var(--surface-light);
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            margin: 1.5rem 0;
-            overflow: hidden;
-        }
-
-        .code-header {
-            background: var(--background);
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid var(--border);
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .difficulty-badge {
-            background: var(--primary-color);
-            color: white;
-            padding: 0.2rem 0.6rem;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-
-            .difficulty-badge.beginner {
-                background: var(--success);
-            }
-
-            .difficulty-badge.intermediate {
-                background: var(--warning);
-            }
-
-            .difficulty-badge.advanced {
-                background: var(--secondary-color);
-            }
-
-        pre {
-            margin: 0;
-            padding: 1.5rem;
-            overflow-x: auto;
-            background: transparent !important;
-        }
-
-        .example-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 2rem;
-            margin: 2rem 0;
-        }
-
-        .example-card {
-            background: var(--surface-light);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 2rem;
-            transition: all 0.3s ease;
-        }
-
-            .example-card:hover {
-                transform: translateY(-5px);
-                border-color: var(--primary-color);
-                box-shadow: 0 10px 30px rgba(99, 102, 241, 0.2);
-            }
-
-            .example-card h4 {
-                margin: 0 0 1rem 0;
-                color: var(--text-primary);
-                display: flex;
-                align-items: center;
-                gap: 0.5rem;
-            }
-
-            .example-card p {
-                margin-bottom: 1rem;
-                font-size: 0.9rem;
-            }
-
-        .example-link {
-            color: var(--primary-color);
-            text-decoration: none;
-            font-weight: 500;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            transition: color 0.3s ease;
-        }
-
-            .example-link:hover {
-                color: var(--accent);
-            }
-
-        .alert {
-            padding: 1rem;
-            border-radius: 8px;
-            margin: 1.5rem 0;
-            border-left: 4px solid;
-        }
-
-        .alert-info {
-            background: rgba(99, 102, 241, 0.1);
-            border-color: var(--primary-color);
-            color: var(--text-primary);
-        }
-
-        .alert-warning {
-            background: rgba(245, 158, 11, 0.1);
-            border-color: var(--warning);
-            color: var(--text-primary);
-        }
-
-        .alert-success {
-            background: rgba(16, 185, 129, 0.1);
-            border-color: var(--success);
-            color: var(--text-primary);
-        }
-
-        .feature-highlight {
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(0, 217, 255, 0.1));
-            border: 1px solid var(--primary-color);
-            border-radius: 12px;
-            padding: 2rem;
-            margin: 2rem 0;
-        }
-
-            .feature-highlight h3 {
-                margin-top: 0;
-                color: var(--primary-color);
-            }
-
-        @media (max-width: 1024px) {
-            .main {
-                grid-template-columns: 1fr;
-                padding-top: 80px;
-            }
-
-            .sidebar {
-                position: static;
-                order: 2;
-                max-height: none;
-            }
-
-            .nav-links {
-                display: none;
-            }
-
-            .example-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="docs.css">
 </head>
+
 <body>
     <nav class="nav">
         <div class="nav-container">
-            <a href="../index.html" class="logo">OwnAudioSharp</a>
+            <a href="../index.html" class="logo">OwnaudioSharp</a>
             <ul class="nav-links">
-                <li><a href="../index.html#features">Features</a></li>
                 <li><a href="quickstart.html">Quick Start</a></li>
-                <li><a href="api-reference.html">API Reference</a></li>
+                <li><a href="api-core.html">Core API</a></li>
+                <li><a href="api-net.html">NET API</a></li>
                 <li><a href="examples.html" class="active">Examples</a></li>
+                <li><a href="effects.html">Effects</a></li>
+                <li><a href="networksync.html">Net Sync</a></li>
+                <li><a href="matchering.html">Mastering</a></li>
+                <li><a href="vocalremover.html">Vocal Sep</a></li>
+                <li><a href="chorddetect.html">Chords</a></li>
                 <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
             </ul>
         </div>
@@ -376,1401 +39,627 @@
 
     <div class="main">
         <aside class="sidebar">
-            <h3>Examples</h3>
+            <h3>Example Navigation</h3>
             <ul class="sidebar-nav">
-                <li>
-                    <div class="section-title">Basic Usage</div>
-                    <ul>
-                        <li><a href="#simple-playback">Simple Playback</a></li>
-                        <li><a href="#multiple-sources">Multiple Sources</a></li>
-                        <li><a href="#audio-recording">Audio Recording</a></li>
-                    </ul>
-                </li>
-                <li>
-                    <div class="section-title">Audio Effects</div>
-                    <ul>
-                        <li><a href="#applying-effects">Applying Effects</a></li>
-                    </ul>
-                </li>
-                <li>
-                    <div class="section-title">Real-Time Audio</div>
-                    <ul>
-                        <li><a href="#sine-generator">Sine Wave Generator</a></li>
-                        <!--<li><a href="#network-streaming">Network Streaming</a></li>
-                        <li><a href="#live-effects">Live Effects</a></li>-->
-                    </ul>
-                </li>
-                <li>
-                    <div class="section-title">Advanced Features</div>
-                    <ul>
-                        <li><a href="#chord-analysis">Chord Analysis</a></li>
-                        <li><a href="#audio-mastering">Audio Mastering</a></li>
-                        <li><a href="#visualization">Visualization</a></li>
-                    </ul>
-                </li>
+                <li><a href="#overview" class="active">Overview</a></li>
+                <li><a href="#step1-init">1. Engine Initialization</a></li>
+                <li><a href="#step2-start">2. Starting Engine</a></li>
+                <li><a href="#step3-mixer">3. Mixer Setup</a></li>
+                <li><a href="#step4-effects">4. Master Effects</a></li>
+                <li><a href="#step5-sources">5. Audio Sources</a></li>
+                <li><a href="#step6-playback">6. Synchronized Playback</a></li>
+                <li><a href="#step7-monitoring">7. Monitoring & Effects</a></li>
+                <li><a href="#step8-cleanup">8. Cleanup</a></li>
             </ul>
         </aside>
 
         <main class="content">
-            <h1>Code Examples</h1>
-            <p>Practical examples demonstrating OwnAudioSharp's capabilities. From simple playback to advanced real-time processing.</p>
+            <h1>Complete AudioMixer Example</h1>
+            <p>This comprehensive example demonstrates the usage of OwnaudioNET with multi-track playback, master
+                effects, and synchronized playback control.</p>
 
-            <div class="example-grid">
-                <div class="example-card">
-                    <h4>🎵 Audio Player <span class="difficulty-badge beginner">Beginner</span></h4>
-                    <p>Complete console-based audio player with interactive controls</p>
-                    <a href="#simple-playback" class="example-link">View Example →</a>
-                </div>
-                <div class="example-card">
-                    <h4>🎛️ Effect Processor <span class="difficulty-badge intermediate">Intermediate</span></h4>
-                    <p>Apply and chain multiple audio effects with real-time control</p>
-                    <a href="#applying-effects" class="example-link">View Example →</a>
-                </div>
-                <div class="example-card">
-                    <h4>🎼 Music Analyzer <span class="difficulty-badge advanced">Advanced</span></h4>
-                    <p>Analyze music files for chord progressions, key, and tempo</p>
-                    <a href="#music-analyzer" class="example-link">View Example →</a>
-                </div>
-                <div class="example-card">
-                    <h4>🔄 Real-Time Synthesizer <span class="difficulty-badge advanced">Advanced</span></h4>
-                    <p>Generate and process audio in real-time with effects</p>
-                    <a href="#realtime-synth" class="example-link">View Example →</a>
-                </div>
+            <div class="alert alert-info">
+                <strong>Developer Example</strong>
+                This code demonstrates the practical usage of the OwnaudioNET API. All classes and methods used in this
+                example are documented in the API reference.
             </div>
 
-            <h2 id="simple-playback">Simple Audio Playback</h2>
-            <p>The most basic example - loading and playing an audio file.</p>
+            <h2 id="overview">Overview</h2>
+            <p>This example program demonstrates the following features:</p>
+            <ul>
+                <li><strong>Audio Engine initialization</strong> with custom configuration</li>
+                <li><strong>AudioMixer creation</strong> with direct engine access</li>
+                <li><strong>Master effects chain</strong> (Equalizer, Compressor, Dynamic Amp)</li>
+                <li><strong>Multi-track playback</strong> with four separate audio files</li>
+                <li><strong>Synchronized playback</strong> with drift correction</li>
+                <li><strong>Real-time monitoring</strong> with position and peak levels</li>
+                <li><strong>Dynamic effect activation</strong> during playback</li>
+            </ul>
+
+            <h2 id="step1-init">Step 1: Audio Engine Initialization</h2>
+            <p>The first step is to initialize the audio engine with a custom configuration. We configure the sample
+                rate, channel count, and buffer size for optimal performance.</p>
 
             <div class="code-block">
-                <div class="code-header">
-                    <span>BasicPlayback.cs</span>
-                    <span class="difficulty-badge beginner">Beginner</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio;
-using Ownaudio.Sources;
-using System;
-using System.Threading.Tasks;
+                <div class="code-header">Engine Initialization</div>
+                <pre><code class="language-csharp">using Ownaudio.Core;
+using OwnaudioNET.Core;
 
-class BasicPlayback
+AudioConfig config = new AudioConfig()
 {
-    static async Task Main(string[] args)
+    SampleRate = 48000,
+    Channels = 2,
+    BufferSize = 512
+};
+
+OwnaudioNet.Initialize(config);
+
+Console.WriteLine($"Initialized: {OwnaudioNet.IsInitialized}");
+Console.WriteLine($"Version: {OwnaudioNet.Version}");
+Console.WriteLine($"Sample Rate: {OwnaudioNet.Engine?.Config.SampleRate} Hz");
+Console.WriteLine($"Channels: {OwnaudioNet.Engine?.Config.Channels}");
+Console.WriteLine($"Buffer Size: {OwnaudioNet.Engine?.FramesPerBuffer} frames");</code></pre>
+            </div>
+
+            <p><strong>What happens here:</strong></p>
+            <ul>
+                <li>Create an <code>AudioConfig</code> object with 48kHz sample rate, stereo (2 channels), and 512
+                    frames buffer size</li>
+                <li>Initialize the OwnaudioNET static instance with this configuration</li>
+                <li>The engine automatically detects the platform and uses the appropriate native audio API (WASAPI on
+                    Windows, Core Audio on macOS, PulseAudio on Linux)</li>
+                <li>Display initialization status and audio configuration parameters</li>
+            </ul>
+
+            <h2 id="step2-start">Step 2: Starting the Audio Engine</h2>
+            <p>After initialization, we start the audio engine to begin processing audio.</p>
+
+            <div class="code-block">
+                <div class="code-header">Starting Engine</div>
+                <pre><code class="language-csharp">OwnaudioNet.Start();
+
+Console.WriteLine($"Engine running: {OwnaudioNet.IsRunning}");</code></pre>
+            </div>
+
+            <p><strong>What happens here:</strong></p>
+            <ul>
+                <li>The <code>Start()</code> method activates the audio engine's real-time processing thread</li>
+                <li>The engine begins requesting audio buffers from registered sources</li>
+                <li>At this point, the engine is ready to accept audio sources and play them</li>
+            </ul>
+
+            <h2 id="step3-mixer">Step 3: Creating the Audio Mixer</h2>
+            <p>We create an AudioMixer instance with direct engine access for optimal performance, bypassing additional
+                wrapper layers.</p>
+
+            <div class="code-block">
+                <div class="code-header">Mixer Creation</div>
+                <pre><code class="language-csharp">using OwnaudioNET.Mixing;
+
+var Engine = OwnaudioNet.Engine!.UnderlyingEngine;
+
+mixer = new AudioMixer(Engine, bufferSizeInFrames: 512);
+
+mixer.MasterVolume = 0.8f;
+
+mixer.SourceError += (sender, e) =>
+{
+    Console.WriteLine($"Source error: {e.Message}");
+};</code></pre>
+            </div>
+
+            <p><strong>What happens here:</strong></p>
+            <ul>
+                <li>Get direct access to the underlying engine (<code>IAudioEngine</code>) for maximum performance</li>
+                <li>Create an <code>AudioMixer</code> with 512 frames internal buffer size</li>
+                <li>Set master volume to 80% (0.8f) which applies to the final mixed output</li>
+                <li>Register an error handler for any source-related errors during playback</li>
+                <li>The mixer will handle mixing multiple audio sources into a single output stream</li>
+            </ul>
+
+            <h2 id="step4-effects">Step 4: Master Effects Configuration</h2>
+            <p>Configure and add master effects that will be applied to the final mixed output. These effects process
+                all sources together.</p>
+
+            <div class="code-block">
+                <div class="code-header">Equalizer Setup (30-Band)</div>
+                <pre><code class="language-csharp">using OwnaudioNET.Effects;
+
+var _equalizer = new Equalizer30BandEffect();
+
+_equalizer.SetBandGain(band: 0, frequency: 20, q: 0.5f, gainDB: 0.2f);
+_equalizer.SetBandGain(band: 1, frequency: 25, q: 0.5f, gainDB: 0.4f);
+_equalizer.SetBandGain(band: 2, frequency: 31, q: 0.6f, gainDB: 0.6f);
+_equalizer.SetBandGain(band: 3, frequency: 40, q: 0.7f, gainDB: 0.8f);
+_equalizer.SetBandGain(band: 4, frequency: 50, q: 0.7f, gainDB: 0.8f);
+_equalizer.SetBandGain(band: 5, frequency: 63, q: 0.7f, gainDB: -0.3f);
+
+_equalizer.SetBandGain(band: 6, frequency: 80, q: 0.8f, gainDB: 0.3f);
+_equalizer.SetBandGain(band: 7, frequency: 100, q: 0.8f, gainDB: 0.5f);
+_equalizer.SetBandGain(band: 8, frequency: 125, q: 0.9f, gainDB: 0.3f);
+_equalizer.SetBandGain(band: 9, frequency: 160, q: 0.9f, gainDB: 0.1f);
+
+_equalizer.SetBandGain(band: 10, frequency: 200, q: 1.0f, gainDB: -0.4f);
+_equalizer.SetBandGain(band: 11, frequency: 250, q: 1.0f, gainDB: -0.8f);
+_equalizer.SetBandGain(band: 12, frequency: 315, q: 1.1f, gainDB: -0.7f);
+_equalizer.SetBandGain(band: 13, frequency: 400, q: 1.1f, gainDB: -0.5f);
+_equalizer.SetBandGain(band: 14, frequency: 500, q: 1.0f, gainDB: -0.2f);
+
+_equalizer.SetBandGain(band: 15, frequency: 630, q: 1.0f, gainDB: -0.1f);
+_equalizer.SetBandGain(band: 16, frequency: 800, q: 1.0f, gainDB: 0.0f);
+_equalizer.SetBandGain(band: 17, frequency: 1000, q: 1.0f, gainDB: 0.0f);
+_equalizer.SetBandGain(band: 18, frequency: 1250, q: 1.0f, gainDB: 0.0f);
+_equalizer.SetBandGain(band: 19, frequency: 1600, q: 1.0f, gainDB: 0.1f);
+
+_equalizer.SetBandGain(band: 20, frequency: 2000, q: 1.0f, gainDB: 0.3f);
+_equalizer.SetBandGain(band: 21, frequency: 2500, q: 0.9f, gainDB: 0.5f);
+_equalizer.SetBandGain(band: 22, frequency: 3150, q: 0.9f, gainDB: 0.7f);
+_equalizer.SetBandGain(band: 23, frequency: 4000, q: 0.8f, gainDB: 0.5f);
+_equalizer.SetBandGain(band: 24, frequency: 5000, q: 0.7f, gainDB: 0.3f);
+
+_equalizer.SetBandGain(band: 25, frequency: 6300, q: 0.7f, gainDB: 0.3f);
+_equalizer.SetBandGain(band: 26, frequency: 8000, q: 0.6f, gainDB: 0.6f);
+_equalizer.SetBandGain(band: 27, frequency: 10000, q: 0.6f, gainDB: 0.8f);
+_equalizer.SetBandGain(band: 28, frequency: 12500, q: 0.5f, gainDB: 1.0f);
+_equalizer.SetBandGain(band: 29, frequency: 16000, q: 0.5f, gainDB: 1.0f);</code></pre>
+            </div>
+
+            <p><strong>What happens here:</strong></p>
+            <ul>
+                <li>Create a 30-band parametric equalizer with professional frequency bands</li>
+                <li><strong>Sub-bass (20-63 Hz):</strong> Enhanced low-end with controlled boost</li>
+                <li><strong>Bass (80-160 Hz):</strong> Punch and body for kick drums and bass</li>
+                <li><strong>Low-mid (200-500 Hz):</strong> Reduce mud and boxiness</li>
+                <li><strong>Mid (630-1600 Hz):</strong> Neutral balance for vocal clarity</li>
+                <li><strong>Upper-mid (2000-5000 Hz):</strong> Presence and definition boost</li>
+                <li><strong>High (6300-16000 Hz):</strong> Airiness and brilliance</li>
+            </ul>
+
+            <div class="code-block">
+                <div class="code-header">Compressor and Dynamic Amp</div>
+                <pre><code class="language-csharp">var _compressor = new CompressorEffect(CompressorPreset.Vintage);
+
+mixer.AddMasterEffect(_equalizer);
+mixer.AddMasterEffect(_compressor);
+mixer.AddMasterEffect(new DynamicAmpEffect(DynamicAmpPreset.Live));
+
+_equalizer.Enabled = false;
+_compressor.Enabled = false;</code></pre>
+            </div>
+
+            <p><strong>What happens here:</strong></p>
+            <ul>
+                <li>Create a vintage-style compressor for warm, musical compression</li>
+                <li>Add all three effects to the master effects chain (processed in order)</li>
+                <li>Add a dynamic amplifier with "Live" preset for final output enhancement</li>
+                <li>Initially disable equalizer and compressor (they will be enabled at 30 seconds)</li>
+                <li>Master effects are applied to the final mixed output from all sources</li>
+            </ul>
+
+            <h2 id="step5-sources">Step 5: Creating Audio Sources</h2>
+            <p>Create multiple audio sources from WAV files and configure them for synchronized playback.</p>
+
+            <div class="code-block">
+                <div class="code-header">File Source Creation</div>
+                <pre><code class="language-csharp">using OwnaudioNET.Sources;
+using System.Reflection;
+
+string? exePath = Assembly.GetExecutingAssembly().Location;
+string? exeDirectory = Path.GetDirectoryName(exePath);
+
+string audioFilePath0 = Path.Combine(exeDirectory, "media", "drums.wav");
+string audioFilePath1 = Path.Combine(exeDirectory, "media", "bass.wav");
+string audioFilePath2 = Path.Combine(exeDirectory, "media", "other.wav");
+string audioFilePath3 = Path.Combine(exeDirectory, "media", "vocals.wav");
+
+int targetSampleRate = OwnaudioNet.Engine!.Config.SampleRate;
+int targetChannels = OwnaudioNet.Engine!.Config.Channels;
+
+fileSource0 = new FileSource(audioFilePath0, 8192, targetSampleRate, targetChannels);
+fileSource1 = new FileSource(audioFilePath1, 8192, targetSampleRate, targetChannels);
+fileSource2 = new FileSource(audioFilePath2, 8192, targetSampleRate, targetChannels);
+fileSource3 = new FileSource(audioFilePath3, 8192, targetSampleRate, targetChannels);
+
+fileSource0.Volume = 0.9f;
+fileSource1.Volume = 0.85f;
+fileSource2.Volume = 0.8f;
+fileSource3.Volume = 1.0f;</code></pre>
+            </div>
+
+            <p><strong>What happens here:</strong></p>
+            <ul>
+                <li>Locate the application directory and construct paths to audio files</li>
+                <li>Get the engine's target sample rate and channel configuration</li>
+                <li>Create four <code>FileSource</code> instances with 8192 sample internal buffer</li>
+                <li>Each source automatically resamples and converts to match engine format</li>
+                <li>Set individual volume levels for each track (drums, bass, other, vocals)</li>
+                <li>The sources are ready but not yet playing</li>
+            </ul>
+
+            <h2 id="step6-playback">Step 6: Synchronized Playback Setup</h2>
+            <p>Add sources to the mixer and configure Master Clock synchronization for sample-accurate playback.</p>
+
+            <div class="alert alert-info">
+                <strong>Master Clock Synchronization (v2.1.0+)</strong>
+                This example uses the new timeline-based Master Clock system for professional DAW-style synchronization.
+            </div>
+
+            <div class="code-block">
+                <div class="code-header">Mixer Configuration and Master Clock Sync</div>
+                <pre><code class="language-csharp">mixer.AddSource(fileSource0);
+mixer.AddSource(fileSource1);
+mixer.AddSource(fileSource2);
+mixer.AddSource(fileSource3);
+
+// Attach all sources to Master Clock for sample-accurate sync
+fileSource0.AttachToClock(mixer.MasterClock);
+fileSource1.AttachToClock(mixer.MasterClock);
+fileSource2.AttachToClock(mixer.MasterClock);
+fileSource3.AttachToClock(mixer.MasterClock);
+
+// Optional: Set timeline positions (all start at 0.0 by default)
+fileSource0.StartOffset = 0.0;  // Drums start immediately
+fileSource1.StartOffset = 0.0;  // Bass starts immediately
+fileSource2.StartOffset = 0.0;  // Other starts immediately
+fileSource3.StartOffset = 0.0;  // Vocals start immediately
+
+// Start mixer
+mixer.Start();
+
+// Start all sources for playback
+fileSource0.Play();
+fileSource1.Play();
+fileSource2.Play();
+fileSource3.Play();
+
+// All attached sources now play in perfect sync</code></pre>
+            </div>
+
+            <p><strong>What happens here:</strong></p>
+            <ul>
+                <li>Add all four audio sources to the mixer's processing pipeline</li>
+                <li><strong>Attach to Master Clock:</strong> Each source subscribes to the mixer's timeline</li>
+                <li><strong>StartOffset property:</strong> Positions tracks on the timeline (DAW-style regions)</li>
+                <li>Start the mixer to begin the mixing engine</li>
+                <li><strong>Play() each source:</strong> Explicitly start playback for each attached source</li>
+                <li><strong>Sample-accurate sync:</strong> Master Clock ensures precise timing alignment</li>
+                <li><strong>Automatic drift correction:</strong> Tracks resync if drift exceeds 10ms (~480 samples @
+                    48kHz)</li>
+                <li><strong>Timeline control:</strong> Use <code>mixer.MasterClock.SeekTo(time)</code> to jump to any
+                    position</li>
+                <li><strong>Dropout events:</strong> Subscribe to <code>mixer.TrackDropout</code> to monitor buffer
+                    underruns</li>
+            </ul>
+
+            <div class="alert alert-success">
+                <strong>Master Clock Benefits</strong>
+                Unlike legacy sync groups, Master Clock provides:
+                <ul>
+                    <li>Timeline-based positioning with start offsets</li>
+                    <li>Sample-accurate synchronization (not just frame-accurate)</li>
+                    <li>Realtime and Offline rendering modes</li>
+                    <li>Automatic tempo-independent timing</li>
+                    <li>Per-track tempo control with synchronized master timeline</li>
+                </ul>
+            </div>
+
+            <h2 id="step7-monitoring">Step 7: Real-time Monitoring and Dynamic Effects</h2>
+            <p>Monitor playback progress and peak levels in real-time, with dynamic effect activation during playback.
+            </p>
+
+            <div class="code-block">
+                <div class="code-header">Monitoring Loop</div>
+                <pre><code class="language-csharp">DateTime startTime = DateTime.Now;
+
+while (fileSource0.State == SourceState.Playing)
+{
+    Thread.Sleep(100);
+
+    double position = fileSource0.Position;
+    double duration = fileSource0.Duration;
+    int progressPercent = (int)((position / duration) * 100);
+    
+    int barWidth = 40;
+    int filledWidth = (int)((position / duration) * barWidth);
+    string progressBar = new string('█', filledWidth) + new string('░', barWidth - filledWidth);
+
+    string infoLine = $"Position: {TimeSpan.FromSeconds(position)} / {TimeSpan.FromSeconds(duration)} [{progressBar}] {progressPercent}%";
+    string peakLine = $"| Peaks: L={mixer.LeftPeak:F2} R={mixer.RightPeak:F2}";
+
+    Console.Write(infoLine + peakLine);
+
+    if (position > 30 && position < 35)
     {
-        try
-        {
-            // Initialize OwnAudio
-            OwnAudio.Initialize();
-            
-            var sourceManager = SourceManager.Instance;
-            
-            // Load an audio file
-            await sourceManager.AddOutputSource("music.mp3", "MyTrack");
-            
-            Console.WriteLine($"Loaded: {sourceManager["MyTrack"].Duration}");
-            
-            // Start playback
-            sourceManager.Play();
-            Console.WriteLine("Playing... Press any key to stop.");
-            Console.ReadKey();
-            
-            // Stop and cleanup
-            sourceManager.Stop();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error: {ex.Message}");
-        }
-        finally
-        {
-            OwnAudio.Free();
-        }
+        _equalizer.Enabled = true;
+        _compressor.Enabled = true;
     }
 }</code></pre>
             </div>
 
-            <h2 id="multiple-sources">Multiple Audio Sources</h2>
-            <p>Mix multiple audio sources with individual volume control.</p>
+            <p><strong>What happens here:</strong></p>
+            <ul>
+                <li>Record the start time for tempo accuracy calculation</li>
+                <li>Loop while the first source is in <code>Playing</code> state</li>
+                <li>Sleep 100ms between updates to avoid excessive CPU usage</li>
+                <li>Query current playback position and total duration from the source</li>
+                <li>Calculate progress percentage and create a visual progress bar</li>
+                <li>Display position, duration, progress bar, and peak levels (left/right channels)</li>
+                <li><strong>Dynamic effect activation:</strong> Enable equalizer and compressor between 30-35 seconds
+                </li>
+                <li>This demonstrates real-time effect toggling without interrupting playback</li>
+            </ul>
 
             <div class="code-block">
-                <div class="code-header">
-                    <span>AudioMixer.cs</span>
-                    <span class="difficulty-badge beginner">Beginner</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio;
-using Ownaudio.Sources;
-using System;
-using System.Threading.Tasks;
+                <div class="code-header">Playback Statistics</div>
+                <pre><code class="language-csharp">Console.WriteLine("Playback completed!");
 
-class AudioMixer
+TimeSpan elapsed = DateTime.Now - startTime;
+double finalPosition = fileSource0.Position;
+
+Console.WriteLine($"Real-time elapsed: {elapsed.TotalSeconds:F2} seconds");
+Console.WriteLine($"Audio position reached: {finalPosition:F2} seconds");
+
+double tempoRatio = finalPosition / elapsed.TotalSeconds;
+double tempoError = (tempoRatio - 1.0) * 100.0;
+
+Console.WriteLine($"Tempo ratio: {tempoRatio:F4} (1.0000 = perfect)");
+if (Math.Abs(tempoError) < 0.5)
 {
-    static async Task Main(string[] args)
+    Console.WriteLine($"Tempo accuracy: EXCELLENT ({tempoError:+0.00;-0.00}%)");
+}
+else if (Math.Abs(tempoError) < 2.0)
+{
+    Console.WriteLine($"Tempo accuracy: Good ({tempoError:+0.00;-0.00}%)");
+}
+else
+{
+    Console.WriteLine($"Tempo accuracy: POOR ({tempoError:+0.00;-0.00}%)");
+}</code></pre>
+            </div>
+
+            <p><strong>What happens here:</strong></p>
+            <ul>
+                <li>Calculate elapsed real-world time and final audio position</li>
+                <li>Compute tempo ratio (should be 1.0 for perfect playback speed)</li>
+                <li>Calculate tempo error as percentage deviation from ideal</li>
+                <li>Display accuracy assessment: Excellent (&lt;0.5% error), Good (&lt;2% error), or Poor</li>
+                <li>This verifies that the audio engine maintains accurate playback timing</li>
+            </ul>
+
+            <h2 id="step8-cleanup">Step 8: Cleanup and Shutdown</h2>
+            <p>Properly dispose of all resources and shut down the audio engine.</p>
+
+            <div class="code-block">
+                <div class="code-header">Resource Cleanup</div>
+                <pre><code class="language-csharp">Console.WriteLine("=== FINAL STATISTICS ===");
+Console.WriteLine($"Total mixed frames: {mixer.TotalMixedFrames}");
+Console.WriteLine($"Total underruns: {mixer.TotalUnderruns}");
+Console.WriteLine($"Master volume: {mixer.MasterVolume:P0}");
+Console.WriteLine($"Source state: {fileSource0.State}");
+Console.WriteLine($"Final position: {fileSource0.Position:F2}s / {fileSource0.Duration:F2}s");
+
+Console.WriteLine("=== CLEANUP ===");
+
+mixer.Stop();
+mixer.StopSyncGroup("Demo");
+mixer.Dispose();
+
+fileSource0.Dispose();
+fileSource1.Dispose();
+fileSource2.Dispose();
+fileSource3.Dispose();
+
+OwnaudioNet.Stop();
+OwnaudioNet.Shutdown();</code></pre>
+            </div>
+
+            <p><strong>What happens here:</strong></p>
+            <ul>
+                <li>Display final statistics including total processed frames and underrun count</li>
+                <li>Stop the mixer's processing and the sync group</li>
+                <li>Dispose the mixer to release its internal resources</li>
+                <li>Dispose all file sources to close file handles and free buffers</li>
+                <li>Stop the audio engine (halts the real-time processing thread)</li>
+                <li>Shutdown OwnaudioNET completely, releasing all native audio resources</li>
+                <li><strong>Important:</strong> Always dispose resources in this order: sources → mixer → engine</li>
+            </ul>
+
+            <h2>Complete Code</h2>
+            <p>Here's the complete example with all necessary using statements and error handling:</p>
+
+            <div class="code-block">
+                <div class="code-header">Complete Program.cs</div>
+                <pre><code class="language-csharp">using Ownaudio.Core;
+using OwnaudioNET.Core;
+using OwnaudioNET.Effects;
+using OwnaudioNET.Mixing;
+using OwnaudioNET.Sources;
+using System.Reflection;
+
+namespace OwnaudioNET.Test;
+
+public class TestProgram
+{
+    public static void Main(string[] args)
     {
+        AudioMixer? mixer = null;
+        FileSource? fileSource0 = null;
+        FileSource? fileSource1 = null;
+        FileSource? fileSource2 = null;
+        FileSource? fileSource3 = null;
+
         try
         {
-            OwnAudio.Initialize();
-            var sourceManager = SourceManager.Instance;
-            
-            // Add multiple sources
-            await sourceManager.AddOutputSource("background.mp3", "Background");
-            await sourceManager.AddOutputSource("drums.wav", "Drums");
-            await sourceManager.AddOutputSource("bass.wav", "Bass");
-            
-            // Set individual volumes
-            sourceManager["Background"].Volume = 0.6f;  // 60% background music
-            sourceManager["Drums"].Volume = 0.8f;       // 80% drums
-            sourceManager["Bass"].Volume = 0.7f;        // 70% bass
-            
-            // Start mixed playback
-            sourceManager.Play();
-            
-            // Interactive volume control
-            await RunVolumeControl(sourceManager);
-        }
-        finally
-        {
-            OwnAudio.Free();
-        }
-    }
-    
-    static async Task RunVolumeControl(SourceManager manager)
-    {
-        while (manager.IsPlaying)
-        {
-            Console.WriteLine("\nVolume Control:");
-            Console.WriteLine("1. Background  2. Drums  3. Bass  4. Quit");
-            
-            var key = Console.ReadKey().KeyChar;
-            if (key == '4') break;
-            
-            string sourceName = key switch
+            AudioConfig config = new AudioConfig()
             {
-                '1' => "Background",
-                '2' => "Drums", 
-                '3' => "Bass",
-                _ => null
+                SampleRate = 48000,
+                Channels = 2,
+                BufferSize = 512
             };
             
-            if (sourceName != null)
+            OwnaudioNet.Initialize(config);
+            OwnaudioNet.Start();
+
+            var Engine = OwnaudioNet.Engine!.UnderlyingEngine;
+            mixer = new AudioMixer(Engine, bufferSizeInFrames: 512);
+            mixer.MasterVolume = 0.8f;
+
+            var _equalizer = new Equalizer30BandEffect();
+            var _compressor = new CompressorEffect(CompressorPreset.Vintage);
+            
+            mixer.AddMasterEffect(_equalizer);
+            mixer.AddMasterEffect(_compressor);
+            mixer.AddMasterEffect(new DynamicAmpEffect(DynamicAmpPreset.Live));
+            
+            _equalizer.Enabled = false;
+            _compressor.Enabled = false;
+
+            string? exeDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            int targetSampleRate = OwnaudioNet.Engine!.Config.SampleRate;
+            int targetChannels = OwnaudioNet.Engine!.Config.Channels;
+
+            fileSource0 = new FileSource(Path.Combine(exeDirectory, "media", "drums.wav"), 8192, targetSampleRate, targetChannels);
+            fileSource1 = new FileSource(Path.Combine(exeDirectory, "media", "bass.wav"), 8192, targetSampleRate, targetChannels);
+            fileSource2 = new FileSource(Path.Combine(exeDirectory, "media", "other.wav"), 8192, targetSampleRate, targetChannels);
+            fileSource3 = new FileSource(Path.Combine(exeDirectory, "media", "vocals.wav"), 8192, targetSampleRate, targetChannels);
+
+            mixer.AddSource(fileSource0);
+            mixer.AddSource(fileSource1);
+            mixer.AddSource(fileSource2);
+            mixer.AddSource(fileSource3);
+
+            var syncGroup = mixer.CreateSyncGroup("Demo", fileSource0, fileSource1, fileSource2, fileSource3);
+            mixer.Start();
+            mixer.StartSyncGroup("Demo");
+
+            DateTime startTime = DateTime.Now;
+
+            while (fileSource0.State == SourceState.Playing)
             {
-                Console.Write($"\nNew volume for {sourceName} (0.0-1.0): ");
-                if (float.TryParse(Console.ReadLine(), out float volume))
+                Thread.Sleep(100);
+                
+                double position = fileSource0.Position;
+                double duration = fileSource0.Duration;
+                
+                if (position > 30 && position < 35)
                 {
-                    manager[sourceName].Volume = Math.Clamp(volume, 0f, 1f);
-                    Console.WriteLine($"{sourceName} volume set to {volume:F2}");
+                    _equalizer.Enabled = true;
+                    _compressor.Enabled = true;
                 }
             }
-        }
-    }
-}</code></pre>
-            </div>
 
-            <h2 id="audio-recording">Audio Recording</h2>
-            <p>Record audio from microphone to file with configurable bit depth.</p>
+            mixer.Stop();
+            mixer.StopSyncGroup("Demo");
+            mixer.Dispose();
 
-            <div class="code-block">
-                <div class="code-header">
-                    <span>AudioRecorder.cs</span>
-                    <span class="difficulty-badge beginner">Beginner</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio;
-using Ownaudio.Sources;
-using System;
-using System.Threading.Tasks;
+            fileSource0.Dispose();
+            fileSource1.Dispose();
+            fileSource2.Dispose();
+            fileSource3.Dispose();
 
-class AudioRecorder
-{
-    static async Task Main(string[] args)
-    {
-        try
-        {
-            OwnAudio.Initialize();
-            var sourceManager = SourceManager.Instance;
-            
-            // Add input source (microphone)
-            var inputSource = await sourceManager.AddInputSource("Microphone");
-            Console.WriteLine("Microphone ready for recording.");
-            
-            Console.WriteLine("Press ENTER to start recording...");
-            Console.ReadLine();
-            
-            // Start recording to file (16-bit WAV)
-            string outputFile = $"recording_{DateTime.Now:yyyyMMdd_HHmmss}.wav";
-            sourceManager.Play(outputFile, 16);
-            
-            Console.WriteLine($"🔴 Recording to {outputFile}");
-            Console.WriteLine("Press ENTER to stop recording...");
-            Console.ReadLine();
-            
-            // Stop recording
-            sourceManager.Stop();
-            Console.WriteLine($"✅ Recording saved: {outputFile}");
-            
-            // Optional: Playback the recorded file
-            Console.WriteLine("Play back recording? (y/n)");
-            if (Console.ReadKey().KeyChar == 'y')
-            {
-                await PlaybackRecording(outputFile);
-            }
+            OwnaudioNet.Stop();
+            OwnaudioNet.Shutdown();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Recording error: {ex.Message}");
-        }
-        finally
-        {
-            OwnAudio.Free();
-        }
-    }
-    
-    static async Task PlaybackRecording(string filePath)
-    {
-        try
-        {
-            var sourceManager = SourceManager.Instance;
+            Console.WriteLine($"ERROR: {ex.Message}");
             
-            // Clear previous sources
-            sourceManager.Sources.Clear();
+            fileSource0?.Dispose();
+            fileSource1?.Dispose();
+            fileSource2?.Dispose();
+            fileSource3?.Dispose();
+            mixer?.Dispose();
+            OwnaudioNet.Shutdown();
             
-            // Load and play recording
-            await sourceManager.AddOutputSource(filePath, "Recording");
-            sourceManager.Play();
-            
-            Console.WriteLine($"\n🎵 Playing back recording ({sourceManager["Recording"].Duration})");
-            Console.WriteLine("Press any key to stop...");
-            Console.ReadKey();
-            
-            sourceManager.Stop();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Playback error: {ex.Message}");
-        }
-    }
-}</code></pre>
-            </div>
-
-            <h2 id="applying-effects">Applying Audio Effects</h2>
-            <p>Apply professional audio effects like reverb, delay, and compression.</p>
-
-            <div class="code-block">
-                <div class="code-header">
-                    <span>EffectProcessor.cs</span>
-                    <span class="difficulty-badge intermediate">Intermediate</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio;
-using Ownaudio.Sources;
-using Ownaudio.Processors;
-using System;
-using System.Threading.Tasks;
-
-class EffectProcessor
-{
-    private static SourceManager sourceManager;
-    
-    static async Task Main(string[] args)
-    {
-        try
-        {
-            OwnAudio.Initialize();
-            sourceManager = SourceManager.Instance;
-            
-            // Load audio file
-            await sourceManager.AddOutputSource("audio.mp3", "Track");
-            sourceManager.Play();
-            
-            Console.WriteLine("🎛️  Effect Processor");
-            Console.WriteLine("Track loaded and playing...");
-            
-            await RunEffectMenu();
-        }
-        finally
-        {
-            OwnAudio.Free();
-        }
-    }
-    
-    static async Task RunEffectMenu()
-    {
-        while (sourceManager.IsPlaying)
-        {
-            Console.WriteLine("\n=== Audio Effects ===");
-            Console.WriteLine("1. Hall Reverb     2. Room Reverb");
-            Console.WriteLine("3. Echo Delay      4. Ping Pong Delay");
-            Console.WriteLine("5. Compressor      6. Equalizer");
-            Console.WriteLine("7. Clear Effects   8. Exit");
-            Console.Write("Choose effect: ");
-            
-            var choice = Console.ReadKey().KeyChar;
-            Console.WriteLine();
-            
-            switch (choice)
-            {
-                case '1': ApplyHallReverb(); break;
-                case '2': ApplyRoomReverb(); break;
-                case '3': ApplyEchoDelay(); break;
-                case '4': ApplyPingPongDelay(); break;
-                case '5': ApplyCompressor(); break;
-                case '6': ApplyEqualizer(); break;
-                case '7': ClearEffects(); break;
-                case '8': return;
-            }
-        }
-    }
-    
-    static void ApplyHallReverb()
-    {
-        var reverb = new Reverb(
-            roomSize: 0.8f,    // Large hall
-            damping: 0.2f,     // Minimal damping
-            wetLevel: 0.4f,    // 40% reverb
-            dryLevel: 0.7f     // 70% original
-        );
-        sourceManager.CustomSampleProcessor = reverb;
-        Console.WriteLine("✅ Hall reverb applied");
-    }
-    
-    static void ApplyRoomReverb()
-    {
-        var reverb = new Reverb(
-            roomSize: 0.4f,    // Small room
-            damping: 0.6f,     // More damping
-            wetLevel: 0.3f,    // 30% reverb
-            dryLevel: 0.8f     // 80% original
-        );
-        sourceManager.CustomSampleProcessor = reverb;
-        Console.WriteLine("✅ Room reverb applied");
-    }
-    
-    static void ApplyEchoDelay()
-    {
-        var delay = new Delay(
-            delayMs: 500,      // 500ms delay
-            feedback: 0.4f,    // 40% feedback
-            wetLevel: 0.3f,    // 30% effect
-            sampleRate: 44100
-        );
-        sourceManager.CustomSampleProcessor = delay;
-        Console.WriteLine("✅ Echo delay applied");
-    }
-    
-    static void ApplyPingPongDelay()
-    {
-        var delay = new Delay(
-            delayMs: 250,      // 250ms delay
-            feedback: 0.6f,    // 60% feedback
-            wetLevel: 0.4f,    // 40% effect
-            sampleRate: 44100
-        );
-        sourceManager.CustomSampleProcessor = delay;
-        Console.WriteLine("✅ Ping-pong delay applied");
-    }
-    
-    static void ApplyCompressor()
-    {
-        var compressor = new Compressor(
-            threshold: 0.6f,   // Compress above 60%
-            ratio: 4.0f,       // 4:1 ratio
-            attackMs: 10f,     // Fast attack
-            releaseMs: 100f,   // Medium release
-            makeupGain: 1.2f,  // Compensate gain
-            sampleRate: 44100f
-        );
-        sourceManager.CustomSampleProcessor = compressor;
-        Console.WriteLine("✅ Compressor applied (4:1 ratio)");
-    }
-    
-    static void ApplyEqualizer()
-    {
-        var equalizer = new Equalizer(44100);
-        
-        // Boost bass
-        equalizer.SetBandGain(0, 60f, 3.0f, 1.0f);    // 60Hz +3dB
-        equalizer.SetBandGain(1, 100f, 2.5f, 1.0f);   // 100Hz +2.5dB
-        
-        // Slight mid cut
-        equalizer.SetBandGain(10, 800f, -1.0f, 2.0f); // 800Hz -1dB
-        
-        // Presence boost
-        equalizer.SetBandGain(15, 3000f, 2.0f, 1.5f); // 3kHz +2dB
-        
-        sourceManager.CustomSampleProcessor = equalizer;
-        Console.WriteLine("✅ EQ applied (Bass boost, presence enhancement)");
-    }
-    
-    static void ClearEffects()
-    {
-        sourceManager.CustomSampleProcessor = null;
-        Console.WriteLine("✅ All effects cleared");
-    }
-}</code></pre>
-            </div>
-
-            <h2 id="sine-generator">Real-Time Sine Wave Generator</h2>
-            <p>Generate and stream audio in real-time with interactive control.</p>
-
-            <div class="code-block">
-                <div class="code-header">
-                    <span>SineGenerator.cs</span>
-                    <span class="difficulty-badge intermediate">Intermediate</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio;
-using Ownaudio.Sources;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-class SineGenerator
-{
-    private static SourceSound realtimeSource;
-    private static bool isGenerating = false;
-    private static float frequency = 440f; // A4
-    private static float amplitude = 0.3f;
-    private static int sampleRate = 44100;
-    
-    static async Task Main(string[] args)
-    {
-        try
-        {
-            OwnAudio.Initialize();
-            var sourceManager = SourceManager.Instance;
-            
-            // Create real-time source
-            realtimeSource = sourceManager.AddRealTimeSource(1.0f, 2, "SineWave");
-            
-            Console.WriteLine("🎵 Real-Time Sine Wave Generator");
-            Console.WriteLine($"Initial frequency: {frequency}Hz");
-            
-            // Start audio generation
-            StartGeneration();
-            sourceManager.Play();
-            
-            await RunGeneratorControl();
-        }
-        finally
-        {
-            StopGeneration();
-            OwnAudio.Free();
-        }
-    }
-    
-    static void StartGeneration()
-    {
-        isGenerating = true;
-        
-        Task.Run(async () =>
-        {
-            double phase = 0;
-            int bufferSize = 1024;
-            
-            while (isGenerating && realtimeSource.State != SourceState.Idle)
-            {
-                float[] buffer = GenerateSineWave(bufferSize, ref phase);
-                realtimeSource.SubmitSamples(buffer);
-                
-                // Control timing for smooth playback
-                await Task.Delay(10);
-            }
-        });
-    }
-    
-    static float[] GenerateSineWave(int samples, ref double phase)
-    {
-        float[] buffer = new float[samples * 2]; // Stereo
-        double phaseIncrement = 2.0 * Math.PI * frequency / sampleRate;
-        
-        for (int i = 0; i < samples; i++)
-        {
-            float sample = (float)(Math.Sin(phase) * amplitude);
-            
-            buffer[i * 2] = sample;     // Left channel
-            buffer[i * 2 + 1] = sample; // Right channel
-            
-            phase += phaseIncrement;
-            if (phase >= 2.0 * Math.PI)
-                phase -= 2.0 * Math.PI;
-        }
-        
-        return buffer;
-    }
-    
-    static async Task RunGeneratorControl()
-    {
-        while (isGenerating)
-        {
-            Console.WriteLine("\n=== Sine Wave Controls ===");
-            Console.WriteLine($"Frequency: {frequency:F1}Hz | Amplitude: {amplitude:F2}");
-            Console.WriteLine("W/S: Frequency ±50Hz | A/D: Frequency ±10Hz");
-            Console.WriteLine("Q/E: Volume ±0.1 | Space: Musical notes | X: Exit");
-            
-            var key = Console.ReadKey(true).Key;
-            
-            switch (key)
-            {
-                case ConsoleKey.W: frequency += 50f; break;
-                case ConsoleKey.S: frequency -= 50f; break;
-                case ConsoleKey.A: frequency -= 10f; break;
-                case ConsoleKey.D: frequency += 10f; break;
-                case ConsoleKey.Q: amplitude = Math.Max(0.0f, amplitude - 0.1f); break;
-                case ConsoleKey.E: amplitude = Math.Min(1.0f, amplitude + 0.1f); break;
-                case ConsoleKey.Spacebar: await PlayMusicalNotes(); break;
-                case ConsoleKey.X: return;
-            }
-            
-            // Clamp frequency to reasonable range
-            frequency = Math.Clamp(frequency, 20f, 20000f);
-            
-            Console.WriteLine($"Updated - Freq: {frequency:F1}Hz, Vol: {amplitude:F2}");
-        }
-    }
-    
-    static async Task PlayMusicalNotes()
-    {
-        float[] notes = { 261.63f, 293.66f, 329.63f, 349.23f, 392.00f, 440.00f, 493.88f, 523.25f }; // C-C octave
-        string[] noteNames = { "C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5" };
-        
-        Console.WriteLine("\n🎼 Playing musical scale...");
-        
-        for (int i = 0; i < notes.Length; i++)
-        {
-            frequency = notes[i];
-            Console.WriteLine($"♪ {noteNames[i]} ({frequency:F1}Hz)");
-            await Task.Delay(500);
-        }
-        
-        frequency = 440f; // Reset to A4
-        Console.WriteLine("Scale complete!");
-    }
-    
-    static void StopGeneration()
-    {
-        isGenerating = false;
-    }
-}</code></pre>
-            </div>
-
-            <h2 id="chord-analysis">Music Analysis and Chord Detection</h2>
-            <p>Analyze audio files for musical content including chords, key, and tempo.</p>
-
-            <div class="code-block">
-                <div class="code-header">
-                    <span>MusicAnalyzer.cs</span>
-                    <span class="difficulty-badge advanced">Advanced</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio;
-using Ownaudio.Sources;
-using Ownaudio.Utilities.Extensions;
-using System;
-using System.Threading.Tasks;
-
-class MusicAnalyzer
-{
-    static async Task Main(string[] args)
-    {
-        try
-        {
-            OwnAudio.Initialize();
-            var sourceManager = SourceManager.Instance;
-            
-            // Get audio file from user
-            Console.WriteLine("🎼 Music Analyzer");
-            Console.Write("Enter path to audio file: ");
-            string filePath = Console.ReadLine();
-            
-            if (string.IsNullOrEmpty(filePath) || !System.IO.File.Exists(filePath))
-            {
-                Console.WriteLine("File not found. Using default: demo.mp3");
-                filePath = "demo.mp3";
-            }
-            
-            // Load audio file
-            Console.WriteLine("Loading audio file...");
-            await sourceManager.AddOutputSource(filePath, "AnalysisTrack");
-            
-            var track = sourceManager["AnalysisTrack"];
-            Console.WriteLine($"✅ Loaded: {System.IO.Path.GetFileName(filePath)}");
-            Console.WriteLine($"Duration: {track.Duration}");
-            
-            // Start analysis
-            await PerformMusicAnalysis(sourceManager, "AnalysisTrack");
-            
-            // Optional playback with visualization
-            await PlaybackWithAnalysis(sourceManager);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Analysis error: {ex.Message}");
-        }
-        finally
-        {
-            OwnAudio.Free();
-        }
-    }
-    
-    static async Task PerformMusicAnalysis(SourceManager manager, string trackName)
-    {
-        Console.WriteLine("\n🔍 Analyzing musical content...");
-        Console.WriteLine("This may take a moment for longer tracks...");
-        
-        try
-        {
-            // Perform chord detection analysis
-            var (timedChords, detectedKey, tempo) = manager.DetectChords(trackName, intervalSecond: 1.0f);
-            
-            // Display analysis results
-            Console.WriteLine("\n📊 Analysis Results:");
-            Console.WriteLine($"🎵 Detected Key: {detectedKey ?? "Unknown"}");
-            Console.WriteLine($"🥁 Estimated Tempo: {tempo:F1} BPM");
-            Console.WriteLine($"🎼 Total Chord Changes: {timedChords.Count}");
-            
-            // Display chord progression
-            Console.WriteLine("\n🎹 Chord Progression:");
-            Console.WriteLine("Time       | Chord      | Confidence");
-            Console.WriteLine("-----------|------------|------------");
-            
-            foreach (var chord in timedChords)
-            {
-                string timeRange = $"{chord.StartTime:F1}s-{chord.EndTime:F1}s";
-                string confidenceStr = GetConfidenceString(chord.Confidence);
-                
-                Console.WriteLine($"{timeRange,-10} | {chord.ChordName,-10} | {confidenceStr}");
-            }
-            
-            // Musical analysis summary
-            AnalyzeChordProgression(timedChords, detectedKey);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Chord detection failed: {ex.Message}");
-        }
-    }
-    
-    static string GetConfidenceString(float confidence)
-    {
-        return confidence switch
-        {
-            >= 0.9f => "🟢 Excellent",
-            >= 0.7f => "🟡 Good", 
-            >= 0.5f => "🟠 Fair",
-            _ => "🔴 Poor"
-        };
-    }
-    
-    static void AnalyzeChordProgression(System.Collections.Generic.List<Ownaudio.Utilities.OwnChordDetect.Analysis.TimedChord> chords, string key)
-    {
-        if (chords.Count == 0) return;
-        
-        Console.WriteLine("\n📈 Musical Analysis:");
-        
-        // Find most common chords
-        var chordCounts = new System.Collections.Generic.Dictionary<string, int>();
-        foreach (var chord in chords)
-        {
-            if (chord.ChordName != "Unknown")
-            {
-                chordCounts[chord.ChordName] = chordCounts.GetValueOrDefault(chord.ChordName, 0) + 1;
-            }
-        }
-        
-        if (chordCounts.Count > 0)
-        {
-            Console.WriteLine("🏆 Most Common Chords:");
-            var sortedChords = chordCounts.OrderByDescending(x => x.Value).Take(5);
-            foreach (var (chord, count) in sortedChords)
-            {
-                double percentage = (count * 100.0) / chords.Count;
-                Console.WriteLine($"  {chord}: {count} times ({percentage:F1}%)");
-            }
-        }
-        
-        // Calculate average confidence
-        var validChords = chords.Where(c => c.ChordName != "Unknown").ToList();
-        if (validChords.Count > 0)
-        {
-            double avgConfidence = validChords.Average(c => c.Confidence);
-            Console.WriteLine($"🎯 Average Detection Confidence: {avgConfidence:F2} ({GetConfidenceString((float)avgConfidence)})");
-        }
-        
-        // Detect key changes
-        if (!string.IsNullOrEmpty(key))
-        {
-            Console.WriteLine($"🗝️  Primary Key: {key}");
-            
-            // Simple modulation detection (basic implementation)
-            var keyChanges = DetectSimpleKeyChanges(chords);
-            if (keyChanges.Count > 1)
-            {
-                Console.WriteLine("🔄 Possible Key Changes Detected:");
-                foreach (var change in keyChanges)
-                {
-                    Console.WriteLine($"  {change.Time:F1}s: Modulation to {change.NewKey}");
-                }
-            }
-        }
-    }
-    
-    static System.Collections.Generic.List<(double Time, string NewKey)> DetectSimpleKeyChanges(
-        System.Collections.Generic.List<Ownaudio.Utilities.OwnChordDetect.Analysis.TimedChord> chords)
-    {
-        var changes = new System.Collections.Generic.List<(double, string)>();
-        
-        // This is a simplified key change detection
-        // In a real application, you'd use more sophisticated harmonic analysis
-        
-        string previousKey = null;
-        foreach (var chord in chords.Where(c => c.ChordName != "Unknown"))
-        {
-            string currentKey = EstimateKeyFromChord(chord.ChordName);
-            if (currentKey != null && currentKey != previousKey && previousKey != null)
-            {
-                changes.Add((chord.StartTime, currentKey));
-            }
-            previousKey = currentKey;
-        }
-        
-        return changes;
-    }
-    
-    static string EstimateKeyFromChord(string chordName)
-    {
-        // Simplified key estimation based on chord root
-        // This is a basic implementation for demonstration
-        if (chordName.StartsWith("C")) return "C Major";
-        if (chordName.StartsWith("G")) return "G Major";
-        if (chordName.StartsWith("Am")) return "A Minor";
-        if (chordName.StartsWith("F")) return "F Major";
-        if (chordName.StartsWith("Dm")) return "D Minor";
-        
-        return null; // Unknown key
-    }
-    
-    static async Task PlaybackWithAnalysis(SourceManager manager)
-    {
-        Console.WriteLine("\n🎵 Playback with Real-time Analysis");
-        Console.WriteLine("Press P to play/pause, S to stop, Q to quit");
-        
-        bool isPlaying = false;
-        var analysisTask = Task.CompletedTask;
-        
-        while (true)
-        {
-            var key = Console.ReadKey(true).Key;
-            
-            switch (key)
-            {
-                case ConsoleKey.P:
-                    if (isPlaying)
-                    {
-                        manager.Pause();
-                        Console.WriteLine("⏸️  Paused");
-                    }
-                    else
-                    {
-                        manager.Play();
-                        Console.WriteLine("▶️  Playing");
-                        analysisTask = ShowRealtimePosition(manager);
-                    }
-                    isPlaying = !isPlaying;
-                    break;
-                    
-                case ConsoleKey.S:
-                    manager.Stop();
-                    Console.WriteLine("⏹️  Stopped");
-                    isPlaying = false;
-                    break;
-                    
-                case ConsoleKey.Q:
-                    if (isPlaying) manager.Stop();
-                    return;
-            }
-        }
-    }
-    
-    static async Task ShowRealtimePosition(SourceManager manager)
-    {
-        while (manager.IsPlaying)
-        {
-            var position = manager.Position;
-            var duration = manager.Duration;
-            double progress = position.TotalSeconds / duration.TotalSeconds * 100;
-            
-            Console.Write($"\r🎵 {position:mm\\:ss} / {duration:mm\\:ss} ({progress:F1}%) ");
-            
-            await Task.Delay(1000);
-        }
-        Console.WriteLine();
-    }
-}</code></pre>
-            </div>
-
-            <div id="audio-mastering" class="feature-highlight">
-                <h3>🎚️ Professional Audio Mastering</h3>
-                <p>Use OwnAudioSharp's intelligent matching system to achieve professional sound quality.</p>
-
-                <div class="code-block">
-                    <div class="code-header">AudioMastering.cs</div>
-                    <pre><code class="language-csharp">using Ownaudio.Utilities.Matchering;
-
-class AudioMastering
-{
-    static void Main(string[] args)
-    {
-        var analyzer = new AudioAnalyzer();
-        
-        // Professional matchering - one line of code!
-        analyzer.ProcessEQMatching(
-            "my_track.wav",      // Your audio
-            "reference.wav",     // Professional reference
-            "mastered.wav"       // Studio-quality output
-        );
-        
-        // Optimize for different playback systems
-        analyzer.ProcessWithEnhancedPreset("mastered.wav", "streaming.wav", 
-            PlaybackSystem.RadioBroadcast);
-            
-        Console.WriteLine("✅ Professional mastering complete!");
-    }
-}</code></pre>
-                </div>
-            </div>
-
-            <h2 id="realtime-synth">Real-Time Synthesizer with Effects</h2>
-            <p>Advanced example combining real-time synthesis with live effects processing.</p>
-
-            <div class="code-block">
-                <div class="code-header">
-                    <span>RealtimeSynth.cs</span>
-                    <span class="difficulty-badge advanced">Advanced</span>
-                </div>
-                <pre><code class="language-csharp">using Ownaudio;
-using Ownaudio.Sources;
-using Ownaudio.Processors;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-class RealtimeSynth
-{
-    private static SourceSound synthSource;
-    private static SourceManager sourceManager;
-    private static bool isRunning = false;
-    
-    // Synthesis parameters
-    private static float[] frequencies = new float[4]; // 4-voice polyphony
-    private static float[] amplitudes = new float[4];
-    private static double[] phases = new double[4];
-    private static bool[] noteStates = new bool[4];
-    
-    // Effect parameters
-    private static bool reverbEnabled = false;
-    private static bool delayEnabled = false;
-    private static float masterVolume = 0.5f;
-    
-    static async Task Main(string[] args)
-    {
-        try
-        {
-            OwnAudio.Initialize();
-            sourceManager = SourceManager.Instance;
-            
-            // Create real-time synthesis source
-            synthSource = sourceManager.AddRealTimeSource(1.0f, 2, "Synthesizer");
-            
-            Console.WriteLine("🎹 Real-Time Synthesizer");
-            Console.WriteLine("Features: 4-voice polyphony, reverb, delay");
-            
-            // Start synthesis engine
-            StartSynthEngine();
-            sourceManager.Play();
-            
-            await RunSynthController();
-        }
-        finally
-        {
-            StopSynthEngine();
-            OwnAudio.Free();
-        }
-    }
-    
-    static void StartSynthEngine()
-    {
-        isRunning = true;
-        
-        Task.Run(async () =>
-        {
-            int bufferSize = 512;
-            int sampleRate = 44100;
-            
-            while (isRunning && synthSource.State != SourceState.Idle)
-            {
-                float[] buffer = GeneratePolyphonic(bufferSize, sampleRate);
-                synthSource.SubmitSamples(buffer);
-                
-                await Task.Delay(5); // ~100 updates per second
-            }
-        });
-    }
-    
-    static float[] GeneratePolyphonic(int samples, int sampleRate)
-    {
-        float[] buffer = new float[samples * 2]; // Stereo
-        
-        for (int i = 0; i < samples; i++)
-        {
-            float mixedSample = 0f;
-            
-            // Generate and mix all active voices
-            for (int voice = 0; voice < 4; voice++)
-            {
-                if (noteStates[voice] && frequencies[voice] > 0)
-                {
-                    double phaseIncrement = 2.0 * Math.PI * frequencies[voice] / sampleRate;
-                    
-                    // Generate waveform (saw wave for richer harmonics)
-                    float sample = GenerateSawWave(phases[voice]) * amplitudes[voice];
-                    
-                    mixedSample += sample;
-                    
-                    phases[voice] += phaseIncrement;
-                    if (phases[voice] >= 2.0 * Math.PI)
-                        phases[voice] -= 2.0 * Math.PI;
-                }
-            }
-            
-            // Apply master volume
-            mixedSample *= masterVolume;
-            
-            // Store stereo
-            buffer[i * 2] = mixedSample;     // Left
-            buffer[i * 2 + 1] = mixedSample; // Right
-        }
-        
-        return buffer;
-    }
-    
-    static float GenerateSawWave(double phase)
-    {
-        // Sawtooth wave: ramp from -1 to 1
-        return (float)(2.0 * (phase / (2.0 * Math.PI)) - 1.0);
-    }
-    
-    static async Task RunSynthController()
-    {
-        Console.WriteLine("\n🎛️ Synthesizer Controls:");
-        Console.WriteLine("Piano Keys: Q W E R (voices 1-4)");
-        Console.WriteLine("Octaves: Z X C V (low to high)");
-        Console.WriteLine("Effects: 1=Reverb 2=Delay 3=Clear");
-        Console.WriteLine("Volume: + - (master volume)");
-        Console.WriteLine("ESC: Exit");
-        
-        // Musical note frequencies (4th octave)
-        var noteFrequencies = new System.Collections.Generic.Dictionary<ConsoleKey, float>
-        {
-            { ConsoleKey.Q, 261.63f }, // C4
-            { ConsoleKey.W, 293.66f }, // D4
-            { ConsoleKey.E, 329.63f }, // E4
-            { ConsoleKey.R, 349.23f }, // F4
-            { ConsoleKey.T, 392.00f }, // G4
-            { ConsoleKey.Y, 440.00f }, // A4
-            { ConsoleKey.U, 493.88f }, // B4
-        };
-        
-        float octaveMultiplier = 1.0f;
-        
-        while (isRunning)
-        {
-            var keyInfo = Console.ReadKey(true);
-            var key = keyInfo.Key;
-            
-            switch (key)
-            {
-                case ConsoleKey.Escape:
-                    return;
-                    
-                // Octave controls
-                case ConsoleKey.Z: octaveMultiplier = 0.5f; Console.WriteLine("🎵 Low octave"); break;
-                case ConsoleKey.X: octaveMultiplier = 1.0f; Console.WriteLine("🎵 Mid octave"); break;
-                case ConsoleKey.C: octaveMultiplier = 2.0f; Console.WriteLine("🎵 High octave"); break;
-                case ConsoleKey.V: octaveMultiplier = 4.0f; Console.WriteLine("🎵 Very high octave"); break;
-                
-                // Effect controls
-                case ConsoleKey.D1: ToggleReverb(); break;
-                case ConsoleKey.D2: ToggleDelay(); break;
-                case ConsoleKey.D3: ClearEffects(); break;
-                
-                // Volume controls
-                case ConsoleKey.OemPlus:
-                case ConsoleKey.Add:
-                    masterVolume = Math.Min(1.0f, masterVolume + 0.1f);
-                    Console.WriteLine($"🔊 Volume: {masterVolume:F1}");
-                    break;
-                case ConsoleKey.OemMinus:
-                case ConsoleKey.Subtract:
-                    masterVolume = Math.Max(0.0f, masterVolume - 0.1f);
-                    Console.WriteLine($"🔉 Volume: {masterVolume:F1}");
-                    break;
-                
-                // Note triggers
-                default:
-                    if (noteFrequencies.ContainsKey(key))
-                    {
-                        TriggerNote(noteFrequencies[key] * octaveMultiplier);
-                    }
-                    break;
-            }
-        }
-    }
-    
-    static void TriggerNote(float frequency)
-    {
-        // Find an available voice
-        for (int i = 0; i < 4; i++)
-        {
-            if (!noteStates[i])
-            {
-                frequencies[i] = frequency;
-                amplitudes[i] = 0.3f; // Volume per voice
-                phases[i] = 0;
-                noteStates[i] = true;
-                
-                Console.WriteLine($"🎹 Note ON: {frequency:F1}Hz (Voice {i + 1})");
-                
-                // Auto-release after 1 second
-                Task.Delay(1000).ContinueWith(_ => ReleaseNote(i));
-                return;
-            }
-        }
-        
-        Console.WriteLine("🚫 All voices busy!");
-    }
-    
-    static void ReleaseNote(int voice)
-    {
-        if (voice >= 0 && voice < 4)
-        {
-            noteStates[voice] = false;
-            Console.WriteLine($"🎹 Note OFF: Voice {voice + 1}");
-        }
-    }
-    
-    static void ToggleReverb()
-    {
-        reverbEnabled = !reverbEnabled;
-        
-        if (reverbEnabled)
-        {
-            var reverb = new Reverb(0.6f, 0.4f, 0.4f, 0.7f);
-            sourceManager.CustomSampleProcessor = reverb;
-            Console.WriteLine("✅ Reverb ON");
-        }
-        else
-        {
-            sourceManager.CustomSampleProcessor = null;
-            Console.WriteLine("❌ Reverb OFF");
-        }
-    }
-    
-    static void ToggleDelay()
-    {
-        delayEnabled = !delayEnabled;
-        
-        if (delayEnabled)
-        {
-            var delay = new Delay(300, 0.4f, 0.3f, 44100);
-            sourceManager.CustomSampleProcessor = delay;
-            Console.WriteLine("✅ Delay ON");
-        }
-        else
-        {
-            sourceManager.CustomSampleProcessor = null;
-            Console.WriteLine("❌ Delay OFF");
-        }
-    }
-    
-    static void ClearEffects()
-    {
-        sourceManager.CustomSampleProcessor = null;
-        reverbEnabled = false;
-        delayEnabled = false;
-        Console.WriteLine("🧹 All effects cleared");
-    }
-    
-    static void StopSynthEngine()
-    {
-        isRunning = false;
-        
-        // Release all notes
-        for (int i = 0; i < 4; i++)
-        {
-            noteStates[i] = false;
+            Environment.Exit(1);
         }
     }
 }</code></pre>
             </div>
 
             <div class="alert alert-success">
-                <strong>Demo Application:</strong> For a complete Avalonia MVVM example with GUI controls, check out the <a href="https://github.com/ModernMube/OwnAudioSharpDemo" target="_blank" style="color: var(--success);">OwnAudioSharp Demo</a> repository. It demonstrates all features with a professional user interface.
+                <strong>Key Takeaways</strong>
+                This example demonstrates professional audio application development with OwnaudioNET, including
+                multi-track synchronization, real-time effects processing, and proper resource management.
             </div>
 
-            <h2 id="visualization">Audio Visualization with Avalonia</h2>
-            <p>Create interactive waveform displays for audio applications.</p>
+            <h2>Next Steps</h2>
 
-            <div class="code-block">
-                <div class="code-header">MainWindow.axaml</div>
-                <pre><code class="language-xml">&lt;Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:audio="using:Ownaudio.Utilities"
-        x:Class="AudioVisualizer.MainWindow"
-        Title="Audio Visualizer" Height="600" Width="900"&gt;
-
-    &lt;Grid RowDefinitions="Auto,*,Auto"&gt;
-        
-        &lt;!-- Controls --&gt;
-        &lt;StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10"&gt;
-            &lt;Button Name="LoadButton" Content="Load Audio" Margin="5"/&gt;
-            &lt;Button Name="PlayButton" Content="Play" Margin="5"/&gt;
-            &lt;Button Name="PauseButton" Content="Pause" Margin="5"/&gt;
-            &lt;Button Name="StopButton" Content="Stop" Margin="5"/&gt;
-        &lt;/StackPanel&gt;
-        
-        &lt;!-- Waveform Display --&gt;
-        &lt;audio:WaveAvaloniaDisplay Grid.Row="1" 
-                                  Name="WaveformDisplay"
-                                  WaveformBrush="DodgerBlue"
-                                  PlaybackPositionBrush="Red"
-                                  VerticalScale="1.5"
-                                  DisplayStyle="MinMax"
-                                  Margin="10"/&gt;
-        
-        &lt;!-- Status Bar --&gt;
-        &lt;TextBlock Grid.Row="2" Name="StatusText" 
-                   Text="Ready" Margin="10" 
-                   HorizontalAlignment="Center"/&gt;
-                   
-    &lt;/Grid&gt;
-&lt;/Window&gt;</code></pre>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>📚 Core API Reference</h4>
+                    <p>Learn about low-level audio engine components and direct platform access.</p>
+                    <a href="api-core.html" style="color: var(--primary-color);">View Core API →</a>
+                </div>
+                <div class="feature-card">
+                    <h4>📚 NET API Reference</h4>
+                    <p>Explore high-level APIs for mixing, effects, and audio sources.</p>
+                    <a href="api-net.html" style="color: var(--primary-color);">View NET API →</a>
+                </div>
+                <div class="feature-card">
+                    <h4>🎚️ Audio Effects</h4>
+                    <p>Discover available effects like EQ, compressor, reverb, and more.</p>
+                    <a href="api-net.html#effects" style="color: var(--primary-color);">View Effects →</a>
+                </div>
             </div>
 
-            <div class="code-block">
-                <div class="code-header">MainWindow.axaml.cs</div>
-                <pre><code class="language-csharp">using Avalonia.Controls;
-using Avalonia.Interactivity;
-using Ownaudio;
-using Ownaudio.Sources;
-using System;
-using System.Threading.Tasks;
-
-namespace AudioVisualizer
-{
-    public partial class MainWindow : Window
-    {
-        private SourceManager sourceManager;
-        
-        public MainWindow()
-        {
-            InitializeComponent();
-            InitializeAudio();
-            SetupEventHandlers();
-        }
-        
-        private void InitializeAudio()
-        {
-            try
-            {
-                OwnAudio.Initialize();
-                sourceManager = SourceManager.Instance;
-            }
-            catch (Exception ex)
-            {
-                StatusText.Text = $"Audio initialization failed: {ex.Message}";
-            }
-        }
-        
-        private void SetupEventHandlers()
-        {
-            LoadButton.Click += LoadButton_Click;
-            PlayButton.Click += PlayButton_Click;
-            PauseButton.Click += PauseButton_Click;
-            StopButton.Click += StopButton_Click;
-            
-            // Handle waveform position changes
-            WaveformDisplay.PlaybackPositionChanged += OnPlaybackPositionChanged;
-        }
-        
-        private async void LoadButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var dialog = new OpenFileDialog
-                {
-                    Title = "Select Audio File",
-                    Filters = new[]
-                    {
-                        new FileDialogFilter { Name = "Audio Files", Extensions = { "mp3", "wav", "flac", "ogg" } },
-                        new FileDialogFilter { Name = "All Files", Extensions = { "*" } }
-                    }
-                };
-                
-                var files = await dialog.ShowAsync(this);
-                if (files?.Length > 0)
-                {
-                    await LoadAudioFile(files[0]);
-                }
-            }
-            catch (Exception ex)
-            {
-                StatusText.Text = $"Load error: {ex.Message}";
-            }
-        }
-        
-        private async Task LoadAudioFile(string filePath)
-        {
-            StatusText.Text = "Loading audio file...";
-            
-            try
-            {
-                // Clear existing sources
-                sourceManager.Stop();
-                
-                // Load new audio file
-                await sourceManager.AddOutputSource(filePath, "MainTrack");
-                
-                // Load waveform data
-                var audioData = sourceManager["MainTrack"].GetFloatAudioData(TimeSpan.Zero);
-                WaveformDisplay.SetAudioData(audioData);
-                
-                StatusText.Text = $"Loaded: {System.IO.Path.GetFileName(filePath)} ({sourceManager["MainTrack"].Duration})";
-            }
-            catch (Exception ex)
-            {
-                StatusText.Text = $"Failed to load: {ex.Message}";
-            }
-        }
-        
-        private void PlayButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                sourceManager.Play();
-                StatusText.Text = "Playing...";
-                
-                // Start position updates
-                StartPositionUpdates();
-            }
-            catch (Exception ex)
-            {
-                StatusText.Text = $"Play error: {ex.Message}";
-            }
-        }
-        
-        private void PauseButton_Click(object sender, RoutedEventArgs e)
-        {
-            sourceManager.Pause();
-            StatusText.Text = "Paused";
-        }
-        
-        private void StopButton_Click(object sender, RoutedEventArgs e)
-        {
-            sourceManager.Stop();
-            WaveformDisplay.PlaybackPosition = 0;
-            StatusText.Text = "Stopped";
-        }
-        
-        private void OnPlaybackPositionChanged(object sender, double position)
-        {
-            // User clicked/dragged on waveform - seek to position
-            if (sourceManager.Sources.Count > 0)
-            {
-                var newTime = TimeSpan.FromSeconds(position * sourceManager.Duration.TotalSeconds);
-                sourceManager.Seek(newTime);
-            }
-        }
-        
-        private async void StartPositionUpdates()
-        {
-            while (sourceManager.IsPlaying)
-            {
-                // Update waveform playback position
-                if (sourceManager.Duration.TotalSeconds > 0)
-                {
-                    double position = sourceManager.Position.TotalSeconds / sourceManager.Duration.TotalSeconds;
-                    WaveformDisplay.PlaybackPosition = position;
-                }
-                
-                await Task.Delay(50); // 20 FPS updates
-            }
-        }
-        
-        protected override void OnClosed(EventArgs e)
-        {
-            sourceManager?.Stop();
-            OwnAudio.Free();
-            base.OnClosed(e);
-        }
-    }
-}</code></pre>
-            </div>
-
-            <div class="alert alert-info">
-                <strong>More Examples:</strong> Visit the <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" style="color: var(--primary-color);">GitHub repository</a> for additional examples, unit tests, and community contributions. The examples cover everything from basic audio playback to advanced real-time audio processing applications.
-            </div>
+            <!--<div class="alert alert-info">
+                <strong>Need Help?</strong>
+                Check out our <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" style="color: var(--primary-color);">GitHub repository</a> for issues, discussions, and community support.
+            </div>-->
         </main>
     </div>
 
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-links">
+                <a href="../index.html">Home</a>
+                <a href="quickstart.html">Quick Start</a>
+                <a href="api-core.html">Core API</a>
+                <a href="api-net.html">NET API</a>
+                <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a>
+            </div>
+            <p>&copy; 2025 OwnaudioSharp. Cross-platform audio for modern .NET developer.</p>
+        </div>
+    </footer>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <script>
-        // Smooth scrolling for sidebar links
-        document.querySelectorAll('.sidebar-nav a').forEach(link => {
-        link.addEventListener('click', function(e) {
-        e.preventDefault();
-        const targetId = this.getAttribute('href').substring(1);
-        const targetElement = document.getElementById(targetId);
+        const sections = document.querySelectorAll('h2[id]');
+        const navLinks = document.querySelectorAll('.sidebar-nav a');
 
-        if (targetElement) {
-        targetElement.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-        });
-        }
-
-        // Update active link
-        document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-        this.classList.add('active');
-        });
-        });
-
-        // Update active sidebar link on scroll
         window.addEventListener('scroll', () => {
-        const sections = document.querySelectorAll('h2[id], h3[id]');
-        const scrollPos = window.scrollY + 150;
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (window.pageYOffset >= sectionTop - 150) {
+                    current = section.getAttribute('id');
+                }
+            });
 
-        let activeSection = null;
-        sections.forEach(section => {
-        const sectionTop = section.offsetTop;
-        const sectionHeight = section.offsetHeight;
-
-        if (scrollPos >= sectionTop && scrollPos < sectionTop + sectionHeight) {
-        activeSection = section.getAttribute('id');
-        }
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.classList.add('active');
+                }
+            });
         });
 
-        if (activeSection) {
-        document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-        document.querySelector(`.sidebar-nav a[href="#${activeSection}"]`)?.classList.add('active');
-        }
-        });
-
-        // Example card hover effects
-        document.querySelectorAll('.example-card').forEach(card => {
-        card.addEventListener('mouseenter', () => {
-        card.style.transform = 'translateY(-5px)';
-        card.style.borderColor = 'var(--primary-color)';
-        });
-
-        card.addEventListener('mouseleave', () => {
-        card.style.transform = 'translateY(0)';
-        card.style.borderColor = 'var(--border)';
-        });
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
         });
     </script>
 </body>
+
 </html>
