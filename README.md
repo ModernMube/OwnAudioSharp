@@ -78,9 +78,11 @@ State-of-the-art vocal and instrumental track separation using ONNX neural netwo
 - **Example Code**: See [VocalRemover Example](OwnAudio/Examples/Ownaudio.Example.HTDemucs/) for complete implementation
 
 > [!IMPORTANT]
-> **HTDemucs Model Setup Required**
+> **HTDemucs Model Setup**
 > 
-> Before using HTDemucs, download the model file and place it in your models directory:
+> **For NuGet Package Users:** The HTDemucs model is **included in the NuGet package** - no manual download required!
+> 
+> **For Source Code / Building from Source:**
 > 1. Download: [htdemucs.onnx](https://huggingface.co/ModernMube/HTDemucs_onnx/resolve/main/htdemucs.onnx) (166 MB)
 > 2. Copy to the same directory as other vocal remover models
 > 3. The model will be automatically detected by the API
