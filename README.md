@@ -1,6 +1,4 @@
-<div align="center">
-  <img src="Ownaudiologo.png" alt="Logo" width="600"/>
-</div>
+
 
 <div align="center">
   <a href="https://www.nuget.org/packages/OwnAudioSharp">
