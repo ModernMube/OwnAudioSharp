@@ -375,6 +375,9 @@ MigrationBackup/
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
 
+#ONNX model files
+htdemucs.onnx
+
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /OwnaudioExample/ViewModels/MainWindowViewModel.cs
