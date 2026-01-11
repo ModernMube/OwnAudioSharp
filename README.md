@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="Ownaudiologo.png" alt="Logo" width="600"/>
+    <img src="Ownaudiologo.png" width="800">
 </div>
 
 <div align="center">
