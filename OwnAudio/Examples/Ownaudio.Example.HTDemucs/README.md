@@ -232,10 +232,6 @@ Key features:
 - Check that the embedded model was correctly included in the build
 - Some audio (highly compressed, very old recordings) may not separate well
 
-## API Reference
-
-See [HTDemucsAudioSeparator.cs](../../Source/Features/VocalRemover/HTDemucsAudioSeparator.cs) for full API documentation.
-
 ## Model Information
 
 The embedded HTDemucs model is automatically included in the OwnaudioNET assembly as an embedded resource. This means:
