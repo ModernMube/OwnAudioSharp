@@ -61,6 +61,12 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Pack>true</Pack>
     </None>
+    <None Include="runtimes\win-arm64\**\*.*">
+      <Link>runtimes\win-arm64\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <PackagePath>runtimes\win-arm64</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Pack>true</Pack>
+    </None>
     <None Include="runtimes\linux-x64\**\*.*">
       <Link>runtimes\linux-x64\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <PackagePath>runtimes\linux-x64</PackagePath>
@@ -106,6 +112,10 @@
       <Abi>x86_64</Abi>
       <Link>libs\x86_64\%(Filename)%(Extension)</Link>
     </AndroidNativeLibrary>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="runtimes\win-x64\native\libportaudio.old" />
   </ItemGroup>
 
 </Project>

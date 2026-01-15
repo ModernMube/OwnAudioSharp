@@ -38,69 +38,36 @@
                 <li><a href="#mixer">AudioMixer</a></li>
                 <li><a href="#effects">Effects</a></li>
                 <li><a href="#sync">Synchronization</a></li>
-                <li><a href="#interfaces">Interfaces</a></li>
             </ul>
         </aside>
 
         <main class="content">
             <h1><span class="badge badge-net">NET</span> OwnaudioNET API Reference</h1>
             <p>
-                High-level audio API with professional features. Built on Ownaudio.Core with multi-track mixing,
-                effects, synchronization, and real-time processing.
+                High-level audio API with professional features including multi-track mixing, effects processing,
+                synchronization, and real-time audio manipulation.
             </p>
 
             <div class="alert alert-info">
                 <strong>Production-Ready Features</strong>
-                OwnaudioNET provides 15+ professional effects, unlimited track mixing, perfect synchronization,
+                OwnaudioNET provides 15+ professional effects, unlimited track mixing, Master Clock synchronization,
                 tempo/pitch control, and recording capabilities.
             </div>
 
             <h2 id="overview">Overview</h2>
-            <p>OwnaudioNET extends Ownaudio.Core with:</p>
+            <p>OwnaudioNET extends Ownaudio.Core with high-level features:</p>
             <ul>
-                <li><strong>Multi-track mixing</strong> with unlimited simultaneous sources</li>
-                <li><strong>15+ professional effects</strong> including reverb, compressor, EQ</li>
-                <li><strong>Master Clock synchronization</strong> with timeline-based sync, start offsets, and drift
-                    correction (&lt;10ms)</li>
-                <li><strong>DAW-style features</strong> including realtime/offline rendering modes</li>
-                <li><strong>Tempo and pitch control</strong> via SoundTouch integration</li>
-                <li><strong>Recording</strong> to WAV format</li>
-                <li><strong>Real-time metering</strong> (peak and RMS)</li>
-                <li><strong>Thread-safe architecture</strong> with lock-free buffers</li>
+                <li><strong>Multi-track mixing</strong> - Unlimited simultaneous audio sources</li>
+                <li><strong>15+ professional effects</strong> - Reverb, compressor, EQ, and more</li>
+                <li><strong>Master Clock synchronization</strong> - Sample-accurate timeline-based sync with drift
+                    correction</li>
+                <li><strong>DAW-style features</strong> - Realtime/offline rendering modes, start offsets</li>
+                <li><strong>Tempo and pitch control</strong> - Independent time-stretch and pitch-shift via SoundTouch
+                </li>
+                <li><strong>Recording</strong> - Mix-down to WAV format</li>
+                <li><strong>Real-time metering</strong> - Peak and RMS level monitoring</li>
+                <li><strong>Thread-safe architecture</strong> - Lock-free buffers for glitch-free audio</li>
             </ul>
-
-            <h3>Key Features</h3>
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Feature</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>Multiple Formats</td>
-                        <td>WAV, MP3, FLAC support</td>
-                    </tr>
-                    <tr>
-                        <td>Low Latency</td>
-                        <td>&lt; 12ms @ 512 buffer size</td>
-                    </tr>
-                    <tr>
-                        <td>Synchronization</td>
-                        <td>Master Clock with timeline-based sync, start offsets, sample-accurate precision (&lt;10ms
-                            drift tolerance)</td>
-                    </tr>
-                    <tr>
-                        <td>Real-time Processing</td>
-                        <td>Live synthesis, streaming, effects chains</td>
-                    </tr>
-                    <tr>
-                        <td>SoundTouch</td>
-                        <td>Independent tempo and pitch control</td>
-                    </tr>
-                </tbody>
-            </table>
 
             <h2 id="initialization">Initialization</h2>
 
@@ -132,9 +99,6 @@ var config = new AudioConfig
 };
 OwnaudioNet.Initialize(config);
 
-// Mock engine for testing (no hardware required)
-OwnaudioNet.Initialize(config, useMockEngine: true);
-
 // Shutdown
 OwnaudioNet.Shutdown();</code></pre>
             </div>
@@ -152,10 +116,6 @@ var config = new AudioConfig
     BufferSize = 256
 };
 await OwnaudioNet.InitializeAsync(config);
-
-// With cancellation token
-var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-await OwnaudioNet.InitializeAsync(config, useMockEngine: false, cts.Token);
 
 // Async device enumeration
 var devices = await OwnaudioNet.GetOutputDevicesAsync();
@@ -188,11 +148,6 @@ await OwnaudioNet.ShutdownAsync();</code></pre>
                         <td>Console apps</td>
                     </tr>
                     <tr>
-                        <td><code>Initialize(AudioConfig, bool)</code></td>
-                        <td>Initialize with mock engine (⚠️ BLOCKS 50-5000ms)</td>
-                        <td>Console apps, testing</td>
-                    </tr>
-                    <tr>
                         <td><code>InitializeAsync()</code></td>
                         <td>✅ Async init with default settings (NON-BLOCKING)</td>
                         <td>UI apps (WPF, MAUI, Avalonia)</td>
@@ -201,11 +156,6 @@ await OwnaudioNet.ShutdownAsync();</code></pre>
                         <td><code>InitializeAsync(AudioConfig)</code></td>
                         <td>✅ Async init with custom config (NON-BLOCKING)</td>
                         <td>UI apps (WPF, MAUI, Avalonia)</td>
-                    </tr>
-                    <tr>
-                        <td><code>InitializeAsync(AudioConfig, bool, CancellationToken)</code></td>
-                        <td>✅ Async init with cancellation (NON-BLOCKING)</td>
-                        <td>UI apps with timeout control</td>
                     </tr>
                     <tr>
                         <td><code>Shutdown()</code></td>
@@ -217,51 +167,13 @@ await OwnaudioNet.ShutdownAsync();</code></pre>
                         <td>✅ Async shutdown (NON-BLOCKING)</td>
                         <td>UI apps (WPF, MAUI, Avalonia)</td>
                     </tr>
-                    <tr>
-                        <td><code>GetOutputDevicesAsync()</code></td>
-                        <td>✅ Get output devices async (NON-BLOCKING)</td>
-                        <td>UI apps</td>
-                    </tr>
-                    <tr>
-                        <td><code>GetInputDevicesAsync()</code></td>
-                        <td>✅ Get input devices async (NON-BLOCKING)</td>
-                        <td>UI apps</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <h3>Platform Initialization Times</h3>
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Platform</th>
-                        <th>Typical Time</th>
-                        <th>Maximum Time</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>Windows WASAPI</td>
-                        <td>50-100ms</td>
-                        <td>200ms</td>
-                    </tr>
-                    <tr>
-                        <td>Linux PulseAudio</td>
-                        <td>100-500ms</td>
-                        <td>5000ms ⚠️</td>
-                    </tr>
-                    <tr>
-                        <td>macOS Core Audio</td>
-                        <td>50-150ms</td>
-                        <td>300ms</td>
-                    </tr>
                 </tbody>
             </table>
 
             <h2 id="sources">Audio Sources</h2>
 
             <h3>FileSource</h3>
-            <p>File-based audio source with decoding and SoundTouch support.</p>
+            <p>File-based audio source with decoding, SoundTouch support, and Master Clock synchronization.</p>
 
             <div class="code-block">
                 <div class="code-header">FileSource Usage</div>
@@ -271,7 +183,7 @@ var source = new FileSource("music.mp3");
 // Configure playback
 source.Volume = 0.8f;          // Volume (0.0-1.0)
 source.Loop = true;             // Enable looping
-source.Tempo = 1.2f;            // 20% faster (0.5-2.0)
+source.Tempo = 1.2f;            // 20% faster (0.8-1.2)
 source.PitchShift = -2.0f;      // 2 semitones lower (-12..+12)
 
 // Control playback
@@ -332,7 +244,7 @@ source.Dispose();</code></pre>
                     <tr>
                         <td><code>Tempo</code></td>
                         <td>float</td>
-                        <td>Playback tempo (0.5-2.0, 1.0 = normal)</td>
+                        <td>Playback tempo (0.8-1.2, 1.0 = normal)</td>
                     </tr>
                     <tr>
                         <td><code>PitchShift</code></td>
@@ -340,22 +252,15 @@ source.Dispose();</code></pre>
                         <td>Pitch shift in semitones (-12..+12)</td>
                     </tr>
                     <tr>
-                        <td><code>IsEndOfStream</code></td>
-                        <td>bool</td>
-                        <td>True if reached end of file</td>
+                        <td><code>StartOffset</code></td>
+                        <td>double</td>
+                        <td>Timeline start position (for Master Clock sync)</td>
                     </tr>
                 </tbody>
             </table>
 
-            <h4>Supported Formats</h4>
-            <ul>
-                <li><strong>WAV</strong> - PCM, IEEE Float</li>
-                <li><strong>MP3</strong> - MPEG-1/2/2.5 Layer III</li>
-                <li><strong>FLAC</strong> - Free Lossless Audio Codec</li>
-            </ul>
-
             <h3>SampleSource</h3>
-            <p>Play audio from memory samples.</p>
+            <p>Play audio from memory samples with optional dynamic updates.</p>
 
             <div class="code-block">
                 <div class="code-header">SampleSource Usage</div>
@@ -375,9 +280,8 @@ var dynamicSource = new SampleSource(
     bufferSizeInFrames: 48000,  // 1 second buffer
     config: config
 );
-// dynamicSource.AllowDynamicUpdate is automatically true
 
-// Update samples dynamically (only works if AllowDynamicUpdate is enabled)
+// Update samples dynamically
 float[] newSamples = GenerateNewSamples();
 dynamicSource.SubmitSamples(newSamples);
 
@@ -394,7 +298,7 @@ source.Loop = true;</code></pre>
                 <pre><code class="language-csharp">// Initialize OwnaudioNET (engine must be running)
 OwnaudioNet.Initialize();
 
-// Create input source (requires AudioEngineWrapper)
+// Create input source
 var input = new InputSource(
     engine: OwnaudioNet.Engine,
     bufferSizeInFrames: 8192  // Optional, default is 8192
@@ -405,24 +309,8 @@ mixer.AddSource(input);
 input.Play();</code></pre>
             </div>
 
-            <h3>GhostTrackSource</h3>
-            <p>Silent source for synchronization timing.</p>
-
-            <div class="code-block">
-                <div class="code-header">GhostTrackSource Usage</div>
-                <pre><code class="language-csharp">// Create ghost track with duration
-var ghost = new GhostTrackSource(
-    durationInSeconds: 180.0,  // 3 minutes
-    sampleRate: 48000,         // Optional, default is 48000
-    outputChannels: 2          // Optional, default is 2 (stereo)
-);
-
-// Use for sync timing
-var syncGroup = mixer.CreateSyncGroup(track1, track2, ghost);</code></pre>
-            </div>
-
             <h3>SourceWithEffects</h3>
-            <p>Wrapper for applying effects to sources.</p>
+            <p>Wrapper for applying effects chains to any audio source.</p>
 
             <div class="code-block">
                 <div class="code-header">SourceWithEffects Usage</div>
@@ -451,15 +339,13 @@ var compressor = new CompressorEffect(
 sourceWithFx.AddEffect(compressor);
 
 // Modify effects dynamically
-var delay = new DelayEffect();
-sourceWithFx.AddEffect(delay);
-sourceWithFx.RemoveEffect(reverb);
-delay.Enabled = false;  // Disable delay effect
+reverb.Enabled = false;  // Bypass effect
+sourceWithFx.RemoveEffect(compressor);
 sourceWithFx.ClearEffects();</code></pre>
             </div>
 
             <h2 id="mixer">AudioMixer</h2>
-            <p>Central mixing engine for multi-track audio playback.</p>
+            <p>Central mixing engine for multi-track audio playback with Master Clock synchronization.</p>
 
             <div class="code-block">
                 <div class="code-header">AudioMixer Usage</div>
@@ -544,9 +430,9 @@ mixer.Dispose();</code></pre>
                         <td>True if currently recording</td>
                     </tr>
                     <tr>
-                        <td><code>EnableAutoDriftCorrection</code></td>
-                        <td>bool</td>
-                        <td>Enable automatic drift correction</td>
+                        <td><code>MasterClock</code></td>
+                        <td>MasterClock</td>
+                        <td>Master clock for timeline synchronization</td>
                     </tr>
                 </tbody>
             </table>
@@ -581,10 +467,6 @@ mixer.Dispose();</code></pre>
                         <td>Remove all sources</td>
                     </tr>
                     <tr>
-                        <td><code>GetSource(Guid)</code></td>
-                        <td>Get source by ID</td>
-                    </tr>
-                    <tr>
                         <td><code>AddMasterEffect(IEffectProcessor)</code></td>
                         <td>Add effect to master chain</td>
                     </tr>
@@ -604,7 +486,7 @@ mixer.Dispose();</code></pre>
             </table>
 
             <h2 id="effects">Audio Effects</h2>
-            <p>OwnaudioNET includes 15+ professional audio effects with preset support and real-time processing.</p>
+            <p>OwnaudioNET includes 15+ professional audio effects with preset support.</p>
 
             <div class="alert alert-info">
                 <strong>Complete Effects Documentation</strong>
@@ -613,7 +495,7 @@ mixer.Dispose();</code></pre>
                     Effects Reference</a>.
             </div>
 
-            <h3>Quick Start - Adding Effects to Sources</h3>
+            <h3>Quick Start - Adding Effects</h3>
             <div class="code-block">
                 <div class="code-header">Basic Effect Usage</div>
                 <pre><code class="language-csharp">// Create source and wrap with effects capability
@@ -679,20 +561,17 @@ mixer.Start();</code></pre>
             <h2 id="sync">Synchronization</h2>
 
             <h3>Master Clock Architecture</h3>
-            <p>OwnaudioNET uses a professional DAW-style master clock for sample-accurate synchronization. The new
-                timeline-based system provides superior timing precision and advanced features compared to traditional
-                sync groups.</p>
+            <p>OwnaudioNET uses a professional DAW-style Master Clock for sample-accurate synchronization with timeline
+                positioning and automatic drift correction.</p>
 
             <div class="alert alert-success">
-                <strong>New Master Clock System</strong>
-                Version 2.4.0+ introduces timeline-based synchronization with Master Clock architecture, replacing the
-                legacy GhostTrack system.
-                This provides sample-accurate sync, start offsets, realtime/offline rendering modes, and automatic drift
-                correction.
+                <strong>Master Clock System (v2.4.0+)</strong>
+                Timeline-based synchronization provides sample-accurate sync, start offsets, realtime/offline rendering
+                modes, and automatic drift correction.
             </div>
 
             <div class="code-block">
-                <div class="code-header">Master Clock Synchronization (v2.4.0+)</div>
+                <div class="code-header">Master Clock Synchronization</div>
                 <pre><code class="language-csharp">// Create sources
 var drums = new FileSource("drums.wav");
 var bass = new FileSource("bass.wav");
@@ -787,118 +666,6 @@ chorus.Play();
 mixer.MasterClock.SeekTo(20.0);  // Jump to 20 seconds - all tracks sync</code></pre>
             </div>
 
-            <h3>Legacy Sync Group API</h3>
-            <p><strong>Deprecated:</strong> The legacy sync group API is still available but deprecated. Use Master
-                Clock for new projects.</p>
-            <div class="code-block">
-                <div class="code-header">Legacy Sync Group (Deprecated)</div>
-                <pre><code class="language-csharp">// ⚠️ DEPRECATED - Use Master Clock instead
-var syncGroup = mixer.CreateSyncGroup(drums, bass, guitar);
-mixer.StartSyncGroup(syncGroup.Id);
-mixer.StopSyncGroup(syncGroup.Id);</code></pre>
-            </div>
-
-            <div class="alert alert-success">
-                <strong>Best Practices</strong>
-                Use identical file formats (WAV recommended) for best synchronization. MP3 files may have slight timing
-                inaccuracies due to encoder delays and frame structure.
-            </div>
-
-            <h2 id="interfaces">Interfaces</h2>
-
-            <h3>IAudioSource</h3>
-            <p>Base interface for all audio sources.</p>
-
-            <div class="code-block">
-                <div class="code-header">IAudioSource Interface</div>
-                <pre><code class="language-csharp">public interface IAudioSource : IDisposable
-{
-    // Properties
-    Guid Id { get; }
-    AudioState State { get; }
-    float Volume { get; set; }
-    bool Loop { get; set; }
-    double Position { get; }
-    double Duration { get; }
-    bool IsEndOfStream { get; }
-    float Tempo { get; set; }
-    float PitchShift { get; set; }
-    
-    // Methods
-    void Play();
-    void Pause();
-    void Stop();
-    bool Seek(double positionInSeconds);
-    int ReadSamples(Span<float> buffer, int frameCount);
-    
-    // Events
-    event EventHandler<AudioStateChangedEventArgs> StateChanged;
-    event EventHandler<BufferUnderrunEventArgs> BufferUnderrun;
-    event EventHandler<AudioErrorEventArgs> Error;
-}</code></pre>
-            </div>
-
-            <h3>IEffectProcessor</h3>
-            <p>Base interface for audio effects.</p>
-
-            <div class="code-block">
-                <div class="code-header">IEffectProcessor Interface</div>
-                <pre><code class="language-csharp">public interface IEffectProcessor
-{
-    bool IsEnabled { get; set; }
-    void Process(Span<float> buffer, int frameCount);
-    void Reset();
-}</code></pre>
-            </div>
-
-            <h3>ISynchronizable</h3>
-            <p>Interface for synchronizable sources.</p>
-
-            <div class="code-block">
-                <div class="code-header">ISynchronizable Interface</div>
-                <pre><code class="language-csharp">public interface ISynchronizable
-{
-    void PrepareForSync();
-    void StartSync();
-    void ResyncTo(double targetPosition);
-    double GetSyncPosition();
-}</code></pre>
-            </div>
-
-            <h2>Performance</h2>
-
-            <h3>Latency</h3>
-            <ul>
-                <li><strong>Total pipeline:</strong> ~31ms @ 512 frames, 48kHz</li>
-                <li><strong>Mix cycle:</strong> &lt; 5ms with 4 sources</li>
-                <li><strong>Send() latency:</strong> &lt; 1ms (buffer write only)</li>
-            </ul>
-
-            <h3>CPU Usage</h3>
-            <ul>
-                <li><strong>Idle:</strong> &lt; 1%</li>
-                <li><strong>1 source:</strong> ~3-5%</li>
-                <li><strong>4 sources + effects:</strong> ~10-15%</li>
-                <li><strong>Pump thread:</strong> &lt; 5%</li>
-            </ul>
-
-            <h3>Memory</h3>
-            <ul>
-                <li>Zero allocation in hot paths</li>
-                <li>Buffer pooling and reuse</li>
-                <li>SIMD-optimized mixing</li>
-            </ul>
-
-            <h2>Thread Safety</h2>
-            <p>OwnaudioNET uses a multi-threaded architecture:</p>
-            <ul>
-                <li><strong>Main Thread:</strong> User API calls</li>
-                <li><strong>Mix Thread:</strong> High-priority mixing</li>
-                <li><strong>Decoder Threads:</strong> Source decoding</li>
-                <li><strong>Pump Thread:</strong> Audio engine communication</li>
-            </ul>
-            <p>All public methods are thread-safe with lock-free buffer management.</p>
-
             <div style="margin-top: 4rem; padding: 2rem; background: var(--surface); border-radius: 8px;">
                 <h3>Related Documentation</h3>
                 <ul style="list-style: none; padding: 0;">
@@ -906,14 +673,18 @@ mixer.StopSyncGroup(syncGroup.Id);</code></pre>
                         <a href="quickstart.html" style="color: var(--primary-color);">📖 Quick Start Guide</a>
                     </li>
                     <li style="margin-bottom: 0.5rem;">
-                        <a href="api-core.html" style="color: var(--core-color);">⚙️ Core API Reference</a>
+                        <a href="api-core.html" style="color: var(--core-color);">🔧 Core API Reference</a>
+                    </li>
+                    <li style="margin-bottom: 0.5rem;">
+                        <a href="effects.html" style="color: var(--primary-color);">🎛️ Effects Reference</a>
                     </li>
                     <li style="margin-bottom: 0.5rem;">
                         <a href="examples.html" style="color: var(--primary-color);">💡 Code Examples</a>
                     </li>
-                    <!--'<li style="margin-bottom: 0.5rem;">
-                        <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" style="color: var(--primary-color);">🔗 GitHub Repository</a>
-                    </li>-->
+                    <li style="margin-bottom: 0.5rem;">
+                        <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank"
+                            style="color: var(--primary-color);">🔗 GitHub Repository</a>
+                    </li>
                 </ul>
             </div>
         </main>
@@ -923,8 +694,10 @@ mixer.StopSyncGroup(syncGroup.Id);</code></pre>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <script>
+        // Active sidebar navigation
         const sections = document.querySelectorAll('h2[id], h3[id]');
         const navLinks = document.querySelectorAll('.sidebar-nav a');
+
         window.addEventListener('scroll', () => {
             let current = '';
             sections.forEach(section => {
@@ -933,6 +706,7 @@ mixer.StopSyncGroup(syncGroup.Id);</code></pre>
                     current = section.getAttribute('id');
                 }
             });
+
             navLinks.forEach(link => {
                 link.classList.remove('active');
                 if (link.getAttribute('href') === `#${current}`) {
@@ -940,12 +714,17 @@ mixer.StopSyncGroup(syncGroup.Id);</code></pre>
                 }
             });
         });
+
+        // Smooth scrolling
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
             anchor.addEventListener('click', function (e) {
                 e.preventDefault();
                 const target = document.querySelector(this.getAttribute('href'));
                 if (target) {
-                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
                 }
             });
         });

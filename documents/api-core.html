@@ -33,77 +33,41 @@
             <h3>Core API</h3>
             <ul class="sidebar-nav">
                 <li><a href="#overview" class="active">Overview</a></li>
+                <li><a href="#getting-started">Getting Started</a></li>
                 <li><a href="#interfaces">Interfaces</a></li>
                 <li><a href="#factories">Factories</a></li>
-                <li><a href="#classes">Classes</a></li>
+                <li><a href="#configuration">Configuration</a></li>
                 <li><a href="#enums">Enumerations</a></li>
                 <li><a href="#common">Common Components</a></li>
-                <li><a href="#performance">Performance</a></li>
             </ul>
         </aside>
 
         <main class="content">
             <h1><span class="badge badge-core">Core</span> Ownaudio.Core API Reference</h1>
             <p>
-                Low-level cross-platform audio engine with native C++ core (default) or managed C# implementations.
-                Built without external dependencies using native system audio APIs.
+                Low-level cross-platform audio engine providing real-time audio playback and recording with native
+                performance.
             </p>
 
-            <div class="alert alert-warning">
+            <div class="alert alert-info">
                 <strong>🚀 Native Engine (Default)</strong>
-                The native C++ engine is now the default, providing GC-free, glitch-free audio. Despite extensive
-                optimization
-                efforts with managed code (zero-allocation design, lock-free structures), the .NET Garbage Collector
-                proved to be
-                an insurmountable challenge for real-time audio. The managed engines remain available for
+                The native C++ engine is the default, providing GC-free, glitch-free audio processing. Uses
+                PortAudio (if installed) or embedded miniaudio fallback. Managed C# engines are available for
                 development/testing.
             </div>
 
-            <div class="alert alert-info">
-                <strong>Zero External Dependencies</strong>
-                Ownaudio.Core uses native system audio APIs directly: WASAPI (Windows), Core Audio (macOS/iOS),
-                PulseAudio (Linux), and Oboe (Android). No additional libraries required!
-            </div>
-
             <h2 id="overview">Overview</h2>
-            <p>
-                Ownaudio.Core provides the foundation for cross-platform audio applications with:
-            </p>
+            <p>Ownaudio.Core is the foundation for cross-platform audio applications:</p>
             <ul>
                 <li><strong>Native C++ engine (default)</strong> - GC-free, deterministic real-time audio</li>
                 <li><strong>Managed C# engines (optional)</strong> - Pure C# implementations for testing/development
                 </li>
-                <li><strong>Platform-native APIs</strong> for optimal performance</li>
-                <li><strong>Built-in decoders</strong> for WAV, MP3, and FLAC</li>
-                <li><strong>Device management</strong> with hot-plug support</li>
-                <li><strong>Automatic format conversion</strong> and resampling</li>
+                <li><strong>Platform-native APIs</strong> - WASAPI (Windows), Core Audio (macOS/iOS), PulseAudio
+                    (Linux), AAudio (Android)</li>
+                <li><strong>Built-in decoders</strong> - WAV, MP3, and FLAC support</li>
+                <li><strong>Device management</strong> - Hot-plug support and device enumeration</li>
+                <li><strong>Automatic format conversion</strong> - Sample rate and channel conversion</li>
             </ul>
-
-            <h3>Engine Types</h3>
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Engine Type</th>
-                        <th>Implementation</th>
-                        <th>GC Behavior</th>
-                        <th>Use Case</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><strong>Native (Default)</strong></td>
-                        <td>C++ core</td>
-                        <td>No GC interference</td>
-                        <td>Production, professional audio</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Managed (Optional)</strong></td>
-                        <td>Pure C#</td>
-                        <td>Subject to GC pauses</td>
-                        <td>Development, testing, debugging</td>
-                    </tr>
-                </tbody>
-            </table>
 
             <h3>Supported Platforms</h3>
             <table class="api-table">
@@ -143,6 +107,47 @@
                 </tbody>
             </table>
 
+            <h2 id="getting-started">Getting Started</h2>
+            <p>Quick example to get you started with Ownaudio.Core:</p>
+
+            <div class="code-block">
+                <div class="code-header">Basic Usage Example</div>
+                <pre><code class="language-csharp">using Ownaudio.Core;
+using Ownaudio.Decoders;
+
+// Create and initialize engine
+using var engine = AudioEngineFactory.CreateDefault();
+
+// Start the engine
+engine.Start();
+
+// Load and decode audio file
+using var decoder = AudioDecoderFactory.Create(
+    "music.mp3",
+    targetSampleRate: 48000,
+    targetChannels: 2
+);
+
+// Read and play audio
+var buffer = new byte[4096 * 2 * sizeof(float)];
+while (true)
+{
+    var result = decoder.ReadFrames(buffer);
+    if (result.IsEOF) break;
+    
+    if (result.FramesRead > 0)
+    {
+        int bytesRead = result.FramesRead * 2 * sizeof(float);
+        var samples = System.Runtime.InteropServices.MemoryMarshal
+            .Cast<byte, float>(buffer.AsSpan(0, bytesRead));
+        engine.Send(samples);
+    }
+}
+
+// Stop the engine
+engine.Stop();</code></pre>
+            </div>
+
             <h2 id="interfaces">Interfaces</h2>
 
             <h3>IAudioEngine</h3>
@@ -150,12 +155,12 @@
 
             <div class="code-block">
                 <div class="code-header">IAudioEngine Interface</div>
-                <pre><code class="language-csharp">public interface IAudioEngine
+                <pre><code class="language-csharp">public interface IAudioEngine : IDisposable
 {
     // Properties
     int FramesPerBuffer { get; }
     
-    // Lifecycle Methods
+    // Lifecycle
     int Initialize(AudioConfig config);
     int Start();
     int Stop();
@@ -163,112 +168,59 @@
     int OwnAudioEngineStopped();
     
     // Audio I/O
-    void Send(Span&lt;float&gt; samples);
+    void Send(Span<float> samples);
     int Receives(out float[] samples);
     IntPtr GetStream();
     
     // Device Management
-    List&lt;AudioDeviceInfo&gt; GetOutputDevices();
-    List&lt;AudioDeviceInfo&gt; GetInputDevices();
+    List<AudioDeviceInfo> GetOutputDevices();
+    List<AudioDeviceInfo> GetInputDevices();
     int SetOutputDeviceByName(string deviceName);
     int SetOutputDeviceByIndex(int deviceIndex);
     int SetInputDeviceByName(string deviceName);
     int SetInputDeviceByIndex(int deviceIndex);
     
     // Events
-    event EventHandler&lt;AudioDeviceChangedEventArgs&gt; OutputDeviceChanged;
-    event EventHandler&lt;AudioDeviceChangedEventArgs&gt; InputDeviceChanged;
-    event EventHandler&lt;AudioDeviceStateChangedEventArgs&gt; DeviceStateChanged;
+    event EventHandler<AudioDeviceChangedEventArgs> OutputDeviceChanged;
+    event EventHandler<AudioDeviceChangedEventArgs> InputDeviceChanged;
+    event EventHandler<AudioDeviceStateChangedEventArgs> DeviceStateChanged;
 }</code></pre>
             </div>
 
-            <h4>Properties</h4>
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Property</th>
-                        <th>Type</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>FramesPerBuffer</code></td>
-                        <td>int</td>
-                        <td>Actual buffer size in frames (may differ from requested)</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <h4>Methods</h4>
+            <h4>Key Methods</h4>
             <table class="api-table">
                 <thead>
                     <tr>
                         <th>Method</th>
-                        <th>Return</th>
                         <th>Description</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
                         <td><code>Initialize(AudioConfig)</code></td>
-                        <td>int</td>
-                        <td>Initialize engine. Returns 0 on success, negative on error</td>
+                        <td>Initialize engine with configuration. Returns 0 on success.</td>
                     </tr>
                     <tr>
                         <td><code>Start()</code></td>
-                        <td>int</td>
-                        <td>Start audio engine (thread-safe, idempotent)</td>
+                        <td>Start audio engine (thread-safe, idempotent).</td>
                     </tr>
                     <tr>
                         <td><code>Stop()</code></td>
-                        <td>int</td>
-                        <td>Stop audio engine (thread-safe, idempotent)</td>
+                        <td>Stop audio engine gracefully (thread-safe, idempotent).</td>
                     </tr>
                     <tr>
                         <td><code>Send(Span&lt;float&gt;)</code></td>
-                        <td>void</td>
-                        <td>Send audio samples (blocking, zero-allocation)</td>
+                        <td>Send audio samples to output (blocking, zero-allocation).</td>
                     </tr>
                     <tr>
                         <td><code>Receives(out float[])</code></td>
-                        <td>int</td>
-                        <td>Receive audio samples (pooled buffer). Returns sample count</td>
-                    </tr>
-                    <tr>
-                        <td><code>GetOutputDevices()</code></td>
-                        <td>List</td>
-                        <td>Get list of available output devices</td>
-                    </tr>
-                    <tr>
-                        <td><code>GetInputDevices()</code></td>
-                        <td>List</td>
-                        <td>Get list of available input devices</td>
+                        <td>Receive audio samples from input (uses pooled buffers).</td>
                     </tr>
                 </tbody>
             </table>
 
-            <h4>Usage Example</h4>
-            <div class="code-block">
-                <div class="code-header">Basic Engine Usage</div>
-                <pre><code class="language-csharp">// Create and initialize engine
-using var engine = AudioEngineFactory.CreateDefault();
-engine.Initialize(AudioConfig.Default);
-
-// Start the engine
-engine.Start();
-
-// Send audio samples
-float[] samples = GenerateAudio();
-engine.Send(samples.AsSpan());
-
-// Stop the engine
-engine.Stop();</code></pre>
-            </div>
-
             <h3>IAudioDecoder</h3>
-            <p>Audio file decoder interface for WAV, MP3, and FLAC formats, designed for high-performance,
-                zero-allocation reading.</p>
+            <p>Audio file decoder interface for WAV, MP3, and FLAC formats.</p>
 
             <div class="code-block">
                 <div class="code-header">IAudioDecoder Interface</div>
@@ -276,68 +228,17 @@ engine.Stop();</code></pre>
 {
     AudioStreamInfo StreamInfo { get; }
     
-    // New zero-allocation method (Recommended)
+    // Zero-allocation reading (recommended)
     AudioDecoderResult ReadFrames(byte[] buffer);
-
+    
+    // Seeking
     bool TrySeek(TimeSpan position, out string error);
-
-    // Obsolete allocating method
-    [Obsolete("Use ReadFrames for better performance.")]
-    AudioDecoderResult DecodeNextFrame();
 }</code></pre>
             </div>
 
-            <h4>Properties</h4>
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Property</th>
-                        <th>Type</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>StreamInfo</code></td>
-                        <td>AudioStreamInfo</td>
-                        <td>Information about the loaded audio stream (sample rate, channels, duration).</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <h4>Methods</h4>
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Method</th>
-                        <th>Return</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>ReadFrames(byte[] buffer)</code></td>
-                        <td>AudioDecoderResult</td>
-                        <td><span class="badge badge-success">Recommended</span> Reads audio into a pre-allocated
-                            buffer. Zero-allocation.</td>
-                    </tr>
-                    <tr>
-                        <td><code>TrySeek(TimeSpan, out string)</code></td>
-                        <td>bool</td>
-                        <td>Seek to a specific position. Returns true on success.</td>
-                    </tr>
-                    <tr>
-                        <td><code>DecodeNextFrame()</code></td>
-                        <td>AudioDecoderResult</td>
-                        <td><span class="badge badge-danger">Obsolete</span> Decodes the next frame, but allocates
-                            memory. Use <code>ReadFrames</code> instead.</td>
-                    </tr>
-                </tbody>
-            </table>
-
             <h4>Usage Example</h4>
             <div class="code-block">
-                <div class="code-header">Modern Decoder Usage (Zero-Allocation)</div>
+                <div class="code-header">Zero-Allocation Decoder Usage</div>
                 <pre><code class="language-csharp">// Create decoder
 using var decoder = AudioDecoderFactory.Create(
     "music.mp3",
@@ -347,8 +248,10 @@ using var decoder = AudioDecoderFactory.Create(
 
 var info = decoder.StreamInfo;
 Console.WriteLine($"Duration: {info.Duration}");
+Console.WriteLine($"Sample Rate: {info.SampleRate} Hz");
+Console.WriteLine($"Channels: {info.Channels}");
 
-// Create a reusable buffer
+// Create reusable buffer
 int bufferSize = 4096 * info.Channels * sizeof(float);
 var buffer = new byte[bufferSize];
 
@@ -361,10 +264,11 @@ while (true)
     if (result.FramesRead > 0)
     {
         int bytesRead = result.FramesRead * info.Channels * sizeof(float);
-        var samples = System.Runtime.InteropServices.MemoryMarshal.Cast&lt;byte, float&gt;(buffer.AsSpan(0, bytesRead));
+        var samples = System.Runtime.InteropServices.MemoryMarshal
+            .Cast<byte, float>(buffer.AsSpan(0, bytesRead));
         
-        // Process the audio samples directly from the buffer
-        ProcessAudioSamples(samples);
+        // Process audio samples
+        ProcessAudio(samples);
     }
 }</code></pre>
             </div>
@@ -372,7 +276,7 @@ while (true)
             <h2 id="factories">Factory Classes</h2>
 
             <h3>AudioEngineFactory</h3>
-            <p>Creates platform-specific audio engine instances.</p>
+            <p>Creates platform-specific audio engine instances with automatic platform detection.</p>
 
             <table class="api-table">
                 <thead>
@@ -398,10 +302,6 @@ while (true)
                         <td><code>CreateHighLatency()</code></td>
                         <td>Create with high latency settings (2048 frames)</td>
                     </tr>
-                    <tr>
-                        <td><code>GetPlatformInfo()</code></td>
-                        <td>Get current platform information string</td>
-                    </tr>
                 </tbody>
             </table>
 
@@ -418,17 +318,14 @@ var config = new AudioConfig
 {
     SampleRate = 44100,
     Channels = 2,
-    BufferSize = 256
+    BufferSize = 256,
+    EnableInput = true
 };
-using var engine3 = AudioEngineFactory.Create(config);
-
-// Platform info
-string platform = AudioEngineFactory.GetPlatformInfo();
-Console.WriteLine($"Platform: {platform}"); // e.g., "Windows-WASAPI"</code></pre>
+using var engine3 = AudioEngineFactory.Create(config);</code></pre>
             </div>
 
             <h3>AudioDecoderFactory</h3>
-            <p>Creates audio decoders based on file format.</p>
+            <p>Creates audio decoders with automatic format detection from file extension or header.</p>
 
             <table class="api-table">
                 <thead>
@@ -440,11 +337,15 @@ Console.WriteLine($"Platform: {platform}"); // e.g., "Windows-WASAPI"</code></pr
                 <tbody>
                     <tr>
                         <td><code>Create(string, int, int)</code></td>
-                        <td>Create decoder from file path with target sample rate and channels</td>
+                        <td>Create decoder from file path (auto-detects format)</td>
                     </tr>
                     <tr>
                         <td><code>Create(Stream, AudioFormat, int, int)</code></td>
                         <td>Create decoder from stream with specified format</td>
+                    </tr>
+                    <tr>
+                        <td><code>DetectFormat(Stream)</code></td>
+                        <td>Detect audio format from stream header (magic bytes)</td>
                     </tr>
                 </tbody>
             </table>
@@ -493,10 +394,15 @@ using var decoder2 = AudioDecoderFactory.Create(
     AudioFormat.Wav,
     targetSampleRate: 48000,
     targetChannels: 2
-);</code></pre>
+);
+
+// Detect format
+using var fileStream = File.OpenRead("unknown.audio");
+var format = AudioDecoderFactory.DetectFormat(fileStream);
+Console.WriteLine($"Detected format: {format}");</code></pre>
             </div>
 
-            <h2 id="classes">Configuration Classes</h2>
+            <h2 id="configuration">Configuration</h2>
 
             <h3>AudioConfig</h3>
             <p>Audio engine configuration parameters.</p>
@@ -553,14 +459,20 @@ using var decoder2 = AudioDecoderFactory.Create(
                         <td>null</td>
                         <td>Specific input device ID (null for default)</td>
                     </tr>
+                    <tr>
+                        <td><code>HostType</code></td>
+                        <td>EngineHostType</td>
+                        <td>None</td>
+                        <td>Host API type (PortAudio only, ignored by miniaudio)</td>
+                    </tr>
                 </tbody>
             </table>
 
             <h4>Predefined Configurations</h4>
             <ul>
-                <li><code>AudioConfig.Default</code> - 48kHz, stereo, 512 frames (~10ms latency)</li>
+                <li><code>AudioConfig.Default</code> - 48kHz, stereo, 512 frames (~10.7ms latency)</li>
                 <li><code>AudioConfig.LowLatency</code> - 48kHz, stereo, 128 frames (~2.7ms latency)</li>
-                <li><code>AudioConfig.HighLatency</code> - 48kHz, stereo, 2048 frames (~42ms latency)</li>
+                <li><code>AudioConfig.HighLatency</code> - 48kHz, stereo, 2048 frames (~42.7ms latency)</li>
             </ul>
 
             <div class="code-block">
@@ -633,7 +545,6 @@ if (config2.Validate())
             <div class="code-block">
                 <div class="code-header">Device Enumeration</div>
                 <pre><code class="language-csharp">using var engine = AudioEngineFactory.CreateDefault();
-engine.Initialize(AudioConfig.Default);
 
 // List output devices
 var devices = engine.GetOutputDevices();
@@ -647,7 +558,7 @@ foreach (var device in devices)
             </div>
 
             <h3>AudioStreamInfo</h3>
-            <p>Information about an audio stream.</p>
+            <p>Information about an audio stream from a decoder.</p>
 
             <table class="api-table">
                 <thead>
@@ -713,6 +624,24 @@ public enum AudioDeviceState
 }</code></pre>
             </div>
 
+            <h3>EngineHostType</h3>
+            <p>Host API types for PortAudio backend (ignored by miniaudio).</p>
+
+            <div class="code-block">
+                <div class="code-header">EngineHostType Enum</div>
+                <pre><code class="language-csharp">public enum EngineHostType
+{
+    None = 0,           // Use platform default
+    DirectSound = 1,    // Windows DirectSound
+    MME = 2,            // Windows MME
+    ASIO = 3,           // Windows ASIO
+    WASAPI = 13,        // Windows WASAPI (recommended)
+    CoreAudio = 5,      // macOS Core Audio
+    ALSA = 8,           // Linux ALSA
+    JACK = 12           // Linux JACK
+}</code></pre>
+            </div>
+
             <h2 id="common">Common Components</h2>
 
             <p>The <code>Ownaudio.Core.Common</code> namespace provides utility classes for audio processing:</p>
@@ -760,20 +689,17 @@ public enum AudioDeviceState
                 </tbody>
             </table>
 
-            <h2 id="performance">Performance Characteristics</h2>
+            <div class="alert alert-info" style="margin-top: 2rem;">
+                <strong>Performance Characteristics</strong>
+                <ul style="margin-top: 0.5rem;">
+                    <li><strong>Zero-allocation:</strong> Critical audio paths use zero-allocation techniques</li>
+                    <li><strong>Lock-free:</strong> Real-time safe data structures for thread synchronization</li>
+                    <li><strong>SIMD optimizations:</strong> Available on supported platforms</li>
+                    <li><strong>Thread-safe:</strong> All public APIs are thread-safe</li>
+                </ul>
+            </div>
 
-            <h3>Zero-Allocation Guarantee</h3>
-            <p>
-                Critical audio paths use zero-allocation techniques:
-            </p>
-            <ul>
-                <li><code>Send(Span&lt;float&gt;)</code> - No allocations in audio callback</li>
-                <li><code>Receives(out float[])</code> - Uses pooled buffers</li>
-                <li>Lock-free data structures for thread synchronization</li>
-                <li>Object pooling for frequently allocated objects</li>
-            </ul>
-
-            <h3>Latency</h3>
+            <h3>Latency Reference</h3>
             <table class="api-table">
                 <thead>
                     <tr>
@@ -810,28 +736,6 @@ public enum AudioDeviceState
                     </tr>
                 </tbody>
             </table>
-
-            <h3>CPU Usage</h3>
-            <ul>
-                <li><strong>Idle:</strong> &lt; 1%</li>
-                <li><strong>Active playback:</strong> ~2-3% (single stream)</li>
-                <li><strong>SIMD optimizations:</strong> Available on supported platforms</li>
-                <li><strong>Thread priority:</strong> Real-time priority for audio callback</li>
-            </ul>
-
-            <h3>Memory</h3>
-            <ul>
-                <li>Minimal allocations in real-time paths</li>
-                <li>Object pooling for frequently used objects</li>
-                <li>Efficient buffer management</li>
-                <li>Platform-specific optimizations</li>
-            </ul>
-
-            <div class="alert alert-info">
-                <strong>Thread Safety</strong>
-                All public APIs are thread-safe. Internal audio processing uses lock-free data structures
-                for real-time performance.
-            </div>
 
             <div style="margin-top: 4rem; padding: 2rem; background: var(--surface); border-radius: 8px;">
                 <h3>Related Documentation</h3>

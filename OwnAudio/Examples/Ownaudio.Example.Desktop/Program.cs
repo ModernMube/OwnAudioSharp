@@ -37,7 +37,7 @@ public class TestProgram
             {
                 SampleRate = 48000,
                 Channels = 2,
-                BufferSize = 512,
+                BufferSize = 1024,
                 HostType = EngineHostType.None
             };
 
