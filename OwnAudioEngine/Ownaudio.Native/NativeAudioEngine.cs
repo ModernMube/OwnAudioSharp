@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using Logger;
 using Ownaudio.Core;
 using Ownaudio.Core.Common;
@@ -160,6 +162,41 @@ namespace Ownaudio.Native
 #pragma warning restore CS0067
 
         /// <summary>
+        /// Device monitoring interval in milliseconds.
+        /// </summary>
+        private const int DeviceMonitorIntervalMs = 1000;
+
+        /// <summary>
+        /// Cancellation token source for device monitoring task.
+        /// </summary>
+        private CancellationTokenSource? _deviceMonitorCts;
+
+        /// <summary>
+        /// Background task for monitoring device changes.
+        /// </summary>
+        private Task? _deviceMonitorTask;
+
+        /// <summary>
+        /// Last known output devices list.
+        /// </summary>
+        private List<AudioDeviceInfo>? _lastKnownOutputDevices;
+
+        /// <summary>
+        /// Last known input devices list.
+        /// </summary>
+        private List<AudioDeviceInfo>? _lastKnownInputDevices;
+
+        /// <summary>
+        /// Last active output device ID.
+        /// </summary>
+        private string? _lastActiveOutputDeviceId;
+
+        /// <summary>
+        /// Last active input device ID.
+        /// </summary>
+        private string? _lastActiveInputDeviceId;
+
+        /// <summary>
         /// Gets the number of frames per audio buffer.
         /// </summary>
         public int FramesPerBuffer => _framesPerBuffer;
@@ -174,6 +211,229 @@ namespace Ownaudio.Native
             _isBuffering = 0;
             _selectedHostApiType = (PaHostApiTypeId)(-1); // Initialize to invalid value
         }
+
+        #region Device Monitoring
+
+        /// <summary>
+        /// Starts the device monitoring task.
+        /// </summary>
+        private void StartDeviceMonitor()
+        {
+            try
+            {
+                // Stop any existing monitor
+                StopDeviceMonitor();
+
+                // Initialize device lists
+                _lastKnownOutputDevices = GetOutputDevices();
+                _lastKnownInputDevices = _config.EnableInput ? GetInputDevices() : null;
+
+                // Store current active device IDs
+                if (_backend == AudioEngineBackend.PortAudio)
+                {
+                    var outputDevices = _lastKnownOutputDevices;
+                    // Find device by matching the active device index
+                    var activeOutput = outputDevices?.Find(d => d.DeviceId == _activeOutputDeviceIndex.ToString());
+                    _lastActiveOutputDeviceId = activeOutput?.DeviceId;
+
+                    if (_config.EnableInput)
+                    {
+                        var inputDevices = _lastKnownInputDevices;
+                        var activeInput = inputDevices?.Find(d => d.DeviceId == _activeInputDeviceIndex.ToString());
+                        _lastActiveInputDeviceId = activeInput?.DeviceId;
+                    }
+                }
+                else // MiniAudio
+                {
+                    // For MiniAudio, we use the default device (null ID means default)
+                    var defaultOutput = _lastKnownOutputDevices?.Find(d => d.IsDefault);
+                    _lastActiveOutputDeviceId = defaultOutput?.DeviceId;
+
+                    if (_config.EnableInput)
+                    {
+                        var defaultInput = _lastKnownInputDevices?.Find(d => d.IsDefault);
+                        _lastActiveInputDeviceId = defaultInput?.DeviceId;
+                    }
+                }
+
+                // Start monitoring task
+                _deviceMonitorCts = new CancellationTokenSource();
+                _deviceMonitorTask = Task.Run(() => DeviceMonitorLoop(_deviceMonitorCts.Token), _deviceMonitorCts.Token);
+
+                Log.Info("Device monitoring started");
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Failed to start device monitor: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Stops the device monitoring task.
+        /// </summary>
+        private void StopDeviceMonitor()
+        {
+            try
+            {
+                if (_deviceMonitorCts != null)
+                {
+                    _deviceMonitorCts.Cancel();
+                    _deviceMonitorTask?.Wait(2000); // Wait up to 2 seconds
+                    _deviceMonitorCts.Dispose();
+                    _deviceMonitorCts = null;
+                    _deviceMonitorTask = null;
+                    Log.Info("Device monitoring stopped");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Error stopping device monitor: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Background loop that monitors for device changes.
+        /// </summary>
+        private async Task DeviceMonitorLoop(CancellationToken ct)
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(DeviceMonitorIntervalMs, ct);
+                    CheckForDeviceChanges();
+                }
+                catch (OperationCanceledException)
+                {
+                    // Normal cancellation, exit loop
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Log.Error($"Error in device monitor loop: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Checks for device changes and handles device removal.
+        /// </summary>
+        private void CheckForDeviceChanges()
+        {
+            try
+            {
+                // Only monitor if engine is running
+                if (_isRunning == 0)
+                    return;
+
+                // Get current device lists
+                var currentOutputDevices = GetOutputDevices();
+                var currentInputDevices = _config.EnableInput ? GetInputDevices() : null;
+
+                // Check if active output device was removed
+                if (_lastActiveOutputDeviceId != null)
+                {
+                    var activeOutputExists = currentOutputDevices?.Any(d => d.DeviceId == _lastActiveOutputDeviceId) ?? false;
+
+                    if (!activeOutputExists)
+                    {
+                        Log.Warning($"Active output device removed (ID: {_lastActiveOutputDeviceId})");
+                        _ = HandleDeviceRemoved(true); // Fire and forget
+                        return; // Exit early, HandleDeviceRemoved will reinitialize
+                    }
+                }
+
+                // Check if active input device was removed
+                if (_config.EnableInput && _lastActiveInputDeviceId != null)
+                {
+                    var activeInputExists = currentInputDevices?.Any(d => d.DeviceId == _lastActiveInputDeviceId) ?? false;
+
+                    if (!activeInputExists)
+                    {
+                        Log.Warning($"Active input device removed (ID: {_lastActiveInputDeviceId})");
+                        _ = HandleDeviceRemoved(false); // Fire and forget
+                        return; // Exit early, HandleDeviceRemoved will reinitialize
+                    }
+                }
+
+                // Check if default device changed (only if we're using default)
+                if (_config.OutputDeviceId == null)
+                {
+                    var currentDefault = currentOutputDevices?.Find(d => d.IsDefault);
+                    if (currentDefault != null && currentDefault.DeviceId != _lastActiveOutputDeviceId)
+                    {
+                        Log.Info($"Default output device changed to: {currentDefault.Name}");
+                        _ = HandleDeviceRemoved(true); // Fire and forget - reinitialize with new default
+                        return;
+                    }
+                }
+
+
+                // Update last known device lists
+                _lastKnownOutputDevices = currentOutputDevices;
+                _lastKnownInputDevices = currentInputDevices;
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Error checking for device changes: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Handles device removal by reinitializing the engine with the default device.
+        /// </summary>
+        private async Task HandleDeviceRemoved(bool isOutputDevice)
+        {
+            try
+            {
+                Log.Warning("Device removed, switching to default device...");
+
+                // Stop the engine safely
+                Stop();
+
+                // Wait a bit for the device to be fully released
+                await Task.Delay(500);
+
+                // Modify config to use default device
+                if (isOutputDevice)
+                {
+                    _config.OutputDeviceId = null; // Use default
+                    _activeOutputDeviceIndex = -1;
+                }
+                else
+                {
+                    _config.InputDeviceId = null; // Use default
+                    _activeInputDeviceIndex = -1;
+                }
+
+                // Reinitialize the engine
+                int result = _backend == AudioEngineBackend.PortAudio
+                    ? InitializePortAudio()
+                    : InitializeMiniAudio();
+
+                if (result != 0)
+                {
+                    Log.Error($"Failed to reinitialize engine after device removal: {result}");
+                    return;
+                }
+
+                // Restart the engine
+                result = Start();
+                if (result != 0)
+                {
+                    Log.Error($"Failed to restart engine after device removal: {result}");
+                    return;
+                }
+
+                Log.Info("Successfully switched to default device");
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Error handling device removal: {ex.Message}");
+            }
+        }
+
+        #endregion
 
         /// <summary>
         /// Initializes the audio engine with the specified configuration.
@@ -193,9 +453,10 @@ namespace Ownaudio.Native
             // Determine which backend to use
             _backend = DetermineBackend();
 
+            int result;
             try
             {
-                return _backend == AudioEngineBackend.PortAudio
+                result = _backend == AudioEngineBackend.PortAudio
                     ? InitializePortAudio()
                     : InitializeMiniAudio();
             }
@@ -206,10 +467,21 @@ namespace Ownaudio.Native
                 {
                     Log.Error($"PortAudio initialization failed: {ex.Message}. Falling back to MiniAudio...");
                     _backend = AudioEngineBackend.MiniAudio;
-                    return InitializeMiniAudio();
+                    result = InitializeMiniAudio();
                 }
-                throw;
+                else
+                {
+                    throw;
+                }
             }
+
+            // Start device monitoring if initialization was successful
+            if (result == 0)
+            {
+                StartDeviceMonitor();
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -1237,6 +1509,9 @@ namespace Ownaudio.Native
         {
             if (_disposed)
                 return;
+
+            // Stop device monitoring first
+            StopDeviceMonitor();
 
             Stop();
 
