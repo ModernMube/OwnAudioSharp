@@ -140,12 +140,17 @@ public partial class FileSource
     /// <returns>True if buffer should be filled, false otherwise.</returns>
     private bool ShouldFillBuffer()
     {
-        // Dynamic buffer sizing: higher target when SoundTouch is active
+        // BUGFIX: Reduced target fill level to prevent accumulation buffer overflow.
+        // Previous 87.5% (7/8) left only 1/8 (4096 frames) free space, but we read
+        // 8192 frames at once. With SoundTouch time-stretch, this can expand even more.
+        // This caused the accumulation buffer to grow indefinitely until overflow,
+        // resulting in audio dropout after a short time with 15+ tracks at <95% tempo.
+        // Solution: Use 50% (1/2) threshold to ensure at least 2x read chunk space.
         bool isSoundTouchActive = _soundTouch.IsProcessingNeeded();
         int targetFillLevel = isSoundTouchActive
-            ? (_buffer.Capacity * 7) / 8     // 87.5% for SoundTouch
+            ? (_buffer.Capacity * 1) / 2     // 50% for SoundTouch (was 87.5%)
             : (_buffer.Capacity * 3) / 4;    // 75% for direct playback
-        
+
         return _buffer.Available < targetFillLevel;
     }
 
@@ -306,7 +311,7 @@ public partial class FileSource
             try
             {
                 // Caller should check IsProcessingNeeded() before calling this method
-                
+
                 int requiredSize = samples.Length;
                 if (_soundTouchInputBuffer.Length < requiredSize)
                 {
