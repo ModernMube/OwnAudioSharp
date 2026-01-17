@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <!-- Enable mobile targets only when explicitly building for mobile -->
-    <TargetFrameworks Condition="'$(BuildingForMobile)' == 'true'">net9.0;net9.0-android35.0;net9.0-ios18.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(BuildingForMobile)' == 'true'">net9.0;net9.0-android;net9.0-ios</TargetFrameworks>
     <TargetFrameworks Condition="'$(BuildingForMobile)' != 'true'">net9.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
@@ -37,14 +37,14 @@
 
   <!-- Android-specific settings -->
   <PropertyGroup Condition="$(TargetFramework.Contains('android'))">
-    <SupportedOSPlatformVersion>21.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
     <AndroidEnableProfiledAot>true</AndroidEnableProfiledAot>
     <AndroidUseInterpreter>false</AndroidUseInterpreter>
   </PropertyGroup>
 
   <!-- iOS-specific settings -->
   <PropertyGroup Condition="$(TargetFramework.Contains('ios'))">
-    <SupportedOSPlatformVersion>11.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion>12.2</SupportedOSPlatformVersion>
     <RuntimeIdentifiers>ios-arm64;iossimulator-arm64;iossimulator-x64</RuntimeIdentifiers>
   </PropertyGroup>
 

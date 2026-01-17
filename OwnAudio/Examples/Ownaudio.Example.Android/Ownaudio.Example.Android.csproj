@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net9.0-android35.0</TargetFrameworks>
+    <TargetFrameworks>net9.0-android</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -31,13 +31,26 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Xamarin.AndroidX.AppCompat" Version="1.7.0.2" />
+    <PackageReference Include="Xamarin.AndroidX.AppCompat" Version="1.7.1.2">
+      <!-- Exclude duplicate Compose runtime annotations to prevent R8 duplicate class errors -->
+      <ExcludeAssets>none</ExcludeAssets>
+      <PrivateAssets>none</PrivateAssets>
+    </PackageReference>
+    <!-- Explicitly exclude the JVM variant that causes conflicts -->
+    <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Annotation.Jvm" Version="*">
+      <ExcludeAssets>all</ExcludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\OwnAudioEngine\Ownaudio.Android\Ownaudio.Android.csproj" />
     <ProjectReference Include="..\..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" />
     <ProjectReference Include="..\..\Source\OwnaudioNET.Mobile.csproj" />
+  </ItemGroup>
+
+  <!-- Android Manifest -->
+  <ItemGroup>
+    <AndroidManifest Include="Properties\AndroidManifest.xml" />
   </ItemGroup>
 
   <!-- Android Resources -->
