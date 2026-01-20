@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
 using Ownaudio;
 using Ownaudio.Core;
-using OwnaudioNET.BufferManagement;
 using OwnaudioNET.Core;
 using OwnaudioNET.Events;
 using OwnaudioNET.Exceptions;
@@ -10,46 +9,35 @@ namespace OwnaudioNET.Engine;
 
 /// <summary>
 /// Central wrapper class that bridges OwnaudioNET with the external IAudioEngine implementation.
-/// Provides lock-free buffer management, pump thread pattern, and zero-allocation Send/Receive operations.
-///
+/// Provides simplified interface for audio engine lifecycle, device management, and event forwarding.
+/// </summary>
+/// <remarks>
 /// Architecture:
 /// - Main Thread: User API calls (Send, Receive, Start, Stop, device management)
-/// - Pump Thread: Reads from CircularBuffer and calls engine.Send() in a tight loop
+/// - AudioBufferController: Manages circular buffer and buffer pool
+/// - AudioPump: Manages pump thread that transfers data to engine
 /// - Engine RT Thread: Managed by external IAudioEngine (e.g., WASAPI RT thread)
 ///
 /// Thread Safety:
 /// - All public methods are thread-safe
-/// - Internal buffer operations are lock-free (CircularBuffer SPSC pattern)
-/// - State management uses volatile fields and Interlocked operations
+/// - Internal components use lock-free or thread-safe operations
 ///
 /// Performance:
 /// - Send() latency: &lt; 1ms (CircularBuffer write only)
 /// - Total pipeline latency: ~21ms (2x buffer) + engine buffer (~10ms) = ~31ms @ 512 frames, 48kHz
 /// - Zero allocations in Send() hot path
-/// - Pump thread overhead: &lt; 5% CPU
-/// </summary>
+/// </remarks>
 public sealed class AudioEngineWrapper : IDisposable
 {
     // External engine instance
     private readonly IAudioEngine _engine;
 
-    // Buffer management
-    private readonly CircularBuffer _outputBuffer;
-    private readonly AudioBufferPool _inputBufferPool;
-
-    // Pump thread
-    private Thread? _pumpThread;
-    private volatile bool _stopRequested;
-    private volatile bool _isRunning;
+    // Component instances
+    private readonly AudioBufferController _bufferController;
+    private readonly AudioPump _pump;
 
     // Configuration
     private readonly AudioConfig _config;
-    private readonly int _engineBufferSize; // In samples (frames * channels)
-    private readonly int _sleepIntervalMs;
-
-    // Statistics and error tracking
-    private long _totalUnderruns;
-    private long _pumpedFrames;
 
     // Event forwarding subscriptions
     private EventHandler<AudioDeviceChangedEventArgs>? _engineOutputDeviceChanged;
@@ -73,22 +61,22 @@ public sealed class AudioEngineWrapper : IDisposable
     /// <summary>
     /// Gets whether the audio engine is currently running.
     /// </summary>
-    public bool IsRunning => _isRunning;
+    public bool IsRunning => _pump.IsRunning;
 
     /// <summary>
     /// Gets the number of samples currently available in the output buffer.
     /// </summary>
-    public int OutputBufferAvailable => _outputBuffer.Available;
+    public int OutputBufferAvailable => _bufferController.OutputBufferAvailable;
 
     /// <summary>
     /// Gets the total number of buffer underrun events that have occurred.
     /// </summary>
-    public long TotalUnderruns => Interlocked.Read(ref _totalUnderruns);
+    public long TotalUnderruns => _bufferController.TotalUnderruns;
 
     /// <summary>
     /// Gets the total number of frames pumped to the audio engine.
     /// </summary>
-    public long TotalPumpedFrames => Interlocked.Read(ref _pumpedFrames);
+    public long TotalPumpedFrames => _pump.TotalPumpedFrames;
 
     /// <summary>
     /// Gets the underlying IAudioEngine instance.
@@ -99,7 +87,11 @@ public sealed class AudioEngineWrapper : IDisposable
     /// <summary>
     /// Event raised when the output buffer is full and incoming audio is dropped.
     /// </summary>
-    public event EventHandler<BufferUnderrunEventArgs>? BufferUnderrun;
+    public event EventHandler<BufferUnderrunEventArgs>? BufferUnderrun
+    {
+        add => _bufferController.BufferUnderrun += value;
+        remove => _bufferController.BufferUnderrun -= value;
+    }
 
     /// <summary>
     /// Event raised when the output device changes.
@@ -134,33 +126,24 @@ public sealed class AudioEngineWrapper : IDisposable
             throw new AudioEngineException("Engine FramesPerBuffer must be positive.", -1);
 
         // Calculate buffer size in samples (frames * channels)
-        _engineBufferSize = FramesPerBuffer * _config.Channels;
+        int engineBufferSize = FramesPerBuffer * _config.Channels;
 
-        // Create output circular buffer
-        // Increased from 2x to 8x to accommodate large mixer buffers (4096 frames) and heavy DSP.
-        // If EngineBuffer is 1024, 2x = 2048 < 4096 (Mixer) -> Overflow!
-        // 8x = 8192 > 4096 -> OK! Plus safety margin for jitter.
-        int circularBufferSize = _engineBufferSize * 8;
-        _outputBuffer = new CircularBuffer(circularBufferSize);
+        // Create buffer controller
+        _bufferController = new AudioBufferController(
+            engineBufferSize,
+            _config.Channels,
+            bufferMultiplier: 8);
 
-        // Create input buffer pool
-        _inputBufferPool = new AudioBufferPool(_engineBufferSize, initialPoolSize: 4, maxPoolSize: 16);
-
-        // Calculate sleep interval for pump thread (half buffer time to avoid tight loop)
-        // Sleep time = (FramesPerBuffer / 2) / SampleRate * 1000 ms
-        double halfBufferTimeMs = (FramesPerBuffer / 2.0) / _config.SampleRate * 1000.0;
-        _sleepIntervalMs = Math.Max(1, (int)Math.Round(halfBufferTimeMs));
+        // Create pump
+        _pump = new AudioPump(
+            _engine,
+            _bufferController,
+            engineBufferSize,
+            FramesPerBuffer,
+            _config.SampleRate);
 
         // Subscribe to engine events
         SubscribeToEngineEvents();
-
-        // Pump thread will be created in Start() method to allow restart
-        _pumpThread = null;
-
-        _stopRequested = false;
-        _isRunning = false;
-        _totalUnderruns = 0;
-        _pumpedFrames = 0;
     }
 
     /// <summary>
@@ -173,7 +156,7 @@ public sealed class AudioEngineWrapper : IDisposable
     {
         ThrowIfDisposed();
 
-        if (_isRunning)
+        if (IsRunning)
             return; // Already running
 
         try
@@ -184,21 +167,10 @@ public sealed class AudioEngineWrapper : IDisposable
                 throw new AudioEngineException($"Failed to start audio engine. Error code: {result}", result);
 
             // Start pump thread
-            _stopRequested = false;
-            _isRunning = true;
-
-            // Create new thread for each start (threads cannot be restarted)
-            _pumpThread = new Thread(PumpThreadLoop)
-            {
-                Name = "AudioEngineWrapper.PumpThread",
-                IsBackground = true,
-                Priority = ThreadPriority.Highest // High priority for audio pumping
-            };
-            _pumpThread.Start();
+            _pump.Start();
         }
         catch (Exception ex) when (ex is not AudioEngineException)
         {
-            _isRunning = false;
             throw new AudioEngineException("Failed to start audio engine wrapper.", ex);
         }
     }
@@ -216,30 +188,18 @@ public sealed class AudioEngineWrapper : IDisposable
     {
         ThrowIfDisposed();
 
-        if (!_isRunning)
+        if (!IsRunning)
             return; // Already stopped
 
         try
         {
-            // Signal pump thread to stop
-            _stopRequested = true;
-
-            // Wait for pump thread to exit (with timeout)
-            if (_pumpThread != null && _pumpThread.IsAlive)
-            {
-                if (!_pumpThread.Join(TimeSpan.FromSeconds(2)))
-                {
-                    // Thread didn't exit gracefully - log warning but continue
-                    // Don't abort - it's unsafe in modern .NET
-                }
-            }
+            // Stop pump thread first
+            _pump.Stop();
 
             // Stop the external audio engine
             int result = _engine.Stop();
             if (result < 0)
                 throw new AudioEngineException($"Failed to stop audio engine. Error code: {result}", result);
-
-            _isRunning = false;
         }
         catch (Exception ex) when (ex is not AudioEngineException)
         {
@@ -296,29 +256,10 @@ public sealed class AudioEngineWrapper : IDisposable
     {
         ThrowIfDisposed();
 
-        if (!_isRunning)
+        if (!IsRunning)
             throw new InvalidOperationException("Cannot send audio when engine is not running. Call Start() first.");
 
-        if (samples.IsEmpty)
-            return;
-
-        // Write to circular buffer (zero-allocation, lock-free)
-        int written = _outputBuffer.Write(samples);
-
-        // Check for underrun (buffer full - samples dropped)
-        if (written < samples.Length)
-        {
-            int droppedSamples = samples.Length - written;
-            int droppedFrames = droppedSamples / _config.Channels;
-
-            Interlocked.Increment(ref _totalUnderruns);
-
-            // Raise underrun event (do not block hot path - event handlers should be fast)
-            BufferUnderrun?.Invoke(this, new BufferUnderrunEventArgs(
-                missedFrames: droppedFrames,
-                position: Interlocked.Read(ref _pumpedFrames)
-            ));
-        }
+        _bufferController.Send(samples);
     }
 
     /// <summary>
@@ -348,7 +289,7 @@ public sealed class AudioEngineWrapper : IDisposable
     {
         ThrowIfDisposed();
 
-        if (!_isRunning)
+        if (!IsRunning)
             throw new InvalidOperationException("Cannot receive audio when engine is not running. Call Start() first.");
 
         try
@@ -370,7 +311,7 @@ public sealed class AudioEngineWrapper : IDisposable
                 return null;
             }
 
-            sampleCount = result; // FIXED: Use actual samples read, not buffer size
+            sampleCount = result; // Use actual samples read, not buffer size
             return samples;
         }
         catch
@@ -392,17 +333,7 @@ public sealed class AudioEngineWrapper : IDisposable
     /// </remarks>
     public void ReturnInputBuffer(float[] buffer)
     {
-        if (buffer == null || buffer.Length != _engineBufferSize)
-            return; // Invalid buffer - discard
-
-        try
-        {
-            _inputBufferPool.Return(buffer);
-        }
-        catch
-        {
-            // Pool full or other error - discard buffer
-        }
+        _bufferController.ReturnInputBuffer(buffer);
     }
 
     /// <summary>
@@ -455,7 +386,7 @@ public sealed class AudioEngineWrapper : IDisposable
     {
         ThrowIfDisposed();
 
-        if (_isRunning)
+        if (IsRunning)
             throw new InvalidOperationException("Cannot change output device while engine is running. Call Stop() first.");
 
         try
@@ -481,7 +412,7 @@ public sealed class AudioEngineWrapper : IDisposable
     {
         ThrowIfDisposed();
 
-        if (_isRunning)
+        if (IsRunning)
             throw new InvalidOperationException("Cannot change input device while engine is running. Call Stop() first.");
 
         try
@@ -507,63 +438,7 @@ public sealed class AudioEngineWrapper : IDisposable
     public void ClearOutputBuffer()
     {
         ThrowIfDisposed();
-        _outputBuffer.Clear();
-    }
-
-    /// <summary>
-    /// Pump thread loop - reads from CircularBuffer and sends to engine.
-    /// This runs at high priority to minimize audio glitches.
-    /// </summary>
-    private void PumpThreadLoop()
-    {
-        // Pre-allocate buffer OUTSIDE loop to avoid stack overflow issues
-        // (stackalloc in loop can cause problems in older .NET versions)
-        float[] tempBuffer = new float[_engineBufferSize];
-
-        while (!_stopRequested)
-        {
-            try
-            {
-                // Check if enough data is available in the circular buffer
-                int available = _outputBuffer.Available;
-
-                if (available >= _engineBufferSize)
-                {
-                    // Read from circular buffer into pre-allocated temp buffer
-                    Span<float> bufferSpan = tempBuffer.AsSpan();
-                    int read = _outputBuffer.Read(bufferSpan);
-
-                    if (read == _engineBufferSize)
-                    {
-                        // Send to engine (this may block until hardware buffer has space)
-                        _engine.Send(bufferSpan);
-
-                        // Update statistics
-                        Interlocked.Add(ref _pumpedFrames, FramesPerBuffer);
-                    }
-                    else
-                    {
-                        // Partial read - unusual, but handle gracefully
-                        // Send what we have
-                        _engine.Send(bufferSpan.Slice(0, read));
-                        Interlocked.Add(ref _pumpedFrames, read / _config.Channels);
-                    }
-                }
-                else
-                {
-                    // Not enough data available - sleep and retry
-                    // This is normal during startup or sparse audio playback
-                    Thread.Sleep(_sleepIntervalMs);
-                }
-            }
-            catch
-            {
-                // Error in pump thread - log but don't crash the thread
-                // In production, log via ILogger
-                // Back off on error to avoid tight loop
-                Thread.Sleep(_sleepIntervalMs * 2);
-            }
-        }
+        _bufferController.ClearOutputBuffer();
     }
 
     /// <summary>
@@ -616,7 +491,7 @@ public sealed class AudioEngineWrapper : IDisposable
             return;
 
         // Stop engine if running
-        if (_isRunning)
+        if (IsRunning)
         {
             try
             {
@@ -631,9 +506,9 @@ public sealed class AudioEngineWrapper : IDisposable
         // Unsubscribe from engine events
         UnsubscribeFromEngineEvents();
 
-        // Clear buffers
-        _outputBuffer.Clear();
-        _inputBufferPool.Clear();
+        // Dispose components
+        _pump.Dispose();
+        _bufferController.Dispose();
 
         // Dispose engine
         _engine?.Dispose();
@@ -647,7 +522,7 @@ public sealed class AudioEngineWrapper : IDisposable
     public override string ToString()
     {
         return $"AudioEngineWrapper: {_config.SampleRate}Hz {_config.Channels}ch, BufferSize: {FramesPerBuffer} frames, " +
-               $"Running: {_isRunning}, OutputBuffer: {_outputBuffer.Available}/{_outputBuffer.Capacity} samples, " +
+               $"Running: {IsRunning}, OutputBuffer: {OutputBufferAvailable}/{_bufferController.OutputBufferCapacity} samples, " +
                $"Underruns: {TotalUnderruns}, Pumped: {TotalPumpedFrames} frames";
     }
 }

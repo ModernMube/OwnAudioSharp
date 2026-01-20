@@ -465,6 +465,18 @@ Console.WriteLine($"Detected format: {format}");</code></pre>
                         <td>None</td>
                         <td>Host API type (PortAudio only, ignored by miniaudio)</td>
                     </tr>
+                    <tr>
+                        <td><code>InputChannelSelectors</code></td>
+                        <td>int[]?</td>
+                        <td>null</td>
+                        <td>ASIO-specific input channel selection (null for sequential mapping)</td>
+                    </tr>
+                    <tr>
+                        <td><code>OutputChannelSelectors</code></td>
+                        <td>int[]?</td>
+                        <td>null</td>
+                        <td>ASIO-specific output channel selection (null for sequential mapping)</td>
+                    </tr>
                 </tbody>
             </table>
 
@@ -539,6 +551,16 @@ if (config2.Validate())
                         <td>AudioDeviceState</td>
                         <td>Current device state</td>
                     </tr>
+                    <tr>
+                        <td><code>MaxInputChannels</code></td>
+                        <td>int</td>
+                        <td>Maximum number of input channels supported (0 if unavailable)</td>
+                    </tr>
+                    <tr>
+                        <td><code>MaxOutputChannels</code></td>
+                        <td>int</td>
+                        <td>Maximum number of output channels supported (0 if unavailable)</td>
+                    </tr>
                 </tbody>
             </table>
 
@@ -554,7 +576,18 @@ foreach (var device in devices)
     Console.WriteLine($"  ID: {device.DeviceId}");
     Console.WriteLine($"  Default: {device.IsDefault}");
     Console.WriteLine($"  State: {device.State}");
-}</code></pre>
+    Console.WriteLine($"  Max Input Channels: {device.MaxInputChannels}");
+    Console.WriteLine($"  Max Output Channels: {device.MaxOutputChannels}");
+}
+
+// ASIO example with channel selection
+var config = new AudioConfig
+{
+    HostType = EngineHostType.ASIO,
+    Channels = 2,
+    OutputChannelSelectors = new int[] { 4, 5 }  // Use channels 4 and 5
+};
+using var asioEngine = AudioEngineFactory.Create(config);</code></pre>
             </div>
 
             <h3>AudioStreamInfo</h3>

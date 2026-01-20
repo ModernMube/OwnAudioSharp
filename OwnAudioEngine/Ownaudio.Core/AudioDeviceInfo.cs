@@ -44,6 +44,18 @@ namespace Ownaudio.Core
         public AudioDeviceState State { get; }
 
         /// <summary>
+        /// Gets the maximum number of input channels supported by this device.
+        /// Returns 0 if the device does not support input or if the information is unavailable.
+        /// </summary>
+        public int MaxInputChannels { get; }
+
+        /// <summary>
+        /// Gets the maximum number of output channels supported by this device.
+        /// Returns 0 if the device does not support output or if the information is unavailable.
+        /// </summary>
+        public int MaxOutputChannels { get; }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="AudioDeviceInfo"/> class.
         /// </summary>
         /// <param name="deviceId">The unique device identifier.</param>
@@ -61,6 +73,32 @@ namespace Ownaudio.Core
             bool isOutput,
             bool isDefault,
             AudioDeviceState state)
+            : this(deviceId, name, engineName, isInput, isOutput, isDefault, state, 0, 0)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="AudioDeviceInfo"/> class with channel count information.
+        /// </summary>
+        /// <param name="deviceId">The unique device identifier.</param>
+        /// <param name="name">The human-readable device name.</param>
+        /// <param name="engineName">The name of the audio engine managing this device.</param>
+        /// <param name="isInput">Indicates whether this is an input device.</param>
+        /// <param name="isOutput">Indicates whether this is an output device.</param>
+        /// <param name="isDefault">Indicates whether this is the default device.</param>
+        /// <param name="state">The device state.</param>
+        /// <param name="maxInputChannels">Maximum number of input channels supported.</param>
+        /// <param name="maxOutputChannels">Maximum number of output channels supported.</param>
+        public AudioDeviceInfo(
+            string deviceId,
+            string name,
+            string engineName,
+            bool isInput,
+            bool isOutput,
+            bool isDefault,
+            AudioDeviceState state,
+            int maxInputChannels,
+            int maxOutputChannels)
         {
             DeviceId = deviceId;
             Name = name;
@@ -69,6 +107,8 @@ namespace Ownaudio.Core
             IsOutput = isOutput;
             IsDefault = isDefault;
             State = state;
+            MaxInputChannels = maxInputChannels;
+            MaxOutputChannels = maxOutputChannels;
         }
 
         /// <summary>

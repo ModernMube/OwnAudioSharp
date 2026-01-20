@@ -42,21 +42,34 @@ internal static partial class PaBinding
     }
 
     public enum PaHostApiTypeId
-    {   
-        paInDevelopment=0, /* use while developing support for a new host API */
-        paDirectSound=1,
-        paMME=2,
-        paASIO=3,
-        paSoundManager=4,
-        paCoreAudio=5,
-        paOSS=7,
-        paALSA=8,
-        paAL=9,
-        paBeOS=10,
-        paWDMKS=11,
-        paJACK=12,
-        paWASAPI=13,
-        paAudioScienceHPI=14
+    {
+        paInDevelopment = 0, /* use while developing support for a new host API */
+        paDirectSound = 1,
+        paMME = 2,
+        paASIO = 3,
+        paSoundManager = 4,
+        paCoreAudio = 5,
+        paOSS = 7,
+        paALSA = 8,
+        paAL = 9,
+        paBeOS = 10,
+        paWDMKS = 11,
+        paJACK = 12,
+        paWASAPI = 13,
+        paAudioScienceHPI = 14
+    }
+
+    /// <summary>
+    /// ASIO-specific stream flags for advanced configuration.
+    /// </summary>
+    [Flags]
+    public enum PaAsioFlags : uint
+    {
+        /// <summary>
+        /// Use channel selectors to specify which ASIO channels to use.
+        /// When set, the channelSelectors field in PaAsioStreamInfo must point to an array of channel indices.
+        /// </summary>
+        UseChannelSelectors = 0x01
     }
 
     [Flags]
@@ -93,7 +106,7 @@ internal static partial class PaBinding
     /// <summary>
     /// Thread priority levels for WASAPI operations.
     /// </summary>
-    public enum PaWasapiThreadPriority 
+    public enum PaWasapiThreadPriority
     {
         /// <summary>
         /// No specific priority.

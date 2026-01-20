@@ -662,16 +662,42 @@ namespace Ownaudio.Native
                 }
             }
 
+            // Check if we need ASIO-specific configuration
+            bool useAsioChannelSelectors = _selectedHostApiType == PaHostApiTypeId.paASIO &&
+                                           (_config.OutputChannelSelectors != null && _config.OutputChannelSelectors.Length > 0);
+
+            // Prepare ASIO stream info for output if needed
+            PaAsioStreamInfo outputAsioInfo = default;
+            IntPtr outputAsioInfoPtr = IntPtr.Zero;
+
+            if (useAsioChannelSelectors)
+            {
+                outputAsioInfo = new PaAsioStreamInfo
+                {
+                    size = (uint)Marshal.SizeOf<PaAsioStreamInfo>(),
+                    hostApiType = PaHostApiTypeId.paASIO,
+                    version = 1,
+                    flags = (uint)PaAsioFlags.UseChannelSelectors
+                };
+                outputAsioInfo.SetChannelSelectors(_config.OutputChannelSelectors!);
+                outputAsioInfoPtr = Marshal.AllocHGlobal(Marshal.SizeOf<PaAsioStreamInfo>());
+                Marshal.StructureToPtr(outputAsioInfo, outputAsioInfoPtr, false);
+
+                Log.Info($"PortAudio ASIO: Using custom output channel selectors: [{string.Join(", ", _config.OutputChannelSelectors!)}]");
+            }
+
             var outputParams = new PaStreamParameters
             {
                 device = _activeOutputDeviceIndex,
                 channelCount = _config.Channels,
                 sampleFormat = PaSampleFormat.paFloat32,
                 suggestedLatency = outputLatency,
-                hostApiSpecificStreamInfo = IntPtr.Zero
+                hostApiSpecificStreamInfo = outputAsioInfoPtr
             };
 
             IntPtr inputParamsPtr = IntPtr.Zero;
+            PaAsioStreamInfo inputAsioInfo = default;
+            IntPtr inputAsioInfoPtr = IntPtr.Zero;
 
             if (_config.EnableInput && _activeInputDeviceIndex >= 0)
             {
@@ -684,13 +710,33 @@ namespace Ownaudio.Native
                     inputLatency = devInfo.defaultLowInputLatency;
                 }
 
+                // Check if we need ASIO-specific configuration for input
+                bool useAsioInputChannelSelectors = _selectedHostApiType == PaHostApiTypeId.paASIO &&
+                                                    (_config.InputChannelSelectors != null && _config.InputChannelSelectors.Length > 0);
+
+                if (useAsioInputChannelSelectors)
+                {
+                    inputAsioInfo = new PaAsioStreamInfo
+                    {
+                        size = (uint)Marshal.SizeOf<PaAsioStreamInfo>(),
+                        hostApiType = PaHostApiTypeId.paASIO,
+                        version = 1,
+                        flags = (uint)PaAsioFlags.UseChannelSelectors
+                    };
+                    inputAsioInfo.SetChannelSelectors(_config.InputChannelSelectors!);
+                    inputAsioInfoPtr = Marshal.AllocHGlobal(Marshal.SizeOf<PaAsioStreamInfo>());
+                    Marshal.StructureToPtr(inputAsioInfo, inputAsioInfoPtr, false);
+
+                    Log.Info($"PortAudio ASIO: Using custom input channel selectors: [{string.Join(", ", _config.InputChannelSelectors!)}]");
+                }
+
                 var inputParams = new PaStreamParameters
                 {
                     device = _activeInputDeviceIndex,
                     channelCount = _config.Channels,
                     sampleFormat = PaSampleFormat.paFloat32,
                     suggestedLatency = inputLatency,
-                    hostApiSpecificStreamInfo = IntPtr.Zero
+                    hostApiSpecificStreamInfo = inputAsioInfoPtr
                 };
                 inputParamsPtr = Marshal.AllocHGlobal(Marshal.SizeOf(inputParams));
                 Marshal.StructureToPtr(inputParams, inputParamsPtr, false);
@@ -716,9 +762,23 @@ namespace Ownaudio.Native
                 _paCallback,
                 IntPtr.Zero);
 
+            // Cleanup allocated memory
             Marshal.FreeHGlobal(outputParamsPtr);
             if (inputParamsPtr != IntPtr.Zero)
                 Marshal.FreeHGlobal(inputParamsPtr);
+
+            // Free ASIO info structures and their internal channel selector arrays
+            if (outputAsioInfoPtr != IntPtr.Zero)
+            {
+                outputAsioInfo.Free();
+                Marshal.FreeHGlobal(outputAsioInfoPtr);
+            }
+
+            if (inputAsioInfoPtr != IntPtr.Zero)
+            {
+                inputAsioInfo.Free();
+                Marshal.FreeHGlobal(inputAsioInfoPtr);
+            }
 
             return result;
         }
@@ -1210,7 +1270,9 @@ namespace Ownaudio.Native
                                 isInput: paDeviceInfo.maxInputChannels > 0,
                                 isOutput: true,
                                 isDefault: (i == defaultDeviceIndex),
-                                state: AudioDeviceState.Active
+                                state: AudioDeviceState.Active,
+                                maxInputChannels: paDeviceInfo.maxInputChannels,
+                                maxOutputChannels: paDeviceInfo.maxOutputChannels
                             ));
                         }
                     }
@@ -1250,6 +1312,20 @@ namespace Ownaudio.Native
                         // Convert device ID to string (use index as ID)
                         string deviceId = $"ma_output_{i}";
 
+                        // Extract max channel counts from nativeDataFormats
+                        int maxOutputChannels = 0;
+                        int maxInputChannels = 0;
+
+                        if (deviceInfo.nativeDataFormats != null && deviceInfo.NativeDataFormatCount > 0)
+                        {
+                            for (int j = 0; j < deviceInfo.NativeDataFormatCount && j < deviceInfo.nativeDataFormats.Length; j++)
+                            {
+                                var format = deviceInfo.nativeDataFormats[j];
+                                if (format.channels > maxOutputChannels)
+                                    maxOutputChannels = (int)format.channels;
+                            }
+                        }
+
                         devices.Add(new AudioDeviceInfo(
                             deviceId: deviceId,
                             name: deviceInfo.Name,
@@ -1257,7 +1333,9 @@ namespace Ownaudio.Native
                             isInput: false,
                             isOutput: true,
                             isDefault: deviceInfo.IsDefault,
-                            state: AudioDeviceState.Active
+                            state: AudioDeviceState.Active,
+                            maxInputChannels: maxInputChannels,
+                            maxOutputChannels: maxOutputChannels
                         ));
                     }
                 }
@@ -1325,7 +1403,9 @@ namespace Ownaudio.Native
                                 isInput: true,
                                 isOutput: paDeviceInfo.maxOutputChannels > 0,
                                 isDefault: (i == defaultDeviceIndex),
-                                state: AudioDeviceState.Active
+                                state: AudioDeviceState.Active,
+                                maxInputChannels: paDeviceInfo.maxInputChannels,
+                                maxOutputChannels: paDeviceInfo.maxOutputChannels
                             ));
                         }
                     }
@@ -1365,6 +1445,20 @@ namespace Ownaudio.Native
                         // Convert device ID to string (use index as ID)
                         string deviceId = $"ma_input_{i}";
 
+                        // Extract max channel counts from nativeDataFormats
+                        int maxInputChannels = 0;
+                        int maxOutputChannels = 0;
+
+                        if (deviceInfo.nativeDataFormats != null && deviceInfo.NativeDataFormatCount > 0)
+                        {
+                            for (int j = 0; j < deviceInfo.NativeDataFormatCount && j < deviceInfo.nativeDataFormats.Length; j++)
+                            {
+                                var format = deviceInfo.nativeDataFormats[j];
+                                if (format.channels > maxInputChannels)
+                                    maxInputChannels = (int)format.channels;
+                            }
+                        }
+
                         devices.Add(new AudioDeviceInfo(
                             deviceId: deviceId,
                             name: deviceInfo.Name,
@@ -1372,7 +1466,9 @@ namespace Ownaudio.Native
                             isInput: true,
                             isOutput: false,
                             isDefault: deviceInfo.IsDefault,
-                            state: AudioDeviceState.Active
+                            state: AudioDeviceState.Active,
+                            maxInputChannels: maxInputChannels,
+                            maxOutputChannels: maxOutputChannels
                         ));
                     }
                 }

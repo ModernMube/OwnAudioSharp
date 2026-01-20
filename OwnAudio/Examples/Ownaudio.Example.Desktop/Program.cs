@@ -54,6 +54,7 @@ public class TestProgram
             Console.WriteLine($"  ✓ Buffer Size: {OwnaudioNet.Engine?.FramesPerBuffer} frames");
             Console.WriteLine($"  ✓ Expected Latency: {(OwnaudioNet.Engine?.FramesPerBuffer / (double)OwnaudioNet.Engine?.Config.SampleRate! * 1000):F2} ms");
 
+
             // Get current audio device information
             var outputDevices = OwnaudioNet.Engine?.UnderlyingEngine.GetOutputDevices();
             if (outputDevices != null && outputDevices.Count > 0)
@@ -74,6 +75,8 @@ public class TestProgram
                 {
                     Console.WriteLine($"  ✓ Audio Engine: {currentDevice.EngineName}");
                     Console.WriteLine($"  ✓ Output Device: {currentDevice.Name}");
+                    Console.WriteLine($"  ✓ Max Output channels: {currentDevice.MaxOutputChannels}");
+                    Console.WriteLine($"  ✓ Max Input channels: {currentDevice.MaxInputChannels}");
                 }
             }
 

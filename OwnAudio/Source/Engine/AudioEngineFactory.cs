@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Ownaudio.Core;
@@ -14,16 +15,73 @@ namespace OwnaudioNET.Engine;
 public static class AudioEngineFactory
 {
     private static readonly object _lock = new object();
-    private static bool _nativeChecked = false;
-    private static Type? _nativeEngineType = null;
-    private static bool _wasapiChecked = false;
-    private static Type? _wasapiEngineType = null;
-    private static bool _pulseaudioChecked = false;
-    private static Type? _pulseaudioEngineType = null;
-    private static bool _coreaudioChecked = false;
-    private static Type? _coreaudioEngineType = null;
-    private static bool _aaudioChecked = false;
-    private static Type? _aaudioEngineType = null;
+
+    /// <summary>
+    /// Descriptor for a platform-specific audio engine.
+    /// Contains metadata needed to load the engine via reflection.
+    /// </summary>
+    private struct PlatformEngineDescriptor
+    {
+        /// <summary>
+        /// Gets or sets the assembly name containing the engine implementation.
+        /// </summary>
+        public string AssemblyName { get; set; }
+
+        /// <summary>
+        /// Gets or sets the fully qualified type name of the engine class.
+        /// </summary>
+        public string TypeName { get; set; }
+
+        /// <summary>
+        /// Gets or sets the display name for logging and diagnostics.
+        /// </summary>
+        public string DisplayName { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether this engine type has been checked for availability.
+        /// </summary>
+        public bool Checked { get; set; }
+
+        /// <summary>
+        /// Gets or sets the cached Type object if the engine is available.
+        /// </summary>
+        public Type? CachedType { get; set; }
+    }
+
+    // Platform engine registry
+    private static readonly Dictionary<string, PlatformEngineDescriptor> _platformEngines = new()
+    {
+        ["Native"] = new PlatformEngineDescriptor
+        {
+            AssemblyName = "Ownaudio.Native",
+            TypeName = "Ownaudio.Native.NativeAudioEngine",
+            DisplayName = "NativeAudioEngine (PortAudio/MiniAudio)"
+        },
+        ["Windows"] = new PlatformEngineDescriptor
+        {
+            AssemblyName = "Ownaudio.Windows",
+            TypeName = "Ownaudio.Windows.WasapiEngine",
+            DisplayName = "WasapiEngine"
+        },
+        ["Linux"] = new PlatformEngineDescriptor
+        {
+            AssemblyName = "Ownaudio.Linux",
+            TypeName = "Ownaudio.Linux.PulseAudioEngine",
+            DisplayName = "PulseAudioEngine"
+        },
+        ["macOS"] = new PlatformEngineDescriptor
+        {
+            AssemblyName = "Ownaudio.macOS",
+            TypeName = "Ownaudio.macOS.CoreAudioEngine",
+            DisplayName = "CoreAudioEngine"
+        },
+        ["Android"] = new PlatformEngineDescriptor
+        {
+            AssemblyName = "Ownaudio.Android",
+            TypeName = "Ownaudio.Android.AAudioEngine",
+            DisplayName = "AAudioEngine"
+        }
+    };
 
     /// <summary>
     /// Creates an audio engine instance for the current platform.
@@ -55,14 +113,12 @@ public static class AudioEngineFactory
         Exception? nativeEngineException = null;
 
         // Try to use NativeAudioEngine first (PortAudio/MiniAudio hybrid)
-        // This is the preferred cross-platform solution
         try
         {
-            engine = CreateNativeEngine();
+            engine = LoadEngine("Native");
         }
         catch (Exception ex)
         {
-            // Store the exception for logging, but continue to fallback
             nativeEngineException = ex;
             engine = null;
         }
@@ -78,39 +134,20 @@ public static class AudioEngineFactory
 
             try
             {
-                if (OperatingSystem.IsWindows())
-                {
-                    engine = CreateWasapiEngine();
-                }
-                else if (OperatingSystem.IsMacOS())
-                {
-                    engine = CreateCoreAudioEngine();
-                }
-                else if (OperatingSystem.IsLinux())
-                {
-                    engine = CreatePulseAudioEngine();
-                }
-                else if (OperatingSystem.IsAndroid())
-                {
-                    engine = CreateAAudioEngine();
-                }
-                else if (OperatingSystem.IsIOS())
-                {
-                    // iOS uses NativeAudioEngine via MiniAudio (CoreAudio backend)
-                    // If we reach here, NativeAudioEngine initialization already failed above
-                    throw new AudioEngineException("NativeAudioEngine (required for iOS) is not available. Ensure Ownaudio.Native assembly is referenced and miniaudio framework is bundled.");
-                }
-                else
+                string? platformKey = GetCurrentPlatformKey();
+
+                if (platformKey == null)
                 {
                     throw new AudioEngineException($"Unsupported platform: {RuntimeInformation.OSDescription}. Use CreateMockEngine() for testing.");
                 }
+
+                engine = LoadEngine(platformKey);
 
                 if (engine == null)
                     throw new AudioEngineException("Failed to create audio engine instance.");
             }
             catch (AudioEngineException)
             {
-                // Re-throw AudioEngineException as-is
                 throw;
             }
             catch (Exception ex)
@@ -190,302 +227,89 @@ public static class AudioEngineFactory
     }
 
     /// <summary>
-    /// Creates a NativeAudioEngine instance using reflection to avoid hard dependency.
-    /// NativeAudioEngine uses PortAudio (preferred) or MiniAudio (fallback).
+    /// Loads an audio engine by platform key using reflection.
     /// </summary>
-    /// <returns>A NativeAudioEngine instance.</returns>
-    /// <exception cref="AudioEngineException">Thrown when NativeAudioEngine cannot be loaded.</exception>
-    private static IAudioEngine? CreateNativeEngine()
+    /// <param name="platformKey">The platform key (e.g., "Native", "Windows", "Linux").</param>
+    /// <returns>An IAudioEngine instance, or null if the engine cannot be loaded.</returns>
+    /// <exception cref="AudioEngineException">Thrown when the engine cannot be loaded or instantiated.</exception>
+    private static IAudioEngine? LoadEngine(string platformKey)
     {
         lock (_lock)
         {
-            // Check if we've already tried to load Native engine
-            if (_nativeChecked && _nativeEngineType == null)
+            if (!_platformEngines.TryGetValue(platformKey, out var descriptor))
+            {
+                throw new AudioEngineException($"Unknown platform key: {platformKey}");
+            }
+
+            // Check if we've already tried to load this engine
+            if (descriptor.Checked && descriptor.CachedType == null)
             {
                 throw new AudioEngineException(
-                    "NativeAudioEngine is not available. Ensure Ownaudio.Native assembly is referenced and accessible.");
-            }
-
-            // Try to load the type on first call
-            if (!_nativeChecked)
-            {
-                try
-                {
-                    // Attempt to load the Ownaudio.Native assembly
-                    Assembly nativeAssembly = Assembly.Load("Ownaudio.Native");
-                    _nativeEngineType = nativeAssembly.GetType("Ownaudio.Native.NativeAudioEngine");
-
-                    if (_nativeEngineType == null)
-                    {
-                        throw new AudioEngineException(
-                            "NativeAudioEngine type not found in Ownaudio.Native assembly. " +
-                            "The assembly may be corrupted or incompatible.");
-                    }
-                }
-                catch (Exception ex) when (ex is not AudioEngineException)
-                {
-                    _nativeEngineType = null;
-                    throw new AudioEngineException(
-                        "Failed to load Ownaudio.Native assembly. Ensure the assembly is referenced and available.",
-                        ex);
-                }
-                finally
-                {
-                    _nativeChecked = true;
-                }
-            }
-
-            // Create instance using reflection
-            try
-            {
-                var instance = Activator.CreateInstance(_nativeEngineType!);
-                return instance as IAudioEngine;
-            }
-            catch (Exception ex)
-            {
-                throw new AudioEngineException($"Failed to instantiate NativeAudioEngine: {ex.Message}", ex);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Creates a WasapiEngine instance using reflection to avoid hard dependency.
-    /// </summary>
-    /// <returns>A WasapiEngine instance, or null if assembly cannot be loaded.</returns>
-    /// <exception cref="AudioEngineException">Thrown when WasapiEngine cannot be loaded.</exception>
-    private static IAudioEngine? CreateWasapiEngine()
-    {
-        lock (_lock)
-        {
-            // Check if we've already tried to load WASAPI
-            if (_wasapiChecked && _wasapiEngineType == null)
-            {
-                throw new AudioEngineException(
-                    "WasapiEngine is not available. Ensure Ownaudio.Windows assembly is referenced and accessible. " +
+                    $"{descriptor.DisplayName} is not available. Ensure {descriptor.AssemblyName} assembly is referenced and accessible. " +
                     "For testing without hardware, use CreateMockEngine() instead.");
             }
 
             // Try to load the type on first call
-            if (!_wasapiChecked)
+            if (!descriptor.Checked)
             {
                 try
                 {
-                    // Attempt to load the Ownaudio.Windows assembly
-                    Assembly wasapiAssembly = Assembly.Load("Ownaudio.Windows");
-                    _wasapiEngineType = wasapiAssembly.GetType("Ownaudio.Windows.WasapiEngine");
+                    Assembly assembly = Assembly.Load(descriptor.AssemblyName);
+                    descriptor.CachedType = assembly.GetType(descriptor.TypeName);
 
-                    if (_wasapiEngineType == null)
+                    if (descriptor.CachedType == null)
                     {
                         throw new AudioEngineException(
-                            "WasapiEngine type not found in Ownaudio.Windows assembly. " +
+                            $"{descriptor.DisplayName} type not found in {descriptor.AssemblyName} assembly. " +
                             "The assembly may be corrupted or incompatible.");
                     }
                 }
                 catch (Exception ex) when (ex is not AudioEngineException)
                 {
-                    _wasapiEngineType = null;
+                    descriptor.CachedType = null;
                     throw new AudioEngineException(
-                        "Failed to load Ownaudio.Windows assembly. Ensure the assembly is referenced and available. " +
+                        $"Failed to load {descriptor.AssemblyName} assembly. Ensure the assembly is referenced and available. " +
                         "For testing without hardware, use CreateMockEngine() instead.",
                         ex);
                 }
                 finally
                 {
-                    _wasapiChecked = true;
+                    descriptor.Checked = true;
+                    _platformEngines[platformKey] = descriptor; // Update the struct in dictionary
                 }
             }
 
             // Create instance using reflection
             try
             {
-                var instance = Activator.CreateInstance(_wasapiEngineType!);
+                var instance = Activator.CreateInstance(descriptor.CachedType!);
                 return instance as IAudioEngine;
             }
             catch (Exception ex)
             {
-                throw new AudioEngineException($"Failed to instantiate WasapiEngine: {ex.Message}", ex);
+                throw new AudioEngineException($"Failed to instantiate {descriptor.DisplayName}: {ex.Message}", ex);
             }
         }
     }
 
     /// <summary>
-    /// Creates a PulseAudioEngine instance using reflection to avoid hard dependency.
+    /// Gets the platform key for the current operating system.
     /// </summary>
-    /// <returns>A PulseAudioEngine instance, or null if assembly cannot be loaded.</returns>
-    /// <exception cref="AudioEngineException">Thrown when PulseAudioEngine cannot be loaded.</exception>
-    private static IAudioEngine? CreatePulseAudioEngine()
+    /// <returns>The platform key string, or null if the platform is not supported.</returns>
+    private static string? GetCurrentPlatformKey()
     {
-        lock (_lock)
-        {
-            // Check if we've already tried to load PulseAudio
-            if (_pulseaudioChecked && _pulseaudioEngineType == null)
-            {
-                throw new AudioEngineException(
-                    "PulseAudioEngine is not available. Ensure Ownaudio.Linux assembly is referenced and accessible. " +
-                    "For testing without hardware, use CreateMockEngine() instead.");
-            }
-
-            // Try to load the type on first call
-            if (!_pulseaudioChecked)
-            {
-                try
-                {
-                    // Attempt to load the Ownaudio.Linux assembly
-                    Assembly pulseaudioAssembly = Assembly.Load("Ownaudio.Linux");
-                    _pulseaudioEngineType = pulseaudioAssembly.GetType("Ownaudio.Linux.PulseAudioEngine");
-
-                    if (_pulseaudioEngineType == null)
-                    {
-                        throw new AudioEngineException(
-                            "PulseAudioEngine type not found in Ownaudio.Linux assembly. " +
-                            "The assembly may be corrupted or incompatible.");
-                    }
-                }
-                catch (Exception ex) when (ex is not AudioEngineException)
-                {
-                    _pulseaudioEngineType = null;
-                    throw new AudioEngineException(
-                        "Failed to load Ownaudio.Linux assembly. Ensure the assembly is referenced and available. " +
-                        "For testing without hardware, use CreateMockEngine() instead.",
-                        ex);
-                }
-                finally
-                {
-                    _pulseaudioChecked = true;
-                }
-            }
-
-            // Create instance using reflection
-            try
-            {
-                var instance = Activator.CreateInstance(_pulseaudioEngineType!);
-                return instance as IAudioEngine;
-            }
-            catch (Exception ex)
-            {
-                throw new AudioEngineException($"Failed to instantiate PulseAudioEngine: {ex.Message}", ex);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Creates a CoreAudioEngine instance using reflection to avoid hard dependency.
-    /// </summary>
-    /// <returns>A CoreAudioEngine instance, or null if assembly cannot be loaded.</returns>
-    /// <exception cref="AudioEngineException">Thrown when CoreAudioEngine cannot be loaded.</exception>
-    private static IAudioEngine? CreateCoreAudioEngine()
-    {
-        lock (_lock)
-        {
-            // Check if we've already tried to load CoreAudio
-            if (_coreaudioChecked && _coreaudioEngineType == null)
-            {
-                throw new AudioEngineException(
-                    "CoreAudioEngine is not available. Ensure Ownaudio.macOS assembly is referenced and accessible. " +
-                    "For testing without hardware, use CreateMockEngine() instead.");
-            }
-
-            // Try to load the type on first call
-            if (!_coreaudioChecked)
-            {
-                try
-                {
-                    // Attempt to load the Ownaudio.macOS assembly
-                    Assembly coreaudioAssembly = Assembly.Load("Ownaudio.macOS");
-                    _coreaudioEngineType = coreaudioAssembly.GetType("Ownaudio.macOS.CoreAudioEngine");
-
-                    if (_coreaudioEngineType == null)
-                    {
-                        throw new AudioEngineException(
-                            "CoreAudioEngine type not found in Ownaudio.macOS assembly. " +
-                            "The assembly may be corrupted or incompatible.");
-                    }
-                }
-                catch (Exception ex) when (ex is not AudioEngineException)
-                {
-                    _coreaudioEngineType = null;
-                    throw new AudioEngineException(
-                        "Failed to load Ownaudio.macOS assembly. Ensure the assembly is referenced and available. " +
-                        "For testing without hardware, use CreateMockEngine() instead.",
-                        ex);
-                }
-                finally
-                {
-                    _coreaudioChecked = true;
-                }
-            }
-
-            // Create instance using reflection
-            try
-            {
-                var instance = Activator.CreateInstance(_coreaudioEngineType!);
-                return instance as IAudioEngine;
-            }
-            catch (Exception ex)
-            {
-                throw new AudioEngineException($"Failed to instantiate CoreAudioEngine: {ex.Message}", ex);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Creates an AAudioEngine instance using reflection to avoid hard dependency.
-    /// </summary>
-    /// <returns>An AAudioEngine instance, or null if assembly cannot be loaded.</returns>
-    /// <exception cref="AudioEngineException">Thrown when AAudioEngine cannot be loaded.</exception>
-    private static IAudioEngine? CreateAAudioEngine()
-    {
-        lock (_lock)
-        {
-            // Check if we've already tried to load AAudio
-            if (_aaudioChecked && _aaudioEngineType == null)
-            {
-                throw new AudioEngineException(
-                    "AAudioEngine is not available. Ensure Ownaudio.Android assembly is referenced and accessible. " +
-                    "For testing without hardware, use CreateMockEngine() instead.");
-            }
-
-            // Try to load the type on first call
-            if (!_aaudioChecked)
-            {
-                try
-                {
-                    // Attempt to load the Ownaudio.Android assembly
-                    Assembly aaudioAssembly = Assembly.Load("Ownaudio.Android");
-                    _aaudioEngineType = aaudioAssembly.GetType("Ownaudio.Android.AAudioEngine");
-
-                    if (_aaudioEngineType == null)
-                    {
-                        throw new AudioEngineException(
-                            "AAudioEngine type not found in Ownaudio.Android assembly. " +
-                            "The assembly may be corrupted or incompatible.");
-                    }
-                }
-                catch (Exception ex) when (ex is not AudioEngineException)
-                {
-                    _aaudioEngineType = null;
-                    throw new AudioEngineException(
-                        "Failed to load Ownaudio.Android assembly. Ensure the assembly is referenced and available. " +
-                        "For testing without hardware, use CreateMockEngine() instead.",
-                        ex);
-                }
-                finally
-                {
-                    _aaudioChecked = true;
-                }
-            }
-
-            // Create instance using reflection
-            try
-            {
-                var instance = Activator.CreateInstance(_aaudioEngineType!);
-                return instance as IAudioEngine;
-            }
-            catch (Exception ex)
-            {
-                throw new AudioEngineException($"Failed to instantiate AAudioEngine: {ex.Message}", ex);
-            }
-        }
+        if (OperatingSystem.IsWindows())
+            return "Windows";
+        else if (OperatingSystem.IsMacOS())
+            return "macOS";
+        else if (OperatingSystem.IsLinux())
+            return "Linux";
+        else if (OperatingSystem.IsAndroid())
+            return "Android";
+        else if (OperatingSystem.IsIOS())
+            return "Native"; // iOS uses NativeAudioEngine via MiniAudio
+        else
+            return null;
     }
 
     /// <summary>
@@ -495,124 +319,30 @@ public static class AudioEngineFactory
     public static bool IsNativeEngineAvailable()
     {
         // First, check if NativeAudioEngine is available (preferred)
-        lock (_lock)
+        try
         {
-            if (!_nativeChecked)
-            {
-                try
-                {
-                    Assembly nativeAssembly = Assembly.Load("Ownaudio.Native");
-                    _nativeEngineType = nativeAssembly.GetType("Ownaudio.Native.NativeAudioEngine");
-                    _nativeChecked = true;
-                }
-                catch
-                {
-                    _nativeChecked = true;
-                    _nativeEngineType = null;
-                }
-            }
-
-            // If NativeAudioEngine is available, return true immediately
-            if (_nativeEngineType != null)
-                return true;
+            LoadEngine("Native");
+            return true;
+        }
+        catch
+        {
+            // NativeAudioEngine not available, try platform-specific
         }
 
         // Fallback: check platform-specific engines
-        if (OperatingSystem.IsWindows())
-        {
-            lock (_lock)
-            {
-                if (_wasapiChecked)
-                    return _wasapiEngineType != null;
+        string? platformKey = GetCurrentPlatformKey();
+        if (platformKey == null)
+            return false;
 
-                try
-                {
-                    Assembly wasapiAssembly = Assembly.Load("Ownaudio.Windows");
-                    _wasapiEngineType = wasapiAssembly.GetType("Ownaudio.Windows.WasapiEngine");
-                    _wasapiChecked = true;
-                    return _wasapiEngineType != null;
-                }
-                catch
-                {
-                    _wasapiChecked = true;
-                    _wasapiEngineType = null;
-                    return false;
-                }
-            }
-        }
-        else if (OperatingSystem.IsLinux())
+        try
         {
-            lock (_lock)
-            {
-                if (_pulseaudioChecked)
-                    return _pulseaudioEngineType != null;
-
-                try
-                {
-                    Assembly pulseaudioAssembly = Assembly.Load("Ownaudio.Linux");
-                    _pulseaudioEngineType = pulseaudioAssembly.GetType("Ownaudio.Linux.PulseAudioEngine");
-                    _pulseaudioChecked = true;
-                    return _pulseaudioEngineType != null;
-                }
-                catch
-                {
-                    _pulseaudioChecked = true;
-                    _pulseaudioEngineType = null;
-                    return false;
-                }
-            }
+            LoadEngine(platformKey);
+            return true;
         }
-        else if (OperatingSystem.IsMacOS())
+        catch
         {
-            lock (_lock)
-            {
-                if (_coreaudioChecked)
-                    return _coreaudioEngineType != null;
-
-                try
-                {
-                    Assembly coreaudioAssembly = Assembly.Load("Ownaudio.macOS");
-                    _coreaudioEngineType = coreaudioAssembly.GetType("Ownaudio.macOS.CoreAudioEngine");
-                    _coreaudioChecked = true;
-                    return _coreaudioEngineType != null;
-                }
-                catch
-                {
-                    _coreaudioChecked = true;
-                    _coreaudioEngineType = null;
-                    return false;
-                }
-            }
+            return false;
         }
-        else if (OperatingSystem.IsAndroid())
-        {
-            lock (_lock)
-            {
-                if (_aaudioChecked)
-                    return _aaudioEngineType != null;
-
-                try
-                {
-                    Assembly aaudioAssembly = Assembly.Load("Ownaudio.Android");
-                    _aaudioEngineType = aaudioAssembly.GetType("Ownaudio.Android.AAudioEngine");
-                    _aaudioChecked = true;
-                    return _aaudioEngineType != null;
-                }
-                catch
-                {
-                    _aaudioChecked = true;
-                    _aaudioEngineType = null;
-                    return false;
-                }
-            }
-        }
-        else if (OperatingSystem.IsIOS())
-        {
-            // iOS uses NativeAudioEngine (already checked above)
-            return _nativeEngineType != null;
-        }
-
-        return false;
     }
 
     /// <summary>
@@ -624,37 +354,32 @@ public static class AudioEngineFactory
         // Check if NativeAudioEngine is available first
         lock (_lock)
         {
-            if (!_nativeChecked)
+            if (_platformEngines.TryGetValue("Native", out var nativeDescriptor))
             {
-                try
+                if (!nativeDescriptor.Checked)
                 {
-                    Assembly nativeAssembly = Assembly.Load("Ownaudio.Native");
-                    _nativeEngineType = nativeAssembly.GetType("Ownaudio.Native.NativeAudioEngine");
-                    _nativeChecked = true;
+                    try
+                    {
+                        LoadEngine("Native");
+                    }
+                    catch
+                    {
+                        // Ignore, will check cached type below
+                    }
                 }
-                catch
-                {
-                    _nativeChecked = true;
-                    _nativeEngineType = null;
-                }
-            }
 
-            if (_nativeEngineType != null)
-                return "NativeAudioEngine (PortAudio/MiniAudio)";
+                if (nativeDescriptor.CachedType != null)
+                    return nativeDescriptor.DisplayName;
+            }
         }
 
         // Fallback to platform-specific engine names
-        if (OperatingSystem.IsWindows())
-            return "WasapiEngine (Windows fallback)";
-        else if (OperatingSystem.IsMacOS())
-            return "CoreAudioEngine (macOS fallback)";
-        else if (OperatingSystem.IsLinux())
-            return "PulseAudioEngine (Linux fallback)";
-        else if (OperatingSystem.IsAndroid())
-            return "AAudioEngine (Android fallback)";
-        else if (OperatingSystem.IsIOS())
-            return "NativeAudioEngine (iOS via MiniAudio/CoreAudio)";
-        else
-            return "None";
+        string? platformKey = GetCurrentPlatformKey();
+        if (platformKey != null && _platformEngines.TryGetValue(platformKey, out var descriptor))
+        {
+            return $"{descriptor.DisplayName} ({platformKey} fallback)";
+        }
+
+        return "None";
     }
 }
