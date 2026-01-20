@@ -13,7 +13,9 @@ HTDemucs (Hybrid Transformer Demucs) is a state-of-the-art neural network for mu
 
 ## Model Setup
 
-The HTDemucs model is **embedded as a resource** in the OwnaudioNET assembly. You don't need to download or manage the model file separately!
+The HTDemucs model is **embedded** as a resource in the OwnaudioNET NUGET package. You don't need to download or handle the model file separately!
+
+The source code does not include the model file, due to Github size limits. You can download it from here: https://huggingface.co/ModernMube/HTDemucs_onnx/tree/main
 
 ### Using the Embedded Model (Recommended)
 
