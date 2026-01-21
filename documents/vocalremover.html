@@ -339,6 +339,160 @@ var options4 = new SimpleSeparationOptions
                     compared to complete vocal removal.</li>
             </ul>
 
+            <h3>HTDemucs Model - Advanced Stem Separation</h3>
+            <p>
+                For more advanced audio separation needs, the <strong>HTDemucs</strong> (Hybrid Transformer Demucs)
+                model
+                provides state-of-the-art multi-stem separation capabilities. Unlike the basic vocal/instrumental
+                separation,
+                HTDemucs can separate audio into four distinct stems:
+            </p>
+
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Stem</th>
+                        <th>Description</th>
+                        <th>Use Cases</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>Vocals</code></td>
+                        <td>Singing and speech</td>
+                        <td>Karaoke, vocal analysis, remixing</td>
+                    </tr>
+                    <tr>
+                        <td><code>Drums</code></td>
+                        <td>Percussion instruments</td>
+                        <td>Rhythm analysis, drum replacement</td>
+                    </tr>
+                    <tr>
+                        <td><code>Bass</code></td>
+                        <td>Bass guitar and low-frequency instruments</td>
+                        <td>Bass isolation, mixing, mastering</td>
+                    </tr>
+                    <tr>
+                        <td><code>Other</code></td>
+                        <td>All other instruments (guitars, keyboards, strings, etc.)</td>
+                        <td>Instrumental remixing, analysis</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="alert alert-info">
+                <strong>Model Availability</strong>
+                <ul style="margin-top: 0.5rem;">
+                    <li><strong>NUGET Package:</strong> The HTDemucs model is embedded as a resource in the OwnaudioNET
+                        NUGET package. You don't need to download or handle the model file separately when using the
+                        package!</li>
+                    <li><strong>Source Code:</strong> Due to GitHub size limitations, the source code repository does
+                        NOT include the HTDemucs model file. If you clone the repository, you must download the model
+                        separately from
+                        <a href="https://huggingface.co/ModernMube/HTDemucs_onnx/tree/main" target="_blank"
+                            style="color: var(--primary-color);">HuggingFace</a>.
+                    </li>
+                </ul>
+            </div>
+
+            <h4>HTDemucs Usage Example</h4>
+            <div class="code-block">
+                <div class="code-header">Using HTDemucs for Multi-Stem Separation</div>
+                <pre><code class="language-csharp">using OwnaudioNET.Features.HTDemucs;
+
+// Create HTDemucs separator with embedded model
+var options = new HTDemucsSeparationOptions
+{
+    Model = InternalModel.HTDemucs,  // Use embedded resource
+    OutputDirectory = "output_htdemucs",
+    ChunkSizeSeconds = 10,           // Chunk size (10-30s recommended)
+    OverlapFactor = 0.25f,           // Overlap between chunks (0.25 = 25%)
+    EnableGPU = true,                // Use GPU acceleration
+    TargetStems = HTDemucsStem.All   // Extract all stems
+};
+
+using var separator = new HTDemucsAudioSeparator(options);
+separator.Initialize();
+
+// Progress tracking
+separator.ProgressChanged += (s, progress) =>
+{
+    Console.WriteLine($"{progress.Status}: {progress.OverallProgress:F1}%");
+    Console.WriteLine($"Chunks: {progress.ProcessedChunks}/{progress.TotalChunks}");
+};
+
+// Separate audio into stems
+var result = separator.Separate("music.mp3");
+
+Console.WriteLine($"Vocals: {result.VocalsPath}");
+Console.WriteLine($"Drums: {result.DrumsPath}");
+Console.WriteLine($"Bass: {result.BassPath}");
+Console.WriteLine($"Other: {result.OtherPath}");
+Console.WriteLine($"Processing time: {result.ProcessingTime}");</code></pre>
+            </div>
+
+            <h4>Selective Stem Extraction</h4>
+            <div class="code-block">
+                <div class="code-header">Extract Only Specific Stems</div>
+                <pre><code class="language-csharp">// Extract only vocals and other instruments
+var options = new HTDemucsSeparationOptions
+{
+    Model = InternalModel.HTDemucs,
+    OutputDirectory = "output",
+    TargetStems = HTDemucsStem.Vocals | HTDemucsStem.Other
+};
+
+// Extract only drums
+var drumsOnly = new HTDemucsSeparationOptions
+{
+    Model = InternalModel.HTDemucs,
+    OutputDirectory = "drums_output",
+    TargetStems = HTDemucsStem.Drums
+};
+
+// Using helper methods
+using var separator = HTDemucsExtensions.CreateDefaultSeparator("output_directory");
+separator.Initialize();
+var result = separator.Separate("music.mp3");</code></pre>
+            </div>
+
+            <h4>HTDemucs Performance</h4>
+            <p>HTDemucs provides superior separation quality but requires more computational resources:</p>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Hardware</th>
+                        <th>Processing Speed</th>
+                        <th>Example (3 min song)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>CPU (16 cores)</td>
+                        <td>10-15x realtime</td>
+                        <td>~12-18 seconds</td>
+                    </tr>
+                    <tr>
+                        <td>GPU (NVIDIA RTX 3060)</td>
+                        <td>50-100x realtime</td>
+                        <td>~2-4 seconds</td>
+                    </tr>
+                    <tr>
+                        <td>GPU (NVIDIA RTX 4090)</td>
+                        <td>100-150x realtime</td>
+                        <td>~1-2 seconds</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="alert alert-warning">
+                <strong>HTDemucs Model Download for Source Code Users</strong>
+                If you're building from source code (not using the NUGET package), you must download the HTDemucs
+                model file from <a href="https://huggingface.co/ModernMube/HTDemucs_onnx/tree/main" target="_blank"
+                    style="color: var(--primary-color);">HuggingFace</a> due to GitHub's file size restrictions.
+                The NUGET package includes the model automatically.
+            </div>
+
             <h2 id="configuration">Advanced Configuration</h2>
 
             <h3>Processing Parameters</h3>

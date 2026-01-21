@@ -48,16 +48,42 @@ public partial class FileSource
 
         _masterClock = clock;
 
-        // Initialize _trackLocalTime to match current clock position
+        // Calculate the target track position based on current clock time and start offset
         double currentClockTime = _masterClock.CurrentTimestamp;
-        // Adjust for track start offset
-        _trackLocalTime = currentClockTime - _startOffset; 
+        double targetTrackPosition = currentClockTime - _startOffset;
+
+        // Handle negative StartOffset by seeking to the appropriate position
+        if (targetTrackPosition > 0)
+        {
+            // Negative offset case: We need to start playing from within the file
+            // Example: StartOffset = -2.0, currentClockTime = 0.0 => targetTrackPosition = 2.0
+            // This means we should start playing from 2.0 seconds into the file
+            if (Seek(targetTrackPosition))
+            {
+                _trackLocalTime = targetTrackPosition;
+            }
+            else
+            {
+                // Seek failed - fall back to beginning
+                Seek(0);
+                _trackLocalTime = 0.0;
+            }
+        }
+        else
+        {
+            // Positive offset or zero: Start from the beginning of the file
+            // The negative _trackLocalTime will cause ReadSamplesAtTime to generate silence
+            // until the clock reaches the start offset
+            Seek(0);
+            _trackLocalTime = targetTrackPosition;
+        }
+
         _fractionalFrameAccumulator = 0.0;
 
         // Reset input-driven timing counter
         lock (_timingLock)
         {
-            _totalSamplesProcessedFromFile = (long)(_trackLocalTime * _streamInfo.SampleRate);
+            _totalSamplesProcessedFromFile = (long)(Math.Max(0, _trackLocalTime) * _streamInfo.SampleRate);
         }
 
         // Set short initial grace period at AttachToClock to prevent immediate Seek
@@ -106,7 +132,7 @@ public partial class FileSource
 
         // Determine direction: are we behind or ahead?
         bool isBehind = targetTrackTime > _trackLocalTime;
-        
+
         // Calculate the new tempo change percentage
         float newTempoChange;
         if (isBehind)
@@ -127,7 +153,7 @@ public partial class FileSource
         // ADAPTIVE CORRECTION: Adjust rate based on drift magnitude and recovery state
         double correctionRate;
         string correctionMode;
-        
+
         // Check if we're in post-dropout recovery (more aggressive)
         if (_consecutiveUnderruns > 0)
         {
@@ -165,9 +191,9 @@ public partial class FileSource
 
         _lastDrift = drift;
 
-        #if DEBUG
+#if DEBUG
         Log.Debug($"[SoftSync-{correctionMode}] Drift={drift:F4}s, Rate={correctionRate:P0}, Correction={correctionAmount:F6}s ({(isBehind ? "speed up" : "slow down")})");
-        #endif
+#endif
     }
 
     /// <summary>
@@ -223,7 +249,7 @@ public partial class FileSource
             if (drift <= SyncTolerance)
             {
                 // GREEN ZONE: No correction needed
-                
+
                 // EXIT RECOVERY: If we are in sync, reset underrun counter
                 if (_consecutiveUnderruns > 0)
                 {
@@ -237,9 +263,9 @@ public partial class FileSource
                     _isSoftSyncActive = false;
                 }
 
-                #if DEBUG
+#if DEBUG
                 // Console.WriteLine($"[GreenZone] Drift={drift:F4}s - No correction");
-                #endif
+#endif
             }
             else if (drift <= SoftSyncTolerance && _consecutiveUnderruns == 0)
             {
@@ -249,9 +275,9 @@ public partial class FileSource
                 ApplySoftSync(drift, targetTrackTime);
                 _isSoftSyncActive = true;
 
-                #if DEBUG
+#if DEBUG
                 Console.WriteLine($"[YellowZone] Drift={drift:F4}s - Soft sync active");
-                #endif
+#endif
             }
             else
             {
@@ -268,36 +294,36 @@ public partial class FileSource
                 // Calculate drift in frames
                 double driftInSeconds = targetTrackTime - _trackLocalTime;
                 bool isBehind = driftInSeconds > 0;
-                
+
                 if (isBehind)
                 {
                     // We are behind - check if we can skip samples in buffer
                     long driftFrames = (long)(Math.Abs(driftInSeconds) * _streamInfo.SampleRate);
                     int driftSamples = (int)(driftFrames * _streamInfo.Channels);
-                    
+
                     // Check if buffer has enough data to skip
                     if (driftSamples > 0 && driftSamples <= _buffer.Available)
                     {
                         // INSTANT RESYNC: Skip samples in buffer
                         _buffer.Skip(driftSamples);
-                        
+
                         // Update track time to target
                         _trackLocalTime = targetTrackTime;
-                        
+
                         // Update position tracking
                         double exactSourceFrames = driftFrames * _tempo;
                         _fractionalFrameAccumulator += exactSourceFrames;
                         int sourceFramesAdvanced = (int)_fractionalFrameAccumulator;
                         _fractionalFrameAccumulator -= sourceFramesAdvanced;
                         UpdateSamplePosition(sourceFramesAdvanced);
-                        
+
                         double newPosition = _currentPosition + (driftInSeconds * _tempo);
                         Interlocked.Exchange(ref _currentPosition, newPosition);
-                        
-                        #if DEBUG
+
+#if DEBUG
                         Console.WriteLine($"[RedZone-BufferSkip] Drift={drift:F4}s - Skipped {driftFrames} frames in buffer (instant resync)");
-                        #endif
-                        
+#endif
+
                         // Continue to normal read below (we're now in sync)
                         // Fall through to read samples
                     }
@@ -322,14 +348,14 @@ public partial class FileSource
                             // Instead of disabling sync (which just kills audio), perform a HARD RESET
                             // This mimics the "Reset" button logic that the user confirmed works
                             PerformHardReset(targetTrackTime);
-                            
+
                             // Return silence for one frame to allow reset to take effect
                             FillWithSilence(buffer, frameCount * _streamInfo.Channels);
                             result = ReadResult.CreateSuccess(frameCount); // Return success to prevent further error handling in mixer
 
-                            #if DEBUG
+#if DEBUG
                             Console.WriteLine($"[RedZone] Seek cascade detected - Triggered HARD RESET");
-                            #endif
+#endif
 
                             return true;
                         }
@@ -340,9 +366,9 @@ public partial class FileSource
                         double seekLatencyCompensation = _consecutiveUnderruns > 0 ? 0.300 : 0.100; // 300ms during recovery, 100ms normally
                         double filePosition = (targetTrackTime + seekLatencyCompensation) * _tempo;
 
-                        #if DEBUG
+#if DEBUG
                         Console.WriteLine($"[RedZone-Seek] Drift={drift:F4}s - Hard sync (seek to {filePosition:F4}s, +{seekLatencyCompensation:F3}s compensation)");
-                        #endif
+#endif
 
                         if (!Seek(filePosition))
                         {
@@ -368,10 +394,10 @@ public partial class FileSource
                 {
                     // We are ahead - this is unusual, just force sync
                     _trackLocalTime = targetTrackTime;
-                    
-                    #if DEBUG
+
+#if DEBUG
                     Console.WriteLine($"[RedZone-Ahead] Drift={drift:F4}s - Track ahead of clock, force sync");
-                    #endif
+#endif
                 }
             }
         }
@@ -400,7 +426,7 @@ public partial class FileSource
             _fractionalFrameAccumulator += exactSourceFrames;
             int sourceFramesAdvanced = (int)_fractionalFrameAccumulator;
             _fractionalFrameAccumulator -= sourceFramesAdvanced;
-            
+
             UpdateSamplePosition(sourceFramesAdvanced);
 
             double newPosition = _currentPosition + (framesRead * frameDuration * _tempo);
@@ -409,8 +435,8 @@ public partial class FileSource
             // SUCCESSFUL READ: If we are in grace period and reading data, we are "recovering"
             if (gracePeriodActive && _consecutiveUnderruns > 0)
             {
-                 // Decay underrun counter on success
-                 _consecutiveUnderruns--; 
+                // Decay underrun counter on success
+                _consecutiveUnderruns--;
             }
         }
 
@@ -446,7 +472,7 @@ public partial class FileSource
 
             // Return failure for underrun
             result = ReadResult.CreateFailure(frameCount, "Buffer underrun");
-            return false; 
+            return false;
         }
 
         // Apply volume
@@ -493,9 +519,9 @@ public partial class FileSource
     /// </summary>
     private void PerformHardReset(double targetTime)
     {
-        #if DEBUG
+#if DEBUG
         Console.WriteLine($"[HardReset] Triggered at {targetTime:F4}s - Clearing all buffers and state");
-        #endif
+#endif
 
         // 1. Clear SoundTouch state (Critical for fixing "chaos")
         lock (_soundTouchLock)
@@ -514,7 +540,7 @@ public partial class FileSource
         _lastSeekTime = targetTime;
         _gracePeriodEndTime = targetTime + SyncConfig.GracePeriodSeconds;
         _trackLocalTime = targetTime; // Force alignment
-        
+
         // 4. Ensure Tempo is clean (if we had soft sync adjustment pending)
         ResetSoftSync();
     }

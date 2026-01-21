@@ -223,6 +223,77 @@ public sealed class InputSource : BaseAudioSource
     }
 
     /// <summary>
+    /// Gets the current input levels (peak levels) from the capture buffer.
+    /// This monitors the captured audio for peak sample values.
+    /// </summary>
+    /// <returns>Tuple containing left and right channel peak levels (0.0 to 1.0), or (0, 0) if not available.</returns>
+    /// <remarks>
+    /// This method peeks at the current capture buffer without removing samples.
+    /// The returned values are scaled by the Volume property to reflect the actual output level.
+    /// For mono sources, both left and right values will be identical.
+    /// </remarks>
+    public (float left, float right) GetInputLevels()
+    {
+        ThrowIfDisposed();
+
+        if (State != AudioState.Playing || _captureBuffer.IsEmpty)
+        {
+            return (0f, 0f);
+        }
+
+        try
+        {
+            // Create a temporary buffer to peek at current audio data
+            int peekSamples = Math.Min(512 * _config.Channels, _captureBuffer.Available);
+            if (peekSamples == 0)
+            {
+                return (0f, 0f);
+            }
+
+            Span<float> peekBuffer = stackalloc float[peekSamples];
+            int actualSamples = _captureBuffer.Peek(peekBuffer);
+
+            if (actualSamples == 0)
+            {
+                return (0f, 0f);
+            }
+
+            // Calculate peak levels for each channel
+            float leftPeak = 0f;
+            float rightPeak = 0f;
+            int channels = _config.Channels;
+
+            for (int i = 0; i < actualSamples; i += channels)
+            {
+                float leftSample = Math.Abs(peekBuffer[i]);
+                leftPeak = Math.Max(leftPeak, leftSample);
+
+                if (channels > 1)
+                {
+                    float rightSample = Math.Abs(peekBuffer[i + 1]);
+                    rightPeak = Math.Max(rightPeak, rightSample);
+                }
+            }
+
+            // If mono, use same value for both channels
+            if (channels == 1)
+            {
+                rightPeak = leftPeak;
+            }
+
+            // Apply volume scaling
+            leftPeak *= Volume;
+            rightPeak *= Volume;
+
+            return (leftPeak, rightPeak);
+        }
+        catch
+        {
+            return (0f, 0f);
+        }
+    }
+
+    /// <summary>
     /// Releases the unmanaged resources used by the InputSource and optionally releases the managed resources.
     /// </summary>
     protected override void Dispose(bool disposing)
