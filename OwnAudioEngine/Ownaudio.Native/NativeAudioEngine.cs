@@ -868,22 +868,23 @@ namespace Ownaudio.Native
         #region MiniAudio Implementation
 
         /// <summary>
-        /// Initializes the MiniAudio backend.
+        /// Ensures MiniAudio context is initialized for device enumeration.
+        /// This allows GetOutputDevices() and GetInputDevices() to work before Initialize() is called.
+        /// Only initializes the context, not the device.
         /// </summary>
         /// <returns>0 on success, negative value on error.</returns>
-        private unsafe int InitializeMiniAudio()
+        private unsafe int EnsureMiniAudioContextForEnumeration()
         {
-            if (_config.HostType != EngineHostType.None)
-            {
-                Log.Warning($"Note: HostType '{_config.HostType}' is ignored when using MiniAudio backend. MiniAudio uses platform defaults.");
-            }
+            // Return early if context is already initialized
+            if (_maContext != IntPtr.Zero)
+                return 0;
 
             // Allocate context
             _maContext = MaBinding.allocate_context();
             if (_maContext == IntPtr.Zero)
                 return -1;
 
-            // Initialize context with platform-specific backends (same as old working version)
+            // Initialize context with platform-specific backends
             MaResult result;
             if (OperatingSystem.IsLinux())
             {
@@ -916,6 +917,65 @@ namespace Ownaudio.Native
                 MaBinding.ma_free(_maContext, IntPtr.Zero, "Failed to initialize MiniAudio context");
                 _maContext = IntPtr.Zero;
                 return (int)result;
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// Initializes the MiniAudio backend.
+        /// </summary>
+        /// <returns>0 on success, negative value on error.</returns>
+        private unsafe int InitializeMiniAudio()
+        {
+            if (_config.HostType != EngineHostType.None)
+            {
+                Log.Warning($"Note: HostType '{_config.HostType}' is ignored when using MiniAudio backend. MiniAudio uses platform defaults.");
+            }
+
+            // Initialize or reuse existing context
+            // Context may already be initialized from device enumeration (lazy init)
+            if (_maContext == IntPtr.Zero)
+            {
+                // Allocate context
+                _maContext = MaBinding.allocate_context();
+                if (_maContext == IntPtr.Zero)
+                    return -1;
+
+                // Initialize context with platform-specific backends (same as old working version)
+                MaResult result;
+                if (OperatingSystem.IsLinux())
+                {
+                    var backends = new[] { MaBackend.Alsa, MaBackend.PulseAudio, MaBackend.Jack };
+                    result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _maContext);
+                }
+                else if (OperatingSystem.IsWindows())
+                {
+                    var backends = new[] { MaBackend.Wasapi };
+                    result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _maContext);
+                }
+                else if (OperatingSystem.IsMacOS() || OperatingSystem.IsIOS())
+                {
+                    var backends = new[] { MaBackend.CoreAudio };
+                    result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _maContext);
+                }
+                else if (OperatingSystem.IsAndroid())
+                {
+                    var backends = new[] { MaBackend.Aaudio, MaBackend.OpenSL };
+                    result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _maContext);
+                }
+                else
+                {
+                    // Fallback to auto-detection
+                    result = MaBinding.ma_context_init(null, 0, IntPtr.Zero, _maContext);
+                }
+
+                if (result != MaResult.Success)
+                {
+                    MaBinding.ma_free(_maContext, IntPtr.Zero, "Failed to initialize MiniAudio context");
+                    _maContext = IntPtr.Zero;
+                    return (int)result;
+                }
             }
 
             // Allocate device
@@ -954,19 +1014,22 @@ namespace Ownaudio.Native
                 return -1;
             }
 
+
             // Initialize device
-            result = MaBinding.ma_device_init(_maContext, configPtr, _maDevice);
+            MaResult deviceResult = MaBinding.ma_device_init(_maContext, configPtr, _maDevice);
             MaBinding.ma_free(configPtr, IntPtr.Zero, "Device config cleanup");
 
-            if (result != MaResult.Success)
+            if (deviceResult != MaResult.Success)
             {
                 MaBinding.ma_free(_maDevice, IntPtr.Zero, "Device init failed");
                 MaBinding.ma_context_uninit(_maContext);
                 MaBinding.ma_free(_maContext, IntPtr.Zero, "Context cleanup after device init failure");
                 _maContext = IntPtr.Zero;
                 _maDevice = IntPtr.Zero;
-                return (int)result;
+                return (int)deviceResult;
             }
+
+
 
             // Initialize ring buffers
             int ringBufferSize = _config.BufferSize * _config.Channels * 4; // 4x buffer
@@ -1052,6 +1115,150 @@ namespace Ownaudio.Native
             {
                 _isActive = -1;
             }
+        }
+
+        /// <summary>
+        /// Reinitializes the MiniAudio device with current device configuration.
+        /// Used when switching devices at runtime.
+        /// </summary>
+        /// <returns>0 on success, negative value on error.</returns>
+        private unsafe int ReinitializeMiniAudioDevice()
+        {
+            // Only stop the device if it's actually running
+            if (_maDevice != IntPtr.Zero && _isRunning == 1)
+            {
+                MaBinding.ma_device_stop(_maDevice);
+            }
+
+            // Uninitialize and free the device if it exists
+            if (_maDevice != IntPtr.Zero)
+            {
+                MaBinding.ma_device_uninit(_maDevice);
+                MaBinding.ma_free(_maDevice, IntPtr.Zero, "Device cleanup for reinitialization");
+                _maDevice = IntPtr.Zero;
+            }
+
+            // Free existing callback handle if allocated (will be re-allocated)
+            if (_maCallbackHandle.IsAllocated)
+                _maCallbackHandle.Free();
+
+            // Allocate new device
+            _maDevice = MaBinding.allocate_device();
+            if (_maDevice == IntPtr.Zero)
+                return -1;
+
+            // Initialize ring buffers if not already done or if size changed
+            int ringBufferSize = _config.BufferSize * _config.Channels * 4; // 4x buffer
+            if (_outputRing == null || _outputRing.Capacity != ringBufferSize)
+                _outputRing = new LockFreeRingBuffer<float>(ringBufferSize);
+
+            if (_config.EnableInput && (_inputRing == null || _inputRing.Capacity != ringBufferSize))
+                _inputRing = new LockFreeRingBuffer<float>(ringBufferSize);
+
+            // Create device config
+            MaDeviceType deviceType = _config.EnableInput ? MaDeviceType.Duplex : MaDeviceType.Playback;
+            _maCallback = MiniAudioCallback;
+            _maCallbackHandle = GCHandle.Alloc(_maCallback);
+
+            // Parse device IDs from config if specified
+            IntPtr playbackDeviceIdPtr = IntPtr.Zero;
+            IntPtr captureDeviceIdPtr = IntPtr.Zero;
+
+            // For MiniAudio, device IDs are stored as "ma_output_X" or "ma_input_X" format
+            // We need to get the actual device ID from the enumeration
+            if (!string.IsNullOrEmpty(_config.OutputDeviceId) && _config.OutputDeviceId.StartsWith("ma_output_"))
+            {
+                // Extract index from device ID
+                if (int.TryParse(_config.OutputDeviceId.Substring("ma_output_".Length), out int deviceIndex))
+                {
+                    // Get device list and extract the actual device ID
+                    MaResult enumResult = MaBinding.ma_context_get_devices(
+                        _maContext,
+                        out IntPtr pPlaybackDevices,
+                        out IntPtr pCaptureDevices,
+                        out int playbackCount,
+                        out int captureCount);
+
+                    if (enumResult == MaResult.Success && deviceIndex < playbackCount)
+                    {
+                        int deviceInfoSize = Marshal.SizeOf<MaDeviceInfo>();
+                        IntPtr deviceInfoPtr = IntPtr.Add(pPlaybackDevices, deviceIndex * deviceInfoSize);
+                        var deviceInfo = Marshal.PtrToStructure<MaDeviceInfo>(deviceInfoPtr);
+
+                        // Allocate and copy device ID
+                        playbackDeviceIdPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MaDeviceId>());
+                        Marshal.StructureToPtr(deviceInfo.Id, playbackDeviceIdPtr, false);
+                    }
+                }
+            }
+
+            if (_config.EnableInput && !string.IsNullOrEmpty(_config.InputDeviceId) && _config.InputDeviceId.StartsWith("ma_input_"))
+            {
+                // Extract index from device ID
+                if (int.TryParse(_config.InputDeviceId.Substring("ma_input_".Length), out int deviceIndex))
+                {
+                    // Get device list and extract the actual device ID
+                    MaResult enumResult = MaBinding.ma_context_get_devices(
+                        _maContext,
+                        out IntPtr pPlaybackDevices,
+                        out IntPtr pCaptureDevices,
+                        out int playbackCount,
+                        out int captureCount);
+
+                    if (enumResult == MaResult.Success && deviceIndex < captureCount)
+                    {
+                        int deviceInfoSize = Marshal.SizeOf<MaDeviceInfo>();
+                        IntPtr deviceInfoPtr = IntPtr.Add(pCaptureDevices, deviceIndex * deviceInfoSize);
+                        var deviceInfo = Marshal.PtrToStructure<MaDeviceInfo>(deviceInfoPtr);
+
+                        // Allocate and copy device ID
+                        captureDeviceIdPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MaDeviceId>());
+                        Marshal.StructureToPtr(deviceInfo.Id, captureDeviceIdPtr, false);
+                    }
+                }
+            }
+
+            IntPtr configPtr = MaBinding.allocate_device_config(
+                deviceType,
+                MaFormat.F32,
+                (uint)_config.Channels,
+                (uint)_config.SampleRate,
+                _maCallback,
+                playbackDeviceIdPtr,
+                captureDeviceIdPtr,
+                (uint)_config.BufferSize
+            );
+
+            if (configPtr == IntPtr.Zero)
+            {
+                if (playbackDeviceIdPtr != IntPtr.Zero)
+                    Marshal.FreeHGlobal(playbackDeviceIdPtr);
+                if (captureDeviceIdPtr != IntPtr.Zero)
+                    Marshal.FreeHGlobal(captureDeviceIdPtr);
+                MaBinding.ma_free(_maDevice, IntPtr.Zero, "Failed to allocate device config");
+                _maDevice = IntPtr.Zero;
+                return -1;
+            }
+
+            // Initialize device
+            MaResult result = MaBinding.ma_device_init(_maContext, configPtr, _maDevice);
+            MaBinding.ma_free(configPtr, IntPtr.Zero, "Device config cleanup");
+
+            // Free device ID pointers
+            if (playbackDeviceIdPtr != IntPtr.Zero)
+                Marshal.FreeHGlobal(playbackDeviceIdPtr);
+            if (captureDeviceIdPtr != IntPtr.Zero)
+                Marshal.FreeHGlobal(captureDeviceIdPtr);
+
+            if (result != MaResult.Success)
+            {
+                MaBinding.ma_free(_maDevice, IntPtr.Zero, "Device init failed");
+                _maDevice = IntPtr.Zero;
+                return (int)result;
+            }
+
+            Log.Info($"MiniAudio device reinitialized successfully");
+            return 0;
         }
 
         #endregion
@@ -1280,6 +1487,15 @@ namespace Ownaudio.Native
             }
             else if (_backend == AudioEngineBackend.MiniAudio)
             {
+                // Ensure context is initialized for device enumeration
+                // This allows device enumeration to work before Initialize() is called
+                int initResult = EnsureMiniAudioContextForEnumeration();
+                if (initResult != 0)
+                {
+                    Log.Error($"Failed to initialize MiniAudio context for enumeration: {initResult}");
+                    return devices;
+                }
+
                 // MiniAudio device enumeration using ma_context_get_devices
                 try
                 {
@@ -1301,6 +1517,8 @@ namespace Ownaudio.Native
                     string engineName = $"MiniAudio.{context.backend}";
 
                     // Enumerate output devices
+                    // NOTE: MiniAudio's ma_context_get_devices() does NOT set the isDefault flag.
+                    // As a workaround, we mark the first device as default (common convention).
                     for (int i = 0; i < playbackCount; i++)
                     {
                         // Calculate pointer to device info
@@ -1332,7 +1550,7 @@ namespace Ownaudio.Native
                             engineName: engineName,
                             isInput: false,
                             isOutput: true,
-                            isDefault: deviceInfo.IsDefault,
+                            isDefault: (i == 0), // First device is default (MiniAudio doesn't set isDefault flag)
                             state: AudioDeviceState.Active,
                             maxInputChannels: maxInputChannels,
                             maxOutputChannels: maxOutputChannels
@@ -1413,6 +1631,15 @@ namespace Ownaudio.Native
             }
             else if (_backend == AudioEngineBackend.MiniAudio)
             {
+                // Ensure context is initialized for device enumeration
+                // This allows device enumeration to work before Initialize() is called
+                int initResult = EnsureMiniAudioContextForEnumeration();
+                if (initResult != 0)
+                {
+                    Log.Error($"Failed to initialize MiniAudio context for enumeration: {initResult}");
+                    return devices;
+                }
+
                 // MiniAudio device enumeration using ma_context_get_devices
                 try
                 {
@@ -1434,6 +1661,8 @@ namespace Ownaudio.Native
                     string engineName = $"MiniAudio.{context.backend}";
 
                     // Enumerate input devices
+                    // NOTE: MiniAudio's ma_context_get_devices() does NOT set the isDefault flag.
+                    // As a workaround, we mark the first device as default (common convention).
                     for (int i = 0; i < captureCount; i++)
                     {
                         // Calculate pointer to device info
@@ -1465,7 +1694,7 @@ namespace Ownaudio.Native
                             engineName: engineName,
                             isInput: true,
                             isOutput: false,
-                            isDefault: deviceInfo.IsDefault,
+                            isDefault: (i == 0), // First device is default (MiniAudio doesn't set isDefault flag)
                             state: AudioDeviceState.Active,
                             maxInputChannels: maxInputChannels,
                             maxOutputChannels: maxOutputChannels
@@ -1499,12 +1728,21 @@ namespace Ownaudio.Native
             {
                 if (device.Name.Equals(deviceName, StringComparison.OrdinalIgnoreCase))
                 {
-                    // Parse device index from ID
-                    if (int.TryParse(device.DeviceId, out int deviceIndex))
+                    // Store the selected device ID in config
+                    _config.OutputDeviceId = device.DeviceId;
+
+                    // Handle backend-specific reinitialization
+                    if (_backend == AudioEngineBackend.PortAudio)
                     {
-                        _activeOutputDeviceIndex = deviceIndex;
-                        _config.OutputDeviceId = device.DeviceId;
-                        return ReinitializePortAudioStream();
+                        if (int.TryParse(device.DeviceId, out int deviceIndex))
+                        {
+                            _activeOutputDeviceIndex = deviceIndex;
+                            return ReinitializePortAudioStream();
+                        }
+                    }
+                    else // MiniAudio
+                    {
+                        return ReinitializeMiniAudioDevice();
                     }
                 }
             }
@@ -1529,14 +1767,23 @@ namespace Ownaudio.Native
             if (deviceIndex >= devices.Count)
                 return -3; // Index out of range
 
-            if (int.TryParse(devices[deviceIndex].DeviceId, out int actualPaIndex))
-            {
-                _activeOutputDeviceIndex = actualPaIndex;
-                _config.OutputDeviceId = devices[deviceIndex].DeviceId;
-                return ReinitializePortAudioStream();
-            }
+            // Store the selected device ID in config
+            _config.OutputDeviceId = devices[deviceIndex].DeviceId;
 
-            return -3; // Should not happen if DeviceId is valid
+            // Handle backend-specific reinitialization
+            if (_backend == AudioEngineBackend.PortAudio)
+            {
+                if (int.TryParse(devices[deviceIndex].DeviceId, out int actualPaIndex))
+                {
+                    _activeOutputDeviceIndex = actualPaIndex;
+                    return ReinitializePortAudioStream();
+                }
+                return -3; // Should not happen if DeviceId is valid
+            }
+            else // MiniAudio
+            {
+                return ReinitializeMiniAudioDevice();
+            }
         }
 
         /// <summary>
@@ -1557,12 +1804,21 @@ namespace Ownaudio.Native
             {
                 if (device.Name.Equals(deviceName, StringComparison.OrdinalIgnoreCase))
                 {
-                    // Parse device index from ID
-                    if (int.TryParse(device.DeviceId, out int deviceIndex))
+                    // Store the selected device ID in config
+                    _config.InputDeviceId = device.DeviceId;
+
+                    // Handle backend-specific reinitialization
+                    if (_backend == AudioEngineBackend.PortAudio)
                     {
-                        _activeInputDeviceIndex = deviceIndex;
-                        _config.InputDeviceId = device.DeviceId;
-                        return ReinitializePortAudioStream();
+                        if (int.TryParse(device.DeviceId, out int deviceIndex))
+                        {
+                            _activeInputDeviceIndex = deviceIndex;
+                            return ReinitializePortAudioStream();
+                        }
+                    }
+                    else // MiniAudio
+                    {
+                        return ReinitializeMiniAudioDevice();
                     }
                 }
             }
@@ -1587,15 +1843,23 @@ namespace Ownaudio.Native
             if (deviceIndex >= devices.Count)
                 return -3; // Index out of range
 
-            // Get the actual PortAudio device index from the device info
-            if (int.TryParse(devices[deviceIndex].DeviceId, out int actualPaIndex))
-            {
-                _activeInputDeviceIndex = actualPaIndex;
-                _config.InputDeviceId = devices[deviceIndex].DeviceId;
-                return ReinitializePortAudioStream();
-            }
+            // Store the selected device ID in config
+            _config.InputDeviceId = devices[deviceIndex].DeviceId;
 
-            return -3; // Should not happen
+            // Handle backend-specific reinitialization
+            if (_backend == AudioEngineBackend.PortAudio)
+            {
+                if (int.TryParse(devices[deviceIndex].DeviceId, out int actualPaIndex))
+                {
+                    _activeInputDeviceIndex = actualPaIndex;
+                    return ReinitializePortAudioStream();
+                }
+                return -3; // Should not happen if DeviceId is valid
+            }
+            else // MiniAudio
+            {
+                return ReinitializeMiniAudioDevice();
+            }
         }
 
         /// <summary>

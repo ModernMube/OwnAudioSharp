@@ -37,7 +37,7 @@ public class TestProgram
             {
                 SampleRate = 48000,
                 Channels = 2,
-                BufferSize = 1024,
+                BufferSize = 512,
                 HostType = EngineHostType.None
             };
 
@@ -316,8 +316,8 @@ public class TestProgram
             // IMPORTANT: Start the mixer to begin playback
             // All attached sources will play in perfect sync with the Master Clock
             Console.WriteLine($"  ✓ Mixer started: {mixer.IsRunning}");
-            Console.WriteLine($"  ✓ All sources playing");               
-            
+            Console.WriteLine($"  ✓ All sources playing");
+
             // ==========================================
             // Step 6: Playback Progress Display
             // ==========================================
@@ -376,7 +376,7 @@ public class TestProgram
                     }
                 }
 
-                string infoLine = $"  Position: {new TimeSpan(0,0,(int)position).ToString()} / {new TimeSpan(0, 0, (int)duration).ToString()}s  [{progressBar}] {progressPercent}%  ";
+                string infoLine = $"  Position: {new TimeSpan(0, 0, (int)position).ToString()} / {new TimeSpan(0, 0, (int)duration).ToString()}s  [{progressBar}] {progressPercent}%  ";
                 string peakLine = $"| Peaks: L={mixer.LeftPeak:F2} R={mixer.RightPeak:F2}  ";
                 string clockLine = $"| MClock: {masterTimestamp:F2}s  ";
 
@@ -467,7 +467,7 @@ public class TestProgram
             Console.WriteLine("  Disposing source...");
             fileSource0.Dispose();
             fileSource1.Dispose();
-            fileSource2.Dispose(); 
+            fileSource2.Dispose();
             fileSource3.Dispose();
 
             Console.WriteLine("  Stopping engine...");

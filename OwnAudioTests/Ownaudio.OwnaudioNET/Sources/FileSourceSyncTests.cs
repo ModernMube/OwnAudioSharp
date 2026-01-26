@@ -30,10 +30,10 @@ public class FileSourceSyncTests : IDisposable
 
         _mockDecoder = new Mock<IAudioDecoder>();
         _mockDecoder.Setup(d => d.StreamInfo).Returns(_streamInfo);
-        
+
         // Setup default successful read behavior
         _mockDecoder.Setup(d => d.ReadFrames(It.IsAny<byte[]>()))
-            .Returns((byte[] buffer) => 
+            .Returns((byte[] buffer) =>
             {
                 // Generate silence for testing
                 Array.Clear(buffer, 0, buffer.Length);
@@ -113,11 +113,11 @@ public class FileSourceSyncTests : IDisposable
         _source.Tempo = 1.5f;
 
         // Verify via Reflection that _gracePeriodEndTime is set to a future value
-        var fieldInfo = typeof(FileSource).GetField("_gracePeriodEndTime", 
+        var fieldInfo = typeof(FileSource).GetField("_gracePeriodEndTime",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        
+
         double gracePeriodEndTime = (double)fieldInfo!.GetValue(_source)!;
-        
+
         // Assert
         // Grace period is CurrentTime + GracePeriodSeconds (1.0s)
         // Initial time is ~0
@@ -137,11 +137,11 @@ public class FileSourceSyncTests : IDisposable
         _source.PitchShift = 2;
 
         // Verify via Reflection
-        var fieldInfo = typeof(FileSource).GetField("_gracePeriodEndTime", 
+        var fieldInfo = typeof(FileSource).GetField("_gracePeriodEndTime",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        
+
         double gracePeriodEndTime = (double)fieldInfo!.GetValue(_source)!;
-        
+
         // Assert
         gracePeriodEndTime.Should().BeGreaterThan(0);
     }
@@ -167,17 +167,20 @@ public class FileSourceSyncTests : IDisposable
         // We can't easily verify ReadSamplesAtTime was called without a spy, 
         // but we know logic flows there if _masterClock is not null.
     }
-    
+
     [Fact]
     public void GracePeriod_ShouldPreventDriftCorrection()
     {
         // Verify that during grace period, drift is ignored even if significant
-        
+
         // Arrange
         _source = new FileSource(_mockDecoder.Object);
         _source.AttachToClock(_masterClock!);
         _source.Play();
-        
+
+        // Clear any TrySeek calls made during Play() initialization
+        _mockDecoder.Invocations.Clear();
+
         // Set Tempo to trigger grace period
         _source.Tempo = 1.0f; // Triggers grace period for ~0.5s (24000 frames)
 
@@ -185,28 +188,28 @@ public class FileSourceSyncTests : IDisposable
         // (Track time is 0, Master time is 1.0s -> Drift = 1.0s > 0.010s tolerance)
         // Normal behavior: Should Seek/Resync
         // Grace Period behavior: Should NOT Seek
-        
+
         // We use Reflection to set internal _trackLocalTime to 0 manually just to be sure
-         var trackTimeField = typeof(FileSource).GetField("_trackLocalTime", 
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-         trackTimeField!.SetValue(_source, 0.0);
+        var trackTimeField = typeof(FileSource).GetField("_trackLocalTime",
+           System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        trackTimeField!.SetValue(_source, 0.0);
 
         // Force master clock time
         // We need to advance the master clock manually or mock it effectively.
         // Since MasterClock uses Stopwatch, we can't easily jump it without internal access.
         // Instead, we can pass a future timestamp if we were calling ReadSamplesAtTime directly.
         // But ReadSamples calls ReadSamplesAtTime with _masterClock.CurrentTimestamp.
-        
+
         // Strategy: Use reflection to set _ignoreSyncUntil to a huge value,
         // then call ReadSamplesAtTime directly (it's public interface IMasterClockSource)
-        
+
         // Set grace period to infinity
-        var ignoreField = typeof(FileSource).GetField("_gracePeriodEndTime", 
+        var ignoreField = typeof(FileSource).GetField("_gracePeriodEndTime",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         ignoreField!.SetValue(_source, double.MaxValue);
 
         var buffer = new float[1024];
-        
+
         // Act
         // Request samples at time 5.0s (huge drift from 0.0s)
         bool success = _source.ReadSamplesAtTime(5.0, buffer, 512, out var result);
@@ -217,7 +220,7 @@ public class FileSourceSyncTests : IDisposable
         // However, if drift correction WAS active, it would call Seek(). 
         // We verified _mockDecoder.TrySeek returns true, so it wouldn't fail.
         // Ideally we'd verify TrySeek was NOT called.
-        
+
         _mockDecoder.Verify(d => d.TrySeek(It.IsAny<TimeSpan>(), out It.Ref<string>.IsAny), Times.Never());
     }
 
@@ -228,9 +231,9 @@ public class FileSourceSyncTests : IDisposable
         _source = new FileSource(_mockDecoder.Object);
         _source.AttachToClock(_masterClock!);
         _source.Play();
-        
+
         // Set grace period to 0 (expired)
-        var ignoreField = typeof(FileSource).GetField("_gracePeriodEndTime", 
+        var ignoreField = typeof(FileSource).GetField("_gracePeriodEndTime",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         ignoreField!.SetValue(_source, 0.0);
 
@@ -256,7 +259,7 @@ public class FileSourceSyncTests : IDisposable
     {
         // Arrange
         _source = new FileSource(_mockDecoder.Object);
-        
+
         // Act
         _source.SyncTolerance = 0.050; // 50ms
 
@@ -269,14 +272,14 @@ public class FileSourceSyncTests : IDisposable
     {
         // This test verifies that drift correction uses relative calculation
         // instead of absolute (Time * Tempo), preventing jumps when tempo changed.
-        
+
         // Arrange
         _source = new FileSource(_mockDecoder.Object);
         _source.AttachToClock(_masterClock!);
         _source.Play();
-        
+
         // Disable grace period
-        var ignoreField = typeof(FileSource).GetField("_gracePeriodEndTime", 
+        var ignoreField = typeof(FileSource).GetField("_gracePeriodEndTime",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         ignoreField!.SetValue(_source, 0.0);
 
@@ -284,14 +287,14 @@ public class FileSourceSyncTests : IDisposable
         _source.Tempo = 2.0f;
         // Setting Tempo resets _gracePeriodEndTime, so we must disable it AGAIN
         ignoreField!.SetValue(_source, 0.0);
-        
+
         // Force current position to be at 10.0s
-        var positionField = typeof(FileSource).GetField("_currentPosition", 
+        var positionField = typeof(FileSource).GetField("_currentPosition",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         positionField!.SetValue(_source, 10.0); // File position = 10s
 
         // Force _trackLocalTime to be at 5.0s
-        var trackTimeField = typeof(FileSource).GetField("_trackLocalTime", 
+        var trackTimeField = typeof(FileSource).GetField("_trackLocalTime",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         trackTimeField!.SetValue(_source, 5.0); // Track Time = 5s
 
@@ -299,30 +302,30 @@ public class FileSourceSyncTests : IDisposable
         // File is at 10.0s
         // Track output corresponds to 5.0s Master Time
         // Tempo is 2.0x
-        
+
         // Act: Request samples at Master Time 5.1s
         // Drift = 5.1 - 5.0 = 0.1s
         // Tolerance = 0.010s -> Drift > Tolerance -> Correction!
-        
+
         // New Relative Logic:
         // Target File Pos = CurrentPos + (Drift * Tempo)
         // Target = 10.0 + (0.1 * 2.0) = 10.2s
-        
+
         // Old Absolute Logic (WRONG):
         // Target = MasterTime * Tempo = 5.1 * 2.0 = 10.2s
         // Wait, 10.2s matches here because 10.0s happens to be 5.0 * 2.0.
         // We need a case where history makes absolute calculation wrong.
-        
+
         // Let's assume File Position is 20.0s at Track Time 5.0s (maybe played very fast before)
         positionField!.SetValue(_source, 20.0);
-        
+
         // Relative Logic:
         // Target = 20.0 + (0.1 * 2.0) = 20.2s
-        
+
         // Absolute Logic:
         // Target = 5.1 * 2.0 = 10.2s
         // This would jump BACKWARDS by 10 seconds!
-        
+
         var buffer = new float[1024];
         _source.ReadSamplesAtTime(5.1, buffer, 512, out var result);
 

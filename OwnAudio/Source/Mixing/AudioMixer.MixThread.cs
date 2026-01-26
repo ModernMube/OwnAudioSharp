@@ -3,6 +3,7 @@ using OwnaudioNET.Synchronization;
 using OwnaudioNET.Core;
 using OwnaudioNET.Events;
 using OwnaudioNET.Interfaces;
+using OwnaudioNET.Sources;
 
 namespace OwnaudioNET.Mixing;
 
@@ -75,12 +76,12 @@ public sealed partial class AudioMixer
                 // 2. Mix sources based on rendering mode
                 int activeSources;
                 bool dropoutDetected = false;
-                
+
                 if (_masterClock.Mode == ClockMode.Realtime)
                 {
                     // Realtime mode: Non-blocking, dropouts → silence + event
                     dropoutDetected = MixSourcesRealtime(mixBuffer, sourceBuffer, currentTimestamp, out activeSources);
-                    
+
                     // OPTIMIZATION (Phase 1): Global resync removed to prevent "Thundering Herd"
                     // The FileSource's built-in "Three-Zone" drift correction (Green/Yellow/Red)
                     // handles individual track recovery more efficiently without causing
@@ -165,7 +166,7 @@ public sealed partial class AudioMixer
         // SEQUENTIAL MIXING (Restored for stability)
         // Parallel.For caused thread scheduling jitter which led to sync drift and dropouts.
         // The overhead of managing threads for each mix cycle outweighed the benefits.
-        
+
         var sources = _cachedSourcesArray;
         for (int i = 0; i < sources.Length; i++)
         {
@@ -186,7 +187,22 @@ public sealed partial class AudioMixer
 
                     if (result.FramesRead > 0)
                     {
-                        MixIntoBuffer(mixBuffer, sourceBuffer, result.FramesRead * _config.Channels);
+                        // Check if source has custom channel mapping
+                        if (source is FileSource fs && fs.OutputChannelMapping != null)
+                        {
+                            int sourceSampleCount = result.FramesRead * fs.Config.Channels;
+                            MixIntoBufferSelective(
+                                mixBuffer,
+                                sourceBuffer,
+                                sourceSampleCount,
+                                fs.OutputChannelMapping,
+                                _config.Channels);
+                        }
+                        else
+                        {
+                            // Default: mix to all channels
+                            MixIntoBuffer(mixBuffer, sourceBuffer, result.FramesRead * _config.Channels);
+                        }
                     }
 
                     if (success)
@@ -196,7 +212,7 @@ public sealed partial class AudioMixer
                     else
                     {
                         dropoutDetected = true;
-                        
+
                         OnTrackDropout(new TrackDropoutEventArgs(
                             source.Id,
                             source.GetType().Name,
@@ -220,7 +236,22 @@ public sealed partial class AudioMixer
 
                     if (framesRead > 0)
                     {
-                        MixIntoBuffer(mixBuffer, sourceBuffer, framesRead * _config.Channels);
+                        // Check if source has custom channel mapping
+                        if (source is FileSource fs && fs.OutputChannelMapping != null)
+                        {
+                            int sourceSampleCount = framesRead * fs.Config.Channels;
+                            MixIntoBufferSelective(
+                                mixBuffer,
+                                sourceBuffer,
+                                sourceSampleCount,
+                                fs.OutputChannelMapping,
+                                _config.Channels);
+                        }
+                        else
+                        {
+                            // Default: mix to all channels
+                            MixIntoBuffer(mixBuffer, sourceBuffer, framesRead * _config.Channels);
+                        }
                         activeSources++;
                     }
                 }
@@ -280,7 +311,22 @@ public sealed partial class AudioMixer
 
                     if (success && result.FramesRead > 0)
                     {
-                        MixIntoBuffer(mixBuffer, sourceBuffer, result.FramesRead * _config.Channels);
+                        // Check if source has custom channel mapping
+                        if (source is FileSource fs && fs.OutputChannelMapping != null)
+                        {
+                            int sourceSampleCount = result.FramesRead * fs.Config.Channels;
+                            MixIntoBufferSelective(
+                                mixBuffer,
+                                sourceBuffer,
+                                sourceSampleCount,
+                                fs.OutputChannelMapping,
+                                _config.Channels);
+                        }
+                        else
+                        {
+                            // Default: mix to all channels
+                            MixIntoBuffer(mixBuffer, sourceBuffer, result.FramesRead * _config.Channels);
+                        }
                         activeSources++;
                     }
                     else
@@ -297,7 +343,22 @@ public sealed partial class AudioMixer
 
                     if (framesRead > 0)
                     {
-                        MixIntoBuffer(mixBuffer, sourceBuffer, framesRead * _config.Channels);
+                        // Check if source has custom channel mapping
+                        if (source is FileSource fs && fs.OutputChannelMapping != null)
+                        {
+                            int sourceSampleCount = framesRead * fs.Config.Channels;
+                            MixIntoBufferSelective(
+                                mixBuffer,
+                                sourceBuffer,
+                                sourceSampleCount,
+                                fs.OutputChannelMapping,
+                                _config.Channels);
+                        }
+                        else
+                        {
+                            // Default: mix to all channels
+                            MixIntoBuffer(mixBuffer, sourceBuffer, framesRead * _config.Channels);
+                        }
                         activeSources++;
                     }
                 }

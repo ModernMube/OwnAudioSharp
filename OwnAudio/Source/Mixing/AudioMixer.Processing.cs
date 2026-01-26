@@ -45,6 +45,46 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
+    /// Mixes source samples into specific output channels based on channel mapping.
+    /// Zero-allocation hot path method for selective channel routing.
+    /// </summary>
+    /// <param name="mixBuffer">The output mix buffer</param>
+    /// <param name="sourceBuffer">The source audio buffer</param>
+    /// <param name="sampleCount">Number of samples to mix</param>
+    /// <param name="channelMapping">Target output channel indices (must match source channel count)</param>
+    /// <param name="totalOutputChannels">Total number of output channels in mix buffer</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void MixIntoBufferSelective(
+        float[] mixBuffer,
+        float[] sourceBuffer,
+        int sampleCount,
+        int[] channelMapping,
+        int totalOutputChannels)
+    {
+        int sourceChannels = channelMapping.Length;
+        int frameCount = sampleCount / sourceChannels;
+
+        // Validate channel mapping
+        foreach (int ch in channelMapping)
+        {
+            if (ch < 0 || ch >= totalOutputChannels)
+                return; // Invalid channel index - skip mixing to prevent crashes
+        }
+
+        // Mix frame by frame with channel mapping
+        for (int frame = 0; frame < frameCount; frame++)
+        {
+            for (int ch = 0; ch < sourceChannels; ch++)
+            {
+                int sourceIndex = frame * sourceChannels + ch;
+                int outputIndex = frame * totalOutputChannels + channelMapping[ch];
+
+                mixBuffer[outputIndex] += sourceBuffer[sourceIndex];
+            }
+        }
+    }
+
+    /// <summary>
     /// Applies master volume to the mixed buffer.
     /// Zero-allocation hot path method with SIMD vectorization.
     /// Performance: 4-8x faster on modern CPUs with hardware acceleration.

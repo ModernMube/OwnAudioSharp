@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -157,6 +158,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 StatusMessage = $"Error initializing audio: {ex.Message}";
+                Logger.Log.Debug($"Full exception: {ex}");
+                Logger.Log.Debug($"OwnaudioNet.IsInitialized: {OwnaudioNET.OwnaudioNet.IsInitialized}");
             });
         }
     }
