@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Logger;
@@ -24,8 +23,10 @@ namespace Ownaudio.Native
     /// - All other platforms: Use MiniAudio
     /// - Decoder: Always use MiniAudio decoder (supports MP3, WAV, FLAC)
     /// </summary>
-    public sealed class NativeAudioEngine : IAudioEngine
+    public sealed partial class NativeAudioEngine : IAudioEngine
     {
+        #region Common Fields
+
         /// <summary>
         /// The audio engine backend currently in use (PortAudio or MiniAudio).
         /// </summary>
@@ -73,66 +74,6 @@ namespace Ownaudio.Native
         private int _prebufferThreshold;
 
         /// <summary>
-        /// PortAudio library loader instance.
-        /// </summary>
-        private LibraryLoader? _portAudioLoader;
-
-        /// <summary>
-        /// Selected PortAudio host API type (WASAPI, ASIO, etc.).
-        /// </summary>
-        private PaHostApiTypeId _selectedHostApiType;
-
-        /// <summary>
-        /// Active output device index (PortAudio global device index).
-        /// </summary>
-        private int _activeOutputDeviceIndex = -1;
-
-        /// <summary>
-        /// Active input device index (PortAudio global device index).
-        /// </summary>
-        private int _activeInputDeviceIndex = -1;
-
-        /// <summary>
-        /// Pointer to the PortAudio stream.
-        /// </summary>
-        private IntPtr _paStream;
-
-        /// <summary>
-        /// PortAudio callback delegate.
-        /// </summary>
-        private PaStreamCallback? _paCallback;
-
-        /// <summary>
-        /// GC handle to prevent callback delegate from being collected.
-        /// </summary>
-        private GCHandle _callbackHandle;
-
-        /// <summary>
-        /// MiniAudio library loader instance.
-        /// </summary>
-        // private LibraryLoader? _miniAudioLoader; // REMOVED: Managed by MaBinding
-
-        /// <summary>
-        /// Pointer to the MiniAudio context.
-        /// </summary>
-        private IntPtr _maContext;
-
-        /// <summary>
-        /// Pointer to the MiniAudio device.
-        /// </summary>
-        private IntPtr _maDevice;
-
-        /// <summary>
-        /// MiniAudio callback delegate.
-        /// </summary>
-        private MaDataCallback? _maCallback;
-
-        /// <summary>
-        /// GC handle to prevent MiniAudio callback delegate from being collected.
-        /// </summary>
-        private GCHandle _maCallbackHandle;
-
-        /// <summary>
         /// Lock-free ring buffer for output (playback) audio data.
         /// Initialized in Initialize() method.
         /// </summary>
@@ -143,6 +84,10 @@ namespace Ownaudio.Native
         /// Initialized in Initialize() method.
         /// </summary>
         private LockFreeRingBuffer<float> _inputRing = null!;
+
+        #endregion
+
+        #region Events
 
         /// <summary>
         /// Raised when the output device changes.
@@ -160,6 +105,10 @@ namespace Ownaudio.Native
         /// </summary>
         public event EventHandler<AudioDeviceStateChangedEventArgs>? DeviceStateChanged;
 #pragma warning restore CS0067
+
+        #endregion
+
+        #region Device Monitoring Fields
 
         /// <summary>
         /// Device monitoring interval in milliseconds.
@@ -197,9 +146,23 @@ namespace Ownaudio.Native
         private string? _lastActiveInputDeviceId;
 
         /// <summary>
+        /// Last known total number of devices (input + output).
+        /// Used for lightweight change detection.
+        /// </summary>
+        private int _lastRawDeviceCount = -1;
+
+        #endregion
+
+        #region Properties
+
+        /// <summary>
         /// Gets the number of frames per audio buffer.
         /// </summary>
         public int FramesPerBuffer => _framesPerBuffer;
+
+        #endregion
+
+        #region Constructor
 
         /// <summary>
         /// Initializes a new instance of the <see cref="NativeAudioEngine"/> class.
@@ -211,6 +174,101 @@ namespace Ownaudio.Native
             _isBuffering = 0;
             _selectedHostApiType = (PaHostApiTypeId)(-1); // Initialize to invalid value
         }
+
+        #endregion
+
+        #region Initialization
+
+        /// <summary>
+        /// Initializes the audio engine with the specified configuration.
+        /// </summary>
+        /// <param name="config">The audio configuration to use.</param>
+        /// <returns>0 on success, negative value on error.</returns>
+        public int Initialize(AudioConfig config)
+        {
+            if (config == null || !config.Validate())
+                return -1;
+
+            // Clear ASIO cache on new initialization to ensure fresh probing if devices changed
+            _asioChannelCache.Clear();
+
+            _config = config;
+            _framesPerBuffer = config.BufferSize;
+            // Set prebuffer threshold to 2x buffer size (in samples)
+            _prebufferThreshold = config.BufferSize * config.Channels * 2;
+
+            // Determine which backend to use
+            _backend = DetermineBackend();
+
+            int result;
+            try
+            {
+                result = _backend == AudioEngineBackend.PortAudio
+                    ? InitializePortAudio()
+                    : InitializeMiniAudio();
+            }
+            catch (Exception ex)
+            {
+                // If PortAudio fails, try MiniAudio as fallback
+                if (_backend == AudioEngineBackend.PortAudio)
+                {
+                    Log.Error($"PortAudio initialization failed: {ex.Message}. Falling back to MiniAudio...");
+                    _backend = AudioEngineBackend.MiniAudio;
+                    result = InitializeMiniAudio();
+                }
+                else
+                {
+                    throw;
+                }
+            }
+
+            // Start device monitoring if initialization was successful
+            if (result == 0)
+            {
+                StartDeviceMonitor();
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Determines which audio backend to use (PortAudio or MiniAudio).
+        /// Tries PortAudio first, falls back to MiniAudio if unavailable.
+        /// </summary>
+        /// <returns>The selected audio backend.</returns>
+        private AudioEngineBackend DetermineBackend()
+        {
+            try
+            {
+                _portAudioLoader = new LibraryLoader("libportaudio");
+                PaBinding.InitializeBindings(_portAudioLoader);
+                Log.Info($"PortAudio loaded successfully from: {_portAudioLoader.LibraryPath}");
+                return AudioEngineBackend.PortAudio;
+            }
+            catch (DllNotFoundException ex)
+            {
+                // PortAudio not available - this is expected on most platforms
+                Log.Warning($"PortAudio not found: {ex.Message}");
+                Log.Warning("Falling back to MiniAudio (bundled with application)");
+                _portAudioLoader?.Dispose();
+                _portAudioLoader = null;
+            }
+            catch (Exception ex)
+            {
+                // PortAudio found but failed to initialize
+                Log.Error($"PortAudio initialization failed: {ex.Message}");
+                Log.Error("Falling back to MiniAudio");
+                _portAudioLoader?.Dispose();
+                _portAudioLoader = null;
+            }
+
+            // Fallback: Use MiniAudio (bundled for all platforms)
+            MaBinding.EnsureInitialized();
+            Log.Info($"MiniAudio loaded successfully");
+            return AudioEngineBackend.MiniAudio;
+        }
+
+        #endregion
 
         #region Device Monitoring
 
@@ -227,6 +285,9 @@ namespace Ownaudio.Native
                 // Initialize device lists
                 _lastKnownOutputDevices = GetOutputDevices();
                 _lastKnownInputDevices = _config.EnableInput ? GetInputDevices() : null;
+
+                // Initialize raw device count for lightweight monitoring
+                _lastRawDeviceCount = GetRawDeviceCount();
 
                 // Store current active device IDs
                 if (_backend == AudioEngineBackend.PortAudio)
@@ -316,7 +377,20 @@ namespace Ownaudio.Native
         }
 
         /// <summary>
+        /// Gets the raw count of available devices from the backend.
+        /// This is a lightweight operation compared to full enumeration.
+        /// </summary>
+        /// <returns>Total number of devices reported by the backend.</returns>
+        private int GetRawDeviceCount()
+        {
+            return _backend == AudioEngineBackend.PortAudio
+                ? GetPortAudioRawDeviceCount()
+                : GetMiniAudioRawDeviceCount();
+        }
+
+        /// <summary>
         /// Checks for device changes and handles device removal.
+        /// Uses lightweight counting first to avoid expensive full enumeration.
         /// </summary>
         private void CheckForDeviceChanges()
         {
@@ -325,6 +399,18 @@ namespace Ownaudio.Native
                 // Only monitor if engine is running
                 if (_isRunning == 0)
                     return;
+
+                // Lightweight check: First check if the number of devices has changed
+                int currentRawCount = GetRawDeviceCount();
+                if (currentRawCount == _lastRawDeviceCount)
+                {
+                    // No change in device count, assume no changes to avoid expensive enumeration/probing
+                    return;
+                }
+
+                // If count changed, update the last known count and proceed with full verification
+                _lastRawDeviceCount = currentRawCount;
+                Log.Info($"Device count changed to {currentRawCount}. Performing full device enumeration.");
 
                 // Get current device lists
                 var currentOutputDevices = GetOutputDevices();
@@ -367,7 +453,6 @@ namespace Ownaudio.Native
                         return;
                     }
                 }
-
 
                 // Update last known device lists
                 _lastKnownOutputDevices = currentOutputDevices;
@@ -435,833 +520,7 @@ namespace Ownaudio.Native
 
         #endregion
 
-        /// <summary>
-        /// Initializes the audio engine with the specified configuration.
-        /// </summary>
-        /// <param name="config">The audio configuration to use.</param>
-        /// <returns>0 on success, negative value on error.</returns>
-        public int Initialize(AudioConfig config)
-        {
-            if (config == null || !config.Validate())
-                return -1;
-
-            _config = config;
-            _framesPerBuffer = config.BufferSize;
-            // Set prebuffer threshold to 2x buffer size (in samples)
-            _prebufferThreshold = config.BufferSize * config.Channels * 2;
-
-            // Determine which backend to use
-            _backend = DetermineBackend();
-
-            int result;
-            try
-            {
-                result = _backend == AudioEngineBackend.PortAudio
-                    ? InitializePortAudio()
-                    : InitializeMiniAudio();
-            }
-            catch (Exception ex)
-            {
-                // If PortAudio fails, try MiniAudio as fallback
-                if (_backend == AudioEngineBackend.PortAudio)
-                {
-                    Log.Error($"PortAudio initialization failed: {ex.Message}. Falling back to MiniAudio...");
-                    _backend = AudioEngineBackend.MiniAudio;
-                    result = InitializeMiniAudio();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            // Start device monitoring if initialization was successful
-            if (result == 0)
-            {
-                StartDeviceMonitor();
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// Determines which audio backend to use (PortAudio or MiniAudio).
-        /// Tries PortAudio first, falls back to MiniAudio if unavailable.
-        /// </summary>
-        /// <returns>The selected audio backend.</returns>
-        private AudioEngineBackend DetermineBackend()
-        {
-            try
-            {
-                _portAudioLoader = new LibraryLoader("libportaudio");
-                PaBinding.InitializeBindings(_portAudioLoader);
-                Log.Info($"PortAudio loaded successfully from: {_portAudioLoader.LibraryPath}");
-                return AudioEngineBackend.PortAudio;
-            }
-            catch (DllNotFoundException ex)
-            {
-                // PortAudio not available - this is expected on most platforms
-                Log.Warning($"PortAudio not found: {ex.Message}");
-                Log.Warning("Falling back to MiniAudio (bundled with application)");
-                _portAudioLoader?.Dispose();
-                _portAudioLoader = null;
-            }
-            catch (Exception ex)
-            {
-                // PortAudio found but failed to initialize
-                Log.Error($"PortAudio initialization failed: {ex.Message}");
-                Log.Error("Falling back to MiniAudio");
-                _portAudioLoader?.Dispose();
-                _portAudioLoader = null;
-            }
-
-            // Fallback: Use MiniAudio (bundled for all platforms)
-            MaBinding.EnsureInitialized();
-            Log.Info($"MiniAudio loaded successfully"); // LibraryPath not available directly via MaBinding
-            return AudioEngineBackend.MiniAudio;
-        }
-
-        #region PortAudio Implementation
-
-        /// <summary>
-        /// Converts EngineHostType to PortAudio's PaHostApiTypeId.
-        /// </summary>
-        private PaHostApiTypeId ConvertToPortAudioHostType(EngineHostType hostType)
-        {
-            return hostType switch
-            {
-                EngineHostType.ASIO => PaHostApiTypeId.paASIO,
-                EngineHostType.COREAUDIO => PaHostApiTypeId.paCoreAudio,
-                EngineHostType.ALSA => PaHostApiTypeId.paALSA,
-                EngineHostType.WDMKS => PaHostApiTypeId.paWDMKS,
-                EngineHostType.JACK => PaHostApiTypeId.paJACK,
-                EngineHostType.WASAPI => PaHostApiTypeId.paWASAPI,
-                _ => (PaHostApiTypeId)(-1) // None or unsupported - will use default
-            };
-        }
-
-        /// <summary>
-        /// Gets the default device index for the specified host API.
-        /// Returns -1 if the host API is not available or if using default host API.
-        /// </summary>
-        private int GetDeviceIndexForHost(PaHostApiTypeId hostApiType, bool isInput)
-        {
-            if ((int)hostApiType == -1)
-            {
-                // Use default host API
-                return isInput ? Pa_GetDefaultInputDevice() : Pa_GetDefaultOutputDevice();
-            }
-
-            // Convert host API type ID to host API index
-            int hostApiIndex = Pa_HostApiTypeIdToHostApiIndex(hostApiType);
-
-            if (hostApiIndex < 0)
-            {
-                // Host API not available, fallback to default
-                return isInput ? Pa_GetDefaultInputDevice() : Pa_GetDefaultOutputDevice();
-            }
-
-            // Get host API info
-            IntPtr hostApiInfoPtr = Pa_GetHostApiInfo(hostApiIndex);
-            if (hostApiInfoPtr == IntPtr.Zero)
-            {
-                return isInput ? Pa_GetDefaultInputDevice() : Pa_GetDefaultOutputDevice();
-            }
-
-            var hostApiInfo = Marshal.PtrToStructure<PaHostApiInfo>(hostApiInfoPtr);
-
-            int globalDeviceIndex = isInput ? hostApiInfo.defaultInputDevice : hostApiInfo.defaultOutputDevice;
-
-            if (globalDeviceIndex < 0)
-            {
-                // No default device for this host API
-                return isInput ? Pa_GetDefaultInputDevice() : Pa_GetDefaultOutputDevice();
-            }
-
-            return globalDeviceIndex;
-        }
-
-        /// <summary>
-        /// Initializes the PortAudio backend.
-        /// </summary>
-        /// <returns>0 on success, negative value on error.</returns>
-        private unsafe int InitializePortAudio()
-        {
-            int result = Pa_Initialize();
-            if (result != 0)
-                return result;
-
-            // Determine which host API to use
-            PaHostApiTypeId requestedHostApi = ConvertToPortAudioHostType(_config.HostType);
-            _selectedHostApiType = requestedHostApi;
-
-            if (_config.HostType != EngineHostType.None)
-            {
-                Log.Info($"PortAudio: Requesting host API '{_config.HostType}'");
-            }
-            else
-            {
-                Log.Info("PortAudio: Using default host API");
-            }
-
-            // Get devices based on host API selection
-            int outputDeviceIndex = GetDeviceIndexForHost(requestedHostApi, false);
-            int inputDeviceIndex = _config.EnableInput ? GetDeviceIndexForHost(requestedHostApi, true) : -1;
-
-            // Store active device indices for use in GetOutputDevices()/GetInputDevices()
-            _activeOutputDeviceIndex = outputDeviceIndex;
-            _activeInputDeviceIndex = inputDeviceIndex;
-
-            // Open the stream with the selected devices
-            return ReinitializePortAudioStream();
-        }
-
-        /// <summary>
-        /// Opens or re-opens the PortAudio stream with the current device configuration.
-        /// Used during initialization and when switching devices.
-        /// </summary>
-        /// <returns>0 on success, negative value on error.</returns>
-        private unsafe int ReinitializePortAudioStream()
-        {
-            if (_activeOutputDeviceIndex < 0)
-                return -1;
-
-            // Close existing stream if open
-            if (_paStream != IntPtr.Zero)
-            {
-                Pa_CloseStream(_paStream);
-                _paStream = IntPtr.Zero;
-            }
-
-            // Free existing callback handle if allocated (will be re-allocated)
-            if (_callbackHandle.IsAllocated)
-                _callbackHandle.Free();
-
-            // Initialize ring buffers if not already done or if size changed
-            int ringBufferSize = _config.BufferSize * _config.Channels * 4; // 4x buffer
-            if (_outputRing == null || _outputRing.Capacity != ringBufferSize)
-                _outputRing = new LockFreeRingBuffer<float>(ringBufferSize);
-
-            if (_config.EnableInput && (_inputRing == null || _inputRing.Capacity != ringBufferSize))
-                _inputRing = new LockFreeRingBuffer<float>(ringBufferSize);
-
-            // Get output device info and log the actual device being used
-            IntPtr outputDeviceInfoPtr = Pa_GetDeviceInfo(_activeOutputDeviceIndex);
-            double outputLatency = _config.BufferSize / (double)_config.SampleRate;
-
-            if (outputDeviceInfoPtr != IntPtr.Zero)
-            {
-                var deviceInfo = Marshal.PtrToStructure<PaDeviceInfo>(outputDeviceInfoPtr);
-                outputLatency = deviceInfo.defaultLowOutputLatency;
-
-                IntPtr hostApiInfoPtr = Pa_GetHostApiInfo(deviceInfo.hostApi);
-                if (hostApiInfoPtr != IntPtr.Zero)
-                {
-                    var hostApiInfo = Marshal.PtrToStructure<PaHostApiInfo>(hostApiInfoPtr);
-                    Log.Info($"PortAudio: Using host API '{hostApiInfo.type}' with device '{deviceInfo.name}'");
-                }
-            }
-
-            // Check if we need ASIO-specific configuration
-            bool useAsioChannelSelectors = _selectedHostApiType == PaHostApiTypeId.paASIO &&
-                                           (_config.OutputChannelSelectors != null && _config.OutputChannelSelectors.Length > 0);
-
-            // Prepare ASIO stream info for output if needed
-            PaAsioStreamInfo outputAsioInfo = default;
-            IntPtr outputAsioInfoPtr = IntPtr.Zero;
-
-            if (useAsioChannelSelectors)
-            {
-                outputAsioInfo = new PaAsioStreamInfo
-                {
-                    size = (uint)Marshal.SizeOf<PaAsioStreamInfo>(),
-                    hostApiType = PaHostApiTypeId.paASIO,
-                    version = 1,
-                    flags = (uint)PaAsioFlags.UseChannelSelectors
-                };
-                outputAsioInfo.SetChannelSelectors(_config.OutputChannelSelectors!);
-                outputAsioInfoPtr = Marshal.AllocHGlobal(Marshal.SizeOf<PaAsioStreamInfo>());
-                Marshal.StructureToPtr(outputAsioInfo, outputAsioInfoPtr, false);
-
-                Log.Info($"PortAudio ASIO: Using custom output channel selectors: [{string.Join(", ", _config.OutputChannelSelectors!)}]");
-            }
-
-            var outputParams = new PaStreamParameters
-            {
-                device = _activeOutputDeviceIndex,
-                channelCount = _config.Channels,
-                sampleFormat = PaSampleFormat.paFloat32,
-                suggestedLatency = outputLatency,
-                hostApiSpecificStreamInfo = outputAsioInfoPtr
-            };
-
-            IntPtr inputParamsPtr = IntPtr.Zero;
-            PaAsioStreamInfo inputAsioInfo = default;
-            IntPtr inputAsioInfoPtr = IntPtr.Zero;
-
-            if (_config.EnableInput && _activeInputDeviceIndex >= 0)
-            {
-                // Get device-specific recommended latency for input
-                IntPtr inputDeviceInfoPtr = Pa_GetDeviceInfo(_activeInputDeviceIndex);
-                double inputLatency = _config.BufferSize / (double)_config.SampleRate;
-                if (inputDeviceInfoPtr != IntPtr.Zero)
-                {
-                    var devInfo = Marshal.PtrToStructure<PaDeviceInfo>(inputDeviceInfoPtr);
-                    inputLatency = devInfo.defaultLowInputLatency;
-                }
-
-                // Check if we need ASIO-specific configuration for input
-                bool useAsioInputChannelSelectors = _selectedHostApiType == PaHostApiTypeId.paASIO &&
-                                                    (_config.InputChannelSelectors != null && _config.InputChannelSelectors.Length > 0);
-
-                if (useAsioInputChannelSelectors)
-                {
-                    inputAsioInfo = new PaAsioStreamInfo
-                    {
-                        size = (uint)Marshal.SizeOf<PaAsioStreamInfo>(),
-                        hostApiType = PaHostApiTypeId.paASIO,
-                        version = 1,
-                        flags = (uint)PaAsioFlags.UseChannelSelectors
-                    };
-                    inputAsioInfo.SetChannelSelectors(_config.InputChannelSelectors!);
-                    inputAsioInfoPtr = Marshal.AllocHGlobal(Marshal.SizeOf<PaAsioStreamInfo>());
-                    Marshal.StructureToPtr(inputAsioInfo, inputAsioInfoPtr, false);
-
-                    Log.Info($"PortAudio ASIO: Using custom input channel selectors: [{string.Join(", ", _config.InputChannelSelectors!)}]");
-                }
-
-                var inputParams = new PaStreamParameters
-                {
-                    device = _activeInputDeviceIndex,
-                    channelCount = _config.Channels,
-                    sampleFormat = PaSampleFormat.paFloat32,
-                    suggestedLatency = inputLatency,
-                    hostApiSpecificStreamInfo = inputAsioInfoPtr
-                };
-                inputParamsPtr = Marshal.AllocHGlobal(Marshal.SizeOf(inputParams));
-                Marshal.StructureToPtr(inputParams, inputParamsPtr, false);
-            }
-
-            IntPtr outputParamsPtr = Marshal.AllocHGlobal(Marshal.SizeOf(outputParams));
-            Marshal.StructureToPtr(outputParams, outputParamsPtr, false);
-
-            // Create callback
-            _paCallback = PortAudioCallback;
-            _callbackHandle = GCHandle.Alloc(_paCallback);
-
-            // Open stream with optimized flags
-            const PaStreamFlags streamFlags = PaStreamFlags.paPrimeOutputBuffersUsingStreamCallback | PaStreamFlags.paClipOff;
-
-            int result = Pa_OpenStream(
-                out _paStream,
-                inputParamsPtr,
-                outputParamsPtr,
-                _config.SampleRate,
-                _config.BufferSize,
-                streamFlags,
-                _paCallback,
-                IntPtr.Zero);
-
-            // Cleanup allocated memory
-            Marshal.FreeHGlobal(outputParamsPtr);
-            if (inputParamsPtr != IntPtr.Zero)
-                Marshal.FreeHGlobal(inputParamsPtr);
-
-            // Free ASIO info structures and their internal channel selector arrays
-            if (outputAsioInfoPtr != IntPtr.Zero)
-            {
-                outputAsioInfo.Free();
-                Marshal.FreeHGlobal(outputAsioInfoPtr);
-            }
-
-            if (inputAsioInfoPtr != IntPtr.Zero)
-            {
-                inputAsioInfo.Free();
-                Marshal.FreeHGlobal(inputAsioInfoPtr);
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// PortAudio callback function for processing audio data.
-        /// </summary>
-        /// <param name="input">Pointer to input audio buffer.</param>
-        /// <param name="output">Pointer to output audio buffer.</param>
-        /// <param name="frameCount">Number of frames to process.</param>
-        /// <param name="timeInfo">Timing information.</param>
-        /// <param name="statusFlags">Stream callback flags.</param>
-        /// <param name="userData">User-defined data pointer.</param>
-        /// <returns>Callback result indicating whether to continue or abort.</returns>
-        private unsafe PaStreamCallbackResult PortAudioCallback(
-            void* input, void* output, long frameCount,
-            IntPtr timeInfo, PaStreamCallbackFlags statusFlags, void* userData)
-        {
-            try
-            {
-                int sampleCount = (int)frameCount * _config.Channels;
-                Span<float> outputSpan = new Span<float>(output, sampleCount);
-
-                // Check if we're in pre-buffering state
-                if (_isBuffering == 1)
-                {
-                    // Check if buffer has enough data to start playback
-                    int availableSamples = _outputRing.AvailableRead;
-                    if (availableSamples >= _prebufferThreshold)
-                    {
-                        // Buffer is full enough, disable buffering and start playback
-                        _isBuffering = 0;
-                    }
-                    else
-                    {
-                        // Still buffering - output silence and wait for more data
-                        outputSpan.Clear();
-
-                        // Handle input even during buffering
-                        if (_config.EnableInput && input != null)
-                        {
-                            Span<float> inputSpan = new Span<float>(input, sampleCount);
-                            _inputRing.Write(inputSpan);
-                        }
-
-                        return PaStreamCallbackResult.paContinue;
-                    }
-                }
-
-                // Normal playback mode - Zero-copy: read directly to output
-                int samplesRead = _outputRing.Read(outputSpan);
-
-                if (samplesRead > 0)
-                {
-                    // Fill remaining samples with silence if underrun
-                    if (samplesRead < sampleCount)
-                    {
-                        outputSpan.Slice(samplesRead).Clear();
-                    }
-
-                    _isActive = 1;
-                }
-                else
-                {
-                    // Underrun - output silence
-                    outputSpan.Clear();
-                }
-
-                // Handle input if enabled - Zero-copy: write directly from input
-                if (_config.EnableInput && input != null)
-                {
-                    Span<float> inputSpan = new Span<float>(input, sampleCount);
-                    _inputRing.Write(inputSpan);
-                }
-
-                return PaStreamCallbackResult.paContinue;
-            }
-            catch
-            {
-                _isActive = -1;
-                return PaStreamCallbackResult.paAbort;
-            }
-        }
-
-        #endregion
-
-        #region MiniAudio Implementation
-
-        /// <summary>
-        /// Ensures MiniAudio context is initialized for device enumeration.
-        /// This allows GetOutputDevices() and GetInputDevices() to work before Initialize() is called.
-        /// Only initializes the context, not the device.
-        /// </summary>
-        /// <returns>0 on success, negative value on error.</returns>
-        private unsafe int EnsureMiniAudioContextForEnumeration()
-        {
-            // Return early if context is already initialized
-            if (_maContext != IntPtr.Zero)
-                return 0;
-
-            // Allocate context
-            _maContext = MaBinding.allocate_context();
-            if (_maContext == IntPtr.Zero)
-                return -1;
-
-            // Initialize context with platform-specific backends
-            MaResult result;
-            if (OperatingSystem.IsLinux())
-            {
-                var backends = new[] { MaBackend.Alsa, MaBackend.PulseAudio, MaBackend.Jack };
-                result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _maContext);
-            }
-            else if (OperatingSystem.IsWindows())
-            {
-                var backends = new[] { MaBackend.Wasapi };
-                result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _maContext);
-            }
-            else if (OperatingSystem.IsMacOS() || OperatingSystem.IsIOS())
-            {
-                var backends = new[] { MaBackend.CoreAudio };
-                result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _maContext);
-            }
-            else if (OperatingSystem.IsAndroid())
-            {
-                var backends = new[] { MaBackend.Aaudio, MaBackend.OpenSL };
-                result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _maContext);
-            }
-            else
-            {
-                // Fallback to auto-detection
-                result = MaBinding.ma_context_init(null, 0, IntPtr.Zero, _maContext);
-            }
-
-            if (result != MaResult.Success)
-            {
-                MaBinding.ma_free(_maContext, IntPtr.Zero, "Failed to initialize MiniAudio context");
-                _maContext = IntPtr.Zero;
-                return (int)result;
-            }
-
-            return 0;
-        }
-
-        /// <summary>
-        /// Initializes the MiniAudio backend.
-        /// </summary>
-        /// <returns>0 on success, negative value on error.</returns>
-        private unsafe int InitializeMiniAudio()
-        {
-            if (_config.HostType != EngineHostType.None)
-            {
-                Log.Warning($"Note: HostType '{_config.HostType}' is ignored when using MiniAudio backend. MiniAudio uses platform defaults.");
-            }
-
-            // Initialize or reuse existing context
-            // Context may already be initialized from device enumeration (lazy init)
-            if (_maContext == IntPtr.Zero)
-            {
-                // Allocate context
-                _maContext = MaBinding.allocate_context();
-                if (_maContext == IntPtr.Zero)
-                    return -1;
-
-                // Initialize context with platform-specific backends (same as old working version)
-                MaResult result;
-                if (OperatingSystem.IsLinux())
-                {
-                    var backends = new[] { MaBackend.Alsa, MaBackend.PulseAudio, MaBackend.Jack };
-                    result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _maContext);
-                }
-                else if (OperatingSystem.IsWindows())
-                {
-                    var backends = new[] { MaBackend.Wasapi };
-                    result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _maContext);
-                }
-                else if (OperatingSystem.IsMacOS() || OperatingSystem.IsIOS())
-                {
-                    var backends = new[] { MaBackend.CoreAudio };
-                    result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _maContext);
-                }
-                else if (OperatingSystem.IsAndroid())
-                {
-                    var backends = new[] { MaBackend.Aaudio, MaBackend.OpenSL };
-                    result = MaBinding.ma_context_init(backends, (uint)backends.Length, IntPtr.Zero, _maContext);
-                }
-                else
-                {
-                    // Fallback to auto-detection
-                    result = MaBinding.ma_context_init(null, 0, IntPtr.Zero, _maContext);
-                }
-
-                if (result != MaResult.Success)
-                {
-                    MaBinding.ma_free(_maContext, IntPtr.Zero, "Failed to initialize MiniAudio context");
-                    _maContext = IntPtr.Zero;
-                    return (int)result;
-                }
-            }
-
-            // Allocate device
-            _maDevice = MaBinding.allocate_device();
-            if (_maDevice == IntPtr.Zero)
-            {
-                MaBinding.ma_context_uninit(_maContext);
-                MaBinding.ma_free(_maContext, IntPtr.Zero, "Context cleanup after device alloc failure");
-                _maContext = IntPtr.Zero;
-                return -1;
-            }
-
-            // Create device config
-            MaDeviceType deviceType = _config.EnableInput ? MaDeviceType.Duplex : MaDeviceType.Playback;
-            _maCallback = MiniAudioCallback;
-            _maCallbackHandle = GCHandle.Alloc(_maCallback);
-
-            IntPtr configPtr = MaBinding.allocate_device_config(
-                deviceType,
-                MaFormat.F32,
-                (uint)_config.Channels,
-                (uint)_config.SampleRate,
-                _maCallback,
-                IntPtr.Zero, // default playback device
-                IntPtr.Zero, // default capture device
-                (uint)_config.BufferSize
-            );
-
-            if (configPtr == IntPtr.Zero)
-            {
-                MaBinding.ma_free(_maDevice, IntPtr.Zero, "Failed to allocate device config");
-                MaBinding.ma_context_uninit(_maContext);
-                MaBinding.ma_free(_maContext, IntPtr.Zero, "Context cleanup after config failure");
-                _maContext = IntPtr.Zero;
-                _maDevice = IntPtr.Zero;
-                return -1;
-            }
-
-
-            // Initialize device
-            MaResult deviceResult = MaBinding.ma_device_init(_maContext, configPtr, _maDevice);
-            MaBinding.ma_free(configPtr, IntPtr.Zero, "Device config cleanup");
-
-            if (deviceResult != MaResult.Success)
-            {
-                MaBinding.ma_free(_maDevice, IntPtr.Zero, "Device init failed");
-                MaBinding.ma_context_uninit(_maContext);
-                MaBinding.ma_free(_maContext, IntPtr.Zero, "Context cleanup after device init failure");
-                _maContext = IntPtr.Zero;
-                _maDevice = IntPtr.Zero;
-                return (int)deviceResult;
-            }
-
-
-
-            // Initialize ring buffers
-            int ringBufferSize = _config.BufferSize * _config.Channels * 4; // 4x buffer
-            _outputRing = new LockFreeRingBuffer<float>(ringBufferSize);
-            if (_config.EnableInput)
-                _inputRing = new LockFreeRingBuffer<float>(ringBufferSize);
-
-            return 0;
-        }
-
-        /// <summary>
-        /// MiniAudio callback function for processing audio data.
-        /// </summary>
-        /// <param name="pDevice">Pointer to the MiniAudio device.</param>
-        /// <param name="pOutput">Pointer to output audio buffer.</param>
-        /// <param name="pInput">Pointer to input audio buffer.</param>
-        /// <param name="frameCount">Number of frames to process.</param>
-        private unsafe void MiniAudioCallback(IntPtr pDevice, void* pOutput, void* pInput, uint frameCount)
-        {
-            try
-            {
-                int sampleCount = (int)frameCount * _config.Channels;
-
-                // Handle output (playback)
-                if (pOutput != null)
-                {
-                    Span<float> outputSpan = new Span<float>(pOutput, sampleCount);
-
-                    // Check if we're in pre-buffering state
-                    if (_isBuffering == 1)
-                    {
-                        // Check if buffer has enough data to start playback
-                        int availableSamples = _outputRing.AvailableRead;
-                        if (availableSamples >= _prebufferThreshold)
-                        {
-                            // Buffer is full enough, disable buffering and start playback
-                            _isBuffering = 0;
-                        }
-                        else
-                        {
-                            // Still buffering - output silence and wait for more data
-                            outputSpan.Clear();
-
-                            // Handle input even during buffering
-                            if (_config.EnableInput && pInput != null)
-                            {
-                                Span<float> inputSpan = new Span<float>(pInput, sampleCount);
-                                _inputRing.Write(inputSpan);
-                            }
-
-                            return;
-                        }
-                    }
-
-                    // Normal playback mode - Zero-copy: read directly to output
-                    int samplesRead = _outputRing.Read(outputSpan);
-
-                    if (samplesRead > 0)
-                    {
-                        // Fill remaining samples with silence if underrun
-                        if (samplesRead < sampleCount)
-                        {
-                            outputSpan.Slice(samplesRead).Clear();
-                        }
-
-                        _isActive = 1;
-                    }
-                    else
-                    {
-                        // Underrun - output silence
-                        outputSpan.Clear();
-                    }
-                }
-
-                // Handle input (recording) - Zero-copy: write directly from input
-                if (_config.EnableInput && pInput != null)
-                {
-                    Span<float> inputSpan = new Span<float>(pInput, sampleCount);
-                    _inputRing.Write(inputSpan);
-                }
-            }
-            catch
-            {
-                _isActive = -1;
-            }
-        }
-
-        /// <summary>
-        /// Reinitializes the MiniAudio device with current device configuration.
-        /// Used when switching devices at runtime.
-        /// </summary>
-        /// <returns>0 on success, negative value on error.</returns>
-        private unsafe int ReinitializeMiniAudioDevice()
-        {
-            // Only stop the device if it's actually running
-            if (_maDevice != IntPtr.Zero && _isRunning == 1)
-            {
-                MaBinding.ma_device_stop(_maDevice);
-            }
-
-            // Uninitialize and free the device if it exists
-            if (_maDevice != IntPtr.Zero)
-            {
-                MaBinding.ma_device_uninit(_maDevice);
-                MaBinding.ma_free(_maDevice, IntPtr.Zero, "Device cleanup for reinitialization");
-                _maDevice = IntPtr.Zero;
-            }
-
-            // Free existing callback handle if allocated (will be re-allocated)
-            if (_maCallbackHandle.IsAllocated)
-                _maCallbackHandle.Free();
-
-            // Allocate new device
-            _maDevice = MaBinding.allocate_device();
-            if (_maDevice == IntPtr.Zero)
-                return -1;
-
-            // Initialize ring buffers if not already done or if size changed
-            int ringBufferSize = _config.BufferSize * _config.Channels * 4; // 4x buffer
-            if (_outputRing == null || _outputRing.Capacity != ringBufferSize)
-                _outputRing = new LockFreeRingBuffer<float>(ringBufferSize);
-
-            if (_config.EnableInput && (_inputRing == null || _inputRing.Capacity != ringBufferSize))
-                _inputRing = new LockFreeRingBuffer<float>(ringBufferSize);
-
-            // Create device config
-            MaDeviceType deviceType = _config.EnableInput ? MaDeviceType.Duplex : MaDeviceType.Playback;
-            _maCallback = MiniAudioCallback;
-            _maCallbackHandle = GCHandle.Alloc(_maCallback);
-
-            // Parse device IDs from config if specified
-            IntPtr playbackDeviceIdPtr = IntPtr.Zero;
-            IntPtr captureDeviceIdPtr = IntPtr.Zero;
-
-            // For MiniAudio, device IDs are stored as "ma_output_X" or "ma_input_X" format
-            // We need to get the actual device ID from the enumeration
-            if (!string.IsNullOrEmpty(_config.OutputDeviceId) && _config.OutputDeviceId.StartsWith("ma_output_"))
-            {
-                // Extract index from device ID
-                if (int.TryParse(_config.OutputDeviceId.Substring("ma_output_".Length), out int deviceIndex))
-                {
-                    // Get device list and extract the actual device ID
-                    MaResult enumResult = MaBinding.ma_context_get_devices(
-                        _maContext,
-                        out IntPtr pPlaybackDevices,
-                        out IntPtr pCaptureDevices,
-                        out int playbackCount,
-                        out int captureCount);
-
-                    if (enumResult == MaResult.Success && deviceIndex < playbackCount)
-                    {
-                        int deviceInfoSize = Marshal.SizeOf<MaDeviceInfo>();
-                        IntPtr deviceInfoPtr = IntPtr.Add(pPlaybackDevices, deviceIndex * deviceInfoSize);
-                        var deviceInfo = Marshal.PtrToStructure<MaDeviceInfo>(deviceInfoPtr);
-
-                        // Allocate and copy device ID
-                        playbackDeviceIdPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MaDeviceId>());
-                        Marshal.StructureToPtr(deviceInfo.Id, playbackDeviceIdPtr, false);
-                    }
-                }
-            }
-
-            if (_config.EnableInput && !string.IsNullOrEmpty(_config.InputDeviceId) && _config.InputDeviceId.StartsWith("ma_input_"))
-            {
-                // Extract index from device ID
-                if (int.TryParse(_config.InputDeviceId.Substring("ma_input_".Length), out int deviceIndex))
-                {
-                    // Get device list and extract the actual device ID
-                    MaResult enumResult = MaBinding.ma_context_get_devices(
-                        _maContext,
-                        out IntPtr pPlaybackDevices,
-                        out IntPtr pCaptureDevices,
-                        out int playbackCount,
-                        out int captureCount);
-
-                    if (enumResult == MaResult.Success && deviceIndex < captureCount)
-                    {
-                        int deviceInfoSize = Marshal.SizeOf<MaDeviceInfo>();
-                        IntPtr deviceInfoPtr = IntPtr.Add(pCaptureDevices, deviceIndex * deviceInfoSize);
-                        var deviceInfo = Marshal.PtrToStructure<MaDeviceInfo>(deviceInfoPtr);
-
-                        // Allocate and copy device ID
-                        captureDeviceIdPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MaDeviceId>());
-                        Marshal.StructureToPtr(deviceInfo.Id, captureDeviceIdPtr, false);
-                    }
-                }
-            }
-
-            IntPtr configPtr = MaBinding.allocate_device_config(
-                deviceType,
-                MaFormat.F32,
-                (uint)_config.Channels,
-                (uint)_config.SampleRate,
-                _maCallback,
-                playbackDeviceIdPtr,
-                captureDeviceIdPtr,
-                (uint)_config.BufferSize
-            );
-
-            if (configPtr == IntPtr.Zero)
-            {
-                if (playbackDeviceIdPtr != IntPtr.Zero)
-                    Marshal.FreeHGlobal(playbackDeviceIdPtr);
-                if (captureDeviceIdPtr != IntPtr.Zero)
-                    Marshal.FreeHGlobal(captureDeviceIdPtr);
-                MaBinding.ma_free(_maDevice, IntPtr.Zero, "Failed to allocate device config");
-                _maDevice = IntPtr.Zero;
-                return -1;
-            }
-
-            // Initialize device
-            MaResult result = MaBinding.ma_device_init(_maContext, configPtr, _maDevice);
-            MaBinding.ma_free(configPtr, IntPtr.Zero, "Device config cleanup");
-
-            // Free device ID pointers
-            if (playbackDeviceIdPtr != IntPtr.Zero)
-                Marshal.FreeHGlobal(playbackDeviceIdPtr);
-            if (captureDeviceIdPtr != IntPtr.Zero)
-                Marshal.FreeHGlobal(captureDeviceIdPtr);
-
-            if (result != MaResult.Success)
-            {
-                MaBinding.ma_free(_maDevice, IntPtr.Zero, "Device init failed");
-                _maDevice = IntPtr.Zero;
-                return (int)result;
-            }
-
-            Log.Info($"MiniAudio device reinitialized successfully");
-            return 0;
-        }
-
-        #endregion
+        #region Start/Stop
 
         /// <summary>
         /// Starts audio processing.
@@ -1275,28 +534,17 @@ namespace Ownaudio.Native
             // Enable pre-buffering to prevent playback until buffer has enough data
             _isBuffering = 1;
 
-            if (_backend == AudioEngineBackend.PortAudio)
+            int result = _backend == AudioEngineBackend.PortAudio
+                ? StartPortAudio()
+                : StartMiniAudio();
+
+            if (result != 0)
             {
-                int result = Pa_StartStream(_paStream);
-                if (result != 0)
-                {
-                    _isRunning = 0;
-                    _isBuffering = 0;
-                    return result;
-                }
-            }
-            else // MiniAudio
-            {
-                MaResult result = MaBinding.ma_device_start(_maDevice);
-                if (result != MaResult.Success)
-                {
-                    _isRunning = 0;
-                    _isBuffering = 0;
-                    return (int)result;
-                }
+                _isRunning = 0;
+                _isBuffering = 0;
             }
 
-            return 0;
+            return result;
         }
 
         /// <summary>
@@ -1310,19 +558,17 @@ namespace Ownaudio.Native
 
             _isBuffering = 0;
 
-            if (_backend == AudioEngineBackend.PortAudio)
-            {
-                int result = Pa_StopStream(_paStream);
-                _isActive = 0;
-                return result;
-            }
-            else // MiniAudio
-            {
-                MaResult result = MaBinding.ma_device_stop(_maDevice);
-                _isActive = 0;
-                return (int)result;
-            }
+            int result = _backend == AudioEngineBackend.PortAudio
+                ? StopPortAudio()
+                : StopMiniAudio();
+
+            _isActive = 0;
+            return result;
         }
+
+        #endregion
+
+        #region Audio I/O
 
         /// <summary>
         /// Sends audio samples to the output buffer for playback.
@@ -1362,7 +608,7 @@ namespace Ownaudio.Native
                     }
 
                     // Buffer is full. Wait for the consumer (audio hardware) to play some samples.
-                    // Using Thread.Sleep(1) yields the CPU and prevents thread starvation, 
+                    // Using Thread.Sleep(1) yields the CPU and prevents thread starvation,
                     // which is crucial for the high-priority audio callback thread to run smoothly.
                     Thread.Sleep(1);
                 }
@@ -1395,6 +641,10 @@ namespace Ownaudio.Native
             return samplesRead;
         }
 
+        #endregion
+
+        #region Status Methods
+
         /// <summary>
         /// Gets the activation state of the audio engine.
         /// </summary>
@@ -1422,148 +672,19 @@ namespace Ownaudio.Native
             return _backend == AudioEngineBackend.PortAudio ? _paStream : _maDevice;
         }
 
+        #endregion
+
+        #region Device Enumeration
+
         /// <summary>
         /// Gets a list of available output (playback) devices.
         /// </summary>
         /// <returns>List of output device information.</returns>
         public List<AudioDeviceInfo> GetOutputDevices()
         {
-            var devices = new List<AudioDeviceInfo>();
-
-            if (_backend == AudioEngineBackend.PortAudio)
-            {
-                // Get the host API index for the selected host API type
-                int selectedHostApiIndex = -1;
-                if ((int)_selectedHostApiType != -1)
-                {
-                    selectedHostApiIndex = Pa_HostApiTypeIdToHostApiIndex(_selectedHostApiType);
-                }
-
-                // Identify the actual system default device for the selected host
-                int defaultDeviceIndex = GetDeviceIndexForHost(_selectedHostApiType, false);
-
-                int deviceCount = Pa_GetDeviceCount();
-                for (int i = 0; i < deviceCount; i++)
-                {
-                    IntPtr deviceInfoPtr = Pa_GetDeviceInfo(i);
-                    if (deviceInfoPtr != IntPtr.Zero)
-                    {
-                        var paDeviceInfo = Marshal.PtrToStructure<PaDeviceInfo>(deviceInfoPtr);
-
-                        // Skip devices that don't match the selected host API
-                        if (selectedHostApiIndex >= 0 && paDeviceInfo.hostApi != selectedHostApiIndex)
-                        {
-                            continue;
-                        }
-
-                        if (paDeviceInfo.maxOutputChannels > 0)
-                        {
-                            // Get host API name for engine name
-                            string engineName = "Portaudio";
-                            IntPtr hostApiInfoPtr = Pa_GetHostApiInfo(paDeviceInfo.hostApi);
-                            if (hostApiInfoPtr != IntPtr.Zero)
-                            {
-                                var hostApiInfo = Marshal.PtrToStructure<PaHostApiInfo>(hostApiInfoPtr);
-                                if (!string.IsNullOrEmpty(hostApiInfo.name))
-                                {
-                                    engineName = $"Portaudio.{hostApiInfo.name}";
-                                }
-                            }
-
-                            devices.Add(new AudioDeviceInfo(
-                                deviceId: i.ToString(),
-                                name: paDeviceInfo.name,
-                                engineName: engineName,
-                                isInput: paDeviceInfo.maxInputChannels > 0,
-                                isOutput: true,
-                                isDefault: (i == defaultDeviceIndex),
-                                state: AudioDeviceState.Active,
-                                maxInputChannels: paDeviceInfo.maxInputChannels,
-                                maxOutputChannels: paDeviceInfo.maxOutputChannels
-                            ));
-                        }
-                    }
-                }
-            }
-            else if (_backend == AudioEngineBackend.MiniAudio)
-            {
-                // Ensure context is initialized for device enumeration
-                // This allows device enumeration to work before Initialize() is called
-                int initResult = EnsureMiniAudioContextForEnumeration();
-                if (initResult != 0)
-                {
-                    Log.Error($"Failed to initialize MiniAudio context for enumeration: {initResult}");
-                    return devices;
-                }
-
-                // MiniAudio device enumeration using ma_context_get_devices
-                try
-                {
-                    MaResult result = MaBinding.ma_context_get_devices(
-                        _maContext,
-                        out IntPtr pPlaybackDevices,
-                        out IntPtr pCaptureDevices,
-                        out int playbackCount,
-                        out int captureCount);
-
-                    if (result != MaResult.Success)
-                    {
-                        Log.Error($"MiniAudio device enumeration failed: {result}");
-                        return devices;
-                    }
-
-                    // Get backend name for display
-                    var context = Marshal.PtrToStructure<MaContext>(_maContext);
-                    string engineName = $"MiniAudio.{context.backend}";
-
-                    // Enumerate output devices
-                    // NOTE: MiniAudio's ma_context_get_devices() does NOT set the isDefault flag.
-                    // As a workaround, we mark the first device as default (common convention).
-                    for (int i = 0; i < playbackCount; i++)
-                    {
-                        // Calculate pointer to device info
-                        int deviceInfoSize = Marshal.SizeOf<MaDeviceInfo>();
-                        IntPtr deviceInfoPtr = IntPtr.Add(pPlaybackDevices, i * deviceInfoSize);
-
-                        var deviceInfo = Marshal.PtrToStructure<MaDeviceInfo>(deviceInfoPtr);
-
-                        // Convert device ID to string (use index as ID)
-                        string deviceId = $"ma_output_{i}";
-
-                        // Extract max channel counts from nativeDataFormats
-                        int maxOutputChannels = 0;
-                        int maxInputChannels = 0;
-
-                        if (deviceInfo.nativeDataFormats != null && deviceInfo.NativeDataFormatCount > 0)
-                        {
-                            for (int j = 0; j < deviceInfo.NativeDataFormatCount && j < deviceInfo.nativeDataFormats.Length; j++)
-                            {
-                                var format = deviceInfo.nativeDataFormats[j];
-                                if (format.channels > maxOutputChannels)
-                                    maxOutputChannels = (int)format.channels;
-                            }
-                        }
-
-                        devices.Add(new AudioDeviceInfo(
-                            deviceId: deviceId,
-                            name: deviceInfo.Name,
-                            engineName: engineName,
-                            isInput: false,
-                            isOutput: true,
-                            isDefault: (i == 0), // First device is default (MiniAudio doesn't set isDefault flag)
-                            state: AudioDeviceState.Active,
-                            maxInputChannels: maxInputChannels,
-                            maxOutputChannels: maxOutputChannels
-                        ));
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log.Error($"MiniAudio output device enumeration error: {ex.Message}");
-                }
-            }
-
-            return devices;
+            return _backend == AudioEngineBackend.PortAudio
+                ? GetPortAudioOutputDevices()
+                : GetMiniAudioOutputDevices();
         }
 
         /// <summary>
@@ -1572,143 +693,14 @@ namespace Ownaudio.Native
         /// <returns>List of input device information.</returns>
         public List<AudioDeviceInfo> GetInputDevices()
         {
-            var devices = new List<AudioDeviceInfo>();
-
-            if (_backend == AudioEngineBackend.PortAudio)
-            {
-                // Get the host API index for the selected host API type
-                int selectedHostApiIndex = -1;
-                if ((int)_selectedHostApiType != -1)
-                {
-                    selectedHostApiIndex = Pa_HostApiTypeIdToHostApiIndex(_selectedHostApiType);
-                }
-
-                // Identify the actual system default device for the selected host
-                int defaultDeviceIndex = GetDeviceIndexForHost(_selectedHostApiType, true);
-
-                int deviceCount = Pa_GetDeviceCount();
-                for (int i = 0; i < deviceCount; i++)
-                {
-                    IntPtr deviceInfoPtr = Pa_GetDeviceInfo(i);
-                    if (deviceInfoPtr != IntPtr.Zero)
-                    {
-                        var paDeviceInfo = Marshal.PtrToStructure<PaDeviceInfo>(deviceInfoPtr);
-
-                        // Skip devices that don't match the selected host API
-                        if (selectedHostApiIndex >= 0 && paDeviceInfo.hostApi != selectedHostApiIndex)
-                        {
-                            continue;
-                        }
-
-                        if (paDeviceInfo.maxInputChannels > 0)
-                        {
-                            // Get host API name for engine name
-                            string engineName = "Portaudio";
-                            IntPtr hostApiInfoPtr = Pa_GetHostApiInfo(paDeviceInfo.hostApi);
-                            if (hostApiInfoPtr != IntPtr.Zero)
-                            {
-                                var hostApiInfo = Marshal.PtrToStructure<PaHostApiInfo>(hostApiInfoPtr);
-                                if (!string.IsNullOrEmpty(hostApiInfo.name))
-                                {
-                                    engineName = $"Portaudio.{hostApiInfo.name}";
-                                }
-                            }
-
-                            devices.Add(new AudioDeviceInfo(
-                                deviceId: i.ToString(),
-                                name: paDeviceInfo.name,
-                                engineName: engineName,
-                                isInput: true,
-                                isOutput: paDeviceInfo.maxOutputChannels > 0,
-                                isDefault: (i == defaultDeviceIndex),
-                                state: AudioDeviceState.Active,
-                                maxInputChannels: paDeviceInfo.maxInputChannels,
-                                maxOutputChannels: paDeviceInfo.maxOutputChannels
-                            ));
-                        }
-                    }
-                }
-            }
-            else if (_backend == AudioEngineBackend.MiniAudio)
-            {
-                // Ensure context is initialized for device enumeration
-                // This allows device enumeration to work before Initialize() is called
-                int initResult = EnsureMiniAudioContextForEnumeration();
-                if (initResult != 0)
-                {
-                    Log.Error($"Failed to initialize MiniAudio context for enumeration: {initResult}");
-                    return devices;
-                }
-
-                // MiniAudio device enumeration using ma_context_get_devices
-                try
-                {
-                    MaResult result = MaBinding.ma_context_get_devices(
-                        _maContext,
-                        out IntPtr pPlaybackDevices,
-                        out IntPtr pCaptureDevices,
-                        out int playbackCount,
-                        out int captureCount);
-
-                    if (result != MaResult.Success)
-                    {
-                        Log.Error($"MiniAudio device enumeration failed: {result}");
-                        return devices;
-                    }
-
-                    // Get backend name for display
-                    var context = Marshal.PtrToStructure<MaContext>(_maContext);
-                    string engineName = $"MiniAudio.{context.backend}";
-
-                    // Enumerate input devices
-                    // NOTE: MiniAudio's ma_context_get_devices() does NOT set the isDefault flag.
-                    // As a workaround, we mark the first device as default (common convention).
-                    for (int i = 0; i < captureCount; i++)
-                    {
-                        // Calculate pointer to device info
-                        int deviceInfoSize = Marshal.SizeOf<MaDeviceInfo>();
-                        IntPtr deviceInfoPtr = IntPtr.Add(pCaptureDevices, i * deviceInfoSize);
-
-                        var deviceInfo = Marshal.PtrToStructure<MaDeviceInfo>(deviceInfoPtr);
-
-                        // Convert device ID to string (use index as ID)
-                        string deviceId = $"ma_input_{i}";
-
-                        // Extract max channel counts from nativeDataFormats
-                        int maxInputChannels = 0;
-                        int maxOutputChannels = 0;
-
-                        if (deviceInfo.nativeDataFormats != null && deviceInfo.NativeDataFormatCount > 0)
-                        {
-                            for (int j = 0; j < deviceInfo.NativeDataFormatCount && j < deviceInfo.nativeDataFormats.Length; j++)
-                            {
-                                var format = deviceInfo.nativeDataFormats[j];
-                                if (format.channels > maxInputChannels)
-                                    maxInputChannels = (int)format.channels;
-                            }
-                        }
-
-                        devices.Add(new AudioDeviceInfo(
-                            deviceId: deviceId,
-                            name: deviceInfo.Name,
-                            engineName: engineName,
-                            isInput: true,
-                            isOutput: false,
-                            isDefault: (i == 0), // First device is default (MiniAudio doesn't set isDefault flag)
-                            state: AudioDeviceState.Active,
-                            maxInputChannels: maxInputChannels,
-                            maxOutputChannels: maxOutputChannels
-                        ));
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log.Error($"MiniAudio input device enumeration error: {ex.Message}");
-                }
-            }
-
-            return devices;
+            return _backend == AudioEngineBackend.PortAudio
+                ? GetPortAudioInputDevices()
+                : GetMiniAudioInputDevices();
         }
+
+        #endregion
+
+        #region Device Selection
 
         /// <summary>
         /// Sets the output device by name.
@@ -1810,9 +802,9 @@ namespace Ownaudio.Native
                     // Handle backend-specific reinitialization
                     if (_backend == AudioEngineBackend.PortAudio)
                     {
-                        if (int.TryParse(device.DeviceId, out int deviceIndex))
+                        if (int.TryParse(device.DeviceId, out int deviceIdx))
                         {
-                            _activeInputDeviceIndex = deviceIndex;
+                            _activeInputDeviceIndex = deviceIdx;
                             return ReinitializePortAudioStream();
                         }
                     }
@@ -1862,6 +854,10 @@ namespace Ownaudio.Native
             }
         }
 
+        #endregion
+
+        #region Dispose
+
         /// <summary>
         /// Disposes the audio engine and releases all resources.
         /// </summary>
@@ -1877,42 +873,20 @@ namespace Ownaudio.Native
 
             if (_backend == AudioEngineBackend.PortAudio)
             {
-                if (_paStream != IntPtr.Zero)
-                {
-                    Pa_CloseStream(_paStream);
-                    _paStream = IntPtr.Zero;
-                }
-                Pa_Terminate();
-
-                if (_callbackHandle.IsAllocated)
-                    _callbackHandle.Free();
+                DisposePortAudio();
             }
             else if (_backend == AudioEngineBackend.MiniAudio)
             {
-                if (_maDevice != IntPtr.Zero)
-                {
-                    MaBinding.ma_device_uninit(_maDevice);
-                    MaBinding.ma_free(_maDevice, IntPtr.Zero, "Device cleanup in Dispose");
-                    _maDevice = IntPtr.Zero;
-                }
-
-                if (_maContext != IntPtr.Zero)
-                {
-                    MaBinding.ma_context_uninit(_maContext);
-                    MaBinding.ma_free(_maContext, IntPtr.Zero, "Context cleanup in Dispose");
-                    _maContext = IntPtr.Zero;
-                }
-
-                if (_maCallbackHandle.IsAllocated)
-                    _maCallbackHandle.Free();
+                DisposeMiniAudio();
             }
-
-            _portAudioLoader?.Dispose();
-            // _miniAudioLoader?.Dispose(); // REMOVED: Managed by MaBinding
 
             _disposed = true;
             GC.SuppressFinalize(this);
         }
+
+        #endregion
+
+        #region Backend Enum
 
         /// <summary>
         /// Specifies the audio engine backend type.
@@ -1929,5 +903,7 @@ namespace Ownaudio.Native
             /// </summary>
             MiniAudio
         }
+
+        #endregion
     }
 }

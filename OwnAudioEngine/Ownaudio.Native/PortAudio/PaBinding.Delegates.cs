@@ -25,6 +25,7 @@ internal static partial class PaBinding
     private static HostApiDeviceIndexToDeviceIndex? _hostApiDeviceIndexToDeviceIndex;
     private static GetHostApiInfo? _getHostApiInfo;
     private static GetDefaultHostApi? _getDefaultHostApi;
+    private static IsFormatSupported? _isFormatSupported;
 
     public unsafe delegate PaStreamCallbackResult PaStreamCallback(
         void* input,
@@ -102,4 +103,7 @@ internal static partial class PaBinding
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int GetDefaultHostApi();
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int IsFormatSupported(IntPtr inputParameters, IntPtr outputParameters, double sampleRate);
 }

@@ -32,6 +32,7 @@ internal static partial class PaBinding
 
         _getDefaultInputDevice = loader.LoadFunc<GetDefaultInputDevice>(nameof(Pa_GetDefaultInputDevice));
         _readStream = loader.LoadFunc<ReadStream>(nameof(Pa_ReadStream));
+        _isFormatSupported = loader.LoadFunc<IsFormatSupported>(nameof(Pa_IsFormatSupported));
     }
 
 #nullable disable
@@ -150,6 +151,11 @@ internal static partial class PaBinding
     public static int Pa_GetDefaultHostApi()
     {
         return _getDefaultHostApi();
+    }
+
+    public static int Pa_IsFormatSupported(IntPtr inputParameters, IntPtr outputParameters, double sampleRate)
+    {
+        return _isFormatSupported(inputParameters, outputParameters, sampleRate);
     }
 #nullable restore
 }

@@ -103,7 +103,7 @@ public class AudioService : IDisposable
 
         // Initialize the audio engine (may block up to 5000ms on Linux)
         var config = OwnaudioNet.CreateDefaultConfig();
-        config.EnableInput = true;
+        config.EnableInput = false;
         config.HostType = Ownaudio.Core.EngineHostType.None;
         await OwnaudioNet.InitializeAsync(config);
 
