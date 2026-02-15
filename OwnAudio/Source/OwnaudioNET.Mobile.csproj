@@ -37,7 +37,7 @@
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
     <PackageReference Include="Melanchall.DryWetMidi" Version="8.0.3" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.2" />
-    <ProjectReference Include="..\..\..\OwnAudioVST3.nosync\OwnVST3Host\OwnVST3Host.csproj" />
+    <PackageReference Include="OwnAudioVst" Version="1.4.0" />
     <PackageReference Include="System.Memory" Version="4.6.3" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.102" PrivateAssets="All" />
     <PackageReference Include="System.Numerics.Tensors" Version="10.0.2" />
