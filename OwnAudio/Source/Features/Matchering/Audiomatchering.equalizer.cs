@@ -298,27 +298,31 @@ namespace OwnaudioNET.Features.Matchering
                 float headroomRecoveryGain = (effectiveBoost > 0) ? (float)Math.Pow(10, (effectiveBoost + 2.0f) / 20.0f) : 1.0f;
                 float totalMaxGain = dynamicAmp.MaxGain * headroomRecoveryGain;
 
+                // PHASE 1 FIX: Gyorsabb, zeneileg transzparensebb AGC beállítások
+                // Attack/Release: Gyorsabb reakció a dinamikaváltásokra
+                // Noise Threshold: Szigorúbb zajzár
+                // Max Gain: Korlátozva a túlzott erősítés ellen
                 var dynamicAmplifier = new DynamicAmpEffect(
                     targetLevel: dynamicAmp.TargetLevel,
-                    attackTimeSeconds: 1.5f,         // Slow attack for mastering
-                    releaseTimeSeconds: 4.0f,        // Very slow release for natural dynamics
-                    noiseThresholdDbOrLinear: -65.0f, // Low noise gate (dB value)
-                    maxGainValue: totalMaxGain,
+                    attackTimeSeconds: 0.2f,         // MODIFIED: 1.5f -> 0.2f (200ms, gyors de zenei)
+                    releaseTimeSeconds: 0.8f,        // MODIFIED: 4.0f -> 0.8f (800ms, lélegzőbb)
+                    noiseThresholdDbOrLinear: -50.0f, // MODIFIED: -65.0f -> -50.0f (szigorúbb zajzár)
+                    maxGainValue: Math.Min(totalMaxGain, 3.0f), // MODIFIED: Hard limit +9.5dB-re (~3.0x)
                     sampleRateHz: sampleRate,
-                    rmsWindowSeconds: 0.8f,          // Long window for stable musical decisions
+                    rmsWindowSeconds: 0.8f,          // Változatlan (hosszú ablak a stabil döntésekhez)
                     initialGain: headroomRecoveryGain,
-                    maxGainChangePerSecondDb: 4.0f,  // Very slow gain changes (transparent)
-                    maxGainReductionDb: 8.0f         // Gentle max reduction preserves dynamics
+                    maxGainChangePerSecondDb: 12.0f, // MODIFIED: 4.0f -> 12.0f (gyorsabb reagálás)
+                    maxGainReductionDb: 6.0f         // MODIFIED: 8.0f -> 6.0f (kevesebb összenyomás)
                 );
 
-                Log.Info($"\n[3] DYNAMIC AMPLIFIER (AGC):");
+                Log.Info($"\n[3] DYNAMIC AMPLIFIER (AGC - Optimized):");
                 Log.Info($"    Target Level: {dynamicAmp.TargetLevel:F1} dB");
-                Log.Info($"    Attack: 1.5s, Release: 4.0s (Musical)");
+                Log.Info($"    Attack: 0.2s, Release: 0.8s (Fast & Musical)");
                 Log.Info($"    RMS Window: 0.8s (Long-term averaging)");
-                Log.Info($"    Max Gain: {totalMaxGain:F2}x ({20 * MathF.Log10(totalMaxGain):+F1} dB)");
-                Log.Info($"    Max Reduction: 8 dB (Gentle compression)");
-                Log.Info($"    Gain Change Rate: 4 dB/s (Transparent)");
-                Log.Info($"    Noise Gate: -65 dB (Very low, preserves tail)");
+                Log.Info($"    Max Gain: {Math.Min(totalMaxGain, 3.0f):F2}x ({20 * MathF.Log10(Math.Min(totalMaxGain, 3.0f)):+F1} dB - CAPPED)");
+                Log.Info($"    Max Reduction: 6 dB (Gentle, preserves dynamics)");
+                Log.Info($"    Gain Change Rate: 12 dB/s (Responsive)");
+                Log.Info($"    Noise Gate: -50 dB (Strict, protects against noise boost)");
                 Log.Info($"    Initial Gain: {headroomRecoveryGain:F2}x ({20 * MathF.Log10(headroomRecoveryGain):+F1} dB compensation)");
 
                 // 4. Limiter (Fourth - Final Safety/Peak Control)

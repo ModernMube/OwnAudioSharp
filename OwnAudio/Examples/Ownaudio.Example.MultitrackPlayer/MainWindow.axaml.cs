@@ -22,6 +22,8 @@ public partial class MainWindow : Window
     /// Gets the ViewModel associated with this window.
     /// </summary>
     private MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
+    
+    public static MainWindow? Instance;
 
     #endregion
 
@@ -34,6 +36,9 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        Instance = this;
+        
         DataContext = new MainWindowViewModel();
 
         // FIX: Sliders in Avalonia often handle PointerPressed/Released internally.

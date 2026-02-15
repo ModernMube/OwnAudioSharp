@@ -1080,6 +1080,18 @@ namespace Ownaudio.Linux
             return 0;
         }
 
+        /// <inheritdoc/>
+        public void PauseDeviceMonitoring()
+        {
+            // PulseAudio implementation: no background device monitoring
+        }
+
+        /// <inheritdoc/>
+        public void ResumeDeviceMonitoring()
+        {
+            // PulseAudio implementation: no background device monitoring
+        }
+
         #endregion
 
         #region Disposal

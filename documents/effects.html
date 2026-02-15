@@ -145,6 +145,7 @@
                 <li><a href="#modulation">Modulation</a></li>
                 <li><a href="#spatial">Spatial</a></li>
                 <li><a href="#distortion">Distortion</a></li>
+                <li><a href="#vst3">VST3 Plugins</a></li>
                 <li><a href="#master">Master Processing</a></li>
                 <li><a href="#usage">Usage Examples</a></li>
             </ul>
@@ -182,7 +183,13 @@
                     <span class="category-badge badge-dynamics">DYNAMICS</span>
                     <h3 class="effect-title">CompressorEffect</h3>
                     <p class="effect-desc">Professional dynamic range compressor with soft-knee design, envelope
-                        following, and adaptive gain control. Used to control the dynamic range of audio signals by reducing the volume of loud sounds above a threshold while leaving quieter sounds unaffected. In professional mixing, compressors are essential for vocal processing to ensure consistent levels, taming drum transients, and gluing mix elements together. Common applications include broadcast normalization, podcast production for consistent speech levels, and mastering to increase perceived loudness. Use gentle ratios (2:1 to 4:1) for transparent control, or higher ratios (8:1+) for aggressive limiting-style compression on vocals and drums.</p>
+                        following, and adaptive gain control. Used to control the dynamic range of audio signals by
+                        reducing the volume of loud sounds above a threshold while leaving quieter sounds unaffected. In
+                        professional mixing, compressors are essential for vocal processing to ensure consistent levels,
+                        taming drum transients, and gluing mix elements together. Common applications include broadcast
+                        normalization, podcast production for consistent speech levels, and mastering to increase
+                        perceived loudness. Use gentle ratios (2:1 to 4:1) for transparent control, or higher ratios
+                        (8:1+) for aggressive limiting-style compression on vocals and drums.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -232,7 +239,14 @@
                     <span class="category-badge badge-dynamics">DYNAMICS</span>
                     <h3 class="effect-title">LimiterEffect</h3>
                     <p class="effect-desc">Brick-wall peak limiter with look-ahead, adaptive release, and
-                        zero-allocation buffer management. Prevents audio peaks from exceeding a specified ceiling, making it essential as the final stage in mastering chains to prevent digital clipping and maximize loudness. Professional engineers use limiters on master buses to achieve competitive loudness levels for streaming platforms while maintaining audio quality. The look-ahead feature allows the limiter to anticipate peaks and apply gain reduction smoothly, preventing distortion. Ideal for broadcast applications where strict peak levels must be maintained, live sound reinforcement to protect speakers, and podcast/streaming content to meet platform loudness standards (e.g., -14 LUFS for Spotify).</p>
+                        zero-allocation buffer management. Prevents audio peaks from exceeding a specified ceiling,
+                        making it essential as the final stage in mastering chains to prevent digital clipping and
+                        maximize loudness. Professional engineers use limiters on master buses to achieve competitive
+                        loudness levels for streaming platforms while maintaining audio quality. The look-ahead feature
+                        allows the limiter to anticipate peaks and apply gain reduction smoothly, preventing distortion.
+                        Ideal for broadcast applications where strict peak levels must be maintained, live sound
+                        reinforcement to protect speakers, and podcast/streaming content to meet platform loudness
+                        standards (e.g., -14 LUFS for Spotify).</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -279,7 +293,14 @@
                     <span class="category-badge badge-dynamics">DYNAMICS</span>
                     <h3 class="effect-title">AutoGainEffect</h3>
                     <p class="effect-desc">Automatic gain control with intelligent noise gating, look-ahead detection,
-                        and smooth gain transitions. Automatically adjusts audio levels to maintain a consistent output volume regardless of input variations, making it perfect for live streaming, video conferencing, and podcast recording where speaker distance from the microphone varies. The integrated noise gate prevents background noise from being amplified during quiet passages. Professional applications include broadcast automation systems, conference room audio systems, and content creation workflows where manual gain riding isn't practical. Use the Voice preset for speech applications or Music preset for dynamic music content that needs level consistency without destroying musical dynamics.</p>
+                        and smooth gain transitions. Automatically adjusts audio levels to maintain a consistent output
+                        volume regardless of input variations, making it perfect for live streaming, video conferencing,
+                        and podcast recording where speaker distance from the microphone varies. The integrated noise
+                        gate prevents background noise from being amplified during quiet passages. Professional
+                        applications include broadcast automation systems, conference room audio systems, and content
+                        creation workflows where manual gain riding isn't practical. Use the Voice preset for speech
+                        applications or Music preset for dynamic music content that needs level consistency without
+                        destroying musical dynamics.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -332,7 +353,15 @@
                     <span class="category-badge badge-dynamics">DYNAMICS</span>
                     <h3 class="effect-title">DynamicAmpEffect</h3>
                     <p class="effect-desc">Adaptive volume control with dual-window RMS detection, smart noise gating,
-                        and gain change limiting for transparent dynamics management. Uses RMS (Root Mean Square) level detection to measure perceived loudness rather than just peak levels, providing more musical and transparent gain adjustment. Ideal for normalizing content with varying loudness levels such as playlist playback, audiobook production, and archival audio restoration. The dual-window approach analyzes both short-term and long-term levels to avoid pumping artifacts while maintaining consistent perceived volume. Professional use cases include broadcast playout systems, background music systems in commercial spaces, and automatic level correction for user-generated content platforms. The Transparent preset is excellent for mastering applications where subtle level correction is needed without audible processing.</p>
+                        and gain change limiting for transparent dynamics management. Uses RMS (Root Mean Square) level
+                        detection to measure perceived loudness rather than just peak levels, providing more musical and
+                        transparent gain adjustment. Ideal for normalizing content with varying loudness levels such as
+                        playlist playback, audiobook production, and archival audio restoration. The dual-window
+                        approach analyzes both short-term and long-term levels to avoid pumping artifacts while
+                        maintaining consistent perceived volume. Professional use cases include broadcast playout
+                        systems, background music systems in commercial spaces, and automatic level correction for
+                        user-generated content platforms. The Transparent preset is excellent for mastering applications
+                        where subtle level correction is needed without audible processing.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -389,7 +418,15 @@
                     <span class="category-badge badge-frequency">FREQUENCY</span>
                     <h3 class="effect-title">EqualizerEffect (10-Band)</h3>
                     <p class="effect-desc">Professional 10-band parametric equalizer with cascaded biquad filters (2 per
-                        band) and Direct Form II Transposed implementation for numerical stability. Provides precise frequency shaping across the entire audible spectrum using industry-standard ISO frequencies, making it essential for corrective EQ, tonal shaping, and mix balancing. In professional studios, 10-band EQs are used for room correction, instrument tone shaping, and fixing frequency masking issues between mix elements. The cascaded filter design ensures steep, musical curves without phase distortion. Common applications include removing muddiness from vocals (cut 200-400 Hz), adding presence to guitars (boost 2-4 kHz), enhancing bass punch (boost 60-100 Hz), and de-essing harsh sibilance (cut 6-8 kHz). Use subtle adjustments (±3 dB) for transparent corrections or more aggressive settings (±6-12 dB) for creative sound design.</p>
+                        band) and Direct Form II Transposed implementation for numerical stability. Provides precise
+                        frequency shaping across the entire audible spectrum using industry-standard ISO frequencies,
+                        making it essential for corrective EQ, tonal shaping, and mix balancing. In professional
+                        studios, 10-band EQs are used for room correction, instrument tone shaping, and fixing frequency
+                        masking issues between mix elements. The cascaded filter design ensures steep, musical curves
+                        without phase distortion. Common applications include removing muddiness from vocals (cut
+                        200-400 Hz), adding presence to guitars (boost 2-4 kHz), enhancing bass punch (boost 60-100 Hz),
+                        and de-essing harsh sibilance (cut 6-8 kHz). Use subtle adjustments (±3 dB) for transparent
+                        corrections or more aggressive settings (±6-12 dB) for creative sound design.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -428,7 +465,16 @@
                     <span class="category-badge badge-frequency">FREQUENCY</span>
                     <h3 class="effect-title">Equalizer30BandEffect</h3>
                     <p class="effect-desc">High-resolution 30-band graphic equalizer with professional frequencies from
-                        20 Hz to 16 kHz, optimized Q factors, and single filter per band for natural sound. Offers surgical precision for frequency correction and sound system tuning with 1/3-octave resolution, the industry standard for live sound and installation work. Professional sound engineers use 30-band EQs for speaker system optimization, feedback elimination in live venues, and detailed room acoustic correction. The high band count allows for precise notch filtering to remove problematic resonances without affecting adjacent frequencies. Essential for PA system tuning in concert halls, correcting room modes in home theaters, broadcast studio monitor calibration, and creating custom listening curves for different speaker types. The narrow bands make it ideal for identifying and eliminating feedback frequencies during live performances while maintaining overall tonal balance.</p>
+                        20 Hz to 16 kHz, optimized Q factors, and single filter per band for natural sound. Offers
+                        surgical precision for frequency correction and sound system tuning with 1/3-octave resolution,
+                        the industry standard for live sound and installation work. Professional sound engineers use
+                        30-band EQs for speaker system optimization, feedback elimination in live venues, and detailed
+                        room acoustic correction. The high band count allows for precise notch filtering to remove
+                        problematic resonances without affecting adjacent frequencies. Essential for PA system tuning in
+                        concert halls, correcting room modes in home theaters, broadcast studio monitor calibration, and
+                        creating custom listening curves for different speaker types. The narrow bands make it ideal for
+                        identifying and eliminating feedback frequencies during live performances while maintaining
+                        overall tonal balance.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -466,7 +512,16 @@
                     <span class="category-badge badge-frequency">FREQUENCY</span>
                     <h3 class="effect-title">EnhancerEffect</h3>
                     <p class="effect-desc">Psychoacoustic enhancer with high-pass filtering, harmonic saturation, and
-                        soft clipping for added presence and clarity. Generates harmonically-related overtones that make audio sound brighter, more detailed, and more present in a mix without simply boosting high frequencies. Professional mixing engineers use enhancers to add "air" and "sparkle" to vocals, make instruments cut through dense mixes, and restore high-frequency detail lost in compression or low-quality recordings. The harmonic saturation creates pleasing musical harmonics similar to analog tape and tube equipment. Ideal for adding vocal presence in broadcast applications, enhancing acoustic guitar recordings, bringing life to dull or over-compressed masters, and making podcast voices sound more professional and engaging. Use the VocalClarity preset for speech applications or AcousticSparkle for bringing out detail in acoustic instruments without harshness.</p>
+                        soft clipping for added presence and clarity. Generates harmonically-related overtones that make
+                        audio sound brighter, more detailed, and more present in a mix without simply boosting high
+                        frequencies. Professional mixing engineers use enhancers to add "air" and "sparkle" to vocals,
+                        make instruments cut through dense mixes, and restore high-frequency detail lost in compression
+                        or low-quality recordings. The harmonic saturation creates pleasing musical harmonics similar to
+                        analog tape and tube equipment. Ideal for adding vocal presence in broadcast applications,
+                        enhancing acoustic guitar recordings, bringing life to dull or over-compressed masters, and
+                        making podcast voices sound more professional and engaging. Use the VocalClarity preset for
+                        speech applications or AcousticSparkle for bringing out detail in acoustic instruments without
+                        harshness.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -507,7 +562,16 @@
                     <span class="category-badge badge-modulation">MODULATION</span>
                     <h3 class="effect-title">ChorusEffect</h3>
                     <p class="effect-desc">Multi-voice chorus with LFO modulation, fractional delay interpolation, and
-                        2-6 independent voices for rich detuning effects. Creates the illusion of multiple instruments or voices playing in unison by generating slightly detuned and time-shifted copies of the original signal, adding width, depth, and movement to sounds. Professional producers use chorus extensively on electric guitars to achieve the classic 80s clean tone, on synth pads to create lush evolving textures, and on bass guitars for added thickness without muddiness. The multiple independent voices with phase-offset LFOs create a more natural, ensemble-like effect than simple single-voice chorus. Essential for creating vintage synthesizer sounds, thickening backing vocals, adding dimension to clean electric guitar parts, and making mono sources feel wider in a stereo mix. Use 2-3 voices with slow rates for subtle thickening, or 4-6 voices with faster rates for dramatic, swirling effects.</p>
+                        2-6 independent voices for rich detuning effects. Creates the illusion of multiple instruments
+                        or voices playing in unison by generating slightly detuned and time-shifted copies of the
+                        original signal, adding width, depth, and movement to sounds. Professional producers use chorus
+                        extensively on electric guitars to achieve the classic 80s clean tone, on synth pads to create
+                        lush evolving textures, and on bass guitars for added thickness without muddiness. The multiple
+                        independent voices with phase-offset LFOs create a more natural, ensemble-like effect than
+                        simple single-voice chorus. Essential for creating vintage synthesizer sounds, thickening
+                        backing vocals, adding dimension to clean electric guitar parts, and making mono sources feel
+                        wider in a stereo mix. Use 2-3 voices with slow rates for subtle thickening, or 4-6 voices with
+                        faster rates for dramatic, swirling effects.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -554,7 +618,16 @@
                     <span class="category-badge badge-modulation">MODULATION</span>
                     <h3 class="effect-title">FlangerEffect</h3>
                     <p class="effect-desc">Classic flanging effect with variable delay modulation, feedback control, and
-                        LFO-driven comb filtering for sweeping tones. Produces the iconic "jet plane" swooshing sound by mixing the original signal with a delayed copy whose delay time is continuously modulated, creating moving comb filter notches. Originally discovered by manually varying tape playback speed, flanging is now a staple effect in rock, electronic, and experimental music production. Professional applications include adding movement to electric guitar solos, creating psychedelic vocal effects, enhancing drum loops with rhythmic sweeps, and designing sci-fi sound effects for film and games. The feedback parameter controls the intensity and resonance of the sweeping effect. Use subtle settings (low depth, low feedback) for gentle movement on rhythm guitars, or extreme settings (high depth, high feedback) for dramatic, metallic sweeps on lead instruments and special effects. The JetPlane preset delivers the classic through-zero flanging sound.</p>
+                        LFO-driven comb filtering for sweeping tones. Produces the iconic "jet plane" swooshing sound by
+                        mixing the original signal with a delayed copy whose delay time is continuously modulated,
+                        creating moving comb filter notches. Originally discovered by manually varying tape playback
+                        speed, flanging is now a staple effect in rock, electronic, and experimental music production.
+                        Professional applications include adding movement to electric guitar solos, creating psychedelic
+                        vocal effects, enhancing drum loops with rhythmic sweeps, and designing sci-fi sound effects for
+                        film and games. The feedback parameter controls the intensity and resonance of the sweeping
+                        effect. Use subtle settings (low depth, low feedback) for gentle movement on rhythm guitars, or
+                        extreme settings (high depth, high feedback) for dramatic, metallic sweeps on lead instruments
+                        and special effects. The JetPlane preset delivers the classic through-zero flanging sound.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -600,7 +673,16 @@
                     <span class="category-badge badge-modulation">MODULATION</span>
                     <h3 class="effect-title">PhaserEffect</h3>
                     <p class="effect-desc">Multi-stage phaser with all-pass filters (2-8 stages), LFO modulation
-                        sweeping from 200 Hz to 2 kHz, and feedback control. Creates sweeping notches in the frequency spectrum without affecting the overall amplitude, producing a distinctive swirling, "whooshing" character that's less metallic than flanging. Phasers are iconic in funk, rock, and electronic music, famously used on electric piano (Fender Rhodes), guitar, and synthesizers. Professional producers use phasers to add movement and interest to static sounds, create vintage keyboard tones, and add psychedelic character to vocals and guitars. The number of stages determines the complexity of the effect—more stages create deeper, more pronounced sweeps with multiple notches. Essential for recreating 70s funk keyboard sounds, adding subtle movement to pad synthesizers, creating rotating speaker effects, and designing evolving ambient textures. Use 4 stages for classic vintage tones, or 6-8 stages for more dramatic, modern phasing effects.</p>
+                        sweeping from 200 Hz to 2 kHz, and feedback control. Creates sweeping notches in the frequency
+                        spectrum without affecting the overall amplitude, producing a distinctive swirling, "whooshing"
+                        character that's less metallic than flanging. Phasers are iconic in funk, rock, and electronic
+                        music, famously used on electric piano (Fender Rhodes), guitar, and synthesizers. Professional
+                        producers use phasers to add movement and interest to static sounds, create vintage keyboard
+                        tones, and add psychedelic character to vocals and guitars. The number of stages determines the
+                        complexity of the effect—more stages create deeper, more pronounced sweeps with multiple
+                        notches. Essential for recreating 70s funk keyboard sounds, adding subtle movement to pad
+                        synthesizers, creating rotating speaker effects, and designing evolving ambient textures. Use 4
+                        stages for classic vintage tones, or 6-8 stages for more dramatic, modern phasing effects.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -651,7 +733,17 @@
                     <span class="category-badge badge-modulation">MODULATION</span>
                     <h3 class="effect-title">RotaryEffect</h3>
                     <p class="effect-desc">Leslie speaker simulator with separate horn and rotor, crossover filtering at
-                        800 Hz, and fast/slow speed switching. Emulates the iconic Leslie rotating speaker cabinet originally designed for Hammond organs, which uses physically spinning horn and rotor drivers to create Doppler pitch shifting and amplitude modulation. The effect produces a rich, three-dimensional sound with complex modulation that's impossible to achieve with standard chorus or phaser effects. Professional organists and keyboard players rely on Leslie simulation for authentic Hammond B3 tones, while guitarists use it for psychedelic textures and ambient soundscapes. The separate horn (high frequencies) and rotor (low frequencies) spin at different speeds, creating the characteristic Leslie sound. Essential for gospel, jazz, and rock organ parts, adding vintage character to electric guitars, and creating evolving pad sounds on synthesizers. The fast/slow speed switch mimics the original Leslie's acceleration/deceleration behavior, allowing for dramatic performance dynamics.</p>
+                        800 Hz, and fast/slow speed switching. Emulates the iconic Leslie rotating speaker cabinet
+                        originally designed for Hammond organs, which uses physically spinning horn and rotor drivers to
+                        create Doppler pitch shifting and amplitude modulation. The effect produces a rich,
+                        three-dimensional sound with complex modulation that's impossible to achieve with standard
+                        chorus or phaser effects. Professional organists and keyboard players rely on Leslie simulation
+                        for authentic Hammond B3 tones, while guitarists use it for psychedelic textures and ambient
+                        soundscapes. The separate horn (high frequencies) and rotor (low frequencies) spin at different
+                        speeds, creating the characteristic Leslie sound. Essential for gospel, jazz, and rock organ
+                        parts, adding vintage character to electric guitars, and creating evolving pad sounds on
+                        synthesizers. The fast/slow speed switch mimics the original Leslie's acceleration/deceleration
+                        behavior, allowing for dramatic performance dynamics.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -705,7 +797,18 @@
                     <span class="category-badge badge-spatial">SPATIAL</span>
                     <h3 class="effect-title">ReverbEffect</h3>
                     <p class="effect-desc">Extended Freeverb algorithm with 8 comb filters + 4 all-pass filters per
-                        channel, 20ms pre-delay, stereo spread, and damping control. Simulates the natural reflections and reverberation of acoustic spaces, from small rooms to massive cathedrals, adding depth, dimension, and spatial context to dry recordings. Reverb is arguably the most important spatial effect in music production, used on virtually every professional mix to create cohesion and place sounds in a believable acoustic environment. The damping control simulates high-frequency absorption in real rooms, while the pre-delay separates the direct sound from the reverb tail for clarity. Professional applications include adding natural ambience to close-miked vocals and instruments, creating dramatic spaces for cinematic scores, gluing mix elements together with a common acoustic signature, and designing otherworldly soundscapes for electronic music. Use short room reverbs (0.3-0.5 room size) for intimate vocals, medium hall settings (0.6-0.8) for orchestral and acoustic music, or large cathedral settings (0.9+) for epic, spacious effects.</p>
+                        channel, 20ms pre-delay, stereo spread, and damping control. Simulates the natural reflections
+                        and reverberation of acoustic spaces, from small rooms to massive cathedrals, adding depth,
+                        dimension, and spatial context to dry recordings. Reverb is arguably the most important spatial
+                        effect in music production, used on virtually every professional mix to create cohesion and
+                        place sounds in a believable acoustic environment. The damping control simulates high-frequency
+                        absorption in real rooms, while the pre-delay separates the direct sound from the reverb tail
+                        for clarity. Professional applications include adding natural ambience to close-miked vocals and
+                        instruments, creating dramatic spaces for cinematic scores, gluing mix elements together with a
+                        common acoustic signature, and designing otherworldly soundscapes for electronic music. Use
+                        short room reverbs (0.3-0.5 room size) for intimate vocals, medium hall settings (0.6-0.8) for
+                        orchestral and acoustic music, or large cathedral settings (0.9+) for epic, spacious effects.
+                    </p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -769,7 +872,18 @@
                     <span class="category-badge badge-spatial">SPATIAL</span>
                     <h3 class="effect-title">DelayEffect</h3>
                     <p class="effect-desc">Echo/delay with feedback, damping filter, and up to 5 seconds delay time.
-                        Supports fractional delay with linear interpolation. Creates distinct repetitions of the input signal at specified time intervals, ranging from short slapback echoes to long, evolving delay trails. Delay is fundamental in modern music production, used to add depth, create rhythmic patterns, and build complex soundscapes. Professional engineers use delays for vocal doubling effects (20-40ms), creating space in mixes without the diffusion of reverb, and designing rhythmic elements that sync to the song tempo. The feedback control determines how many repetitions occur, while damping simulates the natural high-frequency loss in analog tape delays. Essential for dub and reggae production (long delays with high feedback), rock guitar solos (slapback and dotted-eighth delays), electronic music (rhythmic delays synced to tempo), and ambient soundscapes (long, filtered delay trails). Use short delays (50-120ms) for thickening and stereo width, medium delays (250-500ms) for rhythmic effects, or long delays (1000ms+) for ambient washes and creative sound design.</p>
+                        Supports fractional delay with linear interpolation. Creates distinct repetitions of the input
+                        signal at specified time intervals, ranging from short slapback echoes to long, evolving delay
+                        trails. Delay is fundamental in modern music production, used to add depth, create rhythmic
+                        patterns, and build complex soundscapes. Professional engineers use delays for vocal doubling
+                        effects (20-40ms), creating space in mixes without the diffusion of reverb, and designing
+                        rhythmic elements that sync to the song tempo. The feedback control determines how many
+                        repetitions occur, while damping simulates the natural high-frequency loss in analog tape
+                        delays. Essential for dub and reggae production (long delays with high feedback), rock guitar
+                        solos (slapback and dotted-eighth delays), electronic music (rhythmic delays synced to tempo),
+                        and ambient soundscapes (long, filtered delay trails). Use short delays (50-120ms) for
+                        thickening and stereo width, medium delays (250-500ms) for rhythmic effects, or long delays
+                        (1000ms+) for ambient washes and creative sound design.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -818,7 +932,18 @@
                     <span class="category-badge badge-distortion">DISTORTION</span>
                     <h3 class="effect-title">DistortionEffect</h3>
                     <p class="effect-desc">Soft-clipping distortion with drive control and output gain compensation.
-                        Uses smooth saturation curve for musical harmonics. Adds harmonic distortion by progressively clipping the audio waveform, creating everything from subtle warmth to aggressive, saturated tones. Unlike hard clipping which creates harsh digital artifacts, soft clipping produces smooth, musical harmonics similar to overdriven analog equipment. Professional producers use distortion to add character and aggression to guitars, bass, drums, and even vocals, or to create lo-fi and vintage textures. The drive parameter controls the amount of saturation, while output gain compensates for the perceived loudness increase. Essential for rock and metal guitar tones, adding grit to bass guitars, creating aggressive electronic music sounds, and adding analog-style warmth to digital recordings. Use low drive settings (1-3) for subtle harmonic enhancement and warmth, medium settings (4-6) for classic rock overdrive, or high settings (7-10) for heavy metal and industrial sounds. The VocalSaturation preset adds subtle harmonic richness to vocals without obvious distortion.</p>
+                        Uses smooth saturation curve for musical harmonics. Adds harmonic distortion by progressively
+                        clipping the audio waveform, creating everything from subtle warmth to aggressive, saturated
+                        tones. Unlike hard clipping which creates harsh digital artifacts, soft clipping produces
+                        smooth, musical harmonics similar to overdriven analog equipment. Professional producers use
+                        distortion to add character and aggression to guitars, bass, drums, and even vocals, or to
+                        create lo-fi and vintage textures. The drive parameter controls the amount of saturation, while
+                        output gain compensates for the perceived loudness increase. Essential for rock and metal guitar
+                        tones, adding grit to bass guitars, creating aggressive electronic music sounds, and adding
+                        analog-style warmth to digital recordings. Use low drive settings (1-3) for subtle harmonic
+                        enhancement and warmth, medium settings (4-6) for classic rock overdrive, or high settings
+                        (7-10) for heavy metal and industrial sounds. The VocalSaturation preset adds subtle harmonic
+                        richness to vocals without obvious distortion.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -860,7 +985,18 @@
                     <span class="category-badge badge-distortion">DISTORTION</span>
                     <h3 class="effect-title">OverdriveEffect</h3>
                     <p class="effect-desc">Tube-style overdrive with asymmetric saturation, tone control (0=dark,
-                        1=bright), and musical harmonics. Emulates the warm, dynamic response of overdriven vacuum tube amplifiers, producing rich even-order harmonics that are perceived as musical and pleasing. The asymmetric saturation mimics how real tubes clip positive and negative waveform peaks differently, creating a more organic, responsive feel compared to symmetric distortion. Professional guitarists and producers use overdrive for classic rock and blues tones, adding warmth to bass guitars, and creating vintage character on keyboards and vocals. The tone control shapes the frequency response from dark and smooth to bright and cutting, allowing the effect to work across different instruments and musical styles. Ideal for blues and classic rock guitar tones, adding analog warmth to digital synthesizers, creating vintage-style bass saturation, and adding subtle harmonic excitement to mix buses. Use the CleanBoost preset for transparent gain with minimal coloration, Blues for smooth mid-gain tones, or Screamer for the iconic mid-focused overdrive sound popularized by the Ibanez Tube Screamer.</p>
+                        1=bright), and musical harmonics. Emulates the warm, dynamic response of overdriven vacuum tube
+                        amplifiers, producing rich even-order harmonics that are perceived as musical and pleasing. The
+                        asymmetric saturation mimics how real tubes clip positive and negative waveform peaks
+                        differently, creating a more organic, responsive feel compared to symmetric distortion.
+                        Professional guitarists and producers use overdrive for classic rock and blues tones, adding
+                        warmth to bass guitars, and creating vintage character on keyboards and vocals. The tone control
+                        shapes the frequency response from dark and smooth to bright and cutting, allowing the effect to
+                        work across different instruments and musical styles. Ideal for blues and classic rock guitar
+                        tones, adding analog warmth to digital synthesizers, creating vintage-style bass saturation, and
+                        adding subtle harmonic excitement to mix buses. Use the CleanBoost preset for transparent gain
+                        with minimal coloration, Blues for smooth mid-gain tones, or Screamer for the iconic mid-focused
+                        overdrive sound popularized by the Ibanez Tube Screamer.</p>
                 </div>
 
                 <h4>Parameters</h4>
@@ -897,6 +1033,226 @@
                     <span class="preset-tag">VintageTube</span>
                     <span class="preset-tag">Bass</span>
                     <span class="preset-tag">Screamer</span>
+                </div>
+            </div>
+
+            <h2 id="vst3">VST3 Plugin Support</h2>
+            <p>OwnaudioSharp provides full VST3 plugin support through the <code>VST3PluginHost</code> and
+                <code>VST3EffectProcessor</code> classes, allowing you to load and use third-party VST3 plugins with
+                native editor support.</p>
+
+            <div class="alert alert-info">
+                <strong>Native VST3 Integration</strong>
+                Full VST3 support with native editor windows, parameter automation, and seamless integration with the
+                OwnaudioSharp effect chain. Compatible with all VST3 plugins on Windows, macOS, and Linux.
+            </div>
+
+            <!-- VST3PluginHost -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge" style="background: #8b5cf6; color: white;">VST3</span>
+                    <h3 class="effect-title">VST3PluginHost</h3>
+                    <p class="effect-desc">Manages VST3 plugin lifecycle, editor windows, and provides processor
+                        instances for audio processing. The host separates UI concerns from audio processing, allowing
+                        you to load plugins, open their graphical editors, and create audio processors independently.
+                        Essential for applications that need to support third-party VST3 effects and instruments.</p>
+                </div>
+
+                <h4>Key Features</h4>
+                <ul>
+                    <li><strong>Plugin Loading</strong> - Load VST3 plugins from .vst3 files</li>
+                    <li><strong>Native Editor</strong> - Open plugin GUI in native windows</li>
+                    <li><strong>Parameter Control</strong> - Get/set plugin parameters programmatically</li>
+                    <li><strong>Plugin Discovery</strong> - Scan system directories for available plugins</li>
+                    <li><strong>Processor Creation</strong> - Generate audio processors for effect chains</li>
+                </ul>
+
+                <h4>Properties</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Name</div>
+                        <div class="param-type">string - Plugin name</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Vendor</div>
+                        <div class="param-type">string - Plugin manufacturer</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">HasEditor</div>
+                        <div class="param-type">bool - Whether plugin has GUI</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">IsEditorOpen</div>
+                        <div class="param-type">bool - Editor window status</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">ParameterCount</div>
+                        <div class="param-type">int - Number of exposed parameters</div>
+                    </div>
+                </div>
+
+                <h4>Basic Usage</h4>
+                <div class="code-block">
+                    <div class="code-header">Load and Use VST3 Plugin</div>
+                    <pre><code class="language-csharp">using OwnaudioNET.Effects.VST;
+
+// Load a VST3 plugin
+var host = new VST3PluginHost("/path/to/plugin.vst3");
+
+Console.WriteLine($"Loaded: {host.Name} by {host.Vendor}");
+Console.WriteLine($"Parameters: {host.ParameterCount}");
+Console.WriteLine($"Has Editor: {host.HasEditor}");
+
+// Get processor for audio engine
+var processor = host.GetProcessor();
+processor.Initialize(audioConfig);
+
+// Add to audio source
+audioSource.AddEffect(processor);
+
+// Clean up when done
+host.Dispose();</code></pre>
+                </div>
+
+                <h4>Opening Plugin Editor</h4>
+                <div class="code-block">
+                    <div class="code-header">Show Plugin GUI</div>
+                    <pre><code class="language-csharp">// Open the plugin's graphical editor
+if (host.HasEditor)
+{
+    host.OpenEditor("My VST3 Plugin");
+    Console.WriteLine($"Editor opened: {host.IsEditorOpen}");
+    
+    // Get editor size
+    var size = host.GetEditorSize();
+    if (size.HasValue)
+    {
+        Console.WriteLine($"Editor size: {size.Value.Width}x{size.Value.Height}");
+    }
+}
+
+// Close editor when done
+host.CloseEditor();</code></pre>
+                </div>
+
+                <h4>Parameter Control</h4>
+                <div class="code-block">
+                    <div class="code-header">Get and Set Parameters</div>
+                    <pre><code class="language-csharp">// Get all parameters
+var parameters = host.GetParameters();
+foreach (var param in parameters)
+{
+    Console.WriteLine($"{param.Name}: {param.CurrentValue:F3} [{param.MinValue}-{param.MaxValue}]");
+}
+
+// Set parameter by ID (normalized 0.0-1.0)
+host.SetParameter(0, 0.75);
+
+// Get current value
+double value = host.GetParameter(0);
+Console.WriteLine($"Parameter 0 value: {value:F3}");</code></pre>
+                </div>
+
+                <h4>Plugin Discovery</h4>
+                <div class="code-block">
+                    <div class="code-header">Scan for VST3 Plugins</div>
+                    <pre><code class="language-csharp">// Find all VST3 plugins in system directories
+var pluginPaths = VST3PluginHost.FindPlugins();
+Console.WriteLine($"Found {pluginPaths.Count} plugins");
+
+foreach (var path in pluginPaths)
+{
+    Console.WriteLine($"  - {path}");
+}
+
+// Scan and get detailed info (slower, loads each plugin)
+var pluginInfos = VST3PluginHost.ScanPlugins();
+foreach (var info in pluginInfos)
+{
+    Console.WriteLine($"{info.Name} ({info.Vendor}) - {info.ParameterCount} params");
+    Console.WriteLine($"  Type: {(info.IsEffect ? "Effect" : "")} {(info.IsInstrument ? "Instrument" : "")}");
+}</code></pre>
+                </div>
+            </div>
+
+            <!-- VST3EffectProcessor -->
+            <div class="effect-card">
+                <div class="effect-header">
+                    <span class="category-badge" style="background: #8b5cf6; color: white;">VST3</span>
+                    <h3 class="effect-title">VST3EffectProcessor</h3>
+                    <p class="effect-desc">VST3 plugin wrapper implementing IEffectProcessor for seamless integration
+                        with the OwnaudioSharp effect chain. Handles audio buffer conversion, wet/dry mixing, and
+                        real-time processing. Created by VST3PluginHost and managed independently for audio processing.
+                    </p>
+                </div>
+
+                <h4>Properties</h4>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <div class="param-name">Enabled</div>
+                        <div class="param-type">bool - Enable/disable processing</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Mix</div>
+                        <div class="param-type">float - Wet/dry mix (0.0-1.0)</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">Vendor</div>
+                        <div class="param-type">string - Plugin manufacturer</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">HasEditor</div>
+                        <div class="param-type">bool - GUI availability</div>
+                    </div>
+                </div>
+
+                <h4>Complete Example</h4>
+                <div class="code-block">
+                    <div class="code-header">Full VST3 Integration</div>
+                    <pre><code class="language-csharp">using OwnaudioNET;
+using OwnaudioNET.Effects.VST;
+using OwnaudioNET.Sources;
+
+// Initialize audio engine
+OwnaudioNET.Initialize();
+
+var config = new AudioConfig
+{
+    SampleRate = 48000,
+    Channels = 2,
+    BufferSize = 512
+};
+
+// Load VST3 plugin
+var vstHost = new VST3PluginHost("/Library/Audio/Plug-Ins/VST3/FabFilter Pro-Q 3.vst3");
+Console.WriteLine($"Loaded: {vstHost.Name} by {vstHost.Vendor}");
+
+// Open plugin editor for user control
+if (vstHost.HasEditor)
+{
+    vstHost.OpenEditor("EQ Plugin");
+}
+
+// Create processor and add to audio chain
+var vstProcessor = vstHost.GetProcessor();
+vstProcessor.Initialize(config);
+vstProcessor.Mix = 0.8f; // 80% wet, 20% dry
+
+// Create audio source and add VST effect
+var audioSource = new FileSource("input.wav");
+audioSource.AddEffect(vstProcessor);
+
+// Play audio with VST processing
+audioSource.Play();
+
+// Adjust parameters during playback
+vstHost.SetParameter(0, 0.5); // Adjust first parameter
+
+// Clean up
+audioSource.Stop();
+vstHost.CloseEditor();
+vstHost.Dispose();
+OwnaudioNET.Shutdown();</code></pre>
                 </div>
             </div>
 

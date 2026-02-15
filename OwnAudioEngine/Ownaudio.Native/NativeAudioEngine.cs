@@ -151,6 +151,12 @@ namespace Ownaudio.Native
         /// </summary>
         private int _lastRawDeviceCount = -1;
 
+        /// <summary>
+        /// Indicates whether device monitoring is currently paused.
+        /// When true, the DeviceMonitorLoop will skip device change detection.
+        /// </summary>
+        private volatile bool _isMonitoringPaused;
+
         #endregion
 
         #region Properties
@@ -362,6 +368,11 @@ namespace Ownaudio.Native
                 try
                 {
                     await Task.Delay(DeviceMonitorIntervalMs, ct);
+
+                    // Skip device checking if monitoring is paused
+                    if (_isMonitoringPaused)
+                        continue;
+
                     CheckForDeviceChanges();
                 }
                 catch (OperationCanceledException)
@@ -389,6 +400,27 @@ namespace Ownaudio.Native
         }
 
         /// <summary>
+        /// Pauses the background device monitoring task.
+        /// This prevents device enumeration and change detection from interfering with UI operations.
+        /// Recommended to call when opening VST editor windows or during critical UI operations.
+        /// </summary>
+        public void PauseDeviceMonitoring()
+        {
+            _isMonitoringPaused = true;
+            Log.Info("Device monitoring paused");
+        }
+
+        /// <summary>
+        /// Resumes the background device monitoring task.
+        /// Should be called after closing VST editor windows or when critical UI operations complete.
+        /// </summary>
+        public void ResumeDeviceMonitoring()
+        {
+            _isMonitoringPaused = false;
+            Log.Info("Device monitoring resumed");
+        }
+
+        /// <summary>
         /// Checks for device changes and handles device removal.
         /// Uses lightweight counting first to avoid expensive full enumeration.
         /// </summary>
@@ -396,8 +428,8 @@ namespace Ownaudio.Native
         {
             try
             {
-                // Only monitor if engine is running
-                if (_isRunning == 0)
+                // Only monitor if engine is running and not paused
+                if (_isRunning == 0 || _isMonitoringPaused)
                     return;
 
                 // Lightweight check: First check if the number of devices has changed
@@ -534,6 +566,9 @@ namespace Ownaudio.Native
             // Enable pre-buffering to prevent playback until buffer has enough data
             _isBuffering = 1;
 
+            // Pause device monitoring during playback to prevent UI interference
+            PauseDeviceMonitoring();
+
             int result = _backend == AudioEngineBackend.PortAudio
                 ? StartPortAudio()
                 : StartMiniAudio();
@@ -542,6 +577,8 @@ namespace Ownaudio.Native
             {
                 _isRunning = 0;
                 _isBuffering = 0;
+                // Resume monitoring if start failed
+                ResumeDeviceMonitoring();
             }
 
             return result;
@@ -563,6 +600,10 @@ namespace Ownaudio.Native
                 : StopMiniAudio();
 
             _isActive = 0;
+
+            // Resume device monitoring after stopping playback
+            ResumeDeviceMonitoring();
+
             return result;
         }
 

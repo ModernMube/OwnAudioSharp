@@ -1076,6 +1076,18 @@ namespace Ownaudio.macOS
             return SetInputDevice(devices[deviceIndex].DeviceId);
         }
 
+        /// <inheritdoc/>
+        public void PauseDeviceMonitoring()
+        {
+            // Core Audio implementation: no background device monitoring
+        }
+
+        /// <inheritdoc/>
+        public void ResumeDeviceMonitoring()
+        {
+            // Core Audio implementation: no background device monitoring
+        }
+
         private int SetOutputDevice(string deviceId)
         {
             if (!uint.TryParse(deviceId, out uint audioDeviceId))

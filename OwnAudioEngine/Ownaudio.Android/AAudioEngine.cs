@@ -542,6 +542,18 @@ namespace Ownaudio.Android
             return AAudioInterop.AAUDIO_ERROR_UNIMPLEMENTED;
         }
 
+        /// <inheritdoc/>
+        public void PauseDeviceMonitoring()
+        {
+            // AAudio implementation: no background device monitoring
+        }
+
+        /// <inheritdoc/>
+        public void ResumeDeviceMonitoring()
+        {
+            // AAudio implementation: no background device monitoring
+        }
+
         #endregion
 
         #region Private Helper Methods

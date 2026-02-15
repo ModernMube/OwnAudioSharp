@@ -146,5 +146,18 @@ namespace Ownaudio.Core
         /// Event raised when a device state changes (added, removed, enabled, disabled).
         /// </summary>
         event EventHandler<AudioDeviceStateChangedEventArgs> DeviceStateChanged;
+
+        /// <summary>
+        /// Pauses the background device monitoring task.
+        /// This prevents device enumeration and change detection from interfering with UI operations.
+        /// Recommended to call when opening VST editor windows or during critical UI operations.
+        /// </summary>
+        void PauseDeviceMonitoring();
+
+        /// <summary>
+        /// Resumes the background device monitoring task.
+        /// Should be called after closing VST editor windows or when critical UI operations complete.
+        /// </summary>
+        void ResumeDeviceMonitoring();
     }
 }

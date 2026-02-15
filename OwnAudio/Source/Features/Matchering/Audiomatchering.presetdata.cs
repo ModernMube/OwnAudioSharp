@@ -17,7 +17,8 @@ namespace OwnaudioNET.Features.Matchering
         /// <summary>
         /// Predefined preset configurations for different playback systems
         /// </summary>
-        private static readonly Dictionary<PlaybackSystem, PlaybackPreset> SystemPresets =  new Dictionary<PlaybackSystem, PlaybackPreset>{
+        private static readonly Dictionary<PlaybackSystem, PlaybackPreset> SystemPresets = new Dictionary<PlaybackSystem, PlaybackPreset>
+        {
             [PlaybackSystem.ConcertPA] = new PlaybackPreset
             {
                 Name = "Concert PA System",
@@ -29,22 +30,22 @@ namespace OwnaudioNET.Features.Matchering
                 +0.5f, 0.5f, 0f, 0f, 0f, -0.5f, -0.5f, 0f, +1f, +2f, // 200-1.6kHz: Clear midrange
                 +2f, +1.5f, +1f, +1f, +2f, +1.5f, +1f, 0f, 0f, -1f  // 2-16kHz: Controlled highs
             },
-                TargetLoudness = -17f,  // More headroom (was -16)
-                DynamicRange = 19f,     // More dynamic
+                TargetLoudness = -16f,  // OPTIMIZED: Concert standard
+                DynamicRange = 19f,
                 Compression = new CompressionSettings
                 {
-                    Threshold = -16f,   // Higher (was -18)
-                    Ratio = 2.0f,       // Lower (was 2.5)
-                    AttackTime = 15f,   // Slower (was 10)
-                    ReleaseTime = 80f,  // Faster release
+                    Threshold = -18f,   // OPTIMIZED: Lower threshold
+                    Ratio = 1.8f,       // OPTIMIZED: More transparent (was 2.0)
+                    AttackTime = 15f,
+                    ReleaseTime = 80f,
                     MakeupGain = 1.5f
                 },
                 DynamicAmp = new DynamicAmpSettings
                 {
                     TargetLevel = -16f,
-                    AttackTime = 0.1f,
-                    ReleaseTime = 0.5f,
-                    MaxGain = 6f
+                    AttackTime = 0.2f,  // OPTIMIZED: Faster, musical (was 0.1f)
+                    ReleaseTime = 0.8f, // OPTIMIZED: Consistent with main processing (was 0.5f)
+                    MaxGain = 3f        // OPTIMIZED: Stricter limit (was 6f)
                 }
             },
 
@@ -59,22 +60,22 @@ namespace OwnaudioNET.Features.Matchering
                 0f, 0f, +0.5f, +0.5f, +0.5f, +1f, +1.5f, +1.5f, +2f, +2f, // 200-1.6kHz: Clear mids
                 +1.5f, +1f, +1.5f, +2f, +2f, +1f, +1f, +0.5f, 0f, -1f // 2-16kHz: Airy top
             },
-                TargetLoudness = -12.5f, // Quieter (was -11)
-                DynamicRange = 10f,      // More dynamic (was 8)
+                TargetLoudness = -11f,  // OPTIMIZED: Club standard (was -12.5f)
+                DynamicRange = 10f,
                 Compression = new CompressionSettings
                 {
-                    Threshold = -14f,    // Higher (was -15)
-                    Ratio = 3.0f,        // Much lower (was 4)
-                    AttackTime = 5f,     // Slower (was 3)
+                    Threshold = -16f,   // OPTIMIZED: Higher threshold (was -14f)
+                    Ratio = 2.5f,       // OPTIMIZED: Less aggressive (was 3.0f)
+                    AttackTime = 5f,
                     ReleaseTime = 40f,
                     MakeupGain = 2.0f
                 },
                 DynamicAmp = new DynamicAmpSettings
                 {
-                    TargetLevel = -12f,
-                    AttackTime = 0.05f,
-                    ReleaseTime = 0.2f,
-                    MaxGain = 4f
+                    TargetLevel = -11f,
+                    AttackTime = 0.15f, // OPTIMIZED: Faster but musical (was 0.05f)
+                    ReleaseTime = 0.6f, // OPTIMIZED: More breathing room (was 0.2f)
+                    MaxGain = 2.5f      // OPTIMIZED: Stricter limit (was 4f)
                 }
             },
 
@@ -89,22 +90,22 @@ namespace OwnaudioNET.Features.Matchering
                 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,             // 200-1.6kHz: Neutral
                 0f, 0f, 0f, 0f, +0.5f, +1f, +1.5f, +1.5f, +1f, +0.5f // 2-16kHz: More air (10k+)
             },
-                TargetLoudness = -19f,  // More headroom
-                DynamicRange = 22f,     // Increased dynamic range
+                TargetLoudness = -18f,  // OPTIMIZED: Hi-Fi dynamics (was -19f)
+                DynamicRange = 22f,
                 Compression = new CompressionSettings
                 {
-                    Threshold = -22f,   // Higher threshold (was -25)
-                    Ratio = 1.3f,       // Lower ratio (was 1.5)
-                    AttackTime = 30f,   // Slower attack (was 20)
+                    Threshold = -24f,   // OPTIMIZED: Even higher threshold (was -22f)
+                    Ratio = 1.2f,       // OPTIMIZED: Ultra-transparent (was 1.3f)
+                    AttackTime = 30f,
                     ReleaseTime = 200f,
                     MakeupGain = 0.5f
                 },
                 DynamicAmp = new DynamicAmpSettings
                 {
-                    TargetLevel = -19f, // Matched
-                    AttackTime = 0.3f,
-                    ReleaseTime = 2f,
-                    MaxGain = 3f
+                    TargetLevel = -18f,
+                    AttackTime = 0.4f,  // OPTIMIZED: Slower for Hi-Fi (was 0.3f)
+                    ReleaseTime = 1.5f, // OPTIMIZED: Faster than before (was 2f)
+                    MaxGain = 2f        // OPTIMIZED: Minimal intervention (was 3f)
                 }
             },
 
@@ -119,22 +120,22 @@ namespace OwnaudioNET.Features.Matchering
                 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,           // 200-1.6kHz: Flat
                 0f, 0f, 0f, 0f, +0.5f, +0.5f, +0.5f, +1f, +1f, +0.5f // 2-16kHz: Subtle air
             },
-                TargetLoudness = -21f,  // More dynamic (was -20)
-                DynamicRange = 24f,     // More dynamic (was 22)
+                TargetLoudness = -20f,  // OPTIMIZED: Studio reference (was -21f)
+                DynamicRange = 24f,
                 Compression = new CompressionSettings
                 {
-                    Threshold = -26f,   // Higher (was -30)
-                    Ratio = 1.15f,      // Lower (was 1.2)
-                    AttackTime = 60f,   // Slower (was 50)
-                    ReleaseTime = 250f, // Faster release for transparency
+                    Threshold = -28f,   // OPTIMIZED: Minimal intervention (was -26f)
+                    Ratio = 1.1f,       // OPTIMIZED: Barely noticeable (was 1.15f)
+                    AttackTime = 60f,
+                    ReleaseTime = 250f,
                     MakeupGain = 0f
                 },
                 DynamicAmp = new DynamicAmpSettings
                 {
                     TargetLevel = -20f,
-                    AttackTime = 0.5f,
-                    ReleaseTime = 3f,
-                    MaxGain = 2f
+                    AttackTime = 0.5f,  // OPTIMIZED: Unchanged, already optimal
+                    ReleaseTime = 2f,   // OPTIMIZED: Slightly faster (was 3f)
+                    MaxGain = 1.5f      // OPTIMIZED: Absolute minimum (was 2f)
                 }
             },
 
@@ -149,22 +150,22 @@ namespace OwnaudioNET.Features.Matchering
                 -1f, -1f, 0f, +1f, +2f, +2f, +1f, 0f, -1f, -2f,     // 200-1.6kHz: Presence dip
                 -1f, +1f, +2f, +1f, 0f, +1f, +2f, +3f, +2f, +1f     // 2-16kHz: Headphone curve
             },
-                TargetLoudness = -16f,  // Personal listening level
+                TargetLoudness = -14f,  // OPTIMIZED: Personal listening (was -16f)
                 DynamicRange = 16f,
                 Compression = new CompressionSettings
                 {
-                    Threshold = -20f,
-                    Ratio = 2f,
+                    Threshold = -22f,   // OPTIMIZED: Higher threshold (was -20f)
+                    Ratio = 1.8f,       // OPTIMIZED: Gentler (was 2f)
                     AttackTime = 5f,
                     ReleaseTime = 80f,
                     MakeupGain = 2f
                 },
                 DynamicAmp = new DynamicAmpSettings
                 {
-                    TargetLevel = -16f,
-                    AttackTime = 0.2f,
-                    ReleaseTime = 1f,
-                    MaxGain = 4f
+                    TargetLevel = -14f,
+                    AttackTime = 0.25f, // OPTIMIZED: Slightly slower (was 0.2f)
+                    ReleaseTime = 1f,   // OPTIMIZED: Unchanged, good balance
+                    MaxGain = 2.5f      // OPTIMIZED: Reduced (was 4f)
                 }
             },
 
@@ -179,22 +180,22 @@ namespace OwnaudioNET.Features.Matchering
                 +1f, +2f, +2f, +2f, +2f, +1f, 0f, +1f, +2f, +3f,    // 200-1.6kHz: Clear vocals
                 +3f, +2f, +1f, +2f, +3f, +2f, +1f, 0f, -1f, -2f     // 2-16kHz: Controlled highs
             },
-                TargetLoudness = -14f,  // Mobile listening level
+                TargetLoudness = -13f,  // OPTIMIZED: Mobile environment (was -14f)
                 DynamicRange = 12f,
                 Compression = new CompressionSettings
                 {
-                    Threshold = -18f,
-                    Ratio = 3f,
+                    Threshold = -20f,   // OPTIMIZED: Higher threshold (was -18f)
+                    Ratio = 2.5f,       // OPTIMIZED: Less aggressive (was 3f)
                     AttackTime = 2f,
                     ReleaseTime = 40f,
                     MakeupGain = 3f
                 },
                 DynamicAmp = new DynamicAmpSettings
                 {
-                    TargetLevel = -14f,
-                    AttackTime = 0.1f,
-                    ReleaseTime = 0.5f,
-                    MaxGain = 5f
+                    TargetLevel = -13f,
+                    AttackTime = 0.2f,  // OPTIMIZED: Faster but musical (was 0.1f)
+                    ReleaseTime = 0.7f, // OPTIMIZED: More breathing (was 0.5f)
+                    MaxGain = 3f        // OPTIMIZED: Reduced (was 5f)
                 }
             },
 
@@ -204,27 +205,27 @@ namespace OwnaudioNET.Features.Matchering
                 Description = "Optimized for road noise and cabin acoustics",
                 FrequencyResponse = new float[]
             {
-                // Car audio curve: Road noise compensation
-                +2f, +2f, +1f, +1f, 0f, 0f, 0f, +1f, +2f, +3f,      // 20-160Hz: Engine compensation
-                +3f, +2f, +1f, +2f, +3f, +4f, +4f, +3f, +2f, +1f,    // 200-1.6kHz: Vocal clarity
-                +2f, +3f, +4f, +3f, +2f, +1f, +2f, +3f, +2f, +1f     // 2-16kHz: Wind noise comp
+                // OPTIMIZED: Car audio curve - moderated boosts
+                +1.5f, +1.5f, +1f, +0.5f, 0f, 0f, 0f, +0.5f, +1f, +2f,      // 20-160Hz: Reduced bass boost
+                +2.5f, +2f, +1.5f, +2f, +2.5f, +3f, +3f, +2.5f, +2f, +1.5f,  // 200-1.6kHz: Max +3dB (was +4dB)
+                +2f, +2.5f, +3f, +2.5f, +2f, +1.5f, +2f, +2.5f, +2f, +1.5f   // 2-16kHz: Controlled highs
             },
-                TargetLoudness = -12f,  // Loud environment
+                TargetLoudness = -11f,  // OPTIMIZED: Noisy environment (was -12f)
                 DynamicRange = 10f,
                 Compression = new CompressionSettings
                 {
-                    Threshold = -16f,
-                    Ratio = 3.5f,
+                    Threshold = -18f,   // OPTIMIZED: Higher threshold (was -16f)
+                    Ratio = 2.8f,       // OPTIMIZED: Less extreme (was 3.5f)
                     AttackTime = 3f,
                     ReleaseTime = 60f,
                     MakeupGain = 4f
                 },
                 DynamicAmp = new DynamicAmpSettings
                 {
-                    TargetLevel = -12f,
-                    AttackTime = 0.05f,
-                    ReleaseTime = 0.3f,
-                    MaxGain = 6f
+                    TargetLevel = -11f,
+                    AttackTime = 0.15f, // OPTIMIZED: Faster but musical (was 0.05f)
+                    ReleaseTime = 0.5f, // OPTIMIZED: More breathing (was 0.3f)
+                    MaxGain = 3f        // OPTIMIZED: Halved (was 6f)
                 }
             },
 
@@ -239,22 +240,22 @@ namespace OwnaudioNET.Features.Matchering
                 +2f, +3f, +4f, +4f, +3f, +2f, +2f, +3f, +2f, +1f,    // 200-1.6kHz: Speech clarity
                 +1f, +1f, +2f, +1f, 0f, 0f, +1f, +1f, 0f, -1f       // 2-16kHz: Soft highs
             },
-                TargetLoudness = -15f,  // Living room level
+                TargetLoudness = -14f,  // OPTIMIZED: Living room (was -15f)
                 DynamicRange = 12f,
                 Compression = new CompressionSettings
                 {
-                    Threshold = -18f,
-                    Ratio = 4f,
+                    Threshold = -20f,   // OPTIMIZED: Higher threshold (was -18f)
+                    Ratio = 3.0f,       // OPTIMIZED: Less aggressive (was 4f)
                     AttackTime = 1f,
                     ReleaseTime = 30f,
                     MakeupGain = 3f
                 },
                 DynamicAmp = new DynamicAmpSettings
                 {
-                    TargetLevel = -15f,
-                    AttackTime = 0.1f,
-                    ReleaseTime = 0.8f,
-                    MaxGain = 4f
+                    TargetLevel = -14f,
+                    AttackTime = 0.2f,  // OPTIMIZED: Consistent (was 0.1f)
+                    ReleaseTime = 0.9f, // OPTIMIZED: Slightly slower (was 0.8f)
+                    MaxGain = 2.5f      // OPTIMIZED: Reduced (was 4f)
                 }
             },
 
@@ -269,22 +270,22 @@ namespace OwnaudioNET.Features.Matchering
                 +2f, +3f, +4f, +4f, +4f, +3f, +3f, +4f, +3f, +2f,     // 200-1.6kHz: Forward mids
                 +2f, +2f, +1f, +1f, 0f, 0f, +1f, 0f, -2f, -4f        // 2-16kHz: HF rolloff
             },
-                TargetLoudness = -9f,   // Broadcast loudness
+                TargetLoudness = -10f,  // OPTIMIZED: Broadcast standard (was -9f)
                 DynamicRange = 6f,
                 Compression = new CompressionSettings
                 {
-                    Threshold = -12f,
-                    Ratio = 6f,
+                    Threshold = -14f,   // OPTIMIZED: Higher threshold (was -12f)
+                    Ratio = 4.5f,       // OPTIMIZED: Less extreme (was 6f)
                     AttackTime = 0.5f,
                     ReleaseTime = 20f,
                     MakeupGain = 6f
                 },
                 DynamicAmp = new DynamicAmpSettings
                 {
-                    TargetLevel = -9f,
-                    AttackTime = 0.02f,
-                    ReleaseTime = 0.1f,
-                    MaxGain = 8f
+                    TargetLevel = -10f,
+                    AttackTime = 0.1f,  // OPTIMIZED: Slower for musicality (was 0.02f)
+                    ReleaseTime = 0.3f, // OPTIMIZED: More breathing (was 0.1f)
+                    MaxGain = 4f        // OPTIMIZED: Halved (was 8f)
                 }
             },
 
@@ -294,27 +295,27 @@ namespace OwnaudioNET.Features.Matchering
                 Description = "Small speaker compensation with midrange focus",
                 FrequencyResponse = new float[]
             {
-                // Phone speaker curve: Limited bass, enhanced mids
-                -6f, -4f, -2f, -1f, 0f, +1f, +2f, +3f, +4f, +4f,     // 20-160Hz: Bass limitation
-                +5f, +6f, +6f, +5f, +4f, +4f, +5f, +6f, +5f, +4f,     // 200-1.6kHz: Strong mids
-                +3f, +3f, +2f, +2f, +1f, +1f, +2f, +1f, 0f, -2f       // 2-16kHz: Controlled highs
+                // OPTIMIZED: Phone speaker curve - moderated boosts
+                -4f, -3f, -2f, -1f, 0f, +1f, +1.5f, +2f, +2.5f, +3f,     // 20-160Hz: Less bass cut
+                +3.5f, +4f, +4f, +3.5f, +3f, +3f, +3.5f, +4f, +3.5f, +3f, // 200-1.6kHz: Max +4dB (was +6dB)
+                +2.5f, +2.5f, +2f, +2f, +1.5f, +1.5f, +2f, +1.5f, +1f, -1f // 2-16kHz: Gentler highs
             },
-                TargetLoudness = -10f,  // Mobile environment
+                TargetLoudness = -11f,  // OPTIMIZED: Mobile environment (was -10f)
                 DynamicRange = 8f,
                 Compression = new CompressionSettings
                 {
-                    Threshold = -14f,
-                    Ratio = 5f,
+                    Threshold = -16f,   // OPTIMIZED: Higher threshold (was -14f)
+                    Ratio = 3.5f,       // OPTIMIZED: Much less aggressive (was 5f)
                     AttackTime = 1f,
                     ReleaseTime = 25f,
                     MakeupGain = 5f
                 },
                 DynamicAmp = new DynamicAmpSettings
                 {
-                    TargetLevel = -10f,
-                    AttackTime = 0.02f,
-                    ReleaseTime = 0.2f,
-                    MaxGain = 8f
+                    TargetLevel = -11f,
+                    AttackTime = 0.1f,  // OPTIMIZED: Much slower for musicality (was 0.02f)
+                    ReleaseTime = 0.4f, // OPTIMIZED: More breathing (was 0.2f)
+                    MaxGain = 4f        // OPTIMIZED: Halved (was 8f)
                 }
             }
         };

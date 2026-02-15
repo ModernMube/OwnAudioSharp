@@ -938,6 +938,18 @@ namespace Ownaudio.Windows
             return ReinitializeInputDevice();
         }
 
+        /// <inheritdoc/>
+        public void PauseDeviceMonitoring()
+        {
+            // WASAPI implementation: no background device monitoring
+        }
+
+        /// <inheritdoc/>
+        public void ResumeDeviceMonitoring()
+        {
+            // WASAPI implementation: no background device monitoring
+        }
+
         /// <summary>
         /// Releases existing output resources and reinitializes the output device with the current configuration.
         /// </summary>

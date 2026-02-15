@@ -442,6 +442,29 @@ public sealed class AudioEngineWrapper : IDisposable
     }
 
     /// <summary>
+    /// Pauses the background device monitoring task.
+    /// This prevents device enumeration and change detection from interfering with UI operations.
+    /// Recommended to call when opening VST editor windows or during critical UI operations.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
+    public void PauseDeviceMonitoring()
+    {
+        ThrowIfDisposed();
+        _engine.PauseDeviceMonitoring();
+    }
+
+    /// <summary>
+    /// Resumes the background device monitoring task.
+    /// Should be called after closing VST editor windows or when critical UI operations complete.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
+    public void ResumeDeviceMonitoring()
+    {
+        ThrowIfDisposed();
+        _engine.ResumeDeviceMonitoring();
+    }
+
+    /// <summary>
     /// Subscribes to engine events and forwards them to wrapper events.
     /// </summary>
     private void SubscribeToEngineEvents()

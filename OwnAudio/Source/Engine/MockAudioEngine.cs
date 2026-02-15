@@ -385,6 +385,18 @@ public sealed class MockAudioEngine : IAudioEngine
         return 0; // Success
     }
 
+    /// <inheritdoc/>
+    public void PauseDeviceMonitoring()
+    {
+        // Mock implementation: no device monitoring to pause
+    }
+
+    /// <inheritdoc/>
+    public void ResumeDeviceMonitoring()
+    {
+        // Mock implementation: no device monitoring to resume
+    }
+
     /// <summary>
     /// Resets all statistics counters to zero.
     /// Useful for testing scenarios that need clean state.

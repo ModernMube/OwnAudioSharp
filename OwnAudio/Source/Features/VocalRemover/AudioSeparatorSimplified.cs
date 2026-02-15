@@ -1769,7 +1769,8 @@ namespace OwnaudioNET.Features.Vocalremover
             var options = new SimpleSeparationOptions
             {
                 Model = model,
-                OutputDirectory = outputDirectory
+                OutputDirectory = outputDirectory, 
+                DisableNoiseReduction = false
             };
 
             var service = new SimpleAudioSeparationService(options);

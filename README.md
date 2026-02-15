@@ -59,8 +59,91 @@ OwnAudioSharp simplifies audio application development in C# by providing a comp
 - **Chord Detection** - Detect chords from audio files for music analysis and transcription
 - **Automatic Mastering** - Master audio based on reference tracks or built-in presets
 - **Vocal & Music Separation** - Separate audio into stems: vocals + music, or drums + bass + music + vocals
+- **VST3 Plugin Support** - Load and use VST3 audio effect plugins with cross-platform editor GUI
 
-**💻 Try it yourself!** Working demo code for all features is available in the [Examples directory](https://github.com/ModernMube/OwnAudioSharp/tree/master/OwnAudio/Examples). Each example project demonstrates how to use these features in real applications.
+### 🎛️ **SmartMaster** - Intelligent Audio Mastering Chain with Auto-Calibration
+Professional audio mastering system with automatic speaker calibration using an external measurement microphone. The system analyzes your speakers' frequency response and automatically optimizes the audio output for optimal sound quality. Includes speaker profiles (HiFi, Headphone, Studio, Club, Concert), 31-band EQ, multiband compression, and brick-wall limiting.
+
+**Use cases:** Automatic room correction, speaker calibration, broadcast preparation, professional mastering
+
+### 🌐 **NetworkSync** - Multi-Device Audio Synchronization
+Synchronize audio playback across multiple devices on your local network with sample-accurate precision (<5ms on LAN). Zero-configuration with automatic server discovery, perfect for multi-room audio, live performances, DJ setups, and synchronized installations.
+
+**Use cases:** Multi-room audio systems, live PA setups, museum installations, collaborative production
+
+### 🎵 **Audio Matchering** - AI-Driven Audio Mastering
+Reference-based mastering that analyzes your favorite tracks and applies their sonic characteristics to your audio. Automatic EQ matching and spectral processing deliver professional mastering results without expensive plugins.
+
+**Use cases:** Music production, podcast mastering, audio restoration
+
+### 🎤 **Vocal Remover** - AI Vocal Separation with HTDemucs
+State-of-the-art vocal and instrumental track separation using ONNX neural networks. Features the advanced **HTDemucs** model for professional-grade 4-stem separation (vocals, drums, bass, other) with margin-trimming technology to eliminate chunk boundary artifacts. Multiple quality models available including `htdemucs` (4-stem), `default`, `best`, and `karaoke` models. Provides professional-grade stem isolation for remixing, karaoke, and audio analysis.
+
+**HTDemucs Features:**
+- **4-Stem Separation**: Isolate vocals, drums, bass, and other instruments independently
+- **Margin-Trimming**: Advanced processing eliminates volume fluctuations at chunk boundaries
+- **High Quality**: Superior separation quality using hybrid transformer architecture
+- **Example Code**: See [VocalRemover Example](OwnAudio/Examples/Ownaudio.Example.HTDemucs/) for complete implementation
+
+> [!IMPORTANT]
+> **HTDemucs Model Setup**
+> 
+> **For NuGet Package Users:** The HTDemucs model is **included in the NuGet package** - no manual download required!
+> 
+> **For Source Code / Building from Source:**
+> 1. Download: [htdemucs.onnx](https://huggingface.co/ModernMube/HTDemucs_onnx/resolve/main/htdemucs.onnx) (166 MB)
+> 2. Copy to the same directory as other vocal remover models
+> 3. The model will be automatically detected by the API
+
+**Use cases:** Karaoke creation, remixing, vocal analysis, instrumental extraction, stem mastering
+
+### 🎸 **Chord Detection** - Advanced Musical Analysis
+Real-time and offline chord recognition supporting major, minor, diminished, augmented, and extended chords (7th, 9th, 11th, 13th). Chromagram-based analysis provides accurate recognition from simple to professional chord structures.
+
+**Use cases:** Music transcription, chord chart generation, music education, DJ software
+
+---
+
+**📚 Complete Documentation:** Visit the [OwnAudioSharp website](https://modernmube.github.io/OwnAudioSharp/) for detailed API documentation, tutorials, and usage examples.
+
+**💻 Working Examples:** See the [Examples directory](OwnAudio/Examples/) for complete, runnable projects demonstrating each feature in action.
+
+
+
+## ⚠️ Version History
+
+**Version 2.1.0+ (Current)** - Native engine with PortAudio/miniaudio backends
+
+**Version 2.0.0** - Attempted pure managed code (GC issues discovered)
+
+**Pre-2.0.0** - Native libraries (miniaudio, portaudio, ffmpeg)
+
+### Core Engine Features
+
+- **Native C++ Audio Engine (Default)**:
+  - GC-free, deterministic real-time audio processing
+  - PortAudio backend (if installed) or embedded miniaudio fallback
+  - Professional-grade performance on all platforms
+  - Zero audio glitches or dropouts
+
+- **Managed C# Engines (Optional)**:
+  - Windows (WASAPI), macOS (Core Audio), Linux (PulseAudio), Android (AAudio)
+  - Pure C# implementation for development and debugging
+  - Available but may experience GC-related glitches
+
+- **Dual API Layers**:
+  - Low-level Core API for direct engine control
+  - High-level NET API for professional features
+
+- **Audio Processing**:
+  - Multi-format support (MP3, WAV, FLAC) with built-in decoders
+  - Real-time effects: reverb, compressor, equalizer, pitch shifting, tempo control
+  - Multi-source audio mixing with synchronized playback
+
+- **High Performance**:
+  - Native engine: Zero GC interference
+  - Lock-free ring buffers for thread safety
+  - SIMD-optimized audio processing
 
 ## 📦 Installation
 

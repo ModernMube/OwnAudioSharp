@@ -80,10 +80,10 @@ namespace OwnaudioNET.Features.Matchering
             //
             // Let's assume for now I will use standard DynamicAmpSettings for the Amp, 
             // AND I will add a new method `CalculateCompressorSettings`.
-            
+
             // Let's stick to the original function for Amp, and I'll add a new one for Compressor. 
             // Retaining original logic for Amp but tuning it:
-            
+
             return new DynamicAmpSettings
             {
                 TargetLevel = targetLoudnessDb, // Match loudness directly
@@ -107,11 +107,13 @@ namespace OwnaudioNET.Features.Matchering
 
             if (crestDiff > 1.0f)
             {
-                // Reduced Ratio scaling (0.4f -> 0.25f) for more transparent gluing
-                ratio = 1.0f + (crestDiff * 0.25f);
-                // Threshold shoud be around the RMS level + some headroom
-                // If signal is -12 RMS and we want to reduce crest by 3dB, threshold should be lower.
-                threshold = 20 * (float)Math.Log10(source.RMSLevel) + 3.0f;
+                // OPTIMIZED: Még finomabb ratio scaling a transzparens "ragasztáshoz"
+                // 0.25f -> 0.15f: Kevésbé agresszív kompresszió
+                ratio = 1.0f + (crestDiff * 0.15f);
+
+                // OPTIMIZED: Threshold az RMS-hez képest, de magasabban
+                // +3.0f -> +6.0f: Csak a valóban hangos részeket kompresszálja
+                threshold = 20 * (float)Math.Log10(source.RMSLevel) + 6.0f;
             }
             else
             {
@@ -120,7 +122,9 @@ namespace OwnaudioNET.Features.Matchering
                 threshold = 20 * (float)Math.Log10(source.PeakLevel) - 4.0f;
             }
 
-            return (Math.Clamp(threshold, -40f, -0.5f), Math.Clamp(ratio, 1.2f, 20.0f));
+            // OPTIMIZED: Ratio felső limit csökkentése 20.0f -> 6.0f
+            // Extrém kompresszió elkerülése zenei anyagoknál
+            return (Math.Clamp(threshold, -40f, -0.5f), Math.Clamp(ratio, 1.2f, 6.0f));
         }
 
         #endregion

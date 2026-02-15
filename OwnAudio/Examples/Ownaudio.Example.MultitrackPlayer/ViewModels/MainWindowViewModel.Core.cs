@@ -68,6 +68,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// </summary>
     private DispatcherTimer? _measurementTimer;
 
+    /// <summary>
+    /// Number of VST editor windows currently open.
+    /// </summary>
+    private int _openEditorCount = 0;
+
+    /// <summary>
+    /// Indicates whether timers were running before being paused for VST editor.
+    /// </summary>
+    private bool _timersWerePaused = false;
+
     #endregion
 
     #region Core Properties
@@ -116,6 +126,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         // Initialize audio service
         Task.Run(InitializeAudioAsync);
+
+        // Scan for VST plugins in background
+        Task.Run(ScanPluginsAsync);
     }
 
     #endregion
@@ -189,11 +202,55 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             LastDropoutMessage = $"{e.TrackName}: {e.MissedFrames} frames @ {e.MasterTimestamp:F2}s";
 
             // Optionally show status if dropout count is low
-            if (_totalDropoutCount < 10) 
+            if (_totalDropoutCount < 10)
             {
                 StatusMessage = $"Dropout: {e.Reason}";
             }
         });
+    }
+
+    #endregion
+
+    #region VST Editor Timer Management
+
+    /// <summary>
+    /// Pauses UI update timers when a VST editor window is opened.
+    /// This prevents timer-triggered property updates from stealing focus from VST editors.
+    /// </summary>
+    internal void PauseTimersForEditor()
+    {
+        if (_openEditorCount == 0) // First editor opening
+        {
+            _timersWerePaused = _playbackTimer.IsEnabled;
+            _playbackTimer.Stop();
+            _measurementTimer?.Stop();
+
+            // Update status to inform user
+            StatusMessage = "VST Editor open - position updates paused";
+        }
+        _openEditorCount++;
+    }
+
+    /// <summary>
+    /// Resumes UI update timers when a VST editor window is closed.
+    /// Only resumes if all VST editors are closed and timers were running before.
+    /// </summary>
+    internal void ResumeTimersAfterEditor()
+    {
+        _openEditorCount--;
+        if (_openEditorCount == 0 && _timersWerePaused) // Last editor closing
+        {
+            if (IsPlaying)
+            {
+                _playbackTimer.Start();
+                StatusMessage = "VST Editor closed - playback resumed";
+            }
+            else
+            {
+                StatusMessage = "VST Editor closed";
+            }
+            // Note: _measurementTimer has its own lifecycle, don't auto-resume
+        }
     }
 
     #endregion
@@ -228,6 +285,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         Tracks.Clear();
 
         _smartMaster?.Dispose();
+
+        // Dispose master effect resources
+        DisposeMasterEffect();
+
         _audioService.Dispose();
 
         _disposed = true;

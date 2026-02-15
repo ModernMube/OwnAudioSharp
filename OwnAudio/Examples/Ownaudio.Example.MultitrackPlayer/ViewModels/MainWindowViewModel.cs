@@ -7,6 +7,8 @@
 // - MainWindowViewModel.AudioEffects.cs: Tempo, pitch, volume controls
 // - MainWindowViewModel.Seeking.cs: Timeline and seeking functionality
 // - MainWindowViewModel.SmartMaster.cs: SmartMaster effect features
+// - MainWindowViewModel.MasterEffect.cs: VST3 master effect management
 // - MainWindowViewModel.Diagnostics.cs: Dropout monitoring
 //
 // This organization improves code maintainability and readability.
+

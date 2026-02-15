@@ -58,7 +58,7 @@ public static partial class OwnaudioNet
     /// <summary>
     /// Initializes the OwnaudioNET library with custom configuration.
     /// This method should be called once at application startup.
-   /// </summary>
+    /// </summary>
     /// <param name="config">The audio configuration.</param>
     /// <param name="useMockEngine">If true, uses MockAudioEngine for testing (no hardware required).</param>
     /// <exception cref="ArgumentNullException">Thrown if config is null.</exception>
@@ -246,6 +246,41 @@ public static partial class OwnaudioNet
             throw new InvalidOperationException("OwnaudioNet must be initialized and started before receiving audio. Call Initialize() and Start() first.");
 
         return _engineWrapper.Receive(out sampleCount);
+    }
+
+    /// <summary>
+    /// Pauses the background device monitoring task.
+    /// This prevents device enumeration and change detection from interfering with UI operations.
+    /// Automatically called when Start() is invoked, but can be called manually if needed.
+    /// Recommended to call when opening VST editor windows or during critical UI operations.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown if OwnaudioNet is not initialized.</exception>
+    public static void PauseDeviceMonitoring()
+    {
+        lock (_initLock)
+        {
+            if (!_initialized || _engineWrapper == null)
+                throw new InvalidOperationException("OwnaudioNet must be initialized before pausing device monitoring.");
+
+            _engineWrapper.PauseDeviceMonitoring();
+        }
+    }
+
+    /// <summary>
+    /// Resumes the background device monitoring task.
+    /// Automatically called when Stop() is invoked, but can be called manually if needed.
+    /// Should be called after closing VST editor windows or when critical UI operations complete.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown if OwnaudioNet is not initialized.</exception>
+    public static void ResumeDeviceMonitoring()
+    {
+        lock (_initLock)
+        {
+            if (!_initialized || _engineWrapper == null)
+                throw new InvalidOperationException("OwnaudioNet must be initialized before resuming device monitoring.");
+
+            _engineWrapper.ResumeDeviceMonitoring();
+        }
     }
 
     /// <summary>

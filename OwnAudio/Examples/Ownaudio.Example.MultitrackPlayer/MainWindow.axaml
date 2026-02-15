@@ -135,7 +135,7 @@
 
             <!-- Master Controls -->
             <Border Grid.Column="1" Background="#2D2D30" Padding="10" Margin="5">
-                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*">
+                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*">
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,20">
                         <TextBlock Text="Master Controls"
                                   FontSize="18" FontWeight="Bold"
@@ -151,8 +151,93 @@
                                ToolTip.Tip="Reset all sliders to default values" />
                     </StackPanel>
 
+                    <!-- Master Effect Panel (MOVED TO TOP) -->
+                    <Border Grid.Row="1" Background="#3E3E42" CornerRadius="4" Padding="10" Margin="0,0,0,15">
+                        <StackPanel Spacing="8">
+                            <!-- Header with Enable/Disable Toggle -->
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <TextBlock Grid.Column="0"
+                                          Text="Master Effect"
+                                          FontWeight="Bold"
+                                          Foreground="#4EC9B0"
+                                          VerticalAlignment="Center" />
+                                <ToggleSwitch Grid.Column="2"
+                                             IsChecked="{Binding IsMasterEffectEnabled}"
+                                             OnContent="On"
+                                             OffContent="Off"
+                                             HorizontalAlignment="Right" />
+                            </Grid>
+
+                            <!-- Plugin Browser -->
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="VST3 Plugin" Foreground="#CCCCCC" FontSize="11" />
+                                <Grid ColumnDefinitions="*,Auto,Auto">
+                                    <ComboBox Grid.Column="0"
+                                             ItemsSource="{Binding AvailablePlugins}"
+                                             SelectedItem="{Binding SelectedPlugin}"
+                                             Margin="0,0,5,0"
+                                             IsEnabled="{Binding !IsScanningPlugins}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock>
+                                                    <Run Text="{Binding Name}" FontWeight="Bold" />
+                                                    <Run Text=" - " />
+                                                    <Run Text="{Binding Vendor}" Foreground="#888888" />
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <Button Grid.Column="1"
+                                           Content="Load"
+                                           Command="{Binding LoadSelectedPluginCommand}"
+                                           Background="#0E639C"
+                                           Foreground="White"
+                                           Padding="15,5"
+                                           CornerRadius="4"
+                                           Margin="0,0,5,0" />
+                                    <Button Grid.Column="2"
+                                           Content="🔄"
+                                           Command="{Binding ScanPluginsCommand}"
+                                           Background="#555555"
+                                           Foreground="White"
+                                           Padding="10,5"
+                                           CornerRadius="4"
+                                           ToolTip.Tip="Rescan for plugins" />
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- Current Plugin Info -->
+                            <TextBlock Text="{Binding MasterEffectName}"
+                                      Foreground="#CCCCCC"
+                                      FontSize="10"
+                                      FontStyle="Italic" />
+
+                            <!-- Plugin Control Buttons -->
+                            <Grid ColumnDefinitions="*,*">
+                                <Button Grid.Column="0"
+                                       Content="Open Editor"
+                                       Command="{Binding OpenMasterEffectEditorCommand}"
+                                       CommandParameter="{Binding $parent[Window]}"
+                                       Background="#0E7A0D"
+                                       Foreground="White"
+                                       Padding="10,5"
+                                       CornerRadius="4"
+                                       Margin="0,0,5,0"
+                                       IsEnabled="{Binding HasMasterEffect}" />
+                                <Button Grid.Column="1"
+                                       Content="Remove"
+                                       Command="{Binding RemoveMasterEffectCommand}"
+                                       Background="#A1260D"
+                                       Foreground="White"
+                                       Padding="10,5"
+                                       CornerRadius="4"
+                                       IsEnabled="{Binding HasMasterEffect}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
                     <!-- Master Volume -->
-                    <StackPanel Grid.Row="1" Spacing="5" Margin="0,0,0,20">
+                    <StackPanel Grid.Row="2" Spacing="5" Margin="0,0,0,20">
                         <TextBlock Text="Master Volume" Foreground="#CCCCCC" />
                         <Grid ColumnDefinitions="*,Auto">
                             <Slider Grid.Column="0"
@@ -169,7 +254,7 @@
                     </StackPanel>
 
                     <!-- Tempo Control -->
-                    <StackPanel Grid.Row="2" Spacing="5" Margin="0,0,0,20">
+                    <StackPanel Grid.Row="3" Spacing="5" Margin="0,0,0,20">
                         <TextBlock Text="Tempo (Time Stretch)" Foreground="#CCCCCC" />
                         <Grid ColumnDefinitions="*,Auto">
                             <Slider Grid.Column="0"
@@ -191,7 +276,7 @@
                     </StackPanel>
 
                     <!-- Pitch Control -->
-                    <StackPanel Grid.Row="3" Spacing="5" Margin="0,0,0,20">
+                    <StackPanel Grid.Row="4" Spacing="5" Margin="0,0,0,20">
                         <TextBlock Text="Pitch Shift" Foreground="#CCCCCC" />
                         <Grid ColumnDefinitions="*,Auto">
                             <Slider Grid.Column="0"
@@ -215,7 +300,7 @@
                     </StackPanel>
 
                     <!-- NEW v2.4.0+: Dropout Statistics -->
-                    <Border Grid.Row="4" Background="#3E3E42" CornerRadius="4" Padding="10" Margin="0,0,0,10">
+                    <Border Grid.Row="5" Background="#3E3E42" CornerRadius="4" Padding="10" Margin="0,0,0,10">
                         <StackPanel Spacing="5">
                             <TextBlock Text="Sync Statistics (NEW!)"
                                       FontWeight="Bold"
@@ -248,7 +333,7 @@
                     </Border>
 
                     <!-- SmartMaster Effect Panel -->
-                    <Border Grid.Row="5" Background="#3E3E42" CornerRadius="4" Padding="10" Margin="0,0,0,10">
+                    <Border Grid.Row="6" Background="#3E3E42" CornerRadius="4" Padding="10" Margin="0,0,0,10">
                         <StackPanel Spacing="8">
                             <!-- Header with Enable/Disable Toggle -->
                             <Grid ColumnDefinitions="Auto,*,Auto">
