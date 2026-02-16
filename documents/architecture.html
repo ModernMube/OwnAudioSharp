@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+
+        gtag('config', 'G-93P1X5V4Z5');
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Architecture - Ownaudio</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="docs.css">
+    <style>
+        .architecture-diagram {
+            background: var(--surface-light);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            margin: 2rem 0;
+        }
+
+        .component-box {
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            transition: all 0.3s ease;
+        }
+
+        .component-box:hover {
+            border-color: var(--primary-color);
+            transform: translateX(4px);
+        }
+
+        .component-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .component-icon {
+            width: 40px;
+            height: 40px;
+            background: rgba(74, 158, 255, 0.1);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary-color);
+            font-size: 1.5rem;
+        }
+
+        .flow-arrow {
+            text-align: center;
+            font-size: 2rem;
+            color: var(--primary-color);
+            margin: 1rem 0;
+        }
+
+        .connection-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .connection-card {
+            background: var(--surface-light);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .connection-card strong {
+            color: var(--primary-color);
+            font-size: 1.1rem;
+        }
+
+        .example-section {
+            background: var(--surface);
+            border-left: 4px solid var(--primary-color);
+            padding: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .data-flow {
+            background: var(--background);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+        }
+
+        .flow-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .flow-step {
+            background: var(--surface-light);
+            border: 2px solid var(--primary-color);
+            border-radius: 6px;
+            padding: 0.6rem 1rem;
+            text-align: center;
+            min-width: 250px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .flow-step:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 20px rgba(74, 158, 255, 0.3);
+        }
+
+        .flow-step.source {
+            border-color: var(--net-color);
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .flow-step.process {
+            border-color: var(--warning);
+            background: rgba(251, 191, 36, 0.1);
+        }
+
+        .flow-step.output {
+            border-color: var(--accent);
+            background: rgba(6, 182, 212, 0.1);
+        }
+
+        .flow-arrow-down {
+            font-size: 1.2rem;
+            color: var(--primary-color);
+            font-weight: bold;
+            line-height: 1;
+        }
+
+        .mixer-diagram {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+            background: var(--surface-light);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+        }
+
+        .mixer-sources {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+        }
+
+        .mixer-source-box {
+            background: var(--surface);
+            border: 2px solid var(--net-color);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .mixer-process-box {
+            background: var(--surface);
+            border: 2px solid var(--primary-color);
+            border-radius: 6px;
+            padding: 0.8rem;
+            text-align: center;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .mixer-process-box.warning {
+            border-color: var(--warning);
+        }
+
+        .parallel-flow {
+            display: flex;
+            gap: 0.8rem;
+            align-items: stretch;
+            margin: 1rem 0;
+        }
+
+        .parallel-track {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+
+        .parallel-box {
+            background: var(--surface-light);
+            border: 2px solid var(--net-color);
+            border-radius: 6px;
+            padding: 0.6rem 0.8rem;
+            text-align: center;
+            font-size: 0.85rem;
+        }
+
+        .parallel-arrow {
+            text-align: center;
+            color: var(--primary-color);
+            font-size: 1.2rem;
+            line-height: 1;
+        }
+
+        .converge-arrow {
+            text-align: center;
+            color: var(--primary-color);
+            font-size: 1.5rem;
+            margin: 0.5rem 0;
+            line-height: 1;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 2rem 0;
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: var(--surface);
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        tr:hover {
+            background: var(--surface-light);
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="nav">
+        <div class="nav-container">
+            <a href="../index.html" class="logo">OwnaudioSharp</a>
+            <ul class="nav-links">
+                <li><a href="quickstart.html">Quick Start</a></li>
+                <li><a href="architecture.html" class="active">Architecture</a></li>
+                <li><a href="api-core.html">Core API</a></li>
+                <li><a href="api-net.html">NET API</a></li>
+                <li><a href="examples.html">Examples</a></li>
+                <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="main">
+        <aside class="sidebar">
+            <h3>System Architecture</h3>
+            <ul class="sidebar-nav">
+                <li><a href="#overview" class="active">Overview</a></li>
+                <li><a href="#device">Device Layer</a></li>
+                <li><a href="#source">Source Layer</a></li>
+                <li><a href="#effect">Effect Layer</a></li>
+                <li><a href="#mixer">Mixer Layer</a></li>
+                <li><a href="#data-flow">Data Flow</a></li>
+                <li><a href="#examples">Practical Examples</a></li>
+                <li><a href="#summary">Summary</a></li>
+            </ul>
+        </aside>
+
+        <main class="content">
+            <h1>System Architecture</h1>
+            <p class="lead">
+                Understanding the relationship between Device, Source, Mixer, and Effect components in OwnAudioSharp
+            </p>
+
+            <h2 id="overview">System Overview</h2>
+
+            <p>
+                OwnAudioSharp uses a <strong>two-layer architecture</strong> with clear separation between low-level
+                platform integration and high-level audio processing:
+            </p>
+
+            <div class="architecture-diagram">
+                <div class="component-box" style="border-color: var(--accent);">
+                    <div class="component-header">
+                        <div class="component-icon">👤</div>
+                        <h3 style="margin: 0;">User Application</h3>
+                    </div>
+                    <p>Your application code using OwnAudioSharp API</p>
+                </div>
+
+                <div class="flow-arrow">↓</div>
+
+                <div class="component-box" style="border-color: var(--net-color);">
+                    <div class="component-header">
+                        <div class="component-icon">🔧</div>
+                        <h3 style="margin: 0;">API Layer (OwnaudioNET)</h3>
+                    </div>
+                    <p>AudioMixer, Source Management, Effects, Features</p>
+                    <div class="badge badge-net">High-Level API</div>
+                </div>
+
+                <div class="flow-arrow">↓</div>
+
+                <div class="component-box" style="border-color: var(--core-color);">
+                    <div class="component-header">
+                        <div class="component-icon">⚙️</div>
+                        <h3 style="margin: 0;">Engine Layer (Ownaudio.Core)</h3>
+                    </div>
+                    <p>IAudioEngine, Platform-Specific Engines, Decoders</p>
+                    <div class="badge badge-core">Low-Level API</div>
+                </div>
+
+                <div class="flow-arrow">↓</div>
+
+                <div class="component-box" style="border-color: var(--warning);">
+                    <div class="component-header">
+                        <div class="component-icon">🔊</div>
+                        <h3 style="margin: 0;">Hardware Device</h3>
+                    </div>
+                    <p>WASAPI / PulseAudio / Core Audio / AAudio</p>
+                    <div class="badge" style="background: rgba(251, 191, 36, 0.2); color: var(--warning);">Platform-Specific</div>
+                </div>
+            </div>
+
+            <h2 id="device">1. Device Layer (IAudioEngine)</h2>
+
+            <div class="component-box">
+                <h3>🔊 Audio Device - Hardware Communication</h3>
+                <p>
+                    The Device layer provides direct communication with hardware audio devices. OwnAudioSharp uses <strong>native C/C++ engines by default</strong> (PortAudio/Miniaudio) for optimal performance, with optional managed C# implementations available for specific scenarios.
+                </p>
+
+                <div class="alert alert-info">
+                    <strong>Default: Native Engines</strong>
+                    <code>AudioEngineFactory.CreateDefault()</code> returns native PortAudio or Miniaudio engines for professional-grade, glitch-free audio. Managed engines (WASAPI/PulseAudio/CoreAudio) are available but optional.
+                </div>
+
+                <h4>Engine Implementations</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Engine Type</th>
+                            <th>Platform</th>
+                            <th>API/Library</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="background: rgba(251, 191, 36, 0.1);">
+                            <td><strong>Native (Default)</strong></td>
+                            <td>All Platforms</td>
+                            <td>PortAudio / Miniaudio</td>
+                            <td><span class="badge" style="background: var(--warning); color: var(--background);">Recommended</span></td>
+                        </tr>
+                        <tr>
+                            <td>Managed (Optional)</td>
+                            <td>Windows</td>
+                            <td>WASAPI (C# P/Invoke)</td>
+                            <td><span class="badge badge-core">Optional</span></td>
+                        </tr>
+                        <tr>
+                            <td>Managed (Optional)</td>
+                            <td>Linux</td>
+                            <td>PulseAudio (C# P/Invoke)</td>
+                            <td><span class="badge badge-core">Optional</span></td>
+                        </tr>
+                        <tr>
+                            <td>Managed (Optional)</td>
+                            <td>macOS</td>
+                            <td>Core Audio (C# P/Invoke)</td>
+                            <td><span class="badge badge-core">Optional</span></td>
+                        </tr>
+                        <tr>
+                            <td>Managed (Optional)</td>
+                            <td>Android</td>
+                            <td>AAudio (C# P/Invoke)</td>
+                            <td><span class="badge badge-core">Optional</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Key Methods</h4>
+                <div class="code-block">
+                    <pre><code class="language-csharp">IAudioEngine engine = AudioEngineFactory.CreateDefault();
+
+// Initialize device (50-5000ms - DO NOT call on UI thread!)
+engine.Initialize(config);
+
+// Start playback
+engine.Start();
+
+// Send audio samples (10-50ms - BLOCKING!)
+engine.Send(samples);
+
+// Stop playback (up to 2000ms - BLOCKING!)
+engine.Stop();
+
+// Device management
+List&lt;AudioDeviceInfo&gt; outputs = engine.GetOutputDevices();
+engine.SetOutputDeviceByName("Speakers");
+engine.OutputDeviceChanged += OnDeviceChanged;</code></pre>
+                </div>
+
+                <div class="alert alert-warning">
+                    <strong>⚠️ CRITICAL:</strong> <code>Initialize()</code>, <code>Send()</code>, and <code>Stop()</code>
+                    are <strong>BLOCKING</strong> operations! Never call them from UI threads.
+                </div>
+            </div>
+
+            <h2 id="source">2. Source Layer (IAudioSource)</h2>
+
+            <div class="component-box">
+                <h3>🎵 Audio Source - Data Provider</h3>
+                <p>
+                    Sources provide audio data from various origins (files, microphone, generated samples).
+                </p>
+
+                <h4>Available Source Types</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Description</th>
+                            <th>Use Case</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>FileSource</code></td>
+                            <td>Plays MP3/WAV/FLAC files</td>
+                            <td>Music playback, audio files</td>
+                        </tr>
+                        <tr>
+                            <td><code>InputSource</code></td>
+                            <td>Records from microphone/line-in</td>
+                            <td>Voice recording, audio capture</td>
+                        </tr>
+                        <tr>
+                            <td><code>SampleSource</code></td>
+                            <td>Plays pre-loaded samples</td>
+                            <td>Sound effects, short clips</td>
+                        </tr>
+                        <tr>
+                            <td><code>GhostTrackSource</code></td>
+                            <td>Silent track for synchronization</td>
+                            <td>Timeline sync, DAW-style alignment</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>Core Interface</h4>
+                <div class="code-block">
+                    <pre><code class="language-csharp">interface IAudioSource
+{
+    // Identity & State
+    Guid Id { get; }
+    AudioState State { get; }  // Playing/Paused/Stopped
+
+    // Configuration
+    AudioConfig Config { get; }
+    AudioStreamInfo StreamInfo { get; }
+
+    // Playback Control
+    float Volume { get; set; }      // 0.0 - 1.0
+    double Position { get; }         // Current position (seconds)
+    double Duration { get; }         // Total duration
+
+    // Tempo & Pitch (SoundTouch)
+    float Tempo { get; set; }        // 1.0 = normal speed
+    float PitchShift { get; set; }   // 0 = no shift
+
+    // Playback Operations
+    void Play();
+    void Pause();
+    void Stop();
+    bool Seek(double seconds);
+
+    // Audio Data (HOT PATH - zero allocation!)
+    int ReadSamples(Span&lt;float&gt; buffer, int frameCount);
+}</code></pre>
+                </div>
+
+                <h4>Usage Example</h4>
+                <div class="code-block">
+                    <pre><code class="language-csharp">var fileSource = new FileSource("music.mp3", engine);
+fileSource.Volume = 0.8f;
+fileSource.Tempo = 1.2f;  // 120% speed
+fileSource.Play();</code></pre>
+                </div>
+            </div>
+
+            <h2 id="effect">3. Effect Layer (IEffectProcessor)</h2>
+
+            <div class="component-box">
+                <h3>🎛️ Audio Effect - Real-Time Processing</h3>
+                <p>
+                    Effects modify audio in real-time. They can be applied to individual sources or the master output.
+                </p>
+
+                <h4>Available Effects</h4>
+                <div class="connection-grid">
+                    <div class="connection-card">
+                        <strong>Dynamics</strong>
+                        <p>CompressorEffect<br>LimiterEffect<br>AutoGainEffect</p>
+                    </div>
+                    <div class="connection-card">
+                        <strong>EQ</strong>
+                        <p>EqualizerEffect<br>Equalizer30BandEffect</p>
+                    </div>
+                    <div class="connection-card">
+                        <strong>Spatial</strong>
+                        <p>ReverbEffect<br>DelayEffect</p>
+                    </div>
+                    <div class="connection-card">
+                        <strong>Modulation</strong>
+                        <p>ChorusEffect<br>FlangerEffect<br>PhaserEffect<br>RotaryEffect</p>
+                    </div>
+                    <div class="connection-card">
+                        <strong>Distortion</strong>
+                        <p>DistortionEffect<br>OverdriveEffect<br>DynamicAmpEffect</p>
+                    </div>
+                    <div class="connection-card">
+                        <strong>Mastering</strong>
+                        <p>SmartMasterEffect<br>EnhancerEffect</p>
+                    </div>
+                    <div class="connection-card">
+                        <strong>VST</strong>
+                        <p>VST3EffectProcessor<br>(VST3 plugin hosting)</p>
+                    </div>
+                </div>
+
+                <h4>Core Interface</h4>
+                <div class="code-block">
+                    <pre><code class="language-csharp">interface IEffectProcessor
+{
+    Guid Id { get; }
+    string Name { get; }
+    bool Enabled { get; set; }      // Enable/disable
+    float Mix { get; set; }         // Wet/Dry mix (0.0-1.0)
+
+    void Initialize(AudioConfig config);
+    void Process(Span&lt;float&gt; buffer, int frameCount);  // HOT PATH!
+    void Reset();  // Clear buffers
+}</code></pre>
+                </div>
+
+                <h4>Two Application Methods</h4>
+
+                <h5>A) Source-Specific Effects (SourceWithEffects)</h5>
+                <div class="code-block">
+                    <pre><code class="language-csharp">var fileSource = new FileSource("guitar.mp3", engine);
+var sourceWithEffects = new SourceWithEffects(fileSource);
+
+// Add effects ONLY to this source
+sourceWithEffects.AddEffect(new DistortionEffect(0.5f));
+sourceWithEffects.AddEffect(new DelayEffect(300f, 0.3f));
+
+mixer.AddSource(sourceWithEffects);</code></pre>
+                </div>
+                <div class="data-flow">
+                    <div class="flow-container">
+                        <div class="flow-step source">FileSource.ReadSamples()</div>
+                        <div class="flow-arrow-down">↓</div>
+                        <div class="flow-step">Clean Audio</div>
+                        <div class="flow-arrow-down">↓</div>
+                        <div class="flow-step process">DistortionEffect.Process()</div>
+                        <div class="flow-arrow-down">↓</div>
+                        <div class="flow-step process">DelayEffect.Process()</div>
+                        <div class="flow-arrow-down">↓</div>
+                        <div class="flow-step output">Processed Audio → Mixer</div>
+                    </div>
+                </div>
+
+                <h5>B) Master Effects (AudioMixer)</h5>
+                <div class="code-block">
+                    <pre><code class="language-csharp">var mixer = new AudioMixer(engine);
+
+// Effects applied to FINAL MIX of all sources
+mixer.AddMasterEffect(new EqualizerEffect(...));
+mixer.AddMasterEffect(new LimiterEffect(0.95f));</code></pre>
+                </div>
+                <div class="data-flow">
+                    <div class="flow-container">
+                        <div class="flow-step source">Source1 + Source2 + Source3</div>
+                        <div class="flow-arrow-down">↓</div>
+                        <div class="flow-step">Mixing</div>
+                        <div class="flow-arrow-down">↓</div>
+                        <div class="flow-step process">EqualizerEffect.Process()</div>
+                        <div class="flow-arrow-down">↓</div>
+                        <div class="flow-step process">LimiterEffect.Process()</div>
+                        <div class="flow-arrow-down">↓</div>
+                        <div class="flow-step output">Device (Send)</div>
+                    </div>
+                </div>
+            </div>
+
+            <h2 id="mixer">4. Mixer Layer (AudioMixer)</h2>
+
+            <div class="component-box">
+                <h3>🎚️ Audio Mixer - Multi-Source Combining</h3>
+                <p>
+                    The AudioMixer combines multiple audio sources and sends the mixed result to the device.
+                </p>
+
+                <h4>Architecture Diagram</h4>
+                <div class="mixer-diagram">
+                    <h4 style="text-align: center; color: var(--primary-color); margin-bottom: 1rem;">AUDIO MIXER</h4>
+
+                    <div class="mixer-sources">
+                        <div class="mixer-source-box">
+                            <strong>Source 1</strong><br>
+                            <small>Vol: 0.8</small><br>
+                            <small>+ Effects</small>
+                        </div>
+                        <div class="mixer-source-box">
+                            <strong>Source 2</strong><br>
+                            <small>Vol: 1.0</small><br>
+                            <small>+ Effects</small>
+                        </div>
+                        <div class="mixer-source-box">
+                            <strong>Source 3</strong><br>
+                            <small>Vol: 0.5</small><br>
+                            <small>+ Effects</small>
+                        </div>
+                    </div>
+
+                    <div class="flow-arrow-down">↓</div>
+
+                    <div class="mixer-process-box warning">
+                        PARALLEL MIXING<br>
+                        <small>(Multi-threaded)</small>
+                    </div>
+
+                    <div class="flow-arrow-down">↓</div>
+
+                    <div class="mixer-process-box">
+                        Master Volume (1.0)
+                    </div>
+
+                    <div class="flow-arrow-down">↓</div>
+
+                    <div class="mixer-process-box">
+                        MASTER EFFECTS<br>
+                        <small>(EQ, Compressor...)</small>
+                    </div>
+
+                    <div class="flow-arrow-down">↓</div>
+
+                    <div class="mixer-process-box">
+                        Level Metering
+                    </div>
+
+                    <div class="flow-arrow-down">↓</div>
+
+                    <div class="mixer-process-box" style="border-style: dashed;">
+                        Recording (WAV)<br>
+                        <small style="color: var(--text-secondary);">[Optional]</small>
+                    </div>
+
+                    <div class="flow-arrow-down">↓</div>
+
+                    <div class="mixer-process-box" style="border-color: var(--accent);">
+                        IAudioEngine (Device)
+                    </div>
+                </div>
+
+                <h4>Usage Example</h4>
+                <div class="code-block">
+                    <pre><code class="language-csharp">var engine = AudioEngineFactory.CreateDefault();
+var mixer = new AudioMixer(engine, bufferSizeInFrames: 512);
+
+// Add sources
+var track1 = new FileSource("drums.mp3", engine);
+var track2 = new FileSource("bass.mp3", engine);
+var track3 = new FileSource("vocals.mp3", engine);
+
+mixer.AddSource(track1);
+mixer.AddSource(track2);
+mixer.AddSource(track3);
+
+// Master effects
+mixer.AddMasterEffect(new EqualizerEffect(...));
+mixer.AddMasterEffect(new CompressorEffect(...));
+
+// Control
+mixer.MasterVolume = 0.9f;
+mixer.Start();
+
+// Synchronized playback using Master Clock
+track1.AttachToClock(mixer.MasterClock);
+track2.AttachToClock(mixer.MasterClock);
+track3.AttachToClock(mixer.MasterClock);
+
+track1.Play();
+track2.Play();
+track3.Play();
+
+// Level metering
+Console.WriteLine($"L: {mixer.LeftPeak:F2}, R: {mixer.RightPeak:F2}");
+
+// Recording
+mixer.StartRecording("output.wav");</code></pre>
+                </div>
+
+                <h4>Thread Architecture</h4>
+                <div class="data-flow">
+                    <div class="flow-container">
+                        <div class="flow-step source">Main Thread (User API)</div>
+                        <div class="flow-arrow-down">↓</div>
+                        <div class="flow-step">AudioMixer.AddSource()</div>
+                        <div class="flow-arrow-down">↓</div>
+                        <div class="flow-step">AudioMixer.Start()</div>
+                        <div class="flow-arrow-down">↓</div>
+                        <div class="flow-step process" style="font-weight: 600;">Mix Thread (High Priority)<br><small>Dedicated thread!</small></div>
+                        <div style="margin: 1rem 0; padding: 1rem; background: var(--surface); border-left: 4px solid var(--warning); border-radius: 4px;">
+                            <div style="margin-bottom: 0.5rem;">→ ReadSamples() from Source 1 (parallel)</div>
+                            <div style="margin-bottom: 0.5rem;">→ ReadSamples() from Source 2 (parallel)</div>
+                            <div style="margin-bottom: 0.5rem;">→ ReadSamples() from Source 3 (parallel)</div>
+                            <div style="margin-bottom: 0.5rem;">→ Mix buffers together</div>
+                            <div style="margin-bottom: 0.5rem;">→ Apply Master Volume</div>
+                            <div style="margin-bottom: 0.5rem;">→ Apply Master Effects (chain)</div>
+                            <div style="margin-bottom: 0.5rem;">→ Calculate Peak Levels</div>
+                            <div style="margin-bottom: 0.5rem;">→ Record to file (if enabled)</div>
+                            <div style="font-weight: 600; color: var(--warning);">→ engine.Send(mixedBuffer) ⚠️ BLOCKING! (10-50ms)</div>
+                        </div>
+                        <div class="flow-arrow-down">↓</div>
+                        <div class="flow-step output">Audio Device (WASAPI/PulseAudio/CoreAudio)</div>
+                    </div>
+                </div>
+
+                <h4>Key Features</h4>
+                <ul>
+                    <li><strong>Lock-free source management</strong> - ConcurrentDictionary usage</li>
+                    <li><strong>Parallel mixing</strong> - Multi-core support</li>
+                    <li><strong>Master clock sync</strong> - Timeline-based synchronization (v2.4.0+)</li>
+                    <li><strong>Real-time level metering</strong> - L/R channel peak levels</li>
+                    <li><strong>WAV recording</strong> - Final mix recording</li>
+                </ul>
+            </div>
+
+            <h2 id="data-flow">Complete Data Flow</h2>
+
+            <h3>Simple Playback (1 source → 1 device)</h3>
+            <div class="data-flow">
+                <div class="flow-container">
+                    <div class="flow-step source">FileSource("music.mp3")</div>
+                    <div class="flow-arrow-down">↓</div>
+                    <div class="flow-step">ReadSamples()</div>
+                    <div class="flow-arrow-down">↓</div>
+                    <div class="flow-step process">IAudioEngine.Send()</div>
+                    <div class="flow-arrow-down">↓</div>
+                    <div class="flow-step">WASAPI / PulseAudio</div>
+                    <div class="flow-arrow-down">↓</div>
+                    <div class="flow-step output">🔊 Speakers</div>
+                </div>
+            </div>
+
+            <h3>Multi-Track Mixing with Effects</h3>
+            <div class="data-flow">
+                <!-- Parallel tracks -->
+                <div class="parallel-flow">
+                    <div class="parallel-track">
+                        <div class="parallel-box">FileSource("drums.mp3")</div>
+                        <div class="parallel-arrow">↓</div>
+                        <div class="parallel-box">Volume (0.8)</div>
+                        <div class="parallel-arrow">↓</div>
+                        <div class="parallel-box" style="border-color: var(--warning);">Compressor</div>
+                    </div>
+                    <div class="parallel-track">
+                        <div class="parallel-box">FileSource("bass.mp3")</div>
+                        <div class="parallel-arrow">↓</div>
+                        <div class="parallel-box">Volume (1.0)</div>
+                        <div class="parallel-arrow">↓</div>
+                        <div class="parallel-box" style="border-color: var(--warning);">EQ</div>
+                    </div>
+                    <div class="parallel-track">
+                        <div class="parallel-box">FileSource("vocals.mp3")</div>
+                        <div class="parallel-arrow">↓</div>
+                        <div class="parallel-box" style="border-color: var(--warning);">Reverb + Delay</div>
+                        <div class="parallel-arrow">↓</div>
+                        <div class="parallel-box">Volume (0.9)</div>
+                    </div>
+                </div>
+
+                <!-- Converge -->
+                <div class="converge-arrow">↓ ↓ ↓</div>
+
+                <!-- Mixed flow -->
+                <div class="flow-container">
+                    <div class="flow-step process" style="font-weight: 600;">AudioMixer (PARALLEL MIX)</div>
+                    <div class="flow-arrow-down">↓</div>
+                    <div class="flow-step">Master Volume (0.9)</div>
+                    <div class="flow-arrow-down">↓</div>
+                    <div class="flow-step process">Master Effects:<br><small>Equalizer, Limiter</small></div>
+                    <div class="flow-arrow-down">↓</div>
+                    <div class="flow-step">Level Metering (L/R Peaks)</div>
+                    <div class="flow-arrow-down">↓</div>
+                    <div class="flow-step" style="border-style: dashed;">Recording ("output.wav")</div>
+                    <div class="flow-arrow-down">↓</div>
+                    <div class="flow-step process">IAudioEngine.Send()</div>
+                    <div class="flow-arrow-down">↓</div>
+                    <div class="flow-step">WASAPI (Windows)</div>
+                    <div class="flow-arrow-down">↓</div>
+                    <div class="flow-step output">🔊 Speakers</div>
+                </div>
+            </div>
+
+            <h2 id="examples">Practical Examples</h2>
+
+            <div class="example-section">
+                <h3>Example 1: Simple File Playback</h3>
+                <div class="code-block">
+                    <pre><code class="language-csharp">var engine = AudioEngineFactory.CreateDefault();
+await Task.Run(() => engine.Initialize(new AudioConfig()));
+engine.Start();
+
+var source = new FileSource("music.mp3", engine);
+source.Play();</code></pre>
+                </div>
+            </div>
+
+            <div class="example-section">
+                <h3>Example 2: Multi-Track DAW-Style Mixing</h3>
+                <div class="code-block">
+                    <pre><code class="language-csharp">var engine = AudioEngineFactory.CreateDefault();
+var mixer = new AudioMixer(engine);
+
+// Load tracks
+var drums = new FileSource("drums.wav", engine);
+var bass = new FileSource("bass.wav", engine);
+var vocals = new FileSource("vocals.wav", engine);
+
+// Add effects to vocals
+var vocalsWithFX = new SourceWithEffects(vocals);
+vocalsWithFX.AddEffect(new ReverbEffect(roomSize: 0.7f));
+vocalsWithFX.AddEffect(new DelayEffect(200f, 0.3f));
+
+// Add to mixer
+mixer.AddSource(drums);
+mixer.AddSource(bass);
+mixer.AddSource(vocalsWithFX);
+
+// Master chain
+mixer.AddMasterEffect(new Equalizer30BandEffect());
+mixer.AddMasterEffect(new CompressorEffect(threshold: -10f));
+mixer.AddMasterEffect(new LimiterEffect(ceiling: 0.95f));
+
+// Start mixer
+mixer.Start();
+
+// Synchronized playback - Method 1: Master Clock (Recommended)
+drums.AttachToClock(mixer.MasterClock);
+bass.AttachToClock(mixer.MasterClock);
+vocalsWithFX.AttachToClock(mixer.MasterClock);
+
+drums.Play();
+bass.Play();
+vocalsWithFX.Play();
+
+// OR Method 2: Sync Groups (Legacy, still supported)
+// mixer.CreateSyncGroup("multitrack", drums, bass, vocalsWithFX);
+// mixer.StartSyncGroup("multitrack");
+
+// Recording
+mixer.StartRecording("final_mix.wav");</code></pre>
+                </div>
+            </div>
+
+            <div class="example-section">
+                <h3>Example 3: VST3 Plugin Usage</h3>
+                <div class="code-block">
+                    <pre><code class="language-csharp">var mixer = new AudioMixer(engine);
+var source = new FileSource("guitar.wav", engine);
+
+// Load VST3 effect
+var vstEffect = new VST3EffectProcessor("C:\\VST3\\Distortion.vst3");
+vstEffect.Initialize(source.Config);
+
+var sourceWithVST = new SourceWithEffects(source);
+sourceWithVST.AddEffect(vstEffect);
+
+mixer.AddSource(sourceWithVST);
+mixer.Start();</code></pre>
+                </div>
+            </div>
+
+            <h2 id="summary">Summary</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        <th>Responsibility</th>
+                        <th>Instances</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Device</strong> (IAudioEngine)</td>
+                        <td>Hardware communication</td>
+                        <td>1 per application</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Source</strong> (IAudioSource)</td>
+                        <td>Audio data provider</td>
+                        <td>N (unlimited)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Effect</strong> (IEffectProcessor)</td>
+                        <td>Audio processing</td>
+                        <td>N (per source or master)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Mixer</strong> (AudioMixer)</td>
+                        <td>Multi-source combining</td>
+                        <td>1 or more (rare)</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Relationships</h3>
+            <div class="connection-grid">
+                <div class="connection-card">
+                    <strong>Source → Mixer</strong>
+                    <p>N:1 - Multiple sources to one mixer</p>
+                </div>
+                <div class="connection-card">
+                    <strong>Source → Effect</strong>
+                    <p>1:N - One source with multiple effects (SourceWithEffects)</p>
+                </div>
+                <div class="connection-card">
+                    <strong>Mixer → Effect</strong>
+                    <p>1:N - One mixer with multiple master effects</p>
+                </div>
+                <div class="connection-card">
+                    <strong>Mixer → Device</strong>
+                    <p>1:1 - One mixer uses one engine</p>
+                </div>
+            </div>
+
+            <div class="alert alert-success" style="margin-top: 3rem;">
+                <h4>🎯 Key Takeaways</h4>
+                <ul>
+                    <li><strong>Device</strong> handles hardware I/O (blocking operations)</li>
+                    <li><strong>Source</strong> provides audio data with playback control</li>
+                    <li><strong>Effect</strong> processes audio in real-time (source or master)</li>
+                    <li><strong>Mixer</strong> combines sources, applies master effects, and sends to device</li>
+                    <li>Effects can be applied at <strong>two levels</strong>: per-source or master</li>
+                    <li>Mixer uses <strong>dedicated high-priority thread</strong> for mixing</li>
+                    <li>System supports <strong>parallel mixing</strong> for multi-core performance</li>
+                </ul>
+            </div>
+
+            <div class="next-steps">
+                <h3>Next Steps</h3>
+                <ul>
+                    <li><a href="quickstart.html">Quick Start Guide</a> - Get started with OwnAudioSharp</li>
+                    <li><a href="api-net.html">NET API Reference</a> - Detailed API documentation</li>
+                    <li><a href="examples.html">Code Examples</a> - Practical usage examples</li>
+                    <li><a href="effects.html">Effects Documentation</a> - Learn about audio effects</li>
+                </ul>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="docs.js"></script>
+</body>
+
+</html>
