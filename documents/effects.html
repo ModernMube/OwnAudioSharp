@@ -1078,6 +1078,22 @@
                         <div class="param-type">string - Plugin manufacturer</div>
                     </div>
                     <div class="param-item">
+                        <div class="param-name">Version</div>
+                        <div class="param-type">string - Plugin version</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">PluginPath</div>
+                        <div class="param-type">string - Full path to loaded VST3 file</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">IsEffect</div>
+                        <div class="param-type">bool - Whether plugin is an audio effect</div>
+                    </div>
+                    <div class="param-item">
+                        <div class="param-name">IsInstrument</div>
+                        <div class="param-type">bool - Whether plugin is an instrument</div>
+                    </div>
+                    <div class="param-item">
                         <div class="param-name">HasEditor</div>
                         <div class="param-type">bool - Whether plugin has GUI</div>
                     </div>
@@ -1157,7 +1173,7 @@ Console.WriteLine($"Parameter 0 value: {value:F3}");</code></pre>
                 <div class="code-block">
                     <div class="code-header">Scan for VST3 Plugins</div>
                     <pre><code class="language-csharp">// Find all VST3 plugins in system directories
-var pluginPaths = VST3PluginHost.FindPlugins();
+var pluginPaths = VST3PluginHost.FindPlugins(includeSubdirectories: true);
 Console.WriteLine($"Found {pluginPaths.Count} plugins");
 
 foreach (var path in pluginPaths)
@@ -1165,8 +1181,12 @@ foreach (var path in pluginPaths)
     Console.WriteLine($"  - {path}");
 }
 
+// Find plugins in custom directories
+string[] customDirs = { @"C:\MyPlugins", @"D:\Audio\VST3" };
+var customPlugins = VST3PluginHost.FindPlugins(customDirs, includeSubdirectories: true);
+
 // Scan and get detailed info (slower, loads each plugin)
-var pluginInfos = VST3PluginHost.ScanPlugins();
+var pluginInfos = VST3PluginHost.ScanPlugins(includeSubdirectories: true);
 foreach (var info in pluginInfos)
 {
     Console.WriteLine($"{info.Name} ({info.Vendor}) - {info.ParameterCount} params");
@@ -1225,7 +1245,8 @@ var config = new AudioConfig
 
 // Load VST3 plugin
 var vstHost = new VST3PluginHost("/Library/Audio/Plug-Ins/VST3/FabFilter Pro-Q 3.vst3");
-Console.WriteLine($"Loaded: {vstHost.Name} by {vstHost.Vendor}");
+Console.WriteLine($"Loaded: {vstHost.Name} by {vstHost.Vendor} v{vstHost.Version}");
+Console.WriteLine($"Type: {(vstHost.IsEffect ? "Effect" : "")} {(vstHost.IsInstrument ? "Instrument" : "")}");
 
 // Open plugin editor for user control
 if (vstHost.HasEditor)
@@ -1233,23 +1254,31 @@ if (vstHost.HasEditor)
     vstHost.OpenEditor("EQ Plugin");
 }
 
-// Create processor and add to audio chain
+// Create processor and initialize with audio config
 var vstProcessor = vstHost.GetProcessor();
 vstProcessor.Initialize(config);
 vstProcessor.Mix = 0.8f; // 80% wet, 20% dry
 
-// Create audio source and add VST effect
-var audioSource = new FileSource("input.wav");
+// Create audio source and wrap with effects capability
+var fileSource = new FileSource("input.wav");
+var audioSource = new SourceWithEffects(fileSource);
 audioSource.AddEffect(vstProcessor);
 
+// Add to mixer
+var mixer = new Mixer(config);
+mixer.AddSource(audioSource);
+
+// Optionally add as master effect
+// mixer.AddMasterEffect(vstProcessor);
+
 // Play audio with VST processing
-audioSource.Play();
+mixer.Start();
 
 // Adjust parameters during playback
 vstHost.SetParameter(0, 0.5); // Adjust first parameter
 
 // Clean up
-audioSource.Stop();
+mixer.Stop();
 vstHost.CloseEditor();
 vstHost.Dispose();
 OwnaudioNET.Shutdown();</code></pre>

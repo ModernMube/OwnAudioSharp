@@ -113,8 +113,6 @@ public class AudioService : IDisposable
         // Create the mixer with the underlying engine (not the wrapper)
         if (OwnaudioNet.Engine != null)
         {
-            // Reverting to 4096 frames (~85ms) for stability with heavy DSP (SmartMaster)
-            // The corresponding AudioEngineWrapper buffer must be increased to accommodate this size!
             _mixer = new AudioMixer(OwnaudioNet.Engine.UnderlyingEngine, bufferSizeInFrames: 1024);
             // Start the mixer once and leave it running
             _mixer.Start();
