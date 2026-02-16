@@ -24,7 +24,7 @@
   <a href="https://modernmube.github.io/OwnAudioSharp/documents/chorddetect.html">
     <img src="https://img.shields.io/badge/Chord%20Detect%20API-blue" width="165">
   </a>
-  <a href="https://modernmube.github.io/OwnAudioSharp/documents/efects.html">
+  <a href="https://modernmube.github.io/OwnAudioSharp/documents/effects.html">
     <img src="https://img.shields.io/badge/Effects%20and%20VST3_plugins-blue" width="230">
   </a>
 </div>
