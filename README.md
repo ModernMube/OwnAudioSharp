@@ -1,5 +1,5 @@
 <div align="center">
-    <img src="Ownaudiologo.png" width="800">
+    <img src="Ownaudiologo.png" width="600">
 </div>
 
 <div align="center">
@@ -13,25 +13,25 @@
 
 <div align="center">
   <a href="https://modernmube.github.io/OwnAudioSharp/documents/api-net.html">
-    <img src="https://img.shields.io/badge/Ownaudio%20NET%20API-blue" width="175">
+    <img src="https://img.shields.io/badge/Ownaudio%20NET%20API-blue" width="145">
   </a>
   <a href="https://modernmube.github.io/OwnAudioSharp/documents/matchering.html">
-    <img src="https://img.shields.io/badge/Audio%20Matchering%20API-blue" width="200">
+    <img src="https://img.shields.io/badge/Audio%20Matchering%20API-blue" width="170">
   </a>
   <a href="https://modernmube.github.io/OwnAudioSharp/documents/vocalremover.html">
-    <img src="https://img.shields.io/badge/Vocal%20Remover%20API-blue" width="180">
+    <img src="https://img.shields.io/badge/Vocal%20Remover%20API-blue" width="150">
   </a>
   <a href="https://modernmube.github.io/OwnAudioSharp/documents/chorddetect.html">
-    <img src="https://img.shields.io/badge/Chord%20Detect%20API-blue" width="165">
+    <img src="https://img.shields.io/badge/Chord%20Detect%20API-blue" width="135">
   </a>
   <a href="https://modernmube.github.io/OwnAudioSharp/documents/effects.html">
-    <img src="https://img.shields.io/badge/Effects%20and%20VST3_plugins-blue" width="230">
+    <img src="https://img.shields.io/badge/Effects%20and%20VST3_plugins-blue" width="200">
   </a>
 </div>
 
 <div align="center">
   <a href="https://github.com/ModernMube/OwnAudioSharp/tree/master/OwnAudio/Examples">
-    <img src="https://img.shields.io/badge/Examples-Ownaudio%20Example%20Projects-red" width="370">
+    <img src="https://img.shields.io/badge/Examples-Ownaudio%20Example%20Projects-red" width="330">
   </a>
 </div>
 
