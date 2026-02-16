@@ -51,7 +51,6 @@
   <!-- Embedded resources -->
   <ItemGroup>
     <EmbeddedResource Include="nmp.onnx" />
-    <EmbeddedResource Include="best.onnx" />
     <EmbeddedResource Include="default.onnx" />
     <EmbeddedResource Include="karaoke.onnx" />
     <EmbeddedResource Include="basesample.bin" />
