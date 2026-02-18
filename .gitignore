@@ -256,6 +256,7 @@ orleans.codegen.cs
 #Ownaudio developer folders
 .claude/
 .markdowns/
+.models/
 
 # Including strong name files can present a security risk
 # (https://github.com/github/gitignore/pull/2483#issue-259490424)

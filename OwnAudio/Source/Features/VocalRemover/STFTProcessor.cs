@@ -1,17 +1,24 @@
 using MathNet.Numerics.IntegralTransforms;
 using System.Numerics;
+using OwnaudioNET.BufferManagement;
 
 namespace OwnaudioNET.Features.Vocalremover
 {
     /// <summary>
     /// Shared STFT (Short-Time Fourier Transform) processor for audio separation models
-    /// Provides optimized STFT computation with pre-calculated Hann windows
+    /// Provides optimized STFT computation with pre-calculated Hann windows and buffer pooling
     /// </summary>
-    public class STFTProcessor
+    public class STFTProcessor : IDisposable
     {
         private readonly int _nFft;
         private readonly int _hopLength;
         private readonly float[] _hannWindow;
+
+        // Buffer pools for reducing GC pressure
+        private readonly AudioBufferPool _paddedSignalPool;
+        private readonly AudioBufferPool _reconstructedPool;
+        private readonly AudioBufferPool _windowSumPool;
+        private bool _disposed;
 
         /// <summary>
         /// Initialize STFT processor with specified parameters
@@ -23,6 +30,15 @@ namespace OwnaudioNET.Features.Vocalremover
             _nFft = nFft;
             _hopLength = hopLength;
             _hannWindow = GenerateHannWindow(nFft);
+
+            // Initialize buffer pools with estimated max sizes
+            // Padded signal: max ~500k samples for 10s chunks at 44.1kHz
+            int maxPaddedLength = 500000;
+            _paddedSignalPool = new AudioBufferPool(maxPaddedLength, initialPoolSize: 2, maxPoolSize: 4);
+            _reconstructedPool = new AudioBufferPool(maxPaddedLength, initialPoolSize: 2, maxPoolSize: 4);
+            _windowSumPool = new AudioBufferPool(maxPaddedLength, initialPoolSize: 2, maxPoolSize: 4);
+
+            _disposed = false;
         }
 
         /// <summary>
@@ -50,45 +66,48 @@ namespace OwnaudioNET.Features.Vocalremover
             int freq_bins = _nFft / 2; // Only positive frequencies
             int channels = audioChunk.GetLength(0);
             int samples = audioChunk.GetLength(1);
-            
+
             // HTDemucs uses special padding: pad = hop_length // 2 * 3
             // Reference: Python line 434: pad = hl // 2 * 3
             int padSize = _hopLength / 2 * 3;  // = 1024 / 2 * 3 = 1536
-            
+
             // Python line 433: le = int(math.ceil(x.shape[-1] / hl))
             // For 441000 samples: ceil(441000 / 1024) = ceil(430.664) = 431
             int expectedFrames = (int)Math.Ceiling((double)samples / _hopLength);
-            
+
             // Python line 435: x = pad1d(x, (pad, pad + le * hl - x.shape[-1]), mode="reflect")
             // Right padding size: pad + le * hl - samples
             int rightPadSize = padSize + expectedFrames * _hopLength - samples;
             int paddedLength = samples + padSize + rightPadSize;
-            
+
             // After STFT with this padding, we get expectedFrames + 4 frames
             // Python line 438: assert z.shape[-1] == le + 4
             int n_frames_with_padding = expectedFrames + 4;
-            
+
             var spectrogram_raw = new float[1, channels, freq_bins, n_frames_with_padding, 2];
-            
+
             // Process each channel
             for (int ch = 0; ch < channels; ch++)
             {
-                // Create padded signal with reflection padding
-                var paddedSignal = new float[paddedLength];
-                
+                // Rent padded signal buffer from pool
+                var paddedSignal = _paddedSignalPool.Rent();
+
+                // Clear only the portion we'll use
+                Array.Clear(paddedSignal, 0, paddedLength);
+
                 // Left reflection padding
                 for (int i = 0; i < padSize; i++)
                 {
                     int srcIdx = Math.Min(padSize - i, samples - 1);
                     paddedSignal[i] = audioChunk[ch, srcIdx];
                 }
-                
+
                 // Copy original signal
                 for (int i = 0; i < samples; i++)
                 {
                     paddedSignal[padSize + i] = audioChunk[ch, i];
                 }
-                
+
                 // Right reflection padding
                 int rightPadStart = padSize + samples;
                 for (int i = 0; i < rightPadSize; i++)
@@ -96,12 +115,12 @@ namespace OwnaudioNET.Features.Vocalremover
                     int srcIdx = Math.Max(0, samples - 2 - i);
                     paddedSignal[rightPadStart + i] = audioChunk[ch, srcIdx];
                 }
-                
+
                 // Process each frame
                 for (int frame = 0; frame < n_frames_with_padding; frame++)
                 {
                     int frameStart = frame * _hopLength;
-                    
+
                     // Extract windowed frame
                     var frameData = new Complex[_nFft];
                     for (int i = 0; i < _nFft; i++)
@@ -116,10 +135,10 @@ namespace OwnaudioNET.Features.Vocalremover
                             frameData[i] = Complex.Zero;
                         }
                     }
-                    
+
                     // Perform FFT (use NoScaling for consistency with ISTFT)
                     Fourier.Forward(frameData, FourierOptions.NoScaling);
-                    
+
                     // Store first freq_bins frequency bins (positive frequencies only)
                     for (int f = 0; f < freq_bins; f++)
                     {
@@ -127,13 +146,16 @@ namespace OwnaudioNET.Features.Vocalremover
                         spectrogram_raw[0, ch, f, frame, 1] = (float)frameData[f].Imaginary;
                     }
                 }
+
+                // Return buffer to pool
+                _paddedSignalPool.Return(paddedSignal);
             }
-            
+
             // Trim frames: z = z[..., 2: 2 + le]
             // Remove first 2 frames, keep exactly expectedFrames
             // Python line 439: z = z[..., 2: 2 + le]
             int trimStart = 2;
-            
+
             var spectrogram = new float[1, channels, freq_bins, expectedFrames, 2];
             for (int ch = 0; ch < channels; ch++)
             {
@@ -146,7 +168,7 @@ namespace OwnaudioNET.Features.Vocalremover
                     }
                 }
             }
-            
+
             return spectrogram;
         }
 
@@ -163,17 +185,17 @@ namespace OwnaudioNET.Features.Vocalremover
             int channels = spectrogram.GetLength(1);
             int freq_bins = spectrogram.GetLength(2);
             int n_frames = spectrogram.GetLength(3);
-            
+
             // HTDemucs uses hop_length // 2 * 3 padding (NOT n_fft // 2)
             // Reference: Python line 446: pad = hl // 2 * 3
             int padSize = _hopLength / 2 * 3;  // = 1024 / 2 * 3 = 1536
-            
+
             // Add time-domain padding: 2 frames on each side
             // Reference: Python lines 444-445
             int n_frames_padded = n_frames + 1 + 4;  // +1 for last frame, +4 for time padding (2 on each side)
-            
+
             var spectrogram_padded = new float[1, channels, freq_bins, n_frames_padded, 2];
-            
+
             // Copy spectrogram with time padding: 2 frames before, original, 1 zero frame after, 2 frames after
             for (int ch = 0; ch < channels; ch++)
             {
@@ -185,18 +207,18 @@ namespace OwnaudioNET.Features.Vocalremover
                         spectrogram_padded[0, ch, f, t, 0] = 0;
                         spectrogram_padded[0, ch, f, t, 1] = 0;
                     }
-                    
+
                     // Original frames
                     for (int t = 0; t < n_frames; t++)
                     {
                         spectrogram_padded[0, ch, f, 2 + t, 0] = spectrogram[0, ch, f, t, 0];
                         spectrogram_padded[0, ch, f, 2 + t, 1] = spectrogram[0, ch, f, t, 1];
                     }
-                    
+
                     // One zero frame (Python: F.pad(z, (0, 0, 0, 1)))
                     spectrogram_padded[0, ch, f, 2 + n_frames, 0] = 0;
                     spectrogram_padded[0, ch, f, 2 + n_frames, 1] = 0;
-                    
+
                     // Time padding: 2 frames at end
                     for (int t = 0; t < 2; t++)
                     {
@@ -205,18 +227,23 @@ namespace OwnaudioNET.Features.Vocalremover
                     }
                 }
             }
-            
+
             // Calculate padded output length
             int paddedLength = _hopLength * (int)Math.Ceiling((double)targetLength / _hopLength) + 2 * padSize;
-            
+
             var result = new float[channels, targetLength];
-            
+
             for (int ch = 0; ch < channels; ch++)
             {
-                var reconstructed = new double[paddedLength];
-                var windowSum = new double[paddedLength];
+                // Rent buffers from pool (we'll convert to double inline)
+                var reconstructedFloat = _reconstructedPool.Rent();
+                var windowSumFloat = _windowSumPool.Rent();
                 var fftFrame = new Complex[_nFft];
-                
+
+                // Clear only the portion we'll use
+                Array.Clear(reconstructedFloat, 0, paddedLength);
+                Array.Clear(windowSumFloat, 0, paddedLength);
+
                 // Process each time frame (using padded spectrogram)
                 for (int t = 0; t < n_frames_padded; t++)
                 {
@@ -227,28 +254,28 @@ namespace OwnaudioNET.Features.Vocalremover
                         float imag = spectrogram_padded[0, ch, f, t, 1];
                         fftFrame[f] = new Complex(real, imag);
                     }
-                    
+
                     // Fill remaining bins with zeros
                     for (int f = freq_bins; f < _nFft; f++)
                     {
                         fftFrame[f] = Complex.Zero;
                     }
-                    
+
                     // Apply Hermitian symmetry for real signal
                     for (int f = 1; f < _nFft / 2; f++)
                     {
                         fftFrame[_nFft - f] = Complex.Conjugate(fftFrame[f]);
                     }
-                    
+
                     // Inverse FFT
                     Fourier.Inverse(fftFrame, FourierOptions.NoScaling);
-                    
+
                     // Normalize by FFT size
                     for (int i = 0; i < _nFft; i++)
                     {
                         fftFrame[i] /= _nFft;
                     }
-                    
+
                     // Overlap-add with Hann window
                     int frameStart = t * _hopLength;
                     for (int i = 0; i < _nFft; i++)
@@ -257,30 +284,34 @@ namespace OwnaudioNET.Features.Vocalremover
                         if (targetIdx >= 0 && targetIdx < paddedLength)
                         {
                             float windowValue = _hannWindow[i];
-                            reconstructed[targetIdx] += fftFrame[i].Real * windowValue;
-                            windowSum[targetIdx] += windowValue * windowValue;
+                            reconstructedFloat[targetIdx] += (float)fftFrame[i].Real * windowValue;
+                            windowSumFloat[targetIdx] += windowValue * windowValue;
                         }
                     }
                 }
-                
+
                 // Extract final result (remove padding) and normalize by window sum
                 for (int i = 0; i < targetLength; i++)
                 {
                     int srcIdx = i + padSize;
                     if (srcIdx >= 0 && srcIdx < paddedLength)
                     {
-                        if (windowSum[srcIdx] > 1e-10)
+                        if (windowSumFloat[srcIdx] > 1e-10f)
                         {
-                            result[ch, i] = (float)(reconstructed[srcIdx] / windowSum[srcIdx]);
+                            result[ch, i] = reconstructedFloat[srcIdx] / windowSumFloat[srcIdx];
                         }
                         else
                         {
-                            result[ch, i] = (float)reconstructed[srcIdx];
+                            result[ch, i] = reconstructedFloat[srcIdx];
                         }
                     }
                 }
+
+                // Return buffers to pool
+                _reconstructedPool.Return(reconstructedFloat);
+                _windowSumPool.Return(windowSumFloat);
             }
-            
+
             return result;
         }
 
@@ -294,19 +325,19 @@ namespace OwnaudioNET.Features.Vocalremover
             int d2 = array.GetLength(2);
             int d3 = array.GetLength(3);
             int d4 = array.GetLength(4);
-            
+
             var result = new float[d0 * d1 * d2 * d3 * d4];
             int idx = 0;
-            
+
             for (int i0 = 0; i0 < d0; i0++)
-            for (int i1 = 0; i1 < d1; i1++)
-            for (int i2 = 0; i2 < d2; i2++)
-            for (int i3 = 0; i3 < d3; i3++)
-            for (int i4 = 0; i4 < d4; i4++)
-            {
-                result[idx++] = array[i0, i1, i2, i3, i4];
-            }
-            
+                for (int i1 = 0; i1 < d1; i1++)
+                    for (int i2 = 0; i2 < d2; i2++)
+                        for (int i3 = 0; i3 < d3; i3++)
+                            for (int i4 = 0; i4 < d4; i4++)
+                            {
+                                result[idx++] = array[i0, i1, i2, i3, i4];
+                            }
+
             return result;
         }
 
@@ -324,5 +355,19 @@ namespace OwnaudioNET.Features.Vocalremover
         /// Get the hop length
         /// </summary>
         public int HopLength => _hopLength;
+
+        /// <summary>
+        /// Dispose resources and clear buffer pools
+        /// </summary>
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                _paddedSignalPool?.Clear();
+                _reconstructedPool?.Clear();
+                _windowSumPool?.Clear();
+                _disposed = true;
+            }
+        }
     }
 }

@@ -8,6 +8,11 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <!-- Define MACOS symbol for macOS builds to enable CoreML code paths -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <DefineConstants>$(DefineConstants);MACOS</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>Ownaudio.Test.OwnaudioNET</_Parameter1>
@@ -32,14 +37,14 @@
 
   <!-- Common dependencies -->
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.3.11" />
+    <PackageReference Include="Avalonia" Version="11.3.12" />
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
     <PackageReference Include="Melanchall.DryWetMidi" Version="8.0.3" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.2" />
     <PackageReference Include="OwnAudioVst" Version="1.4.0" />
     <PackageReference Include="System.Memory" Version="4.6.3" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.102" PrivateAssets="All" />
-    <PackageReference Include="System.Numerics.Tensors" Version="10.0.2" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="All" />
+    <PackageReference Include="System.Numerics.Tensors" Version="10.0.3" />
   </ItemGroup>
 
   <!-- Embedded resources -->

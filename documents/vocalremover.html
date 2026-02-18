@@ -36,6 +36,7 @@
                 <li><a href="#service">AudioSeparationService</a></li>
                 <li><a href="#data-classes">Data Classes</a></li>
                 <li><a href="#models">Separation Models</a></li>
+                <li><a href="#multimodel">Multi-Model Averaging</a></li>
                 <li><a href="#configuration">Configuration</a></li>
                 <li><a href="#progress">Progress Tracking</a></li>
                 <li><a href="#factory">Factory Methods</a></li>
@@ -492,6 +493,372 @@ var result = separator.Separate("music.mp3");</code></pre>
                     style="color: var(--primary-color);">HuggingFace</a> due to GitHub's file size restrictions.
                 The NUGET package includes the model automatically.
             </div>
+
+            <h2 id="multimodel">Multi-Model Averaging</h2>
+            <p>
+                The <code>MultiModelAudioSeparator</code> class takes audio separation quality to the next level by
+                running multiple ONNX models in parallel and averaging their outputs. Each model independently processes
+                the original audio, and the resulting vocals and instrumentals are averaged across all models —
+                yielding cleaner separation with fewer artifacts than any single model alone.
+            </p>
+
+            <div class="alert alert-info">
+                <strong>How It Works</strong>
+                Every model receives the same original audio. After processing, the vocals from all models are averaged
+                together and the instrumentals from all models are averaged together. Models can output either vocals or
+                instrumentals; the complementary stem is always derived by subtracting the model output from the
+                original mix.
+            </div>
+
+            <h3>Key Features</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>Parallel Averaging</h4>
+                    <p>All models process the original audio independently in sequence per chunk, then vocals and
+                        instrumentals are averaged — (V₁+V₂+…+Vₙ)/n and (I₁+I₂+…+Iₙ)/n.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Auto OutputType Detection</h4>
+                    <p>The system automatically detects whether a model outputs vocals or instrumentals by inspecting
+                        ONNX metadata, model name, or file path. Explicit configuration is also supported.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Intermediate Results</h4>
+                    <p>Optionally save every model's individual output to disk for debugging, comparison, or further
+                        post-processing.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Mixed Model Types</h4>
+                    <p>Combine vocal-focused and instrumental-focused models in the same pipeline — each contributes
+                        its strengths, and averaging smooths out the differences.</p>
+                </div>
+            </div>
+
+            <h3>MultiModelAudioSeparator Class</h3>
+
+            <div class="code-block">
+                <div class="code-header">Namespace</div>
+                <pre><code class="language-csharp">using OwnaudioNET.Features.Vocalremover;</code></pre>
+            </div>
+
+            <h4>Public API Methods</h4>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Method</th>
+                        <th>Return</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>Initialize()</code></td>
+                        <td>void</td>
+                        <td>Loads and initializes all ONNX model sessions, auto-detects dimensions and output types</td>
+                    </tr>
+                    <tr>
+                        <td><code>Separate(string)</code></td>
+                        <td>MultiModelSeparationResult</td>
+                        <td>Processes the audio file through all models and returns the averaged separation result</td>
+                    </tr>
+                    <tr>
+                        <td><code>Dispose()</code></td>
+                        <td>void</td>
+                        <td>Releases all ONNX sessions and managed resources</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h4>Events</h4>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Event</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>ProgressChanged</code></td>
+                        <td>EventHandler&lt;MultiModelSeparationProgress&gt;</td>
+                        <td>Raised on every chunk, with per-model index, name, chunk count, and overall percentage</td>
+                    </tr>
+                    <tr>
+                        <td><code>ProcessingCompleted</code></td>
+                        <td>EventHandler&lt;MultiModelSeparationResult&gt;</td>
+                        <td>Raised when all models have finished and the averaged result is ready</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Data Classes</h3>
+
+            <h4>MultiModelSeparationOptions</h4>
+            <div class="code-block">
+                <div class="code-header">MultiModelSeparationOptions Class</div>
+                <pre><code class="language-csharp">public class MultiModelSeparationOptions
+{
+    // List of models to include in the averaging pipeline
+    public List&lt;MultiModelInfo&gt; Models { get; set; } = new();
+
+    // Output directory for final and intermediate files
+    public string OutputDirectory { get; set; } = "separated_multimodel";
+
+    // Enable GPU acceleration (CUDA on Windows/Linux, CoreML on macOS)
+    public bool EnableGPU { get; set; } = true;
+
+    // Overlap margin in samples between chunks (default: 44100 = 1 s)
+    public int Margin { get; set; } = 44100;
+
+    // Chunk size in seconds (0 = process entire file at once)
+    public int ChunkSizeSeconds { get; set; } = 15;
+
+    // Save individual model outputs to disk (useful for debugging)
+    public bool SaveAllIntermediateResults { get; set; } = false;
+}</code></pre>
+            </div>
+
+            <h4>MultiModelInfo</h4>
+            <div class="code-block">
+                <div class="code-header">MultiModelInfo Class</div>
+                <pre><code class="language-csharp">public class MultiModelInfo
+{
+    // Human-readable name shown in progress events and output filenames
+    public string Name { get; set; } = "Model";
+
+    // ONNX model file path (leave null/empty to use an embedded InternalModel)
+    public string? ModelPath { get; set; }
+
+    // Embedded model selection (Default, Best, Karaoke, …)
+    public InternalModel Model { get; set; } = InternalModel.None;
+
+    // FFT size for STFT (0 = auto-detect from ONNX metadata)
+    public int NFft { get; set; } = 6144;
+
+    // Time dimension as power of 2 (2^DimT frames)
+    public int DimT { get; set; } = 8;
+
+    // Frequency dimension
+    public int DimF { get; set; } = 2048;
+
+    // Disable noise reduction for this specific model
+    public bool DisableNoiseReduction { get; set; } = false;
+
+    // Save this model's individual output (independent of SaveAllIntermediateResults)
+    public bool SaveIntermediateOutput { get; set; } = false;
+
+    // Explicit output type — leave null for auto-detection
+    public ModelOutputType? OutputType { get; set; } = null;
+}</code></pre>
+            </div>
+
+            <h4>ModelOutputType Enum</h4>
+            <div class="code-block">
+                <div class="code-header">ModelOutputType Enum</div>
+                <pre><code class="language-csharp">public enum ModelOutputType
+{
+    // Model directly outputs the instrumental track.
+    // Vocals = Original − Instrumental
+    Instrumental,
+
+    // Model directly outputs the vocal track.
+    // Instrumental = Original − Vocals
+    Vocals
+}</code></pre>
+            </div>
+
+            <h4>MultiModelSeparationProgress</h4>
+            <div class="code-block">
+                <div class="code-header">MultiModelSeparationProgress Class</div>
+                <pre><code class="language-csharp">public class MultiModelSeparationProgress
+{
+    public string CurrentFile { get; set; }        // File being processed
+    public double OverallProgress { get; set; }    // 0–100 %
+    public string Status { get; set; }             // Human-readable step description
+    public int CurrentModelIndex { get; set; }     // 1-based model index
+    public int TotalModels { get; set; }           // Total number of models
+    public string CurrentModelName { get; set; }   // Name of the active model
+    public int ProcessedChunks { get; set; }       // Chunks done for current model
+    public int TotalChunks { get; set; }           // Total chunks for current model
+}</code></pre>
+            </div>
+
+            <h4>MultiModelSeparationResult</h4>
+            <div class="code-block">
+                <div class="code-header">MultiModelSeparationResult Class</div>
+                <pre><code class="language-csharp">public class MultiModelSeparationResult
+{
+    public string OutputPath { get; set; }         // Same as InstrumentalPath
+    public string VocalsPath { get; set; }         // Averaged vocals WAV file
+    public string InstrumentalPath { get; set; }   // Averaged instrumental WAV file
+    public Dictionary&lt;string, string&gt; IntermediatePaths { get; set; }  // Per-model outputs
+    public TimeSpan ProcessingTime { get; set; }   // Wall-clock processing duration
+    public int ModelsProcessed { get; set; }       // Number of models that contributed
+}</code></pre>
+            </div>
+
+            <h3>Usage Examples</h3>
+
+            <div>
+            <h4>Simple 2-Model Averaging</h4>
+            </div>            
+            <div class="code-block">
+                <div class="code-header">Using MultiModelExtensions Helper</div>
+                <pre><code class="language-csharp">using OwnaudioNET.Features.Vocalremover;
+
+// Convenience factory: creates a 2-model averaging pipeline
+using var separator = MultiModelExtensions.CreateSimplePipeline(
+    model1: InternalModel.Best,
+    model2: InternalModel.Karaoke,
+    outputDirectory: "output"
+);
+
+separator.ProgressChanged += (s, p) =>
+    Console.WriteLine($"[Model {p.CurrentModelIndex}/{p.TotalModels}] {p.OverallProgress:F1}%");
+
+separator.Initialize();
+var result = separator.Separate("song.mp3");
+
+Console.WriteLine($"Vocals:       {result.VocalsPath}");
+Console.WriteLine($"Instrumental: {result.InstrumentalPath}");
+Console.WriteLine($"Time:         {result.ProcessingTime}");</code></pre>
+            </div>
+
+            <h4>Triple-Model Averaging</h4>
+            <div class="code-block">
+                <div class="code-header">Using MultiModelExtensions.CreateTriplePipeline</div>
+                <pre><code class="language-csharp">using var separator = MultiModelExtensions.CreateTriplePipeline(
+    model1: InternalModel.Best,
+    model2: InternalModel.Default,
+    model3: InternalModel.Karaoke,
+    outputDirectory: "output_triple"
+);
+
+separator.Initialize();
+var result = separator.Separate("song.flac");
+
+// Final averaged outputs
+Console.WriteLine($"Vocals:       {result.VocalsPath}");
+Console.WriteLine($"Instrumental: {result.InstrumentalPath}");
+
+// Intermediate per-model outputs (saved because the helper enables it)
+foreach (var kv in result.IntermediatePaths)
+    Console.WriteLine($"  {kv.Key}: {kv.Value}");</code></pre>
+            </div>
+
+            <h4>Full Control with Custom Options</h4>
+            <div class="code-block">
+                <div class="code-header">Manual MultiModelSeparationOptions</div>
+                <pre><code class="language-csharp">var options = new MultiModelSeparationOptions
+{
+    Models = new List&lt;MultiModelInfo&gt;
+    {
+        new MultiModelInfo
+        {
+            Name = "Step1_BestQuality",
+            Model = InternalModel.Best,
+            NFft = 6144, DimT = 8, DimF = 2048,
+            DisableNoiseReduction = false,
+            SaveIntermediateOutput = true
+        },
+        new MultiModelInfo
+        {
+            Name = "Step2_Karaoke",
+            Model = InternalModel.Karaoke,
+            NFft = 6144, DimT = 8, DimF = 2048,
+            DisableNoiseReduction = true
+        }
+    },
+    OutputDirectory = "output_custom",
+    EnableGPU = true,
+    ChunkSizeSeconds = 15,
+    Margin = 44100,
+    SaveAllIntermediateResults = true
+};
+
+using var separator = new MultiModelAudioSeparator(options);
+
+separator.ProgressChanged += (s, p) =>
+{
+    Console.Write($"\r[{p.CurrentModelName}] chunk {p.ProcessedChunks}/{p.TotalChunks} ({p.OverallProgress:F1}%)");
+};
+
+separator.Initialize();
+var result = separator.Separate("input.wav");</code></pre>
+            </div>
+
+            <h4>Mixed OutputType — Vocal + Instrumental Models</h4>
+            <div class="code-block">
+                <div class="code-header">Combining Models with Different Output Stems</div>
+                <pre><code class="language-csharp">var options = new MultiModelSeparationOptions
+{
+    Models = new List&lt;MultiModelInfo&gt;
+    {
+        new MultiModelInfo
+        {
+            Name = "VocalModel",
+            ModelPath = @"models/vocal_model.onnx",
+            OutputType = ModelOutputType.Vocals       // outputs vocal track directly
+        },
+        new MultiModelInfo
+        {
+            Name = "InstrumentalModel",
+            ModelPath = @"models/instrumental_model.onnx",
+            OutputType = ModelOutputType.Instrumental // outputs instrumental track directly
+        }
+    },
+    OutputDirectory = "output_mixed",
+    EnableGPU = true
+};
+
+// The averaging pipeline:
+// - Vocal complement from model 2: original − instrumental
+// - Instrumental complement from model 1: original − vocals
+// - Final vocals:       (V₁ + V₂) / 2
+// - Final instrumental: (I₁ + I₂) / 2
+
+using var separator = new MultiModelAudioSeparator(options);
+separator.Initialize();
+var result = separator.Separate("song.mp3");</code></pre>
+            </div>
+
+            <h4>Custom ONNX Model Files with Auto-Detection</h4>
+            <div class="code-block">
+                <div class="code-header">External ONNX Models — OutputType Auto-Detected</div>
+                <pre><code class="language-csharp">// OutputType is inferred from model filename:
+//   "Voc_FT.onnx"   → contains "Voc"  → Vocals
+//   "Inst_HQ.onnx"  → contains "Inst" → Instrumental
+var options = new MultiModelSeparationOptions
+{
+    Models = new List&lt;MultiModelInfo&gt;
+    {
+        new MultiModelInfo { Name = "Voc_FT",  ModelPath = @"models/Voc_FT.onnx" },
+        new MultiModelInfo { Name = "Inst_HQ", ModelPath = @"models/Inst_HQ.onnx" }
+    },
+    OutputDirectory = "output_custom_files",
+    EnableGPU = true
+};
+
+using var separator = new MultiModelAudioSeparator(options);
+separator.Initialize();
+var result = separator.Separate("song.wav");</code></pre>
+            </div>
+
+            <h3>Auto-Detection of OutputType</h3>
+            <p>
+                When <code>MultiModelInfo.OutputType</code> is left as <code>null</code>, the system uses a
+                three-strategy detection approach:
+            </p>
+            <ol>
+                <li><strong>ONNX output metadata:</strong> Inspects the model's output node names for keywords such as
+                    <em>vocal</em>, <em>voice</em>, <em>instrumental</em>, <em>karaoke</em>, etc.</li>
+                <li><strong>Model name / file path:</strong> Scans <code>MultiModelInfo.Name</code> and
+                    <code>ModelPath</code> for the same keywords.</li>
+                <li><strong>InternalModel enum name:</strong> Falls back to the enum value name.</li>
+            </ol>
+            <p>If none of the strategies yields a conclusive result, <code>Instrumental</code> is used as the safe
+                default.</p>
 
             <h2 id="configuration">Advanced Configuration</h2>
 

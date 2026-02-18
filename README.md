@@ -62,6 +62,7 @@ OwnAudioSharp simplifies audio application development in C# by providing a comp
 - **Chord Detection** - Detect chords from audio files for music analysis and transcription
 - **Automatic Mastering** - Master audio based on reference tracks or built-in presets
 - **Vocal & Music Separation** - Separate audio into stems: vocals + music, or drums + bass + music + vocals
+- **Multi-Model Audio Pipeline** - Chain multiple separation models for advanced workflows (vocal extraction → enhancement → cleanup)
 - **VST3 Plugin Support** - Load and use VST3 audio effect plugins with cross-platform editor GUI
 
 ### 🎛️ **SmartMaster** - Intelligent Audio Mastering Chain with Auto-Calibration
@@ -82,11 +83,25 @@ Reference-based mastering that analyzes your favorite tracks and applies their s
 ### 🎤 **Vocal Remover** - AI Vocal Separation with HTDemucs
 State-of-the-art vocal and instrumental track separation using ONNX neural networks. Features the advanced **HTDemucs** model for professional-grade 4-stem separation (vocals, drums, bass, other) with margin-trimming technology to eliminate chunk boundary artifacts. Multiple quality models available including `htdemucs` (4-stem), `default`, `best`, and `karaoke` models. Provides professional-grade stem isolation for remixing, karaoke, and audio analysis.
 
+<div align="center">
+  <a href="https://huggingface.co/ModernMube/HTDemucs_onnx/tree/main">
+    <img src="https://img.shields.io/badge/Download_Models-OwnAudioSharp_Vocal_Remove_models-red?style=for-the-badge" alt="Download" width="400">
+  </a>
+</div>
+
 **HTDemucs Features:**
 - **4-Stem Separation**: Isolate vocals, drums, bass, and other instruments independently
 - **Margin-Trimming**: Advanced processing eliminates volume fluctuations at chunk boundaries
 - **High Quality**: Superior separation quality using hybrid transformer architecture
 - **Example Code**: See [VocalRemover Example](OwnAudio/Examples/Ownaudio.Example.HTDemucs/) for complete implementation
+
+**🔗 Multi-Model Pipeline (NEW):**
+Run multiple UVR MDX models in parallel and average their outputs for superior separation quality. Each model independently processes the original audio, then the vocals and instrumentals are averaged across all models — combining their individual strengths into a single, higher-quality result.
+- **Parallel Averaging**: All models process the original audio independently, results are averaged
+- **Per-Model Output Type**: Configure each model as `Vocals` or `Instrumental` output for flexible mixing
+- **Intermediate Saves**: Optionally save each model's individual output for comparison and debugging
+- **Custom Workflows**: Combine any UVR MDX models to reduce artifacts and improve separation quality
+- **Example Code**: See [MultiModel Separator Example](OwnAudio/Examples/Ownaudio.Example.MultimodelSeparator/) for complete implementation
 
 > [!IMPORTANT]
 > **HTDemucs Model Setup**
