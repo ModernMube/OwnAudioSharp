@@ -22,11 +22,6 @@
     <AndroidUseInterpreter>false</AndroidUseInterpreter>
   </PropertyGroup>
 
-  <!-- Platform-independent logger -->
-  <ItemGroup>
-  <ProjectReference Include="..\..\Logger\Logger.csproj" />
-  </ItemGroup>
-
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <Optimize>true</Optimize>
     <DebugType>portable</DebugType>

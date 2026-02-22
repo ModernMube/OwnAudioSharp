@@ -30,11 +30,6 @@
     <DefineConstants Condition="$(TargetFramework.Contains('ios'))">$(DefineConstants);IOS</DefineConstants>
   </PropertyGroup>
 
-  <!-- Platform-independent logger -->
-  <ItemGroup>
-  <ProjectReference Include="..\..\Logger\Logger.csproj" />
-  </ItemGroup>
-
   <!-- Android-specific settings -->
   <PropertyGroup Condition="$(TargetFramework.Contains('android'))">
     <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
