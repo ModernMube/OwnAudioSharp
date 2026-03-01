@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Avalonia.Controls;
 using OwnVST3Host;
 using OwnVST3Host.NativeWindow;
 

@@ -33,7 +33,7 @@
 
   <!-- Common dependencies (including Avalonia for mobile) -->
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.3.11" />
+    <PackageReference Include="Avalonia" Version="11.3.12" />
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
     <PackageReference Include="Melanchall.DryWetMidi" Version="8.0.3" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.2" />

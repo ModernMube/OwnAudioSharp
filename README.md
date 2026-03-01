@@ -165,15 +165,57 @@ Real-time and offline chord recognition supporting major, minor, diminished, aug
 
 ## 📦 Installation
 
-### NuGet Package Manager
+Three packages are available depending on your target platform and feature requirements:
+
+| Package | Platforms | AI/ML Features | Size |
+|---|---|---|---|
+| `OwnAudioSharp` | Windows, Linux, macOS | ✅ Full | ~290 MB |
+| `OwnAudioSharp.Mobile` | Android, iOS | ✅ Full | ~90 MB |
+| `OwnAudioSharp.Basic` | Windows, Linux, macOS, Android, iOS | ❌ None | < 5 MB |
+
+---
+
+### OwnAudioSharp
+> Full-featured desktop audio library with AI-powered vocal removal, chord detection, and audio matchering for Windows, Linux, and macOS.
+
 ```powershell
+# NuGet Package Manager
 Install-Package OwnAudioSharp
 ```
-
-### .NET CLI
 ```bash
+# .NET CLI
 dotnet add package OwnAudioSharp
 ```
+
+---
+
+### OwnAudioSharp.Mobile
+> Full-featured mobile audio library with AI-powered vocal removal, chord detection, and audio matchering for Android and iOS.
+
+```powershell
+# NuGet Package Manager
+Install-Package OwnAudioSharp.Mobile
+```
+```bash
+# .NET CLI
+dotnet add package OwnAudioSharp.Mobile
+```
+
+---
+
+### OwnAudioSharp.Basic
+> Lightweight cross-platform audio library for desktop and mobile — without AI/ML features, ideal for apps that only need playback, recording, mixing, and effects.
+
+```powershell
+# NuGet Package Manager
+Install-Package OwnAudioSharp.Basic
+```
+```bash
+# .NET CLI
+dotnet add package OwnAudioSharp.Basic
+```
+
+---
 
 ### Requirements
 - .NET 9.0 or later
