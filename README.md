@@ -171,7 +171,7 @@ Three packages are available depending on your target platform and feature requi
 |---|---|---|---|
 | `OwnAudioSharp` | Windows, Linux, macOS | ✅ Full | ~290 MB |
 | `OwnAudioSharp.Mobile` | Android, iOS | ✅ Full | ~90 MB |
-| `OwnAudioSharp.Basic` | Windows, Linux, macOS, Android, iOS | ❌ None | < 5 MB |
+| `OwnAudioSharp.Basic` | Windows, Linux, macOS, Android, iOS | ❌ None | < 7 MB |
 
 ---
 
