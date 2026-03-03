@@ -188,14 +188,14 @@ public sealed partial class AudioMixer
                     if (result.FramesRead > 0)
                     {
                         // Check if source has custom channel mapping
-                        if (source is FileSource fs && fs.OutputChannelMapping != null)
+                        if (source is BaseAudioSource bs && bs.OutputChannelMapping != null)
                         {
-                            int sourceSampleCount = result.FramesRead * fs.Config.Channels;
+                            int sourceSampleCount = result.FramesRead * bs.Config.Channels;
                             MixIntoBufferSelective(
                                 mixBuffer,
                                 sourceBuffer,
                                 sourceSampleCount,
-                                fs.OutputChannelMapping,
+                                bs.OutputChannelMapping,
                                 _config.Channels);
                         }
                         else
@@ -237,14 +237,14 @@ public sealed partial class AudioMixer
                     if (framesRead > 0)
                     {
                         // Check if source has custom channel mapping
-                        if (source is FileSource fs && fs.OutputChannelMapping != null)
+                        if (source is BaseAudioSource bs && bs.OutputChannelMapping != null)
                         {
-                            int sourceSampleCount = framesRead * fs.Config.Channels;
+                            int sourceSampleCount = framesRead * bs.Config.Channels;
                             MixIntoBufferSelective(
                                 mixBuffer,
                                 sourceBuffer,
                                 sourceSampleCount,
-                                fs.OutputChannelMapping,
+                                bs.OutputChannelMapping,
                                 _config.Channels);
                         }
                         else
@@ -312,14 +312,14 @@ public sealed partial class AudioMixer
                     if (success && result.FramesRead > 0)
                     {
                         // Check if source has custom channel mapping
-                        if (source is FileSource fs && fs.OutputChannelMapping != null)
+                        if (source is BaseAudioSource bs && bs.OutputChannelMapping != null)
                         {
-                            int sourceSampleCount = result.FramesRead * fs.Config.Channels;
+                            int sourceSampleCount = result.FramesRead * bs.Config.Channels;
                             MixIntoBufferSelective(
                                 mixBuffer,
                                 sourceBuffer,
                                 sourceSampleCount,
-                                fs.OutputChannelMapping,
+                                bs.OutputChannelMapping,
                                 _config.Channels);
                         }
                         else
@@ -344,14 +344,14 @@ public sealed partial class AudioMixer
                     if (framesRead > 0)
                     {
                         // Check if source has custom channel mapping
-                        if (source is FileSource fs && fs.OutputChannelMapping != null)
+                        if (source is BaseAudioSource bs && bs.OutputChannelMapping != null)
                         {
-                            int sourceSampleCount = framesRead * fs.Config.Channels;
+                            int sourceSampleCount = framesRead * bs.Config.Channels;
                             MixIntoBufferSelective(
                                 mixBuffer,
                                 sourceBuffer,
                                 sourceSampleCount,
-                                fs.OutputChannelMapping,
+                                bs.OutputChannelMapping,
                                 _config.Channels);
                         }
                         else

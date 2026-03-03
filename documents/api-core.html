@@ -37,6 +37,7 @@
                 <li><a href="#interfaces">Interfaces</a></li>
                 <li><a href="#factories">Factories</a></li>
                 <li><a href="#configuration">Configuration</a></li>
+                <li><a href="#channel-routing">Channel Routing</a></li>
                 <li><a href="#enums">Enumerations</a></li>
                 <li><a href="#common">Common Components</a></li>
             </ul>
@@ -469,13 +470,15 @@ Console.WriteLine($"Detected format: {format}");</code></pre>
                         <td><code>InputChannelSelectors</code></td>
                         <td>int[]?</td>
                         <td>null</td>
-                        <td>ASIO-specific input channel selection (null for sequential mapping)</td>
+                        <td>Select which physical input channels to record from. Works on all backends. See <a
+                                href="#channel-routing">Channel Routing</a>.</td>
                     </tr>
                     <tr>
                         <td><code>OutputChannelSelectors</code></td>
                         <td>int[]?</td>
                         <td>null</td>
-                        <td>ASIO-specific output channel selection (null for sequential mapping)</td>
+                        <td>Select which physical output channels to play back on. Works on all backends. See <a
+                                href="#channel-routing">Channel Routing</a>.</td>
                     </tr>
                 </tbody>
             </table>
@@ -565,29 +568,122 @@ if (config2.Validate())
             </table>
 
             <div class="code-block">
-                <div class="code-header">Device Enumeration</div>
+                <div class="code-header">Device Enumeration &amp; Channel Routing</div>
                 <pre><code class="language-csharp">using var engine = AudioEngineFactory.CreateDefault();
 
-// List output devices
+// List output devices and their channel counts
 var devices = engine.GetOutputDevices();
 foreach (var device in devices)
 {
     Console.WriteLine($"Device: {device.Name}");
     Console.WriteLine($"  ID: {device.DeviceId}");
     Console.WriteLine($"  Default: {device.IsDefault}");
-    Console.WriteLine($"  State: {device.State}");
     Console.WriteLine($"  Max Input Channels: {device.MaxInputChannels}");
     Console.WriteLine($"  Max Output Channels: {device.MaxOutputChannels}");
 }
 
-// ASIO example with channel selection
+// Route stereo output to physical channels 4 and 5 (e.g. second pair of a multi-output interface)
 var config = new AudioConfig
+{
+    Channels = 2,
+    OutputChannelSelectors = new[] { 4, 5 }  // physical channel indices (0-based)
+};
+using var engine2 = AudioEngineFactory.Create(config);
+
+// ASIO with native hardware channel selection
+var asioConfig = new AudioConfig
 {
     HostType = EngineHostType.ASIO,
     Channels = 2,
-    OutputChannelSelectors = new int[] { 4, 5 }  // Use channels 4 and 5
+    OutputChannelSelectors = new[] { 4, 5 }  // native ASIO channel selectors
 };
-using var asioEngine = AudioEngineFactory.Create(config);</code></pre>
+using var asioEngine = AudioEngineFactory.Create(asioConfig);</code></pre>
+            </div>
+
+            <h2 id="channel-routing">Channel Routing</h2>
+            <p>
+                Channel routing lets you direct audio to specific physical output channels on multi-output devices
+                (e.g. USB audio interfaces, ASIO cards, DAW-style monitor routing).
+                Set <code>OutputChannelSelectors</code> to an array of physical channel indices you want to use.
+                The array length <strong>must match</strong> the <code>Channels</code> property.
+            </p>
+
+            <div class="alert alert-info">
+                <strong>🔀 Universal Support</strong>
+                Channel routing works on <strong>all backends and platforms</strong> — not just ASIO.
+                For PortAudio + ASIO, native hardware channel selection is used (zero overhead).
+                For all other backends (WASAPI, CoreAudio, ALSA, MiniAudio), software routing
+                is applied inside the audio callback with no additional latency.
+            </div>
+
+            <h4>Routing Method by Backend</h4>
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Engine / Backend</th>
+                        <th>Platform</th>
+                        <th>Routing Method</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>PortAudio + ASIO</td>
+                        <td>Windows</td>
+                        <td>Native hardware (<code>PaAsioStreamInfo</code>)</td>
+                    </tr>
+                    <tr>
+                        <td>PortAudio + WASAPI</td>
+                        <td>Windows</td>
+                        <td>Software routing in callback</td>
+                    </tr>
+                    <tr>
+                        <td>MiniAudio</td>
+                        <td>Windows / macOS / Linux / Android / iOS</td>
+                        <td>Software routing in callback</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h4>How It Works</h4>
+            <p>When <code>OutputChannelSelectors</code> is set, the engine internally opens the device with
+                <code>max(selectors)+1</code> physical channels. The audio callback maps
+                each logical channel to its designated physical channel, leaving others silent.
+            </p>
+
+            <div class="code-block">
+                <div class="code-header">Channel Routing – Stereo + Metronome on Separate Outputs</div>
+                <pre><code class="language-csharp">// 8-channel interface: stereo music on ch 0-1, click track on ch 4-5
+// Logical channels:  0   1   2   3
+// Physical channels: 0   1  (skip 2,3)  4   5
+var config = new AudioConfig
+{
+    SampleRate = 48000,
+    Channels   = 4,                             // 4 logical channels
+    OutputChannelSelectors = new[] { 0, 1, 4, 5 } // mapped to physical 0,1,4,5
+};
+
+using var engine = AudioEngineFactory.Create(config);
+engine.Start();
+
+// Build an interleaved 4-channel buffer per frame:
+// [frame0_ch0, frame0_ch1, frame0_ch2, frame0_ch3, frame1_ch0, ...]
+var buffer = new float[frameCount * 4];
+for (int i = 0; i &lt; frameCount; i++)
+{
+    buffer[i * 4 + 0] = musicLeft[i];     // → physical ch 0
+    buffer[i * 4 + 1] = musicRight[i];    // → physical ch 1
+    buffer[i * 4 + 2] = clickLeft[i];     // → physical ch 4
+    buffer[i * 4 + 3] = clickRight[i];    // → physical ch 5
+}
+
+engine.Send(buffer.AsSpan());</code></pre>
+            </div>
+
+            <div class="alert alert-warning">
+                <strong>⚠️ Validation Rule</strong>
+                The length of <code>OutputChannelSelectors</code> must equal the <code>Channels</code>
+                property value. <code>AudioConfig.Validate()</code> returns <code>false</code> if they mismatch
+                or if any selector index is negative.
             </div>
 
             <h3>AudioStreamInfo</h3>

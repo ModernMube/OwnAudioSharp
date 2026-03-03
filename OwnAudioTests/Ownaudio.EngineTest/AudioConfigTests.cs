@@ -289,6 +289,129 @@ namespace Ownaudio.EngineTest
         }
 
         [TestMethod]
+        public void Validate_OutputChannelSelectors_MatchingChannels_ShouldReturnTrue()
+        {
+            // Arrange - stereo output routed to physical channels 4 and 5
+            var config = new AudioConfig
+            {
+                SampleRate = 48000,
+                Channels = 2,
+                BufferSize = 512,
+                EnableOutput = true,
+                OutputChannelSelectors = new[] { 4, 5 }
+            };
+
+            // Act
+            bool isValid = config.Validate();
+
+            // Assert
+            Assert.IsTrue(isValid, "OutputChannelSelectors with matching Channels count should be valid");
+        }
+
+        [TestMethod]
+        public void Validate_OutputChannelSelectors_MismatchedLength_ShouldReturnFalse()
+        {
+            // Arrange - Channels=2 but only 1 selector
+            var config = new AudioConfig
+            {
+                SampleRate = 48000,
+                Channels = 2,
+                BufferSize = 512,
+                EnableOutput = true,
+                OutputChannelSelectors = new[] { 4 }
+            };
+
+            // Act
+            bool isValid = config.Validate();
+
+            // Assert
+            Assert.IsFalse(isValid, "OutputChannelSelectors length must match Channels count");
+        }
+
+        [TestMethod]
+        public void Validate_OutputChannelSelectors_NegativeIndex_ShouldReturnFalse()
+        {
+            // Arrange - negative channel index is invalid
+            var config = new AudioConfig
+            {
+                SampleRate = 48000,
+                Channels = 2,
+                BufferSize = 512,
+                EnableOutput = true,
+                OutputChannelSelectors = new[] { -1, 5 }
+            };
+
+            // Act
+            bool isValid = config.Validate();
+
+            // Assert
+            Assert.IsFalse(isValid, "Negative channel selector index should fail validation");
+        }
+
+        [TestMethod]
+        public void Validate_InputChannelSelectors_MatchingChannels_ShouldReturnTrue()
+        {
+            // Arrange - stereo input routing from physical channels 2 and 3
+            var config = new AudioConfig
+            {
+                SampleRate = 48000,
+                Channels = 2,
+                BufferSize = 512,
+                EnableInput = true,
+                EnableOutput = false,
+                InputChannelSelectors = new[] { 2, 3 }
+            };
+
+            // Act
+            bool isValid = config.Validate();
+
+            // Assert
+            Assert.IsTrue(isValid, "InputChannelSelectors with matching Channels count should be valid");
+        }
+
+        [TestMethod]
+        public void Validate_InputChannelSelectors_MismatchedLength_ShouldReturnFalse()
+        {
+            // Arrange - Channels=2 but only 1 selector
+            var config = new AudioConfig
+            {
+                SampleRate = 48000,
+                Channels = 2,
+                BufferSize = 512,
+                EnableInput = true,
+                EnableOutput = false,
+                InputChannelSelectors = new[] { 2 }
+            };
+
+            // Act
+            bool isValid = config.Validate();
+
+            // Assert
+            Assert.IsFalse(isValid, "InputChannelSelectors length must match Channels count");
+        }
+
+        [TestMethod]
+        public void Validate_InputChannelSelectors_NegativeIndex_ShouldReturnFalse()
+        {
+            // Arrange - negative channel index is invalid
+            var config = new AudioConfig
+            {
+                SampleRate = 48000,
+                Channels = 2,
+                BufferSize = 512,
+                EnableInput = true,
+                EnableOutput = false,
+                InputChannelSelectors = new[] { -1, 3 }
+            };
+
+            // Act
+            bool isValid = config.Validate();
+
+            // Assert
+            Assert.IsFalse(isValid, "Negative input channel selector index should fail validation");
+        }
+
+        [TestMethod]
         public void CommonSampleRates_ShouldValidate()
         {
             // Arrange

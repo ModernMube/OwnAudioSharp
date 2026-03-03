@@ -168,6 +168,7 @@ namespace Ownaudio.Native
                 _callbackHandle.Free();
 
             // Initialize ring buffers if not already done or if size changed
+            // Ring buffers always use LOGICAL channel count (application-facing)
             int ringBufferSize = _config.BufferSize * _config.Channels * 4; // 4x buffer
             if (_outputRing == null || _outputRing.Capacity != ringBufferSize)
                 _outputRing = new LockFreeRingBuffer<float>(ringBufferSize);
@@ -192,8 +193,18 @@ namespace Ownaudio.Native
                 }
             }
 
+            // Determine whether to use ASIO-native channel selectors or software routing.
+            // ASIO native: use PaAsioStreamInfo with channel selectors (existing path).
+            // Non-ASIO:    open enough physical channels; software routing is done in the callback.
+            bool isAsio = _selectedHostApiType == PaHostApiTypeId.paASIO;
+
+            // For non-ASIO: use physical channel count so the device stream covers all selected channels
+            int outputChannelCount = (!isAsio && _config.OutputChannelSelectors != null && _config.OutputChannelSelectors.Length > 0)
+                ? _physicalOutputChannels
+                : _config.Channels;
+
             // Check if we need ASIO-specific configuration
-            bool useAsioChannelSelectors = _selectedHostApiType == PaHostApiTypeId.paASIO &&
+            bool useAsioChannelSelectors = isAsio &&
                                            (_config.OutputChannelSelectors != null && _config.OutputChannelSelectors.Length > 0);
 
             // Prepare ASIO stream info for output if needed
@@ -208,7 +219,7 @@ namespace Ownaudio.Native
             var outputParams = new PaStreamParameters
             {
                 device = _activeOutputDeviceIndex,
-                channelCount = _config.Channels,
+                channelCount = outputChannelCount,
                 sampleFormat = PaSampleFormat.paFloat32,
                 suggestedLatency = outputLatency,
                 hostApiSpecificStreamInfo = outputAsioInfoPtr
@@ -229,8 +240,13 @@ namespace Ownaudio.Native
                     inputLatency = devInfo.defaultLowInputLatency;
                 }
 
+                // For non-ASIO: use physical input channel count
+                int inputChannelCount = (!isAsio && _config.InputChannelSelectors != null && _config.InputChannelSelectors.Length > 0)
+                    ? _physicalInputChannels
+                    : _config.Channels;
+
                 // Check if we need ASIO-specific configuration for input
-                bool useAsioInputChannelSelectors = _selectedHostApiType == PaHostApiTypeId.paASIO &&
+                bool useAsioInputChannelSelectors = isAsio &&
                                                     (_config.InputChannelSelectors != null && _config.InputChannelSelectors.Length > 0);
 
                 if (useAsioInputChannelSelectors)
@@ -241,7 +257,7 @@ namespace Ownaudio.Native
                 var inputParams = new PaStreamParameters
                 {
                     device = _activeInputDeviceIndex,
-                    channelCount = _config.Channels,
+                    channelCount = inputChannelCount,
                     sampleFormat = PaSampleFormat.paFloat32,
                     suggestedLatency = inputLatency,
                     hostApiSpecificStreamInfo = inputAsioInfoPtr
@@ -298,59 +314,106 @@ namespace Ownaudio.Native
         {
             try
             {
-                int sampleCount = (int)frameCount * _config.Channels;
-                Span<float> outputSpan = new Span<float>(output, sampleCount);
+                bool isAsio = _selectedHostApiType == PaHostApiTypeId.paASIO;
+                int logicalChannels = _config.Channels;
+                int physOutChannels = _physicalOutputChannels;
+                int physInChannels = _physicalInputChannels;
+
+                // Software routing is only applied for non-ASIO backends.
+                // ASIO uses native PaAsioStreamInfo channel selectors.
+                bool useOutputRouting = !isAsio
+                    && _config.OutputChannelSelectors != null && _config.OutputChannelSelectors.Length > 0
+                    && physOutChannels != logicalChannels;
+                bool useInputRouting = !isAsio
+                    && _config.InputChannelSelectors != null && _config.InputChannelSelectors.Length > 0
+                    && physInChannels != logicalChannels;
+
+                int logicalSampleCount = (int)frameCount * logicalChannels;
+                int physicalSampleCount = (int)frameCount * physOutChannels;
 
                 // Check if we're in pre-buffering state
                 if (_isBuffering == 1)
                 {
-                    // Check if buffer has enough data to start playback
                     int availableSamples = _outputRing.AvailableRead;
                     if (availableSamples >= _prebufferThreshold)
                     {
-                        // Buffer is full enough, disable buffering and start playback
                         _isBuffering = 0;
                     }
                     else
                     {
-                        // Still buffering - output silence and wait for more data
-                        outputSpan.Clear();
+                        // Still buffering - output silence
+                        new Span<float>(output, physicalSampleCount).Clear();
 
                         // Handle input even during buffering
                         if (_config.EnableInput && input != null)
                         {
-                            Span<float> inputSpan = new Span<float>(input, sampleCount);
-                            _inputRing.Write(inputSpan);
+                            if (useInputRouting)
+                            {
+                                Span<float> logIn = stackalloc float[logicalSampleCount];
+                                RouteInputChannels(input, logIn, (int)frameCount, physInChannels, logicalChannels, _config.InputChannelSelectors!);
+                                _inputRing.Write(logIn);
+                            }
+                            else
+                            {
+                                _inputRing.Write(new Span<float>(input, logicalSampleCount));
+                            }
                         }
 
                         return PaStreamCallbackResult.paContinue;
                     }
                 }
 
-                // Normal playback mode - Zero-copy: read directly to output
-                int samplesRead = _outputRing.Read(outputSpan);
-
-                if (samplesRead > 0)
+                // Output playback
+                if (useOutputRouting)
                 {
-                    // Fill remaining samples with silence if underrun
-                    if (samplesRead < sampleCount)
-                    {
-                        outputSpan.Slice(samplesRead).Clear();
-                    }
+                    Span<float> logicalBuf = stackalloc float[logicalSampleCount];
+                    int samplesRead = _outputRing.Read(logicalBuf);
 
-                    _isActive = 1;
+                    if (samplesRead > 0)
+                    {
+                        if (samplesRead < logicalSampleCount)
+                            logicalBuf.Slice(samplesRead).Clear();
+
+                        RouteOutputChannels((float*)output, logicalBuf, (int)frameCount,
+                            physOutChannels, logicalChannels, _config.OutputChannelSelectors!);
+                        _isActive = 1;
+                    }
+                    else
+                    {
+                        new Span<float>(output, physicalSampleCount).Clear();
+                    }
                 }
                 else
                 {
-                    // Underrun - output silence
-                    outputSpan.Clear();
+                    // No software routing - direct path
+                    Span<float> outputSpan = new Span<float>(output, logicalSampleCount);
+                    int samplesRead = _outputRing.Read(outputSpan);
+
+                    if (samplesRead > 0)
+                    {
+                        if (samplesRead < logicalSampleCount)
+                            outputSpan.Slice(samplesRead).Clear();
+                        _isActive = 1;
+                    }
+                    else
+                    {
+                        outputSpan.Clear();
+                    }
                 }
 
-                // Handle input if enabled - Zero-copy: write directly from input
+                // Input recording
                 if (_config.EnableInput && input != null)
                 {
-                    Span<float> inputSpan = new Span<float>(input, sampleCount);
-                    _inputRing.Write(inputSpan);
+                    if (useInputRouting)
+                    {
+                        Span<float> logIn = stackalloc float[logicalSampleCount];
+                        RouteInputChannels(input, logIn, (int)frameCount, physInChannels, logicalChannels, _config.InputChannelSelectors!);
+                        _inputRing.Write(logIn);
+                    }
+                    else
+                    {
+                        _inputRing.Write(new Span<float>(input, logicalSampleCount));
+                    }
                 }
 
                 return PaStreamCallbackResult.paContinue;

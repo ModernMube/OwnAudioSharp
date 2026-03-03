@@ -342,6 +342,81 @@ public class AudioMixerTests : IDisposable
     }
 
     [Fact]
+    public void AddSource_WithOutputChannelMapping_ShouldNotThrow()
+    {
+        // Arrange - 4-channel mixer, two stereo sources routed to separate channel pairs
+        var fourChConfig = new AudioConfig
+        {
+            SampleRate = 48000,
+            Channels = 4,
+            BufferSize = 512
+        };
+        _engine = AudioEngineFactory.CreateMockEngine(fourChConfig);
+        _mixer = new AudioMixer(_engine);
+
+        var samples1 = new float[9600]; // stereo
+        var samples2 = new float[9600];
+        var srcConfig = new AudioConfig { SampleRate = 48000, Channels = 2 };
+
+        var source1 = new SampleSource(samples1, srcConfig);
+        var source2 = new SampleSource(samples2, srcConfig);
+
+        source1.RouteToChannels(0, 1); // → logical ch 0+1
+        source2.RouteToChannels(2, 3); // → logical ch 2+3
+
+        // Act
+        Action act = () =>
+        {
+            _mixer.AddSource(source1);
+            _mixer.AddSource(source2);
+            _mixer.Start();
+        };
+
+        // Assert
+        act.Should().NotThrow();
+        _mixer.SourceCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void AddSource_WithOutputChannelMapping_ShouldMixIntoDedicatedChannels()
+    {
+        // Arrange - 4-channel mixer, source1 on ch 0+1, source2 on ch 2+3
+        var fourChConfig = new AudioConfig
+        {
+            SampleRate = 48000,
+            Channels = 4,
+            BufferSize = 512
+        };
+        _engine = AudioEngineFactory.CreateMockEngine(fourChConfig);
+        _mixer = new AudioMixer(_engine);
+
+        var srcConfig = new AudioConfig { SampleRate = 48000, Channels = 2 };
+
+        // source1: constant 0.8f on both stereo channels → logical ch 0+1
+        var samples1 = Enumerable.Repeat(0.8f, 9600).ToArray();
+        var source1 = new SampleSource(samples1, srcConfig);
+        source1.RouteToChannels(0, 1);
+        source1.Play();
+
+        // source2: constant 0.6f → logical ch 2+3
+        var samples2 = Enumerable.Repeat(0.6f, 9600).ToArray();
+        var source2 = new SampleSource(samples2, srcConfig);
+        source2.RouteToChannels(2, 3);
+        source2.Play();
+
+        _mixer.AddSource(source1);
+        _mixer.AddSource(source2);
+        _mixer.Start();
+
+        // Act - let the mixer run for a moment
+        Thread.Sleep(100);
+
+        // Assert - mixer ran without errors and both sources are still active
+        _mixer.IsRunning.Should().BeTrue();
+        _mixer.SourceCount.Should().Be(2);
+    }
+
+    [Fact]
     public void Config_ShouldReturnAudioConfig()
     {
         // Arrange

@@ -35,7 +35,7 @@
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>OwnAudioSharp.Basic</PackageId>
-    <Version>2.6.1</Version>
+    <Version>2.6.5</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for desktop (Windows, Linux, macOS) and mobile (Android, iOS) - Basic edition without AI/ML features (no VocalRemover, ChordDetect, Matchering)</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;android;ios;desktop;mobile;sound;multitrack</PackageTags>

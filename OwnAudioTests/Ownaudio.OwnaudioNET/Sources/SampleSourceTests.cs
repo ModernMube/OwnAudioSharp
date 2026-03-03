@@ -357,6 +357,79 @@ public class SampleSourceTests : IDisposable
     }
 
     [Fact]
+    public void OutputChannelMapping_SetValidMapping_ShouldBeStored()
+    {
+        // Arrange
+        var samples = new float[4800];
+        _source = new SampleSource(samples, _testConfig); // Channels = 2
+
+        // Act
+        _source.OutputChannelMapping = new[] { 2, 3 };
+
+        // Assert
+        _source.OutputChannelMapping.Should().BeEquivalentTo(new[] { 2, 3 });
+    }
+
+    [Fact]
+    public void OutputChannelMapping_SetNull_ShouldClearMapping()
+    {
+        // Arrange
+        var samples = new float[4800];
+        _source = new SampleSource(samples, _testConfig);
+        _source.OutputChannelMapping = new[] { 0, 1 };
+
+        // Act
+        _source.OutputChannelMapping = null;
+
+        // Assert
+        _source.OutputChannelMapping.Should().BeNull();
+    }
+
+    [Fact]
+    public void OutputChannelMapping_SetInvalidLength_ShouldThrowArgumentException()
+    {
+        // Arrange - Config.Channels = 2, mapping length = 3
+        var samples = new float[4800];
+        _source = new SampleSource(samples, _testConfig);
+
+        // Act
+        Action act = () => _source.OutputChannelMapping = new[] { 0, 1, 2 };
+
+        // Assert
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*OutputChannelMapping*");
+    }
+
+    [Fact]
+    public void RouteToChannels_ShouldSetMappingAndReturnThis()
+    {
+        // Arrange
+        var samples = new float[4800];
+        _source = new SampleSource(samples, _testConfig); // Channels = 2
+
+        // Act
+        var returned = _source.RouteToChannels(4, 5);
+
+        // Assert
+        _source.OutputChannelMapping.Should().BeEquivalentTo(new[] { 4, 5 });
+        returned.Should().BeSameAs(_source, "RouteToChannels should return this for fluent chaining");
+    }
+
+    [Fact]
+    public void RouteToChannels_WithInvalidLength_ShouldThrowArgumentException()
+    {
+        // Arrange
+        var samples = new float[4800];
+        _source = new SampleSource(samples, _testConfig); // Channels = 2
+
+        // Act - pass 3 channels but source has 2
+        Action act = () => _source.RouteToChannels(0, 1, 2);
+
+        // Assert
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void ConcurrentReadSamples_ShouldBeSafe()
     {
         // Arrange

@@ -99,14 +99,19 @@ namespace Ownaudio.Native
             }
 
             // Create device config
+            // Use physical channel count so the device is opened with enough channels
+            // to cover the highest-numbered channel selector (e.g. [4,5] needs 6 physical channels).
             MaDeviceType deviceType = _config.EnableInput ? MaDeviceType.Duplex : MaDeviceType.Playback;
             _maCallback = MiniAudioCallback;
             _maCallbackHandle = GCHandle.Alloc(_maCallback);
 
+            uint physicalOutChannels = (uint)_physicalOutputChannels;
+            uint physicalInChannels = (uint)(_config.EnableInput ? _physicalInputChannels : _physicalOutputChannels);
+
             IntPtr configPtr = MaBinding.allocate_device_config(
                 deviceType,
                 MaFormat.F32,
-                (uint)_config.Channels,
+                physicalOutChannels,
                 (uint)_config.SampleRate,
                 _maCallback,
                 IntPtr.Zero, // default playback device
@@ -138,7 +143,7 @@ namespace Ownaudio.Native
                 return (int)result;
             }
 
-            // Initialize ring buffers
+            // Initialize ring buffers with LOGICAL channel count (application-facing)
             int ringBufferSize = _config.BufferSize * _config.Channels * 4; // 4x buffer
             _outputRing = new LockFreeRingBuffer<float>(ringBufferSize);
             if (_config.EnableInput)
@@ -158,64 +163,102 @@ namespace Ownaudio.Native
         {
             try
             {
-                int sampleCount = (int)frameCount * _config.Channels;
+                int logicalChannels = _config.Channels;
+                int physOutChannels = _physicalOutputChannels;
+                int physInChannels = _physicalInputChannels;
+                bool useOutputRouting = _config.OutputChannelSelectors != null && _config.OutputChannelSelectors.Length > 0
+                                        && physOutChannels != logicalChannels;
+                bool useInputRouting = _config.InputChannelSelectors != null && _config.InputChannelSelectors.Length > 0
+                                        && physInChannels != logicalChannels;
+
+                int logicalSampleCount = (int)frameCount * logicalChannels;
+                int physicalSampleCount = (int)frameCount * physOutChannels;
 
                 // Handle output (playback)
                 if (pOutput != null)
                 {
-                    Span<float> outputSpan = new Span<float>(pOutput, sampleCount);
-
                     // Check if we're in pre-buffering state
                     if (_isBuffering == 1)
                     {
-                        // Check if buffer has enough data to start playback
                         int availableSamples = _outputRing.AvailableRead;
                         if (availableSamples >= _prebufferThreshold)
                         {
-                            // Buffer is full enough, disable buffering and start playback
                             _isBuffering = 0;
                         }
                         else
                         {
-                            // Still buffering - output silence and wait for more data
-                            outputSpan.Clear();
+                            // Still buffering - output silence
+                            new Span<float>(pOutput, physicalSampleCount).Clear();
 
-                            // Handle input even during buffering
                             if (_config.EnableInput && pInput != null)
                             {
-                                Span<float> inputSpan = new Span<float>(pInput, sampleCount);
-                                _inputRing.Write(inputSpan);
+                                if (useInputRouting)
+                                {
+                                    Span<float> logIn = stackalloc float[logicalSampleCount];
+                                    RouteInputChannels(pInput, logIn, (int)frameCount, (int)frameCount * physInChannels / (int)frameCount, logicalChannels, _config.InputChannelSelectors!);
+                                    _inputRing.Write(logIn);
+                                }
+                                else
+                                {
+                                    _inputRing.Write(new Span<float>(pInput, logicalSampleCount));
+                                }
                             }
-
                             return;
                         }
                     }
 
-                    // Normal playback mode - Zero-copy: read directly to output
-                    int samplesRead = _outputRing.Read(outputSpan);
-
-                    if (samplesRead > 0)
+                    if (useOutputRouting)
                     {
-                        // Fill remaining samples with silence if underrun
-                        if (samplesRead < sampleCount)
-                        {
-                            outputSpan.Slice(samplesRead).Clear();
-                        }
+                        // Read logical samples into a temp buffer, then route to physical channels
+                        Span<float> logicalBuf = stackalloc float[logicalSampleCount];
+                        int samplesRead = _outputRing.Read(logicalBuf);
 
-                        _isActive = 1;
+                        if (samplesRead > 0)
+                        {
+                            if (samplesRead < logicalSampleCount)
+                                logicalBuf.Slice(samplesRead).Clear();
+
+                            RouteOutputChannels((float*)pOutput, logicalBuf, (int)frameCount,
+                                physOutChannels, logicalChannels, _config.OutputChannelSelectors!);
+                            _isActive = 1;
+                        }
+                        else
+                        {
+                            new Span<float>(pOutput, physicalSampleCount).Clear();
+                        }
                     }
                     else
                     {
-                        // Underrun - output silence
-                        outputSpan.Clear();
+                        // No routing - direct path
+                        Span<float> outputSpan = new Span<float>(pOutput, logicalSampleCount);
+                        int samplesRead = _outputRing.Read(outputSpan);
+
+                        if (samplesRead > 0)
+                        {
+                            if (samplesRead < logicalSampleCount)
+                                outputSpan.Slice(samplesRead).Clear();
+                            _isActive = 1;
+                        }
+                        else
+                        {
+                            outputSpan.Clear();
+                        }
                     }
                 }
 
-                // Handle input (recording) - Zero-copy: write directly from input
+                // Handle input (recording)
                 if (_config.EnableInput && pInput != null)
                 {
-                    Span<float> inputSpan = new Span<float>(pInput, sampleCount);
-                    _inputRing.Write(inputSpan);
+                    if (useInputRouting)
+                    {
+                        Span<float> logIn = stackalloc float[logicalSampleCount];
+                        RouteInputChannels(pInput, logIn, (int)frameCount, physInChannels, logicalChannels, _config.InputChannelSelectors!);
+                        _inputRing.Write(logIn);
+                    }
+                    else
+                    {
+                        _inputRing.Write(new Span<float>(pInput, logicalSampleCount));
+                    }
                 }
             }
             catch
@@ -254,7 +297,7 @@ namespace Ownaudio.Native
             if (_maDevice == IntPtr.Zero)
                 return -1;
 
-            // Initialize ring buffers if not already done or if size changed
+            // Ring buffers use LOGICAL channel count (application-facing)
             int ringBufferSize = _config.BufferSize * _config.Channels * 4; // 4x buffer
             if (_outputRing == null || _outputRing.Capacity != ringBufferSize)
                 _outputRing = new LockFreeRingBuffer<float>(ringBufferSize);
@@ -262,10 +305,12 @@ namespace Ownaudio.Native
             if (_config.EnableInput && (_inputRing == null || _inputRing.Capacity != ringBufferSize))
                 _inputRing = new LockFreeRingBuffer<float>(ringBufferSize);
 
-            // Create device config
+            // Create device config with physical channel count
             MaDeviceType deviceType = _config.EnableInput ? MaDeviceType.Duplex : MaDeviceType.Playback;
             _maCallback = MiniAudioCallback;
             _maCallbackHandle = GCHandle.Alloc(_maCallback);
+
+            uint physicalOutChannels = (uint)_physicalOutputChannels;
 
             // Parse device IDs from config if specified
             IntPtr playbackDeviceIdPtr = IntPtr.Zero;
@@ -328,7 +373,7 @@ namespace Ownaudio.Native
             IntPtr configPtr = MaBinding.allocate_device_config(
                 deviceType,
                 MaFormat.F32,
-                (uint)_config.Channels,
+                physicalOutChannels,
                 (uint)_config.SampleRate,
                 _maCallback,
                 playbackDeviceIdPtr,

@@ -34,6 +34,7 @@
             <ul class="sidebar-nav">
                 <li><a href="#overview" class="active">Overview</a></li>
                 <li><a href="#initialization">Initialization</a></li>
+                <li><a href="#channel-routing">Channel Routing</a></li>
                 <li><a href="#sources">Audio Sources</a></li>
                 <li><a href="#mixer">AudioMixer</a></li>
                 <li><a href="#effects">Effects</a></li>
@@ -64,6 +65,8 @@
                 <li><strong>DAW-style features</strong> - Realtime/offline rendering modes, start offsets</li>
                 <li><strong>Tempo and pitch control</strong> - Independent time-stretch and pitch-shift via SoundTouch
                 </li>
+                <li><strong>Channel routing</strong> - Direct audio to specific physical output channels on multi-output
+                    devices</li>
                 <li><strong>Recording</strong> - Mix-down to WAV format</li>
                 <li><strong>Real-time metering</strong> - Peak and RMS level monitoring</li>
                 <li><strong>Thread-safe architecture</strong> - Lock-free buffers for glitch-free audio</li>
@@ -170,6 +173,172 @@ await OwnaudioNet.ShutdownAsync();</code></pre>
                 </tbody>
             </table>
 
+            <h2 id="channel-routing">Channel Routing</h2>
+            <p>
+                Channel routing lets you direct audio to specific physical output channels on a multi-output device
+                (USB interfaces, ASIO cards, monitor controllers, etc.). Set
+                <code>OutputChannelSelectors</code> in your <code>AudioConfig</code> to select which physical channels
+                to use. This works with <strong>all engines and platforms</strong> — not just ASIO.
+            </p>
+
+            <div class="alert alert-info">
+                <strong>🔀 Cross-Engine Support</strong>
+                <ul style="margin-top: 0.5rem;">
+                    <li><strong>PortAudio + ASIO:</strong> Native hardware channel selection (zero overhead)</li>
+                    <li><strong>PortAudio + WASAPI / CoreAudio / ALSA:</strong> Software routing in the audio callback
+                    </li>
+                    <li><strong>MiniAudio (default engine):</strong> Software routing in the audio callback</li>
+                </ul>
+            </div>
+
+            <h3>Configuration</h3>
+            <p>Set the number of logical <code>Channels</code> equal to the number of selectors.
+                Each entry in <code>OutputChannelSelectors</code> is a 0-based physical channel index.</p>
+
+            <div class="code-block">
+                <div class="code-header">Basic Output Channel Routing</div>
+                <pre><code class="language-csharp">// Route stereo output to the second pair of outputs (ch 4 and 5)
+// on an 8-channel USB interface
+var config = new AudioConfig
+{
+    SampleRate = 48000,
+    Channels   = 2,                              // 2 logical channels
+    OutputChannelSelectors = new[] { 4, 5 }      // physical ch 4 and 5
+};
+
+await OwnaudioNet.InitializeAsync(config);
+OwnaudioNet.Start();
+
+// AudioMixer and FileSource work normally - routing is transparent
+var engine = OwnaudioNet.Engine!.UnderlyingEngine;
+var mixer  = new AudioMixer(engine, bufferSizeInFrames: 512);
+var music  = new FileSource("music.wav", 8192,
+    targetSampleRate: 48000, targetChannels: 2);
+
+mixer.AddSource(music);
+mixer.Start();
+music.Play();</code></pre>
+            </div>
+
+            <h3>How Channel Assignment Works in the Mixer</h3>
+            <p>
+                The <code>AudioMixer</code> <strong>sums all sources per logical channel</strong> into a single
+                N-channel buffer, then hands that buffer to the engine. The engine applies the
+                <code>OutputChannelSelectors</code> routing to map each logical channel to its physical counterpart.
+            </p>
+            <p>
+                Every <code>BaseAudioSource</code> subclass — <code>FileSource</code>,
+                <code>SampleSource</code>, <code>InputSource</code>, and custom sources — exposes an
+                <code>OutputChannelMapping</code> property and a fluent <code>RouteToChannels()</code> helper.
+                When set, the mixer automatically places that source's audio into the specified logical channel
+                slots and leaves all other slots silent, so multiple sources can play on distinct physical channels
+                without a custom <code>IAudioSource</code> implementation.
+            </p>
+
+            <table class="api-table">
+                <thead>
+                    <tr>
+                        <th>Scenario</th>
+                        <th>Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Sources share the same logical channel count, no <code>OutputChannelMapping</code> set</td>
+                        <td>All sources play on the <em>same</em> physical channels – mixed together</td>
+                    </tr>
+                    <tr>
+                        <td>Each source has its own <code>OutputChannelMapping</code> / <code>RouteToChannels()</code></td>
+                        <td>Each source is heard on its own dedicated physical channels</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Case 1 – All Sources on the Same Physical Channels (Default)</h3>
+            <p>
+                With a standard 2-channel config and <code>OutputChannelSelectors = [4, 5]</code>,
+                <em>every</em> source added to the mixer plays on physical channels 4 and 5.
+                This is the simplest and most common use case.
+            </p>
+
+            <div class="code-block">
+                <div class="code-header">All Sources → Physical Ch 4 and 5</div>
+                <pre><code class="language-csharp">var config = new AudioConfig
+{
+    Channels               = 2,
+    OutputChannelSelectors = new[] { 4, 5 }  // physical ch 4 and 5
+};
+await OwnaudioNet.InitializeAsync(config);
+OwnaudioNet.Start();
+
+var engine    = OwnaudioNet.Engine!.UnderlyingEngine;
+var mixer     = new AudioMixer(engine, bufferSizeInFrames: 512);
+
+// Both sources will play on physical ch 4 and 5 (mixed together)
+var music     = new FileSource("music.wav",  8192, targetSampleRate: 48000, targetChannels: 2);
+var metronome = new FileSource("click.wav",  8192, targetSampleRate: 48000, targetChannels: 2);
+
+mixer.AddSource(music);
+mixer.AddSource(metronome);
+mixer.Start();
+music.Play();
+metronome.Play();</code></pre>
+            </div>
+
+            <h3>Case 2 – Sources on Separate Physical Channels</h3>
+            <p>
+                To send each source to a <em>different</em> pair of physical channels, call
+                <code>RouteToChannels()</code> on each source. The mixer automatically routes
+                that source's stereo audio into the specified logical channel slots and zeroes out the rest.
+            </p>
+
+            <div class="code-block">
+                <div class="code-header">Per-Source Routing with RouteToChannels()</div>
+                <pre><code class="language-csharp">// 8-channel interface: music on physical ch 0+1, metronome on physical ch 4+5
+// AudioConfig uses 4 logical channels mapped to physical 0, 1, 4, 5
+var config = new AudioConfig
+{
+    Channels               = 4,
+    OutputChannelSelectors = new[] { 0, 1, 4, 5 }
+};
+await OwnaudioNet.InitializeAsync(config);
+OwnaudioNet.Start();
+
+var engine    = OwnaudioNet.Engine!.UnderlyingEngine;
+var mixer     = new AudioMixer(engine, bufferSizeInFrames: 512);
+
+var music     = new FileSource("music.wav",  8192, targetSampleRate: 48000, targetChannels: 2);
+var metronome = new FileSource("click.wav",  8192, targetSampleRate: 48000, targetChannels: 2);
+
+// Route each source to its own logical channel pair.
+// The engine then maps logical → physical via OutputChannelSelectors:
+//   logical 0+1 → physical 0+1  (music)
+//   logical 2+3 → physical 4+5  (metronome)
+music.RouteToChannels(0, 1);
+metronome.RouteToChannels(2, 3);
+
+mixer.AddSource(music);
+mixer.AddSource(metronome);
+mixer.Start();
+music.Play();
+metronome.Play();</code></pre>
+            </div>
+
+            <p>
+                <code>RouteToChannels()</code> and <code>OutputChannelMapping</code> are available on
+                <strong>all <code>BaseAudioSource</code> subclasses</strong>: <code>FileSource</code>,
+                <code>SampleSource</code>, <code>InputSource</code>, and any custom subclass.
+                The mapping array length must equal the source's <code>Config.Channels</code>.
+            </p>
+
+            <div class="alert alert-warning">
+                <strong>⚠️ Channel Count Rule</strong>
+                The <code>OutputChannelSelectors</code> array length must equal the <code>Channels</code> value.
+                Use <code>AudioConfig.Validate()</code> to verify before initializing.
+                Negative selector indices are also invalid.
+            </div>
+
+
             <h2 id="sources">Audio Sources</h2>
 
             <h3>FileSource</h3>
@@ -255,6 +424,19 @@ source.Dispose();</code></pre>
                         <td><code>StartOffset</code></td>
                         <td>double</td>
                         <td>Timeline start position (for Master Clock sync)</td>
+                    </tr>
+                    <tr>
+                        <td><code>OutputChannelMapping</code></td>
+                        <td>int[]?</td>
+                        <td>Logical mix-buffer channel indices this source writes into. Length must equal
+                            <code>Config.Channels</code>. <code>null</code> = write to all channels (default).
+                            Also available on <code>SampleSource</code> and <code>InputSource</code>.</td>
+                    </tr>
+                    <tr>
+                        <td><code>RouteToChannels(params int[])</code></td>
+                        <td>BaseAudioSource</td>
+                        <td>Fluent helper that sets <code>OutputChannelMapping</code> and returns
+                            <code>this</code>. Example: <code>source.RouteToChannels(2, 3)</code>.</td>
                     </tr>
                 </tbody>
             </table>

@@ -85,6 +85,20 @@ namespace Ownaudio.Native
         /// </summary>
         private LockFreeRingBuffer<float> _inputRing = null!;
 
+        /// <summary>
+        /// Number of physical output channels to open on the device.
+        /// Equals _config.Channels unless OutputChannelSelectors is used,
+        /// in which case it is max(OutputChannelSelectors)+1.
+        /// </summary>
+        private int _physicalOutputChannels;
+
+        /// <summary>
+        /// Number of physical input channels to open on the device.
+        /// Equals _config.Channels unless InputChannelSelectors is used,
+        /// in which case it is max(InputChannelSelectors)+1.
+        /// </summary>
+        private int _physicalInputChannels;
+
         #endregion
 
         #region Events
@@ -200,8 +214,25 @@ namespace Ownaudio.Native
 
             _config = config;
             _framesPerBuffer = config.BufferSize;
+
+            // Compute physical channel counts based on channel selectors.
+            // If selectors are set, we need to open enough physical channels to cover
+            // the highest-numbered selected channel (e.g. selector [4,5] needs 6 physical channels).
+            _physicalOutputChannels = (config.OutputChannelSelectors != null && config.OutputChannelSelectors.Length > 0)
+                ? config.OutputChannelSelectors.Max() + 1
+                : config.Channels;
+
+            _physicalInputChannels = (config.InputChannelSelectors != null && config.InputChannelSelectors.Length > 0)
+                ? config.InputChannelSelectors.Max() + 1
+                : config.Channels;
+
+            if (_physicalOutputChannels != config.Channels)
+                Log.Info($"Channel routing active: {config.Channels} logical → {_physicalOutputChannels} physical output channels [{string.Join(", ", config.OutputChannelSelectors!)}]");
+            if (_physicalInputChannels != config.Channels)
+                Log.Info($"Channel routing active: {config.Channels} logical → {_physicalInputChannels} physical input channels [{string.Join(", ", config.InputChannelSelectors!)}]");
+
             // Set prebuffer threshold to 2x buffer size (in samples)
-            _prebufferThreshold = config.BufferSize * config.Channels * 2;
+            _prebufferThreshold = config.BufferSize * _physicalOutputChannels * 2;
 
             // Determine which backend to use
             _backend = DetermineBackend();
@@ -680,6 +711,64 @@ namespace Ownaudio.Native
 
             int samplesRead = _inputRing.Read(samples);
             return samplesRead;
+        }
+
+        #endregion
+
+        #region Channel Routing Helpers
+
+        /// <summary>
+        /// Routes logical output channels into a physical device output buffer.
+        /// The physical buffer has <paramref name="physicalChannels"/> interleaved channels.
+        /// The logical (ring buffer) data has <paramref name="logicalChannels"/> channels.
+        /// Selected physical channel indices are given by <see cref="AudioConfig.OutputChannelSelectors"/>.
+        /// </summary>
+        private unsafe void RouteOutputChannels(
+            float* physicalOutput,
+            Span<float> logicalBuffer,
+            int frameCount,
+            int physicalChannels,
+            int logicalChannels,
+            int[] selectors)
+        {
+            for (int frame = 0; frame < frameCount; frame++)
+            {
+                // Zero-fill the entire physical frame first
+                for (int pc = 0; pc < physicalChannels; pc++)
+                    physicalOutput[frame * physicalChannels + pc] = 0f;
+
+                // Copy each logical channel to its designated physical channel
+                for (int lc = 0; lc < logicalChannels && lc < selectors.Length; lc++)
+                {
+                    int physCh = selectors[lc];
+                    if (physCh < physicalChannels)
+                        physicalOutput[frame * physicalChannels + physCh] = logicalBuffer[frame * logicalChannels + lc];
+                }
+            }
+        }
+
+        /// <summary>
+        /// Routes a physical device input buffer's selected channels into a logical ring buffer.
+        /// </summary>
+        private unsafe void RouteInputChannels(
+            void* physicalInput,
+            Span<float> logicalBuffer,
+            int frameCount,
+            int physicalChannels,
+            int logicalChannels,
+            int[] selectors)
+        {
+            float* pIn = (float*)physicalInput;
+            for (int frame = 0; frame < frameCount; frame++)
+            {
+                for (int lc = 0; lc < logicalChannels && lc < selectors.Length; lc++)
+                {
+                    int physCh = selectors[lc];
+                    logicalBuffer[frame * logicalChannels + lc] = (physCh < physicalChannels)
+                        ? pIn[frame * physicalChannels + physCh]
+                        : 0f;
+                }
+            }
         }
 
         #endregion

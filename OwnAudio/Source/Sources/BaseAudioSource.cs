@@ -200,6 +200,59 @@ public abstract partial class BaseAudioSource : IAudioSource
         buffer.Slice(0, sampleCount).Clear();
     }
 
+    #region Channel Routing
+
+    private int[]? _outputChannelMapping = null;
+
+    /// <summary>
+    /// Specifies which logical mix-buffer channels this source writes its audio into,
+    /// enabling per-source routing to distinct physical output channel pairs.
+    /// Works for any source type (FileSource, SampleSource, InputSource, custom sources).
+    /// <para>
+    /// The mapping array length must equal the source's <c>Config.Channels</c>.
+    /// Indices must be valid within the mixer's total logical channel count.
+    /// Channels are zero-indexed.
+    /// </para>
+    /// <example>
+    /// <code>
+    /// // 8-channel device: stereo music on ch 0+1, metronome on ch 2+3
+    /// // AudioConfig: Channels=4, OutputChannelSelectors=[0,1,2,3] (physical routing)
+    /// music.OutputChannelMapping    = new[] { 0, 1 };
+    /// metronome.OutputChannelMapping = new[] { 2, 3 };
+    /// </code>
+    /// </example>
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the array length does not match <c>Config.Channels</c>.
+    /// </exception>
+    public int[]? OutputChannelMapping
+    {
+        get => _outputChannelMapping;
+        set
+        {
+            if (value != null && value.Length != Config.Channels)
+            {
+                throw new ArgumentException(
+                    $"OutputChannelMapping length ({value.Length}) must match source channel count ({Config.Channels})");
+            }
+            _outputChannelMapping = value;
+        }
+    }
+
+    /// <summary>
+    /// Routes this source to the specified logical channel pair and returns <c>this</c>
+    /// for fluent configuration.
+    /// </summary>
+    /// <param name="channels">Logical channel indices (length must equal <c>Config.Channels</c>).</param>
+    /// <returns>This source instance (fluent API).</returns>
+    public BaseAudioSource RouteToChannels(params int[] channels)
+    {
+        OutputChannelMapping = channels;
+        return this;
+    }
+
+    #endregion
+
     /// <summary>
     /// Throws ObjectDisposedException if the object has been disposed.
     /// </summary>

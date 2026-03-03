@@ -61,18 +61,24 @@ namespace Ownaudio.Core
         public EngineHostType HostType { get; set; } = EngineHostType.None;
 
         /// <summary>
-        /// Specifies which ASIO input channels to use (ASIO host type only).
+        /// Specifies which input channels to use when the device has more input channels than needed.
+        /// Works on both MiniAudio and PortAudio backends, on all supported platforms.
+        /// For PortAudio with ASIO, native hardware channel selection is used (low overhead).
+        /// For all other backends, software channel routing is applied in the callback.
         /// If null or empty, the first N channels will be used (where N = Channels property).
-        /// Example: [2, 3] will use ASIO input channels 2 and 3 for stereo input.
+        /// Example: [2, 3] will route physical input channels 2 and 3 to logical channels 0 and 1.
         /// The array length must match the Channels property when specified.
         /// Default: null (sequential channel mapping starting from channel 0).
         /// </summary>
         public int[]? InputChannelSelectors { get; set; } = null;
 
         /// <summary>
-        /// Specifies which ASIO output channels to use (ASIO host type only).
+        /// Specifies which output channels to use when the device has more output channels than needed.
+        /// Works on both MiniAudio and PortAudio backends, on all supported platforms.
+        /// For PortAudio with ASIO, native hardware channel selection is used (low overhead).
+        /// For all other backends, software channel routing is applied in the callback.
         /// If null or empty, the first N channels will be used (where N = Channels property).
-        /// Example: [4, 5] will use ASIO output channels 4 and 5 for stereo output.
+        /// Example: [4, 5] will route logical channels 0 and 1 to physical output channels 4 and 5.
         /// The array length must match the Channels property when specified.
         /// Default: null (sequential channel mapping starting from channel 0).
         /// </summary>
