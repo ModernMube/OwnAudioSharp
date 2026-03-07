@@ -584,7 +584,7 @@ namespace OwnSeparator.MultiModel
                     new MultiModelInfo
                     {
                         Name = "InstrumentalModel_InstHQ3",
-                        ModelPath = @"/path/to/Inst_HQ_3.onnx"",
+                        ModelPath = @"/path/to/Inst_HQ_3.onnx",
                         NFft = 6144,
                         DimT = 8,
                         DimF = 2048,

@@ -595,8 +595,16 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                         _soundTouch.Clear();
                         _soundTouchAccumulationCount = 0;
                         // Reset transition tracking
-                        _wasSoundTouchProcessing = false; 
+                        _wasSoundTouchProcessing = false;
                     }
+                }
+                else
+                {
+                    // Reactivated at a specific position (e.g. seek-back from EndOfStream).
+                    // Align _trackLocalTime so ReadSamplesAtTime starts in Green Zone instead
+                    // of triggering a Red Zone snap on the first mix cycle after reactivation.
+                    _trackLocalTime = _currentPosition - _startOffset;
+                    _gracePeriodEndTime = _trackLocalTime + SyncConfig.GracePeriodSeconds;
                 }
             }
             else

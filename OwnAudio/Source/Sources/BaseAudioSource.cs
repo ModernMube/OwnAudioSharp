@@ -102,7 +102,7 @@ public abstract partial class BaseAudioSource : IAudioSource
     {
         ThrowIfDisposed();
 
-        if (State == AudioState.Stopped || State == AudioState.Paused)
+        if (State == AudioState.Stopped || State == AudioState.Paused || State == AudioState.EndOfStream)
         {
             State = AudioState.Playing;
         }

@@ -236,8 +236,21 @@ public partial class FileSource
 
         if (gracePeriodActive)
         {
-            // Force _trackLocalTime to sync with target to prevent re-seeking
-            _trackLocalTime = targetTrackTime;
+            // If the clock jumped significantly backwards (user backward seek), the grace period
+            // must NOT suppress correction - it was set based on the old (later) position and
+            // would otherwise block the decoder seek entirely, leaving audio at the old position.
+            double signedDrift = targetTrackTime - _trackLocalTime;
+            if (signedDrift < -SoftSyncTolerance)
+            {
+                // Backward seek detected: cancel grace period so Red Zone can seek the decoder.
+                gracePeriodActive = false;
+                _gracePeriodEndTime = 0.0;
+            }
+            else
+            {
+                // Force _trackLocalTime to sync with target to prevent re-seeking
+                _trackLocalTime = targetTrackTime;
+            }
         }
 
         // Drift correction comparing target and local time
@@ -392,11 +405,22 @@ public partial class FileSource
                 }
                 else
                 {
-                    // We are ahead - this is unusual, just force sync
-                    _trackLocalTime = targetTrackTime;
+                    // We are ahead - the clock jumped backwards (user seek).
+                    // Force-syncing _trackLocalTime is not enough: the file decoder is still
+                    // positioned at the old (later) location. We must seek the decoder too.
+                    double filePosition = targetTrackTime * _tempo;
+                    if (Seek(filePosition))
+                    {
+                        _trackLocalTime = targetTrackTime;
+                        _gracePeriodEndTime = targetTrackTime + SyncConfig.GracePeriodSeconds;
+                    }
+                    else
+                    {
+                        _trackLocalTime = targetTrackTime;
+                    }
 
 #if DEBUG
-                    Console.WriteLine($"[RedZone-Ahead] Drift={drift:F4}s - Track ahead of clock, force sync");
+                    Console.WriteLine($"[RedZone-Ahead] Drift={drift:F4}s - Clock jumped back, seeked decoder to {filePosition:F4}s");
 #endif
                 }
             }

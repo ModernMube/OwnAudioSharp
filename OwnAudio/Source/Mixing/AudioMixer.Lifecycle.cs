@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using OwnaudioNET.Core;
 
 namespace OwnaudioNET.Mixing;
 
@@ -133,6 +134,48 @@ public sealed partial class AudioMixer
         _pauseEvent?.Dispose();
 
         _disposed = true;
+    }
+
+    /// <summary>
+    /// Seeks the mixer to the specified position.
+    /// Advances the MasterClock and automatically reactivates any EndOfStream sources
+    /// whose content covers the new position.
+    /// Sources attached to the MasterClock that are still playing self-correct via
+    /// their built-in Three-Zone drift correction — no explicit seek needed for them.
+    /// </summary>
+    /// <param name="positionInSeconds">Target position in seconds (clamped to 0 if negative).</param>
+    /// <exception cref="ObjectDisposedException">Thrown if mixer is disposed.</exception>
+    public void Seek(double positionInSeconds)
+    {
+        ThrowIfDisposed();
+
+        if (positionInSeconds < 0)
+            positionInSeconds = 0;
+
+        // 1. Move the master clock — Playing sources self-correct via Three-Zone drift correction.
+        _masterClock.SeekTo(positionInSeconds);
+
+        // 2. Reactivate EndOfStream sources that have content at the new position.
+        //    Use a fresh snapshot to avoid stale cached array.
+        var sources = _sources.Values.ToArray();
+        foreach (var source in sources)
+        {
+            if (source.State != AudioState.EndOfStream)
+                continue;
+
+            if (positionInSeconds >= source.Duration)
+                continue;
+
+            try
+            {
+                source.Seek(positionInSeconds);
+                source.Play();
+            }
+            catch
+            {
+                // Reactivation failure is non-fatal; source stays silent.
+            }
+        }
     }
 
     /// <summary>
