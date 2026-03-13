@@ -263,9 +263,10 @@ public sealed class GhostTrackSource : BaseAudioSource
             // Always output silence (this is a ghost track)
             FillWithSilence(buffer, frameCount * _config.Channels);
 
-            // Advance position accounting for tempo
-            long frameAdvance = (long)(framesToRead * _tempo);
-            _currentFrame += frameAdvance;
+            // Advance by actual output frames (wall-clock time), NOT by tempo-scaled frames.
+            // GhostTrack.Position must mirror MasterClock wall-clock time so the API
+            // returns the correct playback position after tempo changes.
+            _currentFrame += framesToRead;
 
             // Update sample position for sync tracking
             UpdateSamplePosition(framesToRead);

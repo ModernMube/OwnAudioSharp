@@ -133,6 +133,7 @@ _ReSharper*/
 *.DotSettings.user
 
 #Claude code folder
+.vscode/
 .claude/
 .markdowns/
 ClearFolders.bat

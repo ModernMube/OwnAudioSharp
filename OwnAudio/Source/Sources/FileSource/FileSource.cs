@@ -397,8 +397,9 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             do
             {
                 currentPosition = Interlocked.CompareExchange(ref _currentPosition, 0, 0);
-                // For double position, we also need to account for effective speed through the file
-                newPosition = currentPosition + (framesRead * frameDuration * _tempo);
+                // Position tracks wall-clock time: advance by output frames / sampleRate only
+                // SoundTouch already applied tempo conversion, so NO additional _tempo multiplication
+                newPosition = currentPosition + (framesRead * frameDuration);
             } while (Math.Abs(Interlocked.CompareExchange(ref _currentPosition, newPosition, currentPosition) - currentPosition) > double.Epsilon);
         }
 
@@ -420,7 +421,8 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             UpdateSamplePosition(silenceSourceFrames);
             
             double frameDuration = 1.0 / _streamInfo.SampleRate;
-            double silenceSeconds = silenceFrames * frameDuration * _tempo;
+            // Silence also advances wall-clock time only (no _tempo multiplication)
+            double silenceSeconds = silenceFrames * frameDuration;
             double newPos, curPos;
             do
             {

@@ -330,7 +330,8 @@ public partial class FileSource
                         _fractionalFrameAccumulator -= sourceFramesAdvanced;
                         UpdateSamplePosition(sourceFramesAdvanced);
 
-                        double newPosition = _currentPosition + (driftInSeconds * _tempo);
+                        // driftInSeconds is a wall-clock duration – no _tempo multiplication
+                        double newPosition = _currentPosition + driftInSeconds;
                         Interlocked.Exchange(ref _currentPosition, newPosition);
 
 #if DEBUG
@@ -453,7 +454,8 @@ public partial class FileSource
 
             UpdateSamplePosition(sourceFramesAdvanced);
 
-            double newPosition = _currentPosition + (framesRead * frameDuration * _tempo);
+            // Position tracks wall-clock time: output frames / sampleRate only (SoundTouch already applied tempo)
+            double newPosition = _currentPosition + (framesRead * frameDuration);
             Interlocked.Exchange(ref _currentPosition, newPosition);
 
             // SUCCESSFUL READ: If we are in grace period and reading data, we are "recovering"
@@ -481,8 +483,9 @@ public partial class FileSource
             UpdateSamplePosition(silenceSourceFrames);
 
             double frameDuration = 1.0 / _streamInfo.SampleRate;
+            // Silence frames are wall-clock time only – no _tempo multiplication
             double silenceSeconds = silenceFrames * frameDuration;
-            double newPos = _currentPosition + (silenceSeconds * _tempo);
+            double newPos = _currentPosition + silenceSeconds;
             Interlocked.Exchange(ref _currentPosition, newPos);
 
             // ADAPTIVE CORRECTION: Trigger aggressive recovery for next 5 frames

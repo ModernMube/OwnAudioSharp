@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <!-- Desktop platforms only (Windows, Linux, macOS) -->
@@ -6,6 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Prevent duplicate assembly attribute errors from Microsoft.SourceLink.GitHub -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkMonikerAttribute>false</GenerateTargetFrameworkMonikerAttribute>
   </PropertyGroup>
 
   <!-- Define MACOS symbol for macOS builds to enable CoreML code paths -->
@@ -23,7 +26,7 @@
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>OwnAudioSharp</PackageId>
-    <Version>2.6.6</Version>
+    <Version>2.6.7</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for desktop platforms (Windows, Linux, macOS)</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;desktop;sound;multitrack</PackageTags>

@@ -8,7 +8,6 @@
       "OwnAudioEngine\\Ownaudio.Native\\Ownaudio.Native.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.Android\\Ownaudio.Example.Android.csproj",
       "OwnAudio\\Source\\OwnaudioNET.Mobile.csproj",
-      "Logger\\Logger.csproj",
     ]
   }
 }

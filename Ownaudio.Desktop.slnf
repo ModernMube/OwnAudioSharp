@@ -2,7 +2,6 @@
   "solution": {
     "path": "Ownaudio.sln",
     "projects": [
-      "Logger\\Logger.csproj",
       "OwnAudioEngine\\Ownaudio.Core\\Ownaudio.Core.csproj",
       "OwnAudioEngine\\Ownaudio.Linux\\Ownaudio.Linux.csproj",
       "OwnAudioEngine\\Ownaudio.macOS\\Ownaudio.macOS.csproj",

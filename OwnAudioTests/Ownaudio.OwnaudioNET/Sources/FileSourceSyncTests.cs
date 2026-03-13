@@ -339,4 +339,47 @@ public class FileSourceSyncTests : IDisposable
         // We should verify the system handled the drift correction, but not necessarily via seek.
         // Let's just verify no crash and the operation completed successfully.
     }
+
+    /// <summary>
+    /// Verifies that Position advances by wall-clock time (framesRead / sampleRate),
+    /// NOT by (framesRead * tempo / sampleRate) which would be a double-tempo bug.
+    /// SoundTouch already performs the tempo conversion, so the output buffer contains
+    /// tempo-adjusted audio but the Position must reflect real (wall-clock) elapsed time.
+    /// </summary>
+    [Theory]
+    [InlineData(1.0f)]
+    [InlineData(1.2f)]
+    [InlineData(0.8f)]
+    public void Position_AfterReadSamples_ShouldAdvanceByWallClockTime_NotDoubleTemp(float tempo)
+    {
+        // Arrange
+        _source = new FileSource(_mockDecoder.Object);
+        _source.Play();
+        Thread.Sleep(100); // Allow buffer to fill
+
+        _source.Tempo = tempo;
+        Thread.Sleep(20); // Allow SoundTouch to stabilize
+
+        const int framesRequested = 512;
+        var buffer = new float[framesRequested * 2]; // stereo
+
+        double positionBefore = _source.Position;
+
+        // Act
+        int framesRead = _source.ReadSamples(buffer, framesRequested);
+
+        // Assert
+        if (framesRead > 0)
+        {
+            // Wall-clock advance = output frames / sampleRate (NO tempo multiplication)
+            double expectedAdvance = framesRead / 48000.0;
+            double actualAdvance = _source.Position - positionBefore;
+
+            // Allow ±2ms tolerance for buffering and fractional frame accumulation
+            actualAdvance.Should().BeApproximately(expectedAdvance, 0.002,
+                because: $"Position should advance by wall-clock time ({expectedAdvance:F5}s), " +
+                         $"not by file-time * tempo ({expectedAdvance * tempo:F5}s). " +
+                         $"Tempo={tempo}, framesRead={framesRead}");
+        }
+    }
 }
