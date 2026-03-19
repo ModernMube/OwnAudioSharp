@@ -26,7 +26,7 @@
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>OwnAudioSharp</PackageId>
-    <Version>2.6.7</Version>
+    <Version>2.6.8</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for desktop platforms (Windows, Linux, macOS)</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;desktop;sound;multitrack</PackageTags>
@@ -43,11 +43,11 @@
     <PackageReference Include="Avalonia" Version="11.3.12" />
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
     <PackageReference Include="Melanchall.DryWetMidi" Version="8.0.3" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.2" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.24.3" />
     <PackageReference Include="OwnAudioVst" Version="1.4.0" />
     <PackageReference Include="System.Memory" Version="4.6.3" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="All" />
-    <PackageReference Include="System.Numerics.Tensors" Version="10.0.3" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.201" PrivateAssets="All" />
+    <PackageReference Include="System.Numerics.Tensors" Version="10.0.5" />
   </ItemGroup>
 
   <!-- Embedded resources -->

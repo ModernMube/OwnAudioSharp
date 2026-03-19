@@ -1,15 +1,10 @@
-﻿using OwnaudioNET.Features.Extensions;
+using OwnaudioNET.Features.Extensions;
 using OwnaudioNET.Features.OwnChordDetect.Analysis;
 using OwnaudioNET.Features.OwnChordDetect.Core;
 using OwnaudioNET.Features.OwnChordDetect.Detectors;
 using OwnaudioNET.Exceptions;
 using Ownaudio.Decoders;
 using Ownaudio.Core;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.InteropServices;
-using System.ComponentModel.Design;
 
 namespace OwnaudioNET.Features.OwnChordDetect
 {
@@ -55,16 +50,113 @@ namespace OwnaudioNET.Features.OwnChordDetect
 
             //Fine - tuning musical chord recognition
             var analyzer = new SongChordAnalyzer(
-                    windowSize: intervalSecond,        // 1 second windows
-                    hopSize: 0.5f,           // 0.25 steps per second
-                    minimumChordDuration: 1.0f, // Min 1.0 second chord
-                    confidence: 0.90f       // Minimum 90% reliability
+                    windowSize: intervalSecond,        // fallback if bpm = 0
+                    hopSize: 0.5f,
+                    minimumChordDuration: 1.0f,
+                    confidence: 0.90f,
+                    bpm: detectTempo           // derive quarter-note window from detected BPM
                 );
 
             var chords = analyzer.AnalyzeSong(rawNotes);
             MusicalKey? detectedKey = analyzer.DetectedKey;
 
             _decoder.Dispose();
+#nullable disable
+            return (chords, detectedKey, detectTempo);
+#nullable restore
+        }
+
+        /// <summary>
+        /// Detects chords from multiple audio files by mixing them into a single audio stream.
+        /// Useful for multi-track projects where each track is a separate file.
+        /// </summary>
+        /// <param name="audioFiles">List of audio file paths to mix and analyze.</param>
+        /// <param name="intervalSecond">Analysis window size in seconds.</param>
+        /// <returns>Tuple of timed chords, detected musical key, and tempo BPM.</returns>
+        public static (List<TimedChord>, MusicalKey, int) DetectFromFiles(
+            IReadOnlyList<string> audioFiles,
+            float intervalSecond = 1.0f)
+        {
+            if (audioFiles == null || audioFiles.Count == 0)
+                throw new AudioException("No audio files provided.");
+
+            const int targetSampleRate = 22050;
+            const int targetChannels = 1;
+
+            // Decode all files and collect samples
+            var allTrackSamples = new List<float[]>(audioFiles.Count);
+            int maxLength = 0;
+
+            foreach (var file in audioFiles)
+            {
+                if (!File.Exists(file))
+                    throw new AudioException($"Audio file not found: {file}");
+
+                using var decoder = AudioDecoderFactory.Create(file, targetSampleRate, targetChannels);
+                float[] samples = decoder.ReadAllSamples();
+                if (samples.Length > maxLength)
+                    maxLength = samples.Length;
+                allTrackSamples.Add(samples);
+            }
+
+            // Mix tracks by summing sample-by-sample
+            var mixed = new float[maxLength];
+            foreach (var trackSamples in allTrackSamples)
+            {
+                for (int i = 0; i < trackSamples.Length; i++)
+                    mixed[i] += trackSamples[i];
+            }
+
+            // Normalize to [-1, 1] to prevent clipping
+            float peak = 0f;
+            for (int i = 0; i < mixed.Length; i++)
+            {
+                float abs = Math.Abs(mixed[i]);
+                if (abs > peak) peak = abs;
+            }
+            if (peak > 1f)
+            {
+                float inv = 1f / peak;
+                for (int i = 0; i < mixed.Length; i++)
+                    mixed[i] *= inv;
+            }
+
+            var waveBuffer = new WaveBuffer(mixed);
+
+            using var model = new Model();
+            var modelOutput = model.Predict(waveBuffer, progress =>
+            {
+                Console.Write($"\rRecognizing musical notes: {progress:P1}");
+            });
+            Console.WriteLine(" ");
+
+            var convertOptions = new NotesConvertOptions
+            {
+                OnsetThreshold = 0.5f,
+                FrameThreshold = 0.2f,
+                MinNoteLength = 15,
+                MinFreq = 90f,
+                MaxFreq = 2800f,
+                IncludePitchBends = false,
+                MelodiaTrick = true
+            };
+
+            var converter = new NotesConverter(modelOutput);
+            List<Note> rawNotes = converter.Convert(convertOptions);
+
+            int detectTempo = MidiWriter.DetectTempo(rawNotes);
+
+            var analyzer = new SongChordAnalyzer(
+                windowSize: intervalSecond,        // fallback if bpm = 0
+                hopSize: 0.5f,
+                minimumChordDuration: 1.0f,
+                confidence: 0.90f,
+                bpm: detectTempo           // derive quarter-note window from detected BPM
+            );
+
+            var chords = analyzer.AnalyzeSong(rawNotes);
+            MusicalKey? detectedKey = analyzer.DetectedKey;
+
 #nullable disable
             return (chords, detectedKey, detectTempo);
 #nullable restore

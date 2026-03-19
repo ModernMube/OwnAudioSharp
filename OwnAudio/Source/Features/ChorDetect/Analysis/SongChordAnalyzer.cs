@@ -1,4 +1,4 @@
-﻿using OwnaudioNET.Features.Extensions;
+using OwnaudioNET.Features.Extensions;
 using OwnaudioNET.Features.OwnChordDetect.Core;
 using OwnaudioNET.Features.OwnChordDetect.Detectors;
 using System;
@@ -66,6 +66,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
 
     /// <summary>
     /// Analyzes a complete song and extracts timed chord progressions with key awareness.
+    /// Uses BPM-derived quarter-note windows and progressive note pruning for accurate results.
     /// </summary>
     public class SongChordAnalyzer
     {
@@ -75,12 +76,12 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         private readonly ChordDetector _detector;
 
         /// <summary>
-        /// The size of the analysis window in seconds.
+        /// The size of the analysis window in seconds (one quarter note when BPM is provided).
         /// </summary>
         private readonly float _windowSize;
 
         /// <summary>
-        /// The hop size between analysis windows in seconds.
+        /// The hop size between analysis windows in seconds (half a quarter note when BPM is provided).
         /// </summary>
         private readonly float _hopSize;
 
@@ -96,17 +97,51 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
 
         /// <summary>
         /// Initializes a new instance of the SongChordAnalyzer class.
+        /// When <paramref name="bpm"/> is greater than zero, the analysis window is derived
+        /// from the tempo using an adaptive note-value strategy:
+        /// <list type="bullet">
+        ///   <item>BPM &lt; 100 → quarter note (60 / bpm s) – chords change frequently</item>
+        ///   <item>BPM 100–150 → half note (120 / bpm s) – medium harmonic rhythm</item>
+        ///   <item>BPM &gt; 150 → whole note (240 / bpm s) – fast tempos, slow chord changes</item>
+        /// </list>
+        /// This mirrors the concept of harmonic rhythm: in fast music chords tend to hold
+        /// for longer beat-multiples, so a larger window captures more notes per chord.
         /// </summary>
-        /// <param name="windowSize">The size of the analysis window in seconds. Default is 1.0f.</param>
-        /// <param name="hopSize">The hop size between analysis windows in seconds. Default is 0.5f.</param>
-        /// <param name="minimumChordDuration">The minimum duration required for a chord to be included in the result. Default is 0.8f.</param>
-        /// <param name="confidence">The minimum confidence threshold for chord detection. Default is 0.6f.</param>
-        public SongChordAnalyzer(float windowSize = 1.0f, float hopSize = 0.5f, float minimumChordDuration = 0.8f, float confidence = 0.6f)
+        /// <param name="windowSize">Analysis window in seconds. Overridden when bpm &gt; 0.</param>
+        /// <param name="hopSize">Hop between windows in seconds. Overridden when bpm &gt; 0.</param>
+        /// <param name="minimumChordDuration">Minimum chord duration to include in results. Default 0.8 s.</param>
+        /// <param name="confidence">Minimum confidence threshold for chord detection. Default 0.6.</param>
+        /// <param name="bpm">Detected tempo in BPM. Drives adaptive window sizing when &gt; 0.</param>
+        public SongChordAnalyzer(
+            float windowSize = 1.0f,
+            float hopSize = 0.5f,
+            float minimumChordDuration = 0.8f,
+            float confidence = 0.6f,
+            int bpm = 0)
         {
             _detector = new ChordDetector(DetectionMode.KeyAware, confidence);
-            _windowSize = windowSize;
-            _hopSize = hopSize;
             _minimumChordDuration = minimumChordDuration;
+
+            if (bpm > 0)
+            {
+                // Adaptive window based on the harmonic rhythm of typical music:
+                //   < 100 BPM  → ♩ quarter note  (60 / bpm)
+                //   100–150    → 𝅗𝅥 half note     (120 / bpm)
+                //   > 150 BPM  → 𝅝 whole note    (240 / bpm)
+                float quarterNote = 60f / bpm;
+                _windowSize = bpm < 100 ? quarterNote
+                            : bpm <= 150 ? quarterNote * 2f   // half note
+                                         : quarterNote * 4f;  // whole note
+
+                // Hop = half the window, so consecutive windows overlap by 50%
+                // and no chord boundary falls entirely between two windows
+                _hopSize = _windowSize / 2f;
+            }
+            else
+            {
+                _windowSize = windowSize;
+                _hopSize = hopSize;
+            }
         }
 
         /// <summary>
@@ -151,7 +186,9 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         }
 
         /// <summary>
-        /// Analyzes the song in sliding windows to detect chords at different time positions.
+        /// Analyzes the song in quarter-note-aligned windows.
+        /// Each window first attempts detection with all available notes, then falls back to
+        /// progressive pruning via <see cref="GetAndPruneNotes"/> if needed.
         /// </summary>
         /// <param name="notes">The list of notes to analyze.</param>
         /// <returns>A list of timed chords detected in each analysis window.</returns>
@@ -163,16 +200,15 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
             for (float time = 0; time < songDuration; time += _hopSize)
             {
                 var windowEnd = Math.Min(time + _windowSize, songDuration);
-                var windowNotes = GetNotesInWindow(notes, time, windowEnd);
+                var result = GetAndPruneNotes(notes, time, windowEnd);
 
-                if (windowNotes.Count >= 2)
+                if (result.HasValue)
                 {
-                    var analysis = _detector.AnalyzeChord(windowNotes);
-                    if (analysis.Confidence > 0.4f)
-                    {
-                        chords.Add(new TimedChord(time, windowEnd, analysis.ChordName,
-                                                analysis.Confidence, analysis.NoteNames));
-                    }
+                    chords.Add(new TimedChord(
+                        time, windowEnd,
+                        result.Value.analysis.ChordName,
+                        result.Value.analysis.Confidence,
+                        result.Value.analysis.NoteNames));
                 }
             }
 
@@ -180,18 +216,76 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         }
 
         /// <summary>
-        /// Gets notes that are active in the specified time window.
+        /// Collects all notes active in a time window and attempts chord detection with progressive pruning.
+        /// <para>
+        /// Algorithm:
+        /// <list type="number">
+        ///   <item>Collect all notes whose playback overlaps the window.</item>
+        ///   <item>Try to detect a chord with all notes.</item>
+        ///   <item>If not found, repeatedly remove the shortest-duration note from the lowest-pitch group
+        ///         until a chord is detected or only 3 notes remain.</item>
+        ///   <item>Make one final attempt with exactly 3 notes; return null on failure.</item>
+        /// </list>
+        /// </para>
         /// </summary>
-        /// <param name="notes">The complete list of notes to filter from.</param>
-        /// <param name="start">The start time of the window in seconds.</param>
-        /// <param name="end">The end time of the window in seconds.</param>
-        /// <returns>A list of notes that are active during the specified time window, ordered by relevance.</returns>
-        private List<Note> GetNotesInWindow(List<Note> notes, float start, float end)
+        /// <param name="allNotes">All notes in the song.</param>
+        /// <param name="windowStart">Start of the analysis window (seconds).</param>
+        /// <param name="windowEnd">End of the analysis window (seconds).</param>
+        /// <returns>
+        ///   A tuple of the winning <see cref="ChordAnalysis"/> and the pruned note list, or null on failure.
+        /// </returns>
+        private (ChordAnalysis analysis, List<Note> notes)? GetAndPruneNotes(
+            List<Note> allNotes, float windowStart, float windowEnd)
         {
-            return notes.Where(n => n.StartTime < end && n.EndTime > start)
-                       .OrderByDescending(n => n.Amplitude * GetOverlap(n, start, end))
-                       .Take(5)
-                       .ToList();
+            // Step 1: collect every note active in this window
+            var windowNotes = allNotes
+                .Where(n => n.StartTime < windowEnd && n.EndTime > windowStart)
+                .ToList();
+
+            if (windowNotes.Count < 3)
+                return null;
+
+            // Step 2: try with all notes
+            var analysis = _detector.TryAnalyzeChord(windowNotes);
+            if (analysis != null)
+                return (analysis, windowNotes);
+
+            // Step 3: progressive pruning
+            // Build a removal order: shortest overlap-duration notes, from lowest to highest pitch.
+            // Notes that are very brief relative to the window are considered least structurally important.
+            var candidates = windowNotes
+                .Select(n => new
+                {
+                    Note = n,
+                    OverlapDuration = Math.Min(n.EndTime, windowEnd) - Math.Max(n.StartTime, windowStart)
+                })
+                .OrderBy(x => x.Note.Pitch)          // low to high pitch
+                .ThenBy(x => x.OverlapDuration)       // shortest within same pitch group first
+                .ToList();
+
+            var workingSet = windowNotes.ToList();
+
+            foreach (var candidate in candidates)
+            {
+                if (workingSet.Count <= 3)
+                    break;
+
+                workingSet.Remove(candidate.Note);
+
+                analysis = _detector.TryAnalyzeChord(workingSet);
+                if (analysis != null)
+                    return (analysis, workingSet);
+            }
+
+            // Step 4: last attempt when exactly 3 notes remain
+            if (workingSet.Count == 3)
+            {
+                analysis = _detector.TryAnalyzeChord(workingSet);
+                if (analysis != null)
+                    return (analysis, workingSet);
+            }
+
+            return null;    // No chord found even with minimum note count
         }
 
         /// <summary>
@@ -227,7 +321,6 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                 if (current.ChordName == next.ChordName &&
                     Math.Abs(current.EndTime - next.StartTime) <= _hopSize * 1.5f)
                 {
-                    // Create merged chord
                     var avgConfidence = (current.Confidence + next.Confidence) / 2;
                     current = new TimedChord(current.StartTime, next.EndTime, current.ChordName,
                                            avgConfidence, current.Notes);

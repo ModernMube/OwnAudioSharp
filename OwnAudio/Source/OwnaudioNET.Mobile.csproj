@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Separate obj directory to avoid project.assets.json conflicts with sibling projects -->
+    <BaseIntermediateOutputPath>obj\Mobile\</BaseIntermediateOutputPath>
+    <!-- Exclude shared obj subdirectories from implicit Compile glob -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj\**</DefaultItemExcludes>
     <!-- Suppress specific warnings for cleaner build output -->
     <NoWarn>$(NoWarn);CS8618;CS8625;CS1570;CS1572;CS1574;CS1587</NoWarn>
 
@@ -20,7 +24,7 @@
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>OwnAudioSharp.Mobile</PackageId>
-    <Version>2.6.7</Version>
+    <Version>2.6.8</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for mobile platforms (Android and iOS)</Description>
     <PackageTags>audio;cross-platform;android;ios;mobile;sound;multitrack</PackageTags>

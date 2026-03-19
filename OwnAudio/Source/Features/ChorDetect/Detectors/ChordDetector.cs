@@ -1,4 +1,4 @@
-﻿using OwnaudioNET.Features.Extensions;
+using OwnaudioNET.Features.Extensions;
 using OwnaudioNET.Features.OwnChordDetect.Analysis;
 using OwnaudioNET.Features.OwnChordDetect.Core;
 using System;
@@ -124,6 +124,23 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
                 PitchClasses = pitchClasses,
                 Chromagram = chromagram
             };
+        }
+
+        /// <summary>
+        /// Tries to analyze a list of notes as a chord. Returns null if no chord is confidently detected.
+        /// Used by the progressive pruning loop in SongChordAnalyzer.
+        /// </summary>
+        /// <param name="notes">The list of notes to analyze.</param>
+        /// <returns>A ChordAnalysis if a chord was found, or null if the result is Unknown.</returns>
+        public ChordAnalysis? TryAnalyzeChord(List<Note> notes)
+        {
+            if (notes.Count < 3)
+                return null;
+
+            var analysis = AnalyzeChord(notes);
+            return (analysis.ChordName == "Unknown" || analysis.ChordName == "N")
+                ? null
+                : analysis;
         }
 
         /// <summary>
@@ -315,18 +332,35 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
         }
 
         /// <summary>
-        /// Computes chromagram from notes.
+        /// Computes chromagram from notes, weighting each pitch class by amplitude × overlap duration.
+        /// Longer-held notes contribute proportionally more than brief passing notes, which improves
+        /// chord accuracy in windows that contain melodic ornaments or short non-chord tones.
         /// </summary>
         /// <param name="notes">The list of notes to convert to chromagram.</param>
+        /// <param name="windowStart">Optional window start time for overlap calculation. Pass -1 to use note duration directly.</param>
+        /// <param name="windowEnd">Optional window end time for overlap calculation. Pass -1 to use note duration directly.</param>
         /// <returns>A normalized 12-element array representing the pitch class distribution.</returns>
-        public float[] ComputeChromagram(List<Note> notes)
+        public float[] ComputeChromagram(List<Note> notes, float windowStart = -1f, float windowEnd = -1f)
         {
             var chroma = new float[12];
 
             foreach (var note in notes)
             {
                 var pitchClass = note.Pitch % 12;
-                chroma[pitchClass] += note.Amplitude;
+
+                // Weight by amplitude × overlap duration (matches KeyDetector weighting strategy)
+                float duration;
+                if (windowStart >= 0 && windowEnd > windowStart)
+                {
+                    duration = Math.Min(note.EndTime, windowEnd) - Math.Max(note.StartTime, windowStart);
+                    duration = Math.Max(duration, 0f);
+                }
+                else
+                {
+                    duration = note.EndTime - note.StartTime;
+                }
+
+                chroma[pitchClass] += note.Amplitude * duration;
             }
 
             // Normalize
