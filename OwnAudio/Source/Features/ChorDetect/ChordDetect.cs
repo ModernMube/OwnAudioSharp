@@ -134,11 +134,11 @@ namespace OwnaudioNET.Features.OwnChordDetect
             {
                 OnsetThreshold = 0.5f,
                 FrameThreshold = 0.2f,
-                MinNoteLength = 15,
+                MinNoteLength = 25,
                 MinFreq = 90f,
                 MaxFreq = 2800f,
                 IncludePitchBends = false,
-                MelodiaTrick = true
+                MelodiaTrick = false
             };
 
             var converter = new NotesConverter(modelOutput);

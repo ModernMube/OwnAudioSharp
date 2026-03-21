@@ -115,6 +115,13 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
             var (chord, confidence, isAmbiguous, alternatives) = DetectChordAdvancedBase(chromagram);
 
             var pitchClasses = notes.Select(n => n.Pitch % 12).Distinct().OrderBy(x => x).ToArray();
+
+            // Filter pitch classes to only those present in the detected chord template
+            if (chord != "Unknown" && chord != "N" && _templates.TryGetValue(chord, out var chordTemplate))
+            {
+                pitchClasses = pitchClasses.Where(pc => chordTemplate[pc] > 0f).ToArray();
+            }
+
             var noteNames = pitchClasses.Select(pc => ChordTemplates.GetNoteName(pc, _currentKey)).ToArray();
 
             return new ChordAnalysis(chord, confidence, GenerateExplanation(pitchClasses, chord, confidence, isAmbiguous), noteNames)
