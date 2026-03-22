@@ -200,6 +200,30 @@ public abstract partial class BaseAudioSource : IAudioSource
         buffer.Slice(0, sampleCount).Clear();
     }
 
+    /// <summary>
+    /// Applies a short linear fade-out to the tail of the buffer.
+    /// Prevents audible click/pop artifacts when the buffer transitions abruptly to silence
+    /// during a buffer underrun (data → 0.0 discontinuity).
+    /// Zero-allocation, in-place; safe to call with any buffer length.
+    /// </summary>
+    /// <param name="buffer">The audio buffer whose tail will be faded.</param>
+    /// <param name="fadeSamples">Number of samples to fade (from full volume to silence).</param>
+    protected static void FadeOutTail(Span<float> buffer, int fadeSamples)
+    {
+        if (buffer.IsEmpty || fadeSamples <= 0)
+            return;
+
+        int count = Math.Min(fadeSamples, buffer.Length);
+        int startIdx = buffer.Length - count;
+
+        for (int i = 0; i < count; i++)
+        {
+            // Linear ramp: full volume at startIdx, silence at last sample
+            float t = (float)(count - 1 - i) / count;
+            buffer[startIdx + i] *= t;
+        }
+    }
+
     #region Channel Routing
 
     private int[]? _outputChannelMapping = null;

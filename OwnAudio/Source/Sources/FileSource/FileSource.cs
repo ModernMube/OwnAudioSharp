@@ -406,6 +406,10 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         // Check for buffer underrun
         if (framesRead < frameCount && !_isEndOfStream)
         {
+            // Fade out the tail of the real audio to prevent a hard click at the silence boundary
+            if (samplesRead > 0)
+                FadeOutTail(buffer.Slice(0, samplesRead), Math.Min(64, samplesRead));
+
             // Fill remaining with silence
             int remainingSamples = (frameCount - framesRead) * _streamInfo.Channels;
             FillWithSilence(buffer.Slice(samplesRead), remainingSamples);

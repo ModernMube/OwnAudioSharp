@@ -108,22 +108,25 @@ public sealed partial class AudioMixer
                     // 4. Apply master effects
                     ApplyMasterEffects(mixBuffer.AsSpan(0, bufferSizeInSamples), _bufferSizeInFrames);
 
-                    // 5. Calculate peak levels
+                    // 5. Prevent digital clipping: clamp summed output to ±1.0
+                    ApplyLimiter(mixBuffer.AsSpan(0, bufferSizeInSamples));
+
+                    // 6. Calculate peak levels
                     CalculatePeakLevels(mixBuffer.AsSpan(0, bufferSizeInSamples));
 
-                    // 6. Write to recorder if active
+                    // 7. Write to recorder if active
                     if (_isRecording)
                     {
                         WriteToRecorder(mixBuffer.AsSpan(0, bufferSizeInSamples));
                     }
 
-                    // 7. Send to engine (BLOCKING CALL - provides natural timing)
+                    // 8. Send to engine (BLOCKING CALL - provides natural timing)
                     _engine.Send(mixBuffer.AsSpan(0, bufferSizeInSamples));
 
                     // Update statistics
                     Interlocked.Add(ref _totalMixedFrames, _bufferSizeInFrames);
 
-                    // 8. Advance Master Clock
+                    // 9. Advance Master Clock
                     _masterClock.Advance(_bufferSizeInFrames);
 
                     // LEGACY: Advance GhostTracks if any exist (deprecated path)

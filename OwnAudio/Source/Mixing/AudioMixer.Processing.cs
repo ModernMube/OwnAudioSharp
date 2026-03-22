@@ -255,6 +255,40 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
+    /// Applies a brickwall limiter to prevent digital clipping when summed sources exceed ±1.0.
+    /// Zero-allocation hot path with SIMD vectorization.
+    /// Called once per mix cycle, after all effects and volume processing.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ApplyLimiter(Span<float> buffer)
+    {
+        int i = 0;
+        int simdLength = Vector<float>.Count;
+
+        if (Vector.IsHardwareAccelerated && buffer.Length >= simdLength)
+        {
+            var maxVec = new Vector<float>(1.0f);
+            var minVec = new Vector<float>(-1.0f);
+            int simdLoopEnd = buffer.Length - (buffer.Length % simdLength);
+
+            for (; i < simdLoopEnd; i += simdLength)
+            {
+                var vec = new Vector<float>(buffer.Slice(i, simdLength));
+                vec = Vector.Min(vec, maxVec);
+                vec = Vector.Max(vec, minVec);
+                vec.CopyTo(buffer.Slice(i, simdLength));
+            }
+        }
+
+        // Scalar fallback for remaining samples
+        for (; i < buffer.Length; i++)
+        {
+            if (buffer[i] > 1.0f) buffer[i] = 1.0f;
+            else if (buffer[i] < -1.0f) buffer[i] = -1.0f;
+        }
+    }
+
+    /// <summary>
     /// Writes mixed audio to the recorder.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

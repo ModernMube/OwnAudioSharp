@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- All platforms: desktop (Windows, Linux, macOS) + mobile (Android, iOS) -->
-    <TargetFrameworks>net9.0;net9.0-android;net9.0-ios</TargetFrameworks>
+    <!-- Default: desktop only. Pass -p:BuildMobile=true to include Android + iOS TFMs. -->
+    <TargetFrameworks>net9.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(BuildMobile)' == 'true'">net9.0;net9.0-android;net9.0-ios</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -77,9 +78,11 @@
   </ItemGroup>
 
   <!-- Core (always included for all platforms) -->
+  <!-- TargetFramework pin on Ownaudio.Native prevents MSBuild from trying to build
+       its android/ios TFMs when building this project for net9.0 only. -->
   <ItemGroup>
     <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" PrivateAssets="all" IncludeAssets="runtime" />
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" PrivateAssets="all" IncludeAssets="runtime" />
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" PrivateAssets="all" IncludeAssets="runtime" Properties="TargetFramework=$(TargetFramework)" />
   </ItemGroup>
 
   <!-- Desktop platform references (net9.0 only) -->
