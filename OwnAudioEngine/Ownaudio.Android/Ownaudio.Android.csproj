@@ -3,6 +3,10 @@
   <PropertyGroup>
     <TargetFramework>net9.0-android</TargetFramework>
     <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
+    <!-- RuntimeIdentifiers intentionally omitted: this is a library project.
+         The app project (Ownaudio.Example.Android) controls per-ABI compilation.
+         Setting RuntimeIdentifiers here causes the AOT linker to look for
+         per-ABI DLLs that this library never produces. -->
     <TargetPlatformMinVersion>24.0</TargetPlatformMinVersion>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
@@ -18,8 +22,8 @@
     <RepositoryUrl>https://github.com/yourusername/ownaudio</RepositoryUrl>
     <PackageTags>audio;android;audiotrack;real-time;low-latency;zero-allocation;mobile</PackageTags>
     <Version>1.0.0</Version>
-    <AndroidEnableProfiledAot>true</AndroidEnableProfiledAot>
-    <AndroidUseInterpreter>false</AndroidUseInterpreter>
+    <!-- AndroidEnableProfiledAot / AndroidUseInterpreter are app-level settings;
+         they have no effect in a class library and are set in the app .csproj. -->
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">

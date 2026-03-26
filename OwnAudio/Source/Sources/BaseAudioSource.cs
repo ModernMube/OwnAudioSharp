@@ -224,6 +224,31 @@ public abstract partial class BaseAudioSource : IAudioSource
         }
     }
 
+    /// <summary>
+    /// Applies a short linear fade-in to the head of the buffer.
+    /// Prevents audible click/pop artifacts when audio resumes after a hard buffer skip
+    /// (Red Zone drift correction) caused a waveform discontinuity: the first sample after
+    /// the skip may be far from the last sample before it, producing a loud crack.
+    /// Zero-allocation, in-place; safe to call with any buffer length.
+    /// </summary>
+    /// <param name="buffer">The audio buffer whose head will be faded in.</param>
+    /// <param name="fadeSamples">Number of samples to ramp from silence to full volume.</param>
+    protected static void FadeInHead(Span<float> buffer, int fadeSamples)
+    {
+        if (buffer.IsEmpty || fadeSamples <= 0)
+            return;
+
+        int count = Math.Min(fadeSamples, buffer.Length);
+
+        for (int i = 0; i < count; i++)
+        {
+            // Linear ramp: silence at index 0, full volume at index count-1
+            float t = (float)i / count;
+            buffer[i] *= t;
+        }
+    }
+
+
     #region Channel Routing
 
     private int[]? _outputChannelMapping = null;

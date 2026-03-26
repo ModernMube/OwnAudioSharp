@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk" InitialTargets="_OwnaudioClearNonAndroidRid">
 
   <PropertyGroup>
     <TargetFrameworks>net9.0-android</TargetFrameworks>
@@ -10,7 +10,19 @@
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
     <AndroidGenerateResourceDesigner>true</AndroidGenerateResourceDesigner>
+    <!-- Explicitly restrict to Android ABIs only; prevents win-arm64 host RID from leaking in on Windows ARM64 -->
+    <RuntimeIdentifiers>android-arm;android-arm64;android-x86;android-x64</RuntimeIdentifiers>
   </PropertyGroup>
+
+  <!-- InitialTargets runs before ALL other targets (including SDK validation targets),
+       which is more reliable than BeforeTargets="_ResolveAndroidTooling" on SDK 35+.
+       This clears any non-Android RuntimeIdentifier injected by the Windows ARM64 host. -->
+  <Target Name="_OwnaudioClearNonAndroidRid">
+    <PropertyGroup>
+      <RuntimeIdentifiers>android-arm;android-arm64;android-x86;android-x64</RuntimeIdentifiers>
+      <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' != '' AND !$(RuntimeIdentifier.StartsWith('android-'))"></RuntimeIdentifier>
+    </PropertyGroup>
+  </Target>
 
   <!-- Debug configuration: use interpreter for hot reload -->
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">

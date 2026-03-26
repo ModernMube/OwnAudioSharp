@@ -26,6 +26,9 @@ public sealed class CircularBuffer
     private volatile int _readPos;
     private int _available;
 
+    // Thread-safe clear flag: set by any thread, consumed atomically inside Write/Read
+    private volatile bool _clearRequested;
+
     private readonly object _lock = new object();
 
     /// <summary>
@@ -35,8 +38,9 @@ public sealed class CircularBuffer
 
     /// <summary>
     /// Gets the number of samples available to read.
+    /// Returns 0 immediately when a Clear() is pending, consistent with the deferred reset.
     /// </summary>
-    public int Available => Volatile.Read(ref _available);
+    public int Available => _clearRequested ? 0 : Volatile.Read(ref _available);
 
     /// <summary>
     /// Gets the number of samples that can be written.
@@ -78,6 +82,23 @@ public sealed class CircularBuffer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Write(ReadOnlySpan<float> data)
     {
+        // Consume a pending clear request atomically at the start of a write cycle.
+        // This avoids the race where Clear() zeroes _available while a concurrent Write
+        // is still running (which would make the subsequent Interlocked.Add go negative).
+        if (_clearRequested)
+        {
+            lock (_lock)
+            {
+                if (_clearRequested)
+                {
+                    _writePos = 0;
+                    _readPos = 0;
+                    Volatile.Write(ref _available, 0);
+                    _clearRequested = false;
+                }
+            }
+        }
+
         int available = Volatile.Read(ref _available);
         int writable = _capacity - available;
         int toWrite = Math.Min(data.Length, writable);
@@ -119,6 +140,25 @@ public sealed class CircularBuffer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Read(Span<float> destination)
     {
+        // Consume a pending clear request atomically at the start of a read cycle.
+        // This avoids the race where Clear() zeroes _available while a concurrent Read
+        // is still running (which would make the subsequent Interlocked.Add go negative).
+        if (_clearRequested)
+        {
+            lock (_lock)
+            {
+                if (_clearRequested)
+                {
+                    _writePos = 0;
+                    _readPos = 0;
+                    Volatile.Write(ref _available, 0);
+                    _clearRequested = false;
+                }
+            }
+            // Return 0 – caller will fill with silence for this cycle
+            return 0;
+        }
+
         int available = Volatile.Read(ref _available);
         int toRead = Math.Min(destination.Length, available);
 
@@ -201,34 +241,26 @@ public sealed class CircularBuffer
     }
 
     /// <summary>
-    /// Clears the buffer.
-    /// WARNING: NOT thread-safe - caller must ensure no concurrent Read/Write operations.
+    /// Requests a thread-safe clear of the buffer.
+    /// The actual reset is applied atomically inside the next Write() or Read() call
+    /// by the producer/consumer thread, avoiding the race condition where resetting
+    /// _available to 0 mid-operation causes it to go negative.
     /// </summary>
     public void Clear()
     {
-        lock (_lock)
-        {
-            _writePos = 0;
-            _readPos = 0;
-            _available = 0;
-        }
+        _clearRequested = true;
     }
 
     /// <summary>
     /// Clears the buffer and zeros out the array to prevent residual audio.
-    /// Use this for synchronized starts where we need guaranteed silence.
-    /// WARNING: NOT thread-safe - caller must ensure no concurrent Read/Write operations.
+    /// Uses the same deferred thread-safe mechanism as Clear().
+    /// The zero-fill of the backing array happens immediately (safe because float[] writes
+    /// to positions outside [readPos, writePos) are never consumed).
     /// </summary>
     public void ClearWithZero()
     {
-        lock (_lock)
-        {
-            _writePos = 0;
-            _readPos = 0;
-            _available = 0;
-        }
-
         Array.Clear(_buffer, 0, _capacity);
+        _clearRequested = true;
     }
 
     /// <summary>

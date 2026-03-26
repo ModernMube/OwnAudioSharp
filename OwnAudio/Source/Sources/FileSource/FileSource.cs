@@ -39,7 +39,8 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     private float[] _soundTouchAccumulationBuffer;
     private int _soundTouchAccumulationCount;
     private bool _wasSoundTouchProcessing = false;
-    
+
+
     // Lock-free soft sync communication (Mixer -> Decoder thread)
     private volatile float _pendingSoftSyncTempoAdjustment = 0f;
 
@@ -85,7 +86,15 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
     private int _consecutiveUnderruns = 0;  // Counter for post-dropout aggressive recovery
     private double _lastDrift = 0.0;  // Track drift history for velocity detection
 
+    // Red Zone buffer-skip fade-in flag.
+    // Set to true after _buffer.Skip() in the Red Zone to signal that the NEXT read
+    // must apply a short fade-in ramp.  This masks the waveform discontinuity that
+    // the skip creates (the sample immediately after the skipped block may be at an
+    // arbitrary amplitude, producing a loud crack without the ramp).
+    private volatile bool _needsFadeIn = false;
+
     #endregion
+
 
     #region Properties
 
@@ -526,8 +535,6 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                     _soundTouch.Clear();
                     // Clear accumulation buffer
                     _soundTouchAccumulationCount = 0; 
-                    // Reset transition tracking after Seek
-                    _wasSoundTouchProcessing = false; 
                 }
 
                 // Reset input-driven timing counter
@@ -600,8 +607,6 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
                     {
                         _soundTouch.Clear();
                         _soundTouchAccumulationCount = 0;
-                        // Reset transition tracking
-                        _wasSoundTouchProcessing = false;
                     }
                 }
                 else

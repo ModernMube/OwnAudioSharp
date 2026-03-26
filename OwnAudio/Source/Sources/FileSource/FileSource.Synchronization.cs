@@ -320,6 +320,10 @@ public partial class FileSource
                         // INSTANT RESYNC: Skip samples in buffer
                         _buffer.Skip(driftSamples);
 
+                        // Signal that the next read must apply a fade-in to mask the
+                        // waveform discontinuity created by skipping over samples.
+                        _needsFadeIn = true;
+
                         // Update track time to target
                         _trackLocalTime = targetTrackTime;
 
@@ -431,6 +435,17 @@ public partial class FileSource
         int samplesToRead = frameCount * _streamInfo.Channels;
         int samplesRead = _buffer.Read(buffer.Slice(0, samplesToRead));
         int framesRead = samplesRead / _streamInfo.Channels;
+
+        // Apply fade-in ramp if a Red Zone buffer-skip just happened.
+        // The skip discards samples mid-stream, so the first sample of the next
+        // read can be at an arbitrary amplitude – without ramping it in, the
+        // sudden level jump is heard as a loud crack.
+        // 128 samples ≈ 2.7 ms at 48 kHz: inaudible as a fade, audible as a crack.
+        if (_needsFadeIn && samplesRead > 0)
+        {
+            _needsFadeIn = false;
+            FadeInHead(buffer.Slice(0, samplesRead), Math.Min(128, samplesRead));
+        }
 
         // OPTIMIZATION (Phase 2): Signal decoder thread if buffer is getting low
         // This wakes the decoder thread immediately when more data is needed
@@ -559,7 +574,6 @@ public partial class FileSource
         {
             _soundTouch.Clear();
             _soundTouchAccumulationCount = 0;
-            _wasSoundTouchProcessing = false;
         }
 
         // 2. Seek to target (clears circular buffer)

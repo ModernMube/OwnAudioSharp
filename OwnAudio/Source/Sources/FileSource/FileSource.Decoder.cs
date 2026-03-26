@@ -212,8 +212,6 @@ public partial class FileSource
                     _soundTouch.Clear();
                     // Clear accumulation buffer
                     _soundTouchAccumulationCount = 0;
-                    // Reset transition tracking
-                    _wasSoundTouchProcessing = false;
                 }
                 return true;
             }
@@ -236,6 +234,8 @@ public partial class FileSource
 
     /// <summary>
     /// Processes a successfully decoded frame.
+    /// Bypasses SoundTouch at identity settings (tempo=1.0, pitch=0) to avoid latency.
+    /// Transitions are handled without Flush() to prevent silence-pad crackling.
     /// </summary>
     private void ProcessDecodedFrame(AudioDecoderResult readResult)
     {
@@ -243,14 +243,15 @@ public partial class FileSource
         var floatSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(_decodeBuffer.AsSpan(0, bytesRead));
         int frameCount = readResult.FramesRead;
 
-        // Bypass SoundTouch when tempo=1.0 AND pitch=0
-        // OPTIMIZATION: Check outside lock to reduce contention with MixThread
+        // Decide path: bypass SoundTouch when tempo=1.0 AND pitch=0
+        // This is critical for multi-track sync: SoundTouch has ~20-80ms internal latency
+        // that accumulates differently on each track and causes audible drift between sávok.
         bool isProcessingNeeded = _soundTouch.IsProcessingNeeded();
 
-        // Handle transitions between SoundTouch processing and direct write
+        // Handle the ON→OFF and OFF→ON transitions (without Flush/silence crackling)
         HandleSoundTouchTransition(isProcessingNeeded);
 
-        // Update transition tracking
+        // Update transition tracking BEFORE the write so the next call sees the new state
         _wasSoundTouchProcessing = isProcessingNeeded;
 
         // Track total samples processed from file for input-driven timing
@@ -261,30 +262,37 @@ public partial class FileSource
 
         if (isProcessingNeeded)
         {
-            // Process through SoundTouch
+            // Process through SoundTouch (pitch/tempo active)
             ProcessWithSoundTouch(floatSpan, frameCount);
         }
         else
         {
-            // Direct write to buffer
+            // Direct write – zero latency, keeps tracks in sync
             _buffer.Write(floatSpan);
         }
     }
 
     /// <summary>
-    /// Handles transitions between SoundTouch processing and direct write.
+    /// Handles ON→OFF and OFF→ON transitions between SoundTouch and the direct path.
+    /// ON→OFF: drains whatever samples SoundTouch already has (NO Flush/silence injection).
+    ///         This preserves the last real audio and avoids the zero-padding crack.
+    /// OFF→ON: clears SoundTouch state so stale data from a previous session doesn't appear.
     /// </summary>
     private void HandleSoundTouchTransition(bool isProcessingNeeded)
     {
-        // Detect transitions between SoundTouch processing and direct write
         if (_wasSoundTouchProcessing && !isProcessingNeeded)
         {
-            // SoundTouch OFF (was ON) - Flush all remaining data
-            FlushSoundTouchBuffer();
+            // SoundTouch turning OFF – drain its internal pipeline WITHOUT adding silence.
+            // The old code called FlushSoundTouchBuffer() here which internally calls
+            // _soundTouch.Flush(). That method injects blank (zero) frames to push out
+            // the remaining samples, and those zeros get written to the circular buffer,
+            // producing an unmistakable "click" at the transition point.
+            // Replacing it with a plain ReceiveSamples loop avoids the silence injection.
+            DrainSoundTouchBuffer();
         }
         else if (!_wasSoundTouchProcessing && isProcessingNeeded)
         {
-            // SoundTouch ON (was OFF) - Clear SoundTouch state
+            // SoundTouch turning ON – clear any stale state from the previous bypass period
             lock (_soundTouchLock)
             {
                 _soundTouch.Clear();
@@ -292,6 +300,7 @@ public partial class FileSource
             }
         }
     }
+
 
     #endregion
 
@@ -391,8 +400,64 @@ public partial class FileSource
     }
 
     /// <summary>
+    /// Drains all samples that SoundTouch has already processed, WITHOUT injecting silence.
+    /// Used during SoundTouch ON→OFF transitions to recover the last real audio frames.
+    ///
+    /// WHY NOT Flush()?
+    /// <see cref="SoundTouchProcessor.Flush"/> internally feeds up to 200 batches of
+    /// 128 silent (zero) frames to push residual samples out of the time-stretch pipeline.
+    /// Those zero frames get written into the circular buffer and produce a clearly audible
+    /// "click" or "pop" at the exact moment the user changes pitch/tempo back to identity.
+    ///
+    /// DrainSoundTouchBuffer only calls ReceiveSamples in a loop – it never adds input.
+    /// Any samples that SoundTouch has not yet emitted stay in its internal buffer and
+    /// are simply abandoned (a few milliseconds of audio at most, imperceptible).
+    /// </summary>
+    private void DrainSoundTouchBuffer()
+    {
+        lock (_soundTouchLock)
+        {
+            try
+            {
+                // Read whatever SoundTouch has already finished processing
+                while (true)
+                {
+                    int maxFrames = _soundTouchOutputBuffer.Length / _streamInfo.Channels;
+                    int framesReceived = _soundTouch.ReceiveSamples(_soundTouchOutputBuffer, maxFrames);
+                    if (framesReceived == 0)
+                        break;
+
+                    int samplesToAdd = framesReceived * _streamInfo.Channels;
+                    AddToSoundTouchAccumulationBuffer(_soundTouchOutputBuffer.AsSpan(0, samplesToAdd));
+                }
+
+                // Write whatever we drained into the circular buffer
+                if (_soundTouchAccumulationCount > 0)
+                {
+                    int samplesWritten = _buffer.Write(_soundTouchAccumulationBuffer.AsSpan(0, _soundTouchAccumulationCount));
+                    int remainingSamples = _soundTouchAccumulationCount - samplesWritten;
+                    if (remainingSamples > 0)
+                    {
+                        _soundTouchAccumulationBuffer.AsSpan(samplesWritten, remainingSamples)
+                            .CopyTo(_soundTouchAccumulationBuffer.AsSpan(0, remainingSamples));
+                    }
+                    _soundTouchAccumulationCount = remainingSamples;
+                }
+
+                // Clear SoundTouch state now that we've drained the real samples
+                _soundTouch.Clear();
+                _soundTouchAccumulationCount = 0;
+            }
+            catch (Exception ex)
+            {
+                OnError(new AudioErrorEventArgs($"SoundTouch drain error: {ex.Message}", ex));
+            }
+        }
+    }
+
+    /// <summary>
     /// Flushes the SoundTouch buffer to retrieve all remaining processed samples.
-    /// Common pattern used at EOF and during transitions.
+    /// Used at EOF only – NOT used for ON/OFF transitions (use DrainSoundTouchBuffer instead).
     /// </summary>
     private void FlushSoundTouchBuffer()
     {
@@ -414,11 +479,25 @@ public partial class FileSource
                     AddToSoundTouchAccumulationBuffer(_soundTouchOutputBuffer.AsSpan(0, samplesToAdd));
                 }
 
-                // Flush accumulation buffer to CircularBuffer
+                // Flush accumulation buffer to CircularBuffer.
+                // BUGFIX: Only discard the samples that were actually written.
+                // Previously, _soundTouchAccumulationCount was always reset to 0 even when
+                // _buffer.Write() returned fewer samples than requested (e.g. when the
+                // circular buffer was almost full). This silently discarded the unwritten
+                // tail, producing a micro-dropout (crackle) precisely when SoundTouch
+                // switches off (which is a random, timing-dependent event).
                 if (_soundTouchAccumulationCount > 0)
                 {
-                    _buffer.Write(_soundTouchAccumulationBuffer.AsSpan(0, _soundTouchAccumulationCount));
-                    _soundTouchAccumulationCount = 0;
+                    int samplesWritten = _buffer.Write(_soundTouchAccumulationBuffer.AsSpan(0, _soundTouchAccumulationCount));
+
+                    // Shift any unwritten samples to the front of the accumulation buffer
+                    int remainingSamples = _soundTouchAccumulationCount - samplesWritten;
+                    if (remainingSamples > 0)
+                    {
+                        _soundTouchAccumulationBuffer.AsSpan(samplesWritten, remainingSamples)
+                            .CopyTo(_soundTouchAccumulationBuffer.AsSpan(0, remainingSamples));
+                    }
+                    _soundTouchAccumulationCount = remainingSamples;
                 }
             }
             catch (Exception ex)
