@@ -137,6 +137,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Gets the sample rate in Hz (set at construction time).
+        /// </summary>
+        public int SampleRate => _sampleRate;
+
+        /// <summary>
         /// Initialize Flanger Processor with specific parameters.
         /// </summary>
         /// <param name="rate">LFO rate in Hz (0.1 - 5.0)</param>

@@ -25,6 +25,17 @@ namespace Ownaudio.Core
         int FramesPerBuffer { get; }
 
         /// <summary>
+        /// Gets the current operational status of the audio engine.
+        /// </summary>
+        /// <returns>
+        /// <see cref="EngineStatus.Idle"/> = initialized but not started
+        /// <see cref="EngineStatus.Running"/> = actively processing audio
+        /// <see cref="EngineStatus.DeviceDisconnected"/> = device unplugged; waiting for reconnection
+        /// <see cref="EngineStatus.Error"/> = fatal error
+        /// </returns>
+        EngineStatus Status { get; }
+
+        /// <summary>
         /// Gets the activation state of the audio engine.
         /// </summary>
         /// <returns>
@@ -146,6 +157,12 @@ namespace Ownaudio.Core
         /// Event raised when a device state changes (added, removed, enabled, disabled).
         /// </summary>
         event EventHandler<AudioDeviceStateChangedEventArgs> DeviceStateChanged;
+
+        /// <summary>
+        /// Event raised when a previously disconnected audio device reconnects.
+        /// The engine automatically resumes playback and recording.
+        /// </summary>
+        event EventHandler<AudioDeviceReconnectedEventArgs> DeviceReconnected;
 
         /// <summary>
         /// Pauses the background device monitoring task.

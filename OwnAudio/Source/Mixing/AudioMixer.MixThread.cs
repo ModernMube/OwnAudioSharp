@@ -144,6 +144,20 @@ public sealed partial class AudioMixer
                     // Still advance clock even with silence (timeline keeps moving)
                     _masterClock.Advance(_bufferSizeInFrames);
 
+                    // Check if all sources have finished (EndOfStream)
+                    if (!_playbackEndedFired && _sources.Count > 0)
+                    {
+                        var snapshot = _cachedSourcesArray;
+                        bool allEnded = snapshot.Length > 0 &&
+                                        Array.TrueForAll(snapshot, s => s.State == AudioState.EndOfStream);
+                        if (allEnded)
+                        {
+                            _playbackEndedFired = true;
+                            // Fire on thread pool to avoid blocking the mix thread
+                            ThreadPool.QueueUserWorkItem(_ => PlaybackEnded?.Invoke(this, EventArgs.Empty));
+                        }
+                    }
+
                     // Sleep longer when no sources are active
                     Thread.Sleep(_mixIntervalMs * 2);
                 }

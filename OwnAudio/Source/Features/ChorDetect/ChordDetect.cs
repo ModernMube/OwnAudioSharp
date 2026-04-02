@@ -5,6 +5,7 @@ using OwnaudioNET.Features.OwnChordDetect.Detectors;
 using OwnaudioNET.Exceptions;
 using Ownaudio.Decoders;
 using Ownaudio.Core;
+using SoundTouch;
 
 namespace OwnaudioNET.Features.OwnChordDetect
 {
@@ -46,7 +47,7 @@ namespace OwnaudioNET.Features.OwnChordDetect
             var converter = new NotesConverter(modelOutput);
             List<OwnaudioNET.Features.Extensions.Note> rawNotes = converter.Convert(convertOptions);
 
-            int detectTempo = MidiWriter.DetectTempo(rawNotes);
+            int detectTempo = DetectBpmFromSamples(samples, 22050, 1);
 
             //Fine - tuning musical chord recognition
             var analyzer = new SongChordAnalyzer(
@@ -144,7 +145,7 @@ namespace OwnaudioNET.Features.OwnChordDetect
             var converter = new NotesConverter(modelOutput);
             List<Note> rawNotes = converter.Convert(convertOptions);
 
-            int detectTempo = MidiWriter.DetectTempo(rawNotes);
+            int detectTempo = DetectBpmFromSamples(mixed, 22050, 1);
 
             var analyzer = new SongChordAnalyzer(
                 windowSize: intervalSecond,        // fallback if bpm = 0
@@ -160,6 +161,27 @@ namespace OwnaudioNET.Features.OwnChordDetect
 #nullable disable
             return (chords, detectedKey, detectTempo);
 #nullable restore
+        }
+
+        /// <summary>
+        /// Detects BPM from raw audio samples using SoundTouch auto-correlation algorithm.
+        /// Falls back to 120 BPM if detection fails (e.g. speech or non-rhythmic content).
+        /// </summary>
+        private static int DetectBpmFromSamples(float[] samples, int sampleRate, int channels)
+        {
+            const int chunkSize = 4096;
+            var bpmDetect = new BpmDetect(channels, sampleRate);
+
+            int offset = 0;
+            while (offset < samples.Length)
+            {
+                int count = Math.Min(chunkSize, samples.Length - offset);
+                bpmDetect.InputSamples(samples.AsSpan(offset, count), count / channels);
+                offset += count;
+            }
+
+            float bpm = bpmDetect.GetBpm();
+            return bpm > 0 ? (int)Math.Round(bpm) : 120;
         }
 
         public static (string chord, float stability) DetectRealtime(

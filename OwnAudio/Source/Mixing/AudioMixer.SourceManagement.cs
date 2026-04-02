@@ -42,6 +42,9 @@ public sealed partial class AudioMixer
             // OPTIMIZATION: Invalidate cached array when sources change
             _sourcesArrayNeedsUpdate = true;
 
+            // Reset PlaybackEnded flag so it can fire again for the new session
+            _playbackEndedFired = false;
+
             // If mixer is running and source is not playing, start it
             if (_isRunning && source.State != AudioState.Playing)
             {
@@ -54,6 +57,41 @@ public sealed partial class AudioMixer
                     // Source failed to start - will be handled by error event
                 }
             }
+        }
+
+        return added;
+    }
+
+    /// <summary>
+    /// Adds a source to the mixer WITHOUT starting playback.
+    /// Use this together with <see cref="FileSource.PreBuffer"/> and
+    /// <see cref="StartPreparedSources"/> for zero-drift multi-track startup.
+    /// </summary>
+    /// <param name="source">The audio source to add.</param>
+    /// <returns>True if added successfully, false if source already exists.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when source is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when track limit exceeded.</exception>
+    /// <exception cref="ObjectDisposedException">Thrown if mixer is disposed.</exception>
+    public bool AddSourcePrepared(IAudioSource source)
+    {
+        ThrowIfDisposed();
+
+        if (source == null)
+            throw new ArgumentNullException(nameof(source));
+
+        if (_sources.Count >= AudioConstants.MaxAudioSources)
+            throw new InvalidOperationException(
+                $"Maximum track limit ({AudioConstants.MaxAudioSources}) reached. " +
+                $"Cannot add more sources.");
+
+        bool added = _sources.TryAdd(source.Id, source);
+        if (added)
+        {
+            source.Error += OnSourceError;
+            _sourcesArrayNeedsUpdate = true;
+            // Reset PlaybackEnded flag so it can fire again for the new session
+            _playbackEndedFired = false;
+            // Note: source.Play() is NOT called here intentionally.
         }
 
         return added;

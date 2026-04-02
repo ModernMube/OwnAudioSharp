@@ -91,9 +91,29 @@ namespace Ownaudio.macOS
         /// <summary>
         /// Occurs when an audio device's state changes.
         /// </summary>
-#pragma warning disable CS0067 // Event is declared but never used
+#pragma warning disable CS0067 // Events are part of the public IAudioEngine API; raised via notification callbacks
         public event EventHandler<AudioDeviceStateChangedEventArgs>? DeviceStateChanged;
+
+        /// <summary>
+        /// Raised when a previously disconnected audio device reconnects.
+        /// NOTE: Hot-plug automatic reconnection is handled by NativeAudioEngine.
+        /// This event is available for API compatibility; CoreAudio engine does not auto-reconnect.
+        /// </summary>
+        public event EventHandler<AudioDeviceReconnectedEventArgs>? DeviceReconnected;
 #pragma warning restore CS0067
+
+        /// <summary>
+        /// Gets the current operational status of the audio engine.
+        /// </summary>
+        public EngineStatus Status
+        {
+            get
+            {
+                if (_isActive == -1) return EngineStatus.Error;
+                if (_isRunning == 1) return EngineStatus.Running;
+                return EngineStatus.Idle;
+            }
+        }
 
         /// <summary>
         /// Gets the number of audio frames per buffer.

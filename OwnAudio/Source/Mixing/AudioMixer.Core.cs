@@ -86,6 +86,9 @@ public sealed partial class AudioMixer : IDisposable
     // Unique identifier for this mixer instance
     private readonly Guid _mixerId;
 
+    // PlaybackEnded tracking
+    private volatile bool _playbackEndedFired;
+
     // Dispose flag
     private bool _disposed;
 
@@ -174,6 +177,12 @@ public sealed partial class AudioMixer : IDisposable
     /// Event raised when a track dropout occurs during master clock synchronized playback (NEW - v2.4.0+).
     /// </summary>
     public event EventHandler<TrackDropoutEventArgs>? TrackDropout;
+
+    /// <summary>
+    /// Fired when all sources in the mixer have reached EndOfStream state.
+    /// Only fired once per playback session; resets when a new source is added.
+    /// </summary>
+    public event EventHandler? PlaybackEnded;
 
     /// <summary>
     /// Initializes a new instance of the AudioMixer class.

@@ -146,6 +146,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Gets the sample rate in Hz (set at construction time).
+        /// </summary>
+        public int SampleRate => _sampleRate;
+
+        /// <summary>
         /// Initialize Phaser Processor with all parameters.
         /// </summary>
         /// <param name="rate">LFO rate in Hz (0.1 - 10.0)</param>

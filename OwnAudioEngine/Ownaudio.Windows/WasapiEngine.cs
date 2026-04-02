@@ -86,6 +86,28 @@ namespace Ownaudio.Windows
         public event EventHandler<AudioDeviceStateChangedEventArgs> DeviceStateChanged;
 
         /// <summary>
+        /// Raised when a previously disconnected audio device reconnects.
+        /// NOTE: Hot-plug automatic reconnection is handled by NativeAudioEngine.
+        /// This event is available for API compatibility; WASAPI does not auto-reconnect.
+        /// </summary>
+#pragma warning disable CS0067
+        public event EventHandler<AudioDeviceReconnectedEventArgs> DeviceReconnected;
+#pragma warning restore CS0067
+
+        /// <summary>
+        /// Gets the current operational status of the audio engine.
+        /// </summary>
+        public EngineStatus Status
+        {
+            get
+            {
+                if (_isActive == -1) return EngineStatus.Error;
+                if (_isRunning == 1) return EngineStatus.Running;
+                return EngineStatus.Idle;
+            }
+        }
+
+        /// <summary>
         /// Gets the number of audio frames per buffer provided by the WASAPI client.
         /// </summary>
         public int FramesPerBuffer => _framesPerBuffer;

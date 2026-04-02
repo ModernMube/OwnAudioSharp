@@ -561,6 +561,49 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
 
     #region Playback Control
 
+    /// <summary>
+    /// Starts the decoder thread and waits for the internal buffer to reach
+    /// the minimum playback level. Does NOT change State to Playing.
+    /// Call this before Play() to avoid blocking Play() in latency-sensitive paths.
+    /// </summary>
+    public void PreBuffer()
+    {
+        ThrowIfDisposed();
+
+        // Reconstruct decoder thread if it exited
+        if (!_decoderThread.IsAlive && _decoderThread.ThreadState != ThreadState.Unstarted)
+        {
+            _decoderThread = new Thread(DecoderThreadProc)
+            {
+                Name = $"FileSource-Decoder-{Id}",
+                IsBackground = true,
+                Priority = ThreadPriority.Normal
+            };
+            _shouldStop = false;
+            _isEndOfStream = false;
+        }
+
+        // Signal decoder to start filling the buffer
+        _pauseEvent.Set();
+
+        if (_decoderThread.ThreadState == ThreadState.Unstarted)
+            _decoderThread.Start();
+
+        // Wait for minimum fill level (same logic as Play())
+        int bufferSizeInSamples = _bufferSizeInFrames * _streamInfo.Channels * 4;
+        bool isSoundTouchActive = _soundTouch.IsProcessingNeeded();
+        int minBufferLevel = isSoundTouchActive
+            ? (bufferSizeInSamples * 3) / 4
+            : bufferSizeInSamples / 2;
+
+        int waitCount = 0;
+        while (_buffer.Available < minBufferLevel && waitCount < 500)
+        {
+            Thread.Sleep(1);
+            waitCount++;
+        }
+    }
+
     /// <inheritdoc/>
     public override void Play()
     {
@@ -569,7 +612,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
         // Signal decoder to start pre-buffering
         _isPreBuffering = true;
         // Resume decoder thread
-        _pauseEvent.Set(); 
+        _pauseEvent.Set();
 
         // Recreate decoder thread if it's terminated
         if (!_decoderThread.IsAlive)
@@ -628,20 +671,22 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IGhostTrackO
             _decoderThread.Start();
         }
 
-        // Wait for buffer to fill
+        // Wait for buffer to fill - skip if already sufficiently filled (e.g. PreBuffer() was called)
         int bufferSizeInSamples = _bufferSizeInFrames * _streamInfo.Channels * 4;
-        // Dynamic buffer sizing: higher target when SoundTouch is active
         bool isSoundTouchActive = _soundTouch.IsProcessingNeeded();
-        int minBufferLevel = isSoundTouchActive 
+        int minBufferLevel = isSoundTouchActive
             ? (bufferSizeInSamples * 3) / 4  // 75% for SoundTouch
             : bufferSizeInSamples / 2;        // 50% for direct playback
-        int waitCount = 0;
 
-        // Reduced timeout from 1000ms to 500ms
-        while (_buffer.Available < minBufferLevel && waitCount < 500) 
+        if (_buffer.Available < minBufferLevel)
         {
-            Thread.Sleep(1);
-            waitCount++;
+            int waitCount = 0;
+            // Reduced timeout from 1000ms to 500ms
+            while (_buffer.Available < minBufferLevel && waitCount < 500)
+            {
+                Thread.Sleep(1);
+                waitCount++;
+            }
         }
 
         _isPreBuffering = false;

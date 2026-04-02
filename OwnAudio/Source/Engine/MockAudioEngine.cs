@@ -69,6 +69,26 @@ public sealed class MockAudioEngine : IAudioEngine
     /// <inheritdoc/>
     public event EventHandler<AudioDeviceStateChangedEventArgs>? DeviceStateChanged;
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The mock engine can fire this event via <see cref="SimulateDeviceReconnected"/>.
+    /// </remarks>
+#pragma warning disable CS0067
+    public event EventHandler<AudioDeviceReconnectedEventArgs>? DeviceReconnected;
+#pragma warning restore CS0067
+
+    /// <inheritdoc/>
+    public EngineStatus Status
+    {
+        get
+        {
+            int s = _state;
+            if (s == -1) return EngineStatus.Error;
+            if (s == 1)  return EngineStatus.Running;
+            return EngineStatus.Idle;
+        }
+    }
+
     /// <summary>
     /// Initializes a new instance of the MockAudioEngine class.
     /// </summary>

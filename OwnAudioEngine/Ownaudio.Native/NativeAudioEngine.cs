@@ -106,28 +106,40 @@ namespace Ownaudio.Native
         /// <summary>
         /// Raised when the output device changes.
         /// </summary>
-#pragma warning disable CS0067 // Event is never used
+#pragma warning disable CS0067 // Events are part of the public IAudioEngine API; not yet fired internally for PortAudio device changes
         public event EventHandler<AudioDeviceChangedEventArgs>? OutputDeviceChanged;
 
         /// <summary>
         /// Raised when the input device changes.
         /// </summary>
         public event EventHandler<AudioDeviceChangedEventArgs>? InputDeviceChanged;
+#pragma warning restore CS0067
 
         /// <summary>
-        /// Raised when the device state changes.
+        /// Raised when the device state changes (e.g., device removed).
         /// </summary>
         public event EventHandler<AudioDeviceStateChangedEventArgs>? DeviceStateChanged;
-#pragma warning restore CS0067
+
+        /// <summary>
+        /// Raised when a previously disconnected audio device reconnects.
+        /// Playback and recording automatically resume.
+        /// </summary>
+        public event EventHandler<AudioDeviceReconnectedEventArgs>? DeviceReconnected;
 
         #endregion
 
         #region Device Monitoring Fields
 
         /// <summary>
-        /// Device monitoring interval in milliseconds.
+        /// Device monitoring interval in milliseconds during normal operation.
         /// </summary>
         private const int DeviceMonitorIntervalMs = 1000;
+
+        /// <summary>
+        /// Device monitoring interval in milliseconds when a device is disconnected.
+        /// More frequent polling to detect reconnection quickly.
+        /// </summary>
+        private const int DeviceReconnectPollIntervalMs = 500;
 
         /// <summary>
         /// Cancellation token source for device monitoring task.
@@ -171,6 +183,43 @@ namespace Ownaudio.Native
         /// </summary>
         private volatile bool _isMonitoringPaused;
 
+        /// <summary>
+        /// Current operational status of the audio engine.
+        /// Cast to/from <see cref="EngineStatus"/> as needed.
+        /// 0=Idle, 1=Running, 2=DeviceDisconnected, -1=Error
+        /// </summary>
+        private volatile int _engineStatusValue;
+
+        /// <summary>
+        /// Indicates whether the active device has been unexpectedly disconnected.
+        /// 0 = connected, 1 = disconnected (waiting for reconnect).
+        /// </summary>
+        private volatile int _isDeviceDisconnected;
+
+        /// <summary>
+        /// The friendly name of the output device that was disconnected.
+        /// Used to identify and reconnect to the same device.
+        /// </summary>
+        private string? _disconnectedOutputDeviceName;
+
+        /// <summary>
+        /// The friendly name of the input device that was disconnected.
+        /// Used to identify and reconnect to the same device.
+        /// </summary>
+        private string? _disconnectedInputDeviceName;
+
+        /// <summary>
+        /// The original output device ID before disconnect.
+        /// Restored when the device reconnects.
+        /// </summary>
+        private string? _originalOutputDeviceId;
+
+        /// <summary>
+        /// The original input device ID before disconnect.
+        /// Restored when the device reconnects.
+        /// </summary>
+        private string? _originalInputDeviceId;
+
         #endregion
 
         #region Properties
@@ -179,6 +228,11 @@ namespace Ownaudio.Native
         /// Gets the number of frames per audio buffer.
         /// </summary>
         public int FramesPerBuffer => _framesPerBuffer;
+
+        /// <summary>
+        /// Gets the current operational status of the audio engine.
+        /// </summary>
+        public EngineStatus Status => (EngineStatus)_engineStatusValue;
 
         #endregion
 
@@ -391,6 +445,7 @@ namespace Ownaudio.Native
 
         /// <summary>
         /// Background loop that monitors for device changes.
+        /// Uses a faster polling rate when a device is disconnected so reconnection is detected quickly.
         /// </summary>
         private async Task DeviceMonitorLoop(CancellationToken ct)
         {
@@ -398,10 +453,16 @@ namespace Ownaudio.Native
             {
                 try
                 {
-                    await Task.Delay(DeviceMonitorIntervalMs, ct);
+                    // Poll faster while waiting for a disconnected device to reappear
+                    int delay = _isDeviceDisconnected == 1
+                        ? DeviceReconnectPollIntervalMs
+                        : DeviceMonitorIntervalMs;
 
-                    // Skip device checking if monitoring is paused
-                    if (_isMonitoringPaused)
+                    await Task.Delay(delay, ct);
+
+                    // Always run checks when disconnected (ignoring _isMonitoringPaused),
+                    // because we need to detect reconnection regardless of UI state.
+                    if (_isMonitoringPaused && _isDeviceDisconnected == 0)
                         continue;
 
                     CheckForDeviceChanges();
@@ -452,74 +513,108 @@ namespace Ownaudio.Native
         }
 
         /// <summary>
-        /// Checks for device changes and handles device removal.
+        /// Checks for device changes and handles device removal or reconnection.
+        /// When a device is disconnected, this method monitors for the original device
+        /// to reappear instead of immediately switching to a default device.
         /// Uses lightweight counting first to avoid expensive full enumeration.
         /// </summary>
         private void CheckForDeviceChanges()
         {
             try
             {
-                // Only monitor if engine is running and not paused
-                if (_isRunning == 0 || _isMonitoringPaused)
+                if (_isRunning == 0)
                     return;
 
-                // Lightweight check: First check if the number of devices has changed
-                int currentRawCount = GetRawDeviceCount();
-                if (currentRawCount == _lastRawDeviceCount)
+                // --- RECONNECT MODE ---
+                // If a device is disconnected, check if it has reappeared.
+                if (_isDeviceDisconnected == 1)
                 {
-                    // No change in device count, assume no changes to avoid expensive enumeration/probing
+                    var currentOutputDevices = GetOutputDevices();
+                    // Check by device name for the disconnected output device
+                    if (_disconnectedOutputDeviceName != null)
+                    {
+                        var found = currentOutputDevices?.Find(d =>
+                            d.Name.Equals(_disconnectedOutputDeviceName, StringComparison.OrdinalIgnoreCase));
+
+                        if (found != null)
+                        {
+                            Log.Info($"Disconnected output device '{_disconnectedOutputDeviceName}' has reappeared. Reconnecting...");
+                            _ = HandleDeviceReconnected(true, found);
+                            return;
+                        }
+                    }
+
+                    // Check for reconnected input device
+                    if (_config.EnableInput && _disconnectedInputDeviceName != null)
+                    {
+                        var currentInputDevices = GetInputDevices();
+                        var foundInput = currentInputDevices?.Find(d =>
+                            d.Name.Equals(_disconnectedInputDeviceName, StringComparison.OrdinalIgnoreCase));
+
+                        if (foundInput != null)
+                        {
+                            Log.Info($"Disconnected input device '{_disconnectedInputDeviceName}' has reappeared. Reconnecting...");
+                            _ = HandleDeviceReconnected(false, foundInput);
+                            return;
+                        }
+                    }
+
+                    // Device still not available — update raw count baseline and keep waiting
+                    _lastRawDeviceCount = GetRawDeviceCount();
                     return;
                 }
 
-                // If count changed, update the last known count and proceed with full verification
+                // --- NORMAL MONITORING MODE ---
+                // Lightweight check: compare raw device count first
+                int currentRawCount = GetRawDeviceCount();
+                if (currentRawCount == _lastRawDeviceCount)
+                    return; // No change
+
                 _lastRawDeviceCount = currentRawCount;
                 Log.Info($"Device count changed to {currentRawCount}. Performing full device enumeration.");
 
-                // Get current device lists
-                var currentOutputDevices = GetOutputDevices();
-                var currentInputDevices = _config.EnableInput ? GetInputDevices() : null;
+                var outputDevices = GetOutputDevices();
+                var inputDevices = _config.EnableInput ? GetInputDevices() : null;
 
                 // Check if active output device was removed
                 if (_lastActiveOutputDeviceId != null)
                 {
-                    var activeOutputExists = currentOutputDevices?.Any(d => d.DeviceId == _lastActiveOutputDeviceId) ?? false;
-
+                    var activeOutputExists = outputDevices?.Any(d => d.DeviceId == _lastActiveOutputDeviceId) ?? false;
                     if (!activeOutputExists)
                     {
                         Log.Warning($"Active output device removed (ID: {_lastActiveOutputDeviceId})");
-                        _ = HandleDeviceRemoved(true); // Fire and forget
-                        return; // Exit early, HandleDeviceRemoved will reinitialize
+                        _ = HandleDeviceRemoved(true);
+                        return;
                     }
                 }
 
                 // Check if active input device was removed
                 if (_config.EnableInput && _lastActiveInputDeviceId != null)
                 {
-                    var activeInputExists = currentInputDevices?.Any(d => d.DeviceId == _lastActiveInputDeviceId) ?? false;
-
+                    var activeInputExists = inputDevices?.Any(d => d.DeviceId == _lastActiveInputDeviceId) ?? false;
                     if (!activeInputExists)
                     {
                         Log.Warning($"Active input device removed (ID: {_lastActiveInputDeviceId})");
-                        _ = HandleDeviceRemoved(false); // Fire and forget
-                        return; // Exit early, HandleDeviceRemoved will reinitialize
+                        _ = HandleDeviceRemoved(false);
+                        return;
                     }
                 }
 
-                // Check if default device changed (only if we're using default)
-                if (_config.OutputDeviceId == null)
+                // Check if default device changed (only when using default device)
+                if (_config.OutputDeviceId == null && _disconnectedOutputDeviceName == null)
                 {
-                    var currentDefault = currentOutputDevices?.Find(d => d.IsDefault);
+                    var currentDefault = outputDevices?.Find(d => d.IsDefault);
                     if (currentDefault != null && currentDefault.DeviceId != _lastActiveOutputDeviceId)
                     {
                         Log.Info($"Default output device changed to: {currentDefault.Name}");
-                        _ = HandleDeviceRemoved(true); // Fire and forget - reinitialize with new default
+                        _ = HandleDeviceRemoved(true);
                         return;
                     }
                 }
 
                 // Update last known device lists
-                _lastKnownOutputDevices = currentOutputDevices;
-                _lastKnownInputDevices = currentInputDevices;
+                _lastKnownOutputDevices = outputDevices;
+                _lastKnownInputDevices = inputDevices;
             }
             catch (Exception ex)
             {
@@ -528,56 +623,183 @@ namespace Ownaudio.Native
         }
 
         /// <summary>
-        /// Handles device removal by reinitializing the engine with the default device.
+        /// Handles unexpected device removal.
+        /// The engine does NOT stop — audio data processing continues internally.
+        /// Only the hardware stream is stopped. The engine enters DeviceDisconnected state
+        /// and waits for the device to reconnect via the monitoring loop.
         /// </summary>
+        /// <param name="isOutputDevice">
+        /// True if the output (playback) device was removed; false for the input device.
+        /// </param>
         private async Task HandleDeviceRemoved(bool isOutputDevice)
         {
+            // Guard against multiple invocations
+            if (Interlocked.CompareExchange(ref _isDeviceDisconnected, 1, 0) != 0)
+                return;
+
             try
             {
-                Log.Warning("Device removed, switching to default device...");
+                string removedDeviceName;
 
-                // Stop the engine safely
-                Stop();
-
-                // Wait a bit for the device to be fully released
-                await Task.Delay(500);
-
-                // Modify config to use default device
                 if (isOutputDevice)
                 {
-                    _config.OutputDeviceId = null; // Use default
-                    _activeOutputDeviceIndex = -1;
+                    // Look up the friendly name of the removed device
+                    removedDeviceName = _lastKnownOutputDevices
+                        ?.Find(d => d.DeviceId == _lastActiveOutputDeviceId)?.Name
+                        ?? _lastActiveOutputDeviceId
+                        ?? "Unknown output device";
+
+                    _disconnectedOutputDeviceName = removedDeviceName;
+                    _originalOutputDeviceId = _config.OutputDeviceId;
+
+                    Log.Warning($"Output device '{removedDeviceName}' disconnected. Engine entering DeviceDisconnected state.");
                 }
                 else
                 {
-                    _config.InputDeviceId = null; // Use default
-                    _activeInputDeviceIndex = -1;
+                    removedDeviceName = _lastKnownInputDevices
+                        ?.Find(d => d.DeviceId == _lastActiveInputDeviceId)?.Name
+                        ?? _lastActiveInputDeviceId
+                        ?? "Unknown input device";
+
+                    _disconnectedInputDeviceName = removedDeviceName;
+                    _originalInputDeviceId = _config.InputDeviceId;
+
+                    Log.Warning($"Input device '{removedDeviceName}' disconnected. Engine entering DeviceDisconnected state.");
                 }
 
-                // Reinitialize the engine
-                int result = _backend == AudioEngineBackend.PortAudio
-                    ? InitializePortAudio()
-                    : InitializeMiniAudio();
+                // Update engine status — data processing continues, only hardware stream stops
+                _engineStatusValue = (int)EngineStatus.DeviceDisconnected;
 
-                if (result != 0)
-                {
-                    Log.Error($"Failed to reinitialize engine after device removal: {result}");
-                    return;
-                }
+                // Stop only the hardware stream, NOT the engine logic
+                // _isRunning remains 1 so Send() / Receives() continue to operate
+                if (_backend == AudioEngineBackend.PortAudio)
+                    StopPortAudio();
+                else
+                    StopMiniAudio();
 
-                // Restart the engine
-                result = Start();
-                if (result != 0)
-                {
-                    Log.Error($"Failed to restart engine after device removal: {result}");
-                    return;
-                }
+                // Short delay to let the OS fully release the device handle
+                await Task.Delay(300);
 
-                Log.Info("Successfully switched to default device");
+                // Fire the state-changed event so the UI can update
+                var deviceInfo = new AudioDeviceInfo(
+                    deviceId: isOutputDevice ? (_lastActiveOutputDeviceId ?? "unknown") : (_lastActiveInputDeviceId ?? "unknown"),
+                    name: removedDeviceName,
+                    engineName: _backend.ToString(),
+                    isInput: !isOutputDevice,
+                    isOutput: isOutputDevice,
+                    isDefault: false,
+                    state: AudioDeviceState.Unplugged);
+
+                DeviceStateChanged?.Invoke(this, new AudioDeviceStateChangedEventArgs(
+                    deviceInfo.DeviceId,
+                    AudioDeviceState.Unplugged,
+                    deviceInfo));
+
+                Log.Info($"Engine status: DeviceDisconnected. Monitoring for '{(isOutputDevice ? _disconnectedOutputDeviceName : _disconnectedInputDeviceName)}' to reconnect...");
             }
             catch (Exception ex)
             {
                 Log.Error($"Error handling device removal: {ex.Message}");
+                _isDeviceDisconnected = 0;
+                _engineStatusValue = (int)EngineStatus.Error;
+            }
+        }
+
+        /// <summary>
+        /// Handles a previously disconnected audio device reconnecting.
+        /// Reinitializes the hardware stream and resumes playback/recording from
+        /// the current ring buffer position without interrupting data processing.
+        /// </summary>
+        /// <param name="isOutputDevice">True if the output device reconnected; false for input.</param>
+        /// <param name="reconnectedDevice">Information about the reconnected device.</param>
+        private async Task HandleDeviceReconnected(bool isOutputDevice, AudioDeviceInfo reconnectedDevice)
+        {
+            try
+            {
+                Log.Info($"Reconnecting {(isOutputDevice ? "output" : "input")} device '{reconnectedDevice.Name}'...");
+
+                // Short delay to let the OS finish registering the device
+                await Task.Delay(500);
+
+                // Restore original device selection in config
+                if (isOutputDevice)
+                {
+                    // Use the reconnected device's ID (may differ from original e.g. after OS remapping)
+                    _config.OutputDeviceId = reconnectedDevice.DeviceId;
+
+                    if (_backend == AudioEngineBackend.PortAudio)
+                    {
+                        if (int.TryParse(reconnectedDevice.DeviceId, out int paIdx))
+                            _activeOutputDeviceIndex = paIdx;
+                    }
+
+                    _lastActiveOutputDeviceId = reconnectedDevice.DeviceId;
+                    _lastRawDeviceCount = GetRawDeviceCount();
+                }
+                else
+                {
+                    _config.InputDeviceId = reconnectedDevice.DeviceId;
+
+                    if (_backend == AudioEngineBackend.PortAudio)
+                    {
+                        if (int.TryParse(reconnectedDevice.DeviceId, out int paIdx))
+                            _activeInputDeviceIndex = paIdx;
+                    }
+
+                    _lastActiveInputDeviceId = reconnectedDevice.DeviceId;
+                    _lastRawDeviceCount = GetRawDeviceCount();
+                }
+
+                // Reinitialize the hardware stream.
+                // Ring buffers are reused as long as capacity is unchanged, preserving accumulated data.
+                int result = _backend == AudioEngineBackend.PortAudio
+                    ? ReinitializePortAudioStream()
+                    : ReinitializeMiniAudioDevice();
+
+                if (result != 0)
+                {
+                    Log.Error($"Failed to reinitialize hardware stream after reconnect: {result}");
+                    _engineStatusValue = (int)EngineStatus.Error;
+                    return;
+                }
+
+                // Start hardware stream
+                result = _backend == AudioEngineBackend.PortAudio
+                    ? StartPortAudio()
+                    : StartMiniAudio();
+
+                if (result != 0)
+                {
+                    Log.Error($"Failed to start hardware stream after reconnect: {result}");
+                    _engineStatusValue = (int)EngineStatus.Error;
+                    return;
+                }
+
+                // Enable pre-buffering so existing ring buffer data is drained smoothly
+                _isBuffering = 1;
+
+                // Clear disconnect state and restore Running status
+                _isDeviceDisconnected = 0;
+                _disconnectedOutputDeviceName = null;
+                _disconnectedInputDeviceName = null;
+                _originalOutputDeviceId = null;
+                _originalInputDeviceId = null;
+                _engineStatusValue = (int)EngineStatus.Running;
+
+                Log.Info($"Device '{reconnectedDevice.Name}' reconnected. Playback resumed.");
+
+                // Fire reconnect event
+                DeviceReconnected?.Invoke(this, new AudioDeviceReconnectedEventArgs(
+                    reconnectedDevice.DeviceId,
+                    reconnectedDevice.Name,
+                    isOutputDevice,
+                    reconnectedDevice));
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Error handling device reconnect: {ex.Message}");
+                _isDeviceDisconnected = 0;
+                _engineStatusValue = (int)EngineStatus.Error;
             }
         }
 
@@ -597,8 +819,9 @@ namespace Ownaudio.Native
             // Enable pre-buffering to prevent playback until buffer has enough data
             _isBuffering = 1;
 
-            // Pause device monitoring during playback to prevent UI interference
-            PauseDeviceMonitoring();
+            // NOTE: Device monitoring is intentionally NOT paused during normal Start().
+            // The monitoring loop must stay active so it can detect device disconnections.
+            // Previously this called PauseDeviceMonitoring(), which prevented hot-plug detection.
 
             int result = _backend == AudioEngineBackend.PortAudio
                 ? StartPortAudio()
@@ -608,8 +831,11 @@ namespace Ownaudio.Native
             {
                 _isRunning = 0;
                 _isBuffering = 0;
-                // Resume monitoring if start failed
-                ResumeDeviceMonitoring();
+                _engineStatusValue = (int)EngineStatus.Error;
+            }
+            else
+            {
+                _engineStatusValue = (int)EngineStatus.Running;
             }
 
             return result;
@@ -625,15 +851,14 @@ namespace Ownaudio.Native
                 return 0; // Already stopped
 
             _isBuffering = 0;
+            _isDeviceDisconnected = 0;
+            _engineStatusValue = (int)EngineStatus.Idle;
 
             int result = _backend == AudioEngineBackend.PortAudio
                 ? StopPortAudio()
                 : StopMiniAudio();
 
             _isActive = 0;
-
-            // Resume device monitoring after stopping playback
-            ResumeDeviceMonitoring();
 
             return result;
         }
@@ -657,7 +882,13 @@ namespace Ownaudio.Native
             int totalSamples = samples.Length;
             int written = 0;
             var lastProgressTime = Environment.TickCount64;
-            const int timeoutMs = 1000; // Increased timeout to 1s to be safe
+
+            // During device disconnect the hardware callback thread is stopped, so the ring buffer
+            // will not be drained. We use a much larger timeout to keep the pipeline alive while
+            // waiting for the device to reconnect. Once reconnected, _isDeviceDisconnected is
+            // cleared and the callback resumes draining the buffer.
+            const long normalTimeoutMs = 1000;
+            const long disconnectTimeoutMs = 30_000; // 30 s – enough for a USB device to reappear
 
             // Write samples in a loop, blocking until all samples are written
             while (written < totalSamples && _isRunning == 1)
@@ -672,16 +903,19 @@ namespace Ownaudio.Native
                 }
                 else
                 {
-                    // Check for timeout (every ~15ms is enough resolution)
+                    long timeoutMs = _isDeviceDisconnected == 1 ? disconnectTimeoutMs : normalTimeoutMs;
                     long currentTime = Environment.TickCount64;
+
                     if (currentTime - lastProgressTime > timeoutMs)
                     {
-                        throw new AudioException($"Send timeout: No progress for {timeoutMs}ms. Audio thread may have stopped.");
+                        if (_isDeviceDisconnected == 1)
+                            throw new AudioException($"Send timeout: Device has been disconnected for {timeoutMs / 1000}s and has not reconnected.");
+                        else
+                            throw new AudioException($"Send timeout: No progress for {timeoutMs}ms. Audio thread may have stopped.");
                     }
 
-                    // Buffer is full. Wait for the consumer (audio hardware) to play some samples.
-                    // Using Thread.Sleep(1) yields the CPU and prevents thread starvation,
-                    // which is crucial for the high-priority audio callback thread to run smoothly.
+                    // Buffer is full. Yield CPU time.
+                    // When disconnected, the buffer drains as soon as the device reconnects.
                     Thread.Sleep(1);
                 }
             }
@@ -778,7 +1012,12 @@ namespace Ownaudio.Native
         /// <summary>
         /// Gets the activation state of the audio engine.
         /// </summary>
-        /// <returns>0 = idle, 1 = active, -1 = error.</returns>
+        /// <returns>
+        /// 1 = running (including DeviceDisconnected – data processing continues),
+        /// 0 = idle / stopped,
+        /// -1 = error.
+        /// Use <see cref="Status"/> for detailed state including <see cref="EngineStatus.DeviceDisconnected"/>.
+        /// </returns>
         public int OwnAudioEngineActivate()
         {
             return _isRunning;

@@ -179,6 +179,33 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
+    /// Seeks the MasterClock to <paramref name="startPosition"/> and simultaneously
+    /// starts all sources that are not yet in Playing state.
+    /// Call this after adding sources via <see cref="AddSourcePrepared"/> and
+    /// pre-buffering them with <see cref="FileSource.PreBuffer"/>.
+    /// </summary>
+    /// <param name="startPosition">The clock position (in seconds) to start from. Default: 0.0</param>
+    /// <exception cref="ObjectDisposedException">Thrown if mixer is disposed.</exception>
+    public void StartPreparedSources(double startPosition = 0.0)
+    {
+        ThrowIfDisposed();
+
+        // 1. Reset clock to ensure all sources start from the same reference point
+        _masterClock.SeekTo(startPosition);
+
+        // 2. Start all non-playing sources atomically (sequential loop is fast: no blocking)
+        var sources = _sources.Values.ToArray();
+        foreach (var source in sources)
+        {
+            if (source.State != AudioState.Playing)
+            {
+                try { source.Play(); }
+                catch { /* non-fatal */ }
+            }
+        }
+    }
+
+    /// <summary>
     /// Throws ObjectDisposedException if disposed.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

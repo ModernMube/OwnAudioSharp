@@ -182,7 +182,7 @@ namespace OwnaudioNET.Effects
         /// Update all internal coefficients based on current parameters.
         /// call this whenever a parameter changes.
         /// </summary>
-        private void RecalculateCoefficients()
+        private void RecalculateCoefficients(bool isMakeUoGain =  false)
         {
             // Attack/Release coefficients
             // Formula: coeff = exp(-1 / (time * sampleRate))
@@ -202,10 +202,8 @@ namespace OwnaudioNET.Effects
             // Soft Knee bounds
             _kneeLowerBoundDb = _thresholdDb - KneeHalfWidth;
             _kneeUpperBoundDb = _thresholdDb + KneeHalfWidth;
-            
-            // Auto Makeup Gain Calculation
-            // Estimate typical gain reduction and compensate
-            CalculateAutoMakeupGain();
+
+            if (isMakeUoGain) CalculateAutoMakeupGain();
         }
         
         /// <summary>
@@ -343,6 +341,7 @@ namespace OwnaudioNET.Effects
         /// <param name="preset">The preset to apply</param>
         public void SetPreset(CompressorPreset preset)
         {
+            Reset();
             switch (preset)
             {
                 case CompressorPreset.Default:
@@ -401,7 +400,7 @@ namespace OwnaudioNET.Effects
                     _makeupGain = 1.6f;
                     break;
             }
-            RecalculateCoefficients();
+            RecalculateCoefficients(false);
         }
 
         /// <summary>
@@ -425,17 +424,18 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Threshold level in range [0,1]
+        /// Threshold level in dB (typically -60 to 0)
         /// </summary>
         public float Threshold
         {
-            get => _threshold;
+            get => LinearToDb(_threshold);
             set
             {
-                if (Math.Abs(_threshold - value) > 0.001f)
+                float newLinear = DbToLinear(value);
+                if (Math.Abs(_threshold - newLinear) > 0.001f)
                 {
-                    _threshold = FastClamp(value, 0.0f, 1.0f);
-                    RecalculateCoefficients();
+                    _threshold = FastClamp(newLinear, 0.000001f, 1.0f);
+                    RecalculateCoefficients(true);
                 }
             }
         }
@@ -451,7 +451,7 @@ namespace OwnaudioNET.Effects
                 if (Math.Abs(_ratio - value) > 0.01f)
                 {
                     _ratio = FastClamp(value, 1.0f, 100.0f);
-                    RecalculateCoefficients();
+                    RecalculateCoefficients(true);
                 }
             }
         }
@@ -468,7 +468,7 @@ namespace OwnaudioNET.Effects
                 if (Math.Abs(_attackTime - newTime) > 0.00001f)
                 {
                     _attackTime = newTime;
-                    RecalculateCoefficients();
+                    RecalculateCoefficients(true);
                 }
             }
         }
@@ -485,18 +485,18 @@ namespace OwnaudioNET.Effects
                 if (Math.Abs(_releaseTime - newTime) > 0.00001f)
                 {
                     _releaseTime = newTime;
-                    RecalculateCoefficients();
+                    RecalculateCoefficients(true);
                 }
             }
         }
 
         /// <summary>
-        /// Makeup gain as linear amplitude multiplier
+        /// Makeup gain in dB
         /// </summary>
         public float MakeupGain
         {
-            get => _makeupGain;
-            set => _makeupGain = FastClamp(value, 0.1f, 10.0f);
+            get => LinearToDb(_makeupGain);
+            set => _makeupGain = FastClamp(DbToLinear(value), 0.1f, 10.0f);
         }
 
         /// <summary>
@@ -510,7 +510,7 @@ namespace OwnaudioNET.Effects
                 if (Math.Abs(_sampleRate - value) > 1.0f)
                 {
                     _sampleRate = FastClamp(value, 8000f, 192000f);
-                    RecalculateCoefficients();
+                    RecalculateCoefficients(true);
                 }
             }
         }

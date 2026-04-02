@@ -125,11 +125,31 @@ namespace Ownaudio.Android
 
         #region IAudioEngine Events
 
-#pragma warning disable CS0067 // Event is never used
+#pragma warning disable CS0067 // Events are part of the public IAudioEngine API
         public event EventHandler<AudioDeviceChangedEventArgs>? OutputDeviceChanged;
         public event EventHandler<AudioDeviceChangedEventArgs>? InputDeviceChanged;
-#pragma warning restore CS0067
         public event EventHandler<AudioDeviceStateChangedEventArgs>? DeviceStateChanged;
+
+        /// <summary>
+        /// Raised when a previously disconnected audio device reconnects.
+        /// NOTE: Hot-plug automatic reconnection is handled by NativeAudioEngine.
+        /// This event is available for API compatibility; AAudio engine does not auto-reconnect.
+        /// </summary>
+        public event EventHandler<AudioDeviceReconnectedEventArgs>? DeviceReconnected;
+#pragma warning restore CS0067
+
+        /// <summary>
+        /// Gets the current operational status of the audio engine.
+        /// </summary>
+        public EngineStatus Status
+        {
+            get
+            {
+                if (_isActive == -1) return EngineStatus.Error;
+                if (_isRunning == 1) return EngineStatus.Running;
+                return EngineStatus.Idle;
+            }
+        }
 
         #endregion
 

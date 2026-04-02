@@ -24,7 +24,7 @@ public partial class FileSource
         public const int MaxSeeksPerWindow = 10;
         public const double SeekWindowSeconds = 5.0;
         public const double GracePeriodSeconds = 1.0;
-        public const double InitialGracePeriodSeconds = 0.5;
+        public const double InitialGracePeriodSeconds = 0.1;
     }
 
     #endregion

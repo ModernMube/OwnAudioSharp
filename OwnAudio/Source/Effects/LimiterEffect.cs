@@ -305,6 +305,11 @@ namespace OwnaudioNET.Effects
         /// Gets or sets the look-ahead time in ms
         /// ZERO-ALLOCATION: Uses pre-allocated buffer, only changes active size
         /// </summary>
+        /// <summary>
+        /// Gets the sample rate in Hz (set at construction time).
+        /// </summary>
+        public float SampleRate => _sampleRate;
+
         public float LookAheadMs
         {
             get => _lookAheadMs;
