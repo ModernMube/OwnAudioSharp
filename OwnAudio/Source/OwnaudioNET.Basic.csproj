@@ -40,7 +40,7 @@
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>OwnAudioSharp.Basic</PackageId>
-    <Version>2.7.0</Version>
+    <Version>2.7.1</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for desktop (Windows, Linux, macOS) and mobile (Android, iOS) - Basic edition without AI/ML features (no VocalRemover, ChordDetect, Matchering)</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;android;ios;desktop;mobile;sound;multitrack</PackageTags>
@@ -54,7 +54,7 @@
   <!-- Dependencies (AI/ML packages excluded) -->
   <ItemGroup>
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
-    <PackageReference Include="OwnAudioVst" Version="1.4.0" />
+    <PackageReference Include="OwnAudioVst" Version="1.4.1" />
     <PackageReference Include="System.Memory" Version="4.6.3" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="All" />
   </ItemGroup>
