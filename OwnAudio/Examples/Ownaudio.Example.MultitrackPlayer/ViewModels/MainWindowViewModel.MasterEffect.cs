@@ -136,20 +136,31 @@ public partial class MainWindowViewModel
     /// <summary>
     /// Loads a VST3 plugin from the specified path.
     /// </summary>
-    private Task LoadMasterEffectFromPathAsync(string pluginPath)
+    private async Task LoadMasterEffectFromPathAsync(string pluginPath)
     {
         try
         {
-            StatusMessage = "Loading VST3 plugin...";
+            await Dispatcher.UIThread.InvokeAsync(() =>
+                StatusMessage = "Loading VST3 plugin...");
 
-            // Remove existing master effect if any
+            // Remove existing master effect on UI thread
             RemoveMasterEffect();
 
-            // Create new VST3 plugin host
-            _masterEffectHost = new VST3PluginHost(pluginPath);
+            // Load plugin on background thread to avoid blocking the UI
+            VST3PluginHost? newHost = null;
+            VST3EffectProcessor? newProcessor = null;
 
-            // Get processor from host
-            _masterEffect = _masterEffectHost.GetProcessor();
+            await Task.Run(() =>
+            {
+                newHost = new VST3PluginHost(pluginPath);
+                newProcessor = newHost.GetProcessor();
+            });
+
+            if (newHost == null || newProcessor == null)
+                return;
+
+            _masterEffectHost = newHost;
+            _masterEffect = newProcessor;
 
             // Initialize with current audio config
             if (OwnaudioNET.OwnaudioNet.Engine != null)
@@ -157,37 +168,37 @@ public partial class MainWindowViewModel
                 _masterEffect.Initialize(OwnaudioNET.OwnaudioNet.Engine.Config);
             }
 
-            // Update UI
-            MasterEffectName = _masterEffectHost.Name;
-            OnPropertyChanged(nameof(HasMasterEffect));
-
-            // Notify commands to re-evaluate their CanExecute
-            OpenMasterEffectEditorCommand.NotifyCanExecuteChanged();
-            RemoveMasterEffectCommand.NotifyCanExecuteChanged();
-
             // Add to mixer if enabled
             if (IsMasterEffectEnabled && _audioService.Mixer != null)
             {
                 _audioService.Mixer.AddMasterEffect(_masterEffect);
             }
 
-            StatusMessage = $"Loaded VST plugin: {_masterEffectHost.Name}";
+            // Update UI
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                MasterEffectName = _masterEffectHost.Name;
+                OnPropertyChanged(nameof(HasMasterEffect));
+                OpenMasterEffectEditorCommand.NotifyCanExecuteChanged();
+                RemoveMasterEffectCommand.NotifyCanExecuteChanged();
+                StatusMessage = $"Loaded VST plugin: {_masterEffectHost.Name}";
+            });
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Error loading VST plugin: {ex.Message}";
             _masterEffectHost?.Dispose();
             _masterEffectHost = null;
             _masterEffect = null;
-            MasterEffectName = "No plugin loaded";
-            OnPropertyChanged(nameof(HasMasterEffect));
 
-            // Notify commands to re-evaluate their CanExecute
-            OpenMasterEffectEditorCommand.NotifyCanExecuteChanged();
-            RemoveMasterEffectCommand.NotifyCanExecuteChanged();
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                MasterEffectName = "No plugin loaded";
+                OnPropertyChanged(nameof(HasMasterEffect));
+                OpenMasterEffectEditorCommand.NotifyCanExecuteChanged();
+                RemoveMasterEffectCommand.NotifyCanExecuteChanged();
+                StatusMessage = $"Error loading VST plugin: {ex.Message}";
+            });
         }
-
-        return Task.CompletedTask;
     }
 
 
@@ -332,6 +343,9 @@ public partial class MainWindowViewModel
         {
             if (value)
             {
+                // Propagate current transport state to the plugin
+                _masterEffect?.SetTransportPlaying(_audioService.Mixer?.IsRunning ?? false);
+
                 // Add master effect to mixer
                 _audioService.Mixer.AddMasterEffect(_masterEffect);
                 StatusMessage = "Master effect enabled";

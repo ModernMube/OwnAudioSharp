@@ -379,20 +379,17 @@ namespace OwnaudioNET.Visualization
             var vScale = (float)(height / 2 * VerticalScale);
 
             int totalSamples = _audioData.Length;
+            double zoom = Math.Max(1.0, ZoomFactor);
 
-            double visibleSamplesFraction = 1.0 / ZoomFactor;
-            int visibleSamples = (int)(totalSamples * visibleSamplesFraction);
-            int startSampleIndex = (int)(totalSamples * ScrollOffset);
+            // Use full floating-point precision to avoid rounding drift between zoom levels.
+            // startSample and samplesPerPixel are the only coordinate-mapping values needed.
+            double startSample = totalSamples * ScrollOffset;
+            double samplesPerPixel = totalSamples / (zoom * width);
 
-            // Adjust startSampleIndex to prevent going out of bounds
-            if (startSampleIndex + visibleSamples > totalSamples)
-            {
-                startSampleIndex = totalSamples - visibleSamples;
-            }
-            if (startSampleIndex < 0)
-                startSampleIndex = 0;
-
-            int samplesPerPixel = Math.Max(1, visibleSamples / (int)width);
+            // Guard: clamp so we never read past the end of the buffer
+            double maxStartSample = totalSamples - samplesPerPixel * width;
+            if (startSample > maxStartSample) startSample = Math.Max(0, maxStartSample);
+            if (startSample < 0) startSample = 0;
 
             // Ensure point cache is large enough
             int requiredSize = (int)width * 2;
@@ -404,15 +401,15 @@ namespace OwnaudioNET.Visualization
 
             if (displayStyle == WaveformDisplayStyle.MinMax)
             {
-                RenderMinMaxStyle(width, centerY, vScale, startSampleIndex, samplesPerPixel);
+                RenderMinMaxStyle(width, centerY, vScale, startSample, samplesPerPixel);
             }
             else if (displayStyle == WaveformDisplayStyle.Positive)
             {
-                RenderPositiveStyle(width, height, vScale, startSampleIndex, samplesPerPixel);
+                RenderPositiveStyle(width, height, vScale, startSample, samplesPerPixel);
             }
             else // RMS
             {
-                RenderRmsStyle(width, centerY, vScale, startSampleIndex, samplesPerPixel);
+                RenderRmsStyle(width, centerY, vScale, startSample, samplesPerPixel);
             }
 
             // Draw lines in batches to reduce GPU draw calls
@@ -424,13 +421,11 @@ namespace OwnaudioNET.Visualization
                 }
             }
 
-            // Always render the playback position indicator
-            double pixelPosition = ConvertAbsolutePositionToPixel(PlaybackPosition, width, startSampleIndex, visibleSamples, totalSamples);
+            // Playback indicator: pixel = (absPos - ScrollOffset) * zoom * width
+            double pixelPosition = (PlaybackPosition - ScrollOffset) * zoom * width;
 
-            // Always draw the playback indicator if it's within the visible area or auto-follow is enabled
             if ((pixelPosition >= 0 && pixelPosition <= width) || AutoFollow)
             {
-                // Clamp the visual position to stay within bounds when auto-follow is active
                 double visualPosition = Math.Clamp(pixelPosition, 0, width);
 
                 _linePoints[0] = new Point(visualPosition, 0);
@@ -454,19 +449,22 @@ namespace OwnaudioNET.Visualization
             }
         }
 
-        private void RenderMinMaxStyle(double width, double centerY, float vScale, int startSampleIndex, int samplesPerPixel)
+        private void RenderMinMaxStyle(double width, double centerY, float vScale, double startSample, double samplesPerPixel)
         {
-            int pixelStartSample, endSample;
+            int dataLen = _audioData!.Length;
             float minValue, maxValue, sample;
 
             for (int x = 0; x < width; x++)
             {
-                pixelStartSample = startSampleIndex + (int)(x * samplesPerPixel);
+                int sampleStart = (int)(startSample + x * samplesPerPixel);
+                int sampleEnd   = Math.Min((int)(startSample + (x + 1) * samplesPerPixel) + 1, dataLen);
+                if (sampleStart >= dataLen) break;
+                if (sampleEnd <= sampleStart) sampleEnd = sampleStart + 1;
+
                 minValue = 1.0f;
                 maxValue = -1.0f;
 
-                endSample = Math.Min(pixelStartSample + samplesPerPixel, _audioData!.Length);
-                for (int i = pixelStartSample; i < endSample; i++)
+                for (int i = sampleStart; i < sampleEnd; i++)
                 {
                     sample = _audioData[i];
                     if (sample < minValue) minValue = sample;
@@ -478,18 +476,21 @@ namespace OwnaudioNET.Visualization
             }
         }
 
-        private void RenderPositiveStyle(double width, double height, float vScale, int startSampleIndex, int samplesPerPixel)
+        private void RenderPositiveStyle(double width, double height, float vScale, double startSample, double samplesPerPixel)
         {
-            int pixelStartSample, endSample;
+            int dataLen = _audioData!.Length;
             float maxPositive, sample;
 
             for (int x = 0; x < width; x++)
             {
-                pixelStartSample = startSampleIndex + (int)(x * samplesPerPixel);
+                int sampleStart = (int)(startSample + x * samplesPerPixel);
+                int sampleEnd   = Math.Min((int)(startSample + (x + 1) * samplesPerPixel) + 1, dataLen);
+                if (sampleStart >= dataLen) break;
+                if (sampleEnd <= sampleStart) sampleEnd = sampleStart + 1;
+
                 maxPositive = 0;
 
-                endSample = Math.Min(pixelStartSample + samplesPerPixel, _audioData!.Length);
-                for (int i = pixelStartSample; i < endSample; i++)
+                for (int i = sampleStart; i < sampleEnd; i++)
                 {
                     sample = Math.Abs(_audioData[i]);
                     if (sample > maxPositive) maxPositive = sample;
@@ -500,19 +501,23 @@ namespace OwnaudioNET.Visualization
             }
         }
 
-        private void RenderRmsStyle(double width, double centerY, float vScale, int startSampleIndex, int samplesPerPixel)
+        private void RenderRmsStyle(double width, double centerY, float vScale, double startSample, double samplesPerPixel)
         {
-            int pixelStartSample, endSample, count;
+            int dataLen = _audioData!.Length;
             float sumSquares, sample, rms;
+            int count;
 
             for (int x = 0; x < width; x++)
             {
-                pixelStartSample = startSampleIndex + (int)(x * samplesPerPixel);
+                int sampleStart = (int)(startSample + x * samplesPerPixel);
+                int sampleEnd   = Math.Min((int)(startSample + (x + 1) * samplesPerPixel) + 1, dataLen);
+                if (sampleStart >= dataLen) break;
+                if (sampleEnd <= sampleStart) sampleEnd = sampleStart + 1;
+
                 sumSquares = 0;
                 count = 0;
 
-                endSample = Math.Min(pixelStartSample + samplesPerPixel, _audioData!.Length);
-                for (int i = pixelStartSample; i < endSample; i++)
+                for (int i = sampleStart; i < sampleEnd; i++)
                 {
                     sample = _audioData[i];
                     sumSquares += sample * sample;
@@ -629,22 +634,9 @@ namespace OwnaudioNET.Visualization
             if (_audioData == null || _audioData.Length == 0)
                 return 0.0;
 
-            int totalSamples = _audioData.Length;
-            double visibleSamplesFraction = 1.0 / ZoomFactor;
-            int visibleSamples = (int)(totalSamples * visibleSamplesFraction);
-            int startSampleIndex = (int)(totalSamples * ScrollOffset);
-
-            double relativePosition = x / Bounds.Width;
-            int samplePosition = startSampleIndex + (int)(relativePosition * visibleSamples);
-
-            return Math.Clamp((double)samplePosition / totalSamples, 0.0, 1.0);
-        }
-
-        private double ConvertAbsolutePositionToPixel(double position, double width, int startSampleIndex, int visibleSamples, int totalSamples)
-        {
-            int samplePosition = (int)(position * totalSamples);
-            double relativePos = (double)(samplePosition - startSampleIndex) / visibleSamples;
-            return relativePos * width;
+            // absPos = ScrollOffset + (x / width) / ZoomFactor  — pure floating-point, no integer rounding
+            double absPos = ScrollOffset + (x / Bounds.Width) / Math.Max(1.0, ZoomFactor);
+            return Math.Clamp(absPos, 0.0, 1.0);
         }
 
         private void ValidateScrollOffset()

@@ -119,7 +119,11 @@ namespace OwnaudioNET.Effects.VST
             _vst3.Initialize(config.SampleRate, config.BufferSize);
             _vst3Initialized = true;
 
-            AllocateBuffers(config.BufferSize, config.Channels);
+            int effectiveChannels = _vst3.ActualOutputChannels > 0
+                ? _vst3.ActualOutputChannels
+                : config.Channels;
+
+            AllocateBuffers(config.BufferSize, effectiveChannels);
         }
 
         /// <summary>
@@ -226,6 +230,21 @@ namespace OwnaudioNET.Effects.VST
 
             return result;
         }
+
+        /// <summary>
+        /// Sets the playback tempo forwarded to the plugin via ProcessContext.
+        /// </summary>
+        public void SetTempo(double bpm) => _vst3?.SetTempo(bpm);
+
+        /// <summary>
+        /// Sets the transport playing state forwarded to the plugin via ProcessContext.
+        /// </summary>
+        public void SetTransportPlaying(bool playing) => _vst3?.SetTransportState(playing);
+
+        /// <summary>
+        /// Resets the transport sample position counter (e.g. on Stop).
+        /// </summary>
+        public void ResetPosition() => _vst3?.ResetTransportPosition();
 
         /// <summary>
         /// Sets a parameter value by ID.
