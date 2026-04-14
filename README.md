@@ -39,6 +39,44 @@
 
 **OwnAudioSharp** is a cross-platform audio framework with advanced features for professional audio applications. It combines native C++ engines for real-time audio processing with fully managed C# implementations, providing efficient and flexible audio solutions across all major platforms.
 
+
+> [!IMPORTANT]
+> ## 🚀 Coming Soon — Version 3.0.0
+>
+> The next major code transformation is coming soon, with the goal of creating a **Native AOT compatible, modular NuGet package structure**.
+>
+> **What is NOT changing:** the existing public API. Backwards compatibility will remain!
+> **Warning:** features marked obsolete will be removed from the package!
+>
+> The user installs only the package they need:
+>
+> ```xml
+> <!-- Audio playback and mixing only -->
+> <PackageReference Include="OwnAudioSharp.Basic" Version="3.0.0" />
+>
+> <!-- Audio + MIDI handling -->
+> <PackageReference Include="OwnAudioSharp.Basic" Version="3.0.0" />
+> <PackageReference Include="OwnAudioSharp.Midi" Version="3.0.0" />
+>
+> <!-- Audio + AI/ML features -->
+> <PackageReference Include="OwnAudioSharp.Basic" Version="3.0.0" />
+> <PackageReference Include="OwnAudioSharp.ML" Version="3.0.0" />
+> ```
+>
+> **AOT vs JIT performance**
+>
+> | Metric | JIT (PGO) | Native AOT |
+> |---|---|---|
+> | Sustained throughput | 100% | 85-95% |
+> | Startup time | 100% | 800-1500% ← AOT wins |
+> | First playback | dropout | immediately |
+> | RAM usage | 100% | 70-80% ← AOT wins |
+> | SIMD performance | same | same |
+>
+> **Conclusion:** AOT is worth it not because it is faster in sustained throughput, but because it is **more predictable, starts faster, and is easier to install**. JIT warmup dropout on first playback is a real, audible problem that AOT solves.
+
+---
+
 ## 🎯 Platform Support
 
 - **Windows** - Native C++ and managed C# engines
