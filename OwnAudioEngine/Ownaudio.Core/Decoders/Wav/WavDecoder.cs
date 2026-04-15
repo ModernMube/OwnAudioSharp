@@ -531,8 +531,14 @@ public sealed class WavDecoder : IAudioDecoder
         if (!TrySeek(position, out string error))
             return new AudioDecoderResult(null!, false, false, error);
 
-        // Use pooled buffer writer instead of MemoryStream (reduces GC pressure)
-        using var writer = new PooledByteBufferWriter(initialCapacity: 65536);
+        // Estimate total output bytes in target format to size the writer correctly up-front,
+        // avoiding repeated ArrayPool buffer growths (and potential Gen2 GC) for long files.
+        int estimatedBytes = (int)(_streamInfo.Duration.TotalSeconds
+            * _targetSampleRate
+            * _targetChannels
+            * sizeof(float));
+
+        using var writer = new PooledByteBufferWriter(initialCapacity: Math.Max(estimatedBytes, 65536));
         double startPts = _currentPts;
 
         while (true)

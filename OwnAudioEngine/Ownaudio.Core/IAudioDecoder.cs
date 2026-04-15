@@ -16,8 +16,10 @@ public interface IAudioDecoder : IDisposable
     /// <summary>
     /// Decode next available audio frame from loaded audio source.
     /// This method allocates a new AudioFrame on every call and should be considered deprecated.
+    /// Prefer <see cref="ReadFrames"/> for zero-allocation audio reading.
     /// </summary>
     /// <returns>A new <see cref="AudioDecoderResult"/> data.</returns>
+    [Obsolete("DecodeNextFrame allocates a new AudioFrame on every call. Use ReadFrames instead for zero-allocation decoding.")]
     AudioDecoderResult DecodeNextFrame();
 
     /// <summary>

@@ -37,9 +37,15 @@ public sealed class StreamingAudioCache : IDisposable
     private readonly int _readAheadSize;
 
     private long _bufferStartPosition;
+    // Accessed from both the main thread (Read/RefillBuffer) and the background read-ahead thread.
+    // Use Volatile.Read/Write and Interlocked.Add to prevent torn reads on 32-bit platforms
+    // and to ensure visibility across CPU cores.
     private int _bufferValidBytes;
     private long _streamPosition;
     private bool _disposed;
+
+    // Pre-computed integer threshold avoids a floating-point multiply on every Read() call.
+    private readonly int _readAheadThreshold;
 
     // Read-ahead state
     private Task? _readAheadTask;
@@ -88,6 +94,9 @@ public sealed class StreamingAudioCache : IDisposable
         _bufferValidBytes = 0;
         _streamPosition = baseStream.Position;
         _disposed = false;
+
+        // Compute the 75% watermark once; avoids repeated FP multiply in the hot Read() path.
+        _readAheadThreshold = (int)(bufferSize * 0.75);
     }
 
     /// <summary>
@@ -119,9 +128,10 @@ public sealed class StreamingAudioCache : IDisposable
                 RefillBuffer(_streamPosition);
             }
 
-            // Calculate how much we can read from current buffer
+            // Calculate how much we can read from current buffer.
+            // Use Volatile.Read to observe writes made by the background read-ahead thread.
             int bufferOffset = (int)(_streamPosition - _bufferStartPosition);
-            int availableInBuffer = _bufferValidBytes - bufferOffset;
+            int availableInBuffer = System.Threading.Volatile.Read(ref _bufferValidBytes) - bufferOffset;
 
             if (availableInBuffer <= 0)
             {
@@ -162,7 +172,7 @@ public sealed class StreamingAudioCache : IDisposable
             }
 
             int bufferOffset = (int)(_streamPosition - _bufferStartPosition);
-            int availableInBuffer = _bufferValidBytes - bufferOffset;
+            int availableInBuffer = System.Threading.Volatile.Read(ref _bufferValidBytes) - bufferOffset;
 
             if (availableInBuffer <= 0)
                 break;
@@ -237,9 +247,10 @@ public sealed class StreamingAudioCache : IDisposable
             _baseStream.Seek(startPosition, SeekOrigin.Begin);
         }
 
-        // Read large chunk (sequential I/O is fast)
+        // Read large chunk (sequential I/O is fast).
+        // Volatile.Write ensures the background read-ahead thread sees the updated value.
         _bufferStartPosition = startPosition;
-        _bufferValidBytes = _baseStream.Read(_buffer, 0, _bufferSize);
+        System.Threading.Volatile.Write(ref _bufferValidBytes, _baseStream.Read(_buffer, 0, _bufferSize));
     }
 
     /// <summary>
@@ -250,9 +261,11 @@ public sealed class StreamingAudioCache : IDisposable
         if (_readAheadSize == 0)
             return;
 
-        // Trigger read-ahead when we've consumed 75% of buffer
+        // Trigger read-ahead when we've consumed 75% of buffer.
+        // Use the pre-computed integer threshold (set in constructor) to avoid
+        // a floating-point multiply on every Read() call.
         int bufferOffset = (int)(_streamPosition - _bufferStartPosition);
-        if (bufferOffset < _bufferValidBytes * 0.75)
+        if (bufferOffset < _readAheadThreshold)
             return;
 
         // Don't start new read-ahead if one is already running
@@ -294,8 +307,9 @@ public sealed class StreamingAudioCache : IDisposable
 
                 if (!cancellationToken.IsCancellationRequested && bytesRead > 0)
                 {
-                    // Extend valid buffer size
-                    _bufferValidBytes += bytesRead;
+                    // Atomically extend the valid byte count so the main thread sees
+                    // a consistent value (no torn read/write on 32-bit platforms).
+                    System.Threading.Interlocked.Add(ref _bufferValidBytes, bytesRead);
                 }
             }
             finally

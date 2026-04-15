@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Ownaudio.Core
 {
@@ -102,17 +103,17 @@ namespace Ownaudio.Core
             if (!EnableInput && !EnableOutput)
                 return false;
 
-            // Validate ASIO channel selectors if specified
+            // Validate channel selectors if specified
             if (InputChannelSelectors != null && InputChannelSelectors.Length > 0)
             {
                 if (InputChannelSelectors.Length != Channels)
                     return false;
 
-                // Check for negative channel indices
+                var seen = new HashSet<int>(InputChannelSelectors.Length);
                 foreach (var ch in InputChannelSelectors)
                 {
-                    if (ch < 0)
-                        return false;
+                    if (ch < 0 || ch > 256) return false; // reasonable hardware maximum
+                    if (!seen.Add(ch)) return false;       // duplicate physical channel
                 }
             }
 
@@ -121,11 +122,11 @@ namespace Ownaudio.Core
                 if (OutputChannelSelectors.Length != Channels)
                     return false;
 
-                // Check for negative channel indices
+                var seen = new HashSet<int>(OutputChannelSelectors.Length);
                 foreach (var ch in OutputChannelSelectors)
                 {
-                    if (ch < 0)
-                        return false;
+                    if (ch < 0 || ch > 256) return false;
+                    if (!seen.Add(ch)) return false;
                 }
             }
 

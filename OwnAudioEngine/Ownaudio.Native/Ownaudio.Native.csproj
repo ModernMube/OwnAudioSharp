@@ -19,7 +19,7 @@
     <PackageProjectUrl>https://github.com/modernmube/OwnAudioSharp</PackageProjectUrl>
     <RepositoryUrl>https://github.com/modernmube/OwnAudioSharp</RepositoryUrl>
     <PackageTags>audio;portaudio;miniaudio;cross-platform;real-time;low-latency;decoder;android;ios;mobile</PackageTags>
-    <Version>3.0.0</Version>
+    <Version>3.2.0</Version>
     <Platforms>AnyCPU;x64;x86</Platforms>
     <!-- Exclude runtimes folder from default wildcard inclusions to prevent Android build from picking up wrong ABIs -->
     <DefaultItemExcludes>$(DefaultItemExcludes);runtimes\**</DefaultItemExcludes>

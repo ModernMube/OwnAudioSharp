@@ -127,17 +127,24 @@ internal ref struct FlacBitReader
 
     /// <summary>
     /// Reads unary-encoded value (count of 0s until first 1).
-    /// Used in Rice coding.
+    /// Used in Rice coding and for wasted-bits signalling.
     /// </summary>
+    /// <param name="maxCount">
+    /// Upper bound on the returned value. Callers should pass a value appropriate to
+    /// the context (e.g. Rice parameter or bit depth) so that a corrupted bitstream is
+    /// caught quickly rather than spinning up to an arbitrary large limit.
+    /// Default (32 768) is safe for all valid FLAC files at all supported bit depths.
+    /// </param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public int ReadUnary()
+    public int ReadUnary(int maxCount = 0x8000)
     {
         int count = 0;
         while (ReadBit() == 0)
         {
             count++;
-            if (count > 10000) // Safety check - reasonable max for FLAC
-                throw new InvalidOperationException($"Unary value too large: {count} (possible bit stream corruption)");
+            if (count > maxCount)
+                throw new InvalidOperationException(
+                    $"Unary value {count} exceeds maximum {maxCount} – possible bit stream corruption.");
         }
         return count;
     }
@@ -148,8 +155,11 @@ internal ref struct FlacBitReader
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int ReadRice(int parameter)
     {
-        // Quotient (unary)
-        int quotient = ReadUnary();
+        // The unary quotient's range scales with the Rice parameter k:
+        // at most ~2^(k+1) is typical for well-formed FLAC data, but we cap at 65 536
+        // to detect corrupted streams quickly while still accepting unusual encodings.
+        int maxUnary = Math.Max(1024, 1 << Math.Min(parameter + 1, 16));
+        int quotient = ReadUnary(maxUnary);
 
         // Remainder (binary) - only read if parameter > 0
         int remainder = 0;

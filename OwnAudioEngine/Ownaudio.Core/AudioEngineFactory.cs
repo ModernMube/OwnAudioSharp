@@ -1,5 +1,6 @@
 using Ownaudio.Core.Common;
 using System;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -11,6 +12,40 @@ namespace Ownaudio.Core
     /// </summary>
     public static class AudioEngineFactory
     {
+        // -----------------------------------------------------------------------
+        // Cached engine types – Assembly.Load + GetType run only once per type.
+        // -----------------------------------------------------------------------
+        private static readonly Lazy<Type?> _nativeEngineType = new Lazy<Type?>(() =>
+            TryLoadType("Ownaudio.Native", "Ownaudio.Native.NativeAudioEngine"));
+
+        private static readonly Lazy<Type?> _windowsEngineType = new Lazy<Type?>(() =>
+            TryLoadType("Ownaudio.Windows", "Ownaudio.Windows.WasapiEngine"));
+
+        private static readonly Lazy<Type?> _macOSEngineType = new Lazy<Type?>(() =>
+            TryLoadType("Ownaudio.macOS", "Ownaudio.macOS.CoreAudioEngine"));
+
+        private static readonly Lazy<Type?> _iOSEngineType = new Lazy<Type?>(() =>
+            TryLoadType("Ownaudio.iOS", "Ownaudio.iOS.CoreAudioIOSEngine"));
+
+        private static readonly Lazy<Type?> _androidEngineType = new Lazy<Type?>(() =>
+            TryLoadType("Ownaudio.Android", "Ownaudio.Android.AAudioEngine"));
+
+        private static readonly Lazy<Type?> _linuxEngineType = new Lazy<Type?>(() =>
+            TryLoadType("Ownaudio.Linux", "Ownaudio.Linux.PulseAudioEngine"));
+
+        private static Type? TryLoadType(string assemblyName, string typeName)
+        {
+            try { return Assembly.Load(assemblyName).GetType(typeName); }
+            catch { return null; }
+        }
+
+        private static IAudioEngine CreateFromCachedType(Lazy<Type?> cachedType, string platformName)
+        {
+            var type = cachedType.Value
+                ?? throw new AudioException("AudioEngineFactory ERROR: ",
+                    new PlatformNotSupportedException($"{platformName} audio engine not available"));
+            return (IAudioEngine)Activator.CreateInstance(type)!;
+        }
         /// <summary>
         /// Creates an audio engine instance for the current platform with the specified configuration.
         /// </summary>
@@ -70,7 +105,14 @@ namespace Ownaudio.Core
             // Initialize the engine
             int result = 0;
 #if WINDOWS
-            Thread initThread = new System.Threading.Thread(() => { result = engine.Initialize(config); });
+            // WASAPI requires COM initialization. Using an explicit MTA thread avoids
+            // any STA interference from the calling thread (e.g. UI or WinForms threads).
+            var initThread = new Thread(() => { result = engine.Initialize(config); }, 256 * 1024)
+            {
+                Name = "OwnAudio-WasapiInit",
+                IsBackground = true
+            };
+            initThread.SetApartmentState(ApartmentState.MTA);
             initThread.Start();
             initThread.Join();
 #else
@@ -113,80 +155,23 @@ namespace Ownaudio.Core
             return Create(AudioConfig.HighLatency);
         }
 
-        private static IAudioEngine CreateNativeEngine()
-        {
-            var assembly = System.Reflection.Assembly.Load("Ownaudio.Native");
-            var type = assembly.GetType("Ownaudio.Native.NativeAudioEngine");
-            return (IAudioEngine)Activator.CreateInstance(type);
-        }
+        private static IAudioEngine CreateNativeEngine() =>
+            CreateFromCachedType(_nativeEngineType, "Native");
 
-        private static IAudioEngine CreateWindowsEngine()
-        {
-            // Use reflection to avoid hard dependency on Windows assembly
-            var assembly = System.Reflection.Assembly.Load("Ownaudio.Windows");
-            var type = assembly.GetType("Ownaudio.Windows.WasapiEngine");
-            return (IAudioEngine)Activator.CreateInstance(type);
-        }
+        private static IAudioEngine CreateWindowsEngine() =>
+            CreateFromCachedType(_windowsEngineType, "Windows WASAPI");
 
-        private static IAudioEngine CreateMacOSEngine()
-        {
-            // macOS implementation (to be completed)
-            try
-            {
-                var assembly = System.Reflection.Assembly.Load("Ownaudio.macOS");
-                var type = assembly.GetType("Ownaudio.macOS.CoreAudioEngine");
-                return (IAudioEngine)Activator.CreateInstance(type);
-            }
-            catch
-            {
-                throw new AudioException("AudioEngineFactory ERROR: ", new PlatformNotSupportedException("macOS audio engine not yet implemented"));
-            }
-        }
+        private static IAudioEngine CreateMacOSEngine() =>
+            CreateFromCachedType(_macOSEngineType, "macOS Core Audio");
 
-        private static IAudioEngine CreateIOSEngine()
-        {
-            // iOS implementation (to be completed)
-            try
-            {
-                var assembly = System.Reflection.Assembly.Load("Ownaudio.iOS");
-                var type = assembly.GetType("Ownaudio.iOS.CoreAudioIOSEngine");
-                return (IAudioEngine)Activator.CreateInstance(type);
-            }
-            catch
-            {
-                throw new AudioException("AudioEngineFactory ERROR: ", new PlatformNotSupportedException("iOS audio engine not yet implemented"));
-            }
-        }
+        private static IAudioEngine CreateIOSEngine() =>
+            CreateFromCachedType(_iOSEngineType, "iOS Core Audio");
 
-        private static IAudioEngine CreateAndroidEngine()
-        {
-            // Android implementation (to be completed)
-            try
-            {
-                var assembly = System.Reflection.Assembly.Load("Ownaudio.Android");
-                var type = assembly.GetType("Ownaudio.Android.AAudioEngine");
-                return (IAudioEngine)Activator.CreateInstance(type);
-            }
-            catch
-            {
-                throw new AudioException("AudioEngineFactory ERROR: ", new PlatformNotSupportedException("Android audio engine not yet implemented"));
-            }
-        }
+        private static IAudioEngine CreateAndroidEngine() =>
+            CreateFromCachedType(_androidEngineType, "Android AAudio");
 
-        private static IAudioEngine CreateLinuxEngine()
-        {
-            // Linux PulseAudio implementation
-            try
-            {
-                var assembly = System.Reflection.Assembly.Load("Ownaudio.Linux");
-                var type = assembly.GetType("Ownaudio.Linux.PulseAudioEngine");
-                return (IAudioEngine)Activator.CreateInstance(type);
-            }
-            catch
-            {
-                throw new AudioException("AudioEngineFactory ERROR: ", new PlatformNotSupportedException("Linux audio engine not yet implemented"));
-            }
-        }
+        private static IAudioEngine CreateLinuxEngine() =>
+            CreateFromCachedType(_linuxEngineType, "Linux PulseAudio");
 
         /// <summary>
         /// Gets information about the current platform's audio capabilities.

@@ -84,7 +84,7 @@ public sealed class DecodedAudioCache
         if (_cache.TryGetValue(key, out var entry))
         {
             // Update LRU timestamp
-            entry.LastAccessTicks = DateTime.UtcNow.Ticks;
+            entry.LastAccessTicks = Environment.TickCount64;
             frame = entry.Frame;
             return true;
         }
@@ -231,7 +231,9 @@ public sealed class DecodedAudioCache
         {
             Frame = frame;
             SizeBytes = frame.Data.Length + 64; // Data + overhead estimate
-            LastAccessTicks = DateTime.UtcNow.Ticks;
+            // Environment.TickCount64 is ~10x cheaper than DateTime.UtcNow (no syscall overhead)
+            // and is sufficient for LRU ordering (millisecond resolution).
+            LastAccessTicks = Environment.TickCount64;
         }
     }
 }
@@ -285,6 +287,7 @@ public sealed class CachedAudioDecoder : IAudioDecoder
         return _baseDecoder.ReadFrames(buffer);
     }
 
+#pragma warning disable CS0618 // Implementing the obsolete IAudioDecoder.DecodeNextFrame intentionally
     public AudioDecoderResult DecodeNextFrame()
     {
         // Try to get from cache first
@@ -306,6 +309,7 @@ public sealed class CachedAudioDecoder : IAudioDecoder
 
         return result;
     }
+#pragma warning restore CS0618
 
     public bool TrySeek(TimeSpan position, out string error)
     {

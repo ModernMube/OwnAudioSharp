@@ -19,10 +19,12 @@ public static class AudioDecoderExtensions
     /// <returns>A float array containing all the decoded audio samples.</returns>
     public static float[] ReadAllSamples(this IAudioDecoder decoder)
     {
-        // Use a List<float> to accumulate samples. It's more efficient than MemoryStream for this.
-        var allSamples = new List<float>((int)(decoder.StreamInfo.Duration.TotalSeconds * decoder.StreamInfo.SampleRate));
-        
-        // Create a reusable buffer. Its size should be based on what FileSource uses. 8192 frames is a good default.
+        // Pre-allocate with a realistic estimate (samples * channels) to avoid List resizing.
+        int estimatedSamples = (int)(decoder.StreamInfo.Duration.TotalSeconds
+            * decoder.StreamInfo.SampleRate
+            * decoder.StreamInfo.Channels);
+        var allSamples = new List<float>(estimatedSamples > 0 ? estimatedSamples : 65536);
+
         int framesPerBuffer = 8192;
         int bufferSizeInBytes = framesPerBuffer * decoder.StreamInfo.Channels * sizeof(float);
         var buffer = new byte[bufferSizeInBytes];
@@ -34,14 +36,14 @@ public static class AudioDecoderExtensions
             if (result.IsSucceeded && result.FramesRead > 0)
             {
                 int bytesRead = result.FramesRead * decoder.StreamInfo.Channels * sizeof(float);
+                // .NET 8+: AddRange(ReadOnlySpan<T>) avoids the intermediate ToArray() allocation
+                // that was previously created on every decode iteration.
                 var floatSpan = MemoryMarshal.Cast<byte, float>(buffer.AsSpan(0, bytesRead));
-                allSamples.AddRange(floatSpan.ToArray());
+                allSamples.AddRange(floatSpan);
             }
 
             if (result.IsEOF)
-            {
                 break;
-            }
         }
         return allSamples.ToArray();
     }

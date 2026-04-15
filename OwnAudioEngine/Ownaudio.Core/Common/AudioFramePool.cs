@@ -85,12 +85,18 @@ public sealed class AudioFramePool
         if (frame.BufferCapacity != _bufferSize)
             return; // Discard frames with wrong buffer size
 
-        // Check max size limit
+        // Check max size limit.
+        // Note: the check and the Add+Increment are not atomic, so the pool may
+        // transiently exceed _maxPoolSize by a small amount under concurrent load.
+        // This is acceptable – the pool acts as a soft ceiling, not a hard invariant.
         if (_maxPoolSize > 0 && _currentSize >= _maxPoolSize)
             return; // Discard excess frames
 
         _frames.Add(frame);
-        _currentSize++;
+        // Use Interlocked to prevent lost updates when multiple threads return frames
+        // concurrently (ConcurrentBag is thread-safe for Add/TryTake, but a plain ++
+        // on a shared int is not atomic on all architectures).
+        System.Threading.Interlocked.Increment(ref _currentSize);
     }
 
     /// <summary>
@@ -105,7 +111,7 @@ public sealed class AudioFramePool
     {
         while (_frames.TryTake(out _))
         {
-            _currentSize--;
+            System.Threading.Interlocked.Decrement(ref _currentSize);
         }
     }
 }

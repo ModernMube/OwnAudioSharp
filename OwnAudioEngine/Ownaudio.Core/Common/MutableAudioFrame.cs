@@ -40,16 +40,19 @@ internal sealed class MutableAudioFrame
     /// <param name="newData">New frame data (will be copied).</param>
     /// <remarks>
     /// ZERO-ALLOCATION: Reuses internal buffer if large enough, only allocates if buffer needs to grow.
+    /// When growth is needed, allocates to the next power-of-two to amortise future reallocs
+    /// and avoids the wasted element copy that <see cref="Array.Resize"/> would perform.
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Reset(double pts, ReadOnlySpan<byte> newData)
     {
         int requiredLength = newData.Length / sizeof(float);
 
-        // Resize buffer if needed
+        // Grow the buffer if needed. Use power-of-2 sizing and a fresh allocation
+        // (no Array.Resize copy – the old data is immediately overwritten below).
         if (_data.Length < requiredLength)
         {
-            Array.Resize(ref _data, requiredLength);
+            _data = new float[NextPowerOfTwo(requiredLength)];
         }
 
         // Copy data as floats
@@ -71,13 +74,11 @@ internal sealed class MutableAudioFrame
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Reset(double pts, ReadOnlySpan<float> newData)
     {
-        // Resize buffer if needed
         if (_data.Length < newData.Length)
         {
-            Array.Resize(ref _data, newData.Length);
+            _data = new float[NextPowerOfTwo(newData.Length)];
         }
 
-        // Copy data
         newData.CopyTo(_data.AsSpan(0, newData.Length));
 
         _length = newData.Length;
@@ -98,13 +99,11 @@ internal sealed class MutableAudioFrame
         if (lengthInSamples > floatSpan.Length)
             throw new ArgumentException("Length exceeds buffer size", nameof(lengthInSamples));
 
-        // Resize if needed
         if (_data.Length < lengthInSamples)
         {
-            Array.Resize(ref _data, lengthInSamples);
+            _data = new float[NextPowerOfTwo(lengthInSamples)];
         }
 
-        // Copy from AudioBuffer
         floatSpan.Slice(0, lengthInSamples).CopyTo(_data);
 
         _length = lengthInSamples;
@@ -175,6 +174,7 @@ internal sealed class MutableAudioFrame
 
     /// <summary>
     /// Ensures the internal buffer has at least the specified capacity.
+    /// Grows to the next power-of-two to amortise future reallocs.
     /// </summary>
     /// <param name="minimumCapacity">Minimum required capacity in samples.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -182,7 +182,25 @@ internal sealed class MutableAudioFrame
     {
         if (_data.Length < minimumCapacity)
         {
-            Array.Resize(ref _data, minimumCapacity);
+            // Fresh allocation without copying old data (caller is responsible for filling it).
+            _data = new float[NextPowerOfTwo(minimumCapacity)];
         }
+    }
+
+    /// <summary>
+    /// Returns the smallest power of two that is greater than or equal to <paramref name="value"/>.
+    /// Uses bit-manipulation for branch-free, allocation-free calculation.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int NextPowerOfTwo(int value)
+    {
+        if (value <= 1) return 1;
+        value--;
+        value |= value >> 1;
+        value |= value >> 2;
+        value |= value >> 4;
+        value |= value >> 8;
+        value |= value >> 16;
+        return value + 1;
     }
 }

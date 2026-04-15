@@ -39,6 +39,12 @@ public sealed class MemoryMappedAudioStream : Stream
     private long _position;
     private bool _disposed;
 
+    // Permanently acquired pointer for the lifetime of this object.
+    // AcquirePointer() increments the SafeHandle refcount once in the constructor;
+    // ReleasePointer() is called exactly once in Dispose(). This eliminates the
+    // use-after-release hazard that would occur if we acquired/released per GetSpan() call.
+    private nint _basePointerRaw;
+
     /// <summary>
     /// Creates a memory-mapped audio stream from a file path.
     /// </summary>
@@ -143,6 +149,15 @@ public sealed class MemoryMappedAudioStream : Stream
             0,
             _length,
             MemoryMappedFileAccess.Read);
+
+        // Acquire the base pointer once and keep it alive for the object's lifetime.
+        // This prevents the use-after-release hazard in GetSpan() and Read(Span<byte>).
+        unsafe
+        {
+            byte* ptr = null;
+            _accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
+            _basePointerRaw = (nint)ptr;
+        }
     }
 
     /// <summary>
@@ -218,25 +233,16 @@ public sealed class MemoryMappedAudioStream : Stream
 
         int bytesToRead = (int)Math.Min(buffer.Length, _length - _position);
 
-        // Get pointer to memory-mapped region
+        // Use the permanently-held base pointer (acquired in constructor, released in Dispose).
         unsafe
         {
-            byte* ptr = null;
-            _accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
+            byte* ptr = (byte*)_basePointerRaw;
+            if (ptr == null)
+                throw new InvalidOperationException("Memory-mapped view pointer is not available.");
 
-            try
-            {
-                if (ptr == null)
-                    throw new InvalidOperationException("Failed to acquire pointer to memory-mapped view.");
-
-                // Zero-copy read via pointer
-                var source = new ReadOnlySpan<byte>(ptr + _position, bytesToRead);
-                source.CopyTo(buffer);
-            }
-            finally
-            {
-                _accessor.SafeMemoryMappedViewHandle.ReleasePointer();
-            }
+            // Zero-copy read via the permanently pinned pointer
+            var source = new ReadOnlySpan<byte>(ptr + _position, bytesToRead);
+            source.CopyTo(buffer);
         }
 
         _position += bytesToRead;
@@ -245,12 +251,15 @@ public sealed class MemoryMappedAudioStream : Stream
 
     /// <summary>
     /// Gets a read-only span directly to the memory-mapped data (true zero-copy).
+    /// The span is valid for the lifetime of this <see cref="MemoryMappedAudioStream"/> instance.
     /// </summary>
     /// <param name="count">Number of bytes to access.</param>
-    /// <returns>Read-only span pointing to memory-mapped data.</returns>
+    /// <returns>Read-only span pointing to memory-mapped data at the current position.</returns>
     /// <remarks>
     /// This is the fastest possible way to access audio data.
-    /// No copying occurs - you get direct pointer to OS page cache.
+    /// No copying occurs – direct pointer to OS page cache.
+    /// The underlying pointer is acquired once in the constructor and held until Dispose(),
+    /// so the returned span is always backed by live memory (no use-after-release hazard).
     /// </remarks>
     public unsafe ReadOnlySpan<byte> GetSpan(int count)
     {
@@ -262,20 +271,12 @@ public sealed class MemoryMappedAudioStream : Stream
 
         int bytesToRead = (int)Math.Min(count, _length - _position);
 
-        byte* ptr = null;
-        _accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
+        byte* ptr = (byte*)_basePointerRaw;
+        if (ptr == null)
+            throw new InvalidOperationException("Memory-mapped view pointer is not available.");
 
-        try
-        {
-            if (ptr == null)
-                throw new InvalidOperationException("Failed to acquire pointer to memory-mapped view.");
-
-            return new ReadOnlySpan<byte>(ptr + _position, bytesToRead);
-        }
-        finally
-        {
-            _accessor.SafeMemoryMappedViewHandle.ReleasePointer();
-        }
+        // The returned span is safe: _basePointerRaw remains valid until Dispose().
+        return new ReadOnlySpan<byte>(ptr + _position, bytesToRead);
     }
 
     /// <summary>
@@ -338,6 +339,13 @@ public sealed class MemoryMappedAudioStream : Stream
 
         if (disposing)
         {
+            // Release the permanently-held pointer before closing the accessor.
+            if (_basePointerRaw != nint.Zero)
+            {
+                _accessor.SafeMemoryMappedViewHandle.ReleasePointer();
+                _basePointerRaw = nint.Zero;
+            }
+
             _accessor?.Dispose();
             _memoryMappedFile?.Dispose();
         }

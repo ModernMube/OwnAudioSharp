@@ -1,6 +1,7 @@
 using System;
 using Logger;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using Ownaudio.Core.Common;
 using Ownaudio.Decoders.Wav;
@@ -21,6 +22,29 @@ namespace Ownaudio.Decoders;
 /// </remarks>
 public static class AudioDecoderFactory
 {
+    /// <summary>
+    /// Lazily resolved MaDecoder type from Ownaudio.Native assembly.
+    /// Null if the assembly is not available on this platform.
+    /// Cached after the first attempt so repeated file opens never pay the Assembly.Load cost.
+    /// </summary>
+    private static readonly Lazy<Type?> _nativeMaDecoderType = new Lazy<Type?>(() =>
+    {
+        try
+        {
+            var assembly = Assembly.Load("Ownaudio.Native");
+            return assembly.GetType("Ownaudio.Native.Decoders.MaDecoder");
+        }
+        catch
+        {
+            Log.Info("Ownaudio.Native not available – using managed decoders.");
+            return null;
+        }
+    });
+
+    /// <summary>
+    /// True once we have confirmed that the native MaDecoder type is usable.
+    /// </summary>
+    private static bool NativeAvailable => _nativeMaDecoderType.Value != null;
     /// <summary>
     /// Creates an audio decoder for the specified file.
     /// Automatically detects format from file extension or header.
@@ -52,27 +76,24 @@ public static class AudioDecoderFactory
 
         if (format == AudioFormat.Unknown)
             throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException($"Unable to detect audio format for file: {filePath}"));
-        
-        try
-        {
-            var assembly = System.Reflection.Assembly.Load("Ownaudio.Native");
-            var decoderType = assembly.GetType("Ownaudio.Native.Decoders.MaDecoder");
 
-            if (decoderType != null)
+        // PRIMARY: Try native MaDecoder (cached – no repeated Assembly.Load / exception overhead)
+        if (NativeAvailable)
+        {
+            try
             {
-                var decoder = Activator.CreateInstance(decoderType, filePath, targetSampleRate, targetChannels) as IAudioDecoder;
+                var decoder = Activator.CreateInstance(_nativeMaDecoderType.Value!, filePath, targetSampleRate, targetChannels) as IAudioDecoder;
                 if (decoder != null)
                 {
                     Log.Info($"Using MiniAudio decoder for {format} format (native)");
                     return decoder;
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            // MiniAudio not available - fallback to managed decoders
-            Log.Error($"MiniAudio decoder not available: {ex.Message}");
-            Log.Info("Falling back to managed decoder...");
+            catch (Exception ex)
+            {
+                Log.Error($"MiniAudio decoder instantiation failed: {ex.Message}");
+                Log.Info("Falling back to managed decoder...");
+            }
         }
 
         // For MP3, use platform-specific decoders if available
@@ -223,27 +244,23 @@ public static class AudioDecoderFactory
     /// </summary>
     private static IAudioDecoder CreateMp3DecoderFromFile(string filePath, int targetSampleRate, int targetChannels)
     {
-        // PRIMARY: Try MiniAudio decoder first (supports MP3, WAV, FLAC, and more)
-        try
+        // PRIMARY: Try native MaDecoder (same cached type as the main Create() path)
+        if (NativeAvailable)
         {
-            var assembly = System.Reflection.Assembly.Load("Ownaudio.Native");
-            var decoderType = assembly.GetType("Ownaudio.Native.Decoders.MaDecoder");
-
-            if (decoderType != null)
+            try
             {
-                var decoder = Activator.CreateInstance(decoderType, filePath, targetSampleRate, targetChannels) as IAudioDecoder;
+                var decoder = Activator.CreateInstance(_nativeMaDecoderType.Value!, filePath, targetSampleRate, targetChannels) as IAudioDecoder;
                 if (decoder != null)
                 {
                     Log.Info("Using MiniAudio decoder (native)");
                     return decoder;
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            // MiniAudio not available - fallback to platform-specific or managed
-            Log.Error($"MiniAudio decoder not available: {ex.Message}");
-            Log.Error("Falling back to platform-specific decoder...");
+            catch (Exception ex)
+            {
+                Log.Error($"MiniAudio MP3 decoder instantiation failed: {ex.Message}");
+                Log.Error("Falling back to platform-specific decoder...");
+            }
         }
 
         // FALLBACK 1: Platform-specific decoders
