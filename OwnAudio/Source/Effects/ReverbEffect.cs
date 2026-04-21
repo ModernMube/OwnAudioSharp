@@ -512,25 +512,50 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case ReverbPreset.Default:
-                    RoomSize = 0.5f; Damping = 0.5f; Width = 1.0f; WetLevel = 0.33f; DryLevel = 0.8f;
+                    RoomSize = 0.50f; Damping = 0.50f; Width = 1.0f; WetLevel = 0.30f; DryLevel = 0.80f;
                     break;
                 case ReverbPreset.SmallRoom:
-                    RoomSize = 0.3f; Damping = 0.2f; Width = 0.5f; WetLevel = 0.2f; DryLevel = 0.9f;
+                    // Tight, present room – minimal tail, high presence
+                    RoomSize = 0.30f; Damping = 0.65f; Width = 0.6f; WetLevel = 0.18f; DryLevel = 0.90f;
                     break;
                 case ReverbPreset.LargeHall:
-                    RoomSize = 0.85f; Damping = 0.5f; Width = 1.0f; WetLevel = 0.5f; DryLevel = 0.6f;
+                    // Concert hall – spacious decay, full stereo width
+                    RoomSize = 0.85f; Damping = 0.45f; Width = 1.0f; WetLevel = 0.45f; DryLevel = 0.70f;
                     break;
                 case ReverbPreset.Cathedral:
-                    RoomSize = 0.95f; Damping = 0.1f; Width = 1.0f; WetLevel = 0.7f; DryLevel = 0.5f;
+                    // Sacred hall – very long tail, open high-frequency content
+                    RoomSize = 0.95f; Damping = 0.12f; Width = 1.0f; WetLevel = 0.60f; DryLevel = 0.55f;
                     break;
                 case ReverbPreset.Plate:
-                    RoomSize = 0.6f; Damping = 0.1f; Width = 0.8f; WetLevel = 0.4f; DryLevel = 0.8f;
+                    // EMT 140 style – dense, bright, smooth attack
+                    RoomSize = 0.62f; Damping = 0.08f; Width = 0.85f; WetLevel = 0.38f; DryLevel = 0.82f;
+                    break;
+                case ReverbPreset.Spring:
+                    // Spring reverb tank – metallic, shorter decay with character
+                    RoomSize = 0.42f; Damping = 0.75f; Width = 0.55f; WetLevel = 0.28f; DryLevel = 0.85f;
                     break;
                 case ReverbPreset.AmbientPad:
-                    RoomSize = 0.92f; Damping = 0.8f; Width = 1.0f; WetLevel = 0.8f; DryLevel = 0.4f;
+                    // Infinite shimmer – wash of reverb for pads/textures
+                    RoomSize = 0.92f; Damping = 0.20f; Width = 1.0f; WetLevel = 0.70f; DryLevel = 0.35f;
+                    break;
+                case ReverbPreset.VocalBooth:
+                    // Tiny, very damped booth – intimate vocal presence
+                    RoomSize = 0.18f; Damping = 0.90f; Width = 0.35f; WetLevel = 0.12f; DryLevel = 0.95f;
+                    break;
+                case ReverbPreset.DrumRoom:
+                    // Punchy live room – medium size, high energy, controlled tail
+                    RoomSize = 0.65f; Damping = 0.55f; Width = 0.95f; WetLevel = 0.32f; DryLevel = 0.75f;
+                    break;
+                case ReverbPreset.Gated:
+                    // 80s gated reverb – dense build, heavy damping for abrupt feel
+                    RoomSize = 0.72f; Damping = 0.92f; Width = 1.0f; WetLevel = 0.42f; DryLevel = 0.72f;
+                    break;
+                case ReverbPreset.Subtle:
+                    // Barely perceptible glue reverb – spatial enhancement only
+                    RoomSize = 0.28f; Damping = 0.72f; Width = 0.75f; WetLevel = 0.10f; DryLevel = 0.96f;
                     break;
                 default:
-                    RoomSize = 0.5f; Damping = 0.5f; Width = 1.0f; WetLevel = 0.33f; DryLevel = 0.8f;
+                    RoomSize = 0.50f; Damping = 0.50f; Width = 1.0f; WetLevel = 0.30f; DryLevel = 0.80f;
                     break;
             }
         }

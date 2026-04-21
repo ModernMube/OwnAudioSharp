@@ -224,82 +224,42 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case PhaserPreset.Default:
-                    // Default balanced settings for general use
-                    Rate = 0.5f;        // 0.5 Hz - moderate sweep speed
-                    Depth = 0.7f;       // Good depth for noticeable effect
-                    Feedback = 0.5f;    // Balanced feedback
-                    Mix = 0.5f;         // Equal dry/wet mix
-                    Stages = 4;         // Standard 4-stage configuration
+                    Rate = 0.5f; Depth = 0.65f; Feedback = 0.45f; Mix = 0.45f; Stages = 4;
                     break;
 
                 case PhaserPreset.Vintage:
-                    // Classic 70s rock phaser sound - warm and musical
-                    // Medium rate for that classic sweep, good depth for character
-                    Rate = 0.6f;        // 0.6 Hz - classic sweep speed
-                    Depth = 0.8f;       // Deep modulation for pronounced effect
-                    Feedback = 0.65f;   // Moderate feedback for warmth without harshness
-                    Mix = 0.7f;         // Wet-heavy mix for classic phaser prominence
-                    Stages = 4;         // Classic 4-stage configuration
+                    // MXR Phase 90 style – warm, musical 70s character
+                    Rate = 0.6f; Depth = 0.75f; Feedback = 0.62f; Mix = 0.60f; Stages = 4;
                     break;
 
                 case PhaserPreset.Ambient:
-                    // Subtle atmospheric phasing for background textures
-                    // Very slow movement, gentle depth for unobtrusive ambience
-                    Rate = 0.2f;        // 0.2 Hz - very slow, atmospheric movement
-                    Depth = 0.4f;       // Shallow depth for subtlety
-                    Feedback = 0.3f;    // Low feedback for gentle character
-                    Mix = 0.3f;         // Dry-heavy mix to maintain original signal
-                    Stages = 6;         // More stages for smoother, more complex sweeps
+                    // Slow evolving texture – barely perceptible movement
+                    Rate = 0.2f; Depth = 0.40f; Feedback = 0.28f; Mix = 0.28f; Stages = 6;
                     break;
 
                 case PhaserPreset.Tremolo:
-                    // Fast rhythmic phasing for pulsing effects
-                    // High rate creates tremolo-like rhythmic pulsing
-                    Rate = 4.0f;        // 4 Hz - fast rhythmic pulsing
-                    Depth = 0.6f;       // Moderate depth for clear rhythmic effect
-                    Feedback = 0.2f;    // Low feedback to avoid muddiness at high rates
-                    Mix = 0.8f;         // Heavy wet signal for pronounced rhythmic effect
-                    Stages = 3;         // Fewer stages for cleaner, faster response
+                    // Fast rhythmic pulse – phaser as tremolo substitute
+                    Rate = 4.0f; Depth = 0.58f; Feedback = 0.18f; Mix = 0.70f; Stages = 3;
                     break;
 
                 case PhaserPreset.DeepSpace:
-                    // Dramatic psychedelic phasing for experimental sounds
-                    // Maximum depth and high feedback for otherworldly sweeps
-                    Rate = 0.3f;        // 0.3 Hz - slow, dramatic sweeps
-                    Depth = 1.0f;       // Maximum depth for extreme modulation
-                    Feedback = 0.85f;   // High feedback for dramatic resonance
-                    Mix = 0.9f;         // Almost entirely wet for maximum effect
-                    Stages = 8;         // Maximum stages for complex, evolving sweeps
+                    // Slow, extreme psychedelic sweep – maximum resonance
+                    Rate = 0.3f; Depth = 1.0f; Feedback = 0.85f; Mix = 0.82f; Stages = 8;
                     break;
 
                 case PhaserPreset.GuitarSolo:
-                    // Classic lead guitar phasing that cuts through the mix
-                    // Medium-fast rate with good presence and clarity
-                    Rate = 1.2f;        // 1.2 Hz - medium-fast sweep for energy
-                    Depth = 0.75f;      // Good depth for character without muddiness
-                    Feedback = 0.55f;   // Moderate feedback for presence
-                    Mix = 0.6f;         // Balanced mix to maintain note definition
-                    Stages = 4;         // Classic 4-stage for familiar guitar sound
+                    // Medium-fast cutting phaser for lead – EVH/script logo style
+                    Rate = 1.2f; Depth = 0.72f; Feedback = 0.52f; Mix = 0.55f; Stages = 4;
                     break;
 
                 case PhaserPreset.Vocal:
-                    // Gentle vocal enhancement without distraction
-                    // Slow, subtle movement to add character to vocal tracks
-                    Rate = 0.4f;        // 0.4 Hz - gentle, slow movement
-                    Depth = 0.5f;       // Moderate depth for character
-                    Feedback = 0.35f;   // Low feedback to avoid vocal muddiness
-                    Mix = 0.25f;        // Light mix to enhance without overpowering
-                    Stages = 6;         // More stages for smoother, more musical sweep
+                    // Very gentle vocal coloring – adds shimmer without drowning the voice
+                    Rate = 0.4f; Depth = 0.45f; Feedback = 0.30f; Mix = 0.22f; Stages = 6;
                     break;
 
                 case PhaserPreset.SynthPad:
-                    // Lush modulation for synthesizer pads and strings
-                    // Medium rate with deep modulation for evolving textures
-                    Rate = 0.8f;        // 0.8 Hz - medium rate for evolving movement
-                    Depth = 0.85f;      // Deep modulation for lush textures
-                    Feedback = 0.75f;   // High feedback for rich harmonics
-                    Mix = 0.8f;         // Wet-heavy for lush, processed sound
-                    Stages = 6;         // More stages for complex, evolving character
+                    // Rich evolving pad modulation – lush but controlled
+                    Rate = 0.8f; Depth = 0.80f; Feedback = 0.65f; Mix = 0.68f; Stages = 6;
                     break;
             }
         }

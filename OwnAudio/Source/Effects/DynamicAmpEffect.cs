@@ -458,10 +458,10 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case DynamicAmpPreset.Default:
-                    // Balanced settings for general use
+                    // -12dBFS target, moderate speed – transparent general-purpose AGC
                     TargetRmsLevelDb = -12.0f;
-                    AttackTime = 0.5f;
-                    ReleaseTime = 2.0f;
+                    AttackTime = 0.30f;
+                    ReleaseTime = 1.50f;
                     NoiseGateThresholdDb = -50.0f;
                     MaxGain = 6.0f;
                     MaxGainReductionDb = 12.0f;
@@ -469,10 +469,10 @@ namespace OwnaudioNET.Effects
                     break;
 
                 case DynamicAmpPreset.Speech:
-                    // Quick response for speech clarity, higher noise gate
+                    // -15dBFS, faster response, higher gate – clean intelligibility
                     TargetRmsLevelDb = -15.0f;
-                    AttackTime = 0.2f;
-                    ReleaseTime = 0.8f;
+                    AttackTime = 0.18f;
+                    ReleaseTime = 0.80f;
                     NoiseGateThresholdDb = -45.0f;
                     MaxGain = 8.0f;
                     MaxGainReductionDb = 15.0f;
@@ -480,32 +480,32 @@ namespace OwnaudioNET.Effects
                     break;
 
                 case DynamicAmpPreset.Music:
-                    // Gentle, musical settings preserving dynamics
+                    // -14dBFS, slow attack preserves transients and dynamics
                     TargetRmsLevelDb = -14.0f;
-                    AttackTime = 1.0f;
-                    ReleaseTime = 3.0f;
+                    AttackTime = 0.80f;
+                    ReleaseTime = 2.50f;
                     NoiseGateThresholdDb = -55.0f;
                     MaxGain = 4.0f;
                     MaxGainReductionDb = 8.0f;
-                    MaxGainChangePerSecondDb = 6.0f;
+                    MaxGainChangePerSecondDb = 5.0f;
                     break;
 
                 case DynamicAmpPreset.Broadcast:
-                    // Tight control for consistent broadcast levels
+                    // -16dBFS, consistent loudness, limited max gain to avoid pumping
                     TargetRmsLevelDb = -16.0f;
-                    AttackTime = 0.3f;
-                    ReleaseTime = 1.5f;
+                    AttackTime = 0.28f;
+                    ReleaseTime = 1.40f;
                     NoiseGateThresholdDb = -48.0f;
-                    MaxGain = 10.0f;
+                    MaxGain = 6.0f;       // Was 10 – too much, caused pumping artifacts
                     MaxGainReductionDb = 18.0f;
-                    MaxGainChangePerSecondDb = 15.0f;
+                    MaxGainChangePerSecondDb = 14.0f;
                     break;
 
                 case DynamicAmpPreset.Mastering:
-                    // Subtle, transparent mastering-grade dynamics
+                    // -10dBFS, very slow – glue without audible pumping
                     TargetRmsLevelDb = -10.0f;
-                    AttackTime = 2.0f;
-                    ReleaseTime = 5.0f;
+                    AttackTime = 2.00f;
+                    ReleaseTime = 5.00f;
                     NoiseGateThresholdDb = -60.0f;
                     MaxGain = 3.0f;
                     MaxGainReductionDb = 6.0f;
@@ -513,10 +513,10 @@ namespace OwnaudioNET.Effects
                     break;
 
                 case DynamicAmpPreset.Live:
-                    // Fast response for live performance, prevents feedback
+                    // -12dBFS, fast enough for live monitoring, longer release to avoid pumping
                     TargetRmsLevelDb = -12.0f;
                     AttackTime = 0.15f;
-                    ReleaseTime = 0.6f;
+                    ReleaseTime = 0.80f;  // Was 0.6 – too short caused pumping on stage
                     NoiseGateThresholdDb = -42.0f;
                     MaxGain = 5.0f;
                     MaxGainReductionDb = 12.0f;
@@ -524,10 +524,10 @@ namespace OwnaudioNET.Effects
                     break;
 
                 case DynamicAmpPreset.Transparent:
-                    // Minimal processing, natural dynamics
+                    // Very slow, gentle – barely perceptible level management
                     TargetRmsLevelDb = -16.0f;
-                    AttackTime = 3.0f;
-                    ReleaseTime = 8.0f;
+                    AttackTime = 3.00f;
+                    ReleaseTime = 8.00f;
                     NoiseGateThresholdDb = -65.0f;
                     MaxGain = 2.5f;
                     MaxGainReductionDb = 5.0f;

@@ -395,24 +395,33 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case Equalizer30Preset.Default: break;
+                // 20Hz sub-bass boost tapering to flat at 200Hz, slight air above 5kHz
                 case Equalizer30Preset.Bass:
-                    ApplyGainCurve(gains, new[] { (0, 7f), (5, 5f), (8, 3f), (10, 1f), (12, -1f), (15, 0f), (20, 1f), (25, 2f), (29, 1f) }); break;
+                    ApplyGainCurve(gains, new[] { (0, 6f), (4, 5f), (7, 4f), (9, 2f), (11, -1f), (14, 0f), (17, 0f), (22, 1f), (26, 2f), (29, 1f) }); break;
+                // Flat up to 800Hz, smooth lift from 1kHz–16kHz
                 case Equalizer30Preset.Treble:
-                    ApplyGainCurve(gains, new[] { (0, 0f), (10, 0f), (15, 1f), (18, 2f), (22, 4f), (25, 3f), (27, 4f), (29, 3f) }); break;
+                    ApplyGainCurve(gains, new[] { (0, 0f), (9, 0f), (14, 0f), (17, 1f), (20, 2f), (22, 4f), (25, 4f), (27, 5f), (29, 3f) }); break;
+                // V-curve: tight sub, mid scoop 250–500Hz, bite at 3kHz, air at 8kHz
                 case Equalizer30Preset.Rock:
-                    ApplyGainCurve(gains, new[] { (0, 5f), (3, 4f), (8, 2f), (12, -2f), (15, -1f), (18, 2f), (22, 4f), (25, 3f), (29, 2f) }); break;
+                    ApplyGainCurve(gains, new[] { (0, 5f), (3, 4f), (7, 2f), (11, -2f), (14, -2f), (17, 0f), (20, 2f), (22, 4f), (25, 4f), (27, 3f), (29, 2f) }); break;
+                // Near-flat with gentle high-end air from 5kHz – natural reproduction
                 case Equalizer30Preset.Classical:
-                    ApplyGainCurve(gains, new[] { (0, 1f), (8, 0f), (15, 0f), (20, 1f), (25, 2f), (27, 2f), (29, 1f) }); break;
+                    ApplyGainCurve(gains, new[] { (0, 1f), (7, 0f), (14, -1f), (17, 0f), (20, 1f), (23, 2f), (26, 2f), (29, 1f) }); break;
+                // Vocal-forward: slight bass warmth, strong 500Hz–3kHz presence, top air
                 case Equalizer30Preset.Pop:
-                    ApplyGainCurve(gains, new[] { (0, 2f), (5, 1f), (12, 1f), (17, 3f), (20, 2f), (25, 2f), (29, 1f) }); break;
+                    ApplyGainCurve(gains, new[] { (0, 2f), (5, 2f), (9, 1f), (13, 2f), (17, 3f), (20, 3f), (22, 3f), (25, 2f), (27, 2f), (29, 2f) }); break;
+                // Warm low-mids, honest 1kHz-3kHz, gentle roll-off at 10kHz+
                 case Equalizer30Preset.Jazz:
-                    ApplyGainCurve(gains, new[] { (0, 2f), (5, 1f), (10, 1f), (17, 1f), (22, 0f), (27, 0f), (29, -1f) }); break;
+                    ApplyGainCurve(gains, new[] { (0, 3f), (4, 3f), (8, 2f), (12, 2f), (17, 1f), (20, 0f), (23, 0f), (26, 0f), (29, -1f) }); break;
+                // Strong 300Hz–3kHz intelligibility peak, cut sub and very high air
                 case Equalizer30Preset.Voice:
-                    ApplyGainCurve(gains, new[] { (0, -3f), (3, -2f), (10, 1f), (15, 3f), (18, 4f), (22, 2f), (27, -1f), (29, -2f) }); break;
+                    ApplyGainCurve(gains, new[] { (0, -3f), (3, -2f), (8, 0f), (11, 2f), (14, 4f), (17, 5f), (20, 5f), (22, 3f), (25, 1f), (27, -1f), (29, -2f) }); break;
+                // Deep sub punch, flat through mids, bright top-end sparkle
                 case Equalizer30Preset.Electronic:
-                    ApplyGainCurve(gains, new[] { (0, 8f), (2, 6f), (5, 3f), (10, 0f), (15, -1f), (18, 1f), (22, 3f), (26, 5f), (29, 4f) }); break;
+                    ApplyGainCurve(gains, new[] { (0, 6f), (2, 6f), (4, 4f), (7, 2f), (11, 0f), (15, -1f), (18, 1f), (22, 3f), (25, 5f), (27, 5f), (29, 4f) }); break;
+                // Natural room – slight warmth at 200Hz, gentle presence lift, airy top
                 case Equalizer30Preset.Acoustic:
-                    ApplyGainCurve(gains, new[] { (0, 1f), (8, 1f), (12, 0f), (17, 2f), (20, 1f), (24, 1f), (27, 0f), (29, -1f) }); break;
+                    ApplyGainCurve(gains, new[] { (0, 1f), (7, 1f), (10, 2f), (13, 1f), (17, 2f), (20, 2f), (23, 1f), (25, 1f), (27, 0f), (29, -1f) }); break;
             }
             SetAllGains(gains);
         }

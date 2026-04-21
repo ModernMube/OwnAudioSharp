@@ -323,15 +323,24 @@ namespace OwnaudioNET.Effects
         {
             switch (preset)
             {
-                case DelayPreset.Default: Time=375; Repeat=0.35f; Mix=0.3f; Damping=0.25f; PingPong=false; break;
-                case DelayPreset.SlapBack: Time=80; Repeat=0.15f; Mix=0.25f; Damping=0.1f; PingPong=false; break;
-                case DelayPreset.ClassicEcho: Time=375; Repeat=0.35f; Mix=0.3f; Damping=0.25f; PingPong=false; break;
-                case DelayPreset.Ambient: Time=650; Repeat=0.55f; Mix=0.45f; Damping=0.4f; PingPong=false; break;
-                case DelayPreset.Rhythmic: Time=250; Repeat=0.4f; Mix=0.35f; Damping=0.2f; PingPong=false; break;
-                case DelayPreset.PingPong: Time=300; Repeat=0.45f; Mix=0.4f; Damping=0.15f; PingPong=true; break;
-                case DelayPreset.TapeEcho: Time=400; Repeat=0.5f; Mix=0.38f; Damping=0.6f; PingPong=false; break;
-                case DelayPreset.Dub: Time=500; Repeat=0.7f; Mix=0.5f; Damping=0.45f; PingPong=false; break;
-                case DelayPreset.Thickening: Time=15; Repeat=0.05f; Mix=0.15f; Damping=0.05f; PingPong=false; break;
+                // Default: dotted-8th at ~120 BPM – universally musical
+                case DelayPreset.Default:     Time=375; Repeat=0.35f; Mix=0.28f; Damping=0.20f; PingPong=false; break;
+                // Slapback: vintage rockabilly/country tape feel
+                case DelayPreset.SlapBack:    Time=85;  Repeat=0.12f; Mix=0.22f; Damping=0.08f; PingPong=false; break;
+                // ClassicEcho: quarter-note echo at 120 BPM – distinct from Default
+                case DelayPreset.ClassicEcho: Time=500; Repeat=0.42f; Mix=0.32f; Damping=0.22f; PingPong=false; break;
+                // Ambient: long, dense, reverb-like echo for soundscapes
+                case DelayPreset.Ambient:     Time=680; Repeat=0.60f; Mix=0.50f; Damping=0.35f; PingPong=false; break;
+                // Rhythmic: 8th-note at 120 BPM – tight, groove-locked
+                case DelayPreset.Rhythmic:    Time=250; Repeat=0.40f; Mix=0.33f; Damping=0.18f; PingPong=false; break;
+                // PingPong: dotted-8th bouncing stereo – wide, immersive
+                case DelayPreset.PingPong:    Time=320; Repeat=0.48f; Mix=0.42f; Damping=0.12f; PingPong=true;  break;
+                // TapeEcho: warm but not too dark – EMT 50 character
+                case DelayPreset.TapeEcho:    Time=420; Repeat=0.52f; Mix=0.38f; Damping=0.42f; PingPong=false; break;
+                // Dub: long high-feedback echo – self-oscillation territory
+                case DelayPreset.Dub:         Time=520; Repeat=0.72f; Mix=0.52f; Damping=0.40f; PingPong=false; break;
+                // Thickening: ADT-style double-tracking, imperceptible delay
+                case DelayPreset.Thickening:  Time=18;  Repeat=0.04f; Mix=0.18f; Damping=0.03f; PingPong=false; break;
             }
         }
 

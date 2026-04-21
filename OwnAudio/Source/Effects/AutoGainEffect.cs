@@ -279,24 +279,29 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case AutoGainPreset.Default:
-                    TargetLevel = 0.25f; AttackCoefficient = 0.99f; ReleaseCoefficient = 0.999f;
-                    MaximumGain = 4.0f; MinimumGain = 0.25f; GateThreshold = 0.001f;
+                    // -12dBFS target – safe for general use without saturation
+                    TargetLevel = 0.25f; AttackCoefficient = 0.990f; ReleaseCoefficient = 0.9990f;
+                    MaximumGain = 4.0f; MinimumGain = 0.20f; GateThreshold = 0.001f;
                     break;
                 case AutoGainPreset.Music:
-                    TargetLevel = 0.2f; AttackCoefficient = 0.995f; ReleaseCoefficient = 0.9995f;
-                    MaximumGain = 2.0f; MinimumGain = 0.5f; GateThreshold = 0.002f;
+                    // -14dBFS target – preserves dynamic contrast of music
+                    TargetLevel = 0.20f; AttackCoefficient = 0.995f; ReleaseCoefficient = 0.9995f;
+                    MaximumGain = 2.5f; MinimumGain = 0.40f; GateThreshold = 0.002f;
                     break;
                 case AutoGainPreset.Voice:
-                    TargetLevel = 0.3f; AttackCoefficient = 0.99f; ReleaseCoefficient = 0.999f;
-                    MaximumGain = 3.0f; MinimumGain = 0.3f; GateThreshold = 0.001f;
+                    // -11dBFS target – clear and present for spoken word
+                    TargetLevel = 0.28f; AttackCoefficient = 0.988f; ReleaseCoefficient = 0.9980f;
+                    MaximumGain = 3.5f; MinimumGain = 0.25f; GateThreshold = 0.0015f;
                     break;
                 case AutoGainPreset.Broadcast:
-                    TargetLevel = 0.4f; AttackCoefficient = 0.98f; ReleaseCoefficient = 0.995f;
-                    MaximumGain = 4.0f; MinimumGain = 0.2f; GateThreshold = 0.0005f;
+                    // -10dBFS target – consistent loudness, faster response for on-air use
+                    TargetLevel = 0.32f; AttackCoefficient = 0.985f; ReleaseCoefficient = 0.9950f;
+                    MaximumGain = 4.0f; MinimumGain = 0.18f; GateThreshold = 0.0005f;
                     break;
                 case AutoGainPreset.Live:
-                    TargetLevel = 0.5f; AttackCoefficient = 0.97f; ReleaseCoefficient = 0.99f;
-                    MaximumGain = 2.5f; MinimumGain = 0.1f; GateThreshold = 0.005f;
+                    // -9dBFS target – assertive level management for live monitoring
+                    TargetLevel = 0.35f; AttackCoefficient = 0.975f; ReleaseCoefficient = 0.9920f;
+                    MaximumGain = 2.5f; MinimumGain = 0.12f; GateThreshold = 0.004f;
                     break;
             }
         }

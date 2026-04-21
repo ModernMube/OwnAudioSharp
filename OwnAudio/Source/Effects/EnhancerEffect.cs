@@ -191,8 +191,10 @@ namespace OwnaudioNET.Effects
         {
             if (_cutFreq > 0 && _sampleRate > 0)
             {
+                // alpha = RC / (RC + dt)  where RC = 1/(2π·fc), dt = 1/fs
                 float rc = 1f / (2f * MathF.PI * _cutFreq);
-                _alpha = rc / (rc + 1f / (2f * MathF.PI * _cutFreq * _sampleRate));
+                float dt = 1f / _sampleRate;
+                _alpha = rc / (rc + dt);
             }
         }
 
@@ -244,45 +246,50 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case EnhancerPreset.Default:
-                    Mix = 0.2f;
-                    CutoffFrequency = 4000f;
-                    Gain = 2.5f;
+                    Mix = 0.15f;
+                    CutoffFrequency = 3500f;
+                    Gain = 1.8f;
                     break;
 
                 case EnhancerPreset.VocalClarity:
-                    Mix = 0.15f;
-                    CutoffFrequency = 5000f;
-                    Gain = 2.0f;
+                    // Gentle presence boost above 4.5kHz – adds air without harshness
+                    Mix = 0.12f;
+                    CutoffFrequency = 4500f;
+                    Gain = 1.8f;
                     break;
 
                 case EnhancerPreset.RockEdge:
-                    Mix = 0.25f;
-                    CutoffFrequency = 3000f;
-                    Gain = 4.0f;
+                    // Bite and upper-midrange saturation for guitars/full mix
+                    Mix = 0.22f;
+                    CutoffFrequency = 2800f;
+                    Gain = 2.8f;
                     break;
 
                 case EnhancerPreset.AcousticSparkle:
-                    Mix = 0.10f;
-                    CutoffFrequency = 6000f;
-                    Gain = 2.5f;
+                    // Very subtle air enhancement above 5.5kHz – natural sparkle
+                    Mix = 0.08f;
+                    CutoffFrequency = 5500f;
+                    Gain = 1.5f;
                     break;
 
                 case EnhancerPreset.MixCutter:
-                    Mix = 0.30f;
-                    CutoffFrequency = 4000f;
-                    Gain = 3.5f;
+                    // Presence and definition boost for cutting through dense arrangements
+                    Mix = 0.25f;
+                    CutoffFrequency = 3200f;
+                    Gain = 2.8f;
                     break;
 
                 case EnhancerPreset.Broadcast:
-                    Mix = 0.20f;
-                    CutoffFrequency = 4500f;
-                    Gain = 3.0f;
+                    // Speech intelligibility enhancement – clarity without listening fatigue
+                    Mix = 0.18f;
+                    CutoffFrequency = 4000f;
+                    Gain = 2.2f;
                     break;
 
                 default:
-                    Mix = 0.2f;
-                    CutoffFrequency = 4000f;
-                    Gain = 2.5f;
+                    Mix = 0.15f;
+                    CutoffFrequency = 3500f;
+                    Gain = 1.8f;
                     break;
             }
         }

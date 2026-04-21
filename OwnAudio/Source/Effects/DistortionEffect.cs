@@ -179,19 +179,17 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case DistortionPreset.Default:
-                    // Default preset with basic distortion settings
-                    // Standard moderate values matching the default constructor parameters
+                    // Moderate distortion with dry blend to retain source character
                     Drive = 2.0f;         // Basic drive amount
-                    Mix = 1.0f;           // Full wet signal
-                    OutputGain = 0.5f;    // Standard output compensation
+                    Mix = 0.82f;          // Was 1.0 – 18% dry preserves original transients
+                    OutputGain = 0.55f;   // Slightly higher than before to compensate mix
                     break;
 
                 case DistortionPreset.WarmOverdrive:
-                    // Subtle warm saturation for adding musical character
-                    // Low drive for gentle saturation, partial mix to retain clarity
-                    Drive = 1.8f;         // Gentle overdrive amount
-                    Mix = 0.7f;           // 70% wet - retains some clean signal
-                    OutputGain = 0.8f;    // Higher output to compensate for gentle processing
+                    // Gentle saturation – adds harmonic richness without obvious distortion
+                    Drive = 1.8f;         // Gentle overdrive
+                    Mix = 0.68f;          // 68% wet – warm but transparent blend
+                    OutputGain = 0.82f;   // Compensate for mild processing
                     break;
 
                 case DistortionPreset.ClassicRock:

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0-android</TargetFramework>
+    <TargetFramework>net10.0-android</TargetFramework>
     <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
     <!-- RuntimeIdentifiers intentionally omitted: this is a library project.
          The app project (Ownaudio.Example.Android) controls per-ABI compilation.

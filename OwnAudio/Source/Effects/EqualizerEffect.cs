@@ -438,15 +438,23 @@ namespace OwnaudioNET.Effects
         public void SetPreset(EqualizerPreset preset)
         {
             float[] gains = new float[10];
+            // Bands: 31Hz, 62Hz, 125Hz, 250Hz, 500Hz, 1kHz, 2kHz, 4kHz, 8kHz, 16kHz
             switch (preset)
             {
-                case EqualizerPreset.Bass: gains = new float[] { 6, 4, 2, -1, 0, 0, 0, 1, 2, 0 }; break;
-                case EqualizerPreset.Treble: gains = new float[] { 0, 0, 0, 0, 1, 2, 4, 3, 4, 2 }; break;
-                case EqualizerPreset.Rock: gains = new float[] { 4, 3, 1, -2, -1, 1, 3, 2, 2, 1 }; break;
-                case EqualizerPreset.Classical: gains = new float[] { 1, 0, 0, 0, 0, 0, 1, 1, 2, 2 }; break;
-                case EqualizerPreset.Pop: gains = new float[] { 2, 1, 0, 1, 2, 3, 2, 1, 2, 1 }; break;
-                case EqualizerPreset.Jazz: gains = new float[] { 2, 1, 1, 0, 0, 1, 0, 1, 0, -1 }; break;
-                case EqualizerPreset.Voice: gains = new float[] { -3, -2, 0, 2, 4, 3, 2, 0, -1, -2 }; break;
+                // Sub punch + low body, slight upper-mid cut for headroom
+                case EqualizerPreset.Bass:     gains = new float[] {  6,  5,  3, -1, -1,  0,  0,  1,  2,  1 }; break;
+                // Air and brilliance – gentle lift from 1kHz up
+                case EqualizerPreset.Treble:   gains = new float[] {  0,  0,  0,  0,  1,  2,  4,  4,  5,  3 }; break;
+                // Classic rock V-curve: bass + treble, mid scoop, 2kHz bite
+                case EqualizerPreset.Rock:     gains = new float[] {  4,  3,  1, -2, -2,  0,  3,  4,  3,  2 }; break;
+                // Subtle room correction – gentle high shelf for air, otherwise flat
+                case EqualizerPreset.Classical:gains = new float[] {  1,  0,  0,  0, -1,  0,  1,  1,  2,  2 }; break;
+                // Vocal-forward with sub warmth and top-end sparkle
+                case EqualizerPreset.Pop:      gains = new float[] {  2,  1,  0,  1,  3,  3,  3,  2,  2,  2 }; break;
+                // Warm low-mids, slight air boost – jazz combo character
+                case EqualizerPreset.Jazz:     gains = new float[] {  3,  2,  2,  1,  0,  0,  0,  1,  1, -1 }; break;
+                // Strong presence/intelligibility peak 500Hz-2kHz, roll off extremes
+                case EqualizerPreset.Voice:    gains = new float[] { -3, -2,  0,  2,  5,  5,  4,  2, -1, -2 }; break;
                 default: break;
             }
             

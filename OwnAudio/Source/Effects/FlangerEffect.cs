@@ -209,12 +209,11 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case FlangerPreset.Default:
-                    // Default balanced flanger settings - good starting point
-                    // Moderate settings that work well for most applications
-                    Rate = 0.5f;         // Default moderate sweep speed
-                    Depth = 0.8f;        // Default good modulation depth
-                    Feedback = 0.6f;     // Default balanced feedback
-                    Mix = 0.5f;          // Default 50/50 mix
+                    // Moderate all-purpose flanging – noticeable but not overwhelming
+                    Rate = 0.5f;         // Moderate sweep speed
+                    Depth = 0.65f;       // Was 0.8 – less aggressive for a starting point
+                    Feedback = 0.55f;    // Balanced resonance
+                    Mix = 0.48f;         // Slightly dry-biased
                     break;
 
                 case FlangerPreset.Classic:

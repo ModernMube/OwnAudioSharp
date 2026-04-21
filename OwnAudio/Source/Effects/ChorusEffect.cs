@@ -347,16 +347,36 @@ namespace OwnaudioNET.Effects
         /// <param name="preset">The preset to apply.</param>
         public void SetPreset(ChorusPreset preset)
         {
-            // Simple mapping to existing logic
             switch (preset)
             {
-                case ChorusPreset.Default: Rate=1.0f; Depth=0.5f; Mix=0.5f; Voices=3; break;
-                case ChorusPreset.VocalSubtle: Rate=0.3f; Depth=0.2f; Mix=0.3f; Voices=2; break;
-                case ChorusPreset.VocalLush: Rate=0.8f; Depth=0.6f; Mix=0.6f; Voices=4; break;
-                case ChorusPreset.GuitarClassic: Rate=0.5f; Depth=0.4f; Mix=0.5f; Voices=3; break;
-                case ChorusPreset.GuitarShimmer: Rate=2.0f; Depth=0.8f; Mix=0.7f; Voices=5; break;
-                case ChorusPreset.SynthPad: Rate=0.15f; Depth=0.9f; Mix=0.8f; Voices=6; break;
-                default: Rate=1.0f; Depth=0.5f; Mix=0.5f; Voices=3; break;
+                case ChorusPreset.Default:
+                    Rate=0.8f; Depth=0.40f; Mix=0.40f; Voices=3; break;
+                case ChorusPreset.VocalSubtle:
+                    // Barely perceptible doubling – adds body without obvious modulation
+                    Rate=0.25f; Depth=0.15f; Mix=0.25f; Voices=2; break;
+                case ChorusPreset.VocalLush:
+                    // Rich vocal layering with gentle pitch drift
+                    Rate=0.65f; Depth=0.55f; Mix=0.50f; Voices=4; break;
+                case ChorusPreset.GuitarClassic:
+                    // Warm Boss CE-1 style – moderate sweep, musical
+                    Rate=0.50f; Depth=0.35f; Mix=0.45f; Voices=3; break;
+                case ChorusPreset.GuitarShimmer:
+                    // Fast sparkle – wide stereo shimmer for clean guitar
+                    Rate=1.50f; Depth=0.70f; Mix=0.60f; Voices=5; break;
+                case ChorusPreset.SynthPad:
+                    // Slow, wide, dreamy pad thickener
+                    Rate=0.12f; Depth=0.75f; Mix=0.65f; Voices=6; break;
+                case ChorusPreset.StringEnsemble:
+                    // Ensemble detuning – natural section spread
+                    Rate=0.35f; Depth=0.65f; Mix=0.55f; Voices=5; break;
+                case ChorusPreset.VintageAnalog:
+                    // Analog BBD-style chorus – warm and slightly seasick
+                    Rate=0.65f; Depth=0.42f; Mix=0.48f; Voices=3; break;
+                case ChorusPreset.Extreme:
+                    // Maximum modulation – extreme detune/vibrato effect
+                    Rate=3.0f; Depth=0.90f; Mix=0.70f; Voices=6; break;
+                default:
+                    Rate=0.8f; Depth=0.40f; Mix=0.40f; Voices=3; break;
             }
         }
 

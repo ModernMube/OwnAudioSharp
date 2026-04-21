@@ -272,13 +272,12 @@ namespace OwnaudioNET.Effects
                     break;
 
                 case RotaryPreset.Rock:
-                    // Aggressive rock organ sound
-                    // Higher speeds and intensity for cutting through dense mixes
-                    HornSpeed = 9.0f;      // Faster horn for aggression
-                    RotorSpeed = 2.0f;     // Driving rotor speed
+                    // Aggressive rock organ – fast Leslie feel (6.6Hz horn, 1.6Hz rotor via IsFast*3)
+                    HornSpeed = 2.2f;      // With IsFast*3 = 6.6Hz – authentic Leslie fast horn
+                    RotorSpeed = 0.55f;    // With IsFast*2 = 1.1Hz – real Leslie fast rotor
                     Intensity = 0.90f;     // High intensity for presence
                     Mix = 1.0f;            // Full effect for maximum impact
-                    IsFast = true;         // Start in fast mode for rock energy
+                    IsFast = true;         // Fast mode activated
                     break;
 
                 case RotaryPreset.Jazz:
@@ -292,13 +291,13 @@ namespace OwnaudioNET.Effects
                     break;
 
                 case RotaryPreset.Psychedelic:
-                    // Extreme modulation for experimental and atmospheric sounds
-                    // Maximum parameters for trippy, otherworldly effects
-                    HornSpeed = 12.0f;     // Very fast horn for intense modulation
-                    RotorSpeed = 3.5f;     // Rapid rotor movement
+                    // Extreme Doppler modulation – deliberately unnatural, trippy
+                    // Horn: 5*3=15Hz, Rotor: 1.5*2=3Hz – extreme but intentional
+                    HornSpeed = 5.0f;      // With IsFast*3 = 15Hz – extreme fast horn
+                    RotorSpeed = 1.5f;     // With IsFast*2 = 3Hz – dramatic rotor
                     Intensity = 1.0f;      // Maximum intensity for extreme effect
                     Mix = 1.0f;            // Full wet for maximum impact
-                    IsFast = true;         // Fast mode for intensity
+                    IsFast = true;         // Fast mode
                     break;
 
                 case RotaryPreset.VintageSlow:
@@ -312,13 +311,13 @@ namespace OwnaudioNET.Effects
                     break;
 
                 case RotaryPreset.VintageFast:
-                    // Authentic vintage Leslie fast cabinet sound
-                    // Traditional fast speeds with classic tremolo and vibrato
-                    HornSpeed = 6.0f;      // Base speed (will be multiplied by fast mode)
-                    RotorSpeed = 1.0f;     // Base speed (will be multiplied by fast mode)
-                    Intensity = 0.75f;     // Classic fast intensity
+                    // Authentic Leslie 122 fast mode: horn ~6.7Hz, rotor ~2Hz
+                    // With IsFast*3 horn: 2.2*3=6.6Hz; rotor: 1.0*2=2Hz
+                    HornSpeed = 2.2f;      // With IsFast*3 = 6.6Hz – true Leslie fast horn speed
+                    RotorSpeed = 1.0f;     // With IsFast*2 = 2.0Hz – authentic fast rotor speed
+                    Intensity = 0.78f;     // Classic fast intensity
                     Mix = 1.0f;            // Pure rotary sound
-                    IsFast = true;         // Authentic fast mode (18Hz horn, 2Hz rotor)
+                    IsFast = true;         // Authentic fast mode
                     break;
 
                 case RotaryPreset.Subtle:

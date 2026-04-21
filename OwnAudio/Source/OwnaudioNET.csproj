@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <!-- Desktop platforms only (Windows, Linux, macOS) -->
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -26,7 +26,7 @@
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>OwnAudioSharp</PackageId>
-    <Version>2.8.0</Version>
+    <Version>2.8.3</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for desktop platforms (Windows, Linux, macOS)</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;desktop;sound;multitrack</PackageTags>
@@ -40,11 +40,11 @@
 
   <!-- Common dependencies -->
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.3.12" />
+    <PackageReference Include="Avalonia" Version="12.0.1" />
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
     <PackageReference Include="Melanchall.DryWetMidi" Version="8.0.3" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.24.3" />
-    <PackageReference Include="OwnAudioVst" Version="1.4.1" />
+    <PackageReference Include="OwnAudioVst" Version="1.4.6" />
     <PackageReference Include="System.Memory" Version="4.6.3" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.201" PrivateAssets="All" />
     <PackageReference Include="System.Numerics.Tensors" Version="10.0.5" />
@@ -71,7 +71,7 @@
   <ItemGroup>
     <!-- Core (always included) -->
     <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" PrivateAssets="all" IncludeAssets="runtime" />
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" PrivateAssets="all" IncludeAssets="runtime" Properties="TargetFramework=net9.0" />
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" PrivateAssets="all" IncludeAssets="runtime" Properties="TargetFramework=net10.0" />
   </ItemGroup>
 
   <!-- Desktop platform references -->
@@ -83,21 +83,21 @@
 
   <!-- Ensure platform-specific projects are built before packing -->
   <Target Name="BuildPlatformProjects" BeforeTargets="GenerateNuspec">
-    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net9.0" />
-    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net9.0" />
-    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Windows\Ownaudio.Windows.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net9.0" />
-    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Linux\Ownaudio.Linux.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net9.0" />
-    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.macOS\Ownaudio.macOS.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net9.0" />
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0" />
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0" />
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Windows\Ownaudio.Windows.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0" />
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Linux\Ownaudio.Linux.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0" />
+    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.macOS\Ownaudio.macOS.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0" />
   </Target>
 
   <!-- Include platform-specific assemblies in the NuGet package -->
   <ItemGroup>
     <!-- Desktop (.NET 9.0) assemblies - removing Exists condition to ensure inclusion -->
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net9.0\Ownaudio.Core.dll" Pack="true" PackagePath="lib\net9.0\" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net9.0\Ownaudio.Native.dll" Pack="true" PackagePath="lib\net9.0\" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Windows\bin\$(Configuration)\net9.0\Ownaudio.Windows.dll" Pack="true" PackagePath="lib\net9.0\" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Linux\bin\$(Configuration)\net9.0\Ownaudio.Linux.dll" Pack="true" PackagePath="lib\net9.0\" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.macOS\bin\$(Configuration)\net9.0\Ownaudio.macOS.dll" Pack="true" PackagePath="lib\net9.0\" />
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0\Ownaudio.Core.dll" Pack="true" PackagePath="lib\net10.0\" />
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net10.0\Ownaudio.Native.dll" Pack="true" PackagePath="lib\net10.0\" />
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Windows\bin\$(Configuration)\net10.0\Ownaudio.Windows.dll" Pack="true" PackagePath="lib\net10.0\" />
+    <None Include="..\..\OwnAudioEngine\Ownaudio.Linux\bin\$(Configuration)\net10.0\Ownaudio.Linux.dll" Pack="true" PackagePath="lib\net10.0\" />
+    <None Include="..\..\OwnAudioEngine\Ownaudio.macOS\bin\$(Configuration)\net10.0\Ownaudio.macOS.dll" Pack="true" PackagePath="lib\net10.0\" />
   </ItemGroup>
 
   <!-- Include native runtime libraries in the NuGet package -->

@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <!-- Default: desktop only. Pass -p:BuildMobile=true to include Android + iOS TFMs. -->
-    <TargetFrameworks>net9.0</TargetFrameworks>
-    <TargetFrameworks Condition="'$(BuildMobile)' == 'true'">net9.0;net9.0-android;net9.0-ios</TargetFrameworks>
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(BuildMobile)' == 'true'">net10.0;net10.0-android;net10.0-ios</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -26,12 +26,12 @@
   </PropertyGroup>
 
   <!-- Android-specific settings -->
-  <PropertyGroup Condition="$(TargetFramework.Contains('android')) AND '$(TargetFramework)' != 'net9.0'">
+  <PropertyGroup Condition="$(TargetFramework.Contains('android')) AND '$(TargetFramework)' != 'net10.0'">
     <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 
   <!-- iOS-specific settings -->
-  <PropertyGroup Condition="$(TargetFramework.Contains('ios')) AND '$(TargetFramework)' != 'net9.0'">
+  <PropertyGroup Condition="$(TargetFramework.Contains('ios')) AND '$(TargetFramework)' != 'net10.0'">
     <SupportedOSPlatformVersion>12.2</SupportedOSPlatformVersion>
   </PropertyGroup>
 
@@ -50,7 +50,7 @@
     <ProjectReference Include="..\Ownaudio.Core\Ownaudio.Core.csproj" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <None Include="runtimes\win-x64\**\*.*">
       <Link>runtimes\win-x64\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <PackagePath>runtimes\win-x64</PackagePath>
@@ -101,7 +101,7 @@
     </None>
   </ItemGroup>
 
-  <ItemGroup Condition="$(TargetFramework.StartsWith('net9.0-android'))">
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net10.0-android'))">
     <AndroidNativeLibrary Include="runtimes\android-arm\native\*.so">
       <Abi>armeabi-v7a</Abi>
       <Link>libs\armeabi-v7a\%(Filename)%(Extension)</Link>

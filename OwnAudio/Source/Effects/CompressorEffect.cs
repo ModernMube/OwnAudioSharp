@@ -345,22 +345,24 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case CompressorPreset.Default:
-                    _threshold = 0.5f;     // -6 dB 
-                    _ratio = 4.0f; 
-                    _attackTime = 0.1f;    // 100ms
-                    _releaseTime = 0.2f;   // 200ms
-                    _makeupGain = 1.0f;
-                    break;
-
-                case CompressorPreset.VocalGentle:
-                    _threshold = 0.7f;     // ~ -3 dB
-                    _ratio = 3.0f;
-                    _attackTime = 0.015f;  // 15ms
-                    _releaseTime = 0.150f; // 150ms
+                    _threshold = 0.50f;    // -6 dB
+                    _ratio = 4.0f;
+                    _attackTime = 0.020f;  // 20ms – responsive yet transparent
+                    _releaseTime = 0.200f; // 200ms
                     _makeupGain = 1.2f;
                     break;
 
+                case CompressorPreset.VocalGentle:
+                    // Soft leveling – 2:1 optical-style feel
+                    _threshold = 0.65f;    // ~ -3.7 dB
+                    _ratio = 2.8f;
+                    _attackTime = 0.018f;  // 18ms
+                    _releaseTime = 0.180f; // 180ms
+                    _makeupGain = 1.3f;
+                    break;
+
                 case CompressorPreset.VocalAggressive:
+                    // Hard limiting style for broadcast consistency
                     _threshold = 0.35f;    // ~ -9 dB
                     _ratio = 8.0f;
                     _attackTime = 0.005f;  // 5ms
@@ -369,15 +371,17 @@ namespace OwnaudioNET.Effects
                     break;
 
                 case CompressorPreset.Drums:
-                    _threshold = 0.6f;
-                    _ratio = 4.5f;
+                    // Punchy parallel-style – fast attack, snap preserved
+                    _threshold = 0.55f;    // ~ -5.2 dB
+                    _ratio = 5.0f;
                     _attackTime = 0.001f;  // 1ms
-                    _releaseTime = 0.080f; // 80ms
-                    _makeupGain = 1.8f;
+                    _releaseTime = 0.060f; // 60ms – tighter than before
+                    _makeupGain = 2.0f;
                     break;
 
                 case CompressorPreset.Bass:
-                    _threshold = 0.45f;
+                    // Tight low-end glue – medium attack preserves bass transient
+                    _threshold = 0.42f;    // ~ -7.5 dB
                     _ratio = 6.0f;
                     _attackTime = 0.010f;  // 10ms
                     _releaseTime = 0.200f; // 200ms
@@ -385,19 +389,21 @@ namespace OwnaudioNET.Effects
                     break;
 
                 case CompressorPreset.MasteringLimiter:
-                    _threshold = 0.9f;
+                    // Transparent peak catching – catches only true transient peaks
+                    _threshold = 0.65f;    // ~ -3.7 dB – active on transients
                     _ratio = 20.0f;
-                    _attackTime = 0.0001f; // 0.1ms
-                    _releaseTime = 0.050f; // 50ms
+                    _attackTime = 0.0001f; // 0.1ms – instant peak catch
+                    _releaseTime = 0.080f; // 80ms – smooth recovery
                     _makeupGain = 1.0f;
                     break;
 
                 case CompressorPreset.Vintage:
-                    _threshold = 0.55f;
+                    // LA-2A/1176 inspired – slow program-dependent feel
+                    _threshold = 0.52f;    // ~ -5.7 dB
                     _ratio = 3.5f;
                     _attackTime = 0.025f;  // 25ms
-                    _releaseTime = 0.300f; // 300ms
-                    _makeupGain = 1.6f;
+                    _releaseTime = 0.350f; // 350ms – longer for analog character
+                    _makeupGain = 1.7f;
                     break;
             }
             RecalculateCoefficients(false);

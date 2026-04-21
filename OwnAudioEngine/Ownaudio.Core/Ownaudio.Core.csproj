@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <!-- Enable mobile targets only when explicitly building for mobile -->
-    <TargetFrameworks Condition="'$(BuildingForMobile)' == 'true'">net9.0;net9.0-android;net9.0-ios</TargetFrameworks>
-    <TargetFrameworks Condition="'$(BuildingForMobile)' != 'true'">net9.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(BuildingForMobile)' == 'true'">net10.0;net10.0-android;net10.0-ios</TargetFrameworks>
+    <TargetFrameworks Condition="'$(BuildingForMobile)' != 'true'">net10.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
