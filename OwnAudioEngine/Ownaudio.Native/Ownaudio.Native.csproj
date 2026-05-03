@@ -9,8 +9,11 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ImplicitUsings>disable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <!-- Suppress nullable warnings (fields initialized in Initialize method) and XML doc warnings -->
-    <NoWarn>$(NoWarn);CS8618;CS1587</NoWarn>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <!-- Suppress nullable warnings (fields initialized in Initialize method), XML doc warnings,
+         and CA2255 (ModuleInitializer in library is intentional for AOT engine registration) -->
+    <NoWarn>$(NoWarn);CS8618;CS1587;CA2255</NoWarn>
     <Authors>Ownaudio Team</Authors>
     <Company>Ownaudio</Company>
     <Product>Ownaudio Native</Product>

@@ -1,4 +1,4 @@
-using MathNet.Numerics.IntegralTransforms;
+using OwnaudioNET.Dsp;
 using OwnaudioNET.Sources;
 using Logger;
 using System.Numerics;
@@ -550,7 +550,7 @@ namespace OwnaudioNET.Features.Matchering
                 float[]? audioSegment = audioData.Skip(startIdx).Take(fftSize).ToArray();
                 Complex[] fftInput = PrepareFFTInput(audioSegment, windowFunction, fftSize);
 
-                Fourier.Forward(fftInput, FourierOptions.Matlab);
+                OwnAudioFft.Forward(fftInput);
 
                 for (int band = 0; band < FrequencyBands.Length; band++)
                 {

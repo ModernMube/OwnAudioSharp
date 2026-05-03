@@ -124,13 +124,8 @@ namespace OwnaudioNET.Effects.SmartMaster
                 string fileName = "measured.smartmaster.json";
                 string filePath = Path.Combine(_presetsDirectory, fileName);
                 
-                var options = new System.Text.Json.JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
-                };
-                
-                string json = System.Text.Json.JsonSerializer.Serialize(measuredConfig, options);
+                string json = System.Text.Json.JsonSerializer.Serialize(
+                    measuredConfig, SmartMasterJsonContext.Default.SmartMasterConfig);
                 File.WriteAllText(filePath, json);
                 
                 Log.Info($"[SmartMaster] Measurement results saved to '{filePath}'");

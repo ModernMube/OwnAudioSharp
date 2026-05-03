@@ -1,4 +1,4 @@
-using MathNet.Numerics.IntegralTransforms;
+using OwnaudioNET.Dsp;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using System.Numerics;
 
@@ -64,7 +64,7 @@ namespace OwnaudioNET.Features.Vocalremover
                             }
                         }
 
-                        Fourier.Forward(context.FftFrame, FourierOptions.NoScaling);
+                        OwnAudioFft.Forward(context.FftFrame);
 
                         for (int f = 0; f < Math.Min(modelParams.DimF, modelParams.NBins); f++)
                         {
@@ -126,7 +126,7 @@ namespace OwnaudioNET.Features.Vocalremover
                             }
                         }
 
-                        Fourier.Inverse(context.FftFrame, FourierOptions.NoScaling);
+                        OwnAudioFft.Inverse(context.FftFrame);
 
                         for (int i = 0; i < modelParams.NFft; i++)
                         {

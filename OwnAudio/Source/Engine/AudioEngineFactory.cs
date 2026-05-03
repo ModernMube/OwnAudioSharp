@@ -1,132 +1,50 @@
-using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Ownaudio.Core;
+using Ownaudio.Native;
 using OwnaudioNET.Exceptions;
 using Logger;
 
 namespace OwnaudioNET.Engine;
 
 /// <summary>
-/// Factory for creating platform-specific audio engine instances.
-/// Uses reflection to load platform implementations without hard dependencies.
+/// AOT-compatible factory that creates and initializes <see cref="IAudioEngine"/> instances
+/// without any reflection or dynamic type loading. All platforms share a single
+/// <see cref="NativeAudioEngine"/> backed by PortAudio (Windows x64 primary) or MiniAudio
+/// (all other platforms and Windows fallback). A <see cref="MockAudioEngine"/> is also
+/// available for unit testing without audio hardware.
 /// </summary>
 public static class AudioEngineFactory
 {
-    private static readonly object _lock = new object();
+    #region Public Factory Methods
 
     /// <summary>
-    /// Descriptor for a platform-specific audio engine.
-    /// Contains metadata needed to load the engine via reflection.
+    /// Creates and initializes a <see cref="NativeAudioEngine"/> for the current platform.
     /// </summary>
-    private struct PlatformEngineDescriptor
-    {
-        /// <summary>
-        /// Gets or sets the assembly name containing the engine implementation.
-        /// </summary>
-        public string AssemblyName { get; set; }
-
-        /// <summary>
-        /// Gets or sets the fully qualified type name of the engine class.
-        /// </summary>
-        public string TypeName { get; set; }
-
-        /// <summary>
-        /// Gets or sets the display name for logging and diagnostics.
-        /// </summary>
-        public string DisplayName { get; set; }
-
-        /// <summary>
-        /// Gets or sets whether this engine type has been checked for availability.
-        /// </summary>
-        public bool Checked { get; set; }
-
-        /// <summary>
-        /// Gets or sets the cached Type object if the engine is available.
-        /// </summary>
-        public Type? CachedType { get; set; }
-    }
-
-    /// <summary>
-    ///  Platform engine registry
-    /// </summary>
-    private static readonly Dictionary<string, PlatformEngineDescriptor> _platformEngines = new()
-    {
-        ["Native"] = new PlatformEngineDescriptor
-        {
-            AssemblyName = "Ownaudio.Native",
-            TypeName = "Ownaudio.Native.NativeAudioEngine",
-            DisplayName = "NativeAudioEngine (PortAudio/MiniAudio)"
-        }
-    };
-
-    /// <summary>
-    /// Creates an audio engine instance for the current platform.
-    /// </summary>
-    /// <param name="config">Audio configuration parameters.</param>
-    /// <returns>An initialized IAudioEngine instance.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when config is null.</exception>
-    /// <exception cref="AudioEngineException">Thrown when engine creation or initialization fails.</exception>
+    /// <param name="config">Audio configuration; must pass <see cref="AudioConfig.Validate"/>.</param>
+    /// <returns>Initialized engine ready for playback or recording.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="config"/> is null.</exception>
+    /// <exception cref="AudioEngineException">Thrown on initialization failure.</exception>
     public static IAudioEngine CreateEngine(AudioConfig config)
     {
         if (config == null)
             throw new ArgumentNullException(nameof(config));
 
         if (!config.Validate())
-            throw new AudioEngineException("Invalid audio configuration. Check SampleRate, Channels, BufferSize, and EnableInput/EnableOutput settings.");
+            throw new AudioEngineException(
+                "Invalid audio configuration. Check SampleRate, Channels, BufferSize, and Enable* flags.");
 
-        IAudioEngine? engine = null;
-        Exception? nativeEngineException = null;
-
-        try
-        {
-            engine = LoadEngine("Native");
-        }
-        catch (Exception ex)
-        {
-            nativeEngineException = ex;
-            engine = null;
-        }
-
-        if (engine == null)
-        {
-            if (nativeEngineException != null)
-            {
-                Log.Error($"NativeAudioEngine not available: {nativeEngineException.Message}");
-                Log.Error("Falling back to platform-specific audio engine...");
-            }
-
-            try
-            {
-                string? platformKey = GetCurrentPlatformKey();
-
-                if (platformKey == null)
-                {
-                    throw new AudioEngineException($"Unsupported platform: {RuntimeInformation.OSDescription}. Use CreateMockEngine() for testing.");
-                }
-
-                engine = LoadEngine(platformKey);
-
-                if (engine == null)
-                    throw new AudioEngineException("Failed to create audio engine instance.");
-            }
-            catch (AudioEngineException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                engine?.Dispose();
-                throw new AudioEngineException($"Failed to create audio engine: {ex.Message}", ex);
-            }
-        }
+        IAudioEngine engine = new NativeAudioEngine();
 
         try
         {
-            int result = engine.Initialize(config);
+            int result = InitializeEngine(engine, config);
+
             if (result < 0)
             {
                 engine.Dispose();
-                throw new AudioEngineException($"Audio engine initialization failed with error code: {result}", result);
+                throw new AudioEngineException(
+                    $"Audio engine initialization failed with error code: {result}", result);
             }
 
             return engine;
@@ -137,40 +55,42 @@ public static class AudioEngineFactory
         }
         catch (Exception ex)
         {
-            engine?.Dispose();
+            engine.Dispose();
             throw new AudioEngineException($"Failed to initialize audio engine: {ex.Message}", ex);
         }
     }
 
     /// <summary>
-    /// Creates a mock audio engine for testing purposes.
-    /// The mock engine simulates audio I/O without actual hardware access.
+    /// Creates and initializes a <see cref="MockAudioEngine"/> for testing without hardware.
     /// </summary>
     /// <param name="config">Audio configuration parameters.</param>
-    /// <param name="generateTestSignal">If true, generates a 440Hz sine wave for testing.</param>
-    /// <returns>An initialized MockAudioEngine instance.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when config is null.</exception>
-    /// <exception cref="AudioEngineException">Thrown when initialization fails.</exception>
+    /// <param name="generateTestSignal">When true, generates a 440 Hz sine wave on output.</param>
+    /// <returns>Initialized mock engine.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="config"/> is null.</exception>
+    /// <exception cref="AudioEngineException">Thrown on initialization failure.</exception>
     public static MockAudioEngine CreateMockEngine(AudioConfig config, bool generateTestSignal = false)
     {
         if (config == null)
             throw new ArgumentNullException(nameof(config));
 
         if (!config.Validate())
-            throw new AudioEngineException("Invalid audio configuration. Check SampleRate, Channels, BufferSize, and EnableInput/EnableOutput settings.");
+            throw new AudioEngineException(
+                "Invalid audio configuration. Check SampleRate, Channels, BufferSize, and Enable* flags.");
+
+        var engine = new MockAudioEngine(generateTestSignal);
 
         try
         {
-            MockAudioEngine mockEngine = new MockAudioEngine(generateTestSignal);
-            int result = mockEngine.Initialize(config);
+            int result = engine.Initialize(config);
 
             if (result < 0)
             {
-                mockEngine.Dispose();
-                throw new AudioEngineException($"Mock audio engine initialization failed with error code: {result}", result);
+                engine.Dispose();
+                throw new AudioEngineException(
+                    $"Mock engine initialization failed with error code: {result}", result);
             }
 
-            return mockEngine;
+            return engine;
         }
         catch (AudioEngineException)
         {
@@ -178,146 +98,60 @@ public static class AudioEngineFactory
         }
         catch (Exception ex)
         {
+            engine.Dispose();
             throw new AudioEngineException($"Failed to create mock audio engine: {ex.Message}", ex);
         }
     }
 
     /// <summary>
-    /// Loads an audio engine by platform key using reflection.
+    /// Returns true when a <see cref="NativeAudioEngine"/> can be created on this platform.
     /// </summary>
-    /// <param name="platformKey">The platform key (e.g., "Native", "Windows", "Linux").</param>
-    /// <returns>An IAudioEngine instance, or null if the engine cannot be loaded.</returns>
-    /// <exception cref="AudioEngineException">Thrown when the engine cannot be loaded or instantiated.</exception>
-    private static IAudioEngine? LoadEngine(string platformKey)
-    {
-        lock (_lock)
-        {
-            if (!_platformEngines.TryGetValue(platformKey, out var descriptor))
-            {
-                throw new AudioEngineException($"Unknown platform key: {platformKey}");
-            }
-
-            if (descriptor.Checked && descriptor.CachedType == null)
-            {
-                throw new AudioEngineException(
-                    $"{descriptor.DisplayName} is not available. Ensure {descriptor.AssemblyName} assembly is referenced and accessible. " +
-                    "For testing without hardware, use CreateMockEngine() instead.");
-            }
-
-            if (!descriptor.Checked)
-            {
-                try
-                {
-                    Assembly assembly = Assembly.Load(descriptor.AssemblyName);
-                    descriptor.CachedType = assembly.GetType(descriptor.TypeName);
-
-                    if (descriptor.CachedType == null)
-                    {
-                        throw new AudioEngineException(
-                            $"{descriptor.DisplayName} type not found in {descriptor.AssemblyName} assembly. " +
-                            "The assembly may be corrupted or incompatible.");
-                    }
-                }
-                catch (Exception ex) when (ex is not AudioEngineException)
-                {
-                    descriptor.CachedType = null;
-                    throw new AudioEngineException(
-                        $"Failed to load {descriptor.AssemblyName} assembly. Ensure the assembly is referenced and available. " +
-                        "For testing without hardware, use CreateMockEngine() instead.",
-                        ex);
-                }
-                finally
-                {
-                    descriptor.Checked = true;
-                    _platformEngines[platformKey] = descriptor; // Update the struct in dictionary
-                }
-            }
-
-            try
-            {
-                var instance = Activator.CreateInstance(descriptor.CachedType!);
-                return instance as IAudioEngine;
-            }
-            catch (Exception ex)
-            {
-                throw new AudioEngineException($"Failed to instantiate {descriptor.DisplayName}: {ex.Message}", ex);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets the platform key for the current operating system.
-    /// Always returns "Native" since all platforms use NativeAudioEngine.
-    /// </summary>
-    /// <returns>Always returns "Native".</returns>
-    private static string? GetCurrentPlatformKey()
-    {
-        return "Native";
-    }
-
-    /// <summary>
-    /// Checks if a native audio engine (NativeAudioEngine or platform-specific) is available.
-    /// </summary>
-    /// <returns>True if a native audio engine is available for the current platform.</returns>
     public static bool IsNativeEngineAvailable()
     {
-        // First, check if NativeAudioEngine is available (preferred)
         try
         {
-            LoadEngine("Native");
+            using var probe = new NativeAudioEngine();
             return true;
         }
         catch
         {
             return false;
         }
-
-        // string? platformKey = GetCurrentPlatformKey();
-        // if (platformKey == null)
-        //     return false;
-        //
-        // try
-        // {
-        //     LoadEngine(platformKey);
-        //     return true;
-        // }
-        // catch
-        // {
-        //     return false;
-        // }
     }
 
     /// <summary>
-    /// Gets the name of the audio engine that would be used for the current platform.
+    /// Returns the display name of the engine used on the current platform.
     /// </summary>
     public static string GetPlatformEngineName()
+        => "NativeAudioEngine (PortAudio/MiniAudio)";
+
+    #endregion
+
+    #region Private Helpers
+
+    /// <summary>
+    /// Runs engine initialization; uses a dedicated MTA thread on Windows to satisfy
+    /// WASAPI COM requirements without depending on the calling thread's apartment.
+    /// </summary>
+    private static int InitializeEngine(IAudioEngine engine, AudioConfig config)
     {
-        // Check if NativeAudioEngine is available first
-        lock (_lock)
+        int result = 0;
+
+#if WINDOWS
+        var thread = new Thread(() => result = engine.Initialize(config), 256 * 1024)
         {
-            if (_platformEngines.TryGetValue("Native", out var nativeDescriptor))
-            {
-                if (!nativeDescriptor.Checked)
-                {
-                    try
-                    {
-                        LoadEngine("Native");
-                    }
-                    catch {}
-                }
+            Name = "OwnAudio-WasapiInit",
+            IsBackground = true
+        };
+        thread.SetApartmentState(ApartmentState.MTA);
+        thread.Start();
+        thread.Join();
+#else
+        result = engine.Initialize(config);
+#endif
 
-                if (nativeDescriptor.CachedType != null)
-                    return nativeDescriptor.DisplayName;
-            }
-        }
-
-        // Fallback to platform-specific engine names
-        string? platformKey = GetCurrentPlatformKey();
-        if (platformKey != null && _platformEngines.TryGetValue(platformKey, out var descriptor))
-        {
-            return $"{descriptor.DisplayName} ({platformKey} fallback)";
-        }
-
-        return "None";
+        return result;
     }
+
+    #endregion
 }

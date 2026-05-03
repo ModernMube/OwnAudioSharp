@@ -1,4 +1,4 @@
-using MathNet.Numerics.IntegralTransforms;
+using OwnaudioNET.Dsp;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Logger;
@@ -227,7 +227,7 @@ namespace OwnaudioNET.Features.Vocalremover
                             }
                         }
 
-                        Fourier.Forward(frame, FourierOptions.NoScaling);
+                        OwnAudioFft.Forward(frame);
 
                         for (int f = 0; f < Math.Min(_modelParams.DimF, _modelParams.NBins); f++)
                         {
@@ -280,7 +280,7 @@ namespace OwnaudioNET.Features.Vocalremover
                             }
                         }
 
-                        Fourier.Inverse(frame, FourierOptions.NoScaling);
+                        OwnAudioFft.Inverse(frame);
 
                         for (int i = 0; i < _modelParams.NFft; i++)
                         {
@@ -582,39 +582,25 @@ namespace OwnaudioNET.Features.Vocalremover
         /// <summary>
         /// Loads the model data as a byte array from the embedded resource.
         /// </summary>
+        /// <summary>
+        /// Loads embedded ONNX model bytes by explicit resource name, avoiding AOT-unsafe
+        /// <c>GetManifestResourceNames()</c> enumeration.
+        /// </summary>
         public static byte[] LoadModelBytes(InternalModel _model)
         {
-            var assembly = Assembly.GetExecutingAssembly();
-            string? resourceName = "";
-
-            switch (_model)
+            string resourceName = _model switch
             {
-                case InternalModel.None:
-                    throw new InvalidOperationException("Model is not set. Please initialize the model first.");
-                case InternalModel.Default:
-                    resourceName = "default.onnx";
-                    break;
-                case InternalModel.Best:
-                    resourceName = "best.onnx";
-                    break;
-                case InternalModel.Karaoke:
-                    resourceName = "karaoke.onnx";
-                    break;
-                case InternalModel.HTDemucs:
-                    resourceName = "htdemucs.onnx";
-                    break;
-            }
+                InternalModel.Default  => "OwnaudioNET.default.onnx",
+                InternalModel.Best     => "OwnaudioNET.best.onnx",
+                InternalModel.Karaoke  => "OwnaudioNET.karaoke.onnx",
+                InternalModel.HTDemucs => "OwnaudioNET.htdemucs.onnx",
+                _ => throw new InvalidOperationException("Model is not set. Please initialize the model first.")
+            };
 
-            foreach (var name in assembly.GetManifestResourceNames())
-            {
-                if (name.EndsWith(resourceName))
-                {
-                    resourceName = name;
-                    break;
-                }
-            }
+            using Stream stream = Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream(resourceName)
+                ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found.");
 
-            using Stream stream = assembly.GetManifestResourceStream(resourceName)!;
             using var memoryStream = new MemoryStream();
             stream.CopyTo(memoryStream);
             return memoryStream.ToArray();

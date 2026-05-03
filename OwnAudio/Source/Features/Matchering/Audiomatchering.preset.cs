@@ -216,19 +216,8 @@ namespace OwnaudioNET.Features.Matchering
 
             try
             {
-                var assembly = Assembly.GetExecutingAssembly();
-                string resourceName = "basesample.bin";
-
-                foreach (var name in assembly.GetManifestResourceNames())
-                {
-                    if (name.EndsWith(resourceName))
-                    {
-                        resourceName = name;
-                        break;
-                    }
-                }
-
-                using Stream stream = assembly.GetManifestResourceStream(resourceName)!;
+                using Stream stream = Assembly.GetExecutingAssembly()
+                    .GetManifestResourceStream("OwnaudioNET.basesample.bin")!;
                 using var memoryStream = new MemoryStream();
                 stream.CopyTo(memoryStream);
 

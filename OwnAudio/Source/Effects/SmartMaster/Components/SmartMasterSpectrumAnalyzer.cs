@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 using System.Numerics;
-using MathNet.Numerics.IntegralTransforms;
+using OwnaudioNET.Dsp;
 
 namespace OwnaudioNET.Effects.SmartMaster.Components
 {
@@ -60,7 +60,7 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
                 }
                 
                 // Perform FFT
-                Fourier.Forward(fftInput, FourierOptions.Matlab);
+                OwnAudioFft.Forward(fftInput);
                 
                 for (int band = 0; band < _frequencyBands.Length; band++)
                 {

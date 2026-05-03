@@ -9,6 +9,10 @@
     <!-- Prevent duplicate assembly attribute errors from Microsoft.SourceLink.GitHub -->
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkMonikerAttribute>false</GenerateTargetFrameworkMonikerAttribute>
+    <!-- AOT / trimming compatibility -->
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
   </PropertyGroup>
 
   <!-- Define MACOS symbol for macOS builds to enable CoreML code paths -->
@@ -25,10 +29,10 @@
   <PropertyGroup>
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageId>OwnAudioSharp</PackageId>
-    <Version>2.9.8</Version>
+    <PackageId>OwnAudioSharp.Basic</PackageId>
+    <Version>3.0.0</Version>
     <Authors>ModernMube</Authors>
-    <Description>Cross-platform audio engine library for desktop platforms (Windows, Linux, macOS)</Description>
+    <Description>AOT-compatible cross-platform audio engine library for desktop platforms (Windows, Linux, macOS)</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;desktop;sound;multitrack</PackageTags>
     <RepositoryUrl>https://github.com/ModernMube/OwnAudioSharp</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -38,10 +42,9 @@
   </PropertyGroup>
 
 
-  <!-- Common dependencies -->
+  <!-- Common dependencies (MathNet.Numerics removed – replaced by OwnAudioFft) -->
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.0.2" />
-    <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
     <PackageReference Include="Melanchall.DryWetMidi" Version="8.0.3" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.25.1" />
     <PackageReference Include="OwnAudioVst" Version="1.5.7" />

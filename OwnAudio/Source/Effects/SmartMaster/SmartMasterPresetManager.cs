@@ -37,7 +37,7 @@ namespace OwnaudioNET.Effects.SmartMaster
         /// </summary>
         public void CreateFactoryPresetsIfNeeded()
         {
-            foreach (SpeakerType speakerType in Enum.GetValues(typeof(SpeakerType)))
+            foreach (SpeakerType speakerType in Enum.GetValues<SpeakerType>())
             {
                 string filename = SmartMasterPresetFactory.GetPresetFilename(speakerType);
                 string filePath = Path.Combine(_presetsDirectory, filename);
@@ -106,12 +106,8 @@ namespace OwnaudioNET.Effects.SmartMaster
             {
                 string json = File.ReadAllText(filePath);
                 
-                var options = new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                };
-                
-                var loadedConfig = JsonSerializer.Deserialize<SmartMasterConfig>(json, options);
+                var loadedConfig = JsonSerializer.Deserialize(
+                    json, SmartMasterJsonContext.Default.SmartMasterConfig);
                 
                 if (loadedConfig == null)
                     throw new InvalidOperationException("Failed to deserialize preset");
@@ -176,13 +172,8 @@ namespace OwnaudioNET.Effects.SmartMaster
         /// </summary>
         private void SaveInternal(SmartMasterConfig config, string filePath)
         {
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            };
-            
-            string json = JsonSerializer.Serialize(config, options);
+            string json = JsonSerializer.Serialize(
+                config, SmartMasterJsonContext.Default.SmartMasterConfig);
             File.WriteAllText(filePath, json);
         }
     }

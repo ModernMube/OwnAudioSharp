@@ -1,4 +1,4 @@
-using MathNet.Numerics.IntegralTransforms;
+using OwnaudioNET.Dsp;
 using System.Numerics;
 using OwnaudioNET.BufferManagement;
 
@@ -137,7 +137,7 @@ namespace OwnaudioNET.Features.Vocalremover
                     }
 
                     // Perform FFT (use NoScaling for consistency with ISTFT)
-                    Fourier.Forward(frameData, FourierOptions.NoScaling);
+                    OwnAudioFft.Forward(frameData);
 
                     // Store first freq_bins frequency bins (positive frequencies only)
                     for (int f = 0; f < freq_bins; f++)
@@ -268,7 +268,7 @@ namespace OwnaudioNET.Features.Vocalremover
                     }
 
                     // Inverse FFT
-                    Fourier.Inverse(fftFrame, FourierOptions.NoScaling);
+                    OwnAudioFft.Inverse(fftFrame);
 
                     // Normalize by FFT size
                     for (int i = 0; i < _nFft; i++)

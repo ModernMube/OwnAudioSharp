@@ -237,19 +237,8 @@ public class Model : IDisposable
     /// <returns>Model bytes as byte array.</returns>
     private static byte[] LoadModelBytes()
     {
-        var assembly = Assembly.GetExecutingAssembly();
-        string resourceName = "nmp.onnx";
-
-        foreach (var name in assembly.GetManifestResourceNames())
-        {
-            if (name.EndsWith(resourceName))
-            {
-                resourceName = name;
-                break;
-            }
-        }
-
-        using Stream stream = assembly.GetManifestResourceStream(resourceName)!;
+        using Stream stream = Assembly.GetExecutingAssembly()
+            .GetManifestResourceStream("OwnaudioNET.nmp.onnx")!;
         using var memoryStream = new MemoryStream();
         stream.CopyTo(memoryStream);
         return memoryStream.ToArray();
