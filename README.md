@@ -79,10 +79,10 @@
 
 ## 🎯 Platform Support
 
-- **Windows** - Native C++ and managed C# engines
-- **macOS** - Native C++ and managed C# engines  
-- **Linux** - Native C++ and managed C# engines
-- **Android** - Managed C# engine
+- **Windows** - Native C++ engine
+- **macOS** - Native C++ engine  
+- **Linux** - Native C++ engine
+- **Android** - Native C++ engine
 - **iOS** - Native C++ engine
 
 ## 🚀 Why OwnAudioSharp?
@@ -182,11 +182,6 @@ Real-time and offline chord recognition supporting major, minor, diminished, aug
   - Professional-grade performance on all platforms
   - Zero audio glitches or dropouts
 
-- **Managed C# Engines (Optional)**:
-  - Windows (WASAPI), macOS (Core Audio), Linux (PulseAudio), Android (AAudio)
-  - Pure C# implementation for development and debugging
-  - Available but may experience GC-related glitches
-
 - **Dual API Layers**:
   - Low-level Core API for direct engine control
   - High-level NET API for professional features
@@ -256,7 +251,7 @@ dotnet add package OwnAudioSharp.Basic
 ---
 
 ### Requirements
-- .NET 9.0 or later
+- .NET 10.0 or later
 - **Optional:** PortAudio library for best performance (automatically falls back to embedded miniaudio)
 
 ## 📚 Documentation
