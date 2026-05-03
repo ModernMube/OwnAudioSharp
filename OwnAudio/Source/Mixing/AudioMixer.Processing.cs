@@ -20,24 +20,18 @@ public sealed partial class AudioMixer
         // SIMD vectorized processing (processes 4-8 floats at once depending on CPU)
         if (Vector.IsHardwareAccelerated && sampleCount >= simdLength)
         {
-            // Process in SIMD chunks for optimal performance
             int simdLoopEnd = sampleCount - (sampleCount % simdLength);
 
             for (; i < simdLoopEnd; i += simdLength)
             {
-                // Load vectors from both buffers
                 var mixVec = new Vector<float>(mixBuffer, i);
                 var srcVec = new Vector<float>(sourceBuffer, i);
 
-                // Add vectors (SIMD operation - single CPU instruction)
                 var result = mixVec + srcVec;
-
-                // Store result back to mix buffer
                 result.CopyTo(mixBuffer, i);
             }
         }
 
-        // Scalar fallback for remaining samples
         for (; i < sampleCount; i++)
         {
             mixBuffer[i] += sourceBuffer[i];
@@ -64,14 +58,12 @@ public sealed partial class AudioMixer
         int sourceChannels = channelMapping.Length;
         int frameCount = sampleCount / sourceChannels;
 
-        // Validate channel mapping
         foreach (int ch in channelMapping)
         {
             if (ch < 0 || ch >= totalOutputChannels)
                 return; // Invalid channel index - skip mixing to prevent crashes
         }
 
-        // Mix frame by frame with channel mapping
         for (int frame = 0; frame < frameCount; frame++)
         {
             for (int ch = 0; ch < sourceChannels; ch++)
@@ -100,7 +92,6 @@ public sealed partial class AudioMixer
         int i = 0;
         int simdLength = Vector<float>.Count;
 
-        // SIMD vectorized processing
         if (Vector.IsHardwareAccelerated && buffer.Length >= simdLength)
         {
             var volumeVec = new Vector<float>(volume);
@@ -108,18 +99,13 @@ public sealed partial class AudioMixer
 
             for (; i < simdLoopEnd; i += simdLength)
             {
-                // Load vector from buffer
                 var vec = new Vector<float>(buffer.Slice(i, simdLength));
-
-                // Multiply by volume vector (SIMD operation - single CPU instruction)
                 vec *= volumeVec;
-
-                // Store result back to buffer
+                
                 vec.CopyTo(buffer.Slice(i, simdLength));
             }
         }
 
-        // Scalar fallback for remaining samples
         for (; i < buffer.Length; i++)
         {
             buffer[i] *= volume;
@@ -146,12 +132,10 @@ public sealed partial class AudioMixer
             }
         }
 
-        // Use cached array (zero allocation in steady state)
         var effects = _cachedEffects;
         if (effects.Length == 0)
             return; // No effects to apply
 
-        // Process each effect in sequence
         foreach (var effect in effects)
         {
             try
@@ -161,11 +145,7 @@ public sealed partial class AudioMixer
                     effect.Process(buffer, frameCount);
                 }
             }
-            catch
-            {
-                // Effect processing error - skip this effect and continue
-                // In production, log via ILogger
-            }
+            catch {}
         }
     }
 
@@ -183,7 +163,6 @@ public sealed partial class AudioMixer
         int frameCount = buffer.Length / 2; // Stereo: 2 samples per frame
         int simdLength = Vector<float>.Count;
 
-        // SIMD vectorized processing (processes multiple samples at once)
         if (Vector.IsHardwareAccelerated && frameCount >= simdLength / 2)
         {
             var leftPeakVec = Vector<float>.Zero;
@@ -192,13 +171,11 @@ public sealed partial class AudioMixer
             int simdFrames = (frameCount / simdLength) * simdLength;
             int i = 0;
 
-            // Pre-allocate buffers outside the loop to avoid potential stack overflow (CA2014)
             Span<float> leftSamples = stackalloc float[simdLength];
             Span<float> rightSamples = stackalloc float[simdLength];
 
             for (; i < simdFrames * 2; i += simdLength * 2)
             {
-                // Load left channel samples (every other pair)
                 for (int j = 0; j < simdLength && i + j * 2 < buffer.Length; j++)
                 {
                     leftSamples[j] = Math.Abs(buffer[i + j * 2]);
@@ -208,12 +185,10 @@ public sealed partial class AudioMixer
                 var leftVec = new Vector<float>(leftSamples);
                 var rightVec = new Vector<float>(rightSamples);
 
-                // Track maximum values using Vector.Max
                 leftPeakVec = Vector.Max(leftPeakVec, leftVec);
                 rightPeakVec = Vector.Max(rightPeakVec, rightVec);
             }
-
-            // Extract maximum from vectors
+            
             for (int j = 0; j < simdLength; j++)
             {
                 if (leftPeakVec[j] > leftPeak)
@@ -222,7 +197,6 @@ public sealed partial class AudioMixer
                     rightPeak = rightPeakVec[j];
             }
 
-            // Process remaining samples with scalar code
             for (; i < buffer.Length; i += 2)
             {
                 float leftSample = Math.Abs(buffer[i]);
@@ -236,7 +210,6 @@ public sealed partial class AudioMixer
         }
         else
         {
-            // Scalar fallback (original implementation)
             for (int i = 0; i < buffer.Length; i += 2)
             {
                 float leftSample = Math.Abs(buffer[i]);
@@ -280,7 +253,6 @@ public sealed partial class AudioMixer
             }
         }
 
-        // Scalar fallback for remaining samples
         for (; i < buffer.Length; i++)
         {
             if (buffer[i] > 1.0f) buffer[i] = 1.0f;
@@ -304,7 +276,6 @@ public sealed partial class AudioMixer
                 }
                 catch
                 {
-                    // Recording error - stop recording
                     _isRecording = false;
                 }
             }

@@ -1,4 +1,4 @@
-﻿namespace Ownaudio.Decoders;
+namespace Ownaudio.Decoders;
 
 /// <summary>
 /// Represents result structure returned by audio decoder while reading audio frame.
@@ -19,6 +19,7 @@ public readonly struct AudioDecoderResult
         IsEOF = eof;
         ErrorMessage = errorMessage;
         FramesRead = 0; // Not applicable in the old path
+        PresentationTime = frame?.PresentationTime ?? 0.0;
     }
 
     /// <summary>
@@ -31,6 +32,20 @@ public readonly struct AudioDecoderResult
     public AudioDecoderResult(int framesRead, bool succeeded, bool eof, string? errorMessage = default)
     {
         FramesRead = framesRead;
+        IsSucceeded = succeeded;
+        IsEOF = eof;
+        ErrorMessage = errorMessage;
+        Frame = null;
+        PresentationTime = 0.0;
+    }
+
+    /// <summary>
+    /// Initializes <see cref="AudioDecoderResult"/> structure for the new, zero-allocation path with PTS.
+    /// </summary>
+    public AudioDecoderResult(int framesRead, double pts, bool succeeded, bool eof, string? errorMessage = default)
+    {
+        FramesRead = framesRead;
+        PresentationTime = pts;
         IsSucceeded = succeeded;
         IsEOF = eof;
         ErrorMessage = errorMessage;
@@ -48,6 +63,11 @@ public readonly struct AudioDecoderResult
     /// This is used by the zero-allocation read path.
     /// </summary>
     public int FramesRead { get; }
+
+    /// <summary>
+    /// Gets the presentation timestamp (PTS) of the current frame in milliseconds.
+    /// </summary>
+    public double PresentationTime { get; }
 
     /// <summary>
     /// Gets whether or not the decoder is succesfully reading audio frame.
@@ -72,7 +92,7 @@ public readonly struct AudioDecoderResult
     /// <returns>A successful AudioDecoderResult.</returns>
     public static AudioDecoderResult CreateSuccess(int framesRead, double pts = 0)
     {
-        return new AudioDecoderResult(framesRead, succeeded: true, eof: false);
+        return new AudioDecoderResult(framesRead, pts, succeeded: true, eof: false);
     }
 
     /// <summary>

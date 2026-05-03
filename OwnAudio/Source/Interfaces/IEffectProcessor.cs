@@ -44,4 +44,11 @@ public interface IEffectProcessor : IDisposable
     /// Resets the effect's internal state.
     /// </summary>
     void Reset();
+
+    /// <summary>
+    /// Gets whether this effect is ready to process audio.
+    /// Always true for built-in effects; VST3 effects return false until
+    /// the plugin has been audio-initialized via VST3PluginHost.InitializeAudioAsync().
+    /// </summary>
+    bool IsReady => true;
 }

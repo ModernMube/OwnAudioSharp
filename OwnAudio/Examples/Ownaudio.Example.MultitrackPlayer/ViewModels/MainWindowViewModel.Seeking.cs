@@ -49,7 +49,6 @@ public partial class MainWindowViewModel
 
         try
         {
-            // NEW - v2.4.0+: Use MasterClock.CurrentTimestamp instead of GetSyncGroupPosition
             double position = _audioService.Mixer.MasterClock.CurrentTimestamp;
 
             // Check if we reached the end of playback
@@ -63,7 +62,6 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            // OPTIMIZATION: Only update UI if position changed significantly
             if (Math.Abs(position - CurrentPositionSeconds) > 0.1)
             {
                 CurrentPositionSeconds = position;
@@ -77,10 +75,7 @@ public partial class MainWindowViewModel
                 PositionDisplay = $"{currentMinutes:D2}:{currentSeconds:D2} / {totalMinutes:D2}:{totalSeconds:D2}";
             }
         }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Timer tick error: {ex.Message}");
-        }
+        catch {}
     }
 
     #endregion
@@ -117,7 +112,6 @@ public partial class MainWindowViewModel
         {
             try
             {
-                // NEW - v2.4.0+: Seek master clock directly
                 _audioService.Mixer?.MasterClock.SeekTo(positionInSeconds);
                 CurrentPositionSeconds = positionInSeconds;
             }

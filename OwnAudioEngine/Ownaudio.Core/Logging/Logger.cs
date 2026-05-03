@@ -5,8 +5,6 @@ namespace Logger;
 
 public static class Log
 {
-    // We go from Fatal up to Info because we first need to notify user about    //
-    // Fatal Errors and Errors, then Warnings and only then we should print info //
     public enum Level
     {
         Disabled = 0,

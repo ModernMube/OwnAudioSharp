@@ -17,7 +17,6 @@ internal static class FlacCrc
 
     static FlacCrc()
     {
-        // Initialize CRC-8 table
         for (int i = 0; i < 256; i++)
         {
             byte crc = (byte)i;
@@ -31,7 +30,6 @@ internal static class FlacCrc
             Crc8Table[i] = crc;
         }
 
-        // Initialize CRC-16 table (ANSI variant used by FLAC)
         for (int i = 0; i < 256; i++)
         {
             ushort crc = 0;

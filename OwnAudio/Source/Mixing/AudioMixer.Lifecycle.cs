@@ -17,6 +17,17 @@ public sealed partial class AudioMixer
         if (_isRunning)
             return;
 
+        lock (_effectsLock)
+        {
+            foreach (var effect in _masterEffects)
+            {
+                if (!effect.IsReady)
+                    throw new InvalidOperationException(
+                        $"Cannot start mixer: effect '{effect.Name}' is not ready for audio processing. " +
+                        $"For VST3 effects call and await VST3PluginHost.InitializeAudioAsync() first.");
+            }
+        }
+
         _shouldStop = false;
         _isRunning = true;
         _pauseEvent.Set();
@@ -37,8 +48,6 @@ public sealed partial class AudioMixer
         if (!_isRunning)
             return;
 
-        // Set running flag to false but keep thread alive
-        // The thread loop will wait on _pauseEvent
         _isRunning = false;
         _pauseEvent.Reset();
     }
@@ -58,14 +67,13 @@ public sealed partial class AudioMixer
         _shouldStop = true;
         _pauseEvent.Reset();
 
-        // Wait for mix thread to exit
-        if (_mixThread.IsAlive)
-        {
-            if (!_mixThread.Join(TimeSpan.FromSeconds(2)))
-            {
-                // Thread didn't exit gracefully
-            }
-        }
+        // if (_mixThread.IsAlive)
+        // {
+        //     if (!_mixThread.Join(TimeSpan.FromSeconds(2)))
+        //     {
+        //         // Thread didn't exit gracefully
+        //     }
+        // }
 
         // Stop all sources
         foreach (var source in _sources.Values)
@@ -74,10 +82,7 @@ public sealed partial class AudioMixer
             {
                 source.Stop();
             }
-            catch
-            {
-                // Ignore errors when stopping sources
-            }
+            catch {}
         }
 
         _isRunning = false;
@@ -91,29 +96,21 @@ public sealed partial class AudioMixer
         if (_disposed)
             return;
 
-        // Unregister from OwnaudioNet API
         OwnaudioNet.UnregisterAudioMixer(this);
 
-        // Stop mixer
         if (_isRunning)
         {
             try
             {
                 Stop();
             }
-            catch
-            {
-                // Ignore errors
-            }
+            catch {}
         }
 
-        // Stop recording
         StopRecording();
 
-        // Clear all sources
         ClearSources();
 
-        // Dispose all effects
         lock (_effectsLock)
         {
             foreach (var effect in _masterEffects)
@@ -122,15 +119,11 @@ public sealed partial class AudioMixer
                 {
                     effect?.Dispose();
                 }
-                catch
-                {
-                    // Ignore errors during disposal
-                }
+                catch {}
             }
             _masterEffects.Clear();
         }
 
-        // Dispose synchronization primitives
         _pauseEvent?.Dispose();
 
         _disposed = true;
@@ -156,7 +149,6 @@ public sealed partial class AudioMixer
         _masterClock.SeekTo(positionInSeconds);
 
         // 2. Reactivate EndOfStream sources that have content at the new position.
-        //    Use a fresh snapshot to avoid stale cached array.
         var sources = _sources.Values.ToArray();
         foreach (var source in sources)
         {
@@ -171,10 +163,7 @@ public sealed partial class AudioMixer
                 source.Seek(positionInSeconds);
                 source.Play();
             }
-            catch
-            {
-                // Reactivation failure is non-fatal; source stays silent.
-            }
+            catch {}
         }
     }
 
@@ -200,7 +189,7 @@ public sealed partial class AudioMixer
             if (source.State != AudioState.Playing)
             {
                 try { source.Play(); }
-                catch { /* non-fatal */ }
+                catch {}
             }
         }
     }

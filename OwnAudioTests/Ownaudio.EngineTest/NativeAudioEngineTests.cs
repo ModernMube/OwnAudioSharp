@@ -51,8 +51,6 @@ namespace Ownaudio.EngineTest
             // Act
             using (var engine = AudioEngineFactory.Create(config))
             {
-                // The NativeAudioEngine logs which backend it's using (PortAudio or MiniAudio)
-                // Just verify the engine is working
                 Assert.IsNotNull(engine);
 
                 int stoppedState = engine.OwnAudioEngineStopped();

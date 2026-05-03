@@ -117,7 +117,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _audioService = AudioService.Instance;
         Tracks = new ObservableCollection<TrackViewModel>();
 
-        // OPTIMIZATION: Reduced update frequency to 4/sec to lower GC pressure
         _playbackTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         _playbackTimer.Tick += Timer_Tick;
 

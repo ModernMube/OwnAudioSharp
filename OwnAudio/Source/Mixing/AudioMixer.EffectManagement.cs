@@ -18,13 +18,15 @@ public sealed partial class AudioMixer
         if (effect == null)
             throw new ArgumentNullException(nameof(effect));
 
+        if (!effect.IsReady)
+            throw new InvalidOperationException(
+                $"Effect '{effect.Name}' is not ready for audio processing. " +
+                $"For VST3 effects call and await VST3PluginHost.InitializeAudioAsync() first.");
+
         lock (_effectsLock)
         {
-            // Initialize effect with current config
             effect.Initialize(_config);
             _masterEffects.Add(effect);
-
-            // Mark effects as changed to trigger cache update
             _effectsChanged = true;
         }
     }
@@ -48,7 +50,6 @@ public sealed partial class AudioMixer
             bool removed = _masterEffects.Remove(effect);
             if (removed)
             {
-                // Mark effects as changed to trigger cache update
                 _effectsChanged = true;
             }
             return removed;
@@ -66,8 +67,6 @@ public sealed partial class AudioMixer
         lock (_effectsLock)
         {
             _masterEffects.Clear();
-
-            // Mark effects as changed to trigger cache update
             _effectsChanged = true;
         }
     }

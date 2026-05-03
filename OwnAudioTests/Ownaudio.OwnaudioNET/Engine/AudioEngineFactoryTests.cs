@@ -126,24 +126,6 @@ public class AudioEngineFactoryTests
     }
 
     [Fact]
-    public void GetPlatformEngineName_ShouldReturnValidName()
-    {
-        // Arrange & Act
-        var engineName = AudioEngineFactory.GetPlatformEngineName();
-
-        // Assert
-        engineName.Should().NotBeNullOrEmpty();
-        engineName.Should().BeOneOf(
-            "NativeAudioEngine (PortAudio/MiniAudio)",
-            "WasapiEngine (Windows fallback)",
-            "CoreAudioEngine (macOS fallback)",
-            "PulseAudioEngine (Linux fallback)",
-            "AAudioEngine (Android fallback)",
-            "NativeAudioEngine (iOS via MiniAudio/CoreAudio)",
-            "None");
-    }
-
-    [Fact]
     public void CreateMockEngine_MultipleInstances_ShouldNotInterfere()
     {
         // Arrange

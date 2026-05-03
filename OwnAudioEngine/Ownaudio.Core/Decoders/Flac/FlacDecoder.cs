@@ -80,33 +80,19 @@ public sealed class FlacDecoder : IAudioDecoder
         if (!_stream.CanSeek)
             throw new ArgumentException("Stream must support seeking.", nameof(stream));
 
-        // Initialize (parse FLAC headers)
         Initialize();
 
-        // Pre-allocate buffers for zero-allocation decode path
         int maxBlockSize = _flacStreamInfo.MaxBlockSizeValue;
         int maxChannels = _flacStreamInfo.Channels;
 
-        // Frame buffer: worst case ~16KB per frame
         _frameBuffer = new byte[maxBlockSize * maxChannels * 4 + 16384];
-
-        // Decode buffer: holds raw decoded samples (int32) - interleaved
         _decodeBuffer = new int[maxBlockSize * maxChannels];
-
-        // Channel decode buffer: temporary storage for per-channel decoding (all channels * blockSize)
         _channelDecodeBuffer = new int[maxBlockSize * maxChannels];
-
-        // Output buffer: Float32 samples
         _outputBuffer = new float[maxBlockSize * maxChannels];
-
-        // Audio buffer for frame data
         _audioBuffer = new AudioBuffer(maxBlockSize * maxChannels * sizeof(float));
-
         _currentPts = 0.0;
         _currentFrame = 0;
         _currentSample = 0;
-
-        // Initialize format converter if target format differs from source
         _targetSampleRate = targetSampleRate > 0 ? targetSampleRate : _flacStreamInfo.SampleRate;
         _targetChannels = targetChannels > 0 ? targetChannels : _flacStreamInfo.Channels;
 
@@ -121,12 +107,10 @@ public sealed class FlacDecoder : IAudioDecoder
                 targetChannels: _targetChannels,
                 maxFrameSize: maxBlockSize
             );
-
-            // Pre-allocate conversion buffer (worst case: 4x upsample + channel upmix)
+            
             int maxConvertedSamples = _formatConverter.CalculateOutputSize(maxBlockSize * maxChannels) * 2;
             _convertBuffer = new float[maxConvertedSamples];
 
-            // Update StreamInfo to reflect target format (after conversion)
             _streamInfo = new AudioStreamInfo(
                 channels: _targetChannels,
                 sampleRate: _targetSampleRate,
@@ -140,12 +124,9 @@ public sealed class FlacDecoder : IAudioDecoder
             _convertBuffer = Array.Empty<float>();
         }
 
-        // Initialize frame pool AFTER format converter setup
-        // Calculate worst-case output size accounting for resampling + channel conversion
         int maxOutputSamples = maxBlockSize * _targetChannels;
         if (_formatConverter != null)
         {
-            // Account for resampling ratio (e.g., 44.1kHz -> 48kHz = 1.088x)
             maxOutputSamples = _formatConverter.CalculateOutputSize(maxBlockSize * _flacStreamInfo.Channels);
         }
         int maxFrameBytes = maxOutputSamples * sizeof(float) * 2; // 2x safety margin
@@ -159,7 +140,6 @@ public sealed class FlacDecoder : IAudioDecoder
     {
         _stream.Position = 0;
 
-        // Read FLAC marker: "fLaC"
         Span<byte> markerBuffer = stackalloc byte[4];
         if (_stream.Read(markerBuffer) != 4)
             throw new AudioException("Invalid FLAC file: Unable to read marker.");
@@ -168,12 +148,10 @@ public sealed class FlacDecoder : IAudioDecoder
         if (!marker.IsValid)
             throw new AudioException($"Invalid FLAC file: Expected 'fLaC' marker, got 0x{marker.Signature:X8}.");
 
-        // Parse metadata blocks
         bool foundStreamInfo = false;
 
         while (true)
         {
-            // Read metadata block header
             Span<byte> headerBuffer = stackalloc byte[4];
             if (_stream.Read(headerBuffer) != 4)
                 throw new AudioException("Invalid FLAC file: Unable to read metadata block header.");
@@ -182,18 +160,15 @@ public sealed class FlacDecoder : IAudioDecoder
 
             if (header.Type == FlacMetadataBlockType.StreamInfo)
             {
-                // Parse STREAMINFO
                 ParseStreamInfo(header.Length);
                 foundStreamInfo = true;
             }
             else if (header.Type == FlacMetadataBlockType.SeekTable)
             {
-                // Parse SEEKTABLE for fast seeking
                 ParseSeekTable(header.Length);
             }
             else
             {
-                // Skip other metadata blocks (VORBIS_COMMENT, PICTURE, etc.)
                 _stream.Position += header.Length;
             }
 
@@ -204,10 +179,7 @@ public sealed class FlacDecoder : IAudioDecoder
         if (!foundStreamInfo)
             throw new AudioException("Invalid FLAC file: STREAMINFO block not found.");
 
-        // Store position of first audio frame
         _firstFramePosition = _stream.Position;
-
-        // Calculate duration
         double durationSeconds = (double)_flacStreamInfo.TotalSamples / _flacStreamInfo.SampleRate;
 
         _streamInfo = new AudioStreamInfo(
@@ -252,7 +224,6 @@ public sealed class FlacDecoder : IAudioDecoder
 
         if (length % SEEKPOINT_SIZE != 0)
         {
-            // Invalid SEEKTABLE size, skip it
             _stream.Position += length;
             return;
         }
@@ -264,11 +235,9 @@ public sealed class FlacDecoder : IAudioDecoder
             return;
         }
 
-        // Read all seekpoints
         byte[] seekTableData = new byte[length];
         if (_stream.Read(seekTableData, 0, length) != length)
         {
-            // Failed to read, skip
             return;
         }
 
@@ -281,7 +250,6 @@ public sealed class FlacDecoder : IAudioDecoder
             int offset = i * SEEKPOINT_SIZE;
             var seekPoint = MemoryMarshal.Read<FlacSeekPoint>(span.Slice(offset, SEEKPOINT_SIZE));
 
-            // Skip placeholder points
             if (!seekPoint.IsPlaceholder)
             {
                 validSeekPoints.Add(seekPoint);
@@ -294,12 +262,6 @@ public sealed class FlacDecoder : IAudioDecoder
             _seekTableCount = _seekTable.Length;
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Shared decode core – eliminates ~150 lines of duplication between
-    // ReadFrames and DecodeNextFrame. Both methods call this and then
-    // do only their format-specific wrapping (byte[] copy vs. pool).
-    // -----------------------------------------------------------------------
 
     /// <summary>
     /// Decodes the next FLAC frame and places the result in <c>_outputBuffer</c> or
@@ -394,48 +356,6 @@ public sealed class FlacDecoder : IAudioDecoder
         }
     }
 
-    /// <summary>
-    /// Decodes the next audio frame from the FLAC stream.
-    /// </summary>
-    /// <returns>A <see cref="AudioDecoderResult"/> containing the decoded frame or error information.</returns>
-    /// <remarks>
-    /// ZERO-ALLOCATION decode path using AudioFramePool and SIMD conversion.
-    /// </remarks>
-#pragma warning disable CS0618 // IAudioDecoder.DecodeNextFrame is marked Obsolete – implementation is intentional
-    public AudioDecoderResult DecodeNextFrame()
-#pragma warning restore CS0618
-    {
-        if (_disposed)
-            return new AudioDecoderResult(null!, false, false, "Decoder has been disposed.");
-
-        if (_currentSample >= _flacStreamInfo.TotalSamples)
-            return new AudioDecoderResult(null!, false, true);
-
-        try
-        {
-            if (!TryDecodeFrameCore(out int finalSampleCount, out int samplesDecoded, out bool isEof, out string decodeError))
-                return isEof
-                    ? new AudioDecoderResult(null!, false, true)
-                    : new AudioDecoderResult(null!, false, false, $"Failed to decode frame: {decodeError}");
-
-            Span<float> finalSpan = _formatConverter != null
-                ? _convertBuffer.AsSpan(0, finalSampleCount)
-                : _outputBuffer.AsSpan(0, finalSampleCount);
-
-            int byteCount = finalSampleCount * sizeof(float);
-            var pooledFrame = _framePool.Rent(_currentPts, byteCount);
-            finalSpan.CopyTo(MemoryMarshal.Cast<byte, float>(pooledFrame.BufferSpan));
-            var frame = pooledFrame.ToAudioFrame();
-            _framePool.Return(pooledFrame);
-
-            UpdateTimestamps(samplesDecoded);
-            return new AudioDecoderResult(frame, true, false);
-        }
-        catch (Exception ex)
-        {
-            return new AudioDecoderResult(null!, false, false, $"Decode error: {ex.Message}");
-        }
-    }
 
     /// <summary>
     /// Finds the next frame sync code (0x3FFE).
@@ -452,11 +372,8 @@ public sealed class FlacDecoder : IAudioDecoder
             if (b2 == -1)
                 return false;
 
-            // Check for sync code: 0xFF 0xF8-0xFF (11111111 1111100x to 11111111 11111111)
-            // FLAC sync is 14 bits: 11111111111110
             if (b1 == 0xFF && (b2 & 0xFC) == 0xF8)
             {
-                // Found sync
                 _stream.Position -= 2;
                 return true;
             }
@@ -471,8 +388,6 @@ public sealed class FlacDecoder : IAudioDecoder
     /// </summary>
     private int ReadFrameToBuffer(long frameStart)
     {
-        // For now, read up to max frame size
-        // In production, we'd parse the frame header to determine exact size
         int maxRead = Math.Min(_frameBuffer.Length, (int)(_stream.Length - _stream.Position));
         if (maxRead <= 0)
             return 0;
@@ -494,14 +409,12 @@ public sealed class FlacDecoder : IAudioDecoder
         bytesConsumed = 0;
         var reader = new FlacBitReader(frameData);
 
-        // Parse frame header
         if (!TryParseFrameHeader(ref reader, out FlacFrameHeader header, out string headerError))
         {
             error = $"Frame header parsing failed: {headerError}";
             return 0;
         }
 
-        // Decode subframes for each channel
         int blockSize = header.BlockSize;
         int channels = header.Channels;
 
@@ -517,15 +430,11 @@ public sealed class FlacDecoder : IAudioDecoder
             return 0;
         }
 
-        // Use pre-allocated channel buffer (zero allocation)
-        // Layout: [channel0: blockSize samples][channel1: blockSize samples]...
         for (int ch = 0; ch < channels; ch++)
         {
             int channelOffset = ch * blockSize;
             Span<int> channelBuffer = _channelDecodeBuffer.AsSpan(channelOffset, blockSize);
 
-            // Calculate bits per sample for this channel
-            // In Left-Side, Right-Side, Mid-Side modes, the side channel has +1 bit
             int channelBitsPerSample = header.BitsPerSample;
             if (channels == 2)
             {
@@ -550,7 +459,6 @@ public sealed class FlacDecoder : IAudioDecoder
             }
         }
 
-        // Handle channel decorrelation
         if (channels == 2)
         {
             Span<int> channel0 = _channelDecodeBuffer.AsSpan(0, blockSize);
@@ -559,20 +467,16 @@ public sealed class FlacDecoder : IAudioDecoder
             switch (header.ChannelAssignment)
             {
                 case FlacChannelAssignment.LeftSide:
-                    // Left = Left, Right = Left - Side
                     for (int i = 0; i < blockSize; i++)
                         channel1[i] = channel0[i] - channel1[i];
                     break;
 
                 case FlacChannelAssignment.RightSide:
-                    // Left = Right + Side, Right = Right
                     for (int i = 0; i < blockSize; i++)
                         channel0[i] = channel0[i] + channel1[i];
                     break;
 
                 case FlacChannelAssignment.MidSide:
-                    // Mid = (Left + Right) / 2, Side = Left - Right
-                    // Decode: Left = Mid + Side/2, Right = Mid - Side/2
                     for (int i = 0; i < blockSize; i++)
                     {
                         int mid = channel0[i];
@@ -586,16 +490,12 @@ public sealed class FlacDecoder : IAudioDecoder
             }
         }
 
-        // Interleave channels into output buffer (cache-friendly order)
-        // Process by channel to maximize cache locality
         if (channels == 1)
         {
-            // Mono: direct copy
             _channelDecodeBuffer.AsSpan(0, blockSize).CopyTo(_decodeBuffer.AsSpan(0, blockSize));
         }
         else if (channels == 2)
         {
-            // Stereo: optimized interleaving
             Span<int> channel0 = _channelDecodeBuffer.AsSpan(0, blockSize);
             Span<int> channel1 = _channelDecodeBuffer.AsSpan(blockSize, blockSize);
 
@@ -607,7 +507,6 @@ public sealed class FlacDecoder : IAudioDecoder
         }
         else
         {
-            // Multi-channel: generic interleaving
             for (int i = 0; i < blockSize; i++)
             {
                 for (int ch = 0; ch < channels; ch++)
@@ -617,12 +516,10 @@ public sealed class FlacDecoder : IAudioDecoder
             }
         }
 
-        // Read frame footer (CRC-16, byte-aligned)
         reader.AlignToByte();
         ushort frameCrc = (ushort)((reader.ReadByte() << 8) | reader.ReadByte());
         // TODO: Validate CRC if needed
 
-        // Calculate how many bytes we consumed from the input buffer
         bytesConsumed = reader.BytePosition;
 
         return blockSize * channels;
@@ -638,7 +535,6 @@ public sealed class FlacDecoder : IAudioDecoder
 
         try
         {
-            // Sync code (14 bits): must be 11111111111110
             uint sync = reader.ReadBits(14);
             if (sync != 0x3FFE)
             {
@@ -646,57 +542,37 @@ public sealed class FlacDecoder : IAudioDecoder
                 return false;
             }
 
-            // Reserved bit (must be 0)
             if (reader.ReadBit() != 0)
             {
                 error = "Reserved bit #1 is not 0";
                 return false;
             }
 
-            // Blocking strategy (1 bit): 0 = fixed, 1 = variable
             int blockingStrategy = reader.ReadBit();
-
-            // Block size (4 bits)
             int blockSizeCode = (int)reader.ReadBits(4);
-
-            // Sample rate (4 bits)
             int sampleRateCode = (int)reader.ReadBits(4);
-
-            // Channel assignment (4 bits)
             int channelCode = (int)reader.ReadBits(4);
-
-            // Sample size (3 bits)
             int sampleSizeCode = (int)reader.ReadBits(3);
-
-            // Reserved bit (must be 0)
             if (reader.ReadBit() != 0)
             {
                 error = "Reserved bit #2 is not 0";
                 return false;
             }
 
-            // Sample/frame number (UTF-8 coded)
             header.SampleOrFrameNumber = reader.ReadUTF8();
-
-            // Decode block size
             header.BlockSize = DecodeBlockSize(blockSizeCode, ref reader);
             if (header.BlockSize == 0)
                 header.BlockSize = _flacStreamInfo.MaxBlockSizeValue;
-
-            // Decode sample rate
+            
             header.SampleRate = DecodeSampleRate(sampleRateCode, ref reader);
             if (header.SampleRate == 0)
                 header.SampleRate = _flacStreamInfo.SampleRate;
 
-            // Decode channels
             header.Channels = DecodeChannels(channelCode, out header.ChannelAssignment);
-
-            // Decode bits per sample
             header.BitsPerSample = DecodeBitsPerSample(sampleSizeCode);
             if (header.BitsPerSample == 0)
                 header.BitsPerSample = _flacStreamInfo.BitsPerSample;
 
-            // CRC-8 (frame header checksum)
             header.CRC8 = reader.ReadByte();
 
             return true;
@@ -790,7 +666,6 @@ public sealed class FlacDecoder : IAudioDecoder
 
         try
         {
-            // Subframe header: 1 bit (zero), 6 bits (type), 1 bit (wasted bits flag)
             if (reader.ReadBit() != 0)
             {
                 error = "Subframe padding bit is not 0";
@@ -803,12 +678,10 @@ public sealed class FlacDecoder : IAudioDecoder
             int wastedBits = 0;
             if (wastedBitsFlag == 1)
             {
-                // Wasted bits are at most bitsPerSample-1 (≤ 31 for 32-bit audio).
                 wastedBits = reader.ReadUnary(31) + 1;
                 bitsPerSample -= wastedBits;
             }
 
-            // Decode based on subframe type
             bool success;
             string subframeType;
 
@@ -848,7 +721,6 @@ public sealed class FlacDecoder : IAudioDecoder
                 return false;
             }
 
-            // Restore wasted bits
             if (wastedBits > 0)
             {
                 for (int i = 0; i < blockSize; i++)
@@ -882,26 +754,21 @@ public sealed class FlacDecoder : IAudioDecoder
     {
         error = string.Empty;
 
-        // Read warm-up samples
         for (int i = 0; i < order; i++)
             output[i] = reader.ReadSignedBits(bitsPerSample);
 
-        // Decode residual
-        // Pass both blockSize and order for correct partition calculation
         if (!DecodeResidual(ref reader, output.Slice(order), blockSize, order, out string residualError))
         {
             error = $"Residual decoding failed: {residualError}";
             return false;
         }
 
-        // Restore signal using fixed predictor
         RestoreFixed(output, blockSize, order);
         return true;
     }
 
     private void RestoreFixed(Span<int> samples, int count, int order)
     {
-        // Fixed predictors (https://xiph.org/flac/format.html#prediction)
         switch (order)
         {
             case 0: // No prediction
@@ -935,11 +802,9 @@ public sealed class FlacDecoder : IAudioDecoder
 
         try
         {
-            // Read warm-up samples
             for (int i = 0; i < order; i++)
                 output[i] = reader.ReadSignedBits(bitsPerSample);
 
-            // Read LPC precision
             int precisionCode = (int)reader.ReadBits(4);
             int precision = precisionCode + 1;
             if (precision == 16)
@@ -948,7 +813,6 @@ public sealed class FlacDecoder : IAudioDecoder
                 return false;
             }
 
-            // Read LPC shift (5 bits, signed)
             int shift = reader.ReadSignedBits(5);
             if (shift < 0)
             {
@@ -956,20 +820,16 @@ public sealed class FlacDecoder : IAudioDecoder
                 return false;
             }
 
-            // Read LPC coefficients
             Span<int> coeffs = stackalloc int[order];
             for (int i = 0; i < order; i++)
                 coeffs[i] = reader.ReadSignedBits(precision);
 
-            // Decode residual
-            // Pass both blockSize and order for correct partition calculation
             if (!DecodeResidual(ref reader, output.Slice(order), blockSize, order, out string residualError))
             {
                 error = $"Residual decoding failed: {residualError}";
                 return false;
             }
-
-            // Restore signal using LPC
+            
             RestoreLPC(output, blockSize, order, coeffs, shift);
             return true;
         }
@@ -998,7 +858,6 @@ public sealed class FlacDecoder : IAudioDecoder
 
         try
         {
-            // Residual coding method (2 bits)
             int method = (int)reader.ReadBits(2);
 
             int parameterBits = method switch
@@ -1014,7 +873,6 @@ public sealed class FlacDecoder : IAudioDecoder
                 return false;
             }
 
-            // Partition order (4 bits)
             int partitionOrder = (int)reader.ReadBits(4);
             int partitions = 1 << partitionOrder;
 
@@ -1023,18 +881,13 @@ public sealed class FlacDecoder : IAudioDecoder
 
             for (int p = 0; p < partitions; p++)
             {
-                // Calculate partition samples according to FLAC spec
                 int partitionSamples;
                 if (partitionOrder == 0)
                 {
-                    // Single partition: all residual samples
                     partitionSamples = totalSamples;
                 }
                 else
                 {
-                    // Multiple partitions
-                    // Each partition has (blockSize >> partitionOrder) samples
-                    // EXCEPT the first partition which has (blockSize >> partitionOrder) - predictorOrder
                     int basePartitionSize = blockSize >> partitionOrder;
 
                     if (p == 0)
@@ -1047,25 +900,21 @@ public sealed class FlacDecoder : IAudioDecoder
                     }
                 }
 
-            // Rice parameter
-            int parameter = (int)reader.ReadBits(parameterBits);
+                int parameter = (int)reader.ReadBits(parameterBits);
 
-            if (parameter == (1 << parameterBits) - 1)
-            {
-                // Escape code: unencoded binary
-                int bitsPerSample = (int)reader.ReadBits(5);
-                for (int i = 0; i < partitionSamples; i++)
-                    output[outputIndex++] = reader.ReadSignedBits(bitsPerSample);
+                if (parameter == (1 << parameterBits) - 1)
+                {
+                    int bitsPerSample = (int)reader.ReadBits(5);
+                    for (int i = 0; i < partitionSamples; i++)
+                        output[outputIndex++] = reader.ReadSignedBits(bitsPerSample);
+                }
+                else
+                {
+                    for (int i = 0; i < partitionSamples; i++)
+                        output[outputIndex++] = reader.ReadRice(parameter);
+                }
             }
-            else
-            {
-                // Rice-coded
-                for (int i = 0; i < partitionSamples; i++)
-                    output[outputIndex++] = reader.ReadRice(parameter);
-            }
-        }
 
-            // Verify we decoded the correct number of samples
             if (outputIndex != totalSamples)
             {
                 error = $"Sample count mismatch: decoded {outputIndex}, expected {totalSamples}";
@@ -1122,19 +971,14 @@ public sealed class FlacDecoder : IAudioDecoder
             return false;
         }
 
-        // Calculate target sample
         long targetSample = (long)(position.TotalSeconds * _flacStreamInfo.SampleRate);
-
-        // Reset format converter state (resampler position)
         _formatConverter?.Reset();
 
-        // OPTIMIZATION 1: Use SEEKTABLE if available (binary search)
         if (_seekTable != null && _seekTableCount > 0)
         {
             return SeekUsingSeekTable(targetSample, out error);
         }
-
-        // OPTIMIZATION 2: Linear decode (no SEEKTABLE available)
+        
         return SeekUsingFrameSkip(targetSample, out error);
     }
 
@@ -1150,7 +994,6 @@ public sealed class FlacDecoder : IAudioDecoder
     {
         error = string.Empty;
 
-        // Binary search for closest seekpoint before target
         int left = 0;
         int right = _seekTableCount - 1;
         int bestIndex = -1;
@@ -1171,7 +1014,6 @@ public sealed class FlacDecoder : IAudioDecoder
             }
         }
 
-        // If no suitable seekpoint found, start from beginning
         if (bestIndex == -1)
         {
             _stream.Position = _firstFramePosition;
@@ -1181,7 +1023,6 @@ public sealed class FlacDecoder : IAudioDecoder
         }
         else
         {
-            // Jump to seekpoint position
             var seekPoint = _seekTable![bestIndex];
             long streamOffset = seekPoint.GetStreamOffset();
             long seekSample = seekPoint.GetSampleNumber();
@@ -1192,8 +1033,6 @@ public sealed class FlacDecoder : IAudioDecoder
             _currentFrame = (int)(seekSample / _flacStreamInfo.MaxBlockSizeValue);
         }
 
-        // Fine-tune: decode (and discard) frames until we reach the exact target sample.
-        // Uses TryDecodeFrameCore directly to avoid frame-pool / AudioFrame allocation overhead.
         while (_currentSample < targetSample)
         {
             if (!TryDecodeFrameCore(out _, out int samplesDecoded, out bool isEof, out _) || isEof)
@@ -1224,8 +1063,6 @@ public sealed class FlacDecoder : IAudioDecoder
         _currentPts = 0.0;
         _currentFrame = 0;
 
-        // Decode frames sequentially until we reach or pass target.
-        // Uses TryDecodeFrameCore directly to avoid frame-pool / AudioFrame allocation overhead.
         while (_currentSample < targetSample)
         {
             if (!TryDecodeFrameCore(out _, out int samplesDecoded, out bool isEof, out _) || isEof)
@@ -1237,52 +1074,6 @@ public sealed class FlacDecoder : IAudioDecoder
         }
 
         return true;
-    }
-
-
-    /// <summary>
-    /// Decodes all frames starting from the specified position.
-    /// </summary>
-    /// <remarks>
-    /// Uses pooled buffers to minimize GC pressure during accumulation.
-    /// The initial capacity is estimated from the stream duration so that
-    /// the PooledByteBufferWriter rarely needs to grow (avoids Gen2 pressure
-    /// from the old fixed 65 536-byte initial size for long files).
-    /// </remarks>
-    public AudioDecoderResult DecodeAllFrames(TimeSpan position)
-    {
-        if (!TrySeek(position, out string error))
-            return new AudioDecoderResult(null!, false, false, error);
-
-        // Estimate total byte count in target format to avoid buffer growth.
-        int estimatedBytes = (int)(_streamInfo.Duration.TotalSeconds
-            * _targetSampleRate
-            * _targetChannels
-            * sizeof(float));
-
-        using var writer = new PooledByteBufferWriter(initialCapacity: Math.Max(estimatedBytes, 65536));
-        double startPts = _currentPts;
-
-        while (_currentSample < _flacStreamInfo.TotalSamples)
-        {
-            if (!TryDecodeFrameCore(out int finalSampleCount, out int samplesDecoded, out bool isEof, out string decodeError))
-            {
-                if (isEof) break;
-                return new AudioDecoderResult(null!, false, false, decodeError);
-            }
-
-            Span<float> finalSpan = _formatConverter != null
-                ? _convertBuffer.AsSpan(0, finalSampleCount)
-                : _outputBuffer.AsSpan(0, finalSampleCount);
-
-            writer.Write(MemoryMarshal.Cast<float, byte>(finalSpan));
-            UpdateTimestamps(samplesDecoded);
-        }
-
-        byte[] allData = writer.ToArray();
-        var frame = new AudioFrame(startPts, allData);
-
-        return new AudioDecoderResult(frame, true, false);
     }
 
     /// <summary>

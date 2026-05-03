@@ -48,7 +48,6 @@ public partial class TrackViewModel : ObservableObject, IDisposable
     /// <param name="value">The new volume value.</param>
     partial void OnVolumeChanged(float value)
     {
-        // Convert 0-100 to 0.0-1.0 for the audio engine
         _trackInfo.Volume = value / 100.0f;
     }
 
@@ -100,7 +99,6 @@ public partial class TrackViewModel : ObservableObject, IDisposable
     public TrackViewModel(TrackInfo trackInfo)
     {
         _trackInfo = trackInfo ?? throw new ArgumentNullException(nameof(trackInfo));
-        // Convert 0.0-1.0 to 0-100 for display
         _volume = trackInfo.Volume * 100.0f;
         _isMuted = trackInfo.IsMuted;
         _isSolo = trackInfo.IsSolo;

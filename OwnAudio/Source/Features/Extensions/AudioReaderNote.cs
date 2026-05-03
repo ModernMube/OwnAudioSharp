@@ -2,10 +2,6 @@
 using Melanchall.DryWetMidi.Core;
 using Logger;
 using Microsoft.ML.OnnxRuntime;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Numerics.Tensors;
 using System.Reflection;
 
@@ -173,10 +169,8 @@ public class Model : IDisposable
     /// </summary>
     public Model()
     {
-        // Load model synchronously as it's small
         var modelBytes = LoadModelBytes();
         session = new InferenceSession(modelBytes);
-        // Model output names are fixed, can be pre-sorted
         outputName = new OutputName(session);
     }
 
@@ -190,14 +184,11 @@ public class Model : IDisposable
     {
         var output = new ModelOutputHelper();
 
-        // Iterate predictions
         var it = new ModelInput(waveBuffer, session.InputMetadata.First().Value);
         foreach (var (customTensor, progress) in it.Enumerate())
         {
-            // Convert CustomTensor to ONNX Runtime tensor
             var onnxTensor = customTensor.ToOnnxTensor();
 
-            // Single prediction
             var inputs = new List<NamedOnnxValue>
         {
             NamedOnnxValue.CreateFromTensor<float>(session.InputMetadata.First().Key, onnxTensor)
@@ -219,7 +210,6 @@ public class Model : IDisposable
             progressHandler?.Invoke(progress);
         }
 
-        // Convert collected results and return
         return output.Create(waveBuffer.FloatBufferCount);
     }
 
@@ -230,10 +220,8 @@ public class Model : IDisposable
     /// <returns>Converted CustomTensor.</returns>
     private static CustomTensor ConvertToCustomTensor(Microsoft.ML.OnnxRuntime.Tensors.Tensor<float> onnxTensor)
     {
-        // Extract data
         var data = onnxTensor.ToArray();
 
-        // Convert shape
         var shape = new nint[onnxTensor.Dimensions.Length];
         for (int i = 0; i < onnxTensor.Dimensions.Length; i++)
         {
@@ -364,11 +352,9 @@ public class ModelOutputHelper
         var rangeCount = (oriShape[1] - nOlap) * step - rangeStart;
 #nullable restore
 
-        // Determine shape and required memory
         var shape = new nint[] { shape0, step };
         var data = new float[shape[0] * shape[1]];
 
-        // Fill data
         int size = 0;
         foreach (var tensor in t)
         {
@@ -423,7 +409,6 @@ public class ModelInput
         int totalFrames = waveBuffer.FloatBufferCount;
 
         int n, j;
-        // Fill with 0 for cursor < 0 part
         tensorData.AsSpan().Slice(0, offset).Fill(0);
 
         while (cursor < totalFrames)
@@ -441,7 +426,6 @@ public class ModelInput
             }
             else
             {
-                // Last time, fill insufficient data with 0
                 tensorData.AsSpan().Slice(offset).Fill(0);
                 yield return CreateResult(1.0);
             }
@@ -456,7 +440,6 @@ public class ModelInput
     /// <returns>Tuple containing CustomTensor and progress value.</returns>
     private (CustomTensor, Double) CreateResult(double progress)
     {
-        // Create CustomTensor
         var data = tensorData.ToArray();
         var shape = inputInfo.Shape.Select(x => (nint)x).ToArray();
         var customTensor = new CustomTensor(data, shape);
@@ -501,7 +484,6 @@ public class CustomTensor
         if (Data == null || Shape == null)
             throw new InvalidOperationException("Cannot convert null tensor to ONNX tensor");
 
-        // Convert shape to int array
         var intShape = Shape.Select(x => (int)x).ToArray();
         return new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<float>(Data, intShape);
     }
@@ -533,7 +515,6 @@ public class ShapeHelper
         Shape = new int[shape.Length];
         for (int i = 0; i < shape.Length; i++)
         {
-            // abs to handle negative numbers
             var n = Math.Abs(shape[i]);
             Shape[i] = n;
             Count *= n;
@@ -677,12 +658,8 @@ public static class MidiWriter
         var midiFile = new MidiFile();  // The complete MIDI file
         var track = new TrackChunk();   // One track to hold all our notes
 
-        // Create a list to hold all events with their absolute timing
         var timedEvents = new List<(long absoluteTime, MidiEvent midiEvent)>();
 
-        // Set the tempo (speed) of the music
-        // Convert BPM to microseconds per quarter note
-        // Formula: 60,000,000 / BPM = microseconds per quarter note
         int microsecondsPerQuarterNote = 60_000_000 / bpm;
         var tempoEvent = new SetTempoEvent(microsecondsPerQuarterNote);
         timedEvents.Add((0, tempoEvent));  // Tempo event at time 0
@@ -695,41 +672,31 @@ public static class MidiWriter
 
         timedEvents.Add((0, programChangeEvent)); // Program change at time 0
 
-        // Convert each detected note into MIDI events
         int noteIndex = 0;
         foreach (var note in notes)
         {
-            // Convert time from seconds to MIDI ticks
-            // 480 ticks per quarter note is a common standard
-            // Calculate quarter notes per second based on actual BPM
             double quarterNotesPerSecond = bpm / 60.0;
             long startTicks = (long)(note.StartTime * 480 * quarterNotesPerSecond);
             long endTicks = (long)(note.EndTime * 480 * quarterNotesPerSecond);
 
             noteIndex++;
 
-            // Create a "Note On" event (start playing the note)
             var noteOn = new NoteOnEvent(
                 (SevenBitNumber)note.Pitch,  // Which note to play
                 (SevenBitNumber)(int)(note.Amplitude * 100f) // How hard to play it (velocity)
             );
 
-            // Create a "Note Off" event (stop playing the note)
             var noteOff = new NoteOffEvent(
                 (SevenBitNumber)note.Pitch,  // Which note to stop
                 (SevenBitNumber)0               // Release velocity (usually 0)
             );
 
-            // Add both events with their absolute timing
             timedEvents.Add((startTicks, noteOn));
             timedEvents.Add((endTicks, noteOff));
         }
 
-        // Sort all events by their absolute time
         timedEvents.Sort((a, b) => a.absoluteTime.CompareTo(b.absoluteTime));
 
-        // Convert from absolute timing to relative timing and add to track
-        // MIDI uses "delta time" = time since the previous event
         long previousTime = 0;
         foreach (var (absoluteTime, midiEvent) in timedEvents)
         {
@@ -738,18 +705,8 @@ public static class MidiWriter
             previousTime = absoluteTime;
         }
 
-        // The library automatically adds an "End of Track" event when saving
-        // This tells MIDI players that the song is finished
-
-        // Add our track to the MIDI file
         midiFile.Chunks.Add(track);
-
-        // Set the time division (ticks per quarter note)
-        // This is CRITICAL for proper playback speed
         midiFile.TimeDivision = new TicksPerQuarterNoteTimeDivision(480);
-
-        // Save the complete MIDI file to disk
-        // Delete existing file if it exists to avoid overwrite errors
         if (File.Exists(outputPath))
         {
             File.Delete(outputPath);
@@ -771,10 +728,8 @@ public static class MidiWriter
         if (notes.Count < 2)
             return 120; // Default tempo
 
-        // Get all note onset times
         var onsetTimes = notes.Select(n => n.StartTime).OrderBy(t => t).ToList();
 
-        // Calculate intervals between consecutive onsets
         var intervals = new List<float>();
         for (int i = 1; i < onsetTimes.Count; i++)
         {
@@ -788,21 +743,17 @@ public static class MidiWriter
         if (intervals.Count == 0)
             return 120;
 
-        // Find common beat intervals using histogram approach
         var beatCandidates = new Dictionary<int, int>(); // BPM -> count
 
         foreach (var interval in intervals)
         {
-            // Test various beat divisions (quarter, eighth, sixteenth notes)
             for (int division = 1; division <= 4; division *= 2)
             {
                 float beatInterval = interval * division;
                 int bpm = (int)Math.Round(60.0f / beatInterval);
 
-                // Only consider reasonable tempo range
                 if (bpm >= 40 && bpm <= 200)
                 {
-                    // Allow some tolerance for tempo variations
                     for (int offset = -2; offset <= 2; offset++)
                     {
                         int candidateBpm = bpm + offset;
@@ -817,24 +768,20 @@ public static class MidiWriter
             }
         }
 
-        // Find the most common BPM
         if (beatCandidates.Count == 0)
             return 120;
 
         var detectedBpm = beatCandidates.OrderByDescending(kvp => kvp.Value).First().Key;
 
-        // Prefer common tempos if they're close
         int[] commonTempos = { 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160 };
         foreach (var commonTempo in commonTempos)
         {
             if (Math.Abs(detectedBpm - commonTempo) <= 3)
             {
-                //Log.Info($"Tempo detection: {detectedBpm} BPM -> snapped to common tempo {commonTempo} BPM");
                 return commonTempo;
             }
         }
 
-        //Log.Info($"Tempo detection: {detectedBpm} BPM (confidence: {beatCandidates[detectedBpm]} votes)");
         return detectedBpm;
     }
 }
@@ -1147,7 +1094,6 @@ public class NotesConverter
             }
             pitchBendSubMatrix.AsSpan().Fill(float.MinValue);
 
-            // Gaussian vector
             gaussianIdxStart = Math.Max(nBinsTolerance - freqIdx, 0);
             gaussianIdxEnd = windowLen - Math.Max(freqIdx - (Constants.N_FREQ_BINS_CONTOURS - nBinsTolerance - 1), 0);
             if (gaussianIdxStart >= freqGaussianSpan.Length || gaussianIdxEnd > freqGaussianSpan.Length)
@@ -1155,7 +1101,6 @@ public class NotesConverter
                 throw new Exception($"GetPitchBend failed, gaussian idx error: [{gaussianIdxStart},{gaussianIdxEnd}] {freqGaussianSpan.Length}");
             }
 
-            // Split submatrix into row vectors and perform element-wise multiplication with gaussian
             bends.Clear();
             pbShift = -(float)(nBinsTolerance - Math.Max(0, nBinsTolerance - freqIdx));
             for (int i = 0; i < rows; ++i)
@@ -1165,7 +1110,7 @@ public class NotesConverter
                 var pstart = contourSpan.Slice(start, mulLength);
                 var gaussianStart = freqGaussianSpan.Slice(gaussianIdxStart, mulLength);
                 TensorPrimitives.Multiply(pstart, gaussianStart, pitchBendSubMatrix);
-                // Calculate 1 bend
+                
                 maxIdx = TensorPrimitives.IndexOfMax(pitchBendSubMatrix.AsSpan().Slice(0, mulLength));
                 maxValue = pitchBendSubMatrix[maxIdx];
                 bends.Add((float)maxIdx);
@@ -1187,7 +1132,6 @@ public class NotesConverter
     {
         if (notes.Count == 0 || input.Contours.Shape == null)
         {
-            // Return empty array
             return new List<Note>();
         }
 
@@ -1239,7 +1183,6 @@ public class NotesHelper
     {
         if (n < 1) return 0f;
 
-        // Linear conversion from frame index to time in seconds
         return (n * Constants.FFT_HOP) / (float)Constants.AUDIO_SAMPLE_RATE;
     }
 
@@ -1258,7 +1201,6 @@ public class NotesHelper
             return (onsets, frames);
         }
 
-        // If max or min is set, need to copy memory
         var newOnsets = onsets.DeepClone();
         var newFrames = frames.DeepClone();
 
@@ -1295,7 +1237,6 @@ public class NotesHelper
             return new Tensor(null, null);
         }
 
-        // Calculate differences
         var frameData = frames.Data!;
         int frameSize = (int)frames.Shape![frames.Shape.Length - 1]; // Last dimension
         int totalFrameSize = frameData.Length;
@@ -1314,20 +1255,16 @@ public class NotesHelper
             TensorPrimitives.Subtract(frameData, dest, dest);
         }
 
-        // Find minimum of each column, store in first row of diffs. numpy: frame_diff = np.min(diffs, axis = 0)
         var frameDiff = diffsSpan.Slice(0, totalFrameSize);
         for (int i = 1; i < nDiff; i++)
         {
             TensorPrimitives.Min(diffsSpan.Slice(i * totalFrameSize, totalFrameSize), frameDiff, frameDiff);
         }
 
-        // Set threshold. numpy: frame_diff[frame_diff < 0] = 0
         TensorPrimitives.Max(frameDiff, 0f, frameDiff);
 
-        // numpy: frame_diff[:n_diff, :] = 0
         diffsSpan.Slice(0, nDiff * frameSize).Clear();
 
-        // numpy: frame_diff = np.max(onsets) * frame_diff / np.max(frame_diff)
         var onsetData = onsets.Data!;
         {
             var maxDiff = TensorPrimitives.Max(frameDiff);
@@ -1343,7 +1280,6 @@ public class NotesHelper
             }
         }
 
-        // numpy: max_onsets_diff = np.max([onsets, frame_diff], axis = 0)
         float[] ret = new float[onsetData.Length];
         TensorPrimitives.Max(frameDiff, onsetData, ret);
         nint[] shape = new nint[onsets.Shape!.Length];
@@ -1364,8 +1300,6 @@ public class NotesHelper
             return [];
         }
 
-        // This algorithm finds peak positions in each column of the matrix (scipy.signal.argrelmax)
-        // Filter found peaks through threshold to complete
         var data = onsets.Data!;
         float[] mask = new float[data.Length];
         for (int i = 0; i < data.Length; i++)
@@ -1373,7 +1307,6 @@ public class NotesHelper
             mask[i] = Math.Min(data[i], threshold);
         }
 
-        // Peaks can only be at middle positions, iteration only needs to cover [1, n - 2] 
         var step = (int)onsets.Shape![onsets.Shape.Length - 1]; // Last dimension
         var limit = mask.Length - step;
         float v;
@@ -1443,7 +1376,6 @@ public class NotesHelper
         var r = pitchRange.End.Equals(Index.End) ? limit : pitchRange.End.Value;
         if (r < 0 || r > limit || r < l) return;
 
-        // Manually clear the range since we don't have TensorSpan
         var step = (int)t.Shape![t.Shape.Length - 1];
         for (nint i = 0; i < t.Shape![0]; i++)
         {

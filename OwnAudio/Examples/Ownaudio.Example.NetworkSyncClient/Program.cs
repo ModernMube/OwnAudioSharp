@@ -1,3 +1,4 @@
+using Logger;
 using Ownaudio.Core;
 using OwnaudioNET;
 using OwnaudioNET.Core;
@@ -21,13 +22,13 @@ public class ClientProgram
 
     public static async Task Main(string[] args)
     {
-        Console.WriteLine("=== OwnaudioNET NetworkSync Client ===\n");
-        Console.WriteLine("This client synchronizes audio playback with a NetworkSync server.\n");
+        Log.Info("=== OwnaudioNET NetworkSync Client ===\n");
+        Log.Info("This client synchronizes audio playback with a NetworkSync server.\n");
 
         try
         {
             // Initialize audio engine
-            Console.WriteLine("[1/5] Initializing audio engine...");
+            Log.Info("[1/5] Initializing audio engine...");
             AudioConfig config = new AudioConfig
             {
                 SampleRate = 48000,
@@ -38,17 +39,17 @@ public class ClientProgram
 
             OwnaudioNet.Initialize(config);
             OwnaudioNet.Start();
-            Console.WriteLine($"  ✓ Engine initialized and started");
+            Log.Info($"  ✓ Engine initialized and started");
 
             // Create AudioMixer (automatically registers for NetworkSync)
-            Console.WriteLine("\n[2/5] Creating AudioMixer...");
+            Log.Info("\n[2/5] Creating AudioMixer...");
             var engine = OwnaudioNet.Engine!.UnderlyingEngine;
             _mixer = new AudioMixer(engine, bufferSizeInFrames: 512);
             _mixer.MasterVolume = 0.8f;
-            Console.WriteLine($"  ✓ AudioMixer created (ID: {_mixer.MixerId})");
+            Log.Info($"  ✓ AudioMixer created (ID: {_mixer.MixerId})");
 
             // Load audio files
-            Console.WriteLine("\n[3/5] Loading audio files...");
+            Log.Info("\n[3/5] Loading audio files...");
             string? exePath = Assembly.GetExecutingAssembly().Location;
             string? exeDirectory = Path.GetDirectoryName(exePath);
 
@@ -65,7 +66,7 @@ public class ClientProgram
             _other = new FileSource(otherPath, 8192, targetSampleRate: targetSampleRate, targetChannels: targetChannels);
             _vocals = new FileSource(vocalsPath, 8192, targetSampleRate: targetSampleRate, targetChannels: targetChannels);
 
-            Console.WriteLine($"  ✓ Loaded 4 tracks ({_drums.Duration:F1}s duration)");
+            Log.Info($"  ✓ Loaded 4 tracks ({_drums.Duration:F1}s duration)");
 
             // Add sources to mixer and attach to MasterClock
             _mixer.AddSource(_drums);
@@ -79,19 +80,19 @@ public class ClientProgram
             _vocals.AttachToClock(_mixer.MasterClock);
 
             _mixer.Start();
-            Console.WriteLine($"  ✓ Sources synchronized with MasterClock");
+            Log.Info($"  ✓ Sources synchronized with MasterClock");
 
             // Subscribe to connection state changes
             OwnaudioNet.NetworkSyncConnectionChanged += OnConnectionStateChanged;
 
             // Start NetworkSync client (auto-discovery)
-            Console.WriteLine("\n[4/5] Connecting to NetworkSync server...");
+            Log.Info("\n[4/5] Connecting to NetworkSync server...");
             await OwnaudioNet.StartNetworkSyncClientAsync(
                 serverAddress: null,  // Auto-discovery
                 port: 9876,
                 allowOfflinePlayback: true);
-            Console.WriteLine($"  ✓ NetworkSync client started (auto-discovery mode)");
-            Console.WriteLine($"  ✓ Searching for server on local network...");
+            Log.Info($"  ✓ NetworkSync client started (auto-discovery mode)");
+            Log.Info($"  ✓ Searching for server on local network...");
 
             // Start playback (will sync with server when connected)
             _drums.Play();
@@ -100,10 +101,10 @@ public class ClientProgram
             _vocals.Play();
 
             // Interactive status display
-            Console.WriteLine("\n[5/5] Client ready!\n");
-            Console.WriteLine("Available commands:");
-            Console.WriteLine("  status       - Show connection status");
-            Console.WriteLine("  quit         - Exit client\n");
+            Log.Info("\n[5/5] Client ready!\n");
+            Log.Info("Available commands:");
+            Log.Info("  status       - Show connection status");
+            Log.Info("  quit         - Exit client\n");
 
             // Status update loop
             bool running = true;
@@ -138,7 +139,7 @@ public class ClientProgram
                                 break;
 
                             default:
-                                Console.WriteLine($"  ! Unknown command: {command}");
+                                Log.Info($"  ! Unknown command: {command}");
                                 break;
                         }
                     }

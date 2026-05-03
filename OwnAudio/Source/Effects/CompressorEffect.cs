@@ -185,18 +185,13 @@ namespace OwnaudioNET.Effects
         private void RecalculateCoefficients(bool isMakeUoGain =  false)
         {
             // Attack/Release coefficients
-            // Formula: coeff = exp(-1 / (time * sampleRate))
-            // We use MathF for performance in float context
             _attackCoeff = MathF.Exp(-1.0f / (_sampleRate * _attackTime));
             _releaseCoeff = MathF.Exp(-1.0f / (_sampleRate * _releaseTime));
 
             // Threshold in dB
-            // Protect against log(0)
             _thresholdDb = 20.0f * MathF.Log10(Math.Max(_threshold, 1e-6f));
 
             // Slope for compression
-            // Output = Threshold + (Input - Threshold) / Ratio
-            // GainReduction = (Input - Threshold) * (1/Ratio - 1)
             _slope = 1.0f / _ratio - 1.0f;
 
             // Soft Knee bounds
@@ -213,7 +208,6 @@ namespace OwnaudioNET.Effects
         private void CalculateAutoMakeupGain()
         {
             // Typical music signal RMS is around -12 to -18 dB
-            // We'll use -12 dB as reference for makeup gain calculation
             const float typicalInputDb = -12.0f;
             
             // If threshold is above typical input, no makeup needed
@@ -227,7 +221,6 @@ namespace OwnaudioNET.Effects
             float overThresholdDb = typicalInputDb - _thresholdDb;
             
             // Gain reduction in dB (negative value)
-            // For soft knee, we approximate with 50% of the full reduction
             float gainReductionDb = _slope * overThresholdDb * 0.5f;
             
             // Makeup gain compensates 80% of the reduction (for natural dynamics)
@@ -270,7 +263,6 @@ namespace OwnaudioNET.Effects
                 float absInput = Math.Abs(input);
 
                 // 1. Envelope Detection (Peak Detector with release)
-                // Branchless approach could be used but standard branching is predictable here
                 if (absInput > env)
                 {
                     env = att * env + (1.0f - att) * absInput;
@@ -281,19 +273,13 @@ namespace OwnaudioNET.Effects
                 }
 
                 // 2. Gain Calculation
-                // Avoid log of zero
                 if (env < 1e-6f) 
                 {
-                    // Signal is too small, no compression needed usually, but we apply makeup
-                    // To stay consistent with silence
                     buffer[i] = input * mkp;
                     continue; 
                 }
 
                 // Convert envelope to dB
-                // Approximation is suitable for dynamics processing and much faster
-                // We'll use standard Log10 here for accuracy as requested for "Professional"
-                // but MathF version is faster than double Math.Log10
                 float envDb = 20.0f * MathF.Log10(env);
 
                 float gainReductionDb = 0.0f;
@@ -301,25 +287,20 @@ namespace OwnaudioNET.Effects
                 // 3. Compression Characteristic (Soft Knee)
                 if (envDb < kLower)
                 {
-                    // Below knee - linear region (1:1), no reduction
                     gainReductionDb = 0.0f;
                 }
                 else if (envDb > kUpper)
                 {
-                    // Above knee - constant ratio compression
                     gainReductionDb = slope * (envDb - tDb);
                 }
                 else
                 {
                     // Inside soft knee - quadratic interpolation
-                    // Formula: slope * ((x - (T - W/2))^2) / (2 * W)
                     float over = envDb - kLower; // x - lower_bound
                     gainReductionDb = slope * (over * over) / (2.0f * KneeWidthDb);
                 }
 
                 // 4. Application
-                // DB to Linear
-                // gain = 10^(dB/20)
                 float currentGain = MathF.Pow(10.0f, gainReductionDb * 0.05f);
 
                 // Apply makeup gain and compression
@@ -331,7 +312,6 @@ namespace OwnaudioNET.Effects
 
             // Save state
             _envelope = env;
-            // Prevent denormal numbers which can slow down CPU
             if (_envelope < 1e-10f) _envelope = 0.0f;
         }
 

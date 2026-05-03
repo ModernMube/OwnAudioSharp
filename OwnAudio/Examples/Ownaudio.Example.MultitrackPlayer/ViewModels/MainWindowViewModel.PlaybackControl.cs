@@ -38,9 +38,6 @@ public partial class MainWindowViewModel
 
             await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Preparing audio..."; });
 
-            // ENGINE: Audio service should run continuously to prevent cold start glitches
-
-            // OPTIMIZATION: Update cached arrays if needed (zero allocation in steady state)
             if (_cacheNeedsUpdate || _cachedTrackArray.Length != Tracks.Count)
             {
                 _cachedTrackArray = new TrackViewModel[Tracks.Count];
@@ -48,11 +45,9 @@ public partial class MainWindowViewModel
                 _cacheNeedsUpdate = false;
             }
 
-            // OPTIMIZATION: Handle solo and mute logic without LINQ
             bool hasSoloTracks = false;
             int validSourceCount = 0;
 
-            // First pass: count solo tracks and valid sources
             for (int i = 0; i < _cachedTrackArray.Length; i++)
             {
                 if (_cachedTrackArray[i].IsSolo)
@@ -71,13 +66,11 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            // OPTIMIZATION: Allocate source array only once per play
             if (_cachedSourceArray.Length != validSourceCount)
             {
                 _cachedSourceArray = new IAudioSource[validSourceCount];
             }
 
-            // Second pass: apply volume/mute/solo and fill source array
             int sourceIndex = 0;
             for (int i = 0; i < _cachedTrackArray.Length; i++)
             {
@@ -103,12 +96,8 @@ public partial class MainWindowViewModel
 
             await Task.Run(() =>
             {
-                // SYNC: MasterClock Timeline-Based Synchronization (v2.4.0+)
-
-                // 1. Sync MasterClock to match the UI's transport position
                 _audioService.Mixer.MasterClock.SeekTo(startPosition);
 
-                // 2. Attach all tracks to the MasterClock
                 for (int i = 0; i < _cachedSourceArray.Length; i++)
                 {
                     if (_cachedSourceArray[i] is IMasterClockSource clockSource)
@@ -117,33 +106,29 @@ public partial class MainWindowViewModel
                     }
                 }
 
-                // 2.5. CRITICAL: Seek all tracks to start position before pre-buffering
                 System.Threading.Tasks.Parallel.ForEach(_cachedSourceArray, source =>
                 {
                     source.Seek(startPosition);
                 });
 
-                // 3. CRITICAL: Pre-buffer all tracks in parallel to prevent noise
                 System.Threading.Tasks.Parallel.ForEach(_cachedSourceArray, source =>
                 {
                     source.Play();
                 });
 
-                // 4. CRITICAL: Add all tracks to mixer in parallel for atomic-like timing
                 System.Threading.Tasks.Parallel.ForEach(_cachedSourceArray, source =>
                 {
                     _audioService.Mixer.AddSource(source);
                 });
-
-                // 5. Apply SmartMaster effect to mixer output if enabled
+                
                 if (_smartMaster != null && IsSmartMasterEnabled)
                 {
-                    // Add SmartMaster as a master effect on the mixer
                     _audioService.Mixer.AddMasterEffect(_smartMaster);
                 }
+
+                _masterEffect?.SetTransportPlaying(true);
             });
 
-            // OPTIMIZATION: Calculate longest track duration without LINQ
             double longestDuration = 0.0;
             for (int i = 0; i < _cachedSourceArray.Length; i++)
             {
@@ -190,20 +175,16 @@ public partial class MainWindowViewModel
         IsPlaying = false;
         await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Pausing..."; });
 
-        // NEW - v2.4.0+: Pause all tracks individually
         await Task.Run(() =>
         {
             for (int i = 0; i < _cachedSourceArray.Length; i++)
             {
-                try
-                {
-                    _cachedSourceArray[i].Pause();
-                }
-                catch
-                {
-                    // Ignore errors
-                }
+                try { _cachedSourceArray[i].Pause(); }
+                catch {}
             }
+
+            // Pause VST transport — lock-free, safe from background thread.
+            _masterEffect?.SetTransportPlaying(false);
         });
 
         await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Paused"; });
@@ -222,7 +203,6 @@ public partial class MainWindowViewModel
         IsPlaying = false;
         await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Stopping..."; });
 
-        // NEW - v2.4.0+: Stop all tracks and reset master clock
         await Task.Run(() =>
         {
             // Stop all tracks
@@ -232,10 +212,7 @@ public partial class MainWindowViewModel
                 {
                     _cachedSourceArray[i].Stop();
                 }
-                catch
-                {
-                    // Ignore errors
-                }
+                catch { }
             }
 
             // Reset master clock to beginning
@@ -253,26 +230,24 @@ public partial class MainWindowViewModel
                     {
                         _audioService.Mixer.RemoveSource(_cachedSourceArray[i].Id);
                     }
-                    catch
-                    {
-                        // Ignore errors
-                    }
+                    catch {}
                 }
             }
             
-            // CRITICAL: Remove SmartMaster from mixer BEFORE notifying it
-            // This prevents it from processing empty buffers after tracks are removed
             if (_audioService.Mixer != null && _smartMaster != null)
             {
                 _audioService.Mixer.RemoveMasterEffect(_smartMaster);
             }
             
-            // CRITICAL: Notify SmartMaster that playback stopped
-            // This clears filter states to prevent corruption on next Play
             if (_smartMaster != null)
             {
                 _smartMaster.OnPlaybackStopped();
             }
+
+            // Stop VST transport and reset position/buffers.
+            // Reset() calls SetTransportState(false) + ResetTransportPosition() + clears buffers.
+            // Lock-free enqueues — safe from this background thread.
+            _masterEffect?.Reset();
         });
 
         // Reset UI state after stopping

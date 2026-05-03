@@ -71,23 +71,17 @@ public sealed class WavDecoder : IAudioDecoder
         if (!_stream.CanSeek)
             throw new ArgumentException("Stream must support seeking.", nameof(stream));
 
-        // Default frame size: 4096 samples per frame
         _samplesPerFrame = 4096;
-
-        // Initialize (parse WAV headers)
         Initialize();
 
-        // Calculate derived values
         _bytesPerSample = _format.BitsPerSample / 8;
         _frameSizeBytes = _samplesPerFrame * _format.Channels * _bytesPerSample;
 
-        // Pre-allocate buffers for zero-allocation decode path
         _tempReadBuffer = new byte[_frameSizeBytes];
         _decodeBuffer = new AudioBuffer(_samplesPerFrame * _format.Channels * sizeof(float));
 
         _currentPts = 0.0;
 
-        // Initialize format converter if target format differs from source
         _targetSampleRate = targetSampleRate > 0 ? targetSampleRate : (int)_format.SampleRate;
         _targetChannels = targetChannels > 0 ? targetChannels : _format.Channels;
 
@@ -103,11 +97,9 @@ public sealed class WavDecoder : IAudioDecoder
                 maxFrameSize: _samplesPerFrame
             );
 
-            // Pre-allocate conversion buffer (worst case: 4x upsample + channel upmix)
             int maxConvertedSamples = _formatConverter.CalculateOutputSize(_samplesPerFrame * _format.Channels) * 2;
             _convertBuffer = new float[maxConvertedSamples];
 
-            // Update StreamInfo to reflect target format (after conversion)
             _streamInfo = new AudioStreamInfo(
                 channels: _targetChannels,
                 sampleRate: _targetSampleRate,
@@ -121,12 +113,9 @@ public sealed class WavDecoder : IAudioDecoder
             _convertBuffer = Array.Empty<float>();
         }
 
-        // Initialize frame pool AFTER format converter setup
-        // Calculate worst-case output size accounting for resampling + channel conversion
         int maxOutputSamples = _samplesPerFrame * _targetChannels;
         if (_formatConverter != null)
         {
-            // Account for resampling ratio (e.g., 44.1kHz -> 48kHz = 1.088x)
             maxOutputSamples = _formatConverter.CalculateOutputSize(_samplesPerFrame * _format.Channels);
         }
         int maxFrameBytes = maxOutputSamples * sizeof(float) * 2; // 2x safety margin
@@ -169,13 +158,11 @@ public sealed class WavDecoder : IAudioDecoder
 
             if (chunkHeader.ChunkID == ChunkHeader.FMT_ID)
             {
-                // Parse format chunk
                 ParseFormatChunk(chunkHeader.ChunkSize);
                 foundFmt = true;
             }
             else if (chunkHeader.ChunkID == DataChunk.DATA_ID)
             {
-                // Found data chunk
                 _dataChunkStart = _stream.Position;
                 _dataChunkSize = chunkHeader.ChunkSize;
                 foundData = true;
@@ -183,10 +170,7 @@ public sealed class WavDecoder : IAudioDecoder
             }
             else
             {
-                // Skip unknown chunk
                 _stream.Position += chunkHeader.ChunkSize;
-
-                // WAV chunks are word-aligned (pad byte if odd size)
                 if ((chunkHeader.ChunkSize & 1) != 0)
                     _stream.Position += 1;
             }
@@ -198,12 +182,9 @@ public sealed class WavDecoder : IAudioDecoder
         if (!foundData)
             throw new AudioException("Invalid WAV file: 'data' chunk not found.");
 
-        // Calculate duration (based on source format, before conversion)
         long totalSamples = _dataChunkSize / (_format.Channels * (_format.BitsPerSample / 8));
         double durationSeconds = (double)totalSamples / _format.SampleRate;
 
-        // Note: StreamInfo will be updated in constructor after format converter is initialized
-        // This is a temporary StreamInfo with source format
         _streamInfo = new AudioStreamInfo(
             channels: _format.Channels,
             sampleRate: (int)_format.SampleRate,
@@ -211,7 +192,6 @@ public sealed class WavDecoder : IAudioDecoder
             bitDepth: _format.BitsPerSample
         );
 
-        // Seek to start of data
         _stream.Position = _dataChunkStart;
     }
 
@@ -229,12 +209,10 @@ public sealed class WavDecoder : IAudioDecoder
 
         _format = MemoryMarshal.Read<WavFormatChunk>(fmtBuffer);
 
-        // Skip extra format bytes if present
         int extraBytes = (int)chunkSize - 16;
         if (extraBytes > 0)
             _stream.Position += extraBytes;
 
-        // Validate format
         ValidateFormat();
     }
 
@@ -243,7 +221,6 @@ public sealed class WavDecoder : IAudioDecoder
     /// </summary>
     private void ValidateFormat()
     {
-        // Check supported formats
         if (_format.AudioFormat != WavFormatChunk.WAVE_FORMAT_PCM &&
             _format.AudioFormat != WavFormatChunk.WAVE_FORMAT_IEEE_FLOAT)
         {
@@ -293,41 +270,33 @@ public sealed class WavDecoder : IAudioDecoder
         if (_disposed)
             return AudioDecoderResult.CreateError("Decoder has been disposed.");
 
-        // Check if we've reached end of data chunk
         if (_stream.Position >= _dataChunkStart + _dataChunkSize)
             return AudioDecoderResult.CreateEOF();
 
-        // Calculate how many bytes to read from the source
         long remainingBytes = (_dataChunkStart + _dataChunkSize) - _stream.Position;
         int bytesToRead = (int)Math.Min(_frameSizeBytes, remainingBytes);
 
-        // Read audio data into pre-allocated buffer
         int bytesRead = _stream.Read(_tempReadBuffer, 0, bytesToRead);
 
         if (bytesRead == 0)
             return AudioDecoderResult.CreateEOF();
 
-        // Convert to Float32 using SIMD
         int samplesRead = bytesRead / _bytesPerSample;
         ConvertToFloat32(_tempReadBuffer.AsSpan(0, bytesRead), samplesRead);
 
-        // Apply format conversion if needed (resampling + channel conversion)
         int finalSampleCount = samplesRead;
         Span<byte> outputData = _decodeBuffer.Data.Slice(0, samplesRead * sizeof(float));
 
         if (_formatConverter != null)
         {
-            // Convert format (resample + channel convert)
             Span<float> sourceFloat = MemoryMarshal.Cast<byte, float>(outputData);
             Span<float> convertedFloat = _convertBuffer.AsSpan();
 
             finalSampleCount = _formatConverter.Convert(sourceFloat, convertedFloat);
 
-            // Copy converted data back to byte buffer
             outputData = MemoryMarshal.Cast<float, byte>(convertedFloat.Slice(0, finalSampleCount));
         }
 
-        // Copy the decoded data to the output buffer
         int float32Bytes = finalSampleCount * sizeof(float);
         if (float32Bytes > buffer.Length)
         {
@@ -336,82 +305,14 @@ public sealed class WavDecoder : IAudioDecoder
 
         outputData.Slice(0, float32Bytes).CopyTo(buffer.AsSpan());
 
-        // Update presentation timestamp (based on SOURCE format, not target)
         int samplesPerChannel = samplesRead / _format.Channels;
         _currentPts += (samplesPerChannel * 1000.0) / _format.SampleRate;
 
-        // Calculate number of frames read (frames = samples / channels)
         int framesRead = finalSampleCount / _targetChannels;
 
         return AudioDecoderResult.CreateSuccess(framesRead, _currentPts);
     }
 
-    /// <summary>
-    /// Decodes the next audio frame from the WAV stream.
-    /// </summary>
-    /// <returns>A <see cref="AudioDecoderResult"/> containing the decoded frame or error information.</returns>
-    /// <remarks>
-    /// This method is ZERO-ALLOCATION after warmup using AudioFramePool and SIMD conversion.
-    /// Expected allocation: 0 bytes during steady state.
-    /// </remarks>
-    public AudioDecoderResult DecodeNextFrame()
-    {
-        if (_disposed)
-            return new AudioDecoderResult(null!, false, false, "Decoder has been disposed.");
-
-        // Check if we've reached end of data chunk
-        if (_stream.Position >= _dataChunkStart + _dataChunkSize)
-            return new AudioDecoderResult(null!, false, true);
-
-        // Calculate how many bytes to read (don't read past end of data)
-        long remainingBytes = (_dataChunkStart + _dataChunkSize) - _stream.Position;
-        int bytesToRead = (int)Math.Min(_frameSizeBytes, remainingBytes);
-
-        // Read audio data into pre-allocated buffer
-        int bytesRead = _stream.Read(_tempReadBuffer, 0, bytesToRead);
-
-        if (bytesRead == 0)
-            return new AudioDecoderResult(null!, false, true);
-
-        // Convert to Float32 using SIMD
-        int samplesRead = bytesRead / _bytesPerSample;
-        ConvertToFloat32(_tempReadBuffer.AsSpan(0, bytesRead), samplesRead);
-
-        // Apply format conversion if needed (resampling + channel conversion)
-        int finalSampleCount = samplesRead;
-        Span<byte> outputData = _decodeBuffer.Data.Slice(0, samplesRead * sizeof(float));
-
-        if (_formatConverter != null)
-        {
-            // Convert format (resample + channel convert)
-            Span<float> sourceFloat = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(outputData);
-            Span<float> convertedFloat = _convertBuffer.AsSpan();
-
-            finalSampleCount = _formatConverter.Convert(sourceFloat, convertedFloat);
-
-            // Copy converted data back to byte buffer
-            outputData = System.Runtime.InteropServices.MemoryMarshal.Cast<float, byte>(convertedFloat.Slice(0, finalSampleCount));
-        }
-
-        // Rent pooled frame (ZERO ALLOCATION)
-        int float32Bytes = finalSampleCount * sizeof(float);
-        var pooledFrame = _framePool.Rent(_currentPts, float32Bytes);
-
-        // Copy data to pooled frame buffer
-        outputData.Slice(0, float32Bytes).CopyTo(pooledFrame.BufferSpan);
-
-        // Convert to standard AudioFrame (this is the only allocation - the frame wrapper itself)
-        var frame = pooledFrame.ToAudioFrame();
-
-        // Return pooled frame to pool immediately
-        _framePool.Return(pooledFrame);
-
-        // Update presentation timestamp (based on SOURCE format, not target)
-        int samplesPerChannel = samplesRead / _format.Channels;
-        _currentPts += (samplesPerChannel * 1000.0) / _format.SampleRate;
-
-        return new AudioDecoderResult(frame, true, false);
-    }
 
     /// <summary>
     /// Converts audio samples to Float32 format.
@@ -422,7 +323,6 @@ public sealed class WavDecoder : IAudioDecoder
 
         if (_format.AudioFormat == WavFormatChunk.WAVE_FORMAT_IEEE_FLOAT && _format.BitsPerSample == 32)
         {
-            // Already Float32, just copy
             Span<float> sourceFloat = MemoryMarshal.Cast<byte, float>(source);
             sourceFloat.Slice(0, sampleCount).CopyTo(dest);
         }
@@ -492,12 +392,10 @@ public sealed class WavDecoder : IAudioDecoder
             return false;
         }
 
-        // Calculate byte offset
         double positionSeconds = position.TotalSeconds;
         long samplePosition = (long)(positionSeconds * _format.SampleRate);
         long byteOffset = samplePosition * _format.Channels * _bytesPerSample;
 
-        // Align to block boundary
         byteOffset = (byteOffset / _format.BlockAlign) * _format.BlockAlign;
 
         long targetPosition = _dataChunkStart + byteOffset;
@@ -511,54 +409,11 @@ public sealed class WavDecoder : IAudioDecoder
         _stream.Position = targetPosition;
         _currentPts = position.TotalMilliseconds;
 
-        // Reset format converter state (resampler position)
         _formatConverter?.Reset();
 
         return true;
     }
 
-    /// <summary>
-    /// Decodes all frames starting from the specified position.
-    /// </summary>
-    /// <param name="position">Starting position as a <see cref="TimeSpan"/>.</param>
-    /// <returns>A <see cref="AudioDecoderResult"/> containing all decoded audio data.</returns>
-    /// <remarks>
-    /// Warning: This method loads the entire audio stream into memory.
-    /// Uses pooled buffers to minimize GC pressure during accumulation.
-    /// </remarks>
-    public AudioDecoderResult DecodeAllFrames(TimeSpan position)
-    {
-        if (!TrySeek(position, out string error))
-            return new AudioDecoderResult(null!, false, false, error);
-
-        // Estimate total output bytes in target format to size the writer correctly up-front,
-        // avoiding repeated ArrayPool buffer growths (and potential Gen2 GC) for long files.
-        int estimatedBytes = (int)(_streamInfo.Duration.TotalSeconds
-            * _targetSampleRate
-            * _targetChannels
-            * sizeof(float));
-
-        using var writer = new PooledByteBufferWriter(initialCapacity: Math.Max(estimatedBytes, 65536));
-        double startPts = _currentPts;
-
-        while (true)
-        {
-            var result = DecodeNextFrame();
-
-            if (result.IsEOF)
-                break;
-
-            if (!result.IsSucceeded)
-                return result;
-
-            writer.Write(result.Frame.Data, 0, result.Frame.Data.Length);
-        }
-
-        byte[] allData = writer.ToArray();
-        var frame = new AudioFrame(startPts, allData);
-
-        return new AudioDecoderResult(frame, true, false);
-    }
 
     /// <summary>
     /// Releases all resources used by the <see cref="WavDecoder"/>.

@@ -1,3 +1,4 @@
+using Logger;
 using OwnaudioNET;
 using OwnaudioNET.Sources;
 using OwnaudioNET.Effects;
@@ -61,23 +62,12 @@ namespace OwnaudioInput
                 }
                 Console.WriteLine();
                 
-                // If multiple devices, or debugging needed, let's pick one (optional - hardcoding 0 or asking user)
-                // For now, let's keep it simple: just listing them helps debug. 
-                // If the user sees the wrong one is default, we can add selection logic.
-                // But generally, let's actually ASK for selection to be sure.
-                
                 Console.Write("Select input device index (or press Enter for default): ");
                 string? deviceChoice = Console.ReadLine();
                 if (int.TryParse(deviceChoice, out int deviceIndex) && deviceIndex >= 0 && deviceIndex < inputDevices.Count)
                 {
                     var selectedDevice = inputDevices[deviceIndex];
                     Console.WriteLine($"Selecting device: {selectedDevice.Name}");
-                    
-                    // Note: Changing device usually requires engine to be stopped, but we just started it.
-                    // Let's try setting it. The wrapper might throw if running.
-                    // If so, we should set it BEFORE Start(), but we need Engine initialized to get devices.
-                    // Catch-22? No, Initialize creates the engine, Start starts it.
-                    // We are after Start(). So we must Stop(), Set, Start().
                     
                     OwnaudioNet.Stop();
                     OwnaudioNet.Engine.SetInputDeviceByName(selectedDevice.Name);

@@ -94,8 +94,6 @@ namespace OwnaudioNET.Effects
         private static readonly int[] CombTuningR = { 1116 + StereoSpread, 1188 + StereoSpread, 1277 + StereoSpread, 1356 + StereoSpread, 1422 + StereoSpread, 1491 + StereoSpread, 1557 + StereoSpread, 1617 + StereoSpread };
         private static readonly int[] AllPassTuningL = { 556, 441, 341, 225 };
         private static readonly int[] AllPassTuningR = { 556 + StereoSpread, 441 + StereoSpread, 341 + StereoSpread, 225 + StereoSpread };
-
-        // --- DSP State (Flat Arrays for Performance) ---
         
         // Comb Filters State [Channel 0=L, 1=R][FilterIndex]
         private readonly float[][][] _combBuffers; 
@@ -132,7 +130,6 @@ namespace OwnaudioNET.Effects
         // Locks
         private readonly object _lock = new object();
 
-        // --- Properties ---
         /// <summary>
         /// Gets the unique identifier for this effect instance.
         /// </summary>
@@ -236,8 +233,6 @@ namespace OwnaudioNET.Effects
             _name = "Reverb";
             _enabled = true;
 
-            // Allocate State Arrays
-            // 2 Channels (L/R)
             _combBuffers = new float[2][][];
             _combIndices = new int[2][];
             _combLengths = new int[2][];
@@ -259,7 +254,6 @@ namespace OwnaudioNET.Effects
                 _allPassLengths[ch] = new int[NumAllPasses];
             }
 
-            // Set Params
             _roomSize = size;
             _damping = damp;
             _wet = wet;
@@ -268,7 +262,6 @@ namespace OwnaudioNET.Effects
             _mix = mix;
             _gain = gainLevel;
 
-            // Initialize Buffers (assuming default 44.1k, will re-init in Initialize)
             ResizeBuffers(44100);
             UpdateCoefficients();
         }
@@ -310,7 +303,6 @@ namespace OwnaudioNET.Effects
         {
             float scale = newSampleRate / 44100f;
 
-            // PreDelay: 20ms fixed
             int preDelaySamples = (int)(0.020f * newSampleRate);
             _preDelayBuffer = new float[preDelaySamples];
             _preDelayLength = preDelaySamples;
@@ -318,7 +310,6 @@ namespace OwnaudioNET.Effects
 
             for (int ch = 0; ch < 2; ch++)
             {
-                // Combs
                 for (int i = 0; i < NumCombs; i++)
                 {
                     int tuning = (ch == 0) ? CombTuningL[i] : CombTuningR[i];
@@ -329,7 +320,6 @@ namespace OwnaudioNET.Effects
                     _combFilterStore[ch][i] = 0;
                 }
 
-                // AllPasses
                 for (int i = 0; i < NumAllPasses; i++)
                 {
                     int tuning = (ch == 0) ? AllPassTuningL[i] : AllPassTuningR[i];
@@ -349,7 +339,6 @@ namespace OwnaudioNET.Effects
             _roomSizeVal = (_roomSize * ScaleRoom) + OffsetRoom;
             _dampVal = _damping * ScaleDamp;
             
-            // Wet spread logic
             _wet1 = _wet * (0.5f * _width + 0.5f);
             _wet2 = _wet * ((1.0f - _width) * 0.5f);
         }
@@ -364,7 +353,6 @@ namespace OwnaudioNET.Effects
         {
             if (_config == null || !_enabled || _preDelayBuffer == null) return;
 
-            // Local cache (Struct copy)
             float room = _roomSizeVal;
             float damp = _dampVal;
             float g = _gain;
@@ -387,13 +375,10 @@ namespace OwnaudioNET.Effects
                 float inputL = buffer[idx];
                 float inputR = isStereo ? buffer[idx + 1] : inputL;
                 
-                // Mono-sum for reverb engine (Freeverb style)
                 float inputMono = (inputL + inputR) * 0.5f;
 
-                // Apply Gain
                 inputMono *= g;
 
-                // Pre-Delay
                 float delayedInput = _preDelayBuffer[_preDelayIndex];
                 _preDelayBuffer[_preDelayIndex] = inputMono;
                 _preDelayIndex++;
@@ -405,7 +390,6 @@ namespace OwnaudioNET.Effects
                 float outL = 0f;
                 float outR = 0f;
                 
-                // Process Left Engine
                 for(int i=0; i<NumCombs; i++)
                 {                    
                     float[] buf = _combBuffers[0][i];
@@ -415,7 +399,6 @@ namespace OwnaudioNET.Effects
                     _combFilterStore[0][i] = (output * (1.0f - damp)) + (_combFilterStore[0][i] * damp);
                     buf[bIdx] = inputMono + (_combFilterStore[0][i] * room);
                     
-                    // Increment Index
                     bIdx++;
                     if (bIdx >= _combLengths[0][i]) bIdx = 0;
                     _combIndices[0][i] = bIdx;
@@ -423,7 +406,6 @@ namespace OwnaudioNET.Effects
                     outL += output;
                 }
 
-                // Process Right Engine
                 for(int i=0; i<NumCombs; i++)
                 {
                     float[] buf = _combBuffers[1][i];
@@ -440,7 +422,6 @@ namespace OwnaudioNET.Effects
                     outR += output;
                 }
 
-                // AllPass Filters Series (Left)
                 for(int i=0; i<NumAllPasses; i++)
                 {
                     float[] buf = _allPassBuffers[0][i];
@@ -461,7 +442,6 @@ namespace OwnaudioNET.Effects
                     _allPassIndices[0][i] = bIdx;
                 }
 
-                // AllPass Filters Series (Right)
                 for(int i=0; i<NumAllPasses; i++)
                 {
                     float[] buf = _allPassBuffers[1][i];

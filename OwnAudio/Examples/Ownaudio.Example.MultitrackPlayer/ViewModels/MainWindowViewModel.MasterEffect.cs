@@ -13,6 +13,13 @@ namespace MultitrackPlayer.ViewModels;
 /// <summary>
 /// Master Effect functionality for MainWindowViewModel.
 /// Handles VST3 plugin loading, editor window management, and audio processing.
+///
+/// VST3 lifecycle (required order):
+///   1. VST3PluginHost.CreateAsync(path)       – load on plugin thread
+///   2. host.InitializeAudioAsync(sr, block)   – audio init on plugin thread
+///   3. host.GetProcessor()                    – only when host.IsReady
+///   4. mixer.AddMasterEffect(processor)       – validated + buffers allocated
+///   5. processor.Dispose() then host.Dispose() on cleanup
 /// </summary>
 public partial class MainWindowViewModel
 {
@@ -20,11 +27,13 @@ public partial class MainWindowViewModel
 
     /// <summary>
     /// The VST3 plugin host that manages the plugin lifecycle and editor.
+    /// Owns the ThreadedVst3Wrapper; must be disposed after the processor.
     /// </summary>
     private VST3PluginHost? _masterEffectHost;
 
     /// <summary>
-    /// The VST3 effect processor instance for audio processing.
+    /// The VST3 effect processor for audio processing.
+    /// Borrows the ThreadedVst3Wrapper; must be disposed before the host.
     /// </summary>
     private VST3EffectProcessor? _masterEffect;
 
@@ -32,40 +41,22 @@ public partial class MainWindowViewModel
 
     #region Master Effect Properties
 
-    /// <summary>
-    /// Gets or sets whether the master effect is enabled.
-    /// </summary>
     [ObservableProperty]
     private bool _isMasterEffectEnabled;
 
-    /// <summary>
-    /// Gets or sets the name of the loaded master effect plugin.
-    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasMasterEffect))]
     private string _masterEffectName = "No plugin loaded";
 
-    /// <summary>
-    /// Gets or sets whether a master effect plugin is currently loaded.
-    /// </summary>
     public bool HasMasterEffect => _masterEffectHost != null;
 
-    /// <summary>
-    /// Gets the list of available VST3 plugins.
-    /// </summary>
     [ObservableProperty]
     private ObservableCollection<VST3PluginInfo> _availablePlugins = new();
 
-    /// <summary>
-    /// Gets or sets the selected plugin from the browser.
-    /// </summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(LoadSelectedPluginCommand))]
     private VST3PluginInfo? _selectedPlugin;
 
-    /// <summary>
-    /// Gets or sets whether plugins are being scanned.
-    /// </summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(LoadSelectedPluginCommand))]
     private bool _isScanningPlugins;
@@ -75,7 +66,7 @@ public partial class MainWindowViewModel
     #region Master Effect Commands
 
     /// <summary>
-    /// Command to scan for available VST3 plugins.
+    /// Scans for available VST3 plugins on a background thread.
     /// </summary>
     [RelayCommand]
     private async Task ScanPluginsAsync()
@@ -85,22 +76,15 @@ public partial class MainWindowViewModel
             IsScanningPlugins = true;
             StatusMessage = "Scanning for VST3 plugins...";
 
-            // Scan for plugins on a background thread
-            var plugins = await Task.Run(() => VST3PluginHost.ScanPlugins(includeSubdirectories: true));
+            var plugins = await Task.Run(() => VST3PluginHost.ScanPluginsQuick(includeSubdirectories: true));
 
-            // Filter to only effects (not instruments)
-            var effectPlugins = plugins.Where(p => p.IsEffect).ToList();
-
-            // Update UI on main thread
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 AvailablePlugins.Clear();
-                foreach (var plugin in effectPlugins)
-                {
+                foreach (var plugin in plugins)
                     AvailablePlugins.Add(plugin);
-                }
 
-                StatusMessage = $"Found {effectPlugins.Count} VST3 effect plugin(s)";
+                StatusMessage = $"Found {plugins.Count} VST3 plugin(s)";
             });
         }
         catch (Exception ex)
@@ -114,27 +98,26 @@ public partial class MainWindowViewModel
     }
 
     /// <summary>
-    /// Command to load the selected VST3 plugin as the master effect.
+    /// Loads the selected plugin as the master effect.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanLoadSelectedPlugin))]
     private async Task LoadSelectedPluginAsync()
     {
-        if (SelectedPlugin == null)
-            return;
-
+        if (SelectedPlugin == null) return;
         await LoadMasterEffectFromPathAsync(SelectedPlugin.Path);
     }
 
-    /// <summary>
-    /// Determines whether a plugin can be loaded.
-    /// </summary>
-    private bool CanLoadSelectedPlugin()
-    {
-        return SelectedPlugin != null && !IsScanningPlugins;
-    }
+    private bool CanLoadSelectedPlugin() => SelectedPlugin != null && !IsScanningPlugins;
 
     /// <summary>
-    /// Loads a VST3 plugin from the specified path.
+    /// Loads a VST3 plugin from <paramref name="pluginPath"/> as the master effect.
+    ///
+    /// Steps (all non-blocking for the UI thread):
+    ///   1. VST3PluginHost.CreateAsync    — loads on the plugin thread
+    ///   2. host.InitializeAudioAsync     — initializes audio on the plugin thread
+    ///   3. host.GetProcessor()           — safe only after IsReady
+    ///   4. mixer.AddMasterEffect         — validates IsReady, allocates buffers
+    ///   5. SetTransportPlaying           — syncs current playback state to the plugin
     /// </summary>
     private async Task LoadMasterEffectFromPathAsync(string pluginPath)
     {
@@ -143,38 +126,42 @@ public partial class MainWindowViewModel
             await Dispatcher.UIThread.InvokeAsync(() =>
                 StatusMessage = "Loading VST3 plugin...");
 
-            // Remove existing master effect on UI thread
-            RemoveMasterEffect();
+            // Clean up any previously loaded plugin; on macOS waits for JUCE timers to drain.
+            await UnloadCurrentPluginAsync(updateUI: false);
 
-            // Load plugin on background thread to avoid blocking the UI
-            VST3PluginHost? newHost = null;
-            VST3EffectProcessor? newProcessor = null;
+            // Step 1: Load plugin (plugin thread, non-blocking)
+            var newHost = await VST3PluginHost.CreateAsync(pluginPath).ConfigureAwait(false);
 
-            await Task.Run(() =>
+            // Step 2: Initialize audio (plugin thread, non-blocking) 
+            var engineConfig = OwnaudioNET.OwnaudioNet.Engine?.Config;
+            int sampleRate = engineConfig?.SampleRate ?? 48000;
+            int blockSize  = engineConfig?.BufferSize ?? 512;
+
+            bool audioReady = await newHost.InitializeAudioAsync(sampleRate, blockSize)
+                                           .ConfigureAwait(false);
+
+            if (!audioReady)
             {
-                newHost = new VST3PluginHost(pluginPath);
-                newProcessor = newHost.GetProcessor();
-            });
-
-            if (newHost == null || newProcessor == null)
-                return;
-
-            _masterEffectHost = newHost;
-            _masterEffect = newProcessor;
-
-            // Initialize with current audio config
-            if (OwnaudioNET.OwnaudioNet.Engine != null)
-            {
-                _masterEffect.Initialize(OwnaudioNET.OwnaudioNet.Engine.Config);
+                newHost.Dispose();
+                throw new InvalidOperationException(
+                    $"Audio initialization failed for plugin: {pluginPath}");
             }
 
-            // Add to mixer if enabled
+            // Step 3: GetProcessor — only valid when host.IsReady
+            var newProcessor = newHost.GetProcessor();
+
+            _masterEffectHost = newHost;
+            _masterEffect     = newProcessor;
+
+            // Step 4: Add to mixer
             if (IsMasterEffectEnabled && _audioService.Mixer != null)
             {
                 _audioService.Mixer.AddMasterEffect(_masterEffect);
             }
 
-            // Update UI
+            // Step 5: Sync transport state
+            _masterEffect.SetTransportPlaying(_audioService.Mixer?.IsRunning ?? false);
+
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 MasterEffectName = _masterEffectHost.Name;
@@ -186,9 +173,11 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
+            // On error: dispose in correct order (processor first, then host).
+            _masterEffect?.Dispose();
             _masterEffectHost?.Dispose();
             _masterEffectHost = null;
-            _masterEffect = null;
+            _masterEffect     = null;
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
@@ -201,11 +190,10 @@ public partial class MainWindowViewModel
         }
     }
 
-
     /// <summary>
-    /// Command to open the VST3 editor window.
+    /// Opens or closes the VST3 editor window.
+    /// Editor open/close must stay on the UI thread (VST3 + OS requirement).
     /// </summary>
-    /// <param name="window">The parent window (not used anymore, kept for compatibility).</param>
     [RelayCommand(CanExecute = nameof(CanOpenMasterEffectEditor))]
     private async Task OpenMasterEffectEditor(Window? window)
     {
@@ -219,28 +207,21 @@ public partial class MainWindowViewModel
         {
             if (_masterEffectHost.IsEditorOpen)
             {
-                // Closing editor - do it synchronously on UI thread
                 await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    _masterEffectHost.CloseEditor();
-                });
+                    _masterEffectHost.CloseEditor());
+
                 ResumeTimersAfterEditor();
                 StatusMessage = $"Closed editor for {_masterEffectHost.Name}";
             }
             else
             {
-                // Opening editor - use async pattern for macOS compatibility
                 PauseTimersForEditor();
 
-                // On macOS, native window creation must happen on the main thread with proper timing
-                // Wrap in InvokeAsync to ensure we're on the correct dispatcher context
                 await Dispatcher.UIThread.InvokeAsync(async () =>
                 {
-                    // Small delay on macOS to let audio thread stabilize
+                    // macOS: give the audio thread a moment to stabilise before creating a Cocoa window.
                     if (OperatingSystem.IsMacOS())
-                    {
                         await Task.Delay(50);
-                    }
 
                     _masterEffectHost.OpenEditor(_masterEffectHost.Name);
                 });
@@ -250,64 +231,25 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            // If opening failed, make sure to resume timers
             if (!_masterEffectHost.IsEditorOpen)
-            {
                 ResumeTimersAfterEditor();
-            }
+
             StatusMessage = $"Error with editor: {ex.Message}";
         }
     }
 
-    /// <summary>
-    /// Determines whether the master effect editor can be opened.
-    /// </summary>
-    private bool CanOpenMasterEffectEditor()
-    {
-        return _masterEffectHost != null && _masterEffectHost.HasEditor;
-    }
+    private bool CanOpenMasterEffectEditor() =>
+        _masterEffectHost != null && _masterEffectHost.HasEditor;
 
     /// <summary>
-    /// Command to remove the current master effect plugin.
+    /// Removes the current master effect plugin from the mixer and disposes all resources.
     /// </summary>
     [RelayCommand(CanExecute = nameof(HasMasterEffect))]
-    private void RemoveMasterEffect()
+    private async Task RemoveMasterEffect()
     {
         try
         {
-            if (_masterEffectHost == null)
-                return;
-
-            // Resume timers if editor was open
-            bool editorWasOpen = _masterEffectHost.IsEditorOpen;
-
-            // Close native editor window if open
-            _masterEffectHost.CloseEditor();
-
-            if (editorWasOpen)
-            {
-                ResumeTimersAfterEditor();
-            }
-
-            // Remove from mixer
-            if (_audioService.Mixer != null && _masterEffect != null)
-            {
-                _audioService.Mixer.RemoveMasterEffect(_masterEffect);
-            }
-
-            // Dispose the host (which also disposes the processor)
-            _masterEffectHost.Dispose();
-            _masterEffectHost = null;
-            _masterEffect = null;
-
-            // Update UI
-            MasterEffectName = "No plugin loaded";
-            OnPropertyChanged(nameof(HasMasterEffect));
-
-            // Notify commands to re-evaluate their CanExecute
-            OpenMasterEffectEditorCommand.NotifyCanExecuteChanged();
-            RemoveMasterEffectCommand.NotifyCanExecuteChanged();
-
+            await UnloadCurrentPluginAsync(updateUI: true);
             StatusMessage = "Master effect removed";
         }
         catch (Exception ex)
@@ -316,16 +258,47 @@ public partial class MainWindowViewModel
         }
     }
 
+    /// <summary>
+    /// Shared teardown logic: removes the plugin from the mixer, disposes the processor,
+    /// then calls DisposeAsync on the host (which handles platform-specific timer drain).
+    /// </summary>
+    private async Task UnloadCurrentPluginAsync(bool updateUI)
+    {
+        if (_masterEffectHost == null) return;
+
+        bool editorWasOpen = _masterEffectHost.IsEditorOpen;
+        _masterEffectHost.CloseEditor();
+        if (editorWasOpen)
+            ResumeTimersAfterEditor();
+
+        if (_audioService.Mixer != null && _masterEffect != null)
+            _audioService.Mixer.RemoveMasterEffect(_masterEffect);
+
+        _masterEffect?.Dispose();
+        _masterEffect = null;
+
+        // Capture and null out before the async gap so HasMasterEffect returns false
+        var hostToDispose = _masterEffectHost;
+        _masterEffectHost = null;
+
+        if (updateUI)
+        {
+            MasterEffectName = "No plugin loaded";
+            OnPropertyChanged(nameof(HasMasterEffect));
+            OpenMasterEffectEditorCommand.NotifyCanExecuteChanged();
+            RemoveMasterEffectCommand.NotifyCanExecuteChanged();
+        }
+
+        // DisposeAsync handles the platform-specific JUCE timer drain internally.
+        await hostToDispose.DisposeAsync();
+    }
+
     #endregion
 
     #region Master Effect Event Handlers
 
-    /// <summary>
-    /// Handles changes to the IsMasterEffectEnabled property.
-    /// </summary>
     partial void OnIsMasterEffectEnabledChanged(bool value)
     {
-        // If no plugin is loaded, automatically turn off the toggle
         if (_masterEffectHost == null)
         {
             if (value)
@@ -343,16 +316,15 @@ public partial class MainWindowViewModel
         {
             if (value)
             {
-                // Propagate current transport state to the plugin
-                _masterEffect?.SetTransportPlaying(_audioService.Mixer?.IsRunning ?? false);
+                // Sync current playback state before inserting into the chain.
+                _masterEffect?.SetTransportPlaying(_audioService.Mixer.IsRunning);
 
-                // Add master effect to mixer
+                // AddMasterEffect validates IsReady, calls Initialize, and adds to chain.
                 _audioService.Mixer.AddMasterEffect(_masterEffect);
                 StatusMessage = "Master effect enabled";
             }
             else
             {
-                // Remove master effect from mixer
                 _audioService.Mixer.RemoveMasterEffect(_masterEffect);
                 StatusMessage = "Master effect disabled";
             }
@@ -360,7 +332,7 @@ public partial class MainWindowViewModel
         catch (Exception ex)
         {
             StatusMessage = $"Error toggling master effect: {ex.Message}";
-            IsMasterEffectEnabled = !value; // Revert the change
+            IsMasterEffectEnabled = !value; // Revert toggle on error
         }
     }
 
@@ -369,7 +341,9 @@ public partial class MainWindowViewModel
     #region Cleanup
 
     /// <summary>
-    /// Disposes master effect resources (called from main Dispose method).
+    /// Disposes all master effect resources. Called from the main Dispose method.
+    /// Uses the synchronous VST3PluginHost.Dispose() which handles the macOS timer
+    /// drain internally via Thread.Sleep.
     /// </summary>
     private void DisposeMasterEffect()
     {
@@ -378,9 +352,12 @@ public partial class MainWindowViewModel
             _masterEffectHost.CloseEditor();
             ResumeTimersAfterEditor();
         }
+
+        _masterEffect?.Dispose();
+        _masterEffect = null;
+
         _masterEffectHost?.Dispose();
         _masterEffectHost = null;
-        _masterEffect = null;
     }
 
     #endregion

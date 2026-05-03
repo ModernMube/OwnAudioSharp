@@ -23,7 +23,6 @@ public sealed partial class AudioMixer
         if (source == null)
             throw new ArgumentNullException(nameof(source));
 
-        // HARD LIMIT: Enforce maximum track count for CPU performance
         if (_sources.Count >= AudioConstants.MaxAudioSources)
         {
             throw new InvalidOperationException(
@@ -31,31 +30,20 @@ public sealed partial class AudioMixer
                 $"Cannot add more sources. This limit ensures acceptable CPU performance with SoundTouch processing.");
         }
 
-        // Add to source dictionary
         bool added = _sources.TryAdd(source.Id, source);
 
         if (added)
         {
-            // Subscribe to source error events
             source.Error += OnSourceError;
-
-            // OPTIMIZATION: Invalidate cached array when sources change
             _sourcesArrayNeedsUpdate = true;
-
-            // Reset PlaybackEnded flag so it can fire again for the new session
             _playbackEndedFired = false;
-
-            // If mixer is running and source is not playing, start it
             if (_isRunning && source.State != AudioState.Playing)
             {
                 try
                 {
                     source.Play();
                 }
-                catch
-                {
-                    // Source failed to start - will be handled by error event
-                }
+                catch {}
             }
         }
 
@@ -89,9 +77,7 @@ public sealed partial class AudioMixer
         {
             source.Error += OnSourceError;
             _sourcesArrayNeedsUpdate = true;
-            // Reset PlaybackEnded flag so it can fire again for the new session
             _playbackEndedFired = false;
-            // Note: source.Play() is NOT called here intentionally.
         }
 
         return added;
@@ -126,21 +112,14 @@ public sealed partial class AudioMixer
 
         if (_sources.TryRemove(sourceId, out IAudioSource? source))
         {
-            // Unsubscribe from error events
             source.Error -= OnSourceError;
-
-            // OPTIMIZATION: Invalidate cached array when sources change
             _sourcesArrayNeedsUpdate = true;
 
-            // Stop the source
             try
             {
                 source.Stop();
             }
-            catch
-            {
-                // Ignore errors when stopping source
-            }
+            catch {}
 
             return true;
         }
@@ -163,15 +142,10 @@ public sealed partial class AudioMixer
                 source.Error -= OnSourceError;
                 source.Stop();
             }
-            catch
-            {
-                // Ignore errors
-            }
+            catch {}
         }
 
         _sources.Clear();
-
-        // OPTIMIZATION: Invalidate cached array when sources change
         _sourcesArrayNeedsUpdate = true;
     }
 

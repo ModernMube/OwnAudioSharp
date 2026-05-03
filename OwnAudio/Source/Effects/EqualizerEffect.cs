@@ -66,8 +66,6 @@ namespace OwnaudioNET.Effects
         private const int Bands = 10;
         private const int FiltersPerBand = 2; // Cascaded for steeper slopes
         
-        // Filter Coefficients (Flattened: [Band][Filter][Coeff]) - Struct-of-Arrays for SIMD friendliness
-        
         // Coefficients: b0, b1, b2, a1, a2 (a0 normalized to 1)
         private readonly float[] _b0;
         private readonly float[] _b1;
@@ -384,8 +382,6 @@ namespace OwnaudioNET.Effects
 
             // Optimization: Early exit if mix is near zero
             if (Mix < 0.01f) return;
-
-            // Process per channel (samples are interleaved, jump step = channels)
             
             for (int ch = 0; ch < channels; ch++)
             {

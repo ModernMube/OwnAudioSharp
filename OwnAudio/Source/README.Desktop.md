@@ -6,8 +6,7 @@ OwnAudioSharp is a professional-grade audio engine providing high-performance au
 
 ## Key Features
 
-- **Native Audio Engines**: Built on PortAudio and MiniAudio (all platforms) for professional-grade audio processing
-- **Managed Wrappers**: Platform-specific managed engines with WASAPI (Windows), PulseAudio (Linux), and Core Audio (macOS) integration
+- **Native Audio Engine**: Built on PortAudio and MiniAudio for professional-grade, low-latency audio processing across all platforms
 - **Multi-format Support**: Built-in decoders for MP3, WAV, and FLAC
 - **Real-time Processing**: Zero-allocation design with lock-free buffers for professional-grade performance
 - **Advanced Audio Features**:

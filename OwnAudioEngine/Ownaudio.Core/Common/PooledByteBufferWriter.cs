@@ -109,23 +109,18 @@ public sealed class PooledByteBufferWriter : IDisposable
     {
         if (requiredCapacity <= _capacity)
             return;
-
-        // Calculate new capacity (2x growth)
+        
         int newCapacity = Math.Max(requiredCapacity, _capacity * 2);
 
-        // Rent new buffer from pool
         byte[] newBuffer = ArrayPool<byte>.Shared.Rent(newCapacity);
 
-        // Copy existing data
         if (_position > 0)
         {
             Array.Copy(_buffer, 0, newBuffer, 0, _position);
         }
 
-        // Return old buffer to pool
         ArrayPool<byte>.Shared.Return(_buffer);
 
-        // Update state
         _buffer = newBuffer;
         _capacity = newBuffer.Length;
     }

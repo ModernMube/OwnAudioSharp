@@ -56,7 +56,6 @@ public sealed class AudioChannelConverter
     {
         if (!IsConversionNeeded)
         {
-            // No conversion needed - direct copy
             input.CopyTo(output);
             return input.Length;
         }
@@ -67,35 +66,28 @@ public sealed class AudioChannelConverter
         if (output.Length < outputSamples)
             throw new ArgumentException($"Output buffer too small. Required: {outputSamples}, Available: {output.Length}");
 
-        // Route to specific conversion method based on channel configuration
         if (_sourceChannels == 1 && _targetChannels == 2)
         {
-            // Mono to Stereo (duplicate)
             ConvertMonoToStereo(input, output, inputFrames);
         }
         else if (_sourceChannels == 2 && _targetChannels == 1)
         {
-            // Stereo to Mono (average)
             ConvertStereoToMono(input, output, inputFrames);
         }
         else if (_sourceChannels == 1 && _targetChannels > 2)
         {
-            // Mono to Multi-channel (duplicate to all channels)
             ConvertMonoToMulti(input, output, inputFrames);
         }
         else if (_sourceChannels > 1 && _targetChannels == 1)
         {
-            // Multi-channel to Mono (average all)
             ConvertMultiToMono(input, output, inputFrames);
         }
         else if (_sourceChannels > 2 && _targetChannels == 2)
         {
-            // Multi-channel to Stereo (use first 2 channels)
             ConvertMultiToStereo(input, output, inputFrames);
         }
         else
         {
-            // Generic conversion (not optimized)
             ConvertGeneric(input, output, inputFrames);
         }
 
@@ -186,7 +178,6 @@ public sealed class AudioChannelConverter
     {
         if (_sourceChannels < _targetChannels)
         {
-            // Upmix: duplicate available channels
             for (int i = 0; i < frames; i++)
             {
                 for (int ch = 0; ch < _targetChannels; ch++)
@@ -206,7 +197,6 @@ public sealed class AudioChannelConverter
                     float sum = 0.0f;
                     int count = 0;
 
-                    // Average all source channels that map to this target channel
                     for (int sch = ch; sch < _sourceChannels; sch += _targetChannels)
                     {
                         sum += input[i * _sourceChannels + sch];

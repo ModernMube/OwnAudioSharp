@@ -8,13 +8,11 @@ namespace OwnaudioNET.Effects.SmartMaster
 {
     /// <summary>
     /// Sealed DSP processing chain for SmartMaster effect.
-    /// CRITICAL: This class is optimized for Zero GC and minimal CPU usage in the audio thread.
     /// </summary>
     internal sealed class SmartMasterAudioChain : IDisposable
     {
         #region Fields
         
-        // Parallelization threshold: only use parallel processing for buffers larger than this
         private const int PARALLEL_THRESHOLD = 512;
         
         private readonly int _sampleRate;
@@ -28,7 +26,6 @@ namespace OwnaudioNET.Effects.SmartMaster
         private PhaseAlignment? _phaseAlignment;
         private LimiterEffect? _limiter;
         
-        // Pre-allocated buffers for crossover processing (Zero GC)
         // These are sized during Configure() and reused for every Process() call
         private float[]? _tempLBuffer;
         private float[]? _tempRBuffer;
@@ -112,7 +109,6 @@ namespace OwnaudioNET.Effects.SmartMaster
             limiter.Reset();
             
             // 3. Pre-allocate buffers for crossover processing
-            // Estimate max frame count based on typical audio buffer sizes (e.g., 2048 frames)
             _maxFrameCount = Math.Max(_maxFrameCount, 2048);
             
             _tempLBuffer = new float[_maxFrameCount];
@@ -161,15 +157,12 @@ namespace OwnaudioNET.Effects.SmartMaster
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
-            // Early exit if no components initialized
             if (_graphicEQ == null)
                 return;
             
             // Expand pre-allocated buffers if needed (rare case, but prevents crashes)
             if (frameCount > _maxFrameCount)
             {
-                // This should ideally never happen in production, but we handle it gracefully
-                // Note: This WILL cause GC, but only once when buffer size increases
                 _maxFrameCount = frameCount;
                 _tempLBuffer = new float[_maxFrameCount];
                 _tempRBuffer = new float[_maxFrameCount];
@@ -218,7 +211,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 return;
             }
             
-            // ZERO-ALLOCATION: Use pre-allocated buffers
             float[] tempL = _tempLBuffer!;
             float[] tempR = _tempRBuffer!;
             float[] subL = _subLBuffer!;
@@ -228,14 +220,12 @@ namespace OwnaudioNET.Effects.SmartMaster
             int channels = _channels;
             bool useParallel = frameCount >= PARALLEL_THRESHOLD;
             
-            // STEP 1: Extract L/R channels (Interleaved -> Planar) with SIMD
             if (channels == 2)
             {
                 DeinterleaveStereoSIMD(buffer, tempL, tempR, frameCount);
             }
             else
             {
-                // Mono fallback
                 for (int i = 0; i < frameCount; i++)
                 {
                     tempL[i] = buffer[i * channels + 0];
@@ -243,7 +233,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 }
             }
             
-            // STEP 2: Crossover Split (Adaptive parallelization)
             if (useParallel)
             {
                 Parallel.Invoke(
@@ -257,10 +246,8 @@ namespace OwnaudioNET.Effects.SmartMaster
                 _crossover.Process(tempR.AsSpan(0, frameCount), tempR.AsSpan(0, frameCount), subR.AsSpan(0, frameCount), frameCount, 1);
             }
             
-            // STEP 3: Sum to Mono Sub with SIMD
             SumToMonoSIMD(subL, subR, monoSub, frameCount);
             
-            // STEP 4: Phase Alignment (Adaptive parallelization)
             if (useParallel)
             {
                 Parallel.Invoke(
@@ -276,7 +263,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 _phaseAlignment.Process(monoSub.AsSpan(0, frameCount), 2, frameCount);
             }
             
-            // STEP 5: Mix back (Planar -> Interleaved) with SIMD
             if (channels == 2)
             {
                 InterleaveStereoPlusSubSIMD(buffer, tempL, tempR, monoSub, frameCount);
@@ -307,14 +293,10 @@ namespace OwnaudioNET.Effects.SmartMaster
                 int i = 0;
                 int simdWidth = Vector<float>.Count;
                 
-                // SIMD processing (processes multiple frames at once)
-                // Note: We process pairs, so we need 2*simdWidth samples
                 int simdLimit = frameCount - (simdWidth - 1);
                 
                 for (; i < simdLimit; i += simdWidth)
                 {
-                    // Load interleaved data (L0,R0,L1,R1,...)
-                    // We need to load 2*simdWidth values and separate them
                     for (int j = 0; j < simdWidth; j++)
                     {
                         pLeft[i + j] = pInterleaved[(i + j) * 2 + 0];
@@ -322,7 +304,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                     }
                 }
                 
-                // Scalar tail
                 for (; i < frameCount; i++)
                 {
                     pLeft[i] = pInterleaved[i * 2 + 0];
@@ -341,7 +322,6 @@ namespace OwnaudioNET.Effects.SmartMaster
             int simdWidth = Vector<float>.Count;
             var half = new Vector<float>(0.5f);
             
-            // SIMD loop
             for (; i <= frameCount - simdWidth; i += simdWidth)
             {
                 var vL = new Vector<float>(left, i);
@@ -350,7 +330,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 vSum.CopyTo(mono, i);
             }
             
-            // Scalar tail
             for (; i < frameCount; i++)
             {
                 mono[i] = (left[i] + right[i]) * 0.5f;
@@ -371,12 +350,10 @@ namespace OwnaudioNET.Effects.SmartMaster
                 int i = 0;
                 int simdWidth = Vector<float>.Count;
                 
-                // SIMD processing
                 int simdLimit = frameCount - (simdWidth - 1);
                 
                 for (; i < simdLimit; i += simdWidth)
                 {
-                    // Process simdWidth frames
                     for (int j = 0; j < simdWidth; j++)
                     {
                         float subVal = pSub[i + j];
@@ -385,7 +362,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                     }
                 }
                 
-                // Scalar tail
                 for (; i < frameCount; i++)
                 {
                     float subVal = pSub[i];

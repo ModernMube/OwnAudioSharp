@@ -6,8 +6,7 @@ OwnAudioSharp.Mobile is a professional-grade audio engine providing high-perform
 
 ## Key Features
 
-- **Native Audio Engine**: Built on MiniAudio for high-performance, low-latency audio processing
-- **Managed Wrappers**: Platform-specific managed engines with Android AudioTrack/AudioRecord and iOS Audio Queue Services integration
+- **Native Audio Engine**: Built on PortAudio and MiniAudio for high-performance, low-latency audio processing on Android and iOS
 - **Multi-format Support**: Built-in decoders for MP3, WAV, and FLAC
 - **Real-time Processing**: Zero-allocation design with lock-free buffers for professional-grade performance
 - **Advanced Audio Features**:

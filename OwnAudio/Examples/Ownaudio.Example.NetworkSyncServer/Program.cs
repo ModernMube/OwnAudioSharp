@@ -1,3 +1,4 @@
+using Logger;
 using Ownaudio.Core;
 using OwnaudioNET;
 using OwnaudioNET.Core;

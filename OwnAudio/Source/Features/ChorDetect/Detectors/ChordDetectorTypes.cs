@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using OwnaudioNET.Features.Extensions;
+﻿using OwnaudioNET.Features.Extensions;
 
 namespace OwnaudioNET.Features.OwnChordDetect.Detectors
 {

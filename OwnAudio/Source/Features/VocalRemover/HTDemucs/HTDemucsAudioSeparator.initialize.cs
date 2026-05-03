@@ -23,7 +23,6 @@ namespace OwnaudioNET.Features.Vocalremover
                     var inputShape = inputMetadata.Value.Dimensions;
                     Log.Info($"Model input shape: [{string.Join(", ", inputShape)}]");
 
-                    // Expected input: [batch, channels, samples]
                     if (inputShape.Length >= 3)
                     {
                         _modelChannels = (int)inputShape[1];
@@ -39,20 +38,17 @@ namespace OwnaudioNET.Features.Vocalremover
                     var outputShape = outputMetadata.Value.Dimensions;
                     Log.Info($"Model output shape: [{string.Join(", ", outputShape)}]");
 
-                    // Expected output: [batch, stems, channels, samples]
                     if (outputShape.Length >= 4)
                     {
                         _modelStemCount = (int)outputShape[1];
                     }
                 }
 
-                // Override with user settings if provided
                 if (_options.SegmentLength > 0)
                 {
                     _modelSegmentLength = _options.SegmentLength;
                 }
 
-                // Default segment length if not detected
                 if (_modelSegmentLength == 0)
                 {
                     _modelSegmentLength = _options.ChunkSizeSeconds * _options.TargetSampleRate;

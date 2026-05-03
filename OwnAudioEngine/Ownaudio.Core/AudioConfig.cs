@@ -103,7 +103,6 @@ namespace Ownaudio.Core
             if (!EnableInput && !EnableOutput)
                 return false;
 
-            // Validate channel selectors if specified
             if (InputChannelSelectors != null && InputChannelSelectors.Length > 0)
             {
                 if (InputChannelSelectors.Length != Channels)

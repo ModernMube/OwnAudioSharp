@@ -75,47 +75,38 @@ namespace OwnaudioNET.Effects.SmartMaster
         {
             try
             {
-                // Check if audio engine is available
                 if (OwnaudioNET.OwnaudioNet.Engine == null || !OwnaudioNET.OwnaudioNet.Engine.Config.EnableInput)
                 {
                     Logger.Log.Warning("[SmartMaster] Audio input not available for microphone monitoring");
                     return;
                 }
                 
-                // Create InputSource for monitoring
                 var inputSource = new InputSource(OwnaudioNET.OwnaudioNet.Engine, 2048);
                 inputSource.Volume = _micInputGain;
                 inputSource.Play();
                 
-                // Pre-allocate buffer (reused for every read - Zero GC)
                 int frameCount = 512;
                 int sampleCount = frameCount * _config.Channels;
                 float[] buffer = new float[sampleCount];
                 
-                // GC OPTIMIZATION: Create analyzer ONCE outside the loop
                 var analyzer = new SmartMasterSpectrumAnalyzer(_config.SampleRate);
                 
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    // Read samples
                     int framesRead = inputSource.ReadSamples(buffer.AsSpan(), frameCount);
                     
                     if (framesRead > 0)
                     {
-                        // GC OPTIMIZATION: Pass Span directly instead of ToArray()
                         int actualSampleCount = framesRead * _config.Channels;
                         float rmsLevel = analyzer.CalculateRMS(buffer.AsSpan(0, actualSampleCount));
                         float rmsDb = 20f * (float)Math.Log10(Math.Max(rmsLevel, 1e-10f));
                         
-                        // Update last mic level (atomic write for float)
                         _lastMicLevel = rmsDb;
                     }
                     
-                    // Small delay to avoid excessive CPU usage
                     Thread.Sleep(50); // Update ~20 times per second
                 }
                 
-                // Cleanup
                 inputSource.Stop();
                 inputSource.Dispose();
             }

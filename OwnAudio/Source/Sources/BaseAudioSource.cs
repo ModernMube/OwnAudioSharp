@@ -164,19 +164,15 @@ public abstract partial class BaseAudioSource : IAudioSource
         if (Math.Abs(_volume - 1.0f) < 0.001f)
             return; // Skip if volume is essentially 1.0
 
-        // Use Span slicing for bounds checking and better JIT optimization
         var targetSpan = buffer.Slice(0, sampleCount);
         float vol = _volume; // Cache field in local variable
 
         int i = 0;
         int simdLength = Vector<float>.Count;
 
-        // SIMD vectorized processing (4-8x faster on modern CPUs)
         if (Vector.IsHardwareAccelerated && targetSpan.Length >= simdLength)
         {
             var volumeVec = new Vector<float>(vol);
-
-            // Process in SIMD chunks (typically 4 or 8 floats at once)
             for (; i <= targetSpan.Length - simdLength; i += simdLength)
             {
                 var vec = new Vector<float>(targetSpan.Slice(i, simdLength));
@@ -185,7 +181,6 @@ public abstract partial class BaseAudioSource : IAudioSource
             }
         }
 
-        // Process remaining samples (scalar fallback)
         for (; i < targetSpan.Length; i++)
         {
             targetSpan[i] *= vol;
@@ -218,7 +213,6 @@ public abstract partial class BaseAudioSource : IAudioSource
 
         for (int i = 0; i < count; i++)
         {
-            // Linear ramp: full volume at startIdx, silence at last sample
             float t = (float)(count - 1 - i) / count;
             buffer[startIdx + i] *= t;
         }
@@ -242,7 +236,6 @@ public abstract partial class BaseAudioSource : IAudioSource
 
         for (int i = 0; i < count; i++)
         {
-            // Linear ramp: silence at index 0, full volume at index count-1
             float t = (float)i / count;
             buffer[i] *= t;
         }

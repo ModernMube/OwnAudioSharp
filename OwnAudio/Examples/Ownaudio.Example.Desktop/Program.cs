@@ -1,4 +1,5 @@
-﻿using Ownaudio.Core;
+using Logger;
+using Ownaudio.Core;
 using OwnaudioNET.Core;
 using OwnaudioNET.Effects;
 using OwnaudioNET.Mixing;
@@ -15,9 +16,9 @@ public class TestProgram
 {
     public static async Task Main(string[] args)
     {
-        Console.WriteLine("=== OwnaudioNET AudioMixer Demonstration ===\n");
-        Console.WriteLine("This program demonstrates audio playback using the AudioMixer");
-        Console.WriteLine("with a FileSource at 80% volume.\n");
+        Log.Info("=== OwnaudioNET AudioMixer Demonstration ===\n");
+        Log.Info("This program demonstrates audio playback using the AudioMixer");
+        Log.Info("with a FileSource at 80% volume.\n");
 
         AudioMixer? mixer = null;
         FileSource? fileSource0 = null;
@@ -27,10 +28,8 @@ public class TestProgram
 
         try
         {
-            // ==========================================
             // Step 1: Initialize Audio Engine
-            // ==========================================
-            Console.WriteLine("[1/6] Initializing audio engine...");
+            Log.Info("[1/6] Initializing audio engine...");
 
             // Use the standard OwnaudioNet API - it will automatically use NativeAudioEngine
             AudioConfig config = new AudioConfig()
@@ -42,14 +41,13 @@ public class TestProgram
             };
 
             // Initialize via OwnaudioNet (uses AudioEngineFactory internally)
-            // This will try NativeAudioEngine first, then fallback to platform-specific engines
             OwnaudioNet.Initialize(config);
 
-            Console.WriteLine($"  ✓ Initialized: {OwnaudioNet.IsInitialized}");
-            Console.WriteLine($"  ✓ Version: {OwnaudioNet.Version}");
-            Console.WriteLine($"  ✓ Engine Wrapper: {OwnaudioNet.Engine?.GetType().Name}");
-            Console.WriteLine($"  ✓ Underlying Engine: {OwnaudioNet.Engine?.UnderlyingEngine.GetType().Name}");
-            Console.WriteLine($"  ✓ Sample Rate: {OwnaudioNet.Engine?.Config.SampleRate} Hz");
+            Log.Info($"  ✓ Initialized: {OwnaudioNet.IsInitialized}");
+            Log.Info($"  ✓ Version: {OwnaudioNet.Version}");
+            Log.Info($"  ✓ Engine Wrapper: {OwnaudioNet.Engine?.GetType().Name}");
+            Log.Info($"  ✓ Underlying Engine: {OwnaudioNet.Engine?.UnderlyingEngine.GetType().Name}");
+            Log.Info($"  ✓ Sample Rate: {OwnaudioNet.Engine?.Config.SampleRate} Hz");
             Console.WriteLine($"  ✓ Channels: {OwnaudioNet.Engine?.Config.Channels}");
             Console.WriteLine($"  ✓ Buffer Size: {OwnaudioNet.Engine?.FramesPerBuffer} frames");
             Console.WriteLine($"  ✓ Expected Latency: {(OwnaudioNet.Engine?.FramesPerBuffer / (double)OwnaudioNet.Engine?.Config.SampleRate! * 1000):F2} ms");
@@ -59,7 +57,6 @@ public class TestProgram
             var outputDevices = OwnaudioNet.Engine?.UnderlyingEngine.GetOutputDevices();
             if (outputDevices != null && outputDevices.Count > 0)
             {
-                // Find the current device (either by OutputDeviceId or the default device)
                 AudioDeviceInfo? currentDevice = null;
 
                 if (!string.IsNullOrEmpty(config.OutputDeviceId))
@@ -79,20 +76,15 @@ public class TestProgram
                     Console.WriteLine($"  ✓ Max Input channels: {currentDevice.MaxInputChannels}");
                 }
             }
-
-            // ==========================================
+            
             // Step 2: Start Audio Engine
-            // ==========================================
             Console.WriteLine("\n[2/6] Starting audio engine...");
             OwnaudioNet.Start();
             Console.WriteLine($"  ✓ Engine running: {OwnaudioNet.IsRunning}");
 
-            // ==========================================
             // Step 3: Create Audio Mixer
-            // ==========================================
             Console.WriteLine("\n[3/6] Creating audio mixer...");
-            // IMPORTANT: Pass IAudioEngine directly, not AudioEngineWrapper
-            // This removes the extra CircularBuffer and PumpThread layer
+            
             var Engine = OwnaudioNet.Engine!.UnderlyingEngine;
 
             mixer = new AudioMixer(Engine, bufferSizeInFrames: 512);
@@ -108,9 +100,7 @@ public class TestProgram
                 Console.WriteLine($"  ! Source error: {e.Message}");
             };
 
-            // ==========================================
             // Create mastering effects to the mixer
-            // ==========================================
             Console.WriteLine("\n Adding mastering effects to the mixer...");
 
             var _equalizer = new Equalizer30BandEffect();
@@ -158,9 +148,7 @@ public class TestProgram
 
             var _compressor = new CompressorEffect(CompressorPreset.Vintage);
 
-            // ==========================================
             // Add master effects
-            // ==========================================
             mixer.AddMasterEffect(_equalizer);
             mixer.AddMasterEffect(_compressor);
             mixer.AddMasterEffect(new DynamicAmpEffect(DynamicAmpPreset.Music));
@@ -169,9 +157,7 @@ public class TestProgram
             _compressor.Enabled = false;
 
 
-            // ==========================================
             // Step 4: Create Audio Source
-            // ==========================================
             Console.WriteLine("\n[4/6] Creating audio source...");
 
             string? exePath = Assembly.GetExecutingAssembly().Location;
@@ -218,15 +204,10 @@ public class TestProgram
                 Console.WriteLine($"  ! WARNING: Source format mismatch! This may cause playback issues.");
             }
 
-            // ==========================================
             // Step 5: Start Mixer and Add Source
-            // ==========================================
             Console.WriteLine("\n[5/6] Starting mixer and adding source...");
 
-            // ==========================================
             // Add effect vocal track
-            // ==========================================
-
             // 1. Compressor - dynamic control
             CompressorEffect compressor = new CompressorEffect(
                 threshold: 0.4f,      // 40% threshold
@@ -266,9 +247,6 @@ public class TestProgram
             mixer.AddSource(fileSource2);
             mixer.AddSource(fileSource3Effect);
 
-            // ==========================================
-            // NEW MASTER CLOCK ARCHITECTURE (v2.1.0+)
-            // ==========================================
             // Attach sources to Master Clock for sample-accurate synchronization
             fileSource0.AttachToClock(mixer.MasterClock);
             fileSource1.AttachToClock(mixer.MasterClock);
@@ -280,14 +258,6 @@ public class TestProgram
             fileSource1.StartOffset = 0.0;  // Bass start immediately
             fileSource2.StartOffset = 0.0;  // Other start immediately
             fileSource3.StartOffset = 0.0;  // Vocals start immediately
-
-            // Master Clock Features:
-            // - Timeline-based synchronization (timestamp in seconds)
-            // - Sample-accurate precision (not just frame-accurate)
-            // - Automatic drift correction (<10ms tolerance, ~480 samples @ 48kHz)
-            // - Start offsets for DAW-style track positioning
-            // - Realtime/Offline rendering modes
-            // - Tempo-independent master timeline
 
             Console.WriteLine($"  ✓ Sources added to mixer");
             Console.WriteLine($"  ✓ Sources attached to Master Clock");
@@ -307,20 +277,15 @@ public class TestProgram
             mixer.Start();
 
             // Start all sources for playback
-            // With Master Clock, sources must be explicitly started
             fileSource0.Play();
             fileSource1.Play();
             fileSource2.Play();
             fileSource3.Play();
 
-            // IMPORTANT: Start the mixer to begin playback
-            // All attached sources will play in perfect sync with the Master Clock
             Console.WriteLine($"  ✓ Mixer started: {mixer.IsRunning}");
             Console.WriteLine($"  ✓ All sources playing");
 
-            // ==========================================
             // Step 6: Playback Progress Display
-            // ==========================================
             Console.WriteLine("\n[6/6] Playing audio...");
             Console.WriteLine("VOCAL effects: compressor -> delay -> reverb");
             Console.WriteLine("MASTER effects (from 30 seconds): equalizer -> compressor -> dynamicamp\n");
@@ -336,10 +301,7 @@ public class TestProgram
             {
                 statusLine = Console.CursorTop;
             }
-            catch (IOException)
-            {
-                // Console not available - will use line-by-line output instead
-            }
+            catch (IOException) { }
 
             while (fileSource0.State == AudioState.Playing && !userCancelled)
             {
@@ -387,9 +349,7 @@ public class TestProgram
                     Console.WriteLine();
                 }
 
-                // ================================================
                 // At the 30th second we turn on the master effects
-                // ================================================
                 if (position > 30 && position < 35)
                 {
                     _equalizer.Enabled = true;
@@ -405,10 +365,7 @@ public class TestProgram
                         Console.ReadKey(true);
                     }
                 }
-                catch (InvalidOperationException)
-                {
-                    // Console not available (redirected or in CI environment) - ignore
-                }
+                catch (InvalidOperationException) { }
             }
 
             Console.WriteLine("\n\n  ✓ Playback completed!");
@@ -434,15 +391,7 @@ public class TestProgram
                 Console.WriteLine($"  ✗ Tempo accuracy: POOR ({tempoError:+0.00;-0.00}%)");
             }
 
-            // Print PulseAudio timing diagnostics if available
-            if (Engine is Ownaudio.Linux.PulseAudioEngine pulseEngine)
-            {
-                pulseEngine.PrintTimingStatistics();
-            }
-
-            // ==========================================
             // Display Final Statistics
-            // ==========================================
             Console.WriteLine("\n=== FINAL STATISTICS ===");
             Console.WriteLine($"  Total mixed frames: {mixer.TotalMixedFrames}");
             Console.WriteLine($"  Total underruns: {mixer.TotalUnderruns}");
@@ -452,14 +401,11 @@ public class TestProgram
             Console.WriteLine($"  Master Clock timestamp: {mixer.MasterClock.CurrentTimestamp:F2}s");
             Console.WriteLine($"  Master Clock sample position: {mixer.MasterClock.CurrentSamplePosition}");
 
-            // ==========================================
             // Cleanup
-            // ==========================================
             Console.WriteLine("\n=== CLEANUP ===");
 
             Console.WriteLine("  Stopping mixer...");
             mixer.Stop();
-            // Note: No need to stop sync group - Master Clock handles cleanup automatically
 
             Console.WriteLine("  Disposing mixer...");
             mixer.Dispose();

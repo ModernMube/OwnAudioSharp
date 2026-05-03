@@ -334,8 +334,6 @@ namespace OwnaudioNET.Effects
                 if (_bufferIndex >= bufLen) _bufferIndex = 0;
 
                 // Update LFO (Global)
-                // For stereo, usually we might want LFO to be per channel or simply shared
-                // Here we share LFO phase per sample iteration, effectively running LFO at audio rate which is fine
                 _lfoPhase += lfoInc;
                 if (_lfoPhase >= Math.PI * 2) _lfoPhase -= (float)(Math.PI * 2);
             }

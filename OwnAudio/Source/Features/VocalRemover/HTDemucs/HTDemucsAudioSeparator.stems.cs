@@ -17,7 +17,6 @@ namespace OwnaudioNET.Features.Vocalremover
         {
             int chunkLength = audioChunk.GetLength(1);
 
-            // Prepare waveform input tensor: [batch=1, channels=2, samples]
             var inputTensorWave = new DenseTensor<float>(new[] { 1, 2, chunkLength });
 
             for (int ch = 0; ch < 2; ch++)
@@ -28,7 +27,6 @@ namespace OwnaudioNET.Features.Vocalremover
                 }
             }
 
-            // Compute spectrogram input tensor using shared STFT processor
             var spectrogramData = _stftProcessor!.ComputeSpectrogram(audioChunk);
             int n_frames = spectrogramData.GetLength(3);
 
@@ -41,7 +39,6 @@ namespace OwnaudioNET.Features.Vocalremover
             Log.Info($"Waveform tensor shape: [1, 2, {chunkLength}]");
             Log.Info($"Spectrogram tensor shape: [1, 2, 2048, {n_frames}, 2]");
 
-            // Run ONNX inference with both inputs
             var inputs = new List<NamedOnnxValue>
             {
                 NamedOnnxValue.CreateFromTensor(inputNames[0], inputTensorWave),
@@ -50,10 +47,6 @@ namespace OwnaudioNET.Features.Vocalremover
 
             using var outputs = _onnxSession.Run(inputs);
 
-            // HTDemucs HYBRID model outputs TWO tensors that must be MERGED:
-            // outputs[0] = "add_76": [1, 4, 4, 2048, frames] - FREQUENCY BRANCH
-            // outputs[1] = "add_77": [1, 4, 2, samples]      - TIME BRANCH
-            // Final output = time_branch + ISTFT(frequency_branch)
             var outputList = outputs.ToList();
             Log.Info($"Model returned {outputList.Count} outputs");
 
@@ -87,7 +80,6 @@ namespace OwnaudioNET.Features.Vocalremover
 
             Log.Info($"Extracting stems from output: stems={stemCount}, channels={outputChannels}, freq={freqBins}, time={timeFrames}");
 
-            // HTDemucs default order: Drums, Bass, Other, Vocals
             var stemMapping = new[]
             {
                 HTDemucsStem.Drums,
@@ -105,7 +97,6 @@ namespace OwnaudioNET.Features.Vocalremover
 
                 var spectrogram = new float[1, 2, freqBins, timeFrames, 2];
 
-                // Reorganize from [L_Real, L_Imag, R_Real, R_Imag] to [L, R] with [Real, Imag]
                 for (int t = 0; t < timeFrames; t++)
                 {
                     for (int f = 0; f < freqBins; f++)
@@ -152,7 +143,6 @@ namespace OwnaudioNET.Features.Vocalremover
             Log.Info($"Merging dual branches: freq=[stems={stemCount}, ch={freqChannels}, freq={freqBins}, time={timeFrames}], " +
                      $"time=[stems={stemCount}, ch={timeChannels}, samples={timeSamples}]");
 
-            // HTDemucs default order: Drums, Bass, Other, Vocals
             var stemMapping = new[]
             {
                 HTDemucsStem.Drums,
@@ -168,7 +158,6 @@ namespace OwnaudioNET.Features.Vocalremover
                 if (!_options.TargetStems.HasFlag(stem))
                     continue;
 
-                // STEP 1: Convert frequency branch spectrogram to waveform
                 var spectrogram = new float[1, 2, freqBins, timeFrames, 2];
 
                 for (int t = 0; t < timeFrames; t++)
@@ -185,7 +174,6 @@ namespace OwnaudioNET.Features.Vocalremover
                 Log.Info($"Converting {stem} frequency branch spectrogram to waveform using ISTFT");
                 var freqBranchWaveform = _stftProcessor!.ComputeISTFT(spectrogram, targetLength);
 
-                // STEP 2: Extract time branch waveform
                 var timeBranchWaveform = new float[timeChannels, Math.Min(timeSamples, targetLength)];
                 int copyLength = Math.Min(timeSamples, targetLength);
 
@@ -197,8 +185,6 @@ namespace OwnaudioNET.Features.Vocalremover
                     }
                 }
 
-                // STEP 3: MERGE both branches (Python line 661: x = xt + x)
-                // final = time_branch + freq_branch_istft
                 var mergedWaveform = new float[timeChannels, targetLength];
                 for (int ch = 0; ch < timeChannels; ch++)
                 {

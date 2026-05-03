@@ -80,23 +80,17 @@ public sealed class AudioBufferPool
         if (buffer.Length != _bufferSize)
             throw new ArgumentException($"Buffer size mismatch. Expected {_bufferSize}, got {buffer.Length}.", nameof(buffer));
 
-        // Clear the buffer before returning it
         Array.Clear(buffer, 0, buffer.Length);
 
-        // Atomically increment first, then check if we should keep the buffer
-        // This prevents race condition where multiple threads could exceed maxPoolSize
         int newSize = Interlocked.Increment(ref _currentPoolSize);
 
         if (newSize <= _maxPoolSize)
         {
-            // We're within the limit, add to pool
             _pool.Add(buffer);
         }
         else
         {
-            // We exceeded the limit - undo the increment and discard the buffer
             Interlocked.Decrement(ref _currentPoolSize);
-            // Buffer will be garbage collected
         }
     }
 

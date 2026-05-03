@@ -96,7 +96,6 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
         /// <param name="freq">New crossover frequency in Hz.</param>
         public void SetCrossoverFrequency(float freq)
         {
-            // Only reset if frequency actually changes
             if (Math.Abs(_crossoverFreq - freq) > 0.01f)
             {
                 _crossoverFreq = freq;
@@ -151,9 +150,6 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
         /// <param name="channel">Channel index (0 = left, 1 = right).</param>
         public void Process(Span<float> input, Span<float> outputLR, Span<float> outputSub, int frameCount, int channel = 0)
         {
-            // OPTIMIZATION: Removed Math.Clamp - caller ensures valid channel (0 or 1)
-            // This is a hot path method called thousands of times per second
-            
             // Local variables for faster access (channel-specific)
             float lpZ1_1 = _lpZ1_1[channel], lpZ2_1 = _lpZ2_1[channel];
             float lpZ1_2 = _lpZ1_2[channel], lpZ2_2 = _lpZ2_2[channel];

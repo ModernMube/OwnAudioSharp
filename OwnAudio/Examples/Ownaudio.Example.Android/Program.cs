@@ -1,3 +1,4 @@
+using Logger;
 using Android.App;
 using Android.Runtime;
 

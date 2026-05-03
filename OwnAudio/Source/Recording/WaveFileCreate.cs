@@ -74,7 +74,6 @@ namespace OwnaudioNET.Recording
                         // writing audio data
                         for (int i = 0; i < samples.Length; i++)
                         {
-                            // Calculation of PCM values ​​is 24-bit
                             int pcmSample = (int)(samples[i] * 8388607);
 
                             writer.Write((byte)(pcmSample & 0xFF));         // lower 8 bits

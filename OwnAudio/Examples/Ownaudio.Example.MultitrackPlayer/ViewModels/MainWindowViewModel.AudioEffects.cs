@@ -50,9 +50,6 @@ public partial class MainWindowViewModel
     /// <param name="value">The new tempo percentage.</param>
     partial void OnTempoPercentChanged(float value)
     {
-        // This is now called ONLY after PointerReleased or programmatic changes
-        // No debounce needed - the change is already final
-        // NOTE: ApplyTempoChange() is called directly from code-behind, not here
     }
 
     /// <summary>
@@ -67,7 +64,6 @@ public partial class MainWindowViewModel
     /// <param name="value">The new pitch shift value in semitones.</param>
     partial void OnPitchSemitonesChanged(int value)
     {
-        // Final change after PointerReleased, no debounce needed
     }
 
     #endregion
@@ -103,7 +99,6 @@ public partial class MainWindowViewModel
 
         await Task.Run(() =>
         {
-            // OPTIMIZED: Parallel processing for tracks to improve performance
             System.Threading.Tasks.Parallel.ForEach(trackArray, track =>
             {
                 if (track.TrackInfo.Source is FileSource fileSource)
@@ -126,7 +121,6 @@ public partial class MainWindowViewModel
 
         await Task.Run(() =>
         {
-            // OPTIMIZED: Parallel processing for improved performance
             System.Threading.Tasks.Parallel.ForEach(trackArray, track =>
             {
                 if (track.TrackInfo.Source is FileSource fileSource)
@@ -150,13 +144,10 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async void ResetControls()
     {
-        //MasterVolume = 100.0f;
-
         // Update UI properties
         TempoPercent = 100.0f;
         PitchSemitones = 0;
 
-        // CRITICAL FIX: Resynchronize all tracks after buffer clearing
         bool wasPlaying = IsPlaying;
         double currentPosition = CurrentPositionSeconds;
 
@@ -165,7 +156,6 @@ public partial class MainWindowViewModel
             // Cache tracks to array for thread-safe iteration
             var trackArray = Tracks.ToArray();
 
-            // Step 1: Reset tempo and pitch on all tracks (this clears SoundTouch buffers)
             System.Threading.Tasks.Parallel.ForEach(trackArray, track =>
             {
                 if (track.TrackInfo.Source is FileSource fileSource)
@@ -175,7 +165,6 @@ public partial class MainWindowViewModel
                 }
             });
 
-            // Step 2: If playing, resync all tracks to current position to rebuild buffers in sync
             if (wasPlaying && _audioService.Mixer != null)
             {
                 // Resync MasterClock

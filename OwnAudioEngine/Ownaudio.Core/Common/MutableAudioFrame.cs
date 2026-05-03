@@ -48,14 +48,11 @@ internal sealed class MutableAudioFrame
     {
         int requiredLength = newData.Length / sizeof(float);
 
-        // Grow the buffer if needed. Use power-of-2 sizing and a fresh allocation
-        // (no Array.Resize copy – the old data is immediately overwritten below).
         if (_data.Length < requiredLength)
         {
             _data = new float[NextPowerOfTwo(requiredLength)];
         }
 
-        // Copy data as floats
         ReadOnlySpan<float> floatSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(newData);
         floatSpan.CopyTo(_data.AsSpan(0, requiredLength));
 
@@ -121,10 +118,8 @@ internal sealed class MutableAudioFrame
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public AudioFrame ToImmutable()
     {
-        // Create exact-sized byte array
         byte[] byteData = new byte[_length * sizeof(float)];
 
-        // Copy float data to byte array
         var floatSpan = _data.AsSpan(0, _length);
         var byteSpan = System.Runtime.InteropServices.MemoryMarshal.AsBytes(floatSpan);
         byteSpan.CopyTo(byteData);
@@ -182,7 +177,6 @@ internal sealed class MutableAudioFrame
     {
         if (_data.Length < minimumCapacity)
         {
-            // Fresh allocation without copying old data (caller is responsible for filling it).
             _data = new float[NextPowerOfTwo(minimumCapacity)];
         }
     }

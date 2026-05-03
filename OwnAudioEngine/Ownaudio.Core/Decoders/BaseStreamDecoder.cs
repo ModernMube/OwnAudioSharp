@@ -53,14 +53,6 @@ public abstract class BaseStreamDecoder : IAudioDecoder
     /// <exception cref="AudioException">Thrown when stream format is invalid or unsupported.</exception>
     protected abstract AudioStreamInfo ParseStreamInfo();
 
-    /// <summary>
-    /// Decodes the next audio frame from the stream.
-    /// This is the platform/format-specific implementation.
-    /// </summary>
-    /// <returns>Decoded audio data and metadata.</returns>
-    /// <exception cref="AudioException">Thrown when decoding fails.</exception>
-    [Obsolete("This method allocates a new AudioFrame on each call. Use ReadFramesCore instead.", true)]
-    protected abstract AudioDecoderResult DecodeNextFrameCore();
 
     /// <summary>
     /// Reads the next block of audio frames into the provided buffer.
@@ -78,38 +70,6 @@ public abstract class BaseStreamDecoder : IAudioDecoder
     /// <returns>True if seek succeeded, false otherwise.</returns>
     protected abstract bool SeekCore(long samplePosition);
 
-    /// <summary>
-    /// Decodes the next audio frame from the stream.
-    /// Includes common validation and error handling.
-    /// </summary>
-    /// <returns>Decoded audio data and metadata.</returns>
-    /// <exception cref="ObjectDisposedException">Thrown when decoder has been disposed.</exception>
-    [Obsolete("This method allocates a new AudioFrame on each call. Use ReadFrames instead.", true)]
-    public AudioDecoderResult DecodeNextFrame()
-    {
-        ObjectDisposedException.ThrowIf(_isDisposed, this);
-
-        try
-        {
-            return DecodeNextFrameCore();
-        }
-        catch (AudioException)
-        {
-            // Re-throw AudioException as-is
-            throw;
-        }
-        catch (Exception ex)
-        {
-            // Wrap unexpected exceptions
-            throw new AudioException(
-                AudioErrorCategory.Decoding,
-                $"Unexpected error during frame decode at position {_stream?.Position ?? -1}",
-                ex)
-            {
-                StreamPosition = _stream?.Position ?? -1
-            };
-        }
-    }
 
     /// <summary>
     /// Reads the next block of audio frames into the provided buffer.
@@ -127,12 +87,10 @@ public abstract class BaseStreamDecoder : IAudioDecoder
         }
         catch (AudioException)
         {
-            // Re-throw AudioException as-is
             throw;
         }
         catch (Exception ex)
         {
-            // Wrap unexpected exceptions
             throw new AudioException(
                 AudioErrorCategory.Decoding,
                 $"Unexpected error during frame read at position {_stream?.Position ?? -1}",
@@ -159,14 +117,12 @@ public abstract class BaseStreamDecoder : IAudioDecoder
             return false;
         }
 
-        // Validate stream is seekable
         if (_stream == null || !_stream.CanSeek)
         {
             error = "Stream does not support seeking";
             return false;
         }
 
-        // Validate position range
         if (position < TimeSpan.Zero)
         {
             error = $"Position {position} cannot be negative";
@@ -179,10 +135,8 @@ public abstract class BaseStreamDecoder : IAudioDecoder
             return false;
         }
 
-        // Calculate sample position
         long samplePosition = (long)(position.TotalSeconds * _streamInfo.SampleRate);
 
-        // Call platform-specific implementation
         try
         {
             if (!SeekCore(samplePosition))
@@ -227,7 +181,6 @@ public abstract class BaseStreamDecoder : IAudioDecoder
 
         if (disposing)
         {
-            // Dispose stream if owned
             if (_ownsStream && _stream != null)
             {
                 _stream.Dispose();

@@ -24,10 +24,14 @@ namespace OwnaudioNET.Features.Vocalremover
     {
         #region Events
 
-        /// <summary>Progress update event</summary>
+        /// <summary>
+        /// Progress update event
+        /// </summary>
         public event EventHandler<HTDemucsSeparationProgress>? ProgressChanged;
 
-        /// <summary>Processing completed event</summary>
+        /// <summary>
+        /// Processing completed event
+        /// </summary>
         public event EventHandler<HTDemucsSeparationResult>? ProcessingCompleted;
 
         #endregion
@@ -38,16 +42,13 @@ namespace OwnaudioNET.Features.Vocalremover
         private InferenceSession? _onnxSession;
         private bool _disposed = false;
 
-        // STFT processor for spectrogram generation
         private STFTProcessor? _stftProcessor;
 
-        // Model parameters (auto-detected or configured)
         private int _modelSegmentLength = 0;
         private int _modelSampleRate = 44100;
         private int _modelChannels = 2;
         private int _modelStemCount = 4;
 
-        // Stem name mapping (order from model output)
         private readonly string[] _stemNames = { "vocals", "drums", "bass", "other" };
 
         #endregion
@@ -84,7 +85,6 @@ namespace OwnaudioNET.Features.Vocalremover
                 LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING
             };
 
-            // Configure execution providers
             if (_options.EnableGPU)
             {
 #if MACOS
@@ -102,7 +102,7 @@ namespace OwnaudioNET.Features.Vocalremover
                         };
 
                         sessionOptions.AppendExecutionProvider("CoreML", coremlOptions);
-                        Log.Info("✅ CoreML enabled for HTDemucs (MLProgram format, ALL compute units).");
+                        Log.Info("CoreML enabled for HTDemucs (MLProgram format, ALL compute units).");
                     }
                     catch (Exception ex)
                     {
@@ -117,11 +117,11 @@ namespace OwnaudioNET.Features.Vocalremover
                             };
 
                             sessionOptions.AppendExecutionProvider("CoreML", coremlOptions);
-                            Log.Info("✅ CoreML enabled for HTDemucs (NeuralNetwork format fallback).");
+                            Log.Info("CoreML enabled for HTDemucs (NeuralNetwork format fallback).");
                         }
                         catch (Exception ex2)
                         {
-                            Log.Warning($"❌ Both CoreML formats failed.");
+                            Log.Warning($"Both CoreML formats failed.");
                             throw;
                         }
                     }
@@ -159,7 +159,6 @@ namespace OwnaudioNET.Features.Vocalremover
                 Log.Info("Using CPU execution provider for HTDemucs.");
             }
 
-            // Load model from file or embedded resource
             if (useEmbeddedModel)
             {
                 Log.Info($"Loading embedded HTDemucs model: {_options.Model}");
@@ -174,7 +173,6 @@ namespace OwnaudioNET.Features.Vocalremover
 
             AutoDetectModelParameters();
 
-            // Initialize STFT processor for HTDemucs (n_fft=4096, hop_length=1024)
             _stftProcessor = new STFTProcessor(nFft: 4096, hopLength: 1024);
 
             Log.Info($"HTDemucs model initialized: SegmentLength={_modelSegmentLength}, " +

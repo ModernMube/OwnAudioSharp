@@ -102,7 +102,6 @@ public sealed class MockAudioEngine : IAudioEngine
     /// <inheritdoc/>
     public IntPtr GetStream()
     {
-        // Mock engine has no native stream
         return IntPtr.Zero;
     }
 
@@ -121,7 +120,6 @@ public sealed class MockAudioEngine : IAudioEngine
     /// <inheritdoc/>
     public int OwnAudioEngineActivate()
     {
-        // Returns activation state: 1 = active, 0 = idle, <0 = error
         int currentState = _state;
         if (currentState < 0)
             return -1; // Error state
@@ -132,7 +130,6 @@ public sealed class MockAudioEngine : IAudioEngine
     /// <inheritdoc/>
     public int OwnAudioEngineStopped()
     {
-        // Returns stopped state: 1 = stopped, 0 = running, <0 = error
         int currentState = _state;
         if (currentState < 0)
             return -1; // Error state
@@ -183,11 +180,8 @@ public sealed class MockAudioEngine : IAudioEngine
             if (_state == 1)
                 return 0; // Already running (idempotent)
 
-            // Calculate callback interval based on buffer size and sample rate
-            // Interval = (BufferSize / SampleRate) * 1000ms
             double intervalMs = (_config.BufferSize / (double)_config.SampleRate) * 1000.0;
 
-            // Start simulation timer
             _simulationTimer = new Timer(
                 SimulationCallback,
                 null,
@@ -210,7 +204,6 @@ public sealed class MockAudioEngine : IAudioEngine
             if (_state == 0)
                 return 0; // Already stopped (idempotent)
 
-            // Stop simulation timer
             _simulationTimer?.Dispose();
             _simulationTimer = null;
 
@@ -231,18 +224,14 @@ public sealed class MockAudioEngine : IAudioEngine
         if (_state != 1)
             throw new AudioException("Cannot send samples: engine not running.");
 
-        // Track statistics
         Interlocked.Increment(ref _sendCallCount);
         Interlocked.Add(ref _totalSamplesSent, samples.Length);
 
-        // If test signal generation is enabled, write 440Hz sine wave
         if (_generateTestSignal && _config != null)
         {
             GenerateSineWave(samples, _config.SampleRate, _config.Channels);
         }
 
-        // Simulate some processing time (minimal)
-        // In real engine, this would be the time to copy to device buffer
         Thread.SpinWait(100);
     }
 
@@ -273,10 +262,8 @@ public sealed class MockAudioEngine : IAudioEngine
             return -4; // Input not enabled
         }
 
-        // Track statistics
         Interlocked.Increment(ref _receiveCallCount);
 
-        // Generate mock input data (silence or test signal)
         int sampleCount = _config.BufferSize * _config.Channels;
         samples = new float[sampleCount];
 
@@ -284,7 +271,6 @@ public sealed class MockAudioEngine : IAudioEngine
         {
             GenerateSineWave(samples.AsSpan(), _config.SampleRate, _config.Channels);
         }
-        // else: samples already initialized to zeros (silence)
 
         Interlocked.Add(ref _totalSamplesReceived, sampleCount);
 
@@ -294,7 +280,6 @@ public sealed class MockAudioEngine : IAudioEngine
     /// <inheritdoc/>
     public List<AudioDeviceInfo> GetOutputDevices()
     {
-        // Return mock output devices
         return new List<AudioDeviceInfo>
         {
             new AudioDeviceInfo(
@@ -319,7 +304,6 @@ public sealed class MockAudioEngine : IAudioEngine
     /// <inheritdoc/>
     public List<AudioDeviceInfo> GetInputDevices()
     {
-        // Return mock input devices
         return new List<AudioDeviceInfo>
         {
             new AudioDeviceInfo(
@@ -353,7 +337,6 @@ public sealed class MockAudioEngine : IAudioEngine
         if (string.IsNullOrWhiteSpace(deviceName))
             return -3; // Invalid device name
 
-        // Mock implementation: accept any device name
         return 0; // Success
     }
 
@@ -369,7 +352,6 @@ public sealed class MockAudioEngine : IAudioEngine
         if (deviceIndex < 0)
             return -3; // Invalid device index
 
-        // Mock implementation: accept any valid index
         return 0; // Success
     }
 
@@ -385,7 +367,6 @@ public sealed class MockAudioEngine : IAudioEngine
         if (string.IsNullOrWhiteSpace(deviceName))
             return -3; // Invalid device name
 
-        // Mock implementation: accept any device name
         return 0; // Success
     }
 
@@ -401,7 +382,6 @@ public sealed class MockAudioEngine : IAudioEngine
         if (deviceIndex < 0)
             return -3; // Invalid device index
 
-        // Mock implementation: accept any valid index
         return 0; // Success
     }
 
@@ -530,7 +510,6 @@ public sealed class MockAudioEngine : IAudioEngine
         {
             float sample = (float)(amplitude * Math.Sin(_sinePhase));
 
-            // Write same sample to all channels
             for (int ch = 0; ch < channels; ch++)
             {
                 buffer[frame * channels + ch] = sample;
@@ -538,7 +517,6 @@ public sealed class MockAudioEngine : IAudioEngine
 
             _sinePhase += phaseIncrement;
 
-            // Keep phase in [0, 2π] to prevent overflow
             if (_sinePhase >= 2.0 * Math.PI)
                 _sinePhase -= 2.0 * Math.PI;
         }

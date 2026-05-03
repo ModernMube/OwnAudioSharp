@@ -1,9 +1,6 @@
 using OwnaudioNET.Features.Extensions;
 using OwnaudioNET.Features.OwnChordDetect.Core;
 using OwnaudioNET.Features.OwnChordDetect.Detectors;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace OwnaudioNET.Features.OwnChordDetect.Analysis
 {
@@ -125,16 +122,12 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
             if (bpm > 0)
             {
                 // Adaptive window based on the harmonic rhythm of typical music:
-                //   < 100 BPM  → ♩ quarter note  (60 / bpm)
-                //   100–150    → 𝅗𝅥 half note     (120 / bpm)
-                //   > 150 BPM  → 𝅝 whole note    (240 / bpm)
                 float quarterNote = 60f / bpm;
                 _windowSize = bpm < 100 ? quarterNote
                             : bpm <= 150 ? quarterNote * 2f   // half note
                                          : quarterNote * 4f;  // whole note
 
                 // Hop = half the window, so consecutive windows overlap by 50%
-                // and no chord boundary falls entirely between two windows
                 _hopSize = _windowSize / 2f;
             }
             else
@@ -156,7 +149,6 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
 
             var sortedNotes = songNotes.OrderBy(n => n.StartTime).ToList();
 
-            // First, detect the key of the entire song
             DetectedKey = _detector.DetectKeyFromNotes(sortedNotes);
             _detector.SetKey(DetectedKey);
 
@@ -177,7 +169,6 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
 
             var sortedNotes = songNotes.OrderBy(n => n.StartTime).ToList();
 
-            // Use the specified key
             DetectedKey = key;
             _detector.SetKey(key);
 
@@ -251,8 +242,6 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                 return (analysis, windowNotes);
 
             // Step 3: progressive pruning
-            // Build a removal order: shortest overlap-duration notes, from lowest to highest pitch.
-            // Notes that are very brief relative to the window are considered least structurally important.
             var candidates = windowNotes
                 .Select(n => new
                 {
@@ -317,7 +306,6 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
             {
                 var next = rawChords[i];
 
-                // If same chord and adjacent/overlapping, merge them
                 if (current.ChordName == next.ChordName &&
                     Math.Abs(current.EndTime - next.StartTime) <= _hopSize * 1.5f)
                 {
@@ -327,7 +315,6 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                 }
                 else
                 {
-                    // Different chord or too far apart, add current and start new
                     if (current.EndTime - current.StartTime >= _minimumChordDuration)
                     {
                         merged.Add(current);
@@ -336,7 +323,6 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                 }
             }
 
-            // Don't forget the last chord
             if (current.EndTime - current.StartTime >= _minimumChordDuration)
             {
                 merged.Add(current);

@@ -66,7 +66,6 @@ namespace Ownaudio.Core.Common
             if (capacity <= 0)
                 throw new ArgumentException("Capacity must be positive", nameof(capacity));
 
-            // Round up to next power of 2
             _capacity = RoundUpToPowerOf2(capacity);
             _capacityMask = _capacity - 1;
             _buffer = new T[_capacity];
@@ -92,19 +91,15 @@ namespace Ownaudio.Core.Common
             int writeIdx = Volatile.Read(ref _writeIndex);
             int firstChunk = Math.Min(toWrite, _capacity - writeIdx);
 
-            // Copy first chunk
             data.Slice(0, firstChunk).CopyTo(_buffer.AsSpan(writeIdx, firstChunk));
 
-            // Copy wraparound chunk if needed
             if (toWrite > firstChunk)
             {
                 int remaining = toWrite - firstChunk;
                 data.Slice(firstChunk, remaining).CopyTo(_buffer.AsSpan(0, remaining));
             }
 
-            // Update write index with volatile write (ensures visibility to reader thread)
             Volatile.Write(ref _writeIndex, (writeIdx + toWrite) & _capacityMask);
-
             return toWrite;
         }
 
@@ -126,19 +121,15 @@ namespace Ownaudio.Core.Common
             int readIdx = Volatile.Read(ref _readIndex);
             int firstChunk = Math.Min(toRead, _capacity - readIdx);
 
-            // Copy first chunk
             _buffer.AsSpan(readIdx, firstChunk).CopyTo(destination.Slice(0, firstChunk));
 
-            // Copy wraparound chunk if needed
             if (toRead > firstChunk)
             {
                 int remaining = toRead - firstChunk;
                 _buffer.AsSpan(0, remaining).CopyTo(destination.Slice(firstChunk, remaining));
             }
 
-            // Update read index with volatile write (ensures visibility to writer thread)
             Volatile.Write(ref _readIndex, (readIdx + toRead) & _capacityMask);
-
             return toRead;
         }
 

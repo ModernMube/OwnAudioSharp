@@ -26,7 +26,6 @@ public sealed class CircularBuffer
     private volatile int _readPos;
     private int _available;
 
-    // Thread-safe clear flag: set by any thread, consumed atomically inside Write/Read
     private volatile bool _clearRequested;
 
     private readonly object _lock = new object();
@@ -66,7 +65,6 @@ public sealed class CircularBuffer
         if (capacityInSamples <= 0)
             throw new AudioException("CircularBuffer ERROR: ", new ArgumentException("Capacity must be greater than zero.", nameof(capacityInSamples)));
 
-        // Round up to power of 2 for efficient modulo operations
         _capacity = RoundUpToPowerOf2(capacityInSamples);
         _buffer = new float[_capacity];
         _writePos = 0;
@@ -82,9 +80,6 @@ public sealed class CircularBuffer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Write(ReadOnlySpan<float> data)
     {
-        // Consume a pending clear request atomically at the start of a write cycle.
-        // This avoids the race where Clear() zeroes _available while a concurrent Write
-        // is still running (which would make the subsequent Interlocked.Add go negative).
         if (_clearRequested)
         {
             lock (_lock)
@@ -109,24 +104,18 @@ public sealed class CircularBuffer
         int writePos = _writePos; // Volatile read (implicit)
         int firstChunk = Math.Min(toWrite, _capacity - writePos);
 
-        // Write first chunk
         data.Slice(0, firstChunk).CopyTo(_buffer.AsSpan(writePos, firstChunk));
 
-        // Write second chunk if wrapping around
         if (toWrite > firstChunk)
         {
             int secondChunk = toWrite - firstChunk;
             data.Slice(firstChunk, secondChunk).CopyTo(_buffer.AsSpan(0, secondChunk));
         }
 
-        // Update write position with volatile write (ensures visibility to consumer)
         _writePos = (writePos + toWrite) & (_capacity - 1); // Efficient modulo with power of 2
 
-        // Memory barrier ensures buffer writes complete before available update
-        // This guarantees the consumer won't read uninitialized data
         Thread.MemoryBarrier();
 
-        // Update available count atomically (Interlocked.Add has full fence)
         Interlocked.Add(ref _available, toWrite);
 
         return toWrite;
@@ -140,9 +129,6 @@ public sealed class CircularBuffer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Read(Span<float> destination)
     {
-        // Consume a pending clear request atomically at the start of a read cycle.
-        // This avoids the race where Clear() zeroes _available while a concurrent Read
-        // is still running (which would make the subsequent Interlocked.Add go negative).
         if (_clearRequested)
         {
             lock (_lock)
@@ -155,7 +141,6 @@ public sealed class CircularBuffer
                     _clearRequested = false;
                 }
             }
-            // Return 0 – caller will fill with silence for this cycle
             return 0;
         }
 
@@ -168,23 +153,18 @@ public sealed class CircularBuffer
         int readPos = _readPos; // Volatile read (implicit)
         int firstChunk = Math.Min(toRead, _capacity - readPos);
 
-        // Read first chunk
         _buffer.AsSpan(readPos, firstChunk).CopyTo(destination.Slice(0, firstChunk));
 
-        // Read second chunk if wrapping around
         if (toRead > firstChunk)
         {
             int secondChunk = toRead - firstChunk;
             _buffer.AsSpan(0, secondChunk).CopyTo(destination.Slice(firstChunk, secondChunk));
         }
 
-        // Update read position with volatile write (ensures visibility to producer)
         _readPos = (readPos + toRead) & (_capacity - 1); // Efficient modulo with power of 2
 
-        // Memory barrier ensures reads complete before available update
         Thread.MemoryBarrier();
 
-        // Update available count atomically (Interlocked.Add has full fence)
         Interlocked.Add(ref _available, -toRead);
 
         return toRead;
@@ -207,10 +187,8 @@ public sealed class CircularBuffer
         int readPos = _readPos;
         int firstChunk = Math.Min(toPeek, _capacity - readPos);
 
-        // Peek first chunk
         _buffer.AsSpan(readPos, firstChunk).CopyTo(destination.Slice(0, firstChunk));
 
-        // Peek second chunk if wrapping around
         if (toPeek > firstChunk)
         {
             int secondChunk = toPeek - firstChunk;

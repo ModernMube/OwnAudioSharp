@@ -1,3 +1,4 @@
+using Logger;
 ﻿using Avalonia;
 using System;
 
@@ -16,10 +17,6 @@ class Program
     /// Initializes the Avalonia framework and starts the desktop application.
     /// </summary>
     /// <param name="args">Command-line arguments.</param>
-    /// <remarks>
-    /// Do not use any Avalonia, third-party APIs, or SynchronizationContext-reliant code
-    /// before this method is called, as the framework is not yet initialized.
-    /// </remarks>
     [STAThread]
     public static void Main(string[] args) => BuildAvaloniaApp()
         .StartWithClassicDesktopLifetime(args);

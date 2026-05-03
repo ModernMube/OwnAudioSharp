@@ -63,14 +63,8 @@ internal struct FlacStreamInfo
     public byte MaxFrameSize1;
     public byte MaxFrameSize2;
 
-    // 20 bits: Sample rate (Hz)
-    // 3 bits: Channels - 1
-    // 5 bits: Bits per sample - 1
-    // 36 bits: Total samples
-    // All packed into 8 bytes
     public ulong PackedData1;      // Big-endian packed data
 
-    // MD5 signature (16 bytes)
     public ulong MD5_High;
     public ulong MD5_Low;
 
@@ -79,7 +73,6 @@ internal struct FlacStreamInfo
     public int MinFrameSize => (FrameSize0 << 16) | (FrameSize1 << 8) | FrameSize2;
     public int MaxFrameSize => (MaxFrameSize0 << 16) | (MaxFrameSize1 << 8) | MaxFrameSize2;
 
-    // Extract sample rate (20 bits, big-endian)
     public int SampleRate
     {
         get
@@ -89,7 +82,6 @@ internal struct FlacStreamInfo
         }
     }
 
-    // Extract channels (3 bits)
     public int Channels
     {
         get
@@ -99,7 +91,6 @@ internal struct FlacStreamInfo
         }
     }
 
-    // Extract bits per sample (5 bits)
     public int BitsPerSample
     {
         get
@@ -109,7 +100,6 @@ internal struct FlacStreamInfo
         }
     }
 
-    // Extract total samples (36 bits)
     public long TotalSamples
     {
         get
@@ -204,7 +194,6 @@ internal struct FlacSeekPoint
     public ulong StreamOffset;     // Big-endian: byte offset from first frame
     public ushort FrameSamples;    // Big-endian: number of samples in target frame
 
-    // Placeholder seekpoint marker (indicates invalid entry)
     public const ulong PLACEHOLDER_POINT = 0xFFFFFFFFFFFFFFFF;
 
     public bool IsPlaceholder => SampleNumber == PLACEHOLDER_POINT;

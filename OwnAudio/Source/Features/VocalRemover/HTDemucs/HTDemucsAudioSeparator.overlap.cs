@@ -25,17 +25,14 @@ namespace OwnaudioNET.Features.Vocalremover
 
                 var target = targetBuffers[stem];
 
-                // Determine regions
                 int nonOverlapStart = (position == 0) ? 0 : overlap;
                 int copyLength = Math.Min(chunkLength - nonOverlapStart, totalLength - position - nonOverlapStart);
 
-                // Copy non-overlapping part
                 if (copyLength > 0)
                 {
                     CopyAudioRegion(source, target, nonOverlapStart, position + nonOverlapStart, copyLength);
                 }
 
-                // Blend overlapping region with linear crossfade
                 if (position > 0 && overlap > 0)
                 {
                     int blendLength = Math.Min(overlap, totalLength - position);
@@ -73,8 +70,6 @@ namespace OwnaudioNET.Features.Vocalremover
                 {
                     if (dstStart + i < target.GetLength(1))
                     {
-                        // Constant-power crossfade using cosine/sine
-                        // This maintains perceived loudness better than linear fade
                         float position = (float)i / (float)length;  // 0.0 to 1.0
                         float angle = position * (float)Math.PI / 2.0f;  // 0 to π/2
 

@@ -1,3 +1,4 @@
+using Logger;
 using Android.App;
 using Android.Content.PM;
 using Android.OS;
@@ -122,17 +123,14 @@ namespace OwnaudioAndroidExample
                 UpdateStatus($"✓ Engine: {OwnaudioNet.Engine?.GetType().Name}");
                 UpdateStatus($"✓ Sample Rate: {OwnaudioNet.Engine?.Config.SampleRate} Hz");
                 UpdateStatus($"✓ Buffer Size: {OwnaudioNet.Engine?.FramesPerBuffer} frames");
-
-                // ==========================================
+                
                 // Step 2: Start Audio Engine
-                // ==========================================
                 UpdateStatus("\n[2/6] Starting audio engine...");
 
                 // Create audio mixer using the underlying engine directly
                 var engine = OwnaudioNet.Engine!.UnderlyingEngine;
 
-                // ✅ FIX: Start the underlying engine asynchronously
-                // While Start() is usually fast (~5ms), running it async ensures UI responsiveness
+                // Start the underlying engine asynchronously
                 int startResult = await Task.Run(() => engine.Start());
                 if (startResult < 0)
                 {
@@ -141,9 +139,7 @@ namespace OwnaudioAndroidExample
 
                 UpdateStatus($"✓ Engine running");
 
-                // ==========================================
                 // Step 3: Create Audio Mixer
-                // ==========================================
                 UpdateStatus("\n[3/6] Creating audio mixer...");
 
                 _mixer = new AudioMixer(engine, bufferSizeInFrames: 512);
@@ -156,9 +152,7 @@ namespace OwnaudioAndroidExample
                     UpdateStatus($"! Source error: {e.Message}");
                 };
 
-                // ==========================================
                 // Create mastering effects
-                // ==========================================
                 UpdateStatus("Adding mastering effects...");
 
                 _equalizer = new Equalizer30BandEffect();
@@ -178,9 +172,7 @@ namespace OwnaudioAndroidExample
 
                 UpdateStatus("✓ Master effects added");
 
-                // ==========================================
                 // Step 4: Create Audio Sources (4 tracks)
-                // ==========================================
                 UpdateStatus("\n[4/6] Loading audio files...");
 
                 try
@@ -215,9 +207,7 @@ namespace OwnaudioAndroidExample
 
                 UpdateStatus($"✓ 4 files loaded, Duration: {_fileSource0.Duration:F1}s");
 
-                // ==========================================
                 // Add effects to vocal track
-                // ==========================================
                 UpdateStatus("Adding vocal effects...");
 
                 // Create vocal effects chain (same as desktop)
@@ -253,9 +243,7 @@ namespace OwnaudioAndroidExample
 
                 UpdateStatus("✓ Vocal effects added");
 
-                // ==========================================
                 // Step 5: Add sources to mixer and setup Master Clock sync
-                // ==========================================
                 UpdateStatus("\n[5/6] Setting up Master Clock synchronization...");
 
                 _mixer.AddSource(_fileSource0);
@@ -263,9 +251,7 @@ namespace OwnaudioAndroidExample
                 _mixer.AddSource(_fileSource2);
                 _mixer.AddSource(_fileSource3Effect);
 
-                // ==========================================
                 // NEW MASTER CLOCK ARCHITECTURE (v2.1.0+)
-                // ==========================================
                 // Attach sources to Master Clock for sample-accurate synchronization
                 _fileSource0.AttachToClock(_mixer.MasterClock);
                 _fileSource1.AttachToClock(_mixer.MasterClock);
@@ -405,8 +391,6 @@ namespace OwnaudioAndroidExample
                 _fileSource2.Play();
                 _fileSource3.Play();
 
-                // All attached sources now play in perfect sync with Master Clock
-
                 // Record start time for tempo accuracy calculation
                 _startTime = DateTime.Now;
 
@@ -475,11 +459,8 @@ namespace OwnaudioAndroidExample
                     }
                 }
 
-                // ✅ CRITICAL FIX: Run all blocking operations asynchronously to prevent UI freeze
                 await Task.Run(() =>
                 {
-                    // Note: No need to stop sync group - Master Clock handles cleanup automatically
-
                     // Stop and dispose all sources
                     if (_mixer != null)
                     {
@@ -508,7 +489,6 @@ namespace OwnaudioAndroidExample
                 _fileSource3Effect = null;
                 _mixer = null;
 
-                // ✅ CRITICAL FIX: Use async API for engine stop to prevent UI freeze
                 // This prevents ANR (Application Not Responding) dialog on Android
                 await OwnaudioNet.StopAsync();
 
@@ -686,7 +666,6 @@ namespace OwnaudioAndroidExample
                     _fileSource3?.Dispose();
                     _fileSource3Effect?.Dispose();
 
-                    // Use async API for engine shutdown
                     // This prevents up to 2000ms UI freeze and potential ANR
                     await OwnaudioNet.StopAsync();
                     OwnaudioNet.Shutdown();

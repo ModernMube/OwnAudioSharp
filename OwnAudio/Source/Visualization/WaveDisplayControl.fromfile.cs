@@ -1,10 +1,5 @@
-﻿using Ownaudio.Decoders;
-using System;
+using Ownaudio.Decoders;
 using System.Buffers;
-using System.Collections.Generic;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace OwnaudioNET.Visualization
 {
@@ -32,13 +27,11 @@ namespace OwnaudioNET.Visualization
             if (!File.Exists(filePath))
                 return false;
 
-            // Reset current state
             _audioData = null!;
             ZoomFactor = 1.0;
             ScrollOffset = 0.0;
             InvalidateVisual();
 
-            // Try decoders in preferred order
             return TryLoadFile(filePath, maxSamples, channels, sampleRate);
         }
 
@@ -58,77 +51,9 @@ namespace OwnaudioNET.Visualization
 
             try
             {
-                //options = new FFmpegDecoderOptions(channels, sampleRate);
                 decoder = AudioDecoderFactory.Create(filePath, sampleRate, channels);
 
-                var streamInfo = decoder.StreamInfo;
-                if (streamInfo.Channels == 0 || streamInfo.SampleRate == 0)
-                    return false;
-
-                // Calculate downsampling ratio
-                var estimatedTotalSamples = (long)(streamInfo.Duration.TotalSeconds * streamInfo.SampleRate * streamInfo.Channels);
-                var downsampleRatio = Math.Max(1, (int)(estimatedTotalSamples / maxSamples));
-
-                int sampleCounter = 0;
-                int channelCount = streamInfo.Channels;
-
-                // Process audio in chunks
-                while (true)
-                {
-                    var result = decoder.DecodeNextFrame();
-
-                    if (result.IsEOF || !result.IsSucceeded)
-                        break;
-
-                    if (result.Frame?.Data == null)
-                        continue;
-
-                    // Convert byte data back to float samples
-                    var frameData = result.Frame.Data;
-                    int floatCount = frameData.Length / sizeof(float);
-
-                    if (tempBuffer.Length < floatCount)
-                    {
-                        ArrayPool<float>.Shared.Return(tempBuffer);
-                        tempBuffer = ArrayPool<float>.Shared.Rent(floatCount);
-                    }
-
-                    Buffer.BlockCopy(frameData, 0, tempBuffer, 0, frameData.Length);
-
-                    // Process samples with downsampling and channel mixing
-                    for (int i = 0; i < floatCount; i += channelCount)
-                    {
-                        if (sampleCounter % downsampleRatio == 0)
-                        {
-                            // Mix channels to mono by averaging
-                            float sample = 0f;
-                            for (int ch = 0; ch < channelCount && i + ch < floatCount; ch++)
-                            {
-                                sample += tempBuffer[i + ch];
-                            }
-                            sample /= channelCount;
-
-                            sampleList.Add(sample);
-
-                            if (sampleList.Count >= maxSamples)
-                                break;
-                        }
-                        sampleCounter++;
-                    }
-
-                    if (sampleList.Count >= maxSamples)
-                        break;
-                }
-
-                // Set result if successful
-                if (sampleList.Count > 0)
-                {
-                    _audioData = sampleList.ToArray();
-                    InvalidateVisual();
-                    return true;
-                }
-
-                return false;
+                return ProcessDecoderData(decoder, tempBuffer, sampleList, maxSamples);
             }
             catch (Exception ex)
             {
@@ -175,13 +100,11 @@ namespace OwnaudioNET.Visualization
             if (stream == null)
                 throw new ArgumentNullException(nameof(stream));
 
-            // Reset current state
             _audioData = null;
             ZoomFactor = 1.0;
             ScrollOffset = 0.0;
             InvalidateVisual();
 
-            // Try decoders in preferred order
             return TryLoadStream(stream, AudioFormat.Wav, channels, sampleRate);
         }
 
@@ -201,7 +124,6 @@ namespace OwnaudioNET.Visualization
 
             try
             {
-                //var options = new FFmpegDecoderOptions(channels, sampleRate);
                 decoder = AudioDecoderFactory.Create(stream, AudioFormat.Wav, sampleRate, channels);
 
                 return ProcessDecoderData(decoder, tempBuffer, sampleList, _maxsample);
@@ -238,7 +160,6 @@ namespace OwnaudioNET.Visualization
             int sampleCounter = 0;
             int channelCount = streamInfo.Channels;
 
-            // ZERO-ALLOC: Use a reusable byte buffer for the new ReadFrames method.
             var byteBuffer = ArrayPool<byte>.Shared.Rent(4096 * channelCount * sizeof(float));
 
             while (true)
@@ -254,12 +175,10 @@ namespace OwnaudioNET.Visualization
                 int bytesRead = result.FramesRead * channelCount * sizeof(float);
                 var floatSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(byteBuffer.AsSpan(0, bytesRead));
 
-                // Process samples with downsampling and channel mixing
                 for (int i = 0; i < floatSpan.Length; i += channelCount)
                 {
                     if (sampleCounter % downsampleRatio == 0)
                     {
-                        // Mix channels to mono by averaging
                         float sample = 0f;
                         for (int ch = 0; ch < channelCount && i + ch < floatSpan.Length; ch++)
                         {

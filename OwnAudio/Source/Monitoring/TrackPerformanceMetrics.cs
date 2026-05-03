@@ -122,13 +122,11 @@ namespace OwnaudioNET.Monitoring
             {
                 _cpuSamples.Enqueue(cpuPercentage);
 
-                // Keep only the most recent samples
                 while (_cpuSamples.Count > _maxCpuSamples)
                 {
                     _cpuSamples.Dequeue();
                 }
-
-                // Calculate moving average
+                
                 double sum = 0.0;
                 foreach (var sample in _cpuSamples)
                 {
@@ -172,7 +170,6 @@ namespace OwnaudioNET.Monitoring
 
                 _dropoutHistory.Add(record);
 
-                // Keep only the most recent dropout records
                 while (_dropoutHistory.Count > _maxDropoutHistory)
                 {
                     _dropoutHistory.RemoveAt(0);

@@ -106,7 +106,6 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
             ("13", new[] { 0, 4, 7, 10, 2, 9 }), // 13th
             ("m13", new[] { 0, 3, 7, 10, 2, 9 }), // Minor 13th
 
-            /* Uncomment for extended chord definitions */
             ("7b5", new[] { 0, 4, 6, 10 }),   // Altered chords
             ("7#5", new[] { 0, 4, 8, 10 }),
             ("7#9", new[] { 0, 4, 7, 10, 3 }),

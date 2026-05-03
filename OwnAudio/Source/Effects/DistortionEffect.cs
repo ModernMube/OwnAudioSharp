@@ -264,11 +264,9 @@ namespace OwnaudioNET.Effects
             if (!_enabled)
                 return;
 
-            // Fast path: if mix is 0, no processing needed
             if (_mix < 0.001f)
                 return;
 
-            // Calculate the actual number of samples to process
             int sampleCount = frameCount * _config.Channels;
 
             for (int i = 0; i < sampleCount; i++)

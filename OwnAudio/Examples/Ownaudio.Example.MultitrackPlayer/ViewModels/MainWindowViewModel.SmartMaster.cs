@@ -179,7 +179,7 @@ public partial class MainWindowViewModel
             _measurementTimer.Tick += MeasurementTimer_Tick;
             _measurementTimer.Start();
 
-            // CRITICAL: Pause the mixer to prevent it from fighting for the output buffer
+            // Pause the mixer to prevent it from fighting for the output buffer
             bool wasMixerRunning = _audioService.Mixer != null;
             if (wasMixerRunning)
             {
@@ -194,16 +194,10 @@ public partial class MainWindowViewModel
             }
             finally
             {
-                // CRITICAL FIX SEQUENCE for post-measurement stability: 1. Reset SmartMaster components to clear any internal corruption (NaNs/Infs), 2. Clear Engine Buffer to remove residual measurement data, 3. Restart Mixer
-                
                 try
                 {
-                    // Step 1: Force reset of all SmartMaster components
-                    // This clears any NaN/Inf corruption in filter states that occurred during measurement
                     _smartMaster?.Reset();
                     
-                    // Step 2: Clear the audio engine's output buffer
-                    // This removes any residual measurement data that could cause buffer overflow
                     if (OwnaudioNET.OwnaudioNet.Engine != null)
                     {
                         OwnaudioNET.OwnaudioNet.Engine.ClearOutputBuffer();
@@ -211,12 +205,8 @@ public partial class MainWindowViewModel
                         await Task.Delay(50);
                     }
                 }
-                catch
-                {
-                    // Ignore errors during cleanup to prevent crash
-                }
+                catch {}
 
-                // Step 3: Restart mixer if it was running, regardless of success/failure
                 if (wasMixerRunning)
                 {
                     _audioService.Mixer?.Start();
@@ -234,14 +224,12 @@ public partial class MainWindowViewModel
             
             if (finalStatus.Status == OwnaudioNET.Effects.SmartMaster.MeasurementStatus.Error)
             {
-                // Measurement failed
                 MeasurementProgress = 0;
                 MeasurementStatusText = $"Error: {finalStatus.ErrorMessage ?? "Unknown error"}";
                 StatusMessage = $"Measurement failed: {finalStatus.ErrorMessage ?? "Unknown error"}";
             }
             else if (finalStatus.Status == OwnaudioNET.Effects.SmartMaster.MeasurementStatus.Completed)
             {
-                // Measurement completed successfully
                 MeasurementProgress = 100;
                 MeasurementStatusText = finalStatus.CurrentStep;
                 StatusMessage = finalStatus.Warnings.Length > 0 
@@ -250,7 +238,6 @@ public partial class MainWindowViewModel
             }
             else
             {
-                // Unexpected status
                 MeasurementProgress = 0;
                 MeasurementStatusText = "Measurement ended unexpectedly";
                 StatusMessage = "Measurement ended unexpectedly";

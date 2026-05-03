@@ -19,7 +19,6 @@ public static class AudioDecoderExtensions
     /// <returns>A float array containing all the decoded audio samples.</returns>
     public static float[] ReadAllSamples(this IAudioDecoder decoder)
     {
-        // Pre-allocate with a realistic estimate (samples * channels) to avoid List resizing.
         int estimatedSamples = (int)(decoder.StreamInfo.Duration.TotalSeconds
             * decoder.StreamInfo.SampleRate
             * decoder.StreamInfo.Channels);
@@ -36,8 +35,6 @@ public static class AudioDecoderExtensions
             if (result.IsSucceeded && result.FramesRead > 0)
             {
                 int bytesRead = result.FramesRead * decoder.StreamInfo.Channels * sizeof(float);
-                // .NET 8+: AddRange(ReadOnlySpan<T>) avoids the intermediate ToArray() allocation
-                // that was previously created on every decode iteration.
                 var floatSpan = MemoryMarshal.Cast<byte, float>(buffer.AsSpan(0, bytesRead));
                 allSamples.AddRange(floatSpan);
             }

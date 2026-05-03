@@ -1,3 +1,4 @@
+using Logger;
 using OwnaudioNET.Features.Vocalremover;
 
 namespace HTDemucsExample
@@ -10,9 +11,8 @@ namespace HTDemucsExample
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("HTDemucs Audio Stem Separation Example");
-            Console.WriteLine("======================================");
-            Console.WriteLine();
+            Log.Info("HTDemucs Audio Stem Separation Example");
+            Log.Info("======================================");
 
             // Configuration
             string audioFilePath = @"path/to/your";
@@ -21,8 +21,8 @@ namespace HTDemucsExample
             // Check if example paths need to be updated
             if (audioFilePath.Contains("path/to/your"))
             {
-                Console.WriteLine("Please update the audioFilePath in Program.cs");
-                Console.WriteLine("Press any key to exit...");
+                Log.Info("Please update the audioFilePath in Program.cs");
+                Log.Info("Press any key to exit...");
                 Console.ReadKey();
                 return;
             }
@@ -40,12 +40,11 @@ namespace HTDemucsExample
                     TargetStems = HTDemucsStem.All   // Extract all stems
                 };
 
-                Console.WriteLine($"Input file: {audioFilePath}");
-                Console.WriteLine($"Model: Embedded HTDemucs");
-                Console.WriteLine($"Output directory: {outputDirectory}");
-                Console.WriteLine($"Chunk size: {options.ChunkSizeSeconds}s");
-                Console.WriteLine($"GPU acceleration: {(options.EnableGPU ? "Enabled" : "Disabled")}");
-                Console.WriteLine();
+                Log.Info($"Input file: {audioFilePath}");
+                Log.Info($"Model: Embedded HTDemucs");
+                Log.Info($"Output directory: {outputDirectory}");
+                Log.Info($"Chunk size: {options.ChunkSizeSeconds}s");
+                Log.Info($"GPU acceleration: {(options.EnableGPU ? "Enabled" : "Disabled")}");
 
                 // Alternative: Use external model file
                 // options.ModelPath = @"path/to/htdemucs.onnx";
@@ -71,56 +70,51 @@ namespace HTDemucsExample
 
                 separator.ProcessingCompleted += (s, result) =>
                 {
-                    Console.WriteLine();
-                    Console.WriteLine($"\nProcessing completed in {result.ProcessingTime.TotalSeconds:F1}s");
-                    Console.WriteLine($"Audio duration: {result.AudioDuration.TotalSeconds:F1}s");
-                    Console.WriteLine($"Realtime factor: {result.AudioDuration.TotalSeconds / result.ProcessingTime.TotalSeconds:F1}x");
+                    Log.Info($"\nProcessing completed in {result.ProcessingTime.TotalSeconds:F1}s");
+                    Log.Info($"Audio duration: {result.AudioDuration.TotalSeconds:F1}s");
+                    Log.Info($"Realtime factor: {result.AudioDuration.TotalSeconds / result.ProcessingTime.TotalSeconds:F1}x");
                 };
 
                 // Initialize model
-                Console.WriteLine("Initializing HTDemucs model...");
+                Log.Info("Initializing HTDemucs model...");
                 separator.Initialize();
-                Console.WriteLine("Model initialized successfully!");
-                Console.WriteLine();
+                Log.Info("Model initialized successfully!");
 
                 // Process the audio file
-                Console.WriteLine("Starting stem separation...");
+                Log.Info("Starting stem separation...");
                 var result = separator.Separate(audioFilePath);
 
                 // Display results
-                Console.WriteLine();
-                Console.WriteLine("Separation Results:");
-                Console.WriteLine("==================");
+                Log.Info("Separation Results:");
+                Log.Info("==================");
 
                 foreach (var stem in result.StemPaths)
                 {
                     var fileInfo = new FileInfo(stem.Value);
-                    Console.WriteLine($"  {stem.Key,-8}: {Path.GetFileName(stem.Value)} ({fileInfo.Length / 1024.0 / 1024.0:F2} MB)");
+                    Log.Info($"  {stem.Key,-8}: {Path.GetFileName(stem.Value)} ({fileInfo.Length / 1024.0 / 1024.0:F2} MB)");
                 }
 
-                Console.WriteLine();
-                Console.WriteLine($"All stems saved to: {outputDirectory}");
+                Log.Info($"All stems saved to: {outputDirectory}");
 
                 // Example: Using helper extension methods
-                Console.WriteLine();
-                Console.WriteLine("You can also use helper methods:");
-                Console.WriteLine("  var separator = HTDemucsExtensions.CreateDefaultSeparator();");
-                Console.WriteLine("  var separator = HTDemucsExtensions.CreateStemSelector(HTDemucsStem.Vocals | HTDemucsStem.Other);");
+                Log.Info("You can also use helper methods:");
+                Log.Info("  var separator = HTDemucsExtensions.CreateDefaultSeparator();");
+                Log.Info("  var separator = HTDemucsExtensions.CreateStemSelector(HTDemucsStem.Vocals | HTDemucsStem.Other);");
             }
             catch (FileNotFoundException ex)
             {
-                Console.WriteLine($"\nError - File not found: {ex.Message}");
-                Console.WriteLine("Please check that the audio file path is correct.");
+                Log.Info($"\nError - File not found: {ex.Message}");
+                Log.Info("Please check that the audio file path is correct.");
             }
             catch (InvalidOperationException ex)
             {
-                Console.WriteLine($"\nError - Invalid operation: {ex.Message}");
-                Console.WriteLine("The embedded htdemucs.onnx model may be missing from the assembly.");
+                Log.Info($"\nError - Invalid operation: {ex.Message}");
+                Log.Info("The embedded htdemucs.onnx model may be missing from the assembly.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"\nError occurred: {ex.Message}");
-                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Log.Info($"\nError occurred: {ex.Message}");
+                Log.Info($"Stack trace: {ex.StackTrace}");
             }
 
             Console.WriteLine();

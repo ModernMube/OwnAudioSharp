@@ -25,12 +25,7 @@ namespace SoundTouch
 #if !NETSTANDARD1_1
     using System.IO;
 #endif
-
-    //using JetBrains.Annotations;
-
-    // define this to save AA filter coefficients to a file
-    // #define _DEBUG_SAVE_AAFILTER_COEFFICIENTS 1
-
+    
     /// <summary>
     /// Anti-alias filter is used to prevent folding of high frequencies when
     /// transposing the sample rate with interpolation.

@@ -1,3 +1,4 @@
+using Logger;
 using OwnaudioNET.Features.Vocalremover;
 using static OwnaudioNET.Features.Vocalremover.SimpleSeparator;
 
@@ -10,8 +11,8 @@ namespace OwnSeparator.BasicConsole
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("OwnSeparator Audio Separation - Simplified");
-            Console.WriteLine("==========================================");
+            Log.Info("OwnSeparator Audio Separation - Simplified");
+            Log.Info("==========================================");
 
             string audioFilePath = @"path/audio/music.flac";
             string outputDirectory = @"path/output";
@@ -25,31 +26,31 @@ namespace OwnSeparator.BasicConsole
                 {
                     // Subscribe to events
                     service.ProgressChanged += (s, progress) =>
-                        Console.WriteLine($"{progress?.Status}: {progress?.OverallProgress:F1}%");
+                        Log.Info($"{progress?.Status}: {progress?.OverallProgress:F1}%");
 
                     service.ProcessingCompleted += (s, result) =>
-                        Console.WriteLine($"Completed: {result?.ProcessingTime}");               
+                        Log.Info($"Completed: {result?.ProcessingTime}");               
 
                     // Process the audio file
-                    Console.WriteLine("Starting processing...");
+                    Log.Info("Starting processing...");
                     var result = service.Separate(audioFilePath);
 
-                    Console.WriteLine($"Vocals file: {result.VocalsPath}");
-                    Console.WriteLine($"Instrumental file: {result.InstrumentalPath}");
+                    Log.Info($"Vocals file: {result.VocalsPath}");
+                    Log.Info($"Instrumental file: {result.InstrumentalPath}");
 
                     service.Dispose();
                 }
             }
             catch (FileNotFoundException ex)
             {
-                Console.WriteLine($"File not found: {ex.Message}");
+                Log.Info($"File not found: {ex.Message}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"An error occurred: {ex.Message}");
+                Log.Info($"An error occurred: {ex.Message}");
             }
 
-            Console.WriteLine("Press any key to exit...");
+            Log.Info("Press any key to exit...");
             Console.Read();
         }
     }

@@ -90,8 +90,6 @@ namespace OwnaudioNET.Effects
         private readonly float _sampleRate;
         private readonly int _maxBufferSize;
         
-        // Sliding Window Maximum optimization (using array-based circular deque)
-        // ZERO-ALLOCATION: Pre-allocated arrays instead of LinkedList to avoid node allocations
         private readonly long[] _dequeIndices;
         private readonly float[] _dequeValues;
         private int _dequeHead;
@@ -171,8 +169,6 @@ namespace OwnaudioNET.Effects
 
             _sampleRate = sampleRate;
 
-            // Calculate maximum buffer size for MAX_LOOKAHEAD at given sample rate
-            // This ensures zero-allocation during runtime parameter changes
             _maxBufferSize = (int)(MAX_LOOKAHEAD * sampleRate / 1000.0f);
 
             // Set parameters with validation
@@ -218,8 +214,6 @@ namespace OwnaudioNET.Effects
 
             _sampleRate = sampleRate;
 
-            // Calculate maximum buffer size for MAX_LOOKAHEAD at given sample rate
-            // This ensures zero-allocation during runtime parameter changes
             _maxBufferSize = (int)(MAX_LOOKAHEAD * sampleRate / 1000.0f);
 
             // Initialize with default values first
@@ -324,9 +318,6 @@ namespace OwnaudioNET.Effects
                     _lookAheadSamples = newLookAheadSamples;
                     _activeBufferSize = newLookAheadSamples;
 
-                    // ZERO-ALLOCATION: No Array.Resize!
-                    // Buffers were pre-allocated at _maxBufferSize
-                    // We only use the first _activeBufferSize elements
                     Reset();
                 }
             }
@@ -352,23 +343,16 @@ namespace OwnaudioNET.Effects
             {
                 float inputSample = buffer[i];
 
-                // Store input in delay buffer
                 _delayBuffer[_delayIndex] = inputSample;
 
-                // Calculate peak level for look-ahead detection
                 float peakLevel = GetPeakLevel();
 
-                // Calculate required gain reduction
                 float requiredGain = CalculateGainReduction(peakLevel);
 
-                // Store gain in envelope buffer for smooth transitions
                 _envelopeBuffer[_envelopeIndex] = requiredGain;
 
-                // Get smoothed gain from envelope buffer
                 float smoothGain = GetSmoothedGain();
                 
-                // SAFETY: Check for NaN/Inf in gain calculation
-                // If detected, reset to unity gain to prevent audio corruption
                 if (!float.IsFinite(smoothGain))
                 {
                     smoothGain = 1.0f;
@@ -376,21 +360,16 @@ namespace OwnaudioNET.Effects
                     _targetGain = 1.0f;
                 }
 
-                // Apply gain reduction to delayed sample
-                // Use _activeBufferSize for wrapping to support dynamic lookahead changes
                 float delayedSample = _delayBuffer[(_delayIndex - _lookAheadSamples + _activeBufferSize) % _activeBufferSize];
                 float processedSample = delayedSample * smoothGain;
 
-                // Apply final ceiling limit
                 processedSample = ApplyCeiling(processedSample);
 
                 buffer[i] = processedSample;
 
-                // Update buffer indices - wrap at active buffer size
                 _delayIndex = (_delayIndex + 1) % _activeBufferSize;
                 _envelopeIndex = (_envelopeIndex + 1) % _activeBufferSize;
                 
-                // Increment absolute index
                 _absoluteSampleIndex++;
             }
         }
@@ -401,11 +380,8 @@ namespace OwnaudioNET.Effects
         /// </summary>
         public void Reset()
         {
-            // Clear delay buffer
             Array.Clear(_delayBuffer, 0, _activeBufferSize);
             
-            // Initialize envelope buffer to 1.0 (unity gain, no reduction)
-            // CRITICAL: Do NOT clear to 0.0, as that would cause full attenuation!
             Array.Fill(_envelopeBuffer, 1.0f, 0, _activeBufferSize);
             
             _currentGain = 1.0f;
@@ -414,7 +390,6 @@ namespace OwnaudioNET.Effects
             _envelopeIndex = 0;
             _absoluteSampleIndex = 0;
             
-            // Clear sliding window deque
             _dequeHead = 0;
             _dequeTail = 0;
             _dequeSize = 0;
@@ -544,40 +519,31 @@ namespace OwnaudioNET.Effects
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private float GetPeakLevel()
         {
-            // Remove elements outside the current window from front
-            // Use absolute index to correctly handle buffer wrapping
             long expireThreshold = _absoluteSampleIndex - _activeBufferSize;
             
             while (_dequeSize > 0 && _dequeIndices[_dequeHead] <= expireThreshold)
             {
-                // Pop front
                 _dequeHead = (_dequeHead + 1) % _maxBufferSize;
                 _dequeSize--;
             }
             
-            // Get current sample absolute value
             float currentAbs = Math.Abs(_delayBuffer[_delayIndex]);
             
-            // Remove smaller elements from the back (they can't be maximum anymore)
-            // This maintains the deque in decreasing order
             while (_dequeSize > 0)
             {
                 int backIdx = (_dequeTail - 1 + _maxBufferSize) % _maxBufferSize;
                 if (_dequeValues[backIdx] >= currentAbs)
                     break;
                     
-                // Pop back
                 _dequeTail = backIdx;
                 _dequeSize--;
             }
             
-            // Add current element to back with absolute index
             _dequeIndices[_dequeTail] = _absoluteSampleIndex;
             _dequeValues[_dequeTail] = currentAbs;
             _dequeTail = (_dequeTail + 1) % _maxBufferSize;
             _dequeSize++;
             
-            // The front of the deque is the maximum
             return _dequeSize > 0 ? _dequeValues[_dequeHead] : 0.0f;
         }
 
@@ -590,7 +556,6 @@ namespace OwnaudioNET.Effects
             if (peakLevel <= _threshold)
                 return 1.0f;
 
-            // Calculate ratio of excess over threshold
             float excess = peakLevel / _threshold;
             float targetLevel = _threshold / excess;
 
@@ -604,8 +569,6 @@ namespace OwnaudioNET.Effects
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private float GetSmoothedGain()
         {
-            // Find minimum gain in envelope buffer (most restrictive)
-            // Only scan active buffer portion for efficiency
             float minGain = 1.0f;
             for (int i = 0; i < _activeBufferSize; i++)
             {
@@ -613,42 +576,30 @@ namespace OwnaudioNET.Effects
                     minGain = _envelopeBuffer[i];
             }
 
-            // Smooth gain changes
             _targetGain = minGain;
 
             if (_targetGain < _currentGain)
             {
-                // Fast attack for gain reduction (instant control)
                 _currentGain = _targetGain;
             }
             else
             {
-                // ADAPTIVE RELEASE
-                // If gain reduction is heavy (>3dB), release faster to recover loudness
-                // If gain reduction is minimal (<1dB), release slower for transparency
-                // This mimics "Auto" release behavior in pro limiters
-                
                 float gainDiff = 1.0f - _currentGain;
                 float adaptiveRelease = _release;
 
                 if (gainDiff > 0.3f) // >3dB reduction
                 {
-                    // Speed up release slightly for heavy limiting recovery
                     adaptiveRelease *= 1.5f; 
                 }
                 else if (gainDiff < 0.1f) // <1dB reduction
                 {
-                    // Slow down for micro-dynamics transparency
                     adaptiveRelease *= 0.5f;
                 }
 
-                 // Clamp release to stay stable
                  adaptiveRelease = Math.Clamp(adaptiveRelease, 0.0001f, 0.9999f);
 
                 _currentGain += (_targetGain - _currentGain) * adaptiveRelease;
                 
-                // CRITICAL FIX: Prevent drift by snapping to target when very close
-                // Exponential smoothing never fully reaches target, causing volume drift
                 if (Math.Abs(_targetGain - _currentGain) < 0.0001f)
                 {
                     _currentGain = _targetGain;

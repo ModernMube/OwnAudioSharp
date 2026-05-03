@@ -27,7 +27,6 @@ namespace OwnaudioNET.Features.Matchering
             if (string.IsNullOrEmpty(tempDirectory))
                 tempDirectory = Path.GetTempPath();
 
-            // Generate temporary file paths
             string processedBaseSample = Path.Combine(tempDirectory,
                 $"processed_base_{system}_{DateTime.Now.Ticks}.wav");
 
@@ -42,16 +41,10 @@ namespace OwnaudioNET.Features.Matchering
                 Log.Info($"=== ENHANCED PRESET PROCESSING: {SystemPresets[system].Name} ===");
                 Log.Info($"Mode: {(eqOnlyMode ? "EQ Only" : "Full Effects Chain")}");
 
-                // Step 1: Apply preset effects to base sample
                 ApplyPresetToBaseSample(baseSampleFile, processedBaseSample, system, eqOnlyMode);
-
-                // Step 2: Use processed base sample as target for EQ matching
                 ProcessEQMatching(sourceFile, processedBaseSample, outputFile);
 
                 Log.Info($"Enhanced preset processing completed: {outputFile}");
-                // PrintEnhancedPresetResults(sourceFile, baseSampleFile, processedBaseSample, outputFile, system);
-                // DISABLED: This method creates 3 additional FileSource instances which causes MiniAudio DLL crash (0xC0000005)
-                // The native library does not handle rapid create/destroy cycles well
             }
             finally
             {
@@ -82,8 +75,6 @@ namespace OwnaudioNET.Features.Matchering
         {
             var preset = SystemPresets[system];
 
-            // CRITICAL: Lock to prevent race condition during MiniAudio initialization
-            // This FileSource creation must be synchronized with AnalyzeAudioFile()
             float[] audioData;
             int channels;
             int sampleRate;
@@ -102,19 +93,15 @@ namespace OwnaudioNET.Features.Matchering
 
             Log.Info($"Base sample loaded: {audioData.Length / channels / sampleRate:F1}s, {channels}ch, {sampleRate}Hz");
 
-            // Calculate current RMS for level matching later
             float originalRMS = CalculateRMS(audioData);
 
-            // Minimal gain reduction for headroom
             for (int i = 0; i < audioData.Length; i++)
                 audioData[i] *= 0.95f;
 
-            // Create CONSERVATIVE preset curve - much smaller adjustments
             var enhancedCurve = CreateConservativePresetCurve(preset.FrequencyResponse);
             var baseSpectrum = AnalyzeAudioFile(baseSampleFile);
             var optimizedQFactors = CalculateEnhancedPresetQFactors(enhancedCurve, baseSpectrum);
 
-            // Apply MINIMAL gain reduction based on EQ boosts only
             float totalBoosts = enhancedCurve.Where(x => x > 0).Sum();
             float protectiveGain = Math.Max(0.7f, 1.0f - (totalBoosts * 0.03f)); // 3% reduction per dB boost
 
@@ -123,19 +110,16 @@ namespace OwnaudioNET.Features.Matchering
 
             Log.Info($"Applied protective gain: {20 * Math.Log10(protectiveGain):F1}dB (total boosts: {totalBoosts:F1}dB)");
 
-            // Setup EQ (always applied)
             var presetEQ = new Equalizer30BandEffect(sampleRate);
             for (int i = 0; i < FrequencyBands.Length; i++)
             {
                 presetEQ.SetBandGain(i, FrequencyBands[i], optimizedQFactors[i], enhancedCurve[i]);
             }
 
-            // Setup optional dynamics processing
             CompressorEffect? enhancedCompressor = null;
 
             if (!eqOnlyMode)
             {
-                // ONLY compressor, NO DynamicAmp to preserve level
                 enhancedCompressor = new CompressorEffect(
                     CompressorEffect.DbToLinear(-15f),
                     1.8f,
@@ -146,7 +130,6 @@ namespace OwnaudioNET.Features.Matchering
                 );
             }
 
-            // Initialize effects with audio configuration
             var audioConfig = new Ownaudio.Core.AudioConfig
             {
                 SampleRate = sampleRate,
@@ -160,7 +143,6 @@ namespace OwnaudioNET.Features.Matchering
                 enhancedCompressor.Initialize(audioConfig);
             }
 
-            // Process audio with effects chain
             int framesPerChunk = 512;
             int samplesPerChunk = framesPerChunk * channels;
             var processedData = new List<float>();
@@ -177,22 +159,18 @@ namespace OwnaudioNET.Features.Matchering
                 var chunk = new float[samplesToProcess];
                 Array.Copy(audioData, offset, chunk, 0, samplesToProcess);
 
-                // Always apply EQ - NOTE: frameCount, not sampleCount!
                 presetEQ.Process(chunk.AsSpan(), framesToProcess);
 
-                // Conditionally apply ONLY compression (NO DynamicAmp)
                 if (!eqOnlyMode && enhancedCompressor != null)
                 {
                     enhancedCompressor.Process(chunk.AsSpan(), framesToProcess);
                 }
 
-                // Monitor levels with gentler limiting
                 for (int i = 0; i < chunk.Length; i++)
                 {
                     float sample = chunk[i];
                     maxLevel = Math.Max(maxLevel, Math.Abs(sample));
 
-                    // Very gentle soft limiting to preserve dynamics
                     if (Math.Abs(sample) > 0.95f)
                     {
                         float sign = Math.Sign(sample);
@@ -212,11 +190,9 @@ namespace OwnaudioNET.Features.Matchering
 
             Log.Info($"\nBase sample processed. Max level: {20 * Math.Log10(maxLevel):F1}dB");
 
-            // AUTOMATIC LEVEL MATCHING - preserve original RMS level
             float processedRMS = CalculateRMS(processedData.ToArray());
             float levelCompensation = originalRMS / Math.Max(processedRMS, 1e-10f);
 
-            // Apply compensation gain to match original level
             for (int i = 0; i < processedData.Count; i++)
             {
                 processedData[i] *= levelCompensation;
@@ -226,7 +202,6 @@ namespace OwnaudioNET.Features.Matchering
             Log.Info($"Level compensation applied: {20 * Math.Log10(levelCompensation):F1}dB");
             Log.Info($"Final max level: {20 * Math.Log10(finalMaxLevel):F1}dB");
 
-            // Write processed base sample
             OwnaudioNET.Recording.WaveFile.Create(processedBaseSample, processedData.ToArray(), sampleRate, channels, 24);
 
             Log.Info($"Enhanced base sample created: {processedBaseSample}");
@@ -284,7 +259,6 @@ namespace OwnaudioNET.Features.Matchering
                 float freq = FrequencyBands[i];
                 float originalGain = originalCurve[i];
 
-                // Tuned scaling factors - narrower Q allows for more gain without mud
                 float conservativeFactor = freq switch
                 {
                     <= 63f => 0.75f,    // Bass needs to be solid (was 0.6)
@@ -297,7 +271,6 @@ namespace OwnaudioNET.Features.Matchering
 
                 float conservativeGain = originalGain * conservativeFactor;
 
-                // Tighter limits but slightly relaxed for bass/air
                 float maxConservativeBoost = freq switch
                 {
                     < 100f => 3f,       // Allow reasonable bass boost (was 2f)
@@ -344,8 +317,6 @@ namespace OwnaudioNET.Features.Matchering
                 float freq = FrequencyBands[i];
                 float gain = Math.Abs(enhancedCurve[i]);
 
-                // Base Q for enhanced processing - UPDATED for 30-band standard
-                // We use slightly wider values than surgical matching (avg ~3.5) for musicality
                 float baseQ = freq switch
                 {
                     <= 63f => 2.5f,     // Wide for bass foundation (was 0.5)
@@ -356,7 +327,6 @@ namespace OwnaudioNET.Features.Matchering
                     _ => 3.0f           // Wider air (was 0.7)
                 };
 
-                // Gain-based adjustment
                 float gainAdjustment = gain switch
                 {
                     <= 1f => 1.0f,
@@ -382,11 +352,11 @@ namespace OwnaudioNET.Features.Matchering
         private void PrintEnhancedPresetResults(string sourceFile, string baseSampleFile,
             string processedBaseSample, string outputFile, PlaybackSystem system)
         {
-            Console.WriteLine("\n=== ENHANCED PRESET PROCESSING RESULTS ===");
-            Console.WriteLine($"Applied System: {SystemPresets[system].Name}");
-            Console.WriteLine($"Source: {Path.GetFileName(sourceFile)}");
-            Console.WriteLine($"Base Sample: {Path.GetFileName(baseSampleFile)}");
-            Console.WriteLine($"Output: {Path.GetFileName(outputFile)}");
+            Log.Info("\n=== ENHANCED PRESET PROCESSING RESULTS ===");
+            Log.Info($"Applied System: {SystemPresets[system].Name}");
+            Log.Info($"Source: {Path.GetFileName(sourceFile)}");
+            Log.Info($"Base Sample: {Path.GetFileName(baseSampleFile)}");
+            Log.Info($"Output: {Path.GetFileName(outputFile)}");
 
             try
             {
@@ -394,10 +364,10 @@ namespace OwnaudioNET.Features.Matchering
                 var processedBaseSpectrum = AnalyzeAudioFile(processedBaseSample);
                 var finalSpectrum = AnalyzeAudioFile(outputFile);
 
-                Console.WriteLine("\nSpectrum Analysis:");
-                Console.WriteLine($"Original Base - RMS: {originalBaseSpectrum.RMSLevel:F3}, Loudness: {originalBaseSpectrum.Loudness:F1}dBFS");
-                Console.WriteLine($"Enhanced Base - RMS: {processedBaseSpectrum.RMSLevel:F3}, Loudness: {processedBaseSpectrum.Loudness:F1}dBFS");
-                Console.WriteLine($"Final Output - RMS: {finalSpectrum.RMSLevel:F3}, Loudness: {finalSpectrum.Loudness:F1}dBFS");
+                Log.Info("\nSpectrum Analysis:");
+                Log.Info($"Original Base - RMS: {originalBaseSpectrum.RMSLevel:F3}, Loudness: {originalBaseSpectrum.Loudness:F1}dBFS");
+                Log.Info($"Enhanced Base - RMS: {processedBaseSpectrum.RMSLevel:F3}, Loudness: {processedBaseSpectrum.Loudness:F1}dBFS");
+                Log.Info($"Final Output - RMS: {finalSpectrum.RMSLevel:F3}, Loudness: {finalSpectrum.Loudness:F1}dBFS");
 
                 float baseEnhancement = processedBaseSpectrum.Loudness - originalBaseSpectrum.Loudness;
                 Console.WriteLine($"Base Sample Enhancement: {baseEnhancement:+0.1;-0.1}dB");
@@ -460,7 +430,6 @@ namespace OwnaudioNET.Features.Matchering
             }
             finally
             {
-                // Cleanup temp directory
                 try
                 {
                     if (Directory.Exists(tempDirectory))

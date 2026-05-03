@@ -1,3 +1,4 @@
+using Logger;
 ﻿using OwnaudioNET;
 using OwnaudioNET.Features.Matchering;
 
@@ -25,7 +26,7 @@ class Program
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error: {ex.Message}");
+                Log.Info($"Error: {ex.Message}");
             }
             finally
             {
@@ -34,7 +35,7 @@ class Program
         }
         else
         {
-            Console.WriteLine("Ownaudio engine initialization failed!");
+            Log.Info("Ownaudio engine initialization failed!");
         }  
     }
 }

@@ -30,7 +30,6 @@ public sealed class AudioFormatConverter
     private readonly int _sourceRate;
     private readonly int _targetRate;
 
-    // Pre-allocated intermediate buffer (for channel conversion before resampling)
     private float[] _intermediateBuffer;
 
     /// <summary>
@@ -85,28 +84,23 @@ public sealed class AudioFormatConverter
 
         if (!_needsConversion)
         {
-            // No conversion needed - passthrough mode
             _channelConverter = null;
             _resampler = null;
             _intermediateBuffer = Array.Empty<float>();
             return;
         }
 
-        // Initialize channel converter if needed
         if (needsChannelConversion)
         {
             _channelConverter = new AudioChannelConverter(sourceChannels, targetChannels);
         }
 
-        // Initialize resampler if needed
         if (needsResampling)
         {
-            // Resampler works on the target channel count (after channel conversion)
             int resamplerChannels = needsChannelConversion ? targetChannels : sourceChannels;
             _resampler = new AudioResampler(sourceRate, targetRate, resamplerChannels, maxFrameSize);
         }
 
-        // Pre-allocate intermediate buffer (worst case: channel upmix + resampling upmix)
         int maxIntermediateSamples = maxFrameSize * Math.Max(sourceChannels, targetChannels) * 4;
         _intermediateBuffer = new float[maxIntermediateSamples];
     }
@@ -127,7 +121,6 @@ public sealed class AudioFormatConverter
     {
         if (!_needsConversion)
         {
-            // No conversion needed - zero-copy passthrough
             input.CopyTo(output);
             return input.Length;
         }
@@ -135,7 +128,6 @@ public sealed class AudioFormatConverter
         Span<float> currentData = input;
         int currentSamples = input.Length;
 
-        // Step 1: Channel conversion (if needed)
         if (_channelConverter != null)
         {
             Span<float> intermediateSpan = _intermediateBuffer.AsSpan();
@@ -143,14 +135,12 @@ public sealed class AudioFormatConverter
             currentData = intermediateSpan.Slice(0, currentSamples);
         }
 
-        // Step 2: Resampling (if needed)
         if (_resampler != null)
         {
             currentSamples = _resampler.Resample(currentData, output);
         }
         else
         {
-            // No resampling, copy to output
             currentData.CopyTo(output);
         }
 
@@ -179,13 +169,11 @@ public sealed class AudioFormatConverter
 
         int samples = inputSamples;
 
-        // Calculate size after channel conversion
         if (_channelConverter != null)
         {
             samples = _channelConverter.CalculateOutputSize(samples);
         }
 
-        // Calculate size after resampling
         if (_resampler != null)
         {
             samples = _resampler.CalculateOutputSize(samples);

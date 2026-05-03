@@ -27,69 +27,52 @@ namespace OwnaudioNET.Mixing;
 /// </summary>
 public sealed partial class AudioMixer : IDisposable
 {
-    // Engine integration
     private readonly IAudioEngine _engine;
 
-    // Source management
     private readonly ConcurrentDictionary<Guid, IAudioSource> _sources;
-    private IAudioSource[] _cachedSourcesArray = Array.Empty<IAudioSource>();  // OPTIMIZATION: Cache to avoid ConcurrentDictionary.Values allocation
+    private IAudioSource[] _cachedSourcesArray = Array.Empty<IAudioSource>(); 
     private volatile bool _sourcesArrayNeedsUpdate = true;  // Flag to update cache when sources change
-
-    // Synchronization (LEGACY - deprecated but functional)
-    private readonly AudioSynchronizer _synchronizer;
-
-    // NEW: Master Clock System (v2.4.0+)
+    
     private readonly MasterClock _masterClock;
     private readonly Dictionary<Guid, TrackPerformanceMetrics> _trackMetrics;
     private readonly object _metricsLock = new();
 
-    // Mix thread
     private readonly Thread _mixThread;
     private readonly ManualResetEventSlim _pauseEvent;
     private volatile bool _shouldStop;
     private volatile bool _isRunning;
 
-    // Configuration
     private readonly AudioConfig _config;
     private readonly int _bufferSizeInFrames;
     private readonly int _mixIntervalMs;
 
-    // Master controls
     private volatile float _masterVolume;
 
-    // Level metering (peak levels in last mix cycle)
     private volatile float _leftPeak;
     private volatile float _rightPeak;
 
-    // Parallel mixing buffers (Per-core buffers to avoid locking during mix)
     private float[][] _parallelMixBuffers = Array.Empty<float[]>();
     private float[][] _parallelReadBuffers = Array.Empty<float[]>();
     private readonly object _parallelMixLock = new();
 
-    // Statistics
     private long _totalMixedFrames;
 #pragma warning disable CS0649 // Field is never assigned to, and will always have its default value
     private long _totalUnderruns;
 #pragma warning restore CS0649
 
-    // Recording
     private WaveFileWriter? _recorder;
     private readonly object _recorderLock = new();
     private volatile bool _isRecording;
 
-    // Effect chain (master effects applied to final mix)
     private readonly List<IEffectProcessor> _masterEffects;
     private readonly object _effectsLock = new();
-    private IEffectProcessor[] _cachedEffects = Array.Empty<IEffectProcessor>(); // Cached snapshot to avoid ToArray() in hot path
-    private volatile bool _effectsChanged = false; // Flag to indicate effects list changed
+    private IEffectProcessor[] _cachedEffects = Array.Empty<IEffectProcessor>(); 
+    private volatile bool _effectsChanged = false; 
 
-    // Unique identifier for this mixer instance
     private readonly Guid _mixerId;
 
-    // PlaybackEnded tracking
     private volatile bool _playbackEndedFired;
 
-    // Dispose flag
     private bool _disposed;
 
     /// <summary>
@@ -194,7 +177,6 @@ public sealed partial class AudioMixer : IDisposable
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
 
-        // Generate unique identifier
         _mixerId = Guid.NewGuid();
 
         _config = new AudioConfig
@@ -205,13 +187,8 @@ public sealed partial class AudioMixer : IDisposable
         };
         _bufferSizeInFrames = bufferSizeInFrames;
 
-        // Initialize source management
         _sources = new ConcurrentDictionary<Guid, IAudioSource>();
 
-        // Initialize synchronizer (LEGACY - deprecated but functional)
-        _synchronizer = new AudioSynchronizer();
-
-        // Initialize NEW Master Clock System (v2.4.0+)
         _masterClock = new MasterClock(
             sampleRate: 48000,
             channels: 2,
@@ -219,26 +196,20 @@ public sealed partial class AudioMixer : IDisposable
 
         _trackMetrics = new Dictionary<Guid, TrackPerformanceMetrics>();
 
-        // Initialize effect chain
         _masterEffects = new List<IEffectProcessor>();
 
-        // Initialize master controls
         _masterVolume = 1.0f;
         _leftPeak = 0.0f;
         _rightPeak = 0.0f;
-
-        // Calculate mix interval based on buffer time
-        // Use 1/4 buffer time for more responsive mixing (like Ownaudio SourceManager)
+        
         double quarterBufferTimeMs = (_bufferSizeInFrames / 4.0) / _config.SampleRate * 1000.0;
         _mixIntervalMs = Math.Max(1, (int)Math.Round(quarterBufferTimeMs));
 
-        // Initialize synchronization
         _pauseEvent = new ManualResetEventSlim(false);
         _shouldStop = false;
         _isRunning = false;
         _isRecording = false;
 
-        // Create mix thread
         _mixThread = new Thread(MixThreadLoop)
         {
             Name = "AudioMixer.MixThread",
@@ -246,7 +217,6 @@ public sealed partial class AudioMixer : IDisposable
             Priority = ThreadPriority.Highest
         };
 
-        // Automatic registration with OwnaudioNet API
         OwnaudioNet.RegisterAudioMixer(this);
     }
 

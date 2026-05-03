@@ -30,7 +30,6 @@ namespace Ownaudio.Native
         /// <returns>A tuple containing (maxInputChannels, maxOutputChannels).</returns>
         private unsafe (int maxInput, int maxOutput) ProbeAsioDeviceChannels(int deviceIndex, PaDeviceInfo deviceInfo)
         {
-            // Check cache first
             if (_asioChannelCache.TryGetValue(deviceInfo.name, out var cached))
             {
                 return cached;
@@ -41,8 +40,6 @@ namespace Ownaudio.Native
 
             try
             {
-                // Output channels testing
-                // Test up to 32 channels (common maximum for ASIO devices)
                 for (int ch = 1; ch <= 32; ch++)
                 {
                     var testParams = new PaStreamParameters
@@ -59,23 +56,19 @@ namespace Ownaudio.Native
                     IntPtr testParamsPtr = Marshal.AllocHGlobal(Marshal.SizeOf(testParams));
                     Marshal.StructureToPtr(testParams, testParamsPtr, false);
 
-                    // Test output: inputParameters = null, outputParameters = testParams
                     int result = Pa_IsFormatSupported(IntPtr.Zero, testParamsPtr, 48000.0);
                     Marshal.FreeHGlobal(testParamsPtr);
 
                     if (result == 0)
                     {
-                        // Format is supported
                         maxOutputChannels = ch;
                     }
                     else
                     {
-                        // Format not supported, we've found the maximum
                         break;
                     }
                 }
 
-                // Input channels testing
                 for (int ch = 1; ch <= 32; ch++)
                 {
                     var testParams = new PaStreamParameters
@@ -92,31 +85,26 @@ namespace Ownaudio.Native
                     IntPtr testParamsPtr = Marshal.AllocHGlobal(Marshal.SizeOf(testParams));
                     Marshal.StructureToPtr(testParams, testParamsPtr, false);
 
-                    // Test input: inputParameters = testParams, outputParameters = null
                     int result = Pa_IsFormatSupported(testParamsPtr, IntPtr.Zero, 48000.0);
                     Marshal.FreeHGlobal(testParamsPtr);
 
                     if (result == 0)
                     {
-                        // Format is supported
                         maxInputChannels = ch;
                     }
                     else
                     {
-                        // Format not supported, we've found the maximum
                         break;
                     }
                 }
 
                 Log.Info($"ASIO device probe complete: {maxOutputChannels} output, {maxInputChannels} input channels");
 
-                // Cache the result
                 _asioChannelCache[deviceInfo.name] = (maxInputChannels, maxOutputChannels);
             }
             catch (Exception ex)
             {
                 Log.Warning($"ASIO device probing failed for device index {deviceIndex}: {ex.Message}");
-                // Return fallback values based on deviceInfo
                 maxOutputChannels = Math.Max(deviceInfo.maxOutputChannels, 2);
                 maxInputChannels = Math.Max(deviceInfo.maxInputChannels, 0);
             }

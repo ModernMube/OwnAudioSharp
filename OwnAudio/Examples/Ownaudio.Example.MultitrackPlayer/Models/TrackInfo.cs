@@ -118,7 +118,6 @@ public class TrackInfo : IDisposable
         if (_disposed)
             return;
 
-        // Only dispose if Source is not null and not already disposed
         if (Source != null)
         {
             try
@@ -127,7 +126,6 @@ public class TrackInfo : IDisposable
             }
             catch
             {
-                // Source might already be disposed
             }
             finally
             {

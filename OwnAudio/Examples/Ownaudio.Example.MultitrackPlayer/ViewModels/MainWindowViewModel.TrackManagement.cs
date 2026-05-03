@@ -74,7 +74,6 @@ public partial class MainWindowViewModel
             // Create FileSource in background thread to avoid blocking
             await Task.Run(() =>
             {
-                // CRITICAL: Create FileSource with matching sample rate and channels
                 var fileSource = new FileSource(filePath, 8192,
                     targetSampleRate: targetSampleRate,
                     targetChannels: targetChannels);

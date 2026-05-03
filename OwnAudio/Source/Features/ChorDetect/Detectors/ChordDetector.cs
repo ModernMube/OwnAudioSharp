@@ -355,7 +355,6 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
             {
                 var pitchClass = note.Pitch % 12;
 
-                // Weight by amplitude × overlap duration (matches KeyDetector weighting strategy)
                 float duration;
                 if (windowStart >= 0 && windowEnd > windowStart)
                 {

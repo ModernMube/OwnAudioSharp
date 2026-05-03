@@ -78,7 +78,6 @@ namespace Ownaudio.Native
         {
             if ((int)hostApiType == -1)
             {
-                // Use default host API
                 return isInput ? Pa_GetDefaultInputDevice() : Pa_GetDefaultOutputDevice();
             }
 

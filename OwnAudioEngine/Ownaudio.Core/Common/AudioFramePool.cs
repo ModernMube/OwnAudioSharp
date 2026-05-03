@@ -40,7 +40,6 @@ public sealed class AudioFramePool
         _frames = new ConcurrentBag<PooledAudioFrame>();
         _currentSize = 0;
 
-        // Pre-allocate initial frames
         for (int i = 0; i < initialPoolSize; i++)
         {
             _frames.Add(new PooledAudioFrame(new byte[bufferSize]));
@@ -62,12 +61,10 @@ public sealed class AudioFramePool
 
         if (_frames.TryTake(out PooledAudioFrame frame))
         {
-            // Reuse pooled frame
             frame.Reset(presentationTime, dataLength);
             return frame;
         }
 
-        // Pool empty, create new frame
         return new PooledAudioFrame(new byte[_bufferSize], presentationTime, dataLength);
     }
 
@@ -81,21 +78,13 @@ public sealed class AudioFramePool
         if (frame == null)
             return;
 
-        // Check buffer size matches pool
         if (frame.BufferCapacity != _bufferSize)
             return; // Discard frames with wrong buffer size
 
-        // Check max size limit.
-        // Note: the check and the Add+Increment are not atomic, so the pool may
-        // transiently exceed _maxPoolSize by a small amount under concurrent load.
-        // This is acceptable – the pool acts as a soft ceiling, not a hard invariant.
         if (_maxPoolSize > 0 && _currentSize >= _maxPoolSize)
             return; // Discard excess frames
 
         _frames.Add(frame);
-        // Use Interlocked to prevent lost updates when multiple threads return frames
-        // concurrently (ConcurrentBag is thread-safe for Add/TryTake, but a plain ++
-        // on a shared int is not atomic on all architectures).
         System.Threading.Interlocked.Increment(ref _currentSize);
     }
 

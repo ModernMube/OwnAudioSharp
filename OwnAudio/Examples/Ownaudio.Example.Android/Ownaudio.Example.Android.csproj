@@ -43,19 +43,18 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Xamarin.AndroidX.AppCompat" Version="1.7.1.2">
+    <PackageReference Include="Xamarin.AndroidX.AppCompat" Version="1.7.1.3">
       <!-- Exclude duplicate Compose runtime annotations to prevent R8 duplicate class errors -->
       <ExcludeAssets>none</ExcludeAssets>
       <PrivateAssets>none</PrivateAssets>
     </PackageReference>
     <!-- Explicitly exclude the JVM variant that causes conflicts -->
-    <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Annotation.Jvm" Version="*">
+    <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Annotation.Jvm" Version="1.10.6">
       <ExcludeAssets>all</ExcludeAssets>
     </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\OwnAudioEngine\Ownaudio.Android\Ownaudio.Android.csproj" />
     <ProjectReference Include="..\..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" />
     <ProjectReference Include="..\..\Source\OwnaudioNET.Mobile.csproj" />
   </ItemGroup>

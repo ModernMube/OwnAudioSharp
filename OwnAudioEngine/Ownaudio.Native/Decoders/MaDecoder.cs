@@ -179,7 +179,6 @@ public sealed class MaDecoder : IAudioDecoder
         _targetChannels = targetChannels;
         _readBuffer = ArrayPool<byte>.Shared.Rent(MIN_READ_BUFFER_SIZE);
 
-        // Load miniaudio library
         try
         {
             MaBinding.EnsureInitialized();
@@ -191,10 +190,8 @@ public sealed class MaDecoder : IAudioDecoder
             throw new AudioException($"Failed to load miniaudio library: {ex.Message}", ex);
         }
 
-        // Initialize decoder from stream
         InitializeFromStream(_stream, targetSampleRate, targetChannels);
 
-        // Pre-allocate buffers
         int maxOutputSamples = _samplesPerFrame * (int)_decoderChannels * 2;
         _tempDecodeBuffer = new float[maxOutputSamples];
         _tempByteBuffer = new byte[maxOutputSamples * sizeof(float)];
@@ -227,7 +224,6 @@ public sealed class MaDecoder : IAudioDecoder
         if (!_stream.CanSeek)
             throw new ArgumentException("Stream must support seeking.", nameof(stream));
 
-        // Load miniaudio library
         try
         {
             MaBinding.EnsureInitialized();
@@ -238,10 +234,8 @@ public sealed class MaDecoder : IAudioDecoder
             throw new AudioException($"Failed to load miniaudio library: {ex.Message}", ex);
         }
 
-        // Initialize decoder from stream
         InitializeFromStream(stream, targetSampleRate, targetChannels);
 
-        // Pre-allocate buffers
         int maxOutputSamples = _samplesPerFrame * (int)_decoderChannels * 2;
         _tempDecodeBuffer = new float[maxOutputSamples];
         _tempByteBuffer = new byte[maxOutputSamples * sizeof(float)];
@@ -259,7 +253,6 @@ public sealed class MaDecoder : IAudioDecoder
     {
         try
         {
-            // Try to allocate decoder config - use native version if available, fallback to managed
             try
             {
                 _configPtr = sf_allocate_decoder_config(
@@ -270,7 +263,6 @@ public sealed class MaDecoder : IAudioDecoder
             }
             catch (NotSupportedException)
             {
-                // Native version not available, use managed fallback
                 _configPtr = allocate_decoder_config(
                     MaFormat.F32,
                     (uint)(targetChannels > 0 ? targetChannels : 2),
@@ -281,14 +273,12 @@ public sealed class MaDecoder : IAudioDecoder
             if (_configPtr == IntPtr.Zero)
                 throw new AudioException("Failed to allocate decoder config");
 
-            // Try to allocate decoder - use native version if available, fallback to managed
             try
             {
                 _decoder = sf_allocate_decoder();
             }
             catch (NotSupportedException)
             {
-                // Native version not available, use managed fallback
                 _decoder = allocate_decoder();
             }
 
@@ -299,11 +289,9 @@ public sealed class MaDecoder : IAudioDecoder
                 throw new AudioException("Failed to allocate decoder");
             }
 
-            // Create callback delegates
             _readCallback = ReadCallback;
             _seekCallback = SeekCallback;
 
-            // Initialize decoder with callbacks
             MaResult result = ma_decoder_init(
                 _readCallback,
                 _seekCallback,
@@ -321,14 +309,12 @@ public sealed class MaDecoder : IAudioDecoder
                 throw new AudioException($"Failed to initialize decoder: {result}");
             }
 
-            // Config can be freed after successful init
             if (_configPtr != IntPtr.Zero)
             {
                 ma_free(_configPtr, IntPtr.Zero, "Freeing config after successful init");
                 _configPtr = IntPtr.Zero;
             }
 
-            // Get decoder format information
             _decoderFormat = MaFormat.F32;
             _decoderChannels = 0;
             _decoderSampleRate = 0;
@@ -345,19 +331,16 @@ public sealed class MaDecoder : IAudioDecoder
             if (result != MaResult.Success)
                 throw new AudioException($"Failed to get decoder format: {result}");
 
-            // Get total length in frames
             result = ma_decoder_get_length_in_pcm_frames(_decoder, out _totalFrames);
             if (result != MaResult.Success)
                 _totalFrames = 0; // Unknown length
 
-            // Calculate duration
             TimeSpan duration = TimeSpan.Zero;
             if (_totalFrames > 0 && _decoderSampleRate > 0)
             {
                 duration = TimeSpan.FromSeconds((double)_totalFrames / _decoderSampleRate);
             }
 
-            // Create stream info
             _streamInfo = new AudioStreamInfo(
                 channels: (int)_decoderChannels,
                 sampleRate: (int)_decoderSampleRate,
@@ -403,7 +386,6 @@ public sealed class MaDecoder : IAudioDecoder
 
             var size = (int)Math.Min(bytesToRead, MAX_READ_BUFFER_SIZE);
 
-            // Resize buffer if needed
             if (_readBuffer == null || _readBuffer.Length < size)
             {
                 var newSize = Math.Max(size, MIN_READ_BUFFER_SIZE);
@@ -492,132 +474,6 @@ public sealed class MaDecoder : IAudioDecoder
         }
     }
 
-    /// <summary>
-    /// Decodes the next audio frame from the stream.
-    /// </summary>
-    /// <returns>Result containing the decoded audio frame or error information.</returns>
-    [Obsolete("This method allocates a new AudioFrame on each call. Use ReadFrames instead.", true)]
-    public AudioDecoderResult DecodeNextFrame()
-    {
-        lock (_syncLock)
-        {
-            if (_endOfStreamReached)
-            {
-                return new AudioDecoderResult(
-                    frame: null!,
-                    succeeded: true,
-                    eof: true,
-                    errorMessage: "End of stream reached"
-                );
-            }
-
-            if (_disposed || _decoder == IntPtr.Zero)
-            {
-                return new AudioDecoderResult(
-                    frame: null!,
-                    succeeded: false,
-                    eof: true,
-                    errorMessage: "Decoder disposed"
-                );
-            }
-
-            try
-            {
-                int framesToRead = _samplesPerFrame / (int)_decoderChannels;
-                int samplesToRead = framesToRead * (int)_decoderChannels;
-
-                unsafe
-                {
-                    fixed (float* pBuffer = _tempDecodeBuffer)
-                    {
-                        MaResult result = ma_decoder_read_pcm_frames(
-                            _decoder,
-                            (IntPtr)pBuffer,
-                            (ulong)framesToRead,
-                            out ulong framesRead
-                        );
-
-                        if (framesRead == 0 || result == MaResult.AtEnd)
-                        {
-                            _endOfStreamReached = true;
-                            return new AudioDecoderResult(
-                                frame: null!,
-                                succeeded: true,
-                                eof: true,
-                                errorMessage: "End of stream"
-                            );
-                        }
-
-                        if (result != MaResult.Success)
-                        {
-                            return new AudioDecoderResult(
-                                frame: null!,
-                                succeeded: false,
-                                eof: false,
-                                errorMessage: $"Decoder read error: {result}"
-                            );
-                        }
-
-                        int samplesRead = (int)framesRead * (int)_decoderChannels;
-                        int dataSize = samplesRead * sizeof(float);
-
-                        if (dataSize <= 0)
-                        {
-                            _endOfStreamReached = true;
-                            return new AudioDecoderResult(
-                                frame: null!,
-                                succeeded: true,
-                                eof: true,
-                                errorMessage: null
-                            );
-                        }
-
-                        // Copy float samples to byte array
-                        var sourceSpan = new ReadOnlySpan<float>(_tempDecodeBuffer, 0, samplesRead);
-                        var targetSpan = new Span<byte>(_tempByteBuffer, 0, dataSize);
-                        MemoryMarshal.AsBytes(sourceSpan).CopyTo(targetSpan);
-
-                        // Create result array
-                        var data = new byte[dataSize];
-                        targetSpan.Slice(0, dataSize).CopyTo(data);
-
-                        double presentationTime = _currentPts;
-                        var frame = new AudioFrame(presentationTime, data);
-
-                        // Update presentation time
-                        _currentPts += (double)framesRead / _decoderSampleRate * 1000.0;
-
-                        return new AudioDecoderResult(
-                            frame: frame,
-                            succeeded: true,
-                            eof: false,
-                            errorMessage: null
-                        );
-                    }
-                }
-            }
-            catch (ObjectDisposedException)
-            {
-                _disposed = true;
-                _endOfStreamReached = true;
-                return new AudioDecoderResult(
-                    frame: null!,
-                    succeeded: false,
-                    eof: true,
-                    errorMessage: "Decoder was disposed during operation"
-                );
-            }
-            catch (Exception ex)
-            {
-                return new AudioDecoderResult(
-                    frame: null!,
-                    succeeded: false,
-                    eof: false,
-                    errorMessage: $"Decoder exception: {ex.Message}"
-                );
-            }
-        }
-    }
 
     /// <summary>
     /// Reads the next block of audio frames into the provided buffer.
@@ -647,7 +503,6 @@ public sealed class MaDecoder : IAudioDecoder
                 {
                     fixed (byte* pBuffer = buffer)
                     {
-                        // The native function expects a float*, so we cast our byte*
                         float* pFloatBuffer = (float*)pBuffer;
 
                         MaResult result = ma_decoder_read_pcm_frames(
@@ -668,7 +523,6 @@ public sealed class MaDecoder : IAudioDecoder
                             return new AudioDecoderResult(0, false, false, $"Decoder read error: {result}");
                         }
 
-                        // Update presentation time
                         _currentPts += (double)framesRead / _decoderSampleRate * 1000.0;
 
                         return new AudioDecoderResult((int)framesRead, true, false, null);
@@ -708,7 +562,6 @@ public sealed class MaDecoder : IAudioDecoder
 
             try
             {
-                // Convert time to frame index
                 ulong frameIndex = (ulong)(position.TotalSeconds * _decoderSampleRate);
 
                 MaResult result = ma_decoder_seek_to_pcm_frame(_decoder, frameIndex);
@@ -719,7 +572,6 @@ public sealed class MaDecoder : IAudioDecoder
                     return false;
                 }
 
-                // Update presentation time and reset EOF flag
                 _currentPts = position.TotalMilliseconds;
                 _endOfStreamReached = false;
 
@@ -753,7 +605,6 @@ public sealed class MaDecoder : IAudioDecoder
             if (_disposed)
                 return;
 
-            // Keep callbacks alive until after uninit
             GC.KeepAlive(_readCallback);
             GC.KeepAlive(_seekCallback);
 
@@ -780,8 +631,6 @@ public sealed class MaDecoder : IAudioDecoder
             {
                 _stream.Dispose();
             }
-
-            // _miniAudioLoader?.Dispose(); // REMOVED: Managed by MaBinding
 
             _disposed = true;
             GC.SuppressFinalize(this);

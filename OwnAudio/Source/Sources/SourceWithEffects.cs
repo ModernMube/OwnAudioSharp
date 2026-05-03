@@ -112,9 +112,13 @@ public sealed class SourceWithEffects : IAudioSource
         if (effect == null)
             throw new ArgumentNullException(nameof(effect));
 
+        if (!effect.IsReady)
+            throw new InvalidOperationException(
+                $"Effect '{effect.Name}' is not ready for audio processing. " +
+                $"For VST3 effects call and await VST3PluginHost.InitializeAudioAsync() first.");
+
         lock (_effectsLock)
         {
-            // Initialize effect with source's audio config
             effect.Initialize(Config);
             _effects.Add(effect);
         }
@@ -196,19 +200,16 @@ public sealed class SourceWithEffects : IAudioSource
     {
         ThrowIfDisposed();
 
-        // 1. Read from inner source
         int framesRead = _innerSource.ReadSamples(buffer, frameCount);
 
         if (framesRead == 0)
             return 0;
 
-        // 2. Apply effect chain (if any effects exist)
         lock (_effectsLock)
         {
             if (_effects.Count == 0)
                 return framesRead; // Fast path: no effects
 
-            // Process each effect in order
             foreach (var effect in _effects)
             {
                 try
@@ -218,11 +219,7 @@ public sealed class SourceWithEffects : IAudioSource
                         effect.Process(buffer, framesRead);
                     }
                 }
-                catch
-                {
-                    // Effect processing error - skip this effect and continue
-                    // In production, log via ILogger
-                }
+                catch {}
             }
         }
 
@@ -234,7 +231,6 @@ public sealed class SourceWithEffects : IAudioSource
     {
         ThrowIfDisposed();
 
-        // When seeking, reset all effects to clear their buffers
         lock (_effectsLock)
         {
             foreach (var effect in _effects)
@@ -243,10 +239,7 @@ public sealed class SourceWithEffects : IAudioSource
                 {
                     effect.Reset();
                 }
-                catch
-                {
-                    // Ignore reset errors
-                }
+                catch {}
             }
         }
 
@@ -272,7 +265,6 @@ public sealed class SourceWithEffects : IAudioSource
     {
         ThrowIfDisposed();
 
-        // Reset effects when stopping
         lock (_effectsLock)
         {
             foreach (var effect in _effects)
@@ -281,10 +273,7 @@ public sealed class SourceWithEffects : IAudioSource
                 {
                     effect.Reset();
                 }
-                catch
-                {
-                    // Ignore reset errors
-                }
+                catch {}
             }
         }
 
@@ -336,7 +325,6 @@ public sealed class SourceWithEffects : IAudioSource
         if (_disposed)
             return;
 
-        // Dispose all effects
         lock (_effectsLock)
         {
             foreach (var effect in _effects)
@@ -345,23 +333,16 @@ public sealed class SourceWithEffects : IAudioSource
                 {
                     effect?.Dispose();
                 }
-                catch
-                {
-                    // Ignore disposal errors
-                }
+                catch {}
             }
             _effects.Clear();
         }
 
-        // Dispose inner source
         try
         {
             _innerSource?.Dispose();
         }
-        catch
-        {
-            // Ignore disposal errors
-        }
+        catch {}
 
         _disposed = true;
     }

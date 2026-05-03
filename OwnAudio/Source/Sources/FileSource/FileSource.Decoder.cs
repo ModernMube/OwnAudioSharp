@@ -16,7 +16,7 @@ public partial class FileSource
 
     /// <summary>
     /// Decoder thread procedure - runs in background and fills the buffer.
-    /// Uses frame-based decoding via IAudioDecoder.DecodeNextFrame().
+    /// Uses zero-allocation decoding via IAudioDecoder.ReadFrames().
     /// </summary>
     private void DecoderThreadProc()
     {
@@ -24,39 +24,29 @@ public partial class FileSource
         {
             while (!_shouldStop)
             {
-                // Wait if paused (and not pre-buffering)
                 if (!ShouldContinueDecoding())
                 {
                     _pauseEvent.Wait(100);
                     continue;
                 }
 
-                // Apply pending soft sync adjustment
                 ApplyPendingSoftSyncAdjustment();
 
-                // Handle seek request
                 if (HandleSeekRequest())
                     continue;
 
-                // Check if buffer needs filling
                 if (!ShouldFillBuffer())
                 {
-                    // OPTIMIZATION (Phase 2): Event-driven waiting instead of polling
-                    // Replaces Thread.Sleep(1) which causes ~1000 context switches/sec/track
-                    // WaitOne(10) waits for signal or 10ms timeout, whichever comes first
-                    // This reduces CPU overhead dramatically with 20+ decoder threads
                     _bufferNeedsRefillEvent.WaitOne(10);
                     continue;
                 }
 
-                // Decode next frame
-                if (!DecodeNextFrame())
+                if (!ReadNextFrames())
                     break;
             }
         }
         catch (Exception ex)
         {
-            // Report error to main thread
             OnError(new AudioErrorEventArgs($"Decoder thread error: {ex.Message}", ex));
         }
     }
@@ -82,17 +72,14 @@ public partial class FileSource
             {
                 if (float.IsNaN(pendingAdjustment))
                 {
-                    // Reset to original tempo (sentinel value)
                     double originalTempoChange = (_tempo - 1.0f) * 100.0f;
                     _soundTouch.TempoChange = (float)originalTempoChange;
                 }
                 else
                 {
-                    // Apply the soft sync tempo adjustment
                     _soundTouch.TempoChange = pendingAdjustment;
                 }
             }
-            // Clear the pending adjustment (atomic write)
             _pendingSoftSyncTempoAdjustment = 0f;
         }
     }
@@ -113,11 +100,9 @@ public partial class FileSource
                 if (_decoder.TrySeek(targetTimeSpan, out string error))
                 {
                     Interlocked.Exchange(ref _currentPosition, targetSeconds);
-                    // Sync SamplePosition with new time position
                     SetSamplePosition((long)(targetSeconds * _streamInfo.SampleRate));
                     _isEndOfStream = false;
 
-                    // Reset input-driven timing counter
                     lock (_timingLock)
                     {
                         _totalSamplesProcessedFromFile = (long)(targetSeconds * _streamInfo.SampleRate);
@@ -140,12 +125,6 @@ public partial class FileSource
     /// <returns>True if buffer should be filled, false otherwise.</returns>
     private bool ShouldFillBuffer()
     {
-        // BUGFIX: Reduced target fill level to prevent accumulation buffer overflow.
-        // Previous 87.5% (7/8) left only 1/8 (4096 frames) free space, but we read
-        // 8192 frames at once. With SoundTouch time-stretch, this can expand even more.
-        // This caused the accumulation buffer to grow indefinitely until overflow,
-        // resulting in audio dropout after a short time with 15+ tracks at <95% tempo.
-        // Solution: Use 50% (1/2) threshold to ensure at least 2x read chunk space.
         bool isSoundTouchActive = _soundTouch.IsProcessingNeeded();
         int targetFillLevel = isSoundTouchActive
             ? (_buffer.Capacity * 1) / 2     // 50% for SoundTouch (was 87.5%)
@@ -155,12 +134,11 @@ public partial class FileSource
     }
 
     /// <summary>
-    /// Decodes the next frame from the audio file.
+    /// Reads the next frames from the audio file.
     /// </summary>
     /// <returns>True if decoding should continue, false if EOF or error.</returns>
-    private bool DecodeNextFrame()
+    private bool ReadNextFrames()
     {
-        // ZERO-ALLOC: Decode into the reusable buffer
         var readResult = _decoder.ReadFrames(_decodeBuffer);
 
         if (readResult.IsEOF)
@@ -174,7 +152,6 @@ public partial class FileSource
         }
         else if (!readResult.IsSucceeded)
         {
-            // Decode error
             OnError(new AudioErrorEventArgs($"Decode error: {readResult.ErrorMessage}", null));
             _isEndOfStream = true;
             return false;
@@ -189,16 +166,13 @@ public partial class FileSource
     /// <returns>True if decoding should continue (looping), false otherwise.</returns>
     private bool HandleEndOfStream()
     {
-        // End of file reached
         _isEndOfStream = true;
 
-        // Only flush SoundTouch if it was actually used
         if (_soundTouch.IsProcessingNeeded())
         {
             FlushSoundTouchBuffer();
         }
 
-        // If looping, seek to beginning
         if (Loop)
         {
             if (_decoder.TrySeek(TimeSpan.Zero, out string error))
@@ -206,11 +180,9 @@ public partial class FileSource
                 Interlocked.Exchange(ref _currentPosition, 0.0);
                 _isEndOfStream = false;
 
-                // Clear SoundTouch on loop
                 lock (_soundTouchLock)
                 {
                     _soundTouch.Clear();
-                    // Clear accumulation buffer
                     _soundTouchAccumulationCount = 0;
                 }
                 return true;
@@ -223,7 +195,6 @@ public partial class FileSource
         }
         else
         {
-            // Wait for buffer to drain
             while (!_shouldStop && _buffer.Available > 0)
             {
                 Thread.Sleep(10);
@@ -243,18 +214,10 @@ public partial class FileSource
         var floatSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(_decodeBuffer.AsSpan(0, bytesRead));
         int frameCount = readResult.FramesRead;
 
-        // Decide path: bypass SoundTouch when tempo=1.0 AND pitch=0
-        // This is critical for multi-track sync: SoundTouch has ~20-80ms internal latency
-        // that accumulates differently on each track and causes audible drift between sávok.
         bool isProcessingNeeded = _soundTouch.IsProcessingNeeded();
-
-        // Handle the ON→OFF and OFF→ON transitions (without Flush/silence crackling)
         HandleSoundTouchTransition(isProcessingNeeded);
-
-        // Update transition tracking BEFORE the write so the next call sees the new state
         _wasSoundTouchProcessing = isProcessingNeeded;
-
-        // Track total samples processed from file for input-driven timing
+        
         lock (_timingLock)
         {
             _totalSamplesProcessedFromFile += frameCount;
@@ -262,12 +225,10 @@ public partial class FileSource
 
         if (isProcessingNeeded)
         {
-            // Process through SoundTouch (pitch/tempo active)
             ProcessWithSoundTouch(floatSpan, frameCount);
         }
         else
         {
-            // Direct write – zero latency, keeps tracks in sync
             _buffer.Write(floatSpan);
         }
     }
@@ -282,17 +243,10 @@ public partial class FileSource
     {
         if (_wasSoundTouchProcessing && !isProcessingNeeded)
         {
-            // SoundTouch turning OFF – drain its internal pipeline WITHOUT adding silence.
-            // The old code called FlushSoundTouchBuffer() here which internally calls
-            // _soundTouch.Flush(). That method injects blank (zero) frames to push out
-            // the remaining samples, and those zeros get written to the circular buffer,
-            // producing an unmistakable "click" at the transition point.
-            // Replacing it with a plain ReceiveSamples loop avoids the silence injection.
             DrainSoundTouchBuffer();
         }
         else if (!_wasSoundTouchProcessing && isProcessingNeeded)
         {
-            // SoundTouch turning ON – clear any stale state from the previous bypass period
             lock (_soundTouchLock)
             {
                 _soundTouch.Clear();
@@ -319,23 +273,17 @@ public partial class FileSource
         {
             try
             {
-                // Caller should check IsProcessingNeeded() before calling this method
 
                 int requiredSize = samples.Length;
                 if (_soundTouchInputBuffer.Length < requiredSize)
                 {
-                    // CRITICAL: This should NEVER happen if buffers are pre-allocated correctly
-                    // Log error instead of reallocating to avoid GC in hot path
                     OnError(new AudioErrorEventArgs(
                         $"SoundTouch input buffer overflow: required={requiredSize}, available={_soundTouchInputBuffer.Length}. " +
                         "Increase buffer size in constructor.", null));
                     return;
                 }
 
-                // Copy to pre-allocated buffer
                 samples.CopyTo(_soundTouchInputBuffer.AsSpan(0, samples.Length));
-
-                // Put samples into SoundTouch
                 _soundTouch.PutSamples(_soundTouchInputBuffer.AsSpan(0, samples.Length), frameCount);
 
                 int maxFrames = _soundTouchOutputBuffer.Length / _streamInfo.Channels;
@@ -343,20 +291,16 @@ public partial class FileSource
 
                 if (framesReceived > 0)
                 {
-                    // Add to accumulation buffer
                     int samplesToAdd = framesReceived * _streamInfo.Channels;
                     AddToSoundTouchAccumulationBuffer(_soundTouchOutputBuffer.AsSpan(0, samplesToAdd));
                 }
-
-                // Write IMMEDIATELY whatever we have accumulated
+                
                 if (_soundTouchAccumulationCount > 0)
                 {
-                    // Write ALL accumulated samples immediately
                     int samplesWritten = _buffer.Write(_soundTouchAccumulationBuffer.AsSpan(0, _soundTouchAccumulationCount));
 
                     if (samplesWritten > 0)
                     {
-                        // Successfully wrote some/all samples - shift remaining
                         int remainingSamples = _soundTouchAccumulationCount - samplesWritten;
                         if (remainingSamples > 0)
                         {
@@ -369,7 +313,6 @@ public partial class FileSource
             }
             catch (Exception ex)
             {
-                // Log error but don't crash decoder thread
                 OnError(new AudioErrorEventArgs($"SoundTouch processing error: {ex.Message}", ex));
             }
         }
@@ -386,15 +329,12 @@ public partial class FileSource
         int requiredCapacity = _soundTouchAccumulationCount + samples.Length;
         if (requiredCapacity > _soundTouchAccumulationBuffer.Length)
         {
-            // CRITICAL: This should NEVER happen if buffers are pre-allocated correctly
-            // Log error instead of reallocating to avoid GC in hot path
             OnError(new AudioErrorEventArgs(
                 $"SoundTouch accumulation buffer overflow: required={requiredCapacity}, available={_soundTouchAccumulationBuffer.Length}. " +
                 "Increase buffer size in constructor.", null));
             return;
         }
 
-        // Add samples to accumulation buffer
         samples.CopyTo(_soundTouchAccumulationBuffer.AsSpan(_soundTouchAccumulationCount, samples.Length));
         _soundTouchAccumulationCount += samples.Length;
     }
@@ -419,7 +359,6 @@ public partial class FileSource
         {
             try
             {
-                // Read whatever SoundTouch has already finished processing
                 while (true)
                 {
                     int maxFrames = _soundTouchOutputBuffer.Length / _streamInfo.Channels;
@@ -431,7 +370,6 @@ public partial class FileSource
                     AddToSoundTouchAccumulationBuffer(_soundTouchOutputBuffer.AsSpan(0, samplesToAdd));
                 }
 
-                // Write whatever we drained into the circular buffer
                 if (_soundTouchAccumulationCount > 0)
                 {
                     int samplesWritten = _buffer.Write(_soundTouchAccumulationBuffer.AsSpan(0, _soundTouchAccumulationCount));
@@ -444,7 +382,6 @@ public partial class FileSource
                     _soundTouchAccumulationCount = remainingSamples;
                 }
 
-                // Clear SoundTouch state now that we've drained the real samples
                 _soundTouch.Clear();
                 _soundTouchAccumulationCount = 0;
             }
@@ -467,7 +404,6 @@ public partial class FileSource
             {
                 _soundTouch.Flush();
 
-                // Retrieve all remaining samples from SoundTouch and add to accumulation buffer
                 while (true)
                 {
                     int maxFrames = _soundTouchOutputBuffer.Length / _streamInfo.Channels;
@@ -479,18 +415,10 @@ public partial class FileSource
                     AddToSoundTouchAccumulationBuffer(_soundTouchOutputBuffer.AsSpan(0, samplesToAdd));
                 }
 
-                // Flush accumulation buffer to CircularBuffer.
-                // BUGFIX: Only discard the samples that were actually written.
-                // Previously, _soundTouchAccumulationCount was always reset to 0 even when
-                // _buffer.Write() returned fewer samples than requested (e.g. when the
-                // circular buffer was almost full). This silently discarded the unwritten
-                // tail, producing a micro-dropout (crackle) precisely when SoundTouch
-                // switches off (which is a random, timing-dependent event).
                 if (_soundTouchAccumulationCount > 0)
                 {
                     int samplesWritten = _buffer.Write(_soundTouchAccumulationBuffer.AsSpan(0, _soundTouchAccumulationCount));
 
-                    // Shift any unwritten samples to the front of the accumulation buffer
                     int remainingSamples = _soundTouchAccumulationCount - samplesWritten;
                     if (remainingSamples > 0)
                     {

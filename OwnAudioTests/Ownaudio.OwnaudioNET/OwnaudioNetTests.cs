@@ -11,7 +11,6 @@ public class OwnaudioNetTests : IDisposable
 {
     public OwnaudioNetTests()
     {
-        // Ensure clean state before each test
         if (OwnaudioNet.IsInitialized)
         {
             OwnaudioNet.Shutdown();
@@ -20,7 +19,6 @@ public class OwnaudioNetTests : IDisposable
 
     public void Dispose()
     {
-        // Cleanup after each test
         if (OwnaudioNet.IsInitialized)
         {
             OwnaudioNet.Shutdown();
@@ -53,17 +51,13 @@ public class OwnaudioNetTests : IDisposable
         // Arrange & Act
         Action act = () => OwnaudioNet.Initialize();
 
-        // Assert - Should not throw, but may fail without mock engine on systems without audio
-        // So we skip this test or use try-catch
+        // Assert
         try
         {
             OwnaudioNet.Initialize(OwnaudioNet.CreateDefaultConfig(), useMockEngine: true);
             OwnaudioNet.IsInitialized.Should().BeTrue();
         }
-        catch
-        {
-            // Expected on systems without audio hardware
-        }
+        catch {}
     }
 
     [Fact]
@@ -316,6 +310,5 @@ public class OwnaudioNetTests : IDisposable
 
         // Assert
         OwnaudioNet.IsInitialized.Should().BeTrue();
-        // All threads should complete without deadlock
     }
 }

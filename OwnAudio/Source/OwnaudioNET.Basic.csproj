@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <!-- Default: desktop only. Pass -p:BuildMobile=true to include Android + iOS TFMs. -->
@@ -39,7 +39,7 @@
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>OwnAudioSharp.Basic</PackageId>
-    <Version>2.8.3</Version>
+    <Version>2.9.8</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for desktop (Windows, Linux, macOS) and mobile (Android, iOS) - Basic edition without AI/ML features (no VocalRemover, ChordDetect, Matchering)</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;android;ios;desktop;mobile;sound;multitrack</PackageTags>
@@ -53,9 +53,8 @@
   <!-- Dependencies (AI/ML packages excluded) -->
   <ItemGroup>
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
-    <PackageReference Include="OwnAudioVst" Version="1.4.6" />
-    <PackageReference Include="System.Memory" Version="4.6.3" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="All" />
+    <PackageReference Include="OwnAudioVst" Version="1.5.7" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.203" PrivateAssets="All" />
   </ItemGroup>
 
   <!-- No ONNX models or basesample.bin embedded -->
@@ -84,64 +83,37 @@
     <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" PrivateAssets="all" IncludeAssets="runtime" Properties="TargetFramework=$(TargetFramework)" />
   </ItemGroup>
 
-  <!-- Desktop platform references (net10.0 only) -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Windows\Ownaudio.Windows.csproj" PrivateAssets="all" IncludeAssets="runtime" />
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Linux\Ownaudio.Linux.csproj" PrivateAssets="all" IncludeAssets="runtime" />
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.macOS\Ownaudio.macOS.csproj" PrivateAssets="all" IncludeAssets="runtime" />
-  </ItemGroup>
-
-  <!-- Android platform reference -->
-  <ItemGroup Condition="$(TargetFramework.StartsWith('net10.0-android'))">
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Android\Ownaudio.Android.csproj" PrivateAssets="all" IncludeAssets="runtime" />
-  </ItemGroup>
-
-  <!-- iOS platform reference -->
-  <ItemGroup Condition="$(TargetFramework.StartsWith('net10.0-ios'))">
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.iOS\Ownaudio.iOS.csproj" PrivateAssets="all" IncludeAssets="runtime" />
-  </ItemGroup>
-
   <!-- Build desktop platform projects before packing -->
   <Target Name="BuildPlatformProjects" BeforeTargets="GenerateNuspec" Condition="'$(TargetFramework)' == 'net10.0'">
     <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0" />
     <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0" />
-    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Windows\Ownaudio.Windows.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0" />
-    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Linux\Ownaudio.Linux.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0" />
-    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.macOS\Ownaudio.macOS.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0" />
   </Target>
 
   <!-- Build Android projects before packing -->
   <Target Name="BuildAndroidProjects" BeforeTargets="GenerateNuspec" Condition="$(TargetFramework.StartsWith('net10.0-android'))">
     <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-android35.0;BuildingForMobile=true" />
     <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-android35.0;BuildingForMobile=true" />
-    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Android\Ownaudio.Android.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-android35.0" />
   </Target>
 
   <!-- Build iOS projects before packing -->
   <Target Name="BuildiOSProjects" BeforeTargets="GenerateNuspec" Condition="$(TargetFramework.StartsWith('net10.0-ios'))">
     <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-ios18.0;BuildingForMobile=true" />
     <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-ios18.0;BuildingForMobile=true" />
-    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.iOS\Ownaudio.iOS.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-ios18.0" />
   </Target>
 
   <!-- Include desktop platform-specific assemblies in the NuGet package -->
   <ItemGroup>
     <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0\Ownaudio.Core.dll" Pack="true" PackagePath="lib\net10.0\" />
     <None Include="..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net10.0\Ownaudio.Native.dll" Pack="true" PackagePath="lib\net10.0\" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Windows\bin\$(Configuration)\net10.0\Ownaudio.Windows.dll" Pack="true" PackagePath="lib\net10.0\" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Linux\bin\$(Configuration)\net10.0\Ownaudio.Linux.dll" Pack="true" PackagePath="lib\net10.0\" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.macOS\bin\$(Configuration)\net10.0\Ownaudio.macOS.dll" Pack="true" PackagePath="lib\net10.0\" />
   </ItemGroup>
 
   <!-- Include mobile platform-specific assemblies in the NuGet package -->
   <ItemGroup>
-    <!-- Android assemblies -->
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Android\bin\$(Configuration)\net10.0-android35.0\Ownaudio.Android.dll" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Android\bin\$(Configuration)\net10.0-android35.0\Ownaudio.Android.dll')" Pack="true" PackagePath="lib\net10.0-android35.0\" />
+    <!-- Android assemblies - NativeAudioEngine only -->
     <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-android35.0\Ownaudio.Core.dll" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-android35.0\Ownaudio.Core.dll')" Pack="true" PackagePath="lib\net10.0-android35.0\" />
     <None Include="..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net10.0-android35.0\Ownaudio.Native.dll" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net10.0-android35.0\Ownaudio.Native.dll')" Pack="true" PackagePath="lib\net10.0-android35.0\" />
 
-    <!-- iOS assemblies -->
-    <None Include="..\..\OwnAudioEngine\Ownaudio.iOS\bin\$(Configuration)\net10.0-ios18.0\Ownaudio.iOS.dll" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.iOS\bin\$(Configuration)\net10.0-ios18.0\Ownaudio.iOS.dll')" Pack="true" PackagePath="lib\net10.0-ios18.0\" />
+    <!-- iOS assemblies - NativeAudioEngine only -->
     <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-ios18.0\Ownaudio.Core.dll" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-ios18.0\Ownaudio.Core.dll')" Pack="true" PackagePath="lib\net10.0-ios18.0\" />
     <None Include="..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net10.0-ios18.0\Ownaudio.Native.dll" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net10.0-ios18.0\Ownaudio.Native.dll')" Pack="true" PackagePath="lib\net10.0-ios18.0\" />
   </ItemGroup>

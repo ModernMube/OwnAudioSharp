@@ -25,8 +25,6 @@ namespace OwnaudioNET.Features.Matchering
         {
             var rawAdjustments = new float[FrequencyBands.Length];
 
-            // 1. Smooth the spectrums first to prevent tracking random noise spikes
-            // Increased smoothing (0.5) to ensure we match tonal balance, not jagged noise
             float[] smoothedSource = SmoothSpectrum(source.FrequencyBands, 0.5f);
             float[] smoothedTarget = SmoothSpectrum(target.FrequencyBands, 0.5f);
 
@@ -38,13 +36,8 @@ namespace OwnaudioNET.Features.Matchering
                 float sourceLevel = 20 * (float)Math.Log10(sourceLinear);
                 float targetLevel = 20 * (float)Math.Log10(targetLinear);
 
-                // SAFETY: Noise Floor Protection
-                // If source is extremely quiet (below -80 dB noise floor), DO NOT BOOST it to match target.
-                // Relaxed from -60dB to -80dB to allow more legitimate corrections
-                // This prevents boosting extreme hiss/noise to match musical elements.
                 if (sourceLevel < -80.0f && targetLevel > sourceLevel)
                 {
-                    // Allow cut (if source is noise but louder than target?), but restrict boost.
                     rawAdjustments[i] = 0.0f;
                 }
                 else
@@ -83,14 +76,10 @@ namespace OwnaudioNET.Features.Matchering
         /// <param name="smoothingFactor">Smoothing intensity (0.0 = no smoothing, 1.0 = heavy smoothing)</param>
         private float[] SmoothSpectrum(float[] spectrum, float smoothingFactor = 0.25f)
         {
-            // Adaptive Smoothing: Configurable balance between detail preservation and noise reduction
-            // Lower smoothingFactor = more detail preserved (surgical matching)
-            // Higher smoothingFactor = more smoothing (musical matching)
             float[] smoothed = new float[spectrum.Length];
 
             for (int i = 0; i < spectrum.Length; i++)
             {
-                // Adaptive weighting based on smoothing factor
                 float centerWeight = 1.0f + smoothingFactor * 2.0f; // Was fixed at 4.0f
                 float neighborWeight = smoothingFactor; // Was fixed at 1.0f
 
@@ -113,24 +102,17 @@ namespace OwnaudioNET.Features.Matchering
         {
             var adjustments = new float[rawAdjustments.Length];
 
-            // SURGICAL MATCHING: No global damping.
             float globalScaling = 1.0f;
 
             for (int i = 0; i < rawAdjustments.Length; i++)
             {
-                // No frequency Dependent scaling - Flat 100% transfer
                 float scaledGain = rawAdjustments[i] * globalScaling;
 
-                // Max limits allowed by DSP (prevent digital clipping/instability)
-                // FIXED: Increased to 18dB to match Equalizer30BandEffect capability
-                // This allows full spectral matching range
                 float maxBoost = 18.0f;  // Matches Equalizer capacity
                 float maxCut = 18.0f;    // Symmetric limits
 
                 adjustments[i] = Math.Max(-maxCut, Math.Min(maxBoost, scaledGain));
             }
-
-            // Skip RefinedSpectralBalance for surgical matching to allow exact curve copying
             return adjustments;
         }
         /// <summary>
@@ -153,7 +135,6 @@ namespace OwnaudioNET.Features.Matchering
             float highPresenceSum = adjustments.Skip(24).Take(2).Sum();  // 5-6.3kHz
             float highSum = adjustments.Skip(26).Sum();          // 8kHz+
 
-            // Only intervene in extreme cases
             if (vocalPresenceSum > 12.0f) // Higher threshold
             {
                 Log.Info("Limiting extreme vocal presence boost...");
@@ -166,7 +147,6 @@ namespace OwnaudioNET.Features.Matchering
                 }
             }
 
-            // Low frequency dominance control unchanged
             if (lowSum > vocalPresenceSum + 6.0f) // Higher tolerance
             {
                 Log.Info("Reducing low frequency dominance...");
@@ -210,7 +190,6 @@ namespace OwnaudioNET.Features.Matchering
             {
                 Log.Info($"Starting EQ processing with direct effect chain: {inputFile} -> {outputFile}");
 
-                // Load source audio file
                 using var fileSource = new FileSource(inputFile);
 
                 if (fileSource.Duration == 0)
@@ -220,24 +199,17 @@ namespace OwnaudioNET.Features.Matchering
                 var channels = fileSource.StreamInfo.Channels;
                 var sampleRate = fileSource.StreamInfo.SampleRate;
 
-                // SMART HEADROOM CALCULATION:
-                // Calculate headroom based on average boost rather than max boost
-                // to avoid excessive attenuation that degrades SNR
                 float maxBoost = eqAdjustments.Max();
                 float totalBoost = eqAdjustments.Where(x => x > 0).Sum();
                 int boostCount = eqAdjustments.Count(x => x > 0);
                 float avgBoost = boostCount > 0 ? totalBoost / boostCount : 0;
 
-                // Use average boost + safety margin instead of max boost
-                // This provides adequate headroom without excessive attenuation
                 float effectiveBoost = Math.Min(maxBoost, avgBoost + 4.0f);
                 float preGainDb = 0.0f;
 
                 if (effectiveBoost > 0)
                 {
-                    // Attenuate by effective boost amount + small safety margin
                     preGainDb = -(effectiveBoost + 2.0f);
-                    // Clamp to reasonable range to preserve SNR
                     preGainDb = Math.Clamp(preGainDb, -12.0f, 0.0f);
 
                     float linearPreGain = (float)Math.Pow(10, preGainDb / 20.0f);
@@ -248,22 +220,10 @@ namespace OwnaudioNET.Features.Matchering
                         audioData[i] *= linearPreGain;
                 }
 
-                // Calculate optimal Q factors
                 var optimizedQFactors = CalculateOptimalQFactors(eqAdjustments, sourceSpectrum, targetSpectrum);
-
-                // =======================================================================
-                // PROFESSIONAL MASTERING CHAIN: Comp -> EQ -> DynamicAmp -> Limiter
-                // Rationale:
-                // 1. Compressor first stabilizes dynamics before tonal shaping
-                // 2. EQ shapes frequency response on stabilized signal
-                // 3. DynamicAmp provides gentle AGC for final level matching
-                // 4. Limiter acts as final safety net for peaks
-                // =======================================================================
-
                 Log.Info("\n=== MASTERING CHAIN CONFIGURATION ===");
 
                 // 1. Compressor (First - Stabilizes Dynamics)
-                // Use the calculated threshold and ratio from Crest Factor analysis
                 var globalCompressor = new CompressorEffect(
                     CompressorEffect.DbToLinear(compSettings.Threshold), // Dynamic Threshold
                     compSettings.Ratio,                                  // Dynamic Ratio
@@ -294,25 +254,20 @@ namespace OwnaudioNET.Features.Matchering
                 }
 
                 // 3. Dynamic Amplifier (Third - Automatic Gain Control)
-                // Professional mastering-grade AGC with slow, musical response
                 float headroomRecoveryGain = (effectiveBoost > 0) ? (float)Math.Pow(10, (effectiveBoost + 2.0f) / 20.0f) : 1.0f;
                 float totalMaxGain = dynamicAmp.MaxGain * headroomRecoveryGain;
 
-                // PHASE 1 FIX: Gyorsabb, zeneileg transzparensebb AGC beállítások
-                // Attack/Release: Gyorsabb reakció a dinamikaváltásokra
-                // Noise Threshold: Szigorúbb zajzár
-                // Max Gain: Korlátozva a túlzott erősítés ellen
                 var dynamicAmplifier = new DynamicAmpEffect(
                     targetLevel: dynamicAmp.TargetLevel,
-                    attackTimeSeconds: 0.2f,         // MODIFIED: 1.5f -> 0.2f (200ms, gyors de zenei)
-                    releaseTimeSeconds: 0.8f,        // MODIFIED: 4.0f -> 0.8f (800ms, lélegzőbb)
-                    noiseThresholdDbOrLinear: -50.0f, // MODIFIED: -65.0f -> -50.0f (szigorúbb zajzár)
+                    attackTimeSeconds: 0.2f,         // MODIFIED: 1.5f -> 0.2f (200ms, fast but musical)
+                    releaseTimeSeconds: 0.8f,        // MODIFIED: 4.0f -> 0.8f (800ms, more breathable)
+                    noiseThresholdDbOrLinear: -50.0f, // MODIFIED: -65.0f -> -50.0f (stricter noise isolation)
                     maxGainValue: Math.Min(totalMaxGain, 3.0f), // MODIFIED: Hard limit +9.5dB-re (~3.0x)
                     sampleRateHz: sampleRate,
-                    rmsWindowSeconds: 0.8f,          // Változatlan (hosszú ablak a stabil döntésekhez)
+                    rmsWindowSeconds: 0.8f,          // long window for stable decisions
                     initialGain: headroomRecoveryGain,
-                    maxGainChangePerSecondDb: 12.0f, // MODIFIED: 4.0f -> 12.0f (gyorsabb reagálás)
-                    maxGainReductionDb: 6.0f         // MODIFIED: 8.0f -> 6.0f (kevesebb összenyomás)
+                    maxGainChangePerSecondDb: 12.0f, // MODIFIED: 4.0f -> 12.0f (faster response)
+                    maxGainReductionDb: 6.0f         // MODIFIED: 8.0f -> 6.0f (less compression)
                 );
 
                 Log.Info($"\n[3] DYNAMIC AMPLIFIER (AGC - Optimized):");
@@ -326,7 +281,6 @@ namespace OwnaudioNET.Features.Matchering
                 Log.Info($"    Initial Gain: {headroomRecoveryGain:F2}x ({20 * MathF.Log10(headroomRecoveryGain):+F1} dB compensation)");
 
                 // 4. Limiter (Fourth - Final Safety/Peak Control)
-                // Transparent mastering settings
                 var outputLimiter = new LimiterEffect(
                     sampleRate,
                     threshold: -0.5f,  // Catch peaks just below 0
@@ -358,7 +312,6 @@ namespace OwnaudioNET.Features.Matchering
                 Log.Info($"Total Samples: {audioData.Length:N0}, Total Frames: {audioData.Length / channels:N0}");
                 Log.Info($"Buffer Size: 512 frames\n");
 
-                // Process audio in chunks (frame-based to prevent sample loss)
                 var processedData = new List<float>(audioData.Length);
                 int framesPerChunk = 512;
                 int samplesPerChunk = framesPerChunk * channels;
@@ -368,20 +321,17 @@ namespace OwnaudioNET.Features.Matchering
 
                 for (int offset = 0; offset < totalSamples; offset += samplesPerChunk)
                 {
-                    // CRITICAL FIX: Calculate frames first to prevent sample loss
                     int remainingSamples = totalSamples - offset;
                     int remainingFrames = remainingSamples / channels;
                     int framesToProcess = Math.Min(framesPerChunk, remainingFrames);
                     int samplesToProcess = framesToProcess * channels;
 
-                    // Safety check: Skip only if no samples to process
                     if (samplesToProcess <= 0)
                         break;
 
                     var chunk = new float[samplesToProcess];
                     Array.Copy(audioData, offset, chunk, 0, samplesToProcess);
 
-                    // Professional Mastering Chain Processing Order
                     globalCompressor.Process(chunk.AsSpan(), framesToProcess);  // 1. Stabilize dynamics
                     directEQ.Process(chunk.AsSpan(), framesToProcess);          // 2. Shape frequency
                     dynamicAmplifier.Process(chunk.AsSpan(), framesToProcess);  // 3. Level matching
@@ -394,7 +344,6 @@ namespace OwnaudioNET.Features.Matchering
                     Log.Info($"\rProcessing: {progress:F1}%");
                 }
 
-                // Verify all samples were processed
                 Log.Info($"\n");
                 if (processedData.Count != audioData.Length)
                 {

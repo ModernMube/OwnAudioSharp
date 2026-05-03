@@ -45,7 +45,6 @@ public partial class BaseAudioSource
 
         if (Config.Channels == 2)
         {
-            // Stereo: calculate separate left and right levels
             for (int i = 0; i < frameCount; i++)
             {
                 leftSum += Math.Abs(buffer[i * 2]);
@@ -59,7 +58,6 @@ public partial class BaseAudioSource
         }
         else // Mono
         {
-            // Mono: use same value for both channels
             for (int i = 0; i < sampleCount; i++)
             {
                 leftSum += Math.Abs(buffer[i]);
@@ -79,7 +77,6 @@ public partial class BaseAudioSource
         var now = DateTime.UtcNow;
         var timeSinceUpdate = (now - _lastPositionUpdate).TotalMilliseconds;
 
-        // Only fire event every 50ms and when position actually changed
         if (timeSinceUpdate >= 50 && Math.Abs(Position - _lastPositionReported) > 0.01)
         {
             _lastPositionReported = Position;

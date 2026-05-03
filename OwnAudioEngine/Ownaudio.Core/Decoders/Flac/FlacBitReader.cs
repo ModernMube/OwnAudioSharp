@@ -70,7 +70,6 @@ internal ref struct FlacBitReader
         if (count > 32)
             throw new ArgumentOutOfRangeException(nameof(count), "Cannot read more than 32 bits at once.");
 
-        // Ensure we have enough bits in cache
         while (_cacheBits < count && _bytePosition < _buffer.Length)
             FillCache();
 
@@ -98,7 +97,6 @@ internal ref struct FlacBitReader
         if (count <= 32)
             return ReadBits(count);
 
-        // Read in two parts
         ulong high = ReadBits(count - 32);
         ulong low = ReadBits(32);
         return (high << 32) | low;
@@ -155,18 +153,13 @@ internal ref struct FlacBitReader
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int ReadRice(int parameter)
     {
-        // The unary quotient's range scales with the Rice parameter k:
-        // at most ~2^(k+1) is typical for well-formed FLAC data, but we cap at 65 536
-        // to detect corrupted streams quickly while still accepting unusual encodings.
         int maxUnary = Math.Max(1024, 1 << Math.Min(parameter + 1, 16));
         int quotient = ReadUnary(maxUnary);
 
-        // Remainder (binary) - only read if parameter > 0
         int remainder = 0;
         if (parameter > 0)
             remainder = (int)ReadBits(parameter);
 
-        // Combine: value = (quotient << parameter) | remainder
         int unsignedValue = (quotient << parameter) | remainder;
 
         // Decode zig-zag encoding: 0 = 0, 1 = -1, 2 = 1, 3 = -2, 4 = 2...
@@ -179,10 +172,8 @@ internal ref struct FlacBitReader
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void AlignToByte()
     {
-        // If we have bits remaining in cache, we need to align
         if (_cacheBits > 0)
         {
-            // Calculate how many bits to skip to reach byte boundary
             int bitsToSkip = _cacheBits % 8;
             if (bitsToSkip > 0)
             {
@@ -190,12 +181,9 @@ internal ref struct FlacBitReader
             }
         }
 
-        // Now calculate the correct byte position
-        // _bytePosition is ahead due to cache, so we need to adjust
         int cachedBytes = _cacheBits / 8;
         _bytePosition -= cachedBytes;
 
-        // Clear cache
         _cache = 0;
         _cacheBits = 0;
         _bitPosition = 0;
@@ -207,10 +195,8 @@ internal ref struct FlacBitReader
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public byte ReadByte()
     {
-        // Should be called after AlignToByte(), but check just in case
         if (_cacheBits > 0)
         {
-            // Read from cache first
             if (_cacheBits >= 8)
             {
                 _cacheBits -= 8;
@@ -218,7 +204,6 @@ internal ref struct FlacBitReader
             }
             else
             {
-                // Not enough bits in cache, need to align properly
                 throw new InvalidOperationException("ReadByte called when not byte-aligned");
             }
         }
@@ -255,11 +240,9 @@ internal ref struct FlacBitReader
 
         if ((first & 0x80) == 0)
         {
-            // Single byte (0xxxxxxx)
             return first;
         }
-
-        // Count leading ones
+        
         int bytes = 0;
         byte mask = 0x80;
         while ((first & mask) != 0)
@@ -271,10 +254,8 @@ internal ref struct FlacBitReader
         if (bytes < 2 || bytes > 7)
             throw new InvalidOperationException($"Invalid UTF-8 encoding: {bytes} bytes.");
 
-        // Extract value from first byte
         long value = first & (0xFF >> (bytes + 1));
 
-        // Read continuation bytes
         for (int i = 1; i < bytes; i++)
         {
             byte b = ReadByte();
@@ -316,7 +297,6 @@ internal ref struct FlacBitReader
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void FillCache()
     {
-        // Fill cache with up to 8 bytes (64 bits)
         while (_cacheBits <= 56 && _bytePosition < _buffer.Length)
         {
             _cache = (_cache << 8) | _buffer[_bytePosition++];
@@ -333,7 +313,6 @@ internal ref struct FlacBitReader
         if (count > 32)
             throw new ArgumentOutOfRangeException(nameof(count));
 
-        // Ensure cache has enough bits
         while (_cacheBits < count && _bytePosition < _buffer.Length)
             FillCache();
 

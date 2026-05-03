@@ -263,7 +263,6 @@ namespace Ownaudio.Native
             if (config == null || !config.Validate())
                 return -1;
 
-            // Clear ASIO cache on new initialization to ensure fresh probing if devices changed
             _asioChannelCache.Clear();
 
             _config = config;
@@ -285,10 +284,7 @@ namespace Ownaudio.Native
             if (_physicalInputChannels != config.Channels)
                 Log.Info($"Channel routing active: {config.Channels} logical → {_physicalInputChannels} physical input channels [{string.Join(", ", config.InputChannelSelectors!)}]");
 
-            // Set prebuffer threshold to 2x buffer size (in samples)
             _prebufferThreshold = config.BufferSize * _physicalOutputChannels * 2;
-
-            // Determine which backend to use
             _backend = DetermineBackend();
 
             int result;
@@ -300,7 +296,6 @@ namespace Ownaudio.Native
             }
             catch (Exception ex)
             {
-                // If PortAudio fails, try MiniAudio as fallback
                 if (_backend == AudioEngineBackend.PortAudio)
                 {
                     Log.Error($"PortAudio initialization failed: {ex.Message}. Falling back to MiniAudio...");
@@ -313,7 +308,6 @@ namespace Ownaudio.Native
                 }
             }
 
-            // Start device monitoring if initialization was successful
             if (result == 0)
             {
                 StartDeviceMonitor();
@@ -338,7 +332,6 @@ namespace Ownaudio.Native
             }
             catch (DllNotFoundException ex)
             {
-                // PortAudio not available - this is expected on most platforms
                 Log.Warning($"PortAudio not found: {ex.Message}");
                 Log.Warning("Falling back to MiniAudio (bundled with application)");
                 _portAudioLoader?.Dispose();
@@ -346,7 +339,6 @@ namespace Ownaudio.Native
             }
             catch (Exception ex)
             {
-                // PortAudio found but failed to initialize
                 Log.Error($"PortAudio initialization failed: {ex.Message}");
                 Log.Error("Falling back to MiniAudio");
                 _portAudioLoader?.Dispose();
@@ -370,21 +362,15 @@ namespace Ownaudio.Native
         {
             try
             {
-                // Stop any existing monitor
                 StopDeviceMonitor();
 
-                // Initialize device lists
                 _lastKnownOutputDevices = GetOutputDevices();
                 _lastKnownInputDevices = _config.EnableInput ? GetInputDevices() : null;
-
-                // Initialize raw device count for lightweight monitoring
                 _lastRawDeviceCount = GetRawDeviceCount();
 
-                // Store current active device IDs
                 if (_backend == AudioEngineBackend.PortAudio)
                 {
                     var outputDevices = _lastKnownOutputDevices;
-                    // Find device by matching the active device index
                     var activeOutput = outputDevices?.Find(d => d.DeviceId == _activeOutputDeviceIndex.ToString());
                     _lastActiveOutputDeviceId = activeOutput?.DeviceId;
 
@@ -397,7 +383,6 @@ namespace Ownaudio.Native
                 }
                 else // MiniAudio
                 {
-                    // For MiniAudio, we use the default device (null ID means default)
                     var defaultOutput = _lastKnownOutputDevices?.Find(d => d.IsDefault);
                     _lastActiveOutputDeviceId = defaultOutput?.DeviceId;
 
@@ -407,8 +392,7 @@ namespace Ownaudio.Native
                         _lastActiveInputDeviceId = defaultInput?.DeviceId;
                     }
                 }
-
-                // Start monitoring task
+                
                 _deviceMonitorCts = new CancellationTokenSource();
                 _deviceMonitorTask = Task.Run(() => DeviceMonitorLoop(_deviceMonitorCts.Token), _deviceMonitorCts.Token);
 
@@ -453,15 +437,12 @@ namespace Ownaudio.Native
             {
                 try
                 {
-                    // Poll faster while waiting for a disconnected device to reappear
                     int delay = _isDeviceDisconnected == 1
                         ? DeviceReconnectPollIntervalMs
                         : DeviceMonitorIntervalMs;
 
                     await Task.Delay(delay, ct);
 
-                    // Always run checks when disconnected (ignoring _isMonitoringPaused),
-                    // because we need to detect reconnection regardless of UI state.
                     if (_isMonitoringPaused && _isDeviceDisconnected == 0)
                         continue;
 
@@ -525,12 +506,9 @@ namespace Ownaudio.Native
                 if (_isRunning == 0)
                     return;
 
-                // --- RECONNECT MODE ---
-                // If a device is disconnected, check if it has reappeared.
                 if (_isDeviceDisconnected == 1)
                 {
                     var currentOutputDevices = GetOutputDevices();
-                    // Check by device name for the disconnected output device
                     if (_disconnectedOutputDeviceName != null)
                     {
                         var found = currentOutputDevices?.Find(d =>
@@ -544,7 +522,6 @@ namespace Ownaudio.Native
                         }
                     }
 
-                    // Check for reconnected input device
                     if (_config.EnableInput && _disconnectedInputDeviceName != null)
                     {
                         var currentInputDevices = GetInputDevices();
@@ -559,13 +536,10 @@ namespace Ownaudio.Native
                         }
                     }
 
-                    // Device still not available — update raw count baseline and keep waiting
                     _lastRawDeviceCount = GetRawDeviceCount();
                     return;
                 }
 
-                // --- NORMAL MONITORING MODE ---
-                // Lightweight check: compare raw device count first
                 int currentRawCount = GetRawDeviceCount();
                 if (currentRawCount == _lastRawDeviceCount)
                     return; // No change
@@ -576,7 +550,6 @@ namespace Ownaudio.Native
                 var outputDevices = GetOutputDevices();
                 var inputDevices = _config.EnableInput ? GetInputDevices() : null;
 
-                // Check if active output device was removed
                 if (_lastActiveOutputDeviceId != null)
                 {
                     var activeOutputExists = outputDevices?.Any(d => d.DeviceId == _lastActiveOutputDeviceId) ?? false;
@@ -588,7 +561,6 @@ namespace Ownaudio.Native
                     }
                 }
 
-                // Check if active input device was removed
                 if (_config.EnableInput && _lastActiveInputDeviceId != null)
                 {
                     var activeInputExists = inputDevices?.Any(d => d.DeviceId == _lastActiveInputDeviceId) ?? false;
@@ -600,7 +572,6 @@ namespace Ownaudio.Native
                     }
                 }
 
-                // Check if default device changed (only when using default device)
                 if (_config.OutputDeviceId == null && _disconnectedOutputDeviceName == null)
                 {
                     var currentDefault = outputDevices?.Find(d => d.IsDefault);
@@ -612,7 +583,6 @@ namespace Ownaudio.Native
                     }
                 }
 
-                // Update last known device lists
                 _lastKnownOutputDevices = outputDevices;
                 _lastKnownInputDevices = inputDevices;
             }
@@ -633,7 +603,6 @@ namespace Ownaudio.Native
         /// </param>
         private async Task HandleDeviceRemoved(bool isOutputDevice)
         {
-            // Guard against multiple invocations
             if (Interlocked.CompareExchange(ref _isDeviceDisconnected, 1, 0) != 0)
                 return;
 
@@ -643,7 +612,6 @@ namespace Ownaudio.Native
 
                 if (isOutputDevice)
                 {
-                    // Look up the friendly name of the removed device
                     removedDeviceName = _lastKnownOutputDevices
                         ?.Find(d => d.DeviceId == _lastActiveOutputDeviceId)?.Name
                         ?? _lastActiveOutputDeviceId
@@ -667,20 +635,15 @@ namespace Ownaudio.Native
                     Log.Warning($"Input device '{removedDeviceName}' disconnected. Engine entering DeviceDisconnected state.");
                 }
 
-                // Update engine status — data processing continues, only hardware stream stops
                 _engineStatusValue = (int)EngineStatus.DeviceDisconnected;
 
-                // Stop only the hardware stream, NOT the engine logic
-                // _isRunning remains 1 so Send() / Receives() continue to operate
                 if (_backend == AudioEngineBackend.PortAudio)
                     StopPortAudio();
                 else
                     StopMiniAudio();
 
-                // Short delay to let the OS fully release the device handle
                 await Task.Delay(300);
 
-                // Fire the state-changed event so the UI can update
                 var deviceInfo = new AudioDeviceInfo(
                     deviceId: isOutputDevice ? (_lastActiveOutputDeviceId ?? "unknown") : (_lastActiveInputDeviceId ?? "unknown"),
                     name: removedDeviceName,
@@ -718,13 +681,10 @@ namespace Ownaudio.Native
             {
                 Log.Info($"Reconnecting {(isOutputDevice ? "output" : "input")} device '{reconnectedDevice.Name}'...");
 
-                // Short delay to let the OS finish registering the device
                 await Task.Delay(500);
-
-                // Restore original device selection in config
+                
                 if (isOutputDevice)
                 {
-                    // Use the reconnected device's ID (may differ from original e.g. after OS remapping)
                     _config.OutputDeviceId = reconnectedDevice.DeviceId;
 
                     if (_backend == AudioEngineBackend.PortAudio)
@@ -750,8 +710,6 @@ namespace Ownaudio.Native
                     _lastRawDeviceCount = GetRawDeviceCount();
                 }
 
-                // Reinitialize the hardware stream.
-                // Ring buffers are reused as long as capacity is unchanged, preserving accumulated data.
                 int result = _backend == AudioEngineBackend.PortAudio
                     ? ReinitializePortAudioStream()
                     : ReinitializeMiniAudioDevice();
@@ -763,7 +721,6 @@ namespace Ownaudio.Native
                     return;
                 }
 
-                // Start hardware stream
                 result = _backend == AudioEngineBackend.PortAudio
                     ? StartPortAudio()
                     : StartMiniAudio();
@@ -775,10 +732,8 @@ namespace Ownaudio.Native
                     return;
                 }
 
-                // Enable pre-buffering so existing ring buffer data is drained smoothly
                 _isBuffering = 1;
 
-                // Clear disconnect state and restore Running status
                 _isDeviceDisconnected = 0;
                 _disconnectedOutputDeviceName = null;
                 _disconnectedInputDeviceName = null;
@@ -788,7 +743,6 @@ namespace Ownaudio.Native
 
                 Log.Info($"Device '{reconnectedDevice.Name}' reconnected. Playback resumed.");
 
-                // Fire reconnect event
                 DeviceReconnected?.Invoke(this, new AudioDeviceReconnectedEventArgs(
                     reconnectedDevice.DeviceId,
                     reconnectedDevice.Name,
@@ -816,12 +770,7 @@ namespace Ownaudio.Native
             if (Interlocked.CompareExchange(ref _isRunning, 1, 0) == 1)
                 return 0; // Already running
 
-            // Enable pre-buffering to prevent playback until buffer has enough data
             _isBuffering = 1;
-
-            // NOTE: Device monitoring is intentionally NOT paused during normal Start().
-            // The monitoring loop must stay active so it can detect device disconnections.
-            // Previously this called PauseDeviceMonitoring(), which prevented hot-plug detection.
 
             int result = _backend == AudioEngineBackend.PortAudio
                 ? StartPortAudio()
@@ -883,14 +832,9 @@ namespace Ownaudio.Native
             int written = 0;
             var lastProgressTime = Environment.TickCount64;
 
-            // During device disconnect the hardware callback thread is stopped, so the ring buffer
-            // will not be drained. We use a much larger timeout to keep the pipeline alive while
-            // waiting for the device to reconnect. Once reconnected, _isDeviceDisconnected is
-            // cleared and the callback resumes draining the buffer.
             const long normalTimeoutMs = 1000;
             const long disconnectTimeoutMs = 30_000; // 30 s – enough for a USB device to reappear
 
-            // Write samples in a loop, blocking until all samples are written
             while (written < totalSamples && _isRunning == 1)
             {
                 int remainingSamples = totalSamples - written;
@@ -914,8 +858,6 @@ namespace Ownaudio.Native
                             throw new AudioException($"Send timeout: No progress for {timeoutMs}ms. Audio thread may have stopped.");
                     }
 
-                    // Buffer is full. Yield CPU time.
-                    // When disconnected, the buffer drains as soon as the device reconnects.
                     Thread.Sleep(1);
                 }
             }
@@ -967,11 +909,9 @@ namespace Ownaudio.Native
         {
             for (int frame = 0; frame < frameCount; frame++)
             {
-                // Zero-fill the entire physical frame first
                 for (int pc = 0; pc < physicalChannels; pc++)
                     physicalOutput[frame * physicalChannels + pc] = 0f;
 
-                // Copy each logical channel to its designated physical channel
                 for (int lc = 0; lc < logicalChannels && lc < selectors.Length; lc++)
                 {
                     int physCh = selectors[lc];
@@ -1089,10 +1029,8 @@ namespace Ownaudio.Native
             {
                 if (device.Name.Equals(deviceName, StringComparison.OrdinalIgnoreCase))
                 {
-                    // Store the selected device ID in config
                     _config.OutputDeviceId = device.DeviceId;
 
-                    // Handle backend-specific reinitialization
                     if (_backend == AudioEngineBackend.PortAudio)
                     {
                         if (int.TryParse(device.DeviceId, out int deviceIndex))
@@ -1128,10 +1066,8 @@ namespace Ownaudio.Native
             if (deviceIndex >= devices.Count)
                 return -3; // Index out of range
 
-            // Store the selected device ID in config
             _config.OutputDeviceId = devices[deviceIndex].DeviceId;
 
-            // Handle backend-specific reinitialization
             if (_backend == AudioEngineBackend.PortAudio)
             {
                 if (int.TryParse(devices[deviceIndex].DeviceId, out int actualPaIndex))
@@ -1165,10 +1101,8 @@ namespace Ownaudio.Native
             {
                 if (device.Name.Equals(deviceName, StringComparison.OrdinalIgnoreCase))
                 {
-                    // Store the selected device ID in config
                     _config.InputDeviceId = device.DeviceId;
 
-                    // Handle backend-specific reinitialization
                     if (_backend == AudioEngineBackend.PortAudio)
                     {
                         if (int.TryParse(device.DeviceId, out int deviceIdx))
@@ -1204,10 +1138,8 @@ namespace Ownaudio.Native
             if (deviceIndex >= devices.Count)
                 return -3; // Index out of range
 
-            // Store the selected device ID in config
             _config.InputDeviceId = devices[deviceIndex].DeviceId;
 
-            // Handle backend-specific reinitialization
             if (_backend == AudioEngineBackend.PortAudio)
             {
                 if (int.TryParse(devices[deviceIndex].DeviceId, out int actualPaIndex))
@@ -1235,7 +1167,6 @@ namespace Ownaudio.Native
             if (_disposed)
                 return;
 
-            // Stop device monitoring first
             StopDeviceMonitor();
 
             Stop();

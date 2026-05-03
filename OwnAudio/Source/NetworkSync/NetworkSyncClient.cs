@@ -102,10 +102,8 @@ public sealed class NetworkSyncClient : IDisposable
 
         try
         {
-            // Create UDP client
             _udpClient = new UdpClient(_port);
 
-            // Resolve server endpoint
             if (!string.IsNullOrEmpty(_serverAddress))
             {
                 var addresses = await Dns.GetHostAddressesAsync(_serverAddress);
@@ -115,13 +113,11 @@ public sealed class NetworkSyncClient : IDisposable
                 }
             }
 
-            // Try to sync time
             if (_serverEndpoint != null)
             {
                 await _timeProvider.TrySyncAsync(_serverEndpoint);
             }
 
-            // Start threads
             _isRunning = true;
             
             _receiveThread = new Thread(ReceiveThreadLoop)
@@ -160,11 +156,9 @@ public sealed class NetworkSyncClient : IDisposable
 
         _isRunning = false;
 
-        // Wait for threads to exit
         _receiveThread?.Join(TimeSpan.FromSeconds(2));
         _pingThread?.Join(TimeSpan.FromSeconds(2));
 
-        // Close UDP client
         _udpClient?.Close();
         _udpClient?.Dispose();
         _udpClient = null;
@@ -185,7 +179,6 @@ public sealed class NetworkSyncClient : IDisposable
             {
                 try
                 {
-                    // Receive packet (blocking with timeout)
                     _udpClient!.Client.ReceiveTimeout = 1000;
                     EndPoint remoteEndpoint = new IPEndPoint(IPAddress.Any, 0);
                     int bytesReceived = _udpClient.Client.ReceiveFrom(buffer, ref remoteEndpoint);
@@ -194,7 +187,6 @@ public sealed class NetworkSyncClient : IDisposable
                     {
                         _lastServerMessageTime = DateTime.UtcNow;
 
-                        // Deserialize command
                         NetworkSyncProtocol.Command cmd = default;
                         if (NetworkSyncProtocol.DeserializeCommand(buffer.AsSpan(0, bytesReceived), ref cmd))
                         {
@@ -204,13 +196,9 @@ public sealed class NetworkSyncClient : IDisposable
                 }
                 catch (SocketException)
                 {
-                    // Timeout or network error - check connection state
                     CheckConnectionTimeout();
                 }
-                catch
-                {
-                    // Other error - continue
-                }
+                catch {}
             }
         }
         finally
@@ -236,10 +224,7 @@ public sealed class NetworkSyncClient : IDisposable
 
                 Thread.Sleep(5000);  // Ping every 5 seconds
             }
-            catch
-            {
-                // Ignore errors
-            }
+            catch {}
         }
     }
 
@@ -273,7 +258,6 @@ public sealed class NetworkSyncClient : IDisposable
     /// </summary>
     private void ProcessCommand(ref NetworkSyncProtocol.Command cmd, IPEndPoint remoteEndpoint)
     {
-        // Update server endpoint if not set
         if (_serverEndpoint == null)
         {
             _serverEndpoint = remoteEndpoint;
@@ -294,7 +278,6 @@ public sealed class NetworkSyncClient : IDisposable
             case NetworkSyncProtocol.CommandType.Stop:
             case NetworkSyncProtocol.CommandType.Seek:
             case NetworkSyncProtocol.CommandType.Tempo:
-                // Raise event for application to handle
                 CommandReceived?.Invoke(this, new CommandReceivedEventArgs(cmd));
                 break;
         }
@@ -305,14 +288,12 @@ public sealed class NetworkSyncClient : IDisposable
     /// </summary>
     private void ProcessClockSync(ref NetworkSyncProtocol.Command cmd)
     {
-        // Update connection state
         if (_connectionState == NetworkSyncProtocol.ConnectionState.Connecting ||
             _connectionState == NetworkSyncProtocol.ConnectionState.Connected)
         {
             SetConnectionState(NetworkSyncProtocol.ConnectionState.Synced);
         }
 
-        // Synchronize master clock (lock-free write)
         _masterClock.SeekTo(cmd.MasterClockTimestamp);
     }
 
@@ -347,10 +328,8 @@ public sealed class NetworkSyncClient : IDisposable
 
         if (timeSinceLastMessage > 30)
         {
-            // Connection lost - switch to standalone mode
             SetConnectionState(NetworkSyncProtocol.ConnectionState.Disconnected);
 
-            // Attempt reconnection if allowed
             if (_reconnectAttempts < MaxReconnectAttempts)
             {
                 _reconnectAttempts++;
@@ -373,7 +352,6 @@ public sealed class NetworkSyncClient : IDisposable
             _connectionState = newState;
             ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(oldState, newState));
 
-            // Reset reconnect attempts on successful connection
             if (newState == NetworkSyncProtocol.ConnectionState.Synced)
             {
                 _reconnectAttempts = 0;

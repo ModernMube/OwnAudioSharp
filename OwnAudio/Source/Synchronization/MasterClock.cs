@@ -97,10 +97,7 @@ namespace OwnaudioNET.Synchronization
             if (frameCount <= 0)
                 return;
 
-            // Atomic increment of sample position (lock-free)
             long newSamplePosition = Interlocked.Add(ref _currentSamplePosition, frameCount);
-
-            // Update timestamp (requires lock)
             lock (_positionLock)
             {
                 _currentTimestamp = SamplePositionToTimestamp(newSamplePosition);
@@ -121,11 +118,8 @@ namespace OwnaudioNET.Synchronization
                 throw new ArgumentOutOfRangeException(nameof(timestamp), "Timestamp cannot be negative");
 
             long targetSamplePosition = TimestampToSamplePosition(timestamp);
-
-            // Atomic exchange for sample position
             Interlocked.Exchange(ref _currentSamplePosition, targetSamplePosition);
 
-            // Update timestamp (requires lock)
             lock (_positionLock)
             {
                 _currentTimestamp = timestamp;

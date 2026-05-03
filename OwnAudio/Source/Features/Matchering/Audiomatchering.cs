@@ -1,9 +1,6 @@
 using MathNet.Numerics.IntegralTransforms;
 using OwnaudioNET.Sources;
 using Logger;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 
 namespace OwnaudioNET.Features.Matchering
@@ -39,7 +36,6 @@ namespace OwnaudioNET.Features.Matchering
 
         #region Public API Methods
 
-        // Thread synchronization lock to prevent race condition during MiniAudio initialization
         private static readonly object _analyzerLock = new object();
 
         /// <summary>
@@ -51,12 +47,6 @@ namespace OwnaudioNET.Features.Matchering
         /// <param name="filePath">Path to the audio file to analyze</param>
         /// <returns>Weighted average spectrum analysis result</returns>
         /// <exception cref="InvalidOperationException">Thrown when the audio file cannot be loaded</exception>
-        /// <summary>
-        /// Performs enhanced audio analysis using segmented approach.
-        /// Supports TRUE STEREO analysis: Analyzes Left and Right channels independently
-        /// and averages the spectra to avoid phase cancellation issues (which previously caused
-        /// under-detection of high frequencies in wide mixes).
-        /// </summary>
         public AudioSpectrum AnalyzeAudioFile(string filePath)
         {
             lock (_analyzerLock)
@@ -72,16 +62,14 @@ namespace OwnaudioNET.Features.Matchering
                 int channels = source.StreamInfo.Channels;
                 int sampleRate = source.StreamInfo.SampleRate;
 
-                Console.WriteLine($"Analyzing {filePath} ({channels} ch, {sampleRate}Hz)...");
+                Log.Info($"Analyzing {filePath} ({channels} ch, {sampleRate}Hz)...");
 
                 if (channels == 1)
                 {
-                    // Mono: Simple analysis
                     return AnalyzeMonophonicData(audioData, sampleRate);
                 }
                 else
                 {
-                    // Stereo/Multichannel: Independent Channel Analysis
                     // 1. De-interleave
                     float[][] channelData = new float[channels][];
                     int samplesPerChannel = audioData.Length / channels;
@@ -89,7 +77,6 @@ namespace OwnaudioNET.Features.Matchering
                     for (int c = 0; c < channels; c++)
                         channelData[c] = new float[samplesPerChannel];
 
-                    // Simple de-interleave loop (not zero-alloc, but analysis is offline)
                     for (int i = 0; i < samplesPerChannel; i++)
                     {
                         for (int c = 0; c < channels; c++)
@@ -100,12 +87,11 @@ namespace OwnaudioNET.Features.Matchering
                     var channelSpectra = new List<AudioSpectrum>();
                     for (int c = 0; c < channels; c++)
                     {
-                        Console.WriteLine($"Analyzing Channel {c + 1}...");
+                        Log.Info($"Analyzing Channel {c + 1}...");
                         channelSpectra.Add(AnalyzeMonophonicData(channelData[c], sampleRate));
                     }
 
                     // 3. Average the spectra
-                    // This creates a "Power Sum" equivalent without phase issues
                     return AverageSpectra(channelSpectra);
                 }
             }
@@ -117,7 +103,7 @@ namespace OwnaudioNET.Features.Matchering
         /// </summary>
         private AudioSpectrum AnalyzeMonophonicData(float[] monoData, int sampleRate)
         {
-            Console.WriteLine($"Starting segmented analysis (Length: {monoData.Length / (float)sampleRate:F1}s)");
+            Log.Info($"Starting segmented analysis (Length: {monoData.Length / (float)sampleRate:F1}s)");
 
             List<AudioSegment> segments = CreateAudioSegments(monoData, sampleRate);
             List<SegmentAnalysis> segmentAnalyses = AnalyzeSegments(segments, sampleRate);
@@ -125,10 +111,9 @@ namespace OwnaudioNET.Features.Matchering
 
             var spectrum = CalculateWeightedAverageSpectrum(filteredAnalyses);
 
-            // DEBUG: Print analyzed spectrum details
-            Console.WriteLine($"\n=== ANALYZED SPECTRUM INFO ===");
-            Console.WriteLine($"RMS: {spectrum.RMSLevel:F6}, Peak: {spectrum.PeakLevel:F6}");
-            Console.WriteLine($"Loudness: {spectrum.Loudness:F1} dBFS, Dynamic Range: {spectrum.DynamicRange:F1} dB");
+            Log.Info($"\n=== ANALYZED SPECTRUM INFO ===");
+            Log.Info($"RMS: {spectrum.RMSLevel:F6}, Peak: {spectrum.PeakLevel:F6}");
+            Log.Info($"Loudness: {spectrum.Loudness:F1} dBFS, Dynamic Range: {spectrum.DynamicRange:F1} dB");
 
             return spectrum;
         }
@@ -147,7 +132,6 @@ namespace OwnaudioNET.Features.Matchering
 
             double sumRmsSquares = 0;
             double maxPeak = 0;
-            // Loudness/DR will be recalculated from final RMS/Peak
 
             foreach (var s in spectra)
             {
@@ -157,16 +141,11 @@ namespace OwnaudioNET.Features.Matchering
                 maxPeak = Math.Max(maxPeak, s.PeakLevel);
             }
 
-            // Spectrum Averaging (Linear average of magnitudes is OK for spectral shape, 
-            // but for energy it's better to be consistent. 
-            // However, sticking to averaging bands is safe for EQ matching).
             for (int i = 0; i < bands; i++) avgSpectrum[i] /= spectra.Count;
 
-            // Proper RMS Averaging (Root Mean Square of the RMS values)
             float finalRMS = (float)Math.Sqrt(sumRmsSquares / spectra.Count);
             float finalPeak = (float)maxPeak;
 
-            // Recalculate derived metrics
             float finalLoudness = 20 * (float)Math.Log10(Math.Max(finalRMS, 1e-10f));
             float finalDR = 20 * (float)Math.Log10(finalPeak / Math.Max(finalRMS, 1e-10f));
 
@@ -189,19 +168,19 @@ namespace OwnaudioNET.Features.Matchering
         /// <param name="outputFile">Path where the processed audio will be saved</param>
         public void ProcessEQMatching(string sourceFile, string targetFile, string outputFile)
         {
-            Console.WriteLine("=== SEGMENTED EQ MATCHING ===");
+            Log.Info("=== SEGMENTED EQ MATCHING ===");
 
-            Console.WriteLine("Analyzing source audio (segmented)...");
+            Log.Info("Analyzing source audio (segmented)...");
             AudioSpectrum sourceSpectrum = AnalyzeAudioFile(sourceFile);
 
-            Console.WriteLine("Analyzing target audio (segmented)...");
+            Log.Info("Analyzing target audio (segmented)...");
             AudioSpectrum targetSpectrum = AnalyzeAudioFile(targetFile);
 
             float[] eqAdjustments = CalculateDirectEQAdjustments(sourceSpectrum, targetSpectrum);
             DynamicAmpSettings ampSettings = CalculateDynamicAmpSettings(sourceSpectrum, targetSpectrum);
             var compSettings = CalculateCompressorSettings(sourceSpectrum, targetSpectrum);
 
-            Console.WriteLine("Processing audio with segmented-based EQ...");
+            Log.Info("Processing audio with segmented-based EQ...");
             ApplyDirectEQProcessing(sourceFile, outputFile, eqAdjustments, ampSettings, compSettings, sourceSpectrum, targetSpectrum);
 
             //PrintSegmentedAnalysisResults(sourceSpectrum, targetSpectrum, eqAdjustments);
@@ -230,8 +209,8 @@ namespace OwnaudioNET.Features.Matchering
                 throw new InvalidOperationException($"The audio is too short. Less than 10 seconds!: {audioData.Length / sampleRate} second");
 
 
-            Console.WriteLine($"Segment size: {segmentSamples} samples ({_segmentConfig.SegmentLengthSeconds}s)");
-            Console.WriteLine($"Hop size: {hopSize} samples (overlap: {_segmentConfig.OverlapRatio * 100:F1}%)");
+            Log.Info($"Segment size: {segmentSamples} samples ({_segmentConfig.SegmentLengthSeconds}s)");
+            Log.Info($"Hop size: {hopSize} samples (overlap: {_segmentConfig.OverlapRatio * 100:F1}%)");
 
             for (int start = 0; start < audioData.Length - segmentSamples; start += hopSize)
             {
@@ -239,7 +218,6 @@ namespace OwnaudioNET.Features.Matchering
                 float[]? segmentData = new float[actualLength];
                 Array.Copy(audioData, start, segmentData, 0, actualLength);
 
-                // Calculate segment energy to filter out silent parts
                 float segmentRMS = CalculateRMS(segmentData);
                 float segmentEnergyDB = 20 * (float)Math.Log10(Math.Max(segmentRMS, 1e-10f));
 
@@ -253,7 +231,7 @@ namespace OwnaudioNET.Features.Matchering
                 });
             }
 
-            Console.WriteLine($"Created {segments.Count} segments");
+            Log.Info($"Created {segments.Count} segments");
             return segments;
         }
 
@@ -274,10 +252,8 @@ namespace OwnaudioNET.Features.Matchering
             {
                 AudioSegment? segment = segments[i];
 
-                // Skip segments that are too quiet
                 if (segment.EnergyLevel < _segmentConfig.MinSegmentEnergyThreshold)
                 {
-                    //Console.WriteLine($"Segment {i + 1} skipped (too quiet: {segment.EnergyLevel:F1}dBFS)");
                     continue;
                 }
 
@@ -298,7 +274,7 @@ namespace OwnaudioNET.Features.Matchering
                 validSegments++;
             }
 
-            Console.WriteLine($"Completed analysis: {validSegments} valid segments from {segments.Count} total");
+            Log.Info($"Completed analysis: {validSegments} valid segments from {segments.Count} total");
             return analyses;
         }
 
@@ -332,18 +308,15 @@ namespace OwnaudioNET.Features.Matchering
             float dynamicWeight = 1.0f;
             float positionWeight = 1.0f;
 
-            // Energy-based weighting - prefer segments with good signal level
             if (segment.EnergyLevel > -20.0f)
                 energyWeight = 1.2f; // Boost loud segments
             else if (segment.EnergyLevel < -40.0f)
                 energyWeight = 0.7f; // Reduce quiet segments
 
-            // Dynamic range weighting - prefer segments with balanced dynamics
             float idealDynamicRange = 15.0f; // dB
             float dynamicDifference = Math.Abs(dynamics.DynamicRange - idealDynamicRange);
             dynamicWeight = Math.Max(0.5f, 1.0f - (dynamicDifference / 20.0f));
 
-            // Position weighting - slightly prefer middle sections
             float normalizedPosition = segment.StartTime / (segment.StartTime + segment.Duration);
             if (normalizedPosition > 0.2f && normalizedPosition < 0.8f)
                 positionWeight = 1.1f; // Boost middle sections slightly
@@ -371,7 +344,6 @@ namespace OwnaudioNET.Features.Matchering
             List<SegmentAnalysis> filtered = new List<SegmentAnalysis>();
             int outlierCount = 0;
 
-            // Calculate statistics for each frequency band
             for (int band = 0; band < FrequencyBands.Length; band++)
             {
                 float[] bandValues = analyses.Select(a => a.FrequencySpectrum[band]).ToArray();
@@ -387,7 +359,6 @@ namespace OwnaudioNET.Features.Matchering
                 }
             }
 
-            // Filter based on outlier scores
             float maxOutlierScore = FrequencyBands.Length * 0.3f; // Allow outliers in up to 30% of bands
 
             foreach (var analysis in analyses)
@@ -399,11 +370,10 @@ namespace OwnaudioNET.Features.Matchering
                 else
                 {
                     outlierCount++;
-                    //Console.WriteLine($"Segment {analysis.SegmentIndex + 1} filtered as outlier (score: {analysis.OutlierScore:F1})");
                 }
             }
 
-            Console.WriteLine($"Filtered {outlierCount} outlier segments, kept {filtered.Count} segments");
+            Log.Info($"Filtered {outlierCount} outlier segments, kept {filtered.Count} segments");
             return filtered;
         }
 
@@ -449,27 +419,24 @@ namespace OwnaudioNET.Features.Matchering
             float weightedLoudness = 0f;
             float weightedDynamicRange = 0f;
 
-            Console.WriteLine("\n=== WEIGHTED AVERAGING ===");
+            Log.Info("\n=== WEIGHTED AVERAGING ===");
 
             foreach (var analysis in analyses)
             {
                 float weight = analysis.Weight;
                 totalWeight += weight;
 
-                // Weight spectrum values
                 for (int i = 0; i < FrequencyBands.Length; i++)
                 {
                     weightedSpectrum[i] += analysis.FrequencySpectrum[i] * weight;
                 }
 
-                // Weight dynamics
                 weightedRMS += analysis.Dynamics.RMS * weight;
                 weightedPeak = Math.Max(weightedPeak, analysis.Dynamics.Peak); // Peak is maximum, not averaged
                 weightedLoudness += analysis.Dynamics.Loudness * weight;
                 weightedDynamicRange += analysis.Dynamics.DynamicRange * weight;
             }
 
-            // Normalize by total weight
             for (int i = 0; i < FrequencyBands.Length; i++)
             {
                 weightedSpectrum[i] /= totalWeight;
@@ -479,7 +446,7 @@ namespace OwnaudioNET.Features.Matchering
             weightedLoudness /= totalWeight;
             weightedDynamicRange /= totalWeight;
 
-            Console.WriteLine($"Averaged {analyses.Count} segments with total weight: {totalWeight:F2}");
+            Log.Info($"Averaged {analyses.Count} segments with total weight: {totalWeight:F2}");
 
             return new AudioSpectrum
             {
@@ -569,7 +536,6 @@ namespace OwnaudioNET.Features.Matchering
             int hopSize = (int)(fftSize * (1 - overlapRatio));
             float[] windowFunction = GenerateFlatTopWindow(fftSize); // More accurate amplitude measurement
 
-            // Calculate windowing correction for normalization
             float windowSum = windowFunction.Sum();
             float windowNormFactor = windowSum / fftSize;
 
@@ -594,13 +560,11 @@ namespace OwnaudioNET.Features.Matchering
                 }
             }
 
-            // Averaging - but NO normalization!
             for (int i = 0; i < bandEnergies.Length; i++)
             {
                 bandEnergies[i] /= windowCount;
             }
 
-            // RETURN ABSOLUTE VALUES - no normalization!
             return bandEnergies;
         }
 
@@ -659,13 +623,10 @@ namespace OwnaudioNET.Features.Matchering
 
             if (weightSum == 0) return 0;
 
-            // RMS calculation with windowing correction
             double weightedRMS = Math.Sqrt(energySum / weightSum);
 
-            // Apply windowing correction - but maintain absolute level!
             weightedRMS /= (windowNormFactor * fftSize / 2.0);
 
-            // Return ABSOLUTE RMS value (no further normalization)
             return (float)weightedRMS;
         }
 
@@ -709,21 +670,14 @@ namespace OwnaudioNET.Features.Matchering
             if (audioData.Length == 0)
                 return new DynamicsInfo();
 
-            // ABSOLUTE RMS calculation
             double sumSquares = audioData.Sum(sample => sample * sample);
             float absoluteRMS = (float)Math.Sqrt(sumSquares / audioData.Length);
 
-            // ABSOLUTE peak level
             float absolutePeak = audioData.Max(sample => Math.Abs(sample));
 
-            // ABSOLUTE loudness (with dBFS reference)
             float absoluteLoudness = 20 * (float)Math.Log10(Math.Max(absoluteRMS, 1e-10f));
 
-            // Dynamic range (peak-to-RMS ratio)
             float dynamicRange = 20 * (float)Math.Log10(absolutePeak / Math.Max(absoluteRMS, 1e-10f));
-
-            //Console.WriteLine($"Absolute dynamics - RMS: {absoluteRMS:F6}, Peak: {absolutePeak:F6}");
-            //Console.WriteLine($"Absolute levels - RMS: {absoluteLoudness:F1}dBFS, Peak: {20 * Math.Log10(absolutePeak):F1}dBFS");
 
             return new DynamicsInfo
             {
@@ -829,7 +783,6 @@ namespace OwnaudioNET.Features.Matchering
             for (int i = 0; i < eqAdjustments.Length; i++)
             {
                 string warning = Math.Abs(eqAdjustments[i]) > 8.0f ? " ⚠️" : "";
-                // Console.WriteLine($"{bandNames[i]}: {eqAdjustments[i]:+0.0;-0.0} dB{warning}");
             }
 
             Console.WriteLine("\n=== SAFETY FEATURES ACTIVE ===");

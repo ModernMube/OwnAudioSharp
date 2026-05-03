@@ -85,9 +85,7 @@ public static partial class OwnaudioNet
                     engine = OwnaudioNET.Engine.AudioEngineFactory.CreateEngine(config);
                 }
 
-                // Create wrapper
                 _engineWrapper = new AudioEngineWrapper(engine, config);
-
                 _initialized = true;
             }
             catch (Exception ex) when (ex is not AudioEngineException and not ArgumentNullException)
@@ -181,7 +179,6 @@ public static partial class OwnaudioNet
 
         lock (_mixerRegistryLock)
         {
-            // Only unregister if this is the currently registered mixer
             if (_registeredMixer?.MixerId == mixer.MixerId)
             {
                 _registeredMixer = null;
@@ -366,10 +363,6 @@ public static partial class OwnaudioNet
         };
     }
 
-    // ==========================================
-    // ASYNC API - Prevents UI Thread Blocking
-    // ==========================================
-
     /// <summary>
     /// Initializes the OwnaudioNET library asynchronously with default configuration.
     /// This method prevents UI thread blocking by running initialization on a background thread.
@@ -404,7 +397,6 @@ public static partial class OwnaudioNet
         if (config == null)
             throw new ArgumentNullException(nameof(config));
 
-        // Run initialization on background thread to prevent UI blocking
         await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -440,7 +432,6 @@ public static partial class OwnaudioNet
 
                 try
                 {
-                    // Create wrapper with the provided engine
                     _engineWrapper = new AudioEngineWrapper(engine, config);
                     _initialized = true;
                 }

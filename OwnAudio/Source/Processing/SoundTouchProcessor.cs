@@ -6,17 +6,6 @@ namespace OwnaudioNET.Processing;
 /// Wrapper for SoundTouch library providing pitch shifting and tempo control.
 /// This is a thin wrapper around SoundTouch.SoundTouchProcessor with MANDATORY settings.
 /// </summary>
-/// <remarks>
-/// CRITICAL MANDATORY SETTINGS (applied in constructor):
-/// - UseQuickSeek: 0 (DISABLED for better quality)
-/// - UseAAFilter: 1 (ENABLED to prevent artifacts)
-/// - SequenceMs: 40 (Fixed sequence length)
-/// - SeekWindowMs: 15 (Fixed seek window)
-/// - OverlapMs: 8 (Fixed overlap length)
-///
-/// DO NOT modify these settings. They have been determined through extensive testing
-/// to provide the best quality-to-latency ratio without artifacts.
-/// </remarks>
 public sealed class SoundTouchProcessor : IDisposable
 {
     private readonly SoundTouch.SoundTouchProcessor _soundTouch;
@@ -115,15 +104,10 @@ public sealed class SoundTouchProcessor : IDisposable
     {
         _soundTouch = new SoundTouch.SoundTouchProcessor();
 
-        // Configure basic parameters
         _soundTouch.SampleRate = sampleRate;
         _soundTouch.Channels = channels;
-
-        // CRITICAL MANDATORY SETTINGS - DO NOT CHANGE THESE VALUES!
         _soundTouch.SetSetting(SettingId.UseQuickSeek, 0);          // MUST be 0
         _soundTouch.SetSetting(SettingId.UseAntiAliasFilter, 1);   // MUST be 1
-        // Note: SequenceMs, SeekWindowMs, OverlapMs are not available in this SoundTouch version
-        // Using default values which are optimal
     }
 
     /// <summary>
@@ -144,7 +128,6 @@ public sealed class SoundTouchProcessor : IDisposable
 
         lock (_lock)
         {
-            // SoundTouch.SoundTouchProcessor.PutSamples works with Span<float> directly
             _soundTouch.PutSamples(samples, frameCount);
         }
     }
@@ -164,7 +147,6 @@ public sealed class SoundTouchProcessor : IDisposable
 
         lock (_lock)
         {
-            // SoundTouch.SoundTouchProcessor.ReceiveSamples can work with Span directly
             return _soundTouch.ReceiveSamples(output, maxFrames);
         }
     }

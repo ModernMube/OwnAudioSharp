@@ -12,26 +12,8 @@ namespace Ownaudio.Core
     /// </summary>
     public static class AudioEngineFactory
     {
-        // -----------------------------------------------------------------------
-        // Cached engine types – Assembly.Load + GetType run only once per type.
-        // -----------------------------------------------------------------------
         private static readonly Lazy<Type?> _nativeEngineType = new Lazy<Type?>(() =>
             TryLoadType("Ownaudio.Native", "Ownaudio.Native.NativeAudioEngine"));
-
-        private static readonly Lazy<Type?> _windowsEngineType = new Lazy<Type?>(() =>
-            TryLoadType("Ownaudio.Windows", "Ownaudio.Windows.WasapiEngine"));
-
-        private static readonly Lazy<Type?> _macOSEngineType = new Lazy<Type?>(() =>
-            TryLoadType("Ownaudio.macOS", "Ownaudio.macOS.CoreAudioEngine"));
-
-        private static readonly Lazy<Type?> _iOSEngineType = new Lazy<Type?>(() =>
-            TryLoadType("Ownaudio.iOS", "Ownaudio.iOS.CoreAudioIOSEngine"));
-
-        private static readonly Lazy<Type?> _androidEngineType = new Lazy<Type?>(() =>
-            TryLoadType("Ownaudio.Android", "Ownaudio.Android.AAudioEngine"));
-
-        private static readonly Lazy<Type?> _linuxEngineType = new Lazy<Type?>(() =>
-            TryLoadType("Ownaudio.Linux", "Ownaudio.Linux.PulseAudioEngine"));
 
         private static Type? TryLoadType(string assemblyName, string typeName)
         {
@@ -67,42 +49,13 @@ namespace Ownaudio.Core
             {
                 engine = CreateNativeEngine();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Detect platform and create appropriate engine
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                {
-                    // Windows WASAPI
-                    engine = CreateWindowsEngine();
-                }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                {
-                    // macOS Core Audio
-                    engine = CreateMacOSEngine();
-                }
-                else if (OperatingSystem.IsIOS())
-                {
-                    // iOS Core Audio
-                    engine = CreateIOSEngine();
-                }
-                else if (OperatingSystem.IsAndroid())
-                {
-                    // Android AAudio
-                    engine = CreateAndroidEngine();
-                }
-                else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-                {
-                    // Linux ALSA
-                    engine = CreateLinuxEngine();
-                }
-                else
-                {
-                    throw new AudioException("AudioEngineFactory ERROR: ", new PlatformNotSupportedException(
-                        $"Audio engine not implemented for platform: {RuntimeInformation.OSDescription}"));
-                }
+                throw new AudioException("AudioEngineFactory ERROR: ",
+                    new PlatformNotSupportedException(
+                        $"NativeAudioEngine could not be loaded. Platform: {RuntimeInformation.OSDescription}", ex));
             }
 
-            // Initialize the engine
             int result = 0;
 #if WINDOWS
             // WASAPI requires COM initialization. Using an explicit MTA thread avoids
@@ -158,21 +111,6 @@ namespace Ownaudio.Core
         private static IAudioEngine CreateNativeEngine() =>
             CreateFromCachedType(_nativeEngineType, "Native");
 
-        private static IAudioEngine CreateWindowsEngine() =>
-            CreateFromCachedType(_windowsEngineType, "Windows WASAPI");
-
-        private static IAudioEngine CreateMacOSEngine() =>
-            CreateFromCachedType(_macOSEngineType, "macOS Core Audio");
-
-        private static IAudioEngine CreateIOSEngine() =>
-            CreateFromCachedType(_iOSEngineType, "iOS Core Audio");
-
-        private static IAudioEngine CreateAndroidEngine() =>
-            CreateFromCachedType(_androidEngineType, "Android AAudio");
-
-        private static IAudioEngine CreateLinuxEngine() =>
-            CreateFromCachedType(_linuxEngineType, "Linux PulseAudio");
-
         /// <summary>
         /// Gets information about the current platform's audio capabilities.
         /// </summary>
@@ -180,38 +118,20 @@ namespace Ownaudio.Core
         public static string GetPlatformInfo()
         {
             string platform = "Unknown";
-            string primaryImplementation = "NativeAudioEngine (PortAudio/MiniAudio)";
-            string fallbackImplementation = "Not Available";
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
                 platform = "Windows";
-                fallbackImplementation = "WASAPI (Windows Audio Session API)";
-            }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
                 platform = "macOS";
-                fallbackImplementation = "Core Audio (AudioQueue)";
-            }
             else if (OperatingSystem.IsIOS())
-            {
                 platform = "iOS";
-                fallbackImplementation = "Core Audio (AudioUnit/RemoteIO)";
-            }
             else if (OperatingSystem.IsAndroid())
-            {
                 platform = "Android";
-                fallbackImplementation = "AAudio";
-            }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
                 platform = "Linux";
-                fallbackImplementation = "PulseAudio";
-            }
 
             return $"Platform: {platform}\n" +
-                   $"Primary Implementation: {primaryImplementation}\n" +
-                   $"Fallback Implementation: {fallbackImplementation}\n" +
+                   $"Implementation: NativeAudioEngine (PortAudio/MiniAudio)\n" +
                    $"OS Description: {RuntimeInformation.OSDescription}\n" +
                    $"Framework: {RuntimeInformation.FrameworkDescription}";
         }

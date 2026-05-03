@@ -1,6 +1,3 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Ownaudio.Core;
 using OwnaudioNET.Interfaces;
 
@@ -91,7 +88,6 @@ namespace OwnaudioNET.Effects.SmartMaster
             _measurementService = new SmartMasterMeasurementService(config, presetsDirectory);
             
             // Create audio chain ONCE on first Initialize() call
-            // On subsequent calls (e.g., playback restart), preserve existing chain
             if (_audioChain == null)
             {
                 _audioChain = new SmartMasterAudioChain(config.SampleRate, config.Channels);
@@ -110,13 +106,11 @@ namespace OwnaudioNET.Effects.SmartMaster
         
         public void Process(Span<float> buffer, int frameCount)
         {
-            // CRITICAL: Check for empty buffer (Pause/Stop scenario)
             if (buffer.Length == 0 || frameCount == 0)
             {
                 return;
             }
             
-            // INPUT SANITIZATION: Check for NaN/Inf
             bool hasNaN = false;
             for (int i = 0; i < buffer.Length; i++)
             {
@@ -132,14 +126,11 @@ namespace OwnaudioNET.Effects.SmartMaster
                 Logger.Log.Warning("[SmartMaster] NaN/Inf detected in input buffer - sanitized to zero");
             }
 
-            // Bypass if disabled or not initialized
             if (!_enabled || _audioChain == null)
             {
                 return;
             }
             
-            // LOCK-FREE READ: Audio chain reference is atomically swapped during configuration changes
-            // No lock needed here for maximum performance
             _audioChain.Process(buffer, frameCount);
         }
         
@@ -210,20 +201,16 @@ namespace OwnaudioNET.Effects.SmartMaster
             
             var loadedConfig = _presetManager.Load(presetName);
             
-            // Apply preset with atomic swap
             lock (_configLock)
             {
                 _configuration = loadedConfig;
                 
-                // Recreate audio chain with new configuration
                 var newChain = new SmartMasterAudioChain(_config.SampleRate, _config.Channels);
                 newChain.Configure(_config, _configuration);
                 
-                // Atomic swap (lock-free for audio thread)
                 var oldChain = _audioChain;
                 _audioChain = newChain;
                 
-                // Dispose old chain after swap
                 oldChain?.Dispose();
                 
                 Logger.Log.Info($"[SmartMaster] Preset loaded and applied: {presetName}");
@@ -242,12 +229,10 @@ namespace OwnaudioNET.Effects.SmartMaster
             
             var loadedConfig = _presetManager.LoadSpeakerPreset(speakerType);
             
-            // Apply preset with atomic swap
             lock (_configLock)
             {
                 _configuration = loadedConfig;
                 
-                // Recreate audio chain
                 var newChain = new SmartMasterAudioChain(_config.SampleRate, _config.Channels);
                 newChain.Configure(_config, _configuration);
                 
@@ -273,7 +258,6 @@ namespace OwnaudioNET.Effects.SmartMaster
             {
                 _configuration = new SmartMasterConfig();
                 
-                // Recreate audio chain
                 var newChain = new SmartMasterAudioChain(_config.SampleRate, _config.Channels);
                 newChain.Configure(_config, _configuration);
                 
@@ -282,7 +266,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 oldChain?.Dispose();
             }
             
-            // Save default preset
             _presetManager.Save(_configuration, "default");
             
             Logger.Log.Info("[SmartMaster] Default settings restored and saved");
@@ -310,7 +293,6 @@ namespace OwnaudioNET.Effects.SmartMaster
             if (_measurementService == null || _config == null)
                 throw new InvalidOperationException("Effect not initialized");
             
-            // Check if measurement already in progress
             if (_measurementStatus.Status != MeasurementStatus.Idle && 
                 _measurementStatus.Status != MeasurementStatus.Completed && 
                 _measurementStatus.Status != MeasurementStatus.Error)
@@ -318,25 +300,19 @@ namespace OwnaudioNET.Effects.SmartMaster
                 throw new InvalidOperationException("A measurement is already in progress!");
             }
             
-            // Disable effect during measurement
             bool wasEnabled = _enabled;
             _enabled = false;
             
-            // Reset all component states
             Reset();
             
             _measurementCancellation = new CancellationTokenSource();
             
             try
             {
-                // Perform measurement
                 var measuredConfig = await _measurementService.PerformMeasurementAsync(
                     status => _measurementStatus = status,
                     _configuration.MicInputGain,
                     _measurementCancellation.Token);
-                
-                // Note: Measured config is saved to "measured.smartmaster.json" but NOT applied
-                // User must manually load it
             }
             catch (OperationCanceledException)
             {
@@ -352,7 +328,6 @@ namespace OwnaudioNET.Effects.SmartMaster
             }
             finally
             {
-                // Reset to factory defaults after measurement
                 lock (_configLock)
                 {
                     _configuration = new SmartMasterConfig();
@@ -368,13 +343,11 @@ namespace OwnaudioNET.Effects.SmartMaster
                     }
                 }
                 
-                // Restore effect enabled state
                 _enabled = wasEnabled;
                 
                 _measurementCancellation?.Dispose();
                 _measurementCancellation = null;
                 
-                // Reset to Idle after delay
                 await Task.Delay(100);
                 if (_measurementStatus.Status == MeasurementStatus.Completed || 
                     _measurementStatus.Status == MeasurementStatus.Error)

@@ -39,7 +39,6 @@ namespace Ownaudio.Core.Common
             _objects = new ConcurrentBag<T>();
             _currentSize = 0;
 
-            // Pre-allocate initial objects
             for (int i = 0; i < initialSize; i++)
             {
                 _objects.Add(_objectGenerator());
@@ -59,7 +58,6 @@ namespace Ownaudio.Core.Common
                 return item;
             }
 
-            // Pool is empty, create new instance
             return _objectGenerator();
         }
 
@@ -73,12 +71,10 @@ namespace Ownaudio.Core.Common
         {
             if (item == null)
                 return;
-
-            // Check max size limit
+            
             if (_maxSize > 0 && _currentSize >= _maxSize)
                 return; // Discard object
 
-            // Reset object if reset action is provided
             _resetAction?.Invoke(item);
 
             _objects.Add(item);

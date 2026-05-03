@@ -37,14 +37,10 @@ public sealed class StreamingAudioCache : IDisposable
     private readonly int _readAheadSize;
 
     private long _bufferStartPosition;
-    // Accessed from both the main thread (Read/RefillBuffer) and the background read-ahead thread.
-    // Use Volatile.Read/Write and Interlocked.Add to prevent torn reads on 32-bit platforms
-    // and to ensure visibility across CPU cores.
     private int _bufferValidBytes;
     private long _streamPosition;
     private bool _disposed;
 
-    // Pre-computed integer threshold avoids a floating-point multiply on every Read() call.
     private readonly int _readAheadThreshold;
 
     // Read-ahead state
@@ -95,7 +91,6 @@ public sealed class StreamingAudioCache : IDisposable
         _streamPosition = baseStream.Position;
         _disposed = false;
 
-        // Compute the 75% watermark once; avoids repeated FP multiply in the hot Read() path.
         _readAheadThreshold = (int)(bufferSize * 0.75);
     }
 
@@ -122,20 +117,16 @@ public sealed class StreamingAudioCache : IDisposable
 
         while (count > 0)
         {
-            // Check if we need to refill buffer
             if (!IsPositionInBuffer(_streamPosition))
             {
                 RefillBuffer(_streamPosition);
             }
 
-            // Calculate how much we can read from current buffer.
-            // Use Volatile.Read to observe writes made by the background read-ahead thread.
             int bufferOffset = (int)(_streamPosition - _bufferStartPosition);
             int availableInBuffer = System.Threading.Volatile.Read(ref _bufferValidBytes) - bufferOffset;
 
             if (availableInBuffer <= 0)
             {
-                // End of stream
                 break;
             }
 
@@ -147,7 +138,6 @@ public sealed class StreamingAudioCache : IDisposable
             count -= bytesToCopy;
             totalRead += bytesToCopy;
 
-            // Trigger read-ahead if we're approaching buffer end
             TriggerReadAheadIfNeeded();
         }
 
@@ -214,7 +204,6 @@ public sealed class StreamingAudioCache : IDisposable
 
         _streamPosition = newPosition;
 
-        // Cancel any pending read-ahead
         CancelReadAhead();
 
         return _streamPosition;
@@ -238,17 +227,13 @@ public sealed class StreamingAudioCache : IDisposable
     /// </summary>
     private void RefillBuffer(long startPosition)
     {
-        // Cancel any pending read-ahead
         CancelReadAhead();
 
-        // Seek base stream if needed
         if (_baseStream.Position != startPosition)
         {
             _baseStream.Seek(startPosition, SeekOrigin.Begin);
         }
-
-        // Read large chunk (sequential I/O is fast).
-        // Volatile.Write ensures the background read-ahead thread sees the updated value.
+        
         _bufferStartPosition = startPosition;
         System.Threading.Volatile.Write(ref _bufferValidBytes, _baseStream.Read(_buffer, 0, _bufferSize));
     }
@@ -261,18 +246,13 @@ public sealed class StreamingAudioCache : IDisposable
         if (_readAheadSize == 0)
             return;
 
-        // Trigger read-ahead when we've consumed 75% of buffer.
-        // Use the pre-computed integer threshold (set in constructor) to avoid
-        // a floating-point multiply on every Read() call.
         int bufferOffset = (int)(_streamPosition - _bufferStartPosition);
         if (bufferOffset < _readAheadThreshold)
             return;
 
-        // Don't start new read-ahead if one is already running
         if (_readAheadTask != null && !_readAheadTask.IsCompleted)
             return;
-
-        // Start async read-ahead
+        
         _readAheadCts = new CancellationTokenSource();
         _readAheadTask = Task.Run(() => ReadAheadAsync(_readAheadCts.Token), _readAheadCts.Token);
     }
@@ -291,13 +271,11 @@ public sealed class StreamingAudioCache : IDisposable
                 if (cancellationToken.IsCancellationRequested)
                     return;
 
-                // Calculate read-ahead position
                 long readAheadPosition = _bufferStartPosition + _bufferValidBytes;
 
                 if (readAheadPosition >= _baseStream.Length)
                     return; // Already at end
 
-                // Seek and read into read-ahead portion of buffer
                 _baseStream.Seek(readAheadPosition, SeekOrigin.Begin);
                 int bytesRead = await _baseStream.ReadAsync(
                     _buffer,
@@ -307,8 +285,6 @@ public sealed class StreamingAudioCache : IDisposable
 
                 if (!cancellationToken.IsCancellationRequested && bytesRead > 0)
                 {
-                    // Atomically extend the valid byte count so the main thread sees
-                    // a consistent value (no torn read/write on 32-bit platforms).
                     System.Threading.Interlocked.Add(ref _bufferValidBytes, bytesRead);
                 }
             }
@@ -317,14 +293,8 @@ public sealed class StreamingAudioCache : IDisposable
                 _readAheadLock.Release();
             }
         }
-        catch (OperationCanceledException)
-        {
-            // Expected when read-ahead is cancelled
-        }
-        catch
-        {
-            // Ignore read-ahead errors (will retry on next trigger)
-        }
+        catch (OperationCanceledException) {}
+        catch {}
     }
 
     /// <summary>

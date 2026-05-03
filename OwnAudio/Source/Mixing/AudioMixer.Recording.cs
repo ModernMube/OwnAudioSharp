@@ -56,7 +56,7 @@ public sealed partial class AudioMixer
             }
             catch
             {
-                // Ignore errors during cleanup
+                
             }
             finally
             {

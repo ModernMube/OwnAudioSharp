@@ -1,11 +1,7 @@
-using Ownaudio;
-using Ownaudio.Core;
 using Ownaudio.Decoders;
 using OwnaudioNET.Core;
 using OwnaudioNET.Exceptions;
-using System;
 using System.Buffers;
-using System.IO;
 
 namespace OwnaudioNET.Sources;
 
@@ -37,16 +33,13 @@ public partial class FileSource
 
         try
         {
-            // Check if we have a file path to create a decoder
             if (string.IsNullOrEmpty(_filePath))
             {
                 return Array.Empty<byte>();
             }
 
-            // Create a temporary decoder to extract data without affecting playback
             using var tempDecoder = AudioDecoderFactory.Create(_filePath, _streamInfo.SampleRate, _streamInfo.Channels);
 
-            // Seek to target position
             if (!tempDecoder.TrySeek(position, out string seekError))
             {
                 throw new AudioException($"Failed to seek to position {position}: {seekError}");
@@ -54,7 +47,6 @@ public partial class FileSource
 
             bool readUntilEOF = (duration == null);
 
-            // Calculate target bytes ONLY if duration was explicitly specified
             int targetBytes = 0;
             if (!readUntilEOF)
             {
@@ -67,39 +59,32 @@ public partial class FileSource
                 }
             }
 
-            // Use a MemoryStream to accumulate data (dynamically grows if reading until EOF)
             using var memoryStream = new MemoryStream(targetBytes > 0 ? targetBytes : 65536);
 
-            // ZERO-ALLOC: Use a reusable byte buffer for the new ReadFrames method.
             var byteBuffer = ArrayPool<byte>.Shared.Rent(4096 * _streamInfo.Channels * sizeof(float));
 
             try
             {
                 int bytesWritten = 0;
 
-                // Decode frames until we reach target OR actual EOF
                 while (true)
                 {
                     var result = tempDecoder.ReadFrames(byteBuffer);
 
-                    // Always stop on EOF or error
                     if (result.IsEOF || !result.IsSucceeded || result.FramesRead == 0)
                     {
                         break;
                     }
 
-                    // Copy frame data to result
                     int bytesRead = result.FramesRead * _streamInfo.Channels * sizeof(float);
 
                     if (readUntilEOF)
                     {
-                        // No limit - read everything until EOF
                         memoryStream.Write(byteBuffer, 0, bytesRead);
                         bytesWritten += bytesRead;
                     }
                     else
                     {
-                        // Limited read - stop when we reach target
                         int bytesToCopy = Math.Min(bytesRead, targetBytes - bytesWritten);
                         memoryStream.Write(byteBuffer, 0, bytesToCopy);
                         bytesWritten += bytesToCopy;
@@ -141,7 +126,6 @@ public partial class FileSource
             return Array.Empty<float>();
         }
 
-        // Convert byte[] to float[]
         float[] floatData = new float[byteData.Length / sizeof(float)];
         Buffer.BlockCopy(byteData, 0, floatData, 0, byteData.Length);
 
@@ -168,7 +152,6 @@ public partial class FileSource
 
         try
         {
-            // Create a temporary buffer to peek at current audio data
             int peekSamples = Math.Min(512 * _streamInfo.Channels, _buffer.Available);
             if (peekSamples == 0)
             {
@@ -183,7 +166,6 @@ public partial class FileSource
                 return (0f, 0f);
             }
 
-            // Calculate peak levels for each channel
             float leftPeak = 0f;
             float rightPeak = 0f;
             int channels = _streamInfo.Channels;
@@ -200,13 +182,11 @@ public partial class FileSource
                 }
             }
 
-            // If mono, use same value for both channels
             if (channels == 1)
             {
                 rightPeak = leftPeak;
             }
 
-            // Apply volume scaling
             leftPeak *= Volume;
             rightPeak *= Volume;
 

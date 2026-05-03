@@ -21,7 +21,6 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
             
             for (int i = 0; i < sampleCount; i++)
             {
-                // Uniformly distributed random number between -1.0 and 1.0
                 noise[i] = ((float)_random.NextDouble() * 2.0f - 1.0f) * amplitude;
             }
             

@@ -92,10 +92,6 @@ internal sealed class AudioBufferController : IDisposable
    /// <param name="samples">Audio samples in Float32 format, interleaved (e.g., L R L R for stereo).</param>
    /// <returns>The number of samples actually written to the buffer.</returns>
    /// <exception cref="ObjectDisposedException">Thrown if the controller has been disposed.</exception>
-   /// <remarks>
-   /// If the buffer is full, this method will drop the samples and raise a BufferUnderrun event.
-   /// Performance: &lt; 1ms latency (CircularBuffer write only), zero allocations.
-   /// Thread Safety: Safe to call from any thread.
    /// </remarks>
    [MethodImpl(MethodImplOptions.AggressiveInlining)]
    public int Send(ReadOnlySpan<float> samples)
@@ -105,13 +101,10 @@ internal sealed class AudioBufferController : IDisposable
       if (samples.IsEmpty)
          return 0;
 
-      // Write to circular buffer (zero-allocation, lock-free)
       int written = _outputBuffer.Write(samples);
 
-      // Update statistics
       Interlocked.Add(ref _totalSamplesSent, written);
 
-      // Check for underrun (buffer full - samples dropped)
       if (written < samples.Length)
       {
          int droppedSamples = samples.Length - written;
@@ -119,7 +112,6 @@ internal sealed class AudioBufferController : IDisposable
 
          Interlocked.Increment(ref _totalUnderruns);
 
-         // Raise underrun event (do not block hot path - event handlers should be fast)
          BufferUnderrun?.Invoke(this, new BufferUnderrunEventArgs(
              missedFrames: droppedFrames,
              position: Interlocked.Read(ref _totalSamplesSent) / _channels
@@ -136,10 +128,6 @@ internal sealed class AudioBufferController : IDisposable
    /// <param name="buffer">The buffer to read samples into.</param>
    /// <returns>The number of samples actually read from the buffer.</returns>
    /// <exception cref="ObjectDisposedException">Thrown if the controller has been disposed.</exception>
-   /// <remarks>
-   /// This method is typically called by the pump thread.
-   /// Thread Safety: Safe to call from any thread.
-   /// </remarks>
    [MethodImpl(MethodImplOptions.AggressiveInlining)]
    public int Read(Span<float> buffer)
    {
@@ -153,9 +141,6 @@ internal sealed class AudioBufferController : IDisposable
    /// </summary>
    /// <returns>A buffer from the pool, or null if the pool is empty.</returns>
    /// <exception cref="ObjectDisposedException">Thrown if the controller has been disposed.</exception>
-   /// <remarks>
-   /// The caller is responsible for returning the buffer to the pool using <see cref="ReturnInputBuffer"/>.
-   /// </remarks>
    public float[]? RentInputBuffer()
    {
       ThrowIfDisposed();
@@ -167,10 +152,6 @@ internal sealed class AudioBufferController : IDisposable
    /// </summary>
    /// <param name="buffer">The buffer to return.</param>
    /// <exception cref="ObjectDisposedException">Thrown if the controller has been disposed.</exception>
-   /// <remarks>
-   /// This method is optional - buffers will be garbage collected if not returned.
-   /// However, returning buffers to the pool reduces GC pressure.
-   /// </remarks>
    public void ReturnInputBuffer(float[] buffer)
    {
       if (buffer == null || buffer.Length != _engineBufferSize)
@@ -183,21 +164,13 @@ internal sealed class AudioBufferController : IDisposable
       {
          _inputBufferPool.Return(buffer);
       }
-      catch
-      {
-         // Pool full or other error - discard buffer
-      }
+      catch {}
    }
 
    /// <summary>
    /// Clears the output buffer, discarding all pending audio data.
    /// </summary>
    /// <exception cref="ObjectDisposedException">Thrown if the controller has been disposed.</exception>
-   /// <remarks>
-   /// WARNING: This method is NOT thread-safe with Send() operations.
-   /// Only call this when you're certain no Send() calls are in progress.
-   /// Typically used during seek operations or after stopping playback.
-   /// </remarks>
    public void ClearOutputBuffer()
    {
       ThrowIfDisposed();

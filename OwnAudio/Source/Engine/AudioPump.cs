@@ -72,8 +72,6 @@ internal sealed class AudioPump : IDisposable
       _engineBufferSize = engineBufferSize;
       _framesPerBuffer = framesPerBuffer;
 
-      // Calculate sleep interval for pump thread (half buffer time to avoid tight loop)
-      // Sleep time = (FramesPerBuffer / 2) / SampleRate * 1000 ms
       double halfBufferTimeMs = (framesPerBuffer / 2.0) / sampleRate * 1000.0;
       _sleepIntervalMs = Math.Max(1, (int)Math.Round(halfBufferTimeMs));
 
@@ -97,7 +95,6 @@ internal sealed class AudioPump : IDisposable
       _stopRequested = false;
       _isRunning = true;
 
-      // Create new thread for each start (threads cannot be restarted)
       _pumpThread = new Thread(PumpThreadLoop)
       {
          Name = "AudioPump.PumpThread",
@@ -124,18 +121,16 @@ internal sealed class AudioPump : IDisposable
       if (!_isRunning)
          return; // Already stopped
 
-      // Signal pump thread to stop
       _stopRequested = true;
 
-      // Wait for pump thread to exit (with timeout)
-      if (_pumpThread != null && _pumpThread.IsAlive)
-      {
-         if (!_pumpThread.Join(TimeSpan.FromMilliseconds(timeoutMs)))
-         {
-            // Thread didn't exit gracefully - log warning but continue
-            // Don't abort - it's unsafe in modern .NET
-         }
-      }
+      // if (_pumpThread != null && _pumpThread.IsAlive)
+      // {
+      //    if (!_pumpThread.Join(TimeSpan.FromMilliseconds(timeoutMs)))
+      //    {
+      //       // Thread didn't exit gracefully - log warning but continue
+      //       // Don't abort - it's unsafe in modern .NET
+      //    }
+      // }
 
       _isRunning = false;
    }
@@ -148,11 +143,6 @@ internal sealed class AudioPump : IDisposable
    /// <param name="cancellationToken">Cancellation token to abort the wait (not the stop itself).</param>
    /// <exception cref="ObjectDisposedException">Thrown if the pump has been disposed.</exception>
    /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
-   /// <remarks>
-   /// Recommended for UI applications (WPF, WinForms, MAUI, Avalonia).
-   /// Note: Even if cancelled, the pump will still attempt to stop gracefully.
-   /// The cancellation only affects the async wait, not the stop operation itself.
-   /// </remarks>
    public async Task StopAsync(int timeoutMs = 2000, CancellationToken cancellationToken = default)
    {
       await Task.Run(() =>
@@ -168,50 +158,38 @@ internal sealed class AudioPump : IDisposable
    /// </summary>
    private void PumpThreadLoop()
    {
-      // Pre-allocate buffer OUTSIDE loop to avoid stack overflow issues
       float[] tempBuffer = new float[_engineBufferSize];
 
       while (!_stopRequested)
       {
          try
          {
-            // Check if enough data is available in the buffer
             int available = _bufferController.OutputBufferAvailable;
 
             if (available >= _engineBufferSize)
             {
-               // Read from buffer into pre-allocated temp buffer
                Span<float> bufferSpan = tempBuffer.AsSpan();
                int read = _bufferController.Read(bufferSpan);
 
                if (read == _engineBufferSize)
                {
-                  // Send to engine (this may block until hardware buffer has space)
                   _engine.Send(bufferSpan);
 
-                  // Update statistics
                   Interlocked.Add(ref _pumpedFrames, _framesPerBuffer);
                }
                else if (read > 0)
                {
-                  // Partial read - unusual, but handle gracefully
-                  // Send what we have
                   _engine.Send(bufferSpan.Slice(0, read));
                   Interlocked.Add(ref _pumpedFrames, read / (_engineBufferSize / _framesPerBuffer));
                }
             }
             else
             {
-               // Not enough data available - sleep and retry
-               // This is normal during startup or sparse audio playback
                Thread.Sleep(_sleepIntervalMs);
             }
          }
          catch
          {
-            // Error in pump thread - log but don't crash the thread
-            // In production, log via ILogger
-            // Back off on error to avoid tight loop
             Thread.Sleep(_sleepIntervalMs * 2);
          }
       }
@@ -234,17 +212,13 @@ internal sealed class AudioPump : IDisposable
       if (_disposed)
          return;
 
-      // Stop pump if running
       if (_isRunning)
       {
          try
          {
             Stop();
          }
-         catch
-         {
-            // Ignore errors during disposal
-         }
+         catch {}
       }
 
       _disposed = true;

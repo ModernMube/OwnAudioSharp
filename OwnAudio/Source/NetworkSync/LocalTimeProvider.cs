@@ -18,7 +18,6 @@ public sealed class LocalTimeProvider : IDisposable
     private TimeSyncTier _currentTier = TimeSyncTier.SystemTime;
     private bool _disposed;
 
-    // Local NTP servers to try (common router addresses)
     private static readonly string[] LocalNtpServers = new[]
     {
         "192.168.1.1",
@@ -105,10 +104,7 @@ public sealed class LocalTimeProvider : IDisposable
                     return true;
                 }
             }
-            catch
-            {
-                // Try next server
-            }
+            catch {}
         }
 
         return false;
@@ -127,7 +123,6 @@ public sealed class LocalTimeProvider : IDisposable
             using var udpClient = new UdpClient();
             udpClient.Client.ReceiveTimeout = timeout;
 
-            // Send time request
             var t0 = DateTime.UtcNow;
             var pingCmd = NetworkSyncProtocol.CreatePingCommand(t0.Ticks, 0);
             
@@ -136,7 +131,6 @@ public sealed class LocalTimeProvider : IDisposable
             
             await udpClient.SendAsync(buffer.Slice(0, bytesWritten).ToArray(), bytesWritten, serverEndpoint);
 
-            // Receive response
             var receiveTask = udpClient.ReceiveAsync();
             var timeoutTask = Task.Delay(timeout);
 
@@ -149,7 +143,6 @@ public sealed class LocalTimeProvider : IDisposable
                 if (NetworkSyncProtocol.DeserializeCommand(response.Buffer, ref pongCmd) &&
                     pongCmd.Type == NetworkSyncProtocol.CommandType.Pong)
                 {
-                    // Cristian's algorithm
                     var serverTime = new DateTime(pongCmd.NtpTimestamp, DateTimeKind.Utc);
                     var roundTripTime = (t1 - t0).TotalSeconds;
                     var estimatedLatency = roundTripTime / 2.0;
@@ -165,10 +158,7 @@ public sealed class LocalTimeProvider : IDisposable
                 }
             }
         }
-        catch
-        {
-            // Sync failed
-        }
+        catch {}
 
         return false;
     }
@@ -204,13 +194,11 @@ public sealed class LocalTimeProvider : IDisposable
     {
         try
         {
-            // Wrap DNS resolution with timeout (DNS can hang indefinitely)
             var dnsTask = Dns.GetHostAddressesAsync(server);
             var timeoutTask = Task.Delay(timeout);
             
             if (await Task.WhenAny(dnsTask, timeoutTask) == timeoutTask)
             {
-                // DNS resolution timed out
                 return null;
             }
             
@@ -224,7 +212,6 @@ public sealed class LocalTimeProvider : IDisposable
             socket.ReceiveTimeout = timeout;
             socket.SendTimeout = timeout;
 
-            // NTP packet (48 bytes) - use byte array instead of Span for async
             byte[] ntpData = new byte[48];
             ntpData[0] = 0x1B; // LI = 0, VN = 3, Mode = 3 (Client)
 
@@ -235,7 +222,6 @@ public sealed class LocalTimeProvider : IDisposable
             if (received < 48)
                 return null;
 
-            // Parse NTP timestamp (seconds since 1900-01-01)
             ulong intPart = BinaryPrimitives.ReadUInt32BigEndian(ntpData.AsSpan(40));
             ulong fractPart = BinaryPrimitives.ReadUInt32BigEndian(ntpData.AsSpan(44));
 

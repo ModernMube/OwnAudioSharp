@@ -157,7 +157,6 @@ namespace OwnaudioNET.Features.Vocalremover
             var fileInfo = new FileInfo(filePath);
             var fileSizeMB = fileInfo.Length / (1024.0 * 1024.0);
 
-            // Rough estimates: GPU ~50-100x realtime, CPU ~10-15x realtime
             double minutesPerMB = useGPU ? 0.1 : 1.0;
             var estimatedMinutes = fileSizeMB * minutesPerMB;
 

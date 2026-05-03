@@ -7,31 +7,49 @@ namespace Ownaudio.Core.Common
     /// </summary>
     public enum AudioErrorCategory
     {
-        /// <summary>Unknown or unspecified error.</summary>
+        /// <summary>
+        /// Unknown or unspecified error.
+        /// </summary>
         Unknown,
 
-        /// <summary>Invalid or unsupported file format.</summary>
+        /// <summary>
+        /// Invalid or unsupported file format.
+        /// </summary>
         FileFormat,
 
-        /// <summary>I/O operation failed (read/write/seek).</summary>
+        /// <summary>
+        /// I/O operation failed (read/write/seek).
+        /// </summary>
         IO,
 
-        /// <summary>Audio decoding failed.</summary>
+        /// <summary>
+        /// Audio decoding failed.
+        /// </summary>
         Decoding,
 
-        /// <summary>Seek operation failed.</summary>
+        /// <summary>
+        /// Seek operation failed.
+        /// </summary>
         Seeking,
 
-        /// <summary>Platform-specific API call failed.</summary>
+        /// <summary>
+        /// Platform-specific API call failed.
+        /// </summary>
         PlatformAPI,
 
-        /// <summary>Memory allocation or buffer management failed.</summary>
+        /// <summary>
+        /// Memory allocation or buffer management failed.
+        /// </summary>
         OutOfMemory,
 
-        /// <summary>Audio device operation failed.</summary>
+        /// <summary>
+        /// Audio device operation failed.
+        /// < /summary>
         Device,
 
-        /// <summary>Invalid configuration or parameters.</summary>
+        /// <summary>
+        /// Invalid configuration or parameters.
+        /// </summary>
         Configuration
     }
 

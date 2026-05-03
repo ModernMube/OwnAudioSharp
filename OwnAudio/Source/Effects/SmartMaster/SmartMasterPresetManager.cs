@@ -21,7 +21,6 @@ namespace OwnaudioNET.Effects.SmartMaster
         {
             _presetsDirectory = presetsDirectory ?? throw new ArgumentNullException(nameof(presetsDirectory));
             
-            // Ensure directory exists
             if (!Directory.Exists(_presetsDirectory))
             {
                 Directory.CreateDirectory(_presetsDirectory);
@@ -43,7 +42,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 string filename = SmartMasterPresetFactory.GetPresetFilename(speakerType);
                 string filePath = Path.Combine(_presetsDirectory, filename);
                 
-                // Only create if doesn't exist
                 if (!File.Exists(filePath))
                 {
                     try
@@ -169,8 +167,6 @@ namespace OwnaudioNET.Effects.SmartMaster
             catch (Exception ex)
             {
                 Log.Warning($"[SmartMaster] Failed to load speaker preset {speakerType}, using factory default: {ex.Message}");
-                
-                // Fallback: create from factory
                 return SmartMasterPresetFactory.CreatePreset(speakerType);
             }
         }

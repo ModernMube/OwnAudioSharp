@@ -41,7 +41,6 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
             int fftSize = GetOptimalFFTSize();
             float[] window = GenerateHannWindow(fftSize);
             
-            // Overlapping FFT analysis
             const float overlapRatio = 0.75f;
             int hopSize = (int)(fftSize * (1 - overlapRatio));
             
@@ -63,7 +62,6 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
                 // Perform FFT
                 Fourier.Forward(fftInput, FourierOptions.Matlab);
                 
-                // Calculate band energy
                 for (int band = 0; band < _frequencyBands.Length; band++)
                 {
                     float energy = CalculateBandEnergy(fftInput, _frequencyBands[band], fftSize);

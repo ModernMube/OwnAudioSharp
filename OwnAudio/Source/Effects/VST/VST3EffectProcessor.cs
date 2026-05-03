@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using Ownaudio.Core;
 using OwnaudioNET.Interfaces;
@@ -10,47 +9,60 @@ namespace OwnaudioNET.Effects.VST
     /// <summary>
     /// VST3 plugin wrapper implementing IEffectProcessor for seamless integration
     /// with the OwnAudioSharp effect chain.
+    ///
+    /// Threading model:
+    ///   Audio thread – Process() is called here. ThreadedVst3Wrapper.ProcessAudio() drains
+    ///                  the lock-free SPSC queue (parameter/tempo/transport changes posted by
+    ///                  the UI thread) before each block – zero extra allocations.
+    ///   UI thread    – SetParameter / SetTempo / SetTransportPlaying / ResetPosition enqueue
+    ///                  lock-free; they return immediately without blocking the UI.
+    ///   Any thread   – IsReady, Enabled, Mix reads/writes are volatile-safe.
+    ///
+    /// Ownership:
+    ///   This processor does NOT own the ThreadedVst3Wrapper. The owning VST3PluginHost
+    ///   manages its lifetime. Always dispose the host AFTER the audio engine is stopped.
+    ///
+    /// Required usage:
+    ///   1. await host.InitializeAudioAsync(sampleRate, blockSize)
+    ///   2. var proc = host.GetProcessor()        // only when host.IsReady
+    ///   3. mixer.AddMasterEffect(proc)            // Initialize() validates IsReady
+    ///   4. mixer.Stop()                           // calls Reset() → transport stopped
+    ///   5. proc.Dispose(); host.Dispose()
     /// </summary>
     public sealed class VST3EffectProcessor : IEffectProcessor
     {
         private readonly Guid _id;
         private string _name;
-        private bool _enabled;
-        private bool _disposed;
+        private volatile bool _enabled;
+        private volatile bool _disposed;
         private AudioConfig? _config;
         private float _mix;
 
-        private readonly OwnVst3Wrapper _vst3;
-        private readonly string _pluginPath;
-        private bool _vst3Initialized;
+        private readonly ThreadedVst3Wrapper _threaded;
+
+        private bool _buffersAllocated;
 
         private float[][]? _planarInputBuffers;
         private float[][]? _planarOutputBuffers;
         private float[]? _dryBuffer;
         private int _allocatedBlockSize;
 
-        /// <summary>
-        /// Gets the unique identifier for this effect instance.
-        /// </summary>
+        #region IEffectProcessor properties
+
+        /// <inheritdoc/>
         public Guid Id => _id;
 
-        /// <summary>
-        /// Gets or sets the name of this effect instance.
-        /// </summary>
+        /// <inheritdoc/>
         public string Name
         {
             get => _name;
-            set => _name = value ?? _vst3?.Name ?? "VST3 Effect";
+            set => _name = value ?? "VST3 Effect";
         }
 
-        /// <summary>
-        /// Gets or sets whether this effect is enabled.
-        /// </summary>
+        /// <inheritdoc/>
         public bool Enabled { get => _enabled; set => _enabled = value; }
 
-        /// <summary>
-        /// Gets or sets the wet/dry mix (0.0 = dry, 1.0 = wet).
-        /// </summary>
+        /// <inheritdoc/>
         public float Mix
         {
             get => _mix;
@@ -58,268 +70,244 @@ namespace OwnaudioNET.Effects.VST
         }
 
         /// <summary>
-        /// Gets the vendor/manufacturer of the loaded VST3 plugin.
+        /// Returns true when the underlying VST3 plugin is in Ready or Processing state
+        /// and this processor has not been disposed.
+        /// Safe to read from any thread (volatile).
         /// </summary>
-        public string Vendor => _vst3?.Vendor ?? string.Empty;
+        public bool IsReady => !_disposed && _threaded.IsReady;
 
-        /// <summary>
-        /// Gets whether the loaded plugin is an audio effect.
-        /// </summary>
-        public bool IsEffect => _vst3?.IsEffect ?? false;
+        #endregion
+        
+        #region VST-specific read-only info
 
-        /// <summary>
-        /// Gets whether the loaded plugin is an instrument.
-        /// </summary>
-        public bool IsInstrument => _vst3?.IsInstrument ?? false;
+        /// <summary>Gets the vendor of the loaded VST3 plugin.</summary>
+        public string Vendor => _threaded.InnerWrapper?.Vendor ?? string.Empty;
 
-        /// <summary>
-        /// Gets the full path to the loaded VST3 plugin file.
-        /// </summary>
-        public string PluginPath => _pluginPath;
+        /// <summary>Gets whether the loaded plugin is an audio effect.</summary>
+        public bool IsEffect => _threaded.InnerWrapper?.IsEffect ?? false;
 
-        /// <summary>
-        /// Gets the number of exposed parameters.
-        /// </summary>
-        public int ParameterCount => _vst3?.GetParameterCount() ?? 0;
+        /// <summary>Gets whether the loaded plugin is an instrument.</summary>
+        public bool IsInstrument => _threaded.InnerWrapper?.IsInstrument ?? false;
+        
+        #endregion
 
-        /// <summary>
-        /// Gets whether the plugin has a GUI editor.
-        /// </summary>
-        public bool HasEditor => _vst3?.GetEditorSize() != null;
-
-        /// <summary>
-        /// Creates a VST3 effect processor with a pre-loaded wrapper.
-        /// This constructor is intended to be called by VST3PluginHost.
-        /// </summary>
-        /// <param name="wrapper">Pre-loaded VST3 wrapper instance (managed by VST3PluginHost).</param>
-        /// <exception cref="ArgumentNullException">When wrapper is null.</exception>
-        /// <remarks>
-        /// IMPORTANT: This processor does NOT own the wrapper and will NOT dispose it.
-        /// The wrapper lifecycle is managed by the VST3PluginHost that created this processor.
-        /// </remarks>
-        internal VST3EffectProcessor(OwnVst3Wrapper wrapper)
+        internal VST3EffectProcessor(ThreadedVst3Wrapper threaded)
         {
-            _vst3 = wrapper ?? throw new ArgumentNullException(nameof(wrapper));
-            _id = Guid.NewGuid();
-            _enabled = true;
-            _mix = 1.0f;
-            _pluginPath = string.Empty; // Path is managed by the host
-            _name = _vst3.Name ?? "VST3 Effect";
+            _threaded = threaded ?? throw new ArgumentNullException(nameof(threaded));
+            _id       = Guid.NewGuid();
+            _enabled  = true;
+            _mix      = 1.0f;
+            _name     = _threaded.InnerWrapper?.Name ?? "VST3 Effect";
         }
 
+        #region IEffectProcessor – Initialize
+        
         /// <summary>
-        /// Initializes the effect with the specified audio configuration.
+        /// Stores the audio configuration and allocates processing buffers.
+        /// Does NOT call InitializeAsync – the plugin must already be in Ready state
+        /// (call VST3PluginHost.InitializeAudioAsync first).
         /// </summary>
-        /// <param name="config">The audio configuration.</param>
-        /// <exception cref="ArgumentNullException">Thrown when config is null.</exception>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the plugin is not in Ready state.
+        /// </exception>
         public void Initialize(AudioConfig config)
         {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(VST3EffectProcessor));
+
+            if (!_threaded.IsReady)
+                throw new InvalidOperationException(
+                    $"VST3 plugin '{_name}' is not audio-initialized. " +
+                    $"Call and await VST3PluginHost.InitializeAudioAsync(sampleRate, blockSize) " +
+                    $"before adding this processor to an effect chain. " +
+                    $"Current state: {_threaded.State}");
+
             _config = config ?? throw new ArgumentNullException(nameof(config));
 
-            _vst3.Initialize(config.SampleRate, config.BufferSize);
-            _vst3Initialized = true;
-
-            int effectiveChannels = _vst3.ActualOutputChannels > 0
-                ? _vst3.ActualOutputChannels
+            int effectiveChannels = _threaded.InnerWrapper != null && _threaded.InnerWrapper.ActualOutputChannels > 0
+                ? _threaded.InnerWrapper.ActualOutputChannels
                 : config.Channels;
 
             AllocateBuffers(config.BufferSize, effectiveChannels);
+            _buffersAllocated = true;
         }
+        
+        #endregion
 
+        #region IEffectProcessor – Process (audio thread)
+        
         /// <summary>
         /// Processes the audio buffer through the VST3 plugin.
+        /// Called from the audio thread. Returns immediately (pass-through) when
+        /// the plugin is not ready, disabled, or disposed.
+        /// The ThreadedVst3Wrapper drains the UI→audio SPSC queue before each block.
         /// </summary>
-        /// <param name="buffer">The interleaved stereo audio buffer to process.</param>
-        /// <param name="frameCount">The number of frames in the buffer.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
-            if (_config == null)
-                throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
-
-            if (!_enabled || !_vst3Initialized || _disposed)
+            // Fast path: skip when not usable
+            if (_disposed || !_enabled || !_buffersAllocated || !_threaded.IsReady)
                 return;
 
-            int channels = _config.Channels;
+            int channels     = _config!.Channels;
             int totalSamples = frameCount * channels;
 
             if (frameCount > _allocatedBlockSize)
-            {
                 AllocateBuffers(frameCount, channels);
-            }
 
             bool needsDryMix = _mix < 0.999f;
             if (needsDryMix)
-            {
                 buffer.Slice(0, totalSamples).CopyTo(_dryBuffer.AsSpan());
-            }
 
             try
             {
                 VST3BufferConverter.InterleavedToPlanar(buffer, _planarInputBuffers!, channels, frameCount);
 
-                _vst3.ProcessAudio(_planarInputBuffers!, _planarOutputBuffers!, channels, frameCount);
+                _threaded.ProcessAudio(_planarInputBuffers!, _planarOutputBuffers!, channels, frameCount);
 
                 VST3BufferConverter.PlanarToInterleaved(_planarOutputBuffers!, buffer, channels, frameCount);
             }
-            catch
-            {
-                // Ignore processing errors during editor operations or plugin instability
-                // This prevents crashes when the plugin's UI and audio threads are temporarily out of sync
-                // If error occurs, the buffer retains its input state (bypass behavior)
-            }
+            catch {}
 
             if (needsDryMix)
             {
                 float wet = _mix;
                 float dry = 1.0f - wet;
                 for (int i = 0; i < totalSamples; i++)
-                {
                     buffer[i] = _dryBuffer![i] * dry + buffer[i] * wet;
-                }
             }
         }
+        
+        #endregion
 
+       #region IEffectProcessor – Reset
+       
         /// <summary>
-        /// Resets the effect state.
+        /// Clears internal audio buffers and stops the VST3 transport.
+        /// Does NOT re-initialize the plugin (which would be blocking and expensive).
+        /// Called automatically by SourceWithEffects.Stop() / AudioMixer.Stop().
         /// </summary>
         public void Reset()
         {
+            if (_disposed) return;
+
+            _threaded.SetTransportState(false);
+            _threaded.ResetTransportPosition();
+
             if (_planarInputBuffers != null)
             {
                 for (int ch = 0; ch < _planarInputBuffers.Length; ch++)
                 {
                     Array.Clear(_planarInputBuffers[ch], 0, _planarInputBuffers[ch].Length);
-                    Array.Clear(_planarOutputBuffers![ch], 0, _planarOutputBuffers[ch].Length);
+                    if (_planarOutputBuffers != null)
+                        Array.Clear(_planarOutputBuffers[ch], 0, _planarOutputBuffers[ch].Length);
                 }
             }
-            if (_dryBuffer != null)
-            {
-                Array.Clear(_dryBuffer, 0, _dryBuffer.Length);
-            }
 
-            if (_vst3Initialized && _config != null)
-            {
-                _vst3.Initialize(_config.SampleRate, _config.BufferSize);
-            }
+            if (_dryBuffer != null)
+                Array.Clear(_dryBuffer, 0, _dryBuffer.Length);
         }
+        
+        #endregion
+
+        #region VST-specific transport / parameter helpers
+        
+        /// <summary>
+        /// Sets the playback tempo. Lock-free enqueue to the audio thread.
+        /// Applied before the next ProcessAudio block (~1 block latency).
+        /// </summary>
+        public void SetTempo(double bpm) => _threaded.SetTempo(bpm);
+
+        /// <summary>
+        /// Sets the transport playing state. Lock-free enqueue.
+        /// </summary>
+        public void SetTransportPlaying(bool playing) => _threaded.SetTransportState(playing);
+
+        /// <summary>
+        /// Resets the transport sample position. Lock-free enqueue.
+        /// </summary>
+        public void ResetPosition() => _threaded.ResetTransportPosition();
+
+        /// <summary>
+        /// Sets a parameter value. Lock-free enqueue to the audio thread.
+        /// Applied before the next ProcessAudio block (~1 block latency).
+        /// </summary>
+        public void SetParameter(int id, double value) => _threaded.SetParameter(id, value);
 
         /// <summary>
         /// Gets all parameter information from the VST3 plugin.
+        /// Reads via InnerWrapper – only call after plugin is in Ready state.
         /// </summary>
-        /// <returns>Array of parameter information.</returns>
         public VST3ParameterInfo[] GetParameters()
         {
-            if (_vst3 == null) return Array.Empty<VST3ParameterInfo>();
-
-            var vst3Params = _vst3.GetAllParameters();
-            var result = new VST3ParameterInfo[vst3Params.Count];
+            var vst3Params = _threaded.InnerWrapper.GetAllParameters();
+            var result     = new VST3ParameterInfo[vst3Params.Count];
 
             for (int i = 0; i < vst3Params.Count; i++)
             {
                 var p = vst3Params[i];
                 result[i] = new VST3ParameterInfo(
-                    (uint)p.Id,
-                    p.Name,
-                    p.CurrentValue,
-                    p.MinValue,
-                    p.MaxValue,
-                    p.DefaultValue
-                );
+                    (uint)p.Id, p.Name, p.CurrentValue, p.MinValue, p.MaxValue, p.DefaultValue);
             }
 
             return result;
         }
 
         /// <summary>
-        /// Sets the playback tempo forwarded to the plugin via ProcessContext.
-        /// </summary>
-        public void SetTempo(double bpm) => _vst3?.SetTempo(bpm);
-
-        /// <summary>
-        /// Sets the transport playing state forwarded to the plugin via ProcessContext.
-        /// </summary>
-        public void SetTransportPlaying(bool playing) => _vst3?.SetTransportState(playing);
-
-        /// <summary>
-        /// Resets the transport sample position counter (e.g. on Stop).
-        /// </summary>
-        public void ResetPosition() => _vst3?.ResetTransportPosition();
-
-        /// <summary>
-        /// Sets a parameter value by ID.
-        /// </summary>
-        /// <param name="id">Parameter ID.</param>
-        /// <param name="value">Normalized value (typically 0.0 to 1.0).</param>
-        public void SetParameter(int id, double value)
-        {
-            _vst3?.SetParameter(id, value);
-        }
-
-        /// <summary>
-        /// Gets a parameter value by ID.
-        /// </summary>
-        /// <param name="id">Parameter ID.</param>
-        /// <returns>Current parameter value.</returns>
-        public double GetParameter(int id)
-        {
-            return _vst3?.GetParameter(id) ?? 0.0;
-        }
-
-        /// <summary>
         /// Gets the preferred editor window size.
         /// </summary>
-        /// <returns>Width and height tuple, or null if no editor available.</returns>
         public (int Width, int Height)? GetEditorSize()
         {
-            var size = _vst3?.GetEditorSize();
-            if (size == null) return null;
-            return (size.Value.Width, size.Value.Height);
+            var size = _threaded?.InnerWrapper?.GetEditorSize();
+            return size is null ? null : (size.Value.Width, size.Value.Height);
         }
+        
+        #endregion
 
         /// <summary>
-        /// Allocates internal buffers for audio processing.
+        /// Releases internal audio buffers and stops the VST3 transport.
+        /// Does NOT dispose the ThreadedVst3Wrapper – that is owned by VST3PluginHost.
+        /// Call host.Dispose() separately after the audio engine has stopped.
         /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _disposed = true;
+
+            try
+            {
+                _threaded.SetTransportState(false);
+                _threaded.ResetTransportPosition();
+            }
+            catch { }
+
+            _planarInputBuffers  = null;
+            _planarOutputBuffers = null;
+            _dryBuffer           = null;
+            _buffersAllocated    = false;
+        }
+
+        #region Private helpers
+        
         private void AllocateBuffers(int blockSize, int channels)
         {
-            _planarInputBuffers = new float[channels][];
+            _planarInputBuffers  = new float[channels][];
             _planarOutputBuffers = new float[channels][];
 
             for (int ch = 0; ch < channels; ch++)
             {
-                _planarInputBuffers[ch] = new float[blockSize];
+                _planarInputBuffers[ch]  = new float[blockSize];
                 _planarOutputBuffers[ch] = new float[blockSize];
             }
 
             _dryBuffer = new float[blockSize * channels];
             _allocatedBlockSize = blockSize;
         }
+        
+        #endregion
 
-        /// <summary>
-        /// Disposes the effect and releases resources.
-        /// </summary>
-        /// <remarks>
-        /// IMPORTANT: This does NOT dispose the underlying VST3 wrapper,
-        /// as it is owned and managed by the VST3PluginHost.
-        /// Only internal buffers are released.
-        /// </remarks>
-        public void Dispose()
-        {
-            if (_disposed) return;
-
-            // Only clean up our own buffers, NOT the wrapper (owned by VST3PluginHost)
-            _planarInputBuffers = null;
-            _planarOutputBuffers = null;
-            _dryBuffer = null;
-            _disposed = true;
-        }
-
-        /// <summary>
-        /// Returns a string representation of the effect's current state.
-        /// </summary>
-        public override string ToString()
-        {
-            return $"VST3: {_name} ({Vendor}), Enabled={_enabled}, Mix={_mix:F2}";
-        }
+        public override string ToString() =>
+            $"VST3: {_name} ({Vendor}), Ready={IsReady}, Enabled={_enabled}, Mix={_mix:F2}";
     }
 }

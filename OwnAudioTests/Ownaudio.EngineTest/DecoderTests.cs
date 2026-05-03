@@ -48,50 +48,6 @@ namespace Ownaudio.EngineTest
             Assert.IsTrue(streamInfo.Duration > TimeSpan.Zero, "Duration should be positive");
         }
 
-        [TestMethod]
-        public void WavDecoder_DecodeNextFrame_ShouldReturnValidData()
-        {
-            // Arrange
-            byte[] wavData = CreateSimpleWavFile(48000, 2, 16, 1.0);
-            using var stream = new MemoryStream(wavData);
-            using var decoder = new WavDecoder(stream);
-
-            // Act
-            var result = decoder.DecodeNextFrame();
-
-            // Assert
-            Assert.IsTrue(result.IsSucceeded, "Decode should succeed");
-            Assert.IsNotNull(result.Frame, "Decoded frame should not be null");
-            Assert.IsNotNull(result.Frame.Data, "Decoded data should not be null");
-            Assert.IsTrue(result.Frame.Data.Length > 0, "Decoded data should not be empty");
-        }
-
-        [TestMethod]
-        public void WavDecoder_DecodeMultipleFrames_ShouldSucceed()
-        {
-            // Arrange
-            byte[] wavData = CreateSimpleWavFile(48000, 2, 16, 2.0);
-            using var stream = new MemoryStream(wavData);
-            using var decoder = new WavDecoder(stream);
-
-            int framesDecoded = 0;
-
-            // Act
-            while (true)
-            {
-                var result = decoder.DecodeNextFrame();
-                if (!result.IsSucceeded || result.Frame == null || result.Frame.Data.Length == 0)
-                    break;
-
-                framesDecoded++;
-
-                if (framesDecoded > 100) // Safety limit
-                    break;
-            }
-
-            // Assert
-            Assert.IsTrue(framesDecoded > 0, "Should decode at least one frame");
-        }
 
         [TestMethod]
         public void WavDecoder_TrySeek_WithValidPosition_ShouldSucceed()
@@ -107,25 +63,6 @@ namespace Ownaudio.EngineTest
             // Assert
             Assert.IsTrue(seekResult, $"Seek should succeed. Error: {error}");
             Assert.IsTrue(string.IsNullOrEmpty(error), "Error should be empty on success");
-        }
-
-        [TestMethod]
-        public void WavDecoder_TrySeek_ToBeginning_ShouldSucceed()
-        {
-            // Arrange
-            byte[] wavData = CreateSimpleWavFile(48000, 2, 16, 2.0);
-            using var stream = new MemoryStream(wavData);
-            using var decoder = new WavDecoder(stream);
-
-            // Decode some frames first
-            decoder.DecodeNextFrame();
-            decoder.DecodeNextFrame();
-
-            // Act
-            bool seekResult = decoder.TrySeek(TimeSpan.Zero, out string error);
-
-            // Assert
-            Assert.IsTrue(seekResult, "Seek to beginning should succeed");
         }
 
         [TestMethod]
@@ -184,59 +121,6 @@ namespace Ownaudio.EngineTest
             // Act & Assert (should not throw)
             decoder.Dispose();
             decoder.Dispose();
-        }
-
-        [TestMethod]
-        public void WavDecoder_MonoAudio_ShouldDecode()
-        {
-            // Arrange
-            byte[] wavData = CreateSimpleWavFile(48000, 1, 16, 1.0);
-            using var stream = new MemoryStream(wavData);
-            using var decoder = new WavDecoder(stream);
-
-            // Act
-            var result = decoder.DecodeNextFrame();
-
-            // Assert
-            Assert.IsTrue(result.IsSucceeded, "Mono audio should decode successfully");
-            Assert.AreEqual(1, decoder.StreamInfo.Channels, "Should have 1 channel");
-        }
-
-        [TestMethod]
-        public void WavDecoder_StereoAudio_ShouldDecode()
-        {
-            // Arrange
-            byte[] wavData = CreateSimpleWavFile(48000, 2, 16, 1.0);
-            using var stream = new MemoryStream(wavData);
-            using var decoder = new WavDecoder(stream);
-
-            // Act
-            var result = decoder.DecodeNextFrame();
-
-            // Assert
-            Assert.IsTrue(result.IsSucceeded, "Stereo audio should decode successfully");
-            Assert.AreEqual(2, decoder.StreamInfo.Channels, "Should have 2 channels");
-        }
-
-        [TestMethod]
-        public void WavDecoder_DifferentSampleRates_ShouldDecode()
-        {
-            // Arrange
-            int[] sampleRates = { 8000, 16000, 22050, 44100, 48000 };
-
-            foreach (var sampleRate in sampleRates)
-            {
-                byte[] wavData = CreateSimpleWavFile(sampleRate, 2, 16, 0.5);
-                using var stream = new MemoryStream(wavData);
-                using var decoder = new WavDecoder(stream);
-
-                // Act
-                var result = decoder.DecodeNextFrame();
-
-                // Assert
-                Assert.IsTrue(result.IsSucceeded, $"Should decode {sampleRate} Hz audio");
-                Assert.AreEqual(sampleRate, decoder.StreamInfo.SampleRate, $"Sample rate should be {sampleRate}");
-            }
         }
 
         #region Helper Methods

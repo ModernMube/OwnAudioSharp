@@ -1,6 +1,4 @@
-﻿// RealTimeChordDetector.cs - simplified wrapper
-//using Ownaudio.Utilities.Extensions;
-using OwnaudioNET.Features.Extensions;
+﻿using OwnaudioNET.Features.Extensions;
 using System.Collections.Generic;
 
 namespace OwnaudioNET.Features.OwnChordDetect.Detectors

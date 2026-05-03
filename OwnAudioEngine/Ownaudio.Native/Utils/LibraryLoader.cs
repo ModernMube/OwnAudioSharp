@@ -117,25 +117,19 @@ namespace Ownaudio.Native.Utils
             string fileName = GetLibraryFileName(libraryName);
             string baseDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? Environment.CurrentDirectory;
 
-            // Build search paths list
             var searchPaths = new List<string>
             {
-                // 1. Standard RID structure in application directory
                 Path.Combine(baseDir, "runtimes", rid, "native", fileName),
-                // 2. Flat structure in output directory
                 Path.Combine(baseDir, fileName)
             };
 
-            // 3. Add system-specific paths for PortAudio
             if (libraryName.Contains("portaudio"))
             {
                 searchPaths.AddRange(GetSystemPortAudioPaths(fileName));
             }
 
-            // 4. Try system library path (works on Linux/macOS with LD_LIBRARY_PATH)
             searchPaths.Add(fileName);
 
-            // Search for the library
             foreach (string path in searchPaths)
             {
                 if (File.Exists(path))
@@ -144,7 +138,6 @@ namespace Ownaudio.Native.Utils
                 }
             }
 
-            // Return the most likely path (will fail later with better error message)
             return Path.Combine(baseDir, "runtimes", rid, "native", fileName);
         }
 
@@ -158,7 +151,6 @@ namespace Ownaudio.Native.Utils
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                // macOS Homebrew paths
                 if (arch == Architecture.Arm64)
                 {
                     // Apple Silicon (M1/M2/M3) - Homebrew installs to /opt/homebrew
@@ -172,7 +164,6 @@ namespace Ownaudio.Native.Utils
                     paths.Add(Path.Combine("/usr", "local", "lib", fileName));
                 }
 
-                // Common macOS paths
                 paths.Add(Path.Combine("/usr", "lib", fileName));
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
@@ -200,7 +191,6 @@ namespace Ownaudio.Native.Utils
                         break;
                 }
 
-                // Generic Linux paths
                 paths.Add(Path.Combine("/usr", "lib", $"{fileName}.2"));
                 paths.Add(Path.Combine("/usr", "lib", fileName));
                 paths.Add(Path.Combine("/usr", "local", "lib", fileName));

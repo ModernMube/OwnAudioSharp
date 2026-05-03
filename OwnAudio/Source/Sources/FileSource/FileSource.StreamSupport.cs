@@ -55,7 +55,6 @@ public partial class FileSource
         _bufferSizeInFrames = bufferSizeInFrames;
         _decoder = decoder;
         _streamInfo = _decoder.StreamInfo;
-        // Default file path for stream-based sources
         _filePath = "stream_source";
 
         _config = new AudioConfig
@@ -65,30 +64,24 @@ public partial class FileSource
             BufferSize = bufferSizeInFrames
         };
 
-        // Initialize circular buffer with 4x size for better buffering
         int bufferSizeInSamples = bufferSizeInFrames * _streamInfo.Channels * 4;
         _buffer = new CircularBuffer(bufferSizeInSamples);
 
-        // Initialize SoundTouch processor
         _soundTouch = new SoundTouchProcessor(_streamInfo.SampleRate, _streamInfo.Channels);
         _soundTouchOutputBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 2];
 
-        // Pre-allocate buffers
         _soundTouchInputBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 4];
         _soundTouchAccumulationBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 8];
         _soundTouchAccumulationCount = 0;
         
-        // ZERO-ALLOC: Pre-allocate a reusable buffer for the decoder.
         _decodeBuffer = new byte[bufferSizeInFrames * _streamInfo.Channels * sizeof(float)];
 
-        // Initialize synchronization primitives
         _pauseEvent = new ManualResetEventSlim(false);
         _shouldStop = false;
         _seekRequested = false;
         _currentPosition = 0.0;
         _isEndOfStream = false;
 
-        // Create decoder thread
         _decoderThread = new Thread(DecoderThreadProc)
         {
             Name = $"FileSource-Decoder-{Id}",

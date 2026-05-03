@@ -1,24 +1,4 @@
-﻿// License :
-//
-// SoundTouch audio processing library
-// Copyright (c) Olli Parviainen
-// C# port Copyright (c) Olaf Woudenberg
-//
-// This library is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 2.1 of the License, or (at your option) any later version.
-//
-// This library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Reflection;
 
@@ -148,17 +128,7 @@ namespace SoundTouch
             _stretch.Dispose();
             base.Dispose();
         }
-
-        /// <summary>
-        /// Gets the <c>SoundTouch</c> library version string.
-        /// </summary>
-        //public static string VersionString => GitVersionInformation.InformationalVersion;
-
-        /// <summary>
-        /// Gets the <c>SoundTouch</c> library version Id.
-        /// </summary>
-        //public static Version Version => new Version(GitVersionInformation.AssemblySemFileVer);
-
+        
         /// <summary>
         /// Gets the number of samples currently unprocessed.
         /// </summary>
@@ -389,12 +359,6 @@ namespace SoundTouch
             {
                 throw new InvalidOperationException(Strings.InvalidOperation_ChannelsUndefined);
             }
-
-            // OPTIMIZATION REMOVED: User requires signal to ALWAYS go through DSP processing
-            // even at 1.0x speed/pitch to ensure consistent latency and synchronization.
-            // Previous optimization bypassed TimeStretch/RateTransposer which caused latency jumps
-            // when toggling between 1.0 and non-1.0 values.
-
             // accumulate how many samples are expected out from processing, given the current
             // processing setting
             _samplesExpectedOut += numSamples / (_effectiveRate * _effectiveTempo);

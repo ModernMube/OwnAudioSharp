@@ -44,25 +44,19 @@ public sealed class Mp3Decoder : BaseStreamDecoder
         if (!File.Exists(filePath))
             throw new FileNotFoundException($"MP3 file not found: {filePath}", filePath);
 
-        // Open file stream for BaseStreamDecoder compatibility (seek validation)
-        // Platform decoder uses file path directly, but we need stream for TrySeek() validation
         _stream = File.OpenRead(filePath);
         _ownsStream = true; // We own this stream, dispose it when decoder is disposed
 
-        // Create platform-specific decoder
         _platformDecoder = CreatePlatformDecoder();
         _platformDecoder.InitializeFromFile(filePath, targetSampleRate, targetChannels);
 
-        // Get stream info from platform decoder
         _streamInfo = _platformDecoder.GetStreamInfo();
         _currentPts = 0.0;
 
-        // Pre-allocate buffers (stereo max)
         int bufferSize = DefaultSamplesPerFrame * 2 * sizeof(float);
         _decodeBuffer = new byte[bufferSize];
         _mutableFrame = new MutableAudioFrame(DefaultSamplesPerFrame * 2);
 
-        // Initialize frame pool
         _framePool = new AudioFramePool(bufferSize: bufferSize * 2, initialPoolSize: 2, maxPoolSize: 8);
     }
 
@@ -169,7 +163,6 @@ public sealed class Mp3Decoder : BaseStreamDecoder
             "Windows Media Foundation MP3 decoder not available. Ensure Ownaudio.Windows package is referenced.");
 #elif MACOS
         LogDebug("Mp3Decoder", "Detected macOS platform (compile-time)");
-        // Try to load macOS Core Audio decoder
         try
         {
             var macosDecoderType = Type.GetType(
@@ -182,10 +175,7 @@ public sealed class Mp3Decoder : BaseStreamDecoder
                     return decoder;
             }
         }
-        catch
-        {
-            // Fall through to error
-        }
+        catch {}
 
         throw new AudioException(
             AudioErrorCategory.PlatformAPI,
@@ -275,51 +265,9 @@ public sealed class Mp3Decoder : BaseStreamDecoder
     /// </summary>
     protected override AudioStreamInfo ParseStreamInfo()
     {
-        // Stream info already populated in constructor
         return _streamInfo;
     }
 
-    /// <summary>
-    /// Decodes the next audio frame.
-    /// </summary>
-    /// <returns>Decoded audio frame or EOF/error result.</returns>
-    protected override AudioDecoderResult DecodeNextFrameCore()
-    {
-        if (_platformDecoder.IsEOF)
-            return new AudioDecoderResult(null!, false, true);
-
-        // Decode frame using platform decoder
-        int bytesDecoded = _platformDecoder.DecodeFrame(_decodeBuffer.AsSpan(), out double pts);
-
-        if (bytesDecoded == 0)
-        {
-            // EOF
-            return new AudioDecoderResult(null!, false, true);
-        }
-
-        if (bytesDecoded < 0)
-        {
-            // Error
-            return new AudioDecoderResult(null!, false, false, "Platform decoder error");
-        }
-
-        // Update PTS
-        _currentPts = pts;
-
-        // Rent pooled frame
-        var pooledFrame = _framePool.Rent(_currentPts, bytesDecoded);
-
-        // Copy decoded data to pooled frame
-        _decodeBuffer.AsSpan(0, bytesDecoded).CopyTo(pooledFrame.BufferSpan);
-
-        // Convert to AudioFrame
-        var frame = pooledFrame.ToAudioFrame();
-
-        // Return pooled frame
-        _framePool.Return(pooledFrame);
-
-        return new AudioDecoderResult(frame, true, false);
-    }
 
     /// <summary>
     /// Reads the next block of audio frames into the provided buffer.
@@ -332,25 +280,19 @@ public sealed class Mp3Decoder : BaseStreamDecoder
         if (_platformDecoder.IsEOF)
             return AudioDecoderResult.CreateEOF();
 
-        // Decode frame using platform decoder
         int bytesDecoded = _platformDecoder.DecodeFrame(buffer.AsSpan(), out double pts);
 
         if (bytesDecoded == 0)
         {
-            // EOF
             return AudioDecoderResult.CreateEOF();
         }
 
         if (bytesDecoded < 0)
         {
-            // Error
             return AudioDecoderResult.CreateError("Platform decoder error");
         }
 
-        // Update PTS
         _currentPts = pts;
-
-        // Calculate number of samples decoded
         int samplesDecoded = bytesDecoded / sizeof(float);
 
         return AudioDecoderResult.CreateSuccess(samplesDecoded, pts);

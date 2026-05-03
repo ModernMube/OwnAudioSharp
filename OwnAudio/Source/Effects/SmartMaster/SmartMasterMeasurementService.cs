@@ -1,7 +1,3 @@
-using System;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using Ownaudio.Core;
 using OwnaudioNET.Effects.SmartMaster.Components;
 using OwnaudioNET.Sources;
@@ -50,31 +46,25 @@ namespace OwnaudioNET.Effects.SmartMaster
             // 1. Initialization
             UpdateStatus(status, statusCallback, MeasurementStatus.Initializing, 0.0f, "Initializing measurement...");
 
-            // VERIFICATION: Check if input is enabled in engine configuration
             if (!OwnaudioNET.OwnaudioNet.Engine!.Config.EnableInput)
             {
                 throw new InvalidOperationException(
                     "Audio Input is NOT enabled in OwnAudio configuration. Please set 'audioConfig.EnableInput = true' before initializing OwnAudioNet.");
             }
 
-            // VERIFICATION: Check if any input device is available
             var inputDevices = OwnaudioNET.OwnaudioNet.Engine.GetInputDevices();
             if (inputDevices == null || inputDevices.Count == 0)
             {
                 throw new InvalidOperationException("No audio input devices found!");
             }
             
-            // Clear audio output buffer to prevent residual audio from interfering
             if (OwnaudioNET.OwnaudioNet.Engine != null)
             {
                 try
                 {
                     OwnaudioNET.OwnaudioNet.Engine.ClearOutputBuffer();
                 }
-                catch
-                {
-                    // Ignore if clear fails
-                }
+                catch {}
             }
 
             await Task.Delay(500, cancellationToken);
@@ -110,7 +100,6 @@ namespace OwnaudioNET.Effects.SmartMaster
             // 6. Evaluate results and decide if we can proceed
             if (!rightOk || !leftOk)
             {
-                // Critical errors - cannot calculate corrections
                 UpdateStatus(status, statusCallback, MeasurementStatus.Error, 1.0f, 
                     "Measurement failed: " + string.Join(", ", results.Warnings));
                 
@@ -175,7 +164,6 @@ namespace OwnaudioNET.Effects.SmartMaster
         {
             try
             {
-                // Check if audio engine is available
                 if (OwnaudioNET.OwnaudioNet.Engine == null)
                 {
                     Log.Warning("[SmartMaster] Audio engine not available for measurement");
@@ -215,7 +203,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 const int chunkFrames = 512;
                 float[] playbackBuffer = new float[chunkFrames * _config.Channels];
                 
-                // Recording buffer setup
                 int recordDuration = 1500; // ms
                 int recordFrames = _config.SampleRate * recordDuration / 1000;
                 int recordSamples = recordFrames * _config.Channels;
@@ -224,22 +211,17 @@ namespace OwnaudioNET.Effects.SmartMaster
                 int totalPlayed = 0;
                 int totalRead = 0;
                 
-                // Wait for signal to stabilize (300ms)
                 await Task.Delay(300, cancellationToken);
                 
-                // Calculate engine buffer capacity
                 int engineBufferCapacity = OwnaudioNET.OwnaudioNet.Engine.FramesPerBuffer * _config.Channels * 2;
                 
-                // Simultaneous playback and recording loop
                 while (totalPlayed < playbackSamples && totalRead < recordFrames)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     
-                    // Check engine buffer availability
                     int bufferOccupied = OwnaudioNET.OwnaudioNet.Engine.OutputBufferAvailable;
                     int bufferFree = engineBufferCapacity - bufferOccupied;
                     
-                    // GREEDY PUMPING: Fill buffer if there is space
                     if (bufferFree >= 64 * _config.Channels)
                     {
                         int framesSpace = bufferFree / _config.Channels;
@@ -262,7 +244,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                         }
                     }
                     
-                    // Always try to read from input source (recording)
                     if (totalPlayed > _config.SampleRate * 300 / 1000)
                     {
                         int framesToRecord = Math.Min(512, recordFrames - totalRead);
@@ -284,7 +265,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 // 7. Fade out to prevent clicks
                 await FadeOutSourceAsync(noiseSource, cancellationToken);
                 
-                // 8. Stop
                 noiseSource.Stop();
                 inputSource.Stop();
                 
@@ -377,7 +357,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 const int chunkFrames = 512;
                 float[] playbackBuffer = new float[chunkFrames * _config.Channels];
                 
-                // Recording buffer
                 int recordDuration = 1500;
                 int recordFrames = _config.SampleRate * recordDuration / 1000;
                 int recordSamples = recordFrames * _config.Channels;
@@ -440,7 +419,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 // 7. Fade out to prevent clicks
                 await FadeOutSourceAsync(noiseSource, cancellationToken);
 
-                // 8. Stop
                 noiseSource.Stop();
                 inputSource.Stop();
                 
@@ -595,7 +573,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 // 7. Fade out to prevent clicks
                 await FadeOutSourceAsync(noiseSource, cancellationToken);
 
-                // 8. Stop
                 noiseSource.Stop();
                 inputSource.Stop();
                 
@@ -612,7 +589,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 // 10. Create ideal (flat) spectrum for pink noise
                 float[] idealSpectrum = new float[measuredSpectrum.Length];
                 
-                // Calculate average level from measured spectrum
                 float avgLevel = 0;
                 for (int i = 0; i < measuredSpectrum.Length; i++)
                 {
@@ -620,7 +596,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 }
                 avgLevel /= measuredSpectrum.Length;
                 
-                // Ideal spectrum = uniform level
                 for (int i = 0; i < idealSpectrum.Length; i++)
                 {
                     idealSpectrum[i] = avgLevel;
@@ -632,10 +607,8 @@ namespace OwnaudioNET.Effects.SmartMaster
                     float measuredDb = 20f * (float)Math.Log10(Math.Max(measuredSpectrum[i], 1e-10f));
                     float idealDb = 20f * (float)Math.Log10(Math.Max(idealSpectrum[i], 1e-10f));
                     
-                    // Deviation from ideal (inverted to be correction)
                     float deviation = idealDb - measuredDb;
                     
-                    // Store result
                     results.FrequencyResponse[i] = deviation;
                 }
                 
@@ -650,7 +623,6 @@ namespace OwnaudioNET.Effects.SmartMaster
             {
                 Log.Error($"[SmartMaster] Spectrum analysis error: {ex.Message}");
                 
-                // In case of error, flat frequency response (no correction)
                 for (int i = 0; i < 31; i++)
                 {
                     results.FrequencyResponse[i] = 0.0f;
@@ -668,7 +640,6 @@ namespace OwnaudioNET.Effects.SmartMaster
             {
                 float gain = results.FrequencyResponse[i];
                 
-                // Safety Curve: Limit low-frequency boosts to prevent overdriving
                 float maxBoost;
                 if (i < 5) // Bands 0-4: ~20Hz to ~80Hz
                 {
@@ -679,7 +650,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                     maxBoost = 12.0f;
                 }
                 
-                // Clamp to safe range
                 gain = Math.Clamp(gain, -12.0f, maxBoost);
                 
                 targetConfig.GraphicEQGains[i] = gain;

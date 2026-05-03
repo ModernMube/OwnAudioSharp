@@ -2,7 +2,6 @@
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Reactive;
-using System;
 using System.Buffers;
 
 namespace OwnaudioNET.Visualization
@@ -15,7 +14,6 @@ namespace OwnaudioNET.Visualization
     {
         private float[]? _audioData;
 
-        // Using ArrayPool for more efficient memory usage
         private readonly ArrayPool<Point> _pointPool = ArrayPool<Point>.Shared;
         private Point[] _pointCache;
         private int _pointCacheSize = 0;
@@ -24,10 +22,8 @@ namespace OwnaudioNET.Visualization
         private Pen _waveformPen;
         private Pen _playbackPen;
 
-        // Reuse existing point arrays for different rendering styles
         private readonly Point[] _linePoints = new Point[2];
 
-        // Auto-follow playback settings
 #pragma warning disable CS0414 // Field is assigned but its value is never used
         private bool _autoFollow = true;
 #pragma warning restore CS0414
@@ -223,14 +219,11 @@ namespace OwnaudioNET.Visualization
         public WaveAvaloniaDisplay()
         {
             MinHeight = 50;
-
-            // Initialize point cache from pool instead of direct allocation
             _pointCache = _pointPool.Rent(_pointCacheCapacity);
 
             _waveformPen = new Pen(WaveformBrush);
             _playbackPen = new Pen(PlaybackPositionBrush, 2);
 
-            // Subscribe to all relevant property changes to InvalidateVisual
             this.GetObservable(WaveformBrushProperty).Subscribe(new AnonymousObserver<IBrush>(brush => {
                 _waveformPen = new Pen(brush);
                 InvalidateVisual();
@@ -244,14 +237,12 @@ namespace OwnaudioNET.Visualization
             this.GetObservable(VerticalScaleProperty).Subscribe(new AnonymousObserver<double>(_ => InvalidateVisual()));
             this.GetObservable(DisplayStyleProperty).Subscribe(new AnonymousObserver<WaveformDisplayStyle>(_ => InvalidateVisual()));
 
-            // Subscribe to ZoomFactor and ScrollOffset for visual invalidation
             this.GetObservable(ZoomFactorProperty).Subscribe(new AnonymousObserver<double>(_ => {
                 ValidateScrollOffset();
                 InvalidateVisual();
             }));
             this.GetObservable(ScrollOffsetProperty).Subscribe(new AnonymousObserver<double>(_ => InvalidateVisual()));
 
-            // Subscribe to PlaybackPosition changes for auto-follow functionality
             this.GetObservable(PlaybackPositionProperty).Subscribe(new AnonymousObserver<double>(_ => {
                 if (AutoFollow && !_isUserDragging && !_isUpdatingProperties)
                 {
@@ -288,48 +279,38 @@ namespace OwnaudioNET.Visualization
                 double visibleRange = 1.0 / zoomFactor;
                 double currentScrollOffset = ScrollOffset;
 
-                // Ensure visible range is valid
                 visibleRange = Math.Clamp(visibleRange, 0.02, 1.0);
 
-                // Calculate maximum allowed scroll offset
                 double maxScrollOffset = Math.Max(0.0, 1.0 - visibleRange);
 
-                // Ensure current scroll offset is valid before calculations
                 currentScrollOffset = Math.Clamp(currentScrollOffset, 0.0, maxScrollOffset);
 
-                // Calculate the visible area boundaries
                 double visibleStart = currentScrollOffset;
                 double visibleEnd = Math.Min(1.0, currentScrollOffset + visibleRange);
 
-                // Define the center zone where the playback indicator should stay
                 double centerThreshold = visibleStart + (visibleRange * 0.5);
 
-                // Check if we need to scroll
                 bool needsScroll = false;
                 double newScrollOffset = currentScrollOffset;
 
                 if (playbackPos > centerThreshold && visibleEnd < 0.999) // Use 0.999 to avoid floating point precision issues
                 {
-                    // Playback is past center and we can still scroll forward
                     newScrollOffset = playbackPos - (visibleRange * 0.5);
                     needsScroll = true;
                 }
                 else if (playbackPos < visibleStart)
                 {
-                    // Playback is before visible area (seeking backwards)
                     newScrollOffset = Math.Max(0.0, playbackPos - (visibleRange * 0.25));
                     needsScroll = true;
                 }
                 else if (playbackPos > visibleEnd)
                 {
-                    // Playback is after visible area (big jump forward)
                     newScrollOffset = playbackPos - (visibleRange * 0.25);
                     needsScroll = true;
                 }
 
                 if (needsScroll)
                 {
-                    // Ensure the new scroll offset is within valid bounds
                     newScrollOffset = Math.Clamp(newScrollOffset, 0.0, maxScrollOffset);
 
                     if (Math.Abs(newScrollOffset - currentScrollOffset) > 0.001)
@@ -352,7 +333,6 @@ namespace OwnaudioNET.Visualization
         {
             _audioData = audioData;
 
-            // When new data is set, reset zoom and scroll (optional, but good default)
             ZoomFactor = 1.0;
             ScrollOffset = 0.0;
             PlaybackPosition = 0.0;
@@ -381,17 +361,13 @@ namespace OwnaudioNET.Visualization
             int totalSamples = _audioData.Length;
             double zoom = Math.Max(1.0, ZoomFactor);
 
-            // Use full floating-point precision to avoid rounding drift between zoom levels.
-            // startSample and samplesPerPixel are the only coordinate-mapping values needed.
             double startSample = totalSamples * ScrollOffset;
             double samplesPerPixel = totalSamples / (zoom * width);
 
-            // Guard: clamp so we never read past the end of the buffer
             double maxStartSample = totalSamples - samplesPerPixel * width;
             if (startSample > maxStartSample) startSample = Math.Max(0, maxStartSample);
             if (startSample < 0) startSample = 0;
 
-            // Ensure point cache is large enough
             int requiredSize = (int)width * 2;
             EnsurePointCacheCapacity(requiredSize);
 
@@ -412,7 +388,6 @@ namespace OwnaudioNET.Visualization
                 RenderRmsStyle(width, centerY, vScale, startSample, samplesPerPixel);
             }
 
-            // Draw lines in batches to reduce GPU draw calls
             for (int i = 0; i < _pointCacheSize; i += 2)
             {
                 if (i + 1 < _pointCacheSize)
@@ -421,7 +396,6 @@ namespace OwnaudioNET.Visualization
                 }
             }
 
-            // Playback indicator: pixel = (absPos - ScrollOffset) * zoom * width
             double pixelPosition = (PlaybackPosition - ScrollOffset) * zoom * width;
 
             if ((pixelPosition >= 0 && pixelPosition <= width) || AutoFollow)
@@ -580,7 +554,6 @@ namespace OwnaudioNET.Visualization
 
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
             {
-                // Temporarily disable auto-follow during zoom to prevent conflicts
                 bool wasAutoFollow = AutoFollow;
                 if (wasAutoFollow) AutoFollow = false;
 
@@ -592,20 +565,16 @@ namespace OwnaudioNET.Visualization
 
                 double newZoom = Math.Clamp(oldZoom * zoomChange, 1.0, 50.0);
 
-                // Calculate scroll adjustment before setting new zoom
                 double oldVisibleRange = 1.0 / oldZoom;
                 double newVisibleRange = 1.0 / newZoom;
                 double absPositionAtMouse = ScrollOffset + (pointRatio * oldVisibleRange);
                 double newScrollOffset = absPositionAtMouse - (pointRatio * newVisibleRange);
 
-                // Set zoom first
                 ZoomFactor = newZoom;
 
-                // Then adjust scroll offset with proper validation
                 double maxScrollOffset = Math.Max(0.0, 1.0 - newVisibleRange);
                 ScrollOffset = Math.Clamp(newScrollOffset, 0.0, maxScrollOffset);
 
-                // Re-enable auto-follow and update position
                 if (wasAutoFollow)
                 {
                     AutoFollow = true;
@@ -634,7 +603,6 @@ namespace OwnaudioNET.Visualization
             if (_audioData == null || _audioData.Length == 0)
                 return 0.0;
 
-            // absPos = ScrollOffset + (x / width) / ZoomFactor  — pure floating-point, no integer rounding
             double absPos = ScrollOffset + (x / Bounds.Width) / Math.Max(1.0, ZoomFactor);
             return Math.Clamp(absPos, 0.0, 1.0);
         }

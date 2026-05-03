@@ -90,21 +90,17 @@ public sealed class OptimizedAudioStream : Stream
 
         while (destination.Length > 0)
         {
-            // If buffer is empty, refill it
             if (_bufferPosition >= _bufferLength)
             {
                 if (!RefillBuffer())
                 {
-                    // No more data available
                     break;
                 }
             }
 
-            // Calculate how many bytes we can copy from buffer
             int availableInBuffer = _bufferLength - _bufferPosition;
             int bytesToCopy = Math.Min(availableInBuffer, destination.Length);
 
-            // Copy from buffer to destination
             _buffer.AsSpan(_bufferPosition, bytesToCopy).CopyTo(destination);
 
             _bufferPosition += bytesToCopy;
@@ -137,7 +133,6 @@ public sealed class OptimizedAudioStream : Stream
         if (!CanSeek)
             throw new NotSupportedException("Stream does not support seeking");
 
-        // Calculate target position
         long targetPosition = origin switch
         {
             SeekOrigin.Begin => offset,
@@ -149,19 +144,16 @@ public sealed class OptimizedAudioStream : Stream
         if (targetPosition < 0)
             throw new IOException("Cannot seek before beginning of stream");
 
-        // Check if target is within current buffer
         long bufferStart = _position - _bufferPosition;
         long bufferEnd = bufferStart + _bufferLength;
 
         if (targetPosition >= bufferStart && targetPosition < bufferEnd)
         {
-            // Seek within buffer (fast path)
             _bufferPosition = (int)(targetPosition - bufferStart);
             _position = targetPosition;
         }
         else
         {
-            // Seek outside buffer - need to seek base stream and invalidate buffer
             _baseStream.Seek(targetPosition, SeekOrigin.Begin);
             _bufferPosition = 0;
             _bufferLength = 0;
@@ -174,7 +166,6 @@ public sealed class OptimizedAudioStream : Stream
     /// <inheritdoc/>
     public override void Flush()
     {
-        // Read-only stream - nothing to flush
     }
 
     /// <inheritdoc/>

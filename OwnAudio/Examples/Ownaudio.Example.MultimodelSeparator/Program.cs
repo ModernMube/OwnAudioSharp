@@ -1,3 +1,4 @@
+using Logger;
 using OwnaudioNET.Features.Vocalremover;
 
 namespace OwnSeparator.MultiModel
@@ -24,10 +25,7 @@ namespace OwnSeparator.MultiModel
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("═══════════════════════════════════════════════════");
-            Console.WriteLine("  OwnAudioSharp - Multi-Model Audio Separator");
-            Console.WriteLine("═══════════════════════════════════════════════════");
-            Console.WriteLine();
+            Log.Info("  OwnAudioSharp - Multi-Model Audio Separator");
 
             // Parse command line arguments
             if (args.Length > 0 && args[0] == "--help")
@@ -40,14 +38,14 @@ namespace OwnSeparator.MultiModel
             string audioFilePath = args.Length > 0 ? args[0] : @"/path/to/audio.mp3";
             string outputDirectory = args.Length > 1 ? args[1] : @"/path/to/output/directory";
 
-            Console.WriteLine("Choose an example:");
-            Console.WriteLine("1. Simple 2-Model Averaging (Best + Karaoke)");
-            Console.WriteLine("2. Triple Model Averaging (Best + Default + Karaoke)");
-            Console.WriteLine("3. Custom Pipeline with Intermediate Saves");
-            Console.WriteLine("4. Custom Model Files Pipeline");
-            Console.WriteLine("5. Averaging Demo with Auto-Detection");
-            Console.WriteLine("6. Mixed OutputType Demo (Vocals + Instrumental models)");
-            Console.WriteLine();
+            Log.Info("Choose an example:");
+            Log.Info("1. Simple 2-Model Averaging (Best + Karaoke)");
+            Log.Info("2. Triple Model Averaging (Best + Default + Karaoke)");
+            Log.Info("3. Custom Pipeline with Intermediate Saves");
+            Log.Info("4. Custom Model Files Pipeline");
+            Log.Info("5. Averaging Demo with Auto-Detection");
+            Log.Info("6. Mixed OutputType Demo (Vocals + Instrumental models)");
+            
             Console.Write("Enter choice (1-6): ");
 
             string? choice = Console.ReadLine();
@@ -75,27 +73,23 @@ namespace OwnSeparator.MultiModel
                         RunMixedOutputTypeDemo(audioFilePath, outputDirectory);
                         break;
                     default:
-                        Console.WriteLine("Invalid choice. Running simple pipeline as default.");
+                        Log.Info("Invalid choice. Running simple pipeline as default.");
                         RunSimplePipeline(audioFilePath, outputDirectory);
                         break;
                 }
             }
             catch (FileNotFoundException ex)
             {
-                Console.WriteLine();
-                Console.WriteLine($"❌ Error: File not found");
-                Console.WriteLine($"   {ex.Message}");
-                Console.WriteLine();
-                Console.WriteLine("Please update the file paths in the code or pass them as arguments:");
-                Console.WriteLine("   dotnet run <audio-file> <output-directory>");
+                Log.Warning($"Error: File not found");
+                Log.Warning($"   {ex.Message}");
+                Log.Warning("Please update the file paths in the code or pass them as arguments:");
+                Log.Warning("   dotnet run <audio-file> <output-directory>");
             }
             catch (Exception ex)
             {
-                Console.WriteLine();
-                Console.WriteLine($"❌ Error occurred: {ex.Message}");
-                Console.WriteLine();
-                Console.WriteLine("Stack trace:");
-                Console.WriteLine(ex.StackTrace);
+                Log.Warning($"Error occurred: {ex.Message}");
+                Log.Warning("Stack trace:");
+                Log.Warning(ex.StackTrace);
             }
 
             Console.WriteLine();
@@ -110,9 +104,7 @@ namespace OwnSeparator.MultiModel
         static void RunSimplePipeline(string audioFilePath, string outputDirectory)
         {
             Console.WriteLine();
-            Console.WriteLine("═══════════════════════════════════════════");
             Console.WriteLine("  Example 1: Simple 2-Model Averaging");
-            Console.WriteLine("═══════════════════════════════════════════");
             Console.WriteLine();
             Console.WriteLine($"Input:  {audioFilePath}");
             Console.WriteLine($"Output: {outputDirectory}");
@@ -133,20 +125,20 @@ namespace OwnSeparator.MultiModel
             separator.ProcessingCompleted += OnProcessingCompleted;
 
             // Initialize and process
-            Console.WriteLine("⚙️  Initializing models...");
+            Console.WriteLine("⚙Initializing models...");
             separator.Initialize();
 
-            Console.WriteLine("🚀 Starting processing...");
+            Console.WriteLine("Starting processing...");
             Console.WriteLine();
 
             var result = separator.Separate(audioFilePath);
 
             Console.WriteLine();
-            Console.WriteLine("✅ Processing completed!");
+            Console.WriteLine("Processing completed!");
             Console.WriteLine($"   Time: {result.ProcessingTime}");
             Console.WriteLine($"   Models: {result.ModelsProcessed}");
             Console.WriteLine();
-            Console.WriteLine("📁 Output files:");
+            Console.WriteLine("Output files:");
             Console.WriteLine($"   🎤 Vocals:       {result.VocalsPath}");
             Console.WriteLine($"   🎸 Instrumental: {result.InstrumentalPath}");
 
@@ -159,9 +151,7 @@ namespace OwnSeparator.MultiModel
         static void RunTriplePipeline(string audioFilePath, string outputDirectory)
         {
             Console.WriteLine();
-            Console.WriteLine("══════════════════════════════════════════");
             Console.WriteLine("  Example 2: Triple Model Averaging");
-            Console.WriteLine("══════════════════════════════════════════");
             Console.WriteLine();
             Console.WriteLine($"Input:  {audioFilePath}");
             Console.WriteLine($"Output: {outputDirectory}");
@@ -169,7 +159,7 @@ namespace OwnSeparator.MultiModel
             Console.WriteLine("Models: Best + Default + Karaoke (all parallel)");
             Console.WriteLine("All intermediate results will be saved.");
             Console.WriteLine();
-            Console.WriteLine("ℹ️  Each model processes the original audio independently.");
+            Console.WriteLine("Each model processes the original audio independently.");
             Console.WriteLine("   Results are averaged: (Best + Default + Karaoke) / 3");
             Console.WriteLine();
 
@@ -186,24 +176,24 @@ namespace OwnSeparator.MultiModel
             separator.ProcessingCompleted += OnProcessingCompleted;
 
             // Initialize and process
-            Console.WriteLine("⚙️  Initializing models...");
+            Console.WriteLine("⚙Initializing models...");
             separator.Initialize();
 
-            Console.WriteLine("🚀 Starting processing...");
+            Console.WriteLine("Starting processing...");
             Console.WriteLine();
 
             var result = separator.Separate(audioFilePath);
 
             Console.WriteLine();
-            Console.WriteLine("✅ Processing completed!");
+            Console.WriteLine("Processing completed!");
             Console.WriteLine($"   Time: {result.ProcessingTime}");
             Console.WriteLine($"   Models: {result.ModelsProcessed}");
             Console.WriteLine();
-            Console.WriteLine("📁 Final outputs:");
-            Console.WriteLine($"   🎤 Vocals:       {result.VocalsPath}");
-            Console.WriteLine($"   🎸 Instrumental: {result.InstrumentalPath}");
+            Console.WriteLine("Final outputs:");
+            Console.WriteLine($"   Vocals:       {result.VocalsPath}");
+            Console.WriteLine($"   Instrumental: {result.InstrumentalPath}");
             Console.WriteLine();
-            Console.WriteLine("📁 Intermediate results:");
+            Console.WriteLine("Intermediate results:");
             foreach (var intermediate in result.IntermediatePaths)
             {
                 Console.WriteLine($"   {intermediate.Key}:");
@@ -219,14 +209,12 @@ namespace OwnSeparator.MultiModel
         static void RunCustomPipelineWithDebug(string audioFilePath, string outputDirectory)
         {
             Console.WriteLine();
-            Console.WriteLine("════════════════════════════════════════════════");
             Console.WriteLine("  Example 3: Custom Averaging with Debug Mode");
-            Console.WriteLine("════════════════════════════════════════════════");
             Console.WriteLine();
             Console.WriteLine($"Input:  {audioFilePath}");
             Console.WriteLine($"Output: {outputDirectory}");
             Console.WriteLine();
-            Console.WriteLine("ℹ️  This example shows fine-grained control over averaging.");
+            Console.WriteLine("This example shows fine-grained control over averaging.");
             Console.WriteLine();
 
             // Create options with full control
@@ -297,26 +285,26 @@ namespace OwnSeparator.MultiModel
             {
                 Console.WriteLine();
                 Console.WriteLine();
-                Console.WriteLine($"⏱️  Total processing time: {result.ProcessingTime}");
+                Console.WriteLine($"Total processing time: {result.ProcessingTime}");
             };
 
             // Initialize and process
-            Console.WriteLine("⚙️  Initializing models...");
+            Console.WriteLine("Initializing models...");
             separator.Initialize();
 
-            Console.WriteLine("🚀 Starting processing...");
+            Console.WriteLine("Starting processing...");
             Console.WriteLine();
 
             var result = separator.Separate(audioFilePath);
 
             Console.WriteLine();
-            Console.WriteLine("✅ Processing completed!");
+            Console.WriteLine("Processing completed!");
             Console.WriteLine();
-            Console.WriteLine("📁 Final outputs:");
-            Console.WriteLine($"   🎤 Vocals:       {result.VocalsPath}");
-            Console.WriteLine($"   🎸 Instrumental: {result.InstrumentalPath}");
+            Console.WriteLine("Final outputs:");
+            Console.WriteLine($"   Vocals:       {result.VocalsPath}");
+            Console.WriteLine($"   Instrumental: {result.InstrumentalPath}");
             Console.WriteLine();
-            Console.WriteLine("📁 All intermediate files:");
+            Console.WriteLine("All intermediate files:");
             foreach (var intermediate in result.IntermediatePaths.OrderBy(x => x.Key))
             {
                 Console.WriteLine($"   {intermediate.Key}:");
@@ -332,9 +320,7 @@ namespace OwnSeparator.MultiModel
         static void RunCustomFilesPipeline(string audioFilePath, string outputDirectory)
         {
             Console.WriteLine();
-            Console.WriteLine("═══════════════════════════════════════");
             Console.WriteLine("  Example 4: Custom Model Files");
-            Console.WriteLine("═══════════════════════════════════════");
             Console.WriteLine();
             Console.WriteLine("This example shows how to use custom ONNX models from disk.");
             Console.WriteLine("OutputType will be auto-detected from filename:");
@@ -343,8 +329,6 @@ namespace OwnSeparator.MultiModel
             Console.WriteLine();
 
             // Example paths (update these to your actual model files)
-            //string model1Path = @"path/models/custom_model_1.onnx";
-            //string model2Path = @"path/models/custom_model_2.onnx";
             string model1Path =
                 @"/path/model_1.onnx";
             string model2Path = @"/path/model_2.onnx"; 
@@ -387,20 +371,20 @@ namespace OwnSeparator.MultiModel
             separator.ProgressChanged += OnProgressChanged;
             separator.ProcessingCompleted += OnProcessingCompleted;
 
-            Console.WriteLine("⚙️  Initializing custom models...");
+            Console.WriteLine("Initializing custom models...");
             separator.Initialize();
 
-            Console.WriteLine("🚀 Starting processing...");
+            Console.WriteLine("Starting processing...");
             Console.WriteLine();
 
             var result = separator.Separate(audioFilePath);
 
             Console.WriteLine();
-            Console.WriteLine("✅ Processing completed!");
+            Console.WriteLine("Processing completed!");
             Console.WriteLine();
-            Console.WriteLine("📁 Output files:");
-            Console.WriteLine($"   🎤 Vocals:       {result.VocalsPath}");
-            Console.WriteLine($"   🎸 Instrumental: {result.InstrumentalPath}");
+            Console.WriteLine("Output files:");
+            Console.WriteLine($"   Vocals:       {result.VocalsPath}");
+            Console.WriteLine($"   Instrumental: {result.InstrumentalPath}");
 
             separator.Dispose();
         }
@@ -412,9 +396,7 @@ namespace OwnSeparator.MultiModel
         static void RunAveragingDemo(string audioFilePath, string outputDirectory)
         {
             Console.WriteLine();
-            Console.WriteLine("═══════════════════════════════════════════════════");
             Console.WriteLine("  Example 5: Multi-Model Averaging Demo");
-            Console.WriteLine("═══════════════════════════════════════════════════");
             Console.WriteLine();
             Console.WriteLine("This demo shows how multi-model averaging works:");
             Console.WriteLine();
@@ -442,7 +424,7 @@ namespace OwnSeparator.MultiModel
             Console.WriteLine("  (V₁+V₂+V₃)/3         (I₁+I₂+I₃)/3");
             Console.WriteLine("        │                         │");
             Console.WriteLine("        ↓                         ↓");
-            Console.WriteLine("    💾 SAVE!                  💾 SAVE!");
+            Console.WriteLine("      SAVE!                     SAVE!");
             Console.WriteLine();
             Console.WriteLine($"Input:  {audioFilePath}");
             Console.WriteLine($"Output: {outputDirectory}");
@@ -494,15 +476,15 @@ namespace OwnSeparator.MultiModel
 
             separator.ProgressChanged += (sender, progress) =>
             {
-                Console.Write($"\r🔄 Processing model {progress.CurrentModelIndex}/{progress.TotalModels} ");
+                Console.Write($"\rProcessing model {progress.CurrentModelIndex}/{progress.TotalModels} ");
                 Console.Write($"({progress.CurrentModelName})... ");
                 Console.Write($"Chunk {progress.ProcessedChunks}/{progress.TotalChunks} ({progress.OverallProgress:F1}%)");
             };
 
-            Console.WriteLine("⚙️  Initializing models...");
+            Console.WriteLine("Initializing models...");
             separator.Initialize();
 
-            Console.WriteLine("🚀 Starting parallel processing + averaging pipeline...");
+            Console.WriteLine("Starting parallel processing + averaging pipeline...");
             Console.WriteLine();
 
             var startTime = DateTime.Now;
@@ -511,26 +493,26 @@ namespace OwnSeparator.MultiModel
 
             Console.WriteLine();
             Console.WriteLine();
-            Console.WriteLine("✅ Processing completed!");
+            Console.WriteLine("Processing completed!");
             Console.WriteLine();
-            Console.WriteLine("📊 Statistics:");
-            Console.WriteLine($"   ⏱️  Total time: {elapsed}");
-            Console.WriteLine($"   🔧 Models used: {result.ModelsProcessed}");
-            Console.WriteLine($"   💾 Memory: Streaming (minimal footprint)");
+            Console.WriteLine("Statistics:");
+            Console.WriteLine($"   Total time: {elapsed}");
+            Console.WriteLine($"   Models used: {result.ModelsProcessed}");
+            Console.WriteLine($"   Memory: Streaming (minimal footprint)");
             Console.WriteLine();
-            Console.WriteLine("📁 Final averaged outputs:");
-            Console.WriteLine($"   🎤 Vocals (averaged):       {result.VocalsPath}");
+            Console.WriteLine("Final averaged outputs:");
+            Console.WriteLine($"   Vocals (averaged):       {result.VocalsPath}");
             Console.WriteLine($"      ↳ Average of {result.ModelsProcessed} model outputs");
-            Console.WriteLine($"   🎸 Instrumental (averaged): {result.InstrumentalPath}");
+            Console.WriteLine($"   Instrumental (averaged): {result.InstrumentalPath}");
             Console.WriteLine($"      ↳ Average of {result.ModelsProcessed} model outputs");
             Console.WriteLine();
-            Console.WriteLine("📁 Individual model outputs:");
+            Console.WriteLine("Individual model outputs:");
             foreach (var intermediate in result.IntermediatePaths.OrderBy(x => x.Key))
             {
                 Console.WriteLine($"   {intermediate.Key}");
             }
             Console.WriteLine();
-            Console.WriteLine("💡 How averaging works:");
+            Console.WriteLine("How averaging works:");
             Console.WriteLine("   1. All models process the ORIGINAL audio independently");
             Console.WriteLine("   2. Each model outputs vocals and instrumental");
             Console.WriteLine("   3. Vocals from all models are averaged: (V₁+V₂+V₃)/3");
@@ -547,14 +529,12 @@ namespace OwnSeparator.MultiModel
         static void RunMixedOutputTypeDemo(string audioFilePath, string outputDirectory)
         {
             Console.WriteLine();
-            Console.WriteLine("═════════════════════════════════════════════════════");
             Console.WriteLine("  Example 6: Mixed OutputType Demo");
-            Console.WriteLine("═════════════════════════════════════════════════════");
             Console.WriteLine();
             Console.WriteLine("This demo shows how to combine models with different outputs:");
             Console.WriteLine();
-            Console.WriteLine("  🎤 Model 1 (Voc_FT) → Outputs VOCALS");
-            Console.WriteLine("  🎸 Model 2 (Inst_HQ_3) → Outputs INSTRUMENTAL");
+            Console.WriteLine("  Model 1 (Voc_FT) → Outputs VOCALS");
+            Console.WriteLine("  Model 2 (Inst_HQ_3) → Outputs INSTRUMENTAL");
             Console.WriteLine();
             Console.WriteLine("  The system will:");
             Console.WriteLine("  1. Extract vocals from Model 1 (direct output)");
@@ -598,7 +578,7 @@ namespace OwnSeparator.MultiModel
                 SaveAllIntermediateResults = true
             };
 
-            Console.WriteLine("⚙️  Configuration:");
+            Console.WriteLine("Configuration:");
             for (int i = 0; i < options.Models.Count; i++)
             {
                 var model = options.Models[i];
@@ -616,36 +596,36 @@ namespace OwnSeparator.MultiModel
                 Console.Write($"Chunk {progress.ProcessedChunks}/{progress.TotalChunks} ({progress.OverallProgress:F1}%)");
             };
 
-            Console.WriteLine("⚙️  Initializing models...");
+            Console.WriteLine("Initializing models...");
             separator.Initialize();
 
-            Console.WriteLine("🚀 Starting processing...");
+            Console.WriteLine("Starting processing...");
             Console.WriteLine();
 
             var result = separator.Separate(audioFilePath);
 
             Console.WriteLine();
             Console.WriteLine();
-            Console.WriteLine("✅ Processing completed!");
+            Console.WriteLine("Processing completed!");
             Console.WriteLine($"   Time: {result.ProcessingTime}");
             Console.WriteLine();
-            Console.WriteLine("📁 Final averaged outputs:");
-            Console.WriteLine($"   🎤 Vocals (averaged):       {result.VocalsPath}");
+            Console.WriteLine("Final averaged outputs:");
+            Console.WriteLine($"   Vocals (averaged):       {result.VocalsPath}");
             Console.WriteLine($"      ↳ (Vocal model output + Instrumental model complement) / 2");
-            Console.WriteLine($"   🎸 Instrumental (averaged): {result.InstrumentalPath}");
+            Console.WriteLine($"   Instrumental (averaged): {result.InstrumentalPath}");
             Console.WriteLine($"      ↳ (Instrumental model output + Vocal model complement) / 2");
             Console.WriteLine();
-            Console.WriteLine("📁 Individual model outputs:");
+            Console.WriteLine("Individual model outputs:");
             foreach (var intermediate in result.IntermediatePaths.OrderBy(x => x.Key))
             {
                 Console.WriteLine($"   {intermediate.Key}");
             }
             Console.WriteLine();
-            Console.WriteLine("💡 Benefits of mixing OutputTypes:");
-            Console.WriteLine("   ✅ Combines strengths of specialized models");
-            Console.WriteLine("   ✅ Vocal-focused model improves vocal quality");
-            Console.WriteLine("   ✅ Instrumental-focused model improves instrumental quality");
-            Console.WriteLine("   ✅ Averaging reduces artifacts from both");
+            Console.WriteLine("Benefits of mixing OutputTypes:");
+            Console.WriteLine("   Combines strengths of specialized models");
+            Console.WriteLine("   Vocal-focused model improves vocal quality");
+            Console.WriteLine("   Instrumental-focused model improves instrumental quality");
+            Console.WriteLine("   Averaging reduces artifacts from both");
 
             separator.Dispose();
         }
@@ -666,9 +646,9 @@ namespace OwnSeparator.MultiModel
         {
             Console.WriteLine();
             Console.WriteLine();
-            Console.WriteLine($"⏱️  Processing time: {result.ProcessingTime}");
-            Console.WriteLine($"🎤 Vocals:       {result.VocalsPath}");
-            Console.WriteLine($"🎸 Instrumental: {result.InstrumentalPath}");
+            Console.WriteLine($"⏱Processing time: {result.ProcessingTime}");
+            Console.WriteLine($"Vocals:       {result.VocalsPath}");
+            Console.WriteLine($"Instrumental: {result.InstrumentalPath}");
         }
 
         /// <summary>

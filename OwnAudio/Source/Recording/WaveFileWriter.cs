@@ -60,11 +60,8 @@ public sealed class WaveFileWriter : IDisposable
 
         try
         {
-            // Create file stream
             _stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
             _writer = new BinaryWriter(_stream, Encoding.UTF8, leaveOpen: false);
-
-            // Write WAV header
             WriteWavHeader();
         }
         catch
@@ -90,7 +87,6 @@ public sealed class WaveFileWriter : IDisposable
 
         try
         {
-            // Write samples as Float32 (little-endian)
             for (int i = 0; i < samples.Length; i++)
             {
                 _writer.Write(samples[i]);
@@ -139,27 +135,17 @@ public sealed class WaveFileWriter : IDisposable
     {
         try
         {
-            // Calculate sizes
             long dataChunkSize = _totalSamplesWritten * 4; // 4 bytes per Float32 sample
             long fileSize = 36 + dataChunkSize; // 36 = header size without RIFF header (8 bytes)
 
-            // Update ChunkSize (file size - 8)
             _stream.Seek(4, SeekOrigin.Begin);
             _writer.Write((int)(fileSize - 8));
-
-            // Update Subchunk2Size (data size)
             _stream.Seek(_dataChunkSizePosition, SeekOrigin.Begin);
             _writer.Write((int)dataChunkSize);
-
-            // Flush to ensure all data is written
             _writer.Flush();
             _stream.Flush();
         }
-        catch
-        {
-            // Ignore errors during header update
-            // File may be incomplete but partially usable
-        }
+        catch {}
     }
 
     /// <summary>
@@ -181,7 +167,6 @@ public sealed class WaveFileWriter : IDisposable
 
         try
         {
-            // Update header with final sizes
             UpdateWavHeader();
         }
         finally

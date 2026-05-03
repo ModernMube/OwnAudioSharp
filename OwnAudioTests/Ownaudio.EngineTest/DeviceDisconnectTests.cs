@@ -23,10 +23,6 @@ namespace Ownaudio.EngineTest
     [TestClass]
     public class DeviceDisconnectTests
     {
-        // ─────────────────────────────────────────────────────────────────
-        // 1. EngineStatus enum & Status property
-        // ─────────────────────────────────────────────────────────────────
-
         [TestMethod]
         [TestCategory("DeviceDisconnect")]
         public void EngineStatus_Idle_AfterCreate()
@@ -111,10 +107,6 @@ namespace Ownaudio.EngineTest
             }
         }
 
-        // ─────────────────────────────────────────────────────────────────
-        // 2. Event wiring
-        // ─────────────────────────────────────────────────────────────────
-
         [TestMethod]
         [TestCategory("DeviceDisconnect")]
         public void DeviceStateChanged_Event_CanSubscribeAndUnsubscribe()
@@ -190,10 +182,6 @@ namespace Ownaudio.EngineTest
             Assert.AreEqual("Test Device", args.DeviceInfo.Name);
         }
 
-        // ─────────────────────────────────────────────────────────────────
-        // 3. Send() timeout behaviour: normal vs disconnect state
-        // ─────────────────────────────────────────────────────────────────
-
         [TestMethod]
         [TestCategory("DeviceDisconnect")]
         public void Send_WhileRunning_DoesNotTimeout_WithSmallChunk()
@@ -233,17 +221,11 @@ namespace Ownaudio.EngineTest
             catch (Exception ex) { caught = ex; }
 
             // Assert: any exception is acceptable — the engine must not silently swallow
-            // an attempt to Send() data when it hasn't been started.
             Assert.IsNotNull(caught,
                 "Send() should throw when the engine has not been started.");
 
             Console.WriteLine($"Send() on stopped engine threw: {caught.GetType().Name}: {caught.Message}");
         }
-
-        // ─────────────────────────────────────────────────────────────────
-        // 4. Whitebox: inject DeviceDisconnected state via reflection
-        //    and verify engine behaviour without a real USB device.
-        // ─────────────────────────────────────────────────────────────────
 
         /// <summary>
         /// Injects the DeviceDisconnected status into a running NativeAudioEngine
@@ -252,7 +234,6 @@ namespace Ownaudio.EngineTest
         /// </summary>
         private static void InjectDisconnectedState(IAudioEngine engine)
         {
-            // NativeAudioEngine is a sealed internal class; we use reflection to reach its fields.
             Type engineType = engine.GetType();
 
             SetPrivateField(engineType, engine, "_engineStatusValue", (int)EngineStatus.DeviceDisconnected);
@@ -347,8 +328,6 @@ namespace Ownaudio.EngineTest
                 "Pre-condition: engine must be in DeviceDisconnected state.");
 
             // Act: Send a small chunk while disconnected.
-            // The buffer is drainable because _isRunning=1, so Send() must NOT throw
-            // for a chunk smaller than the ring buffer capacity.
             float[] smallChunk = TestHelpers.GenerateSineWave(440f, config.SampleRate, config.Channels, 0.005);
             Exception? caughtEx = null;
 
@@ -358,7 +337,6 @@ namespace Ownaudio.EngineTest
             }
             catch (AudioException ex)
             {
-                // Only acceptable if the ring buffer is genuinely full (very unlikely for 5ms)
                 caughtEx = ex;
             }
 
@@ -391,7 +369,6 @@ namespace Ownaudio.EngineTest
             };
 
             // Act: manually fire the event the way HandleDeviceRemoved would
-            // (since we can't perform a real USB unplug in CI)
             var simulatedDeviceInfo = new AudioDeviceInfo(
                 deviceId: "sim-001",
                 name: "Simulated USB Interface",
@@ -401,12 +378,10 @@ namespace Ownaudio.EngineTest
                 isDefault: false,
                 state: AudioDeviceState.Unplugged);
 
-            // Use reflection to raise the event directly on the engine instance
             Type engineType = engine.GetType();
             FieldInfo? eventField = engineType.GetField("DeviceStateChanged",
                 BindingFlags.NonPublic | BindingFlags.Instance);
 
-            // Fall back to looking for backing delegate field if event field not directly accessible
             var eventDelegate = (MulticastDelegate?)eventField?.GetValue(engine);
 
             if (eventDelegate != null)
@@ -417,8 +392,6 @@ namespace Ownaudio.EngineTest
             }
             else
             {
-                // If we can't directly invoke via reflection (sealed type), just verify the subscription path
-                // by asserting the event is subscribable — already tested in Event_CanSubscribe test.
                 Console.WriteLine("Note: Could not invoke DeviceStateChanged via reflection on sealed type. " +
                                   "Subscription was verified in the dedicated event test.");
                 Assert.IsTrue(true); // pass
@@ -490,10 +463,6 @@ namespace Ownaudio.EngineTest
             engine.Stop();
         }
 
-        // ─────────────────────────────────────────────────────────────────
-        // 5. PauseDeviceMonitoring does NOT affect disconnect detection
-        // ─────────────────────────────────────────────────────────────────
-
         [TestMethod]
         [TestCategory("DeviceDisconnect")]
         public void DeviceMonitoring_PausedDuringNormalRun_StatusRemainsRunning()
@@ -502,11 +471,11 @@ namespace Ownaudio.EngineTest
             using var engine = AudioEngineFactory.Create(AudioConfig.Default);
             engine.Start();
 
-            // Act: explicitly pause monitoring (was previously called from Start(), now it's not)
+            // Act
             engine.PauseDeviceMonitoring();
             Thread.Sleep(100); // wait a tick
 
-            // Assert: status must still be Running (monitoring is paused, but the engine is alive)
+            // Assert
             Assert.AreEqual(EngineStatus.Running, engine.Status,
                 "Pausing device monitoring should not affect engine status.");
 
@@ -524,25 +493,19 @@ namespace Ownaudio.EngineTest
             // Act
             engine.Start();
 
-            // Reflect _isMonitoringPaused
             Type engineType = engine.GetType();
             FieldInfo? field = engineType.GetField("_isMonitoringPaused",
                 BindingFlags.NonPublic | BindingFlags.Instance);
 
             bool isPaused = (bool)(field?.GetValue(engine) ?? false);
 
-            // Assert: since we removed PauseDeviceMonitoring() from Start(),
-            // the monitoring loop should NOT be paused after Start().
+            // Assert
             Assert.IsFalse(isPaused,
                 "Start() must no longer pause device monitoring. " +
                 "Monitoring must stay active to detect unexpected disconnections.");
 
             engine.Stop();
         }
-
-        // ─────────────────────────────────────────────────────────────────
-        // 6. Stop() clears disconnect state
-        // ─────────────────────────────────────────────────────────────────
 
         [TestMethod]
         [TestCategory("DeviceDisconnect")]
@@ -562,7 +525,6 @@ namespace Ownaudio.EngineTest
             Assert.AreEqual(EngineStatus.Idle, engine.Status,
                 "Stop() must clear the DeviceDisconnected state and return to Idle.");
 
-            // Also verify _isDeviceDisconnected was cleared
             Type engineType = engine.GetType();
             FieldInfo? disconnField = engineType.GetField("_isDeviceDisconnected",
                 BindingFlags.NonPublic | BindingFlags.Instance);

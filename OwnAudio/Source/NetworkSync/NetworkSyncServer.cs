@@ -92,15 +92,9 @@ public sealed class NetworkSyncServer : IDisposable
 
         try
         {
-            // Skip NTP sync - use system time directly (faster startup, works for local network)
-            // The LocalTimeProvider will fallback to system time automatically
-            // await _timeProvider.TrySyncAsync();  // Disabled for fast startup
-
-            // Create UDP client
             _udpClient = new UdpClient(_port);
             _udpClient.EnableBroadcast = true;
 
-            // Start broadcast thread
             _isRunning = true;
             _broadcastThread = new Thread(BroadcastThreadLoop)
             {
@@ -127,18 +121,15 @@ public sealed class NetworkSyncServer : IDisposable
 
         _isRunning = false;
 
-        // Wait for broadcast thread to exit
         if (_broadcastThread != null && _broadcastThread.IsAlive)
         {
             _broadcastThread.Join(TimeSpan.FromSeconds(2));
         }
 
-        // Close UDP client
         _udpClient?.Close();
         _udpClient?.Dispose();
         _udpClient = null;
 
-        // Clear clients
         _clients.Clear();
     }
 
@@ -166,7 +157,6 @@ public sealed class NetworkSyncServer : IDisposable
     /// </summary>
     private void BroadcastThreadLoop()
     {
-        // Pre-allocate buffer (reused for all broadcasts)
         byte[] buffer = _bufferPool.Rent(NetworkSyncProtocol.MaxPacketSize);
         
         try
@@ -177,24 +167,18 @@ public sealed class NetworkSyncServer : IDisposable
             {
                 try
                 {
-                    // 1. Broadcast clock sync (every cycle)
                     BroadcastClockSync(buffer, broadcastEndpoint);
-
-                    // 2. Broadcast queued commands
                     BroadcastQueuedCommands(buffer, broadcastEndpoint);
-
-                    // 3. Clean up stale clients (every 100 cycles = 1 second)
+                    
                     if (Environment.TickCount % 1000 < BroadcastIntervalMs)
                     {
                         CleanupStaleClients();
                     }
-
-                    // Sleep for broadcast interval
+                    
                     Thread.Sleep(BroadcastIntervalMs);
                 }
                 catch
                 {
-                    // Log error but continue
                     Thread.Sleep(BroadcastIntervalMs * 2);
                 }
             }
@@ -213,26 +197,20 @@ public sealed class NetworkSyncServer : IDisposable
         if (_udpClient == null)
             return;
 
-        // Create clock sync command
         var cmd = NetworkSyncProtocol.CreateClockSyncCommand(
             _timeProvider.GetSynchronizedTimeTicks(),
             _masterClock.CurrentTimestamp,
             _masterClock.CurrentSamplePosition,
             _masterClock.SampleRate);
 
-        // Serialize (zero-allocation using Span)
         Span<byte> bufferSpan = buffer.AsSpan(0, NetworkSyncProtocol.MaxPacketSize);
         int bytesWritten = NetworkSyncProtocol.SerializeCommand(ref cmd, bufferSpan);
 
-        // Broadcast
         try
         {
             _udpClient.Send(buffer, bytesWritten, endpoint);
         }
-        catch
-        {
-            // Ignore send errors
-        }
+        catch {}
     }
 
     /// <summary>
@@ -256,19 +234,14 @@ public sealed class NetworkSyncServer : IDisposable
                 _commandQueueHead = (_commandQueueHead + 1) % CommandQueueSize;
             }
 
-            // Serialize (zero-allocation using Span)
             Span<byte> bufferSpan = buffer.AsSpan(0, NetworkSyncProtocol.MaxPacketSize);
             int bytesWritten = NetworkSyncProtocol.SerializeCommand(ref cmd, bufferSpan);
 
-            // Broadcast
             try
             {
                 _udpClient.Send(buffer, bytesWritten, endpoint);
             }
-            catch
-            {
-                // Ignore send errors
-            }
+            catch {}
         }
     }
 
@@ -305,7 +278,6 @@ public sealed class NetworkSyncServer : IDisposable
         if (_udpClient == null)
             return;
 
-        // Update client info
         string key = clientEndpoint.ToString();
         _clients.AddOrUpdate(key,
             _ => new ClientInfo
@@ -321,7 +293,6 @@ public sealed class NetworkSyncServer : IDisposable
                 return existing;
             });
 
-        // Send pong response
         var pongCmd = NetworkSyncProtocol.CreatePongCommand(
             pingCmd.ClientSendTime,
             pingCmd.SequenceNumber);

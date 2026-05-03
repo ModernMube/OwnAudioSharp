@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Threading.Tasks;
 using Ownaudio.Core;
 
 namespace OwnaudioNET.Recording;
@@ -103,7 +99,6 @@ public class AudioRecorder : IDisposable
         {
             if (_isRecording)
             {
-                // Add samples to recording buffer
                 foreach (var sample in samples)
                 {
                     _recordedSamples.Add(sample);
@@ -152,10 +147,7 @@ public class AudioRecorder : IDisposable
         int bytesPerSample = bitDepth / 8;
         int dataSize = samples.Length * bytesPerSample;
 
-        // Write WAV header
         WriteWavHeader(writer, sampleRate, channels, bitDepth, dataSize);
-
-        // Write audio data
         WriteAudioData(writer, samples, bitDepth);
     }
 

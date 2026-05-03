@@ -333,8 +333,6 @@ namespace Ownaudio.Test.OwnaudioNET.Effects
             effect.Process(buffer2, FrameCount);
 
             // Assert
-            // After reset, processing should be consistent (no leftover state)
-            // This is a basic sanity check - detailed state verification would require internal access
             float rms1 = CalculateRMS(buffer1);
             float rms2 = CalculateRMS(buffer2);
             
@@ -376,7 +374,6 @@ namespace Ownaudio.Test.OwnaudioNET.Effects
             }
 
             // Assert
-            // RMS should stabilize and not drift significantly
             float drift = MathF.Abs(LinearToDb(firstBlockRMS) - LinearToDb(lastBlockRMS));
             Assert.True(drift < 0.5f, 
                 $"Effect showed instability over time: drift = {drift:F2} dB");

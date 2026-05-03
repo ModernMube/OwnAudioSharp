@@ -186,7 +186,7 @@ public class AudioEngineWrapperTests : IDisposable
         bool underrunTriggered = false;
         _wrapper.BufferUnderrun += (s, e) => underrunTriggered = true;
 
-        // Act - Send way more than buffer can hold
+        // Act
         var largeSamples = new float[1024 * 1024]; // 1MB of samples
         _wrapper.Send(largeSamples);
 
@@ -214,13 +214,11 @@ public class AudioEngineWrapperTests : IDisposable
         var buffer = _wrapper.Receive(out int count);
 
         // Assert - Can be null if no input data available
-        // Buffer can be non-null even with count=0 (empty buffer returned)
         if (buffer != null && count > 0)
         {
             buffer.Length.Should().BeGreaterThanOrEqualTo(count);
         }
         
-        // Count should always be non-negative
         count.Should().BeGreaterThanOrEqualTo(0);
     }
 

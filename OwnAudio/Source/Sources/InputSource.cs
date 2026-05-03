@@ -59,25 +59,19 @@ public sealed class InputSource : BaseAudioSource
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _bufferSizeInFrames = bufferSizeInFrames;
 
-        // Get config from engine
         _config = engine.Config;
-
-        // Verify input is enabled
         if (!engine.IsRunning)
         {
             throw new InvalidOperationException("Audio engine must be running to create InputSource. Call OwnaudioNet.Start() first.");
         }
 
-        // Initialize circular buffer (samples = frames * channels)
         int bufferSizeInSamples = bufferSizeInFrames * _config.Channels;
         _captureBuffer = new CircularBuffer(bufferSizeInSamples);
 
-        // Initialize synchronization primitives
         _pauseEvent = new ManualResetEventSlim(false);
         _shouldStop = false;
         _currentPosition = 0.0;
 
-        // Create and start capture thread
         _captureThread = new Thread(CaptureThreadProc)
         {
             Name = $"InputSource-Capture-{Id}",
@@ -92,7 +86,6 @@ public sealed class InputSource : BaseAudioSource
     {
         ThrowIfDisposed();
 
-        // If not playing, return silence
         if (State != AudioState.Playing)
         {
             FillWithSilence(buffer, frameCount * _config.Channels);
@@ -103,7 +96,6 @@ public sealed class InputSource : BaseAudioSource
         int samplesRead = _captureBuffer.Read(buffer.Slice(0, samplesToRead));
         int framesRead = samplesRead / _config.Channels;
 
-        // Update position
         if (framesRead > 0)
         {
             double frameDuration = 1.0 / _config.SampleRate;
@@ -116,10 +108,8 @@ public sealed class InputSource : BaseAudioSource
             } while (Math.Abs(Interlocked.CompareExchange(ref _currentPosition, newPosition, currentPosition) - currentPosition) > double.Epsilon);
         }
 
-        // Check for buffer underrun
         if (framesRead < frameCount)
         {
-            // Fill remaining with silence
             int remainingSamples = (frameCount - framesRead) * _config.Channels;
             FillWithSilence(buffer.Slice(samplesRead), remainingSamples);
 
@@ -129,7 +119,6 @@ public sealed class InputSource : BaseAudioSource
                 currentFramePosition));
         }
 
-        // Apply volume
         ApplyVolume(buffer, frameCount * _config.Channels);
 
         return framesRead;
@@ -138,7 +127,6 @@ public sealed class InputSource : BaseAudioSource
     /// <inheritdoc/>
     public override bool Seek(double positionInSeconds)
     {
-        // Seeking is not supported for live input
         return false;
     }
 
@@ -176,29 +164,22 @@ public sealed class InputSource : BaseAudioSource
         {
             while (!_shouldStop)
             {
-                // Wait if paused
                 if (State != AudioState.Playing)
                 {
                     _pauseEvent.Wait(100);
                     continue;
                 }
 
-                // Receive audio from engine
                 float[]? capturedData = _engine.Receive(out int sampleCount);
 
                 if (capturedData != null && sampleCount > 0)
                 {
-                    // Write captured data to circular buffer
                     int samplesWritten = _captureBuffer.Write(capturedData.AsSpan(0, sampleCount));
 
-                    // Return buffer to pool
                     _engine.ReturnInputBuffer(capturedData);
 
-                    // Check if buffer is full (write failed)
                     if (samplesWritten < sampleCount)
                     {
-                        // Buffer full, we're dropping samples
-                        // This shouldn't happen often if buffer is sized correctly
                         int droppedSamples = sampleCount - samplesWritten;
                         int droppedFrames = droppedSamples / _config.Channels;
 
@@ -210,14 +191,12 @@ public sealed class InputSource : BaseAudioSource
                 }
                 else
                 {
-                    // No data available, wait a bit
                     Thread.Sleep(5);
                 }
             }
         }
         catch (Exception ex)
         {
-            // Report error to main thread
             OnError(new AudioErrorEventArgs($"Capture thread error: {ex.Message}", ex));
         }
     }
@@ -243,7 +222,6 @@ public sealed class InputSource : BaseAudioSource
 
         try
         {
-            // Create a temporary buffer to peek at current audio data
             int peekSamples = Math.Min(512 * _config.Channels, _captureBuffer.Available);
             if (peekSamples == 0)
             {
@@ -257,8 +235,7 @@ public sealed class InputSource : BaseAudioSource
             {
                 return (0f, 0f);
             }
-
-            // Calculate peak levels for each channel
+            
             float leftPeak = 0f;
             float rightPeak = 0f;
             int channels = _config.Channels;
@@ -275,13 +252,11 @@ public sealed class InputSource : BaseAudioSource
                 }
             }
 
-            // If mono, use same value for both channels
             if (channels == 1)
             {
                 rightPeak = leftPeak;
             }
 
-            // Apply volume scaling
             leftPeak *= Volume;
             rightPeak *= Volume;
 
@@ -302,28 +277,21 @@ public sealed class InputSource : BaseAudioSource
         {
             if (disposing)
             {
-                // Signal capture thread to stop
                 _shouldStop = true;
                 _pauseEvent.Set(); // Wake up thread if waiting
 
-                // Wait for capture thread to exit (with timeout)
                 if (_captureThread.IsAlive)
                 {
                     if (!_captureThread.Join(TimeSpan.FromSeconds(2)))
                     {
-                        // Thread didn't exit in time, force interrupt
                         try
                         {
                             _captureThread.Interrupt();
                         }
-                        catch
-                        {
-                            // Ignore interrupt errors
-                        }
+                        catch {}
                     }
                 }
 
-                // Dispose managed resources
                 _pauseEvent?.Dispose();
             }
 

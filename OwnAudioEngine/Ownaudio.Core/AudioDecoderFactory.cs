@@ -2,7 +2,6 @@ using System;
 using Logger;
 using System.IO;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using Ownaudio.Core.Common;
 using Ownaudio.Decoders.Wav;
 using Ownaudio.Decoders.Flac;
@@ -45,6 +44,7 @@ public static class AudioDecoderFactory
     /// True once we have confirmed that the native MaDecoder type is usable.
     /// </summary>
     private static bool NativeAvailable => _nativeMaDecoderType.Value != null;
+    
     /// <summary>
     /// Creates an audio decoder for the specified file.
     /// Automatically detects format from file extension or header.
@@ -64,10 +64,7 @@ public static class AudioDecoderFactory
         if (!File.Exists(filePath))
             throw new AudioException("AudioDecoderFactory ERROR: ", new FileNotFoundException($"Audio file not found: {filePath}", filePath));
 
-        // Try to detect format from extension first
         var format = DetectFormatFromExtension(filePath);
-
-        // If extension detection fails, try magic bytes
         if (format == AudioFormat.Unknown)
         {
             using var stream = File.OpenRead(filePath);
@@ -77,7 +74,6 @@ public static class AudioDecoderFactory
         if (format == AudioFormat.Unknown)
             throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException($"Unable to detect audio format for file: {filePath}"));
 
-        // PRIMARY: Try native MaDecoder (cached – no repeated Assembly.Load / exception overhead)
         if (NativeAvailable)
         {
             try
@@ -96,13 +92,11 @@ public static class AudioDecoderFactory
             }
         }
 
-        // For MP3, use platform-specific decoders if available
         if (format == AudioFormat.Mp3)
         {
             return CreateMp3DecoderFromFile(filePath, targetSampleRate, targetChannels);
         }
 
-        // For WAV and FLAC, use managed decoders
         var fileStream = File.OpenRead(filePath);
         return CreateDecoderInternal(fileStream, format, true, targetSampleRate, targetChannels);
     }
@@ -122,7 +116,8 @@ public static class AudioDecoderFactory
     /// <code>
     /// using var stream = new MemoryStream(audioData);
     /// using var decoder = AudioDecoderFactory.Create(stream, AudioFormat.Wav, targetSampleRate: 48000, targetChannels: 2);
-    /// var result = decoder.DecodeNextFrame();
+    /// byte[] buffer = new byte[8192];
+    /// var result = decoder.ReadFrames(buffer);
     /// </code>
     /// </example>
     public static IAudioDecoder Create(Stream stream, AudioFormat format, int targetSampleRate = 0, int targetChannels = 0)
@@ -224,8 +219,6 @@ public static class AudioDecoderFactory
     /// </summary>
     private static IAudioDecoder CreateDecoderInternal(Stream stream, AudioFormat format, bool ownsStream, int targetSampleRate = 0, int targetChannels = 0)
     {
-        // For stream-based decoding, use managed decoders
-        // (MiniAudio decoder requires file path for now)
         return format switch
         {
             AudioFormat.Wav => new WavDecoder(stream, ownsStream, targetSampleRate, targetChannels),
@@ -244,7 +237,6 @@ public static class AudioDecoderFactory
     /// </summary>
     private static IAudioDecoder CreateMp3DecoderFromFile(string filePath, int targetSampleRate, int targetChannels)
     {
-        // PRIMARY: Try native MaDecoder (same cached type as the main Create() path)
         if (NativeAvailable)
         {
             try
@@ -263,7 +255,6 @@ public static class AudioDecoderFactory
             }
         }
 
-        // FALLBACK 1: Platform-specific decoders
 #if ANDROID || IOS
         // Mobile platforms: Use Mp3Decoder wrapper which uses compile-time platform detection
         try
@@ -320,7 +311,6 @@ public static class AudioDecoderFactory
     {
         try
         {
-            // Mp3Decoder wrapper automatically selects platform-specific implementation
             return new Mp3Decoder(stream, ownsStream, targetSampleRate, targetChannels);
         }
         catch (Exception ex) when (!(ex is AudioException))

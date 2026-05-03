@@ -1,0 +1,18 @@
+<Project>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'OwnaudioNET.Basic'">
+    <BaseIntermediateOutputPath>obj\Basic\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(MSBuildProjectDirectory)\obj\Basic\</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'OwnaudioNET.Mobile'">
+    <BaseIntermediateOutputPath>obj\Mobile\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(MSBuildProjectDirectory)\obj\Mobile\</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(JAVA_HOME)' != '' AND '$(JavaToolPath)' == ''">
+    <JavaToolPath>$(JAVA_HOME)$([System.IO.Path]::DirectorySeparatorChar)bin</JavaToolPath>
+    <JavacToolPath>$(JAVA_HOME)$([System.IO.Path]::DirectorySeparatorChar)bin</JavacToolPath>
+    <JavaSdkDirectory>$(JAVA_HOME)</JavaSdkDirectory>
+  </PropertyGroup>
+
+</Project>

@@ -200,7 +200,6 @@ namespace OwnaudioNET.Effects
             if (Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
             {
                 _sampleRate = config.SampleRate;
-                // Re-calc all filters for new rate
                 for(int i=0; i<BANDS; i++)
                     UpdateFilter(i);
             }
@@ -308,8 +307,6 @@ namespace OwnaudioNET.Effects
             float freq = _frequencies[band];
             float q = _qFactors[band];
             float gain = _gains[band]; // Total Gain dB (now applied to single filter)
-
-            // Single filter - full gain applied (reduces phase distortion for more natural sound)
 
             // Peaking EQ coeffs
             float omega = 2.0f * MathF.PI * freq / _sampleRate;

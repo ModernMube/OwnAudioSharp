@@ -212,27 +212,22 @@ namespace OwnaudioNET.Effects
             if (!_enabled)
                 return;
 
-            // Fast path: if mix is 0, no processing needed
             if (_mix < 0.001f)
                 return;
 
-            // Calculate the actual number of samples to process
             int sampleCount = frameCount * _config.Channels;
 
             for (int i = 0; i < sampleCount; i++)
             {
                 float original = buffer[i];
 
-                // Apply high-pass filter
                 float highFreq = _alpha * (_yPrev + original - _xPrev);
                 _xPrev = original;
                 _yPrev = highFreq;
 
-                // Nonlinear processing with soft clipping
                 float processed = highFreq * _gain;
                 processed = MathF.Tanh(processed * 0.5f) * 2f; // Gentle saturation
 
-                // Mix processed signal with original
                 buffer[i] = original + processed * _mix;
             }
         }

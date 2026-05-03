@@ -90,7 +90,6 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
             if (!_enabled || _mix <= 0.0f)
                 return;
             
-            // Check buffer size and resize if necessary
             int requiredSize = frameCount * channels;
             if (_filteredBuffer.Length < requiredSize)
             {
@@ -120,13 +119,10 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
                 float original = originalBuffer[i];
                 float filtered = filteredBuffer[i];
                 
-                // This generates harmonics (including subharmonics)
                 float shaped = Waveshape(filtered * 2.0f); // 2x gain before waveshaper
                 
-                // Mix: original signal + generated subharmonics - Linear phase FIR has constant group delay across all frequencies, so no phase alignment issues occur when mixing
                 float mixed = original * (1.0f - _mix) + shaped * _mix;
                 
-                // Safety clamping to prevent hard clipping
                 if (mixed > 1.0f) mixed = 1.0f;
                 else if (mixed < -1.0f) mixed = -1.0f;
                 
@@ -142,7 +138,6 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
         /// <returns>Waveshaped output</returns>
         private static float Waveshape(float x)
         {
-            // Soft clipping: x / (1 + |x|) - This is a tanh-like function that: Generates harmonics (odd and even), Provides soft saturation, Is low CPU intensive
             return x / (1.0f + MathF.Abs(x));
         }
         

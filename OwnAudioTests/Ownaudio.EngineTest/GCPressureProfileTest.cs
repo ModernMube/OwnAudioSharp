@@ -103,7 +103,6 @@ public class GCPressureProfileTest
         Console.WriteLine($"  Memory: {initialMemory / 1024}KB");
         Console.WriteLine("===================================================");
 
-        // Monitor GC for 60 seconds
         var stopwatch = Stopwatch.StartNew();
         var measurementInterval = TimeSpan.FromSeconds(5);
         var nextMeasurement = measurementInterval;
@@ -157,12 +156,6 @@ public class GCPressureProfileTest
         engine.Stop();
         engine.Dispose();
 
-        // ACCEPTANCE CRITERIA for low GC pressure:
-        // - Gen0: < 10 collections/minute (< 0.167 per second)
-        // - Gen1: < 2 collections/minute
-        // - Gen2: 0 collections during playback
-        // - Memory growth: < 10MB over 60 seconds
-
         double gen0PerSecond = finalGen0 / 60.0;
         double gen1PerSecond = finalGen1 / 60.0;
         long memoryGrowthMB = totalMemoryDelta / (1024 * 1024);
@@ -176,21 +169,21 @@ public class GCPressureProfileTest
         // Assert (warning only, not strict failure)
         if (gen0PerSecond > 0.5)
         {
-            Console.WriteLine($"\n⚠️  WARNING: High Gen0 collection rate: {gen0PerSecond:F3}/sec");
+            Console.WriteLine($"\nWARNING: High Gen0 collection rate: {gen0PerSecond:F3}/sec");
         }
         if (finalGen1 > 5)
         {
-            Console.WriteLine($"\n⚠️  WARNING: High Gen1 collections: {finalGen1} in 60s");
+            Console.WriteLine($"\nWARNING: High Gen1 collections: {finalGen1} in 60s");
         }
         if (finalGen2 > 0)
         {
-            Console.WriteLine($"\n⚠️  WARNING: Gen2 collections detected: {finalGen2} in 60s");
+            Console.WriteLine($"\nWARNING: Gen2 collections detected: {finalGen2} in 60s");
         }
         if (memoryGrowthMB > 10)
         {
-            Console.WriteLine($"\n⚠️  WARNING: High memory growth: {memoryGrowthMB}MB in 60s");
+            Console.WriteLine($"\nWARNING: High memory growth: {memoryGrowthMB}MB in 60s");
         }
 
-        Console.WriteLine("\n✅ GC Pressure Profile Test Completed");
+        Console.WriteLine("\nGC Pressure Profile Test Completed");
     }
 }

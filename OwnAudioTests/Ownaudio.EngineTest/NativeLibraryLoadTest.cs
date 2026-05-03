@@ -28,7 +28,6 @@ public class NativeLibraryLoadTest
             if (!File.Exists(testFile))
             {
                 Console.WriteLine($"! Test file not found: {testFile}");
-                // Try WAV instead
                 testFile = @"E:\VisualStudioProjects\Multiplatform\Ownaudio\OwnAudio\OwnaudioExamples\OwnaudioDesktopExample\media\drums.wav";
             }
 
@@ -39,14 +38,15 @@ public class NativeLibraryLoadTest
                 // Step 3: Try to create decoder instance
                 Console.WriteLine("\nStep 3: Creating MaDecoder instance...");
                 var decoder = Activator.CreateInstance(decoderType!, testFile, 48000, 2) as IAudioDecoder;
-                Console.WriteLine($"✓ Created MaDecoder instance!");
+                byte[] _decodeBuffer = null!;
+    Console.WriteLine($"✓ Created MaDecoder instance!");
                 Console.WriteLine($"  Sample Rate: {decoder?.StreamInfo.SampleRate}");
                 Console.WriteLine($"  Channels: {decoder?.StreamInfo.Channels}");
                 Console.WriteLine($"  Duration: {decoder?.StreamInfo.Duration}");
 
                 // Step 4: Try to decode a frame
                 Console.WriteLine("\nStep 4: Attempting to decode a frame...");
-                var result = decoder?.DecodeNextFrame();
+                var result = decoder?.ReadFrames(_decodeBuffer);
                 if (result.HasValue)
                 {
                     Console.WriteLine($"✓ Decoded frame result:");

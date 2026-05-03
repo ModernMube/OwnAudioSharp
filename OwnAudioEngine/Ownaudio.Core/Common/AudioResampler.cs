@@ -16,7 +16,7 @@ public sealed class AudioResampler
     private readonly int _sourceRate;
     private readonly int _targetRate;
     private readonly int _channels;
-    private readonly double _ratio; // How much we advance in source per output sample (sourceRate/targetRate)
+    private readonly double _ratio; 
     private double _position;
 
     // Pre-allocated buffer for resampled output
@@ -51,7 +51,6 @@ public sealed class AudioResampler
         _ratio = (double)sourceRate / targetRate;
         _position = 0.0;
 
-        // Pre-allocate output buffer (worst case: upsampling by 4x)
         int maxOutputSamples = maxFrameSize * channels * 4;
         _outputBuffer = new float[maxOutputSamples];
     }
@@ -75,14 +74,10 @@ public sealed class AudioResampler
     {
         if (!IsResamplingNeeded)
         {
-            // No resampling needed - direct copy
             input.CopyTo(output);
             return input.Length;
         }
 
-        // BUG FIX: Clip position to valid range before use.
-        // A negative _position after the previous carry-over subtraction means the
-        // resampler "overshot" the buffer by more than one frame; clamp to -1.0 at most.
         if (_position < -1.0) _position = -1.0;
         if (_position < 0.0) _position = 0.0;
 
@@ -90,23 +85,19 @@ public sealed class AudioResampler
         int outputFrameCapacity = output.Length / _channels;
         int outputFrameCount = 0;
 
-        // 4-point cubic Hermite (Catmull-Rom) resampling
         while (outputFrameCount < outputFrameCapacity)
         {
             int index1 = (int)_position;       // Base frame
             int index2 = index1 + 1;           // Next frame (required)
 
-            // Need at least two frames for interpolation
             if (index2 >= inputFrames)
                 break;
 
             double frac = _position - index1;
 
-            // Clamp neighbouring indices at buffer edges to avoid out-of-bounds access
             int index0 = Math.Max(0, index1 - 1);
             int index3 = Math.Min(inputFrames - 1, index1 + 2);
 
-            // Interpolate each channel
             for (int ch = 0; ch < _channels; ch++)
             {
                 float y0 = input[index0 * _channels + ch];
@@ -121,7 +112,6 @@ public sealed class AudioResampler
             _position += _ratio;
         }
 
-        // Carry over the fractional overshoot to the next call for sample-accurate resampling.
         _position -= inputFrames;
 
         return outputFrameCount * _channels;

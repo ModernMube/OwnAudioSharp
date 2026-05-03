@@ -65,7 +65,6 @@ internal struct WavFormatChunk
     public ushort BitsPerSample;
 
     // Note: ExtraSize field is optional and handled separately
-
     public const ushort WAVE_FORMAT_PCM = 1;
     public const ushort WAVE_FORMAT_ADPCM = 2;
     public const ushort WAVE_FORMAT_IEEE_FLOAT = 3;

@@ -211,18 +211,15 @@ namespace OwnaudioNET.Effects
             ValidateAndSetAttackTime(attackTimeSeconds);
             ValidateAndSetReleaseTime(releaseTimeSeconds);
 
-            // Backward compatibility: Auto-detect linear vs dB values (0-1 = linear, otherwise dB)
             float noiseThresholdDb;
             if (noiseThresholdDbOrLinear >= 0.0f && noiseThresholdDbOrLinear <= 1.0f)
             {
-                // Legacy linear value (0-1 range) - convert to dB
                 noiseThresholdDb = noiseThresholdDbOrLinear < 0.000001f
                     ? -80.0f
                     : LinearToDb(noiseThresholdDbOrLinear);
             }
             else
             {
-                // Modern dB value (negative)
                 noiseThresholdDb = noiseThresholdDbOrLinear;
             }
 
@@ -291,7 +288,6 @@ namespace OwnaudioNET.Effects
         /// </summary>
         private void CalculateRmsCoeffs()
         {
-            // Dual-window IIR coefficients: fast (1/10 window) for peaks, slow for musical tracking
             float fastWindow = Math.Max(0.01f, rmsWindowSeconds * 0.1f);
             float slowWindow = Math.Max(0.1f, rmsWindowSeconds);
 
@@ -367,7 +363,6 @@ namespace OwnaudioNET.Effects
             float rmsFast = MathF.Sqrt(Math.Max(0, _rmsFastState));
             float rmsSlow = MathF.Sqrt(Math.Max(0, _rmsSlowState));
 
-            // Guard NaN
             if (float.IsNaN(rmsFast)) { rmsFast = 0f; _rmsFastState = 0f; }
             if (float.IsNaN(rmsSlow)) { rmsSlow = 0f; _rmsSlowState = 0f; }
 
@@ -377,7 +372,6 @@ namespace OwnaudioNET.Effects
 
             if (!_isAboveNoiseGate)
             {
-                // Need to exceed threshold * hysteresis to open gate
                 if (rmsSlow > noiseGateLinear * hysteresisRatio)
                 {
                     _isAboveNoiseGate = true;
@@ -385,7 +379,6 @@ namespace OwnaudioNET.Effects
             }
             else
             {
-                // Need to fall below threshold to close gate
                 if (rmsSlow < noiseGateLinear)
                 {
                     _isAboveNoiseGate = false;
@@ -397,11 +390,9 @@ namespace OwnaudioNET.Effects
 
             if (_isAboveNoiseGate)
             {
-                // Use slow RMS for musical gain calculation
                 float currentLevelDb = LinearToDb(Math.Max(rmsSlow, 1e-6f));
                 float gainErrorDb = targetRmsLevelDb - currentLevelDb;
 
-                // Limit gain reduction to prevent over-compression
                 gainErrorDb = Math.Clamp(gainErrorDb, -maxGainReductionDb, LinearToDb(maxGain));
 
                 desiredGainDb = gainErrorDb;
@@ -411,27 +402,22 @@ namespace OwnaudioNET.Effects
             float maxChangeThisBlock = maxGainChangePerSecondDb * blockTime;
             float gainChangeDb = desiredGainDb - _lastGainDb;
 
-            // Apply attack/release timing
             float timeConst = (gainChangeDb < 0) ? attackTime : releaseTime;
             float alpha = MathF.Exp(-blockTime / timeConst);
             float smoothedChangeDb = (1.0f - alpha) * gainChangeDb;
 
-            // Limit the rate of change
             smoothedChangeDb = Math.Clamp(smoothedChangeDb, -maxChangeThisBlock, maxChangeThisBlock);
 
             float newGainDb = _lastGainDb + smoothedChangeDb;
             currentGain = DbToLinear(newGainDb);
 
-            // Additional safety limits
             currentGain = Math.Clamp(currentGain, 0.1f, maxGain);
 
-            // 6. Apply gain with soft limiting
             float finalGain = currentGain;
             for (int i = 0; i < totalSamples; i++)
             {
                 float val = buffer[i] * finalGain;
 
-                // Professional soft-knee limiting at 0.95 threshold
                 float absVal = MathF.Abs(val);
                 if (absVal > 0.95f)
                 {
@@ -440,7 +426,6 @@ namespace OwnaudioNET.Effects
                     val = val > 0 ? limited : -limited;
                 }
 
-                // Hard limit safety
                 buffer[i] = Math.Clamp(val, -1.0f, 1.0f);
             }
 

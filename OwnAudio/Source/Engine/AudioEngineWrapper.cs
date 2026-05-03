@@ -16,7 +16,7 @@ namespace OwnaudioNET.Engine;
 /// - Main Thread: User API calls (Send, Receive, Start, Stop, device management)
 /// - AudioBufferController: Manages circular buffer and buffer pool
 /// - AudioPump: Manages pump thread that transfers data to engine
-/// - Engine RT Thread: Managed by external IAudioEngine (e.g., WASAPI RT thread)
+/// - Engine RT Thread: Managed by external IAudioEngine
 ///
 /// Thread Safety:
 /// - All public methods are thread-safe
@@ -120,21 +120,17 @@ public sealed class AudioEngineWrapper : IDisposable
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _config = config ?? throw new ArgumentNullException(nameof(config));
 
-        // Get actual negotiated buffer size from engine
         FramesPerBuffer = _engine.FramesPerBuffer;
         if (FramesPerBuffer <= 0)
             throw new AudioEngineException("Engine FramesPerBuffer must be positive.", -1);
 
-        // Calculate buffer size in samples (frames * channels)
         int engineBufferSize = FramesPerBuffer * _config.Channels;
 
-        // Create buffer controller
         _bufferController = new AudioBufferController(
             engineBufferSize,
             _config.Channels,
             bufferMultiplier: 8);
 
-        // Create pump
         _pump = new AudioPump(
             _engine,
             _bufferController,
@@ -178,8 +174,7 @@ public sealed class AudioEngineWrapper : IDisposable
     /// <summary>
     /// Stops the audio engine and pump thread gracefully.
     /// This method is thread-safe and idempotent.
-    ///
-    /// ⚠️ **WARNING:** This method BLOCKS for up to 2 seconds waiting for the pump thread to exit!
+    /// **WARNING:** This method BLOCKS for up to 2 seconds waiting for the pump thread to exit!
     /// For UI applications, use StopAsync() instead to prevent UI freezing.
     /// </summary>
     /// <exception cref="AudioEngineException">Thrown if the engine fails to stop.</exception>
@@ -210,10 +205,7 @@ public sealed class AudioEngineWrapper : IDisposable
     /// <summary>
     /// Stops the audio engine and pump thread asynchronously.
     /// This method prevents UI thread blocking by running the stop operation on a background thread.
-    ///
     /// Recommended for UI applications (WPF, WinForms, MAUI, Avalonia).
-    ///
-    /// Usage:
     /// <code>
     /// await wrapper.StopAsync();
     /// </code>
@@ -222,10 +214,6 @@ public sealed class AudioEngineWrapper : IDisposable
     /// <exception cref="AudioEngineException">Thrown if the engine fails to stop.</exception>
     /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
     /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
-    /// <remarks>
-    /// Note: Even if cancelled, the engine will still attempt to stop gracefully.
-    /// The cancellation only affects the async wait, not the engine stop operation itself.
-    /// </remarks>
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
         await Task.Run(() =>
@@ -247,10 +235,6 @@ public sealed class AudioEngineWrapper : IDisposable
     /// <param name="samples">Audio samples in Float32 format, interleaved (e.g., L R L R for stereo).</param>
     /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the engine is not running.</exception>
-    /// <remarks>
-    /// If the buffer is full, this method will drop the samples and raise a BufferUnderrun event.
-    /// Consider using OutputBufferAvailable to check buffer space before sending large amounts of data.
-    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Send(ReadOnlySpan<float> samples)
     {
@@ -294,19 +278,16 @@ public sealed class AudioEngineWrapper : IDisposable
 
         try
         {
-            // Call engine to receive samples
             int result = _engine.Receives(out float[] samples);
 
             if (result < 0)
             {
-                // Error occurred
                 sampleCount = 0;
                 return null;
             }
 
             if (samples == null || samples.Length == 0)
             {
-                // No data available
                 sampleCount = 0;
                 return null;
             }
@@ -316,8 +297,6 @@ public sealed class AudioEngineWrapper : IDisposable
         }
         catch
         {
-            // Log error but don't crash
-            // In production, log via ILogger
             sampleCount = 0;
             return null;
         }
@@ -469,12 +448,10 @@ public sealed class AudioEngineWrapper : IDisposable
     /// </summary>
     private void SubscribeToEngineEvents()
     {
-        // Create event handlers that forward to wrapper events
         _engineOutputDeviceChanged = (sender, e) => OutputDeviceChanged?.Invoke(this, e);
         _engineInputDeviceChanged = (sender, e) => InputDeviceChanged?.Invoke(this, e);
         _engineDeviceStateChanged = (sender, e) => DeviceStateChanged?.Invoke(this, e);
 
-        // Subscribe to engine events
         _engine.OutputDeviceChanged += _engineOutputDeviceChanged;
         _engine.InputDeviceChanged += _engineInputDeviceChanged;
         _engine.DeviceStateChanged += _engineDeviceStateChanged;
@@ -513,27 +490,20 @@ public sealed class AudioEngineWrapper : IDisposable
         if (_disposed)
             return;
 
-        // Stop engine if running
         if (IsRunning)
         {
             try
             {
                 Stop();
             }
-            catch
-            {
-                // Ignore errors during disposal
-            }
+            catch {}
         }
 
-        // Unsubscribe from engine events
         UnsubscribeFromEngineEvents();
 
-        // Dispose components
         _pump.Dispose();
         _bufferController.Dispose();
 
-        // Dispose engine
         _engine?.Dispose();
 
         _disposed = true;

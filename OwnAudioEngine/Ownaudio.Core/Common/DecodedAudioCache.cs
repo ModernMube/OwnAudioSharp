@@ -83,7 +83,6 @@ public sealed class DecodedAudioCache
 
         if (_cache.TryGetValue(key, out var entry))
         {
-            // Update LRU timestamp
             entry.LastAccessTicks = Environment.TickCount64;
             frame = entry.Frame;
             return true;
@@ -108,13 +107,10 @@ public sealed class DecodedAudioCache
         var key = new CacheKey(sourceId, frameIndex);
         var entry = new CacheEntry(frame);
 
-        // Try to add to cache
         if (_cache.TryAdd(key, entry))
         {
-            // Update cache size
             long newSize = System.Threading.Interlocked.Add(ref _currentCacheSizeBytes, entry.SizeBytes);
 
-            // Check if we need to evict old entries
             if (newSize > _maxCacheSizeBytes)
             {
                 EvictLRUEntries();
@@ -129,15 +125,12 @@ public sealed class DecodedAudioCache
     {
         lock (_evictionLock)
         {
-            // Double-check size under lock
             if (_currentCacheSizeBytes <= _maxCacheSizeBytes)
                 return;
 
-            // Sort entries by last access time (LRU first)
             var sortedEntries = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<CacheKey, CacheEntry>>(_cache);
             sortedEntries.Sort((a, b) => a.Value.LastAccessTicks.CompareTo(b.Value.LastAccessTicks));
 
-            // Evict oldest entries until we're under 75% of max size
             long targetSize = (_maxCacheSizeBytes * 3) / 4;
             int evictedCount = 0;
 
@@ -152,11 +145,6 @@ public sealed class DecodedAudioCache
                     evictedCount++;
                 }
             }
-
-            // Log eviction (optional)
-            //#if DEBUG
-            //System.Diagnostics.Debug.WriteLine($"[DecodedAudioCache] Evicted {evictedCount} frames, new size: {_currentCacheSizeBytes / (1024.0 * 1024.0):F2} MB");
-            //#endif
         }
     }
 
@@ -286,30 +274,6 @@ public sealed class CachedAudioDecoder : IAudioDecoder
         // Caching at the ReadFrames level is less useful since the buffer size may vary
         return _baseDecoder.ReadFrames(buffer);
     }
-
-#pragma warning disable CS0618 // Implementing the obsolete IAudioDecoder.DecodeNextFrame intentionally
-    public AudioDecoderResult DecodeNextFrame()
-    {
-        // Try to get from cache first
-        if (_cache.TryGetFrame(_sourceId, _frameIndex, out var cachedFrame))
-        {
-            _frameIndex++;
-            return new AudioDecoderResult(cachedFrame, true, false);
-        }
-
-        // Not in cache, decode from source
-        var result = _baseDecoder.DecodeNextFrame();
-
-        if (result.IsSucceeded && result.Frame != null)
-        {
-            // Add to cache
-            _cache.AddFrame(_sourceId, _frameIndex, result.Frame);
-            _frameIndex++;
-        }
-
-        return result;
-    }
-#pragma warning restore CS0618
 
     public bool TrySeek(TimeSpan position, out string error)
     {

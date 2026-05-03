@@ -3,10 +3,7 @@
     "path": "Ownaudio.sln",
     "projects": [
       "OwnAudioEngine\\Ownaudio.Core\\Ownaudio.Core.csproj",
-      "OwnAudioEngine\\Ownaudio.Linux\\Ownaudio.Linux.csproj",
-      "OwnAudioEngine\\Ownaudio.macOS\\Ownaudio.macOS.csproj",
       "OwnAudioEngine\\Ownaudio.Native\\Ownaudio.Native.csproj",
-      "OwnAudioEngine\\Ownaudio.Windows\\Ownaudio.Windows.csproj",
       "OwnAudioTests\\Ownaudio.EngineTest\\Ownaudio.Test.Engine.csproj",
       "OwnAudioTests\\Ownaudio.OwnaudioNET\\Ownaudio.Test.OwnaudioNET.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.ChordDetect\\Ownaudio.Example.ChordDetect.csproj",

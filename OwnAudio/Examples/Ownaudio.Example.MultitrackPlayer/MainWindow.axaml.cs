@@ -41,9 +41,6 @@ public partial class MainWindow : Window
         
         DataContext = new MainWindowViewModel();
 
-        // FIX: Sliders in Avalonia often handle PointerPressed/Released internally.
-        // We must use AddHandler with handledEventsToo: true to ensure our methods are called.
-        
         // Seek Slider
         var seekSlider = this.FindControl<Slider>("SeekSlider");
         if (seekSlider != null)

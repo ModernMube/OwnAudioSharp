@@ -84,8 +84,6 @@ namespace Ownaudio.EngineTest
                 engine.Send(samples.AsSpan());
             }
 
-            // Assert (no exceptions thrown)
-
             // Cleanup
             engine.Stop();
         }
@@ -169,8 +167,6 @@ namespace Ownaudio.EngineTest
                 Thread.Sleep(5); // Small delay between sends
             }
 
-            // Assert (no exceptions thrown)
-
             // Cleanup
             engine.Stop();
         }
@@ -191,8 +187,6 @@ namespace Ownaudio.EngineTest
                 float[] samples = GenerateSineWave(freq, config.SampleRate, config.Channels, 0.05);
                 engine.Send(samples.AsSpan());
             }
-
-            // Assert (no exceptions thrown)
 
             // Cleanup
             engine.Stop();

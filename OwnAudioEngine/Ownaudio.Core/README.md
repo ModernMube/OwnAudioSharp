@@ -12,12 +12,7 @@ This package provides the **core foundation** for OwnAudioSharp's audio engine a
 - **Zero-allocation primitives** (object pools, SIMD converters, ring buffers)
 - **Platform detection and factory** for automatic engine selection
 
-**IMPORTANT**: This is a **core library only** - it does not contain platform-specific implementations. For actual audio I/O, you need one of the platform-specific packages:
-- [Ownaudio.Windows](../Ownaudio.Windows/) - WASAPI implementation
-- [Ownaudio.Linux](../Ownaudio.Linux/) - PulseAudio implementation
-- [Ownaudio.macOS](../Ownaudio.macOS/) - Core Audio implementation
-- [Ownaudio.Android](../Ownaudio.Android/) - AAudio implementation
-- [Ownaudio.iOS](../Ownaudio.iOS/) - Core Audio implementation
+**IMPORTANT**: This is a **core library only** - it does not contain platform-specific implementations. For actual audio I/O, use **[Ownaudio.Native](../Ownaudio.Native/)** — the cross-platform native engine built on PortAudio and MiniAudio, supporting all platforms (Windows, Linux, macOS, Android, iOS).
 
 ### Key Features
 
@@ -26,7 +21,7 @@ This package provides the **core foundation** for OwnAudioSharp's audio engine a
 - **Pure managed code**: No native dependencies for core functionality
 - **SIMD optimization**: Vectorized audio processing using `System.Numerics`
 - **Object pooling**: Reusable buffers to minimize allocations
-- **Multi-platform support**: Windows, Linux, macOS, Android, iOS
+- **Multi-platform support**: Windows, Linux, macOS, Android, iOS via Ownaudio.Native
 
 ## Architecture
 
@@ -101,13 +96,9 @@ var engine = AudioEngineFactory.Create(config);
 ```
 
 **Platform Detection Logic**:
-1. Windows → Loads `Ownaudio.Windows.WasapiEngine`
-2. macOS → Loads `Ownaudio.macOS.CoreAudioEngine`
-3. iOS → Loads `Ownaudio.iOS.CoreAudioIOSEngine`
-4. Android → Loads `Ownaudio.Android.AAudioEngine`
-5. Linux → Loads `Ownaudio.Linux.PulseAudioEngine`
+All platforms → Loads `Ownaudio.Native.NativeAudioEngine` (PortAudio/MiniAudio backend)
 
-Uses reflection to avoid hard dependencies, allowing per-platform deployment.
+`NativeAudioEngine` handles all supported platforms (Windows, Linux, macOS, Android, iOS) through a single native library, eliminating the need for platform-specific engine packages.
 
 ## Project Structure
 
@@ -465,7 +456,7 @@ See [THREAD_BLOCKING_ANALYSIS.md](../../../THREAD_BLOCKING_ANALYSIS.md) for deta
 
 ### Minimum Requirements
 
-- **.NET**: 9.0 or later
+- **.NET**: 10.0 or later
 - **Architecture**: x64, ARM64, x86 (platform-dependent)
 - **OS**: Windows 10+, Linux (any modern distro), macOS 10.14+, Android 5.0+, iOS 11.0+
 
@@ -474,18 +465,12 @@ See [THREAD_BLOCKING_ANALYSIS.md](../../../THREAD_BLOCKING_ANALYSIS.md) for deta
 The library targets multiple frameworks for maximum compatibility:
 
 ```xml
-<TargetFrameworks>net9.0;net9.0-android35.0;net9.0-ios18.0</TargetFrameworks>
+<TargetFrameworks>net10.0;net10.0-android;net10.0-ios</TargetFrameworks>
 ```
 
 ### Platform-Specific Dependencies
 
-Ownaudio.Core itself has **no external dependencies**, but platform-specific implementations require:
-
-- **Windows**: COM interop for WASAPI
-- **Linux**: libpulse.so.0 (system library)
-- **macOS**: Core Audio (system framework)
-- **Android**: AAudio (API 26+)
-- **iOS**: Audio Unit (system framework)
+Ownaudio.Core itself has **no external dependencies**. Platform audio I/O requires the **Ownaudio.Native** package, which bundles the PortAudio/MiniAudio native libraries for all supported platforms.
 
 ## Performance Characteristics
 
@@ -763,9 +748,7 @@ engine.Send(samples);
 ## Related Documentation
 
 - [OwnAudioSharp Documentation](https://modernmube.github.io/OwnAudioSharp/)
-- [Windows WASAPI Implementation](../Ownaudio.Windows/README.md)
-- [Linux PulseAudio Implementation](../Ownaudio.Linux/README.md)
-- [macOS Core Audio Implementation](../Ownaudio.macOS/README.md)
+- [Native Engine (Ownaudio.Native)](../Ownaudio.Native/)
 - [Threading Analysis](../../../THREAD_BLOCKING_ANALYSIS.md)
 
 ## License

@@ -208,7 +208,6 @@ namespace OwnaudioNET.Effects
 
             _sampleRate = sampleRate;
 
-            // Initialize with default values first
             _hornSpeed = 6.0f;
             _rotorSpeed = 1.0f;
             _intensity = 0.7f;
@@ -222,7 +221,6 @@ namespace OwnaudioNET.Effects
             _lowPassFilter = new LowPassFilter(800.0f, sampleRate);
             _highPassFilter = new HighPassFilter(800.0f, sampleRate);
 
-            // Apply the selected preset
             SetPreset(preset);
         }
 

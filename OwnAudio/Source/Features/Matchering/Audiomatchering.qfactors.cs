@@ -31,23 +31,16 @@ partial class AudioAnalyzer
             float freq = FrequencyBands[i];
             float gainAdjustment = Math.Abs(eqAdjustments[i]);
 
-            // Base Q factor based on frequency range (psychoacoustic considerations)
             float baseQ = GetFrequencyBasedQ(freq);
 
-            // Adjustment based on required gain correction
             float gainBasedQ = CalculateGainBasedQ(gainAdjustment);
 
-            // Adjustment based on neighboring bands correlation
             float neighborQ = CalculateNeighboringBandsQ(eqAdjustments, i);
 
-            // Adjustment based on spectral density differences
             float spectralQ = CalculateSpectralDensityQ(sourceSpectrum.FrequencyBands[i], targetSpectrum.FrequencyBands[i]);
 
-            // Combine all factors with weighted average
             qFactors[i] = CombineQFactors(baseQ, gainBasedQ, neighborQ, spectralQ, freq);
 
-            // Clamp to reasonable limits for a 30-band EQ
-            // Q < 2.5 is useless (bands merge), Q > 10 is ringing/dangerous
             qFactors[i] = Math.Max(2.5f, Math.Min(8.0f, qFactors[i]));
         }
 
@@ -83,8 +76,6 @@ partial class AudioAnalyzer
     /// </remarks>
     private float GetFrequencyBasedQ(float frequency)
     {
-        // Standard 1/3 Octave EQ requires Q ≈ 4.3 for minimal bleed.
-        // We use slightly wider values (3.5 - 4.0) for musicality, but much narrower than before.
         return frequency switch
         {
             <= 40f => 3.0f,      // Slightly wider for loose low end
@@ -142,7 +133,6 @@ partial class AudioAnalyzer
         float correlation = 0f;
         int neighborCount = 0;
 
-        // Check previous and next bands
         for (int offset = -2; offset <= 2; offset++)
         {
             if (offset == 0) continue;
@@ -152,7 +142,6 @@ partial class AudioAnalyzer
             {
                 float neighborGain = adjustments[neighborIndex];
 
-                // Calculate correlation (same direction and similar magnitude)
                 float gainDifference = Math.Abs(currentGain - neighborGain);
                 bool sameDirection = (currentGain > 0 && neighborGain > 0) || (currentGain < 0 && neighborGain < 0);
 
@@ -230,7 +219,6 @@ partial class AudioAnalyzer
         float neighborWeight = 0.1f;  // Minor context awareness
         float spectralWeight = 0.1f;  // Minor spectral tuning
 
-        // Adjust weights based on frequency range
         if (frequency <= 250f) // Low frequencies
         {
             neighborWeight += 0.1f; // More emphasis on smooth transitions
