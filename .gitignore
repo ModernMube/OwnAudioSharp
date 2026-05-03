@@ -431,3 +431,6 @@ FodyWeavers.xsd
 /OwnAudioVisualiser/OwnAudioVisualiser.iOS/OwnAudioVisualiser.iOS.csproj
 /OwnAudioVisualiser/OwnAudioVisualiser.iOS/Resources/LaunchScreen.xib
 /OwnAudioVisualiser/OwnAudioVisualiser.sln
+
+# Local development notes
+OwnAudioSharp_Refactoring_Plan.md
