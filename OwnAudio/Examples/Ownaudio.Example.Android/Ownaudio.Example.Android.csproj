@@ -49,7 +49,7 @@
       <PrivateAssets>none</PrivateAssets>
     </PackageReference>
     <!-- Explicitly exclude the JVM variant that causes conflicts -->
-    <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Annotation.Jvm" Version="1.10.6">
+    <PackageReference Include="Xamarin.AndroidX.Compose.Runtime.Annotation.Jvm" Version="1.11.0">
       <ExcludeAssets>all</ExcludeAssets>
     </PackageReference>
   </ItemGroup>

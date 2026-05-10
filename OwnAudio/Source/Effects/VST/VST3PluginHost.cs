@@ -315,6 +315,41 @@ namespace OwnaudioNET.Effects.VST
             ThrowIfDisposed();
             _threaded.SetParameter(id, value);
         }
+
+        /// <summary>
+        /// Sets multiple parameter values synchronously on the dedicated plugin thread.
+        /// Unlike SetParameter (SPSC queue, audio thread), this method applies each parameter
+        /// directly via the plugin thread — the same thread used during initialization and
+        /// GetParametersAsync — so the native controller state is updated immediately.
+        /// Intended for non-realtime use such as project state restoration; do not call
+        /// during active audio processing.
+        /// </summary>
+        public async Task SetParametersAsync(IReadOnlyDictionary<int, double> parameters)
+        {
+            ThrowIfDisposed();
+            foreach (var kv in parameters)
+                await _threaded.SetParameterAsync(kv.Key, kv.Value).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Returns the complete processor state as a byte array (plugin thread).
+        /// Returns null if the plugin does not support state serialization.
+        /// </summary>
+        public Task<byte[]?> GetStateAsync()
+        {
+            ThrowIfDisposed();
+            return _threaded.GetStateAsync();
+        }
+
+        /// <summary>
+        /// Restores the complete processor state and syncs the controller display (plugin thread).
+        /// More reliable than SetParametersAsync for full state restoration.
+        /// </summary>
+        public Task<bool> SetStateAsync(byte[] stateData)
+        {
+            ThrowIfDisposed();
+            return _threaded.SetStateAsync(stateData);
+        }
         
 
         /// <summary>

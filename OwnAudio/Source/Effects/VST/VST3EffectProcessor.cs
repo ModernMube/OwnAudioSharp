@@ -235,6 +235,19 @@ namespace OwnaudioNET.Effects.VST
         public void SetParameter(int id, double value) => _threaded.SetParameter(id, value);
 
         /// <summary>
+        /// Sets multiple parameters synchronously on the dedicated plugin thread.
+        /// Unlike SetParameter (SPSC queue, audio thread), this executes on the same thread
+        /// used for plugin initialization and GetParameters, so the native controller state
+        /// is updated immediately without requiring a processAudio drain cycle.
+        /// Use for non-realtime operations such as project state restoration.
+        /// </summary>
+        public async Task ApplyParametersAsync(IReadOnlyDictionary<int, double> parameters)
+        {
+            foreach (var kv in parameters)
+                await _threaded.SetParameterAsync(kv.Key, kv.Value).ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Gets all parameter information from the VST3 plugin.
         /// Reads via InnerWrapper – only call after plugin is in Ready state.
         /// </summary>
