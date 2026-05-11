@@ -1,7 +1,6 @@
 using System;
 using Logger;
 using System.IO;
-using System.Reflection;
 using Ownaudio.Core.Common;
 using Ownaudio.Decoders.Wav;
 using Ownaudio.Decoders.Flac;
@@ -22,28 +21,21 @@ namespace Ownaudio.Decoders;
 public static class AudioDecoderFactory
 {
     /// <summary>
-    /// Lazily resolved MaDecoder type from Ownaudio.Native assembly.
-    /// Null if the assembly is not available on this platform.
-    /// Cached after the first attempt so repeated file opens never pay the Assembly.Load cost.
+    /// AOT-safe factory delegate registered by Ownaudio.Native via [ModuleInitializer].
+    /// Null when the native assembly is not loaded (falls back to managed decoders).
     /// </summary>
-    private static readonly Lazy<Type?> _nativeMaDecoderType = new Lazy<Type?>(() =>
-    {
-        try
-        {
-            var assembly = Assembly.Load("Ownaudio.Native");
-            return assembly.GetType("Ownaudio.Native.Decoders.MaDecoder");
-        }
-        catch
-        {
-            Log.Info("Ownaudio.Native not available – using managed decoders.");
-            return null;
-        }
-    });
+    private static Func<string, int, int, IAudioDecoder>? _nativeDecoderFactory;
 
     /// <summary>
-    /// True once we have confirmed that the native MaDecoder type is usable.
+    /// Registers a native decoder factory. Called from Ownaudio.Native at module init time.
     /// </summary>
-    private static bool NativeAvailable => _nativeMaDecoderType.Value != null;
+    public static void RegisterNativeDecoder(Func<string, int, int, IAudioDecoder> factory)
+        => _nativeDecoderFactory = factory;
+
+    /// <summary>
+    /// True when a native decoder factory has been registered.
+    /// </summary>
+    private static bool NativeAvailable => _nativeDecoderFactory != null;
     
     /// <summary>
     /// Creates an audio decoder for the specified file.
@@ -78,12 +70,9 @@ public static class AudioDecoderFactory
         {
             try
             {
-                var decoder = Activator.CreateInstance(_nativeMaDecoderType.Value!, filePath, targetSampleRate, targetChannels) as IAudioDecoder;
-                if (decoder != null)
-                {
-                    Log.Info($"Using MiniAudio decoder for {format} format (native)");
-                    return decoder;
-                }
+                var decoder = _nativeDecoderFactory!(filePath, targetSampleRate, targetChannels);
+                Log.Info($"Using MiniAudio decoder for {format} format (native)");
+                return decoder;
             }
             catch (Exception ex)
             {
@@ -241,63 +230,25 @@ public static class AudioDecoderFactory
         {
             try
             {
-                var decoder = Activator.CreateInstance(_nativeMaDecoderType.Value!, filePath, targetSampleRate, targetChannels) as IAudioDecoder;
-                if (decoder != null)
-                {
-                    Log.Info("Using MiniAudio decoder (native)");
-                    return decoder;
-                }
+                var decoder = _nativeDecoderFactory!(filePath, targetSampleRate, targetChannels);
+                Log.Info("Using MiniAudio decoder (native)");
+                return decoder;
             }
             catch (Exception ex)
             {
                 Log.Error($"MiniAudio MP3 decoder instantiation failed: {ex.Message}");
-                Log.Error("Falling back to platform-specific decoder...");
+                Log.Info("Falling back to managed Mp3Decoder...");
             }
         }
 
-#if ANDROID || IOS
-        // Mobile platforms: Use Mp3Decoder wrapper which uses compile-time platform detection
         try
         {
             return new Mp3Decoder(filePath, targetSampleRate, targetChannels);
         }
-        catch (Exception ex) when (!(ex is AudioException))
+        catch (Exception ex) when (ex is not AudioException)
         {
             throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException($"Failed to create MP3 decoder: {ex.Message}", ex));
         }
-#elif WINDOWS
-        // Desktop Windows: Use Media Foundation MP3 decoder directly via reflection
-        // (Mp3Decoder wrapper doesn't work correctly on desktop Windows - causes fast playback tempo)
-        try
-        {
-            var assembly = System.Reflection.Assembly.Load("Ownaudio.Windows");
-            var decoderType = assembly.GetType("Ownaudio.Windows.Decoders.MFMp3Decoder");
-
-            if (decoderType == null)
-                throw new AudioException("MFMp3Decoder type not found in Ownaudio.Windows assembly");
-
-            var decoder = Activator.CreateInstance(decoderType, filePath, targetSampleRate, targetChannels) as IAudioDecoder;
-
-            if (decoder == null)
-                throw new AudioException("Failed to create MFMp3Decoder instance");
-
-            return decoder;
-        }
-        catch (Exception ex) when (!(ex is AudioException))
-        {
-            throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException($"Failed to load Windows MP3 decoder: {ex.Message}", ex));
-        }
-#else
-        // macOS, Linux, other desktop platforms: Use Mp3Decoder wrapper
-        try
-        {
-            return new Mp3Decoder(filePath, targetSampleRate, targetChannels);
-        }
-        catch (Exception ex) when (!(ex is AudioException))
-        {
-            throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException($"Failed to create MP3 decoder: {ex.Message}", ex));
-        }
-#endif
     }
 
     /// <summary>

@@ -115,7 +115,7 @@ namespace Ownaudio.Native.Utils
         {
             string rid = GetCurrentRuntimeIdentifier();
             string fileName = GetLibraryFileName(libraryName);
-            string baseDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? Environment.CurrentDirectory;
+            string baseDir = AppContext.BaseDirectory;
 
             var searchPaths = new List<string>
             {
