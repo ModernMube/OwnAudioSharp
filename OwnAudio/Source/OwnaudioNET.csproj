@@ -29,6 +29,7 @@
   <PropertyGroup>
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Native</PackageId>
     <Version>3.0.20</Version>
     <Authors>ModernMube</Authors>
@@ -73,7 +74,7 @@
     <!-- Core (always included) -->
     <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" PrivateAssets="all" IncludeAssets="runtime" />
     <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" PrivateAssets="all" IncludeAssets="runtime" Properties="TargetFramework=net10.0" />
-    <ProjectReference Include="..\Midi\OwnAudio.Midi.csproj" PrivateAssets="all" IncludeAssets="runtime" />
+    <ProjectReference Include="..\Midi\OwnAudio.Midi.csproj" />
   </ItemGroup>
 
   <!-- Desktop platform references are no longer needed - NativeAudioEngine covers all platforms -->
