@@ -4,19 +4,56 @@ namespace OwnAudio.Midi.IO.Platform;
 
 #if MACOS
 
+/// <summary>
+/// macOS MIDI input port implemented via the CoreMIDI framework.
+/// Receives messages through an unmanaged MIDIReadProc callback registered on a CoreMIDI input port.
+/// </summary>
 internal sealed partial class MacOsMidiInputPort : IMidiInputPort
 {
+    /// <summary>
+    /// CoreMIDI client reference created for this port.
+    /// </summary>
     private nint _client;
+
+    /// <summary>
+    /// CoreMIDI input port reference.
+    /// </summary>
     private nint _port;
+
+    /// <summary>
+    /// CoreMIDI source endpoint this port is connected to.
+    /// </summary>
     private nint _source;
+
+    /// <summary>
+    /// GCHandle keeping this instance alive for the unmanaged MIDIReadProc callback.
+    /// </summary>
     private GCHandle _selfHandle;
+
+    /// <summary>
+    /// Guards against double-disposal.
+    /// </summary>
     private bool _disposed;
 
+    /// <summary>
+    /// Gets the display name of this MIDI input port.
+    /// </summary>
     public string Name { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the CoreMIDI port reference is valid.
+    /// </summary>
     public bool IsOpen => _port != 0;
 
+    /// <summary>
+    /// Raised on the CoreMIDI callback thread when MIDI packets arrive.
+    /// </summary>
     public event Action<MidiMessage>? MessageReceived;
 
+    /// <summary>
+    /// Creates a CoreMIDI client, opens an input port, and connects it to <paramref name="sourceEndpoint"/>.
+    /// Throws <see cref="InvalidOperationException"/> if any CoreMIDI call fails.
+    /// </summary>
     public MacOsMidiInputPort(string name, nint sourceEndpoint)
     {
         Name = name;
@@ -51,8 +88,14 @@ internal sealed partial class MacOsMidiInputPort : IMidiInputPort
         }
     }
 
+    /// <summary>
+    /// No-op — the port is connected to its source in the constructor.
+    /// </summary>
     public void Open() { }
 
+    /// <summary>
+    /// Disconnects the source, disposes the CoreMIDI port, and releases the client.
+    /// </summary>
     public void Close()
     {
         if (_port == 0) return;
@@ -63,41 +106,53 @@ internal sealed partial class MacOsMidiInputPort : IMidiInputPort
         _client = 0;
     }
 
-    public void Start() { /* CoreMIDI delivers immediately after port creation */ }
+    /// <summary>
+    /// No-op — CoreMIDI delivers messages immediately after port creation and connection.
+    /// </summary>
+    public void Start() { }
+
+    /// <summary>
+    /// No-op — message delivery stops when the port is closed or disposed.
+    /// </summary>
     public void Stop() { }
 
+    /// <summary>
+    /// CoreMIDI read callback that unpacks MIDIPacketList structures and raises <see cref="MessageReceived"/>
+    /// for each complete MIDI message found in the packet data.
+    /// </summary>
     [UnmanagedCallersOnly]
     private static unsafe void MidiReadCallback(nint packetList, nint readProcRefCon, nint srcConnRefCon)
     {
         var port = (MacOsMidiInputPort?)GCHandle.FromIntPtr(readProcRefCon).Target;
         if (port is null) return;
 
-        // MIDIPacketList: numPackets (UInt32), packets[]
         int numPackets = *(int*)packetList;
         byte* ptr = (byte*)(packetList + 4);
 
         for (int i = 0; i < numPackets; i++)
         {
-            // MIDIPacket: timeStamp (UInt64), length (UInt16), data[]
             long timestamp = *(long*)ptr; ptr += 8;
             ushort length = *(ushort*)ptr; ptr += 2;
 
             for (int b = 0; b < length; )
             {
                 byte status = ptr[b++];
-                if ((status & 0x80) == 0) continue; // skip non-status
+                if ((status & 0x80) == 0) continue;
 
                 byte d1 = b < length ? ptr[b++] : (byte)0;
                 byte d2 = b < length ? ptr[b++] : (byte)0;
                 port.MessageReceived?.Invoke(new MidiMessage(status, d1, d2, timestamp));
             }
             ptr += length;
-            // align to 4 bytes
+
             long offset = (long)ptr % 4;
             if (offset != 0) ptr += 4 - offset;
         }
     }
 
+    /// <summary>
+    /// Returns the names of all CoreMIDI source endpoints available on this system.
+    /// </summary>
     public static IReadOnlyList<string> GetInputPortNames()
     {
         int count = (int)MIDIGetNumberOfSources();
@@ -114,6 +169,9 @@ internal sealed partial class MacOsMidiInputPort : IMidiInputPort
         return names;
     }
 
+    /// <summary>
+    /// Returns the names of all CoreMIDI destination endpoints available on this system.
+    /// </summary>
     public static IReadOnlyList<string> GetOutputPortNames()
     {
         int count = (int)MIDIGetNumberOfDestinations();
@@ -130,6 +188,9 @@ internal sealed partial class MacOsMidiInputPort : IMidiInputPort
         return names;
     }
 
+    /// <summary>
+    /// Closes the port, releases the GCHandle, and suppresses finalization.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed) return;
@@ -139,6 +200,9 @@ internal sealed partial class MacOsMidiInputPort : IMidiInputPort
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// Finalizer that ensures CoreMIDI resources are released.
+    /// </summary>
     ~MacOsMidiInputPort() => Dispose();
 
     private const string CoreMidi = "/System/Library/Frameworks/CoreMIDI.framework/CoreMIDI";
@@ -185,26 +249,62 @@ internal sealed partial class MacOsMidiInputPort : IMidiInputPort
     [LibraryImport(CoreFoundation)]
     private static partial void CFRelease(nint cf);
 
+    /// <summary>
+    /// kMIDIPropertyName CFStringRef symbol loaded at runtime from the CoreMIDI framework.
+    /// </summary>
     private static readonly nint kMIDIPropertyName = GetMIDIPropertyName();
+
+    /// <summary>
+    /// Loads the kMIDIPropertyName pointer from the CoreMIDI native library at startup.
+    /// </summary>
     private static nint GetMIDIPropertyName()
     {
-        // kMIDIPropertyName is a CFStringRef exported symbol
         var lib = NativeLibrary.Load(CoreMidi);
         NativeLibrary.TryGetExport(lib, "kMIDIPropertyName", out nint ptr);
         return Marshal.ReadIntPtr(ptr);
     }
 }
 
+/// <summary>
+/// macOS MIDI output port implemented via the CoreMIDI framework.
+/// Sends short MIDI messages and SysEx data by building MIDIPacketList structures on the stack.
+/// </summary>
 internal sealed partial class MacOsMidiOutputPort : IMidiOutputPort
 {
+    /// <summary>
+    /// CoreMIDI client reference created for this port.
+    /// </summary>
     private nint _client;
+
+    /// <summary>
+    /// CoreMIDI output port reference.
+    /// </summary>
     private nint _port;
+
+    /// <summary>
+    /// CoreMIDI destination endpoint this port sends to.
+    /// </summary>
     private nint _destination;
+
+    /// <summary>
+    /// Guards against double-disposal.
+    /// </summary>
     private bool _disposed;
 
+    /// <summary>
+    /// Gets the display name of this MIDI output port.
+    /// </summary>
     public string Name { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the CoreMIDI port reference is valid.
+    /// </summary>
     public bool IsOpen => _port != 0;
 
+    /// <summary>
+    /// Creates a CoreMIDI client and output port connected to <paramref name="destinationEndpoint"/>.
+    /// Throws <see cref="InvalidOperationException"/> if any CoreMIDI call fails.
+    /// </summary>
     public MacOsMidiOutputPort(string name, nint destinationEndpoint)
     {
         Name = name;
@@ -230,8 +330,14 @@ internal sealed partial class MacOsMidiOutputPort : IMidiOutputPort
         }
     }
 
+    /// <summary>
+    /// No-op — the port is ready to send immediately after construction.
+    /// </summary>
     public void Open() { }
 
+    /// <summary>
+    /// Disposes the CoreMIDI port and client references.
+    /// </summary>
     public void Close()
     {
         if (_port == 0) return;
@@ -241,20 +347,18 @@ internal sealed partial class MacOsMidiOutputPort : IMidiOutputPort
         _client = 0;
     }
 
+    /// <summary>
+    /// Sends a short MIDI message by building a single-packet MIDIPacketList on the stack.
+    /// </summary>
     public void Send(in MidiMessage message)
     {
         if (_port == 0) throw new InvalidOperationException("Port not open.");
         unsafe
         {
-            // Build a minimal MIDIPacketList on the stack
             byte* buf = stackalloc byte[32];
-            // numPackets
             *(int*)buf = 1;
-            // timestamp = 0 (now)
             *(long*)(buf + 4) = 0;
-            // length
             *(ushort*)(buf + 12) = 3;
-            // data
             buf[14] = message.Status;
             buf[15] = message.Data1;
             buf[16] = message.Data2;
@@ -262,6 +366,9 @@ internal sealed partial class MacOsMidiOutputPort : IMidiOutputPort
         }
     }
 
+    /// <summary>
+    /// Sends a SysEx buffer by building a single-packet MIDIPacketList on the stack.
+    /// </summary>
     public void SendSysEx(ReadOnlySpan<byte> data)
     {
         if (_port == 0) throw new InvalidOperationException("Port not open.");
@@ -277,6 +384,9 @@ internal sealed partial class MacOsMidiOutputPort : IMidiOutputPort
         }
     }
 
+    /// <summary>
+    /// Closes the port and releases all CoreMIDI resources.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed) return;
@@ -285,6 +395,9 @@ internal sealed partial class MacOsMidiOutputPort : IMidiOutputPort
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// Finalizer that ensures CoreMIDI resources are released.
+    /// </summary>
     ~MacOsMidiOutputPort() => Dispose();
 
     private const string CoreMidi = "/System/Library/Frameworks/CoreMIDI.framework/CoreMIDI";

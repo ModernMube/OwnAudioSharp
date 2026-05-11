@@ -2,21 +2,30 @@ using System.Buffers.Binary;
 
 namespace OwnAudio.Midi.File;
 
+/// <summary>
+/// Writes a <see cref="MidiFile"/> to a file path or stream in Standard MIDI File (SMF) format.
+/// Uses running status compression and automatically appends an End-of-Track meta event when missing.
+/// </summary>
 public static class MidiFileWriter
 {
+    /// <summary>
+    /// Writes the <see cref="MidiFile"/> to the file at the specified path, creating or overwriting it.
+    /// </summary>
     public static void Write(MidiFile file, string path)
     {
         using var stream = System.IO.File.Create(path);
         Write(file, stream);
     }
 
+    /// <summary>
+    /// Writes the <see cref="MidiFile"/> to the given stream in SMF binary format.
+    /// </summary>
     public static void Write(MidiFile file, Stream stream)
     {
-        // MThd header
         Span<byte> header = stackalloc byte[14];
         header[0] = (byte)'M'; header[1] = (byte)'T';
         header[2] = (byte)'h'; header[3] = (byte)'d';
-        BinaryPrimitives.WriteUInt32BigEndian(header[4..], 6); // chunk length always 6
+        BinaryPrimitives.WriteUInt32BigEndian(header[4..], 6);
         BinaryPrimitives.WriteUInt16BigEndian(header[8..], file.Format);
         BinaryPrimitives.WriteUInt16BigEndian(header[10..], (ushort)file.Tracks.Count);
         BinaryPrimitives.WriteUInt16BigEndian(header[12..], file.TicksPerBeat);
@@ -26,6 +35,10 @@ public static class MidiFileWriter
             WriteTrack(track, stream);
     }
 
+    /// <summary>
+    /// Serializes a single track into an MTrk chunk and writes it to the stream.
+    /// Applies running-status compression and ensures the chunk ends with an End-of-Track event.
+    /// </summary>
     private static void WriteTrack(MidiTrack track, Stream stream)
     {
         using var trackBuffer = new MemoryStream();
@@ -50,9 +63,8 @@ public static class MidiFileWriter
                     trackBuffer.Write(evt.MetaData);
                 runningStatus = 0;
             }
-            else // MIDI
+            else
             {
-                // Write status byte only if it differs from running status
                 if (evt.Status != runningStatus)
                 {
                     trackBuffer.WriteByte(evt.Status);
@@ -66,16 +78,14 @@ public static class MidiFileWriter
             }
         }
 
-        // Ensure track ends with End of Track meta event
         if (track.Events.Count == 0 || !track.Events[^1].IsEndOfTrack)
         {
-            WriteVarLen(trackBuffer, 0); // delta time 0
+            WriteVarLen(trackBuffer, 0);
             trackBuffer.WriteByte(0xFF);
             trackBuffer.WriteByte(0x2F);
             trackBuffer.WriteByte(0x00);
         }
 
-        // Write MTrk header + track data
         Span<byte> chunkHeader = stackalloc byte[8];
         chunkHeader[0] = (byte)'M'; chunkHeader[1] = (byte)'T';
         chunkHeader[2] = (byte)'r'; chunkHeader[3] = (byte)'k';
@@ -85,6 +95,10 @@ public static class MidiFileWriter
         trackBuffer.CopyTo(stream);
     }
 
+    /// <summary>
+    /// Encodes an integer as a MIDI variable-length quantity and writes it to the stream.
+    /// Negative values are clamped to zero.
+    /// </summary>
     private static void WriteVarLen(Stream stream, int value)
     {
         if (value < 0) value = 0;
@@ -99,7 +113,6 @@ public static class MidiFileWriter
             value >>= 7;
         }
 
-        // Write in reverse (most-significant byte first)
         for (int i = len - 1; i >= 0; i--)
             stream.WriteByte(buf[i]);
     }

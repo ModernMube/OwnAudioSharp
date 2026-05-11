@@ -2,8 +2,15 @@ using OwnAudio.Midi.IO.Platform;
 
 namespace OwnAudio.Midi.IO;
 
+/// <summary>
+/// Cross-platform factory for enumerating and opening MIDI input and output ports.
+/// Selects the platform-specific implementation at compile time.
+/// </summary>
 public static class MidiPortFactory
 {
+    /// <summary>
+    /// Returns the names of all available MIDI input ports on the current platform.
+    /// </summary>
     public static IReadOnlyList<string> GetInputPortNames()
     {
 #if WINDOWS
@@ -17,6 +24,9 @@ public static class MidiPortFactory
 #endif
     }
 
+    /// <summary>
+    /// Returns the names of all available MIDI output ports on the current platform.
+    /// </summary>
     public static IReadOnlyList<string> GetOutputPortNames()
     {
 #if WINDOWS
@@ -30,6 +40,10 @@ public static class MidiPortFactory
 #endif
     }
 
+    /// <summary>
+    /// Opens a MIDI input port by name and returns it ready for listening.
+    /// Throws <see cref="ArgumentException"/> if the port name is not found.
+    /// </summary>
     public static IMidiInputPort OpenInput(string portName)
     {
 #if WINDOWS
@@ -50,6 +64,10 @@ public static class MidiPortFactory
 #endif
     }
 
+    /// <summary>
+    /// Opens a MIDI output port by name and returns it ready for sending messages.
+    /// Throws <see cref="ArgumentException"/> if the port name is not found.
+    /// </summary>
     public static IMidiOutputPort OpenOutput(string portName)
     {
 #if WINDOWS

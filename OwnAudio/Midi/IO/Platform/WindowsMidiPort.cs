@@ -4,21 +4,54 @@ namespace OwnAudio.Midi.IO.Platform;
 
 #if WINDOWS
 
+/// <summary>
+/// Windows MIDI input port implemented via the winmm midiIn* API.
+/// Opens the device in the constructor using an unmanaged function pointer callback.
+/// </summary>
 internal sealed partial class WindowsMidiInputPort : IMidiInputPort
 {
     private const int CALLBACK_FUNCTION = 0x30000;
     private const int MM_MIM_DATA = 0x3C3;
 
+    /// <summary>
+    /// Native winmm device handle.
+    /// </summary>
     private nint _handle;
+
+    /// <summary>
+    /// GCHandle keeping this instance alive for the unmanaged callback.
+    /// </summary>
     private GCHandle _selfHandle;
+
+    /// <summary>
+    /// Guards against double-disposal.
+    /// </summary>
     private bool _disposed;
+
+    /// <summary>
+    /// Indicates whether <see cref="Start"/> has been called without a matching <see cref="Stop"/>.
+    /// </summary>
     private bool _started;
 
+    /// <summary>
+    /// Gets the display name of this MIDI input port.
+    /// </summary>
     public string Name { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the native device handle is open.
+    /// </summary>
     public bool IsOpen => _handle != 0;
 
+    /// <summary>
+    /// Raised on the winmm callback thread when a short MIDI message arrives.
+    /// </summary>
     public event Action<MidiMessage>? MessageReceived;
 
+    /// <summary>
+    /// Opens the MIDI input device identified by <paramref name="deviceId"/> using an unmanaged callback.
+    /// Throws <see cref="InvalidOperationException"/> if the device cannot be opened.
+    /// </summary>
     public WindowsMidiInputPort(string name, int deviceId)
     {
         Name = name;
@@ -41,8 +74,14 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
         }
     }
 
-    public void Open() { /* already opened in constructor */ }
+    /// <summary>
+    /// No-op — the port is already opened in the constructor.
+    /// </summary>
+    public void Open() { }
 
+    /// <summary>
+    /// Stops listening, resets the device, and closes the native handle.
+    /// </summary>
     public void Close()
     {
         if (_handle == 0) return;
@@ -52,6 +91,9 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
         _handle = 0;
     }
 
+    /// <summary>
+    /// Begins delivery of MIDI input messages via <see cref="MessageReceived"/>.
+    /// </summary>
     public void Start()
     {
         if (_handle == 0) throw new InvalidOperationException("Port not open.");
@@ -59,6 +101,9 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
         _started = true;
     }
 
+    /// <summary>
+    /// Pauses delivery of MIDI input messages.
+    /// </summary>
     public void Stop()
     {
         if (_handle == 0 || !_started) return;
@@ -66,6 +111,9 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
         _started = false;
     }
 
+    /// <summary>
+    /// Unmanaged callback invoked by winmm on the driver thread for each incoming short MIDI message.
+    /// </summary>
     [UnmanagedCallersOnly]
     private static unsafe void MidiInputCallback(nint handle, int msg, nint instance, nint param1, nint param2)
     {
@@ -80,6 +128,9 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
         port.MessageReceived?.Invoke(new MidiMessage(status, data1, data2));
     }
 
+    /// <summary>
+    /// Returns the names of all installed MIDI input devices on this system.
+    /// </summary>
     public static IReadOnlyList<string> GetInputPortNames()
     {
         int count = midiInGetNumDevs();
@@ -93,6 +144,9 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
         return names;
     }
 
+    /// <summary>
+    /// Returns the names of all installed MIDI output devices on this system.
+    /// </summary>
     public static IReadOnlyList<string> GetOutputPortNames()
     {
         int count = midiOutGetNumDevs();
@@ -106,6 +160,9 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
         return names;
     }
 
+    /// <summary>
+    /// Closes the port and releases the GCHandle used by the unmanaged callback.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed) return;
@@ -115,9 +172,11 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// Finalizer that ensures the native handle and GCHandle are released.
+    /// </summary>
     ~WindowsMidiInputPort() => Dispose();
 
-    // P/Invoke declarations
     [LibraryImport("winmm")]
     private static unsafe partial int midiInOpen(
         out nint handle, int deviceId,
@@ -148,6 +207,9 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
     [LibraryImport("winmm")]
     private static partial int midiOutGetDevCaps(int deviceId, ref MIDIOUTCAPS caps, uint size);
 
+    /// <summary>
+    /// Native capability structure for MIDI input devices (MIDIINCAPS).
+    /// </summary>
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
     private struct MIDIINCAPS
     {
@@ -158,6 +220,9 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
         public uint dwSupport;
     }
 
+    /// <summary>
+    /// Native capability structure for MIDI output devices (MIDIOUTCAPS).
+    /// </summary>
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
     private struct MIDIOUTCAPS
     {
@@ -170,14 +235,36 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
     }
 }
 
+/// <summary>
+/// Windows MIDI output port implemented via the winmm midiOut* API.
+/// Supports short messages and SysEx transmission via MIDIHDR.
+/// </summary>
 internal sealed partial class WindowsMidiOutputPort : IMidiOutputPort
 {
+    /// <summary>
+    /// Native winmm device handle.
+    /// </summary>
     private nint _handle;
+
+    /// <summary>
+    /// Guards against double-disposal.
+    /// </summary>
     private bool _disposed;
 
+    /// <summary>
+    /// Gets the display name of this MIDI output port.
+    /// </summary>
     public string Name { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the native device handle is open.
+    /// </summary>
     public bool IsOpen => _handle != 0;
 
+    /// <summary>
+    /// Opens the MIDI output device identified by <paramref name="deviceId"/>.
+    /// Throws <see cref="InvalidOperationException"/> if the device cannot be opened.
+    /// </summary>
     public WindowsMidiOutputPort(string name, int deviceId)
     {
         Name = name;
@@ -186,8 +273,14 @@ internal sealed partial class WindowsMidiOutputPort : IMidiOutputPort
             throw new InvalidOperationException($"Failed to open MIDI output '{name}': error {result}");
     }
 
+    /// <summary>
+    /// No-op — the port is already opened in the constructor.
+    /// </summary>
     public void Open() { }
 
+    /// <summary>
+    /// Resets and closes the native MIDI output handle.
+    /// </summary>
     public void Close()
     {
         if (_handle == 0) return;
@@ -196,6 +289,9 @@ internal sealed partial class WindowsMidiOutputPort : IMidiOutputPort
         _handle = 0;
     }
 
+    /// <summary>
+    /// Sends a short MIDI message packed into a single 32-bit integer to the output device.
+    /// </summary>
     public void Send(in MidiMessage message)
     {
         if (_handle == 0) throw new InvalidOperationException("Port not open.");
@@ -203,9 +299,11 @@ internal sealed partial class WindowsMidiOutputPort : IMidiOutputPort
         midiOutShortMsg(_handle, packed);
     }
 
+    /// <summary>
+    /// Sends a SysEx buffer to the output device using MIDIHDR prepare/send/unprepare.
+    /// </summary>
     public void SendSysEx(ReadOnlySpan<byte> data)
     {
-        // SysEx requires MIDIHDR – simplified: copy to unmanaged and send
         if (_handle == 0) throw new InvalidOperationException("Port not open.");
         unsafe
         {
@@ -224,6 +322,9 @@ internal sealed partial class WindowsMidiOutputPort : IMidiOutputPort
         }
     }
 
+    /// <summary>
+    /// Closes the port and releases the native device handle.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed) return;
@@ -232,6 +333,9 @@ internal sealed partial class WindowsMidiOutputPort : IMidiOutputPort
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// Finalizer that ensures the native handle is released.
+    /// </summary>
     ~WindowsMidiOutputPort() => Dispose();
 
     [LibraryImport("winmm")]
@@ -255,6 +359,9 @@ internal sealed partial class WindowsMidiOutputPort : IMidiOutputPort
     [LibraryImport("winmm")]
     private static partial int midiOutLongMsg(nint handle, ref MIDIHDR header, uint size);
 
+    /// <summary>
+    /// Native MIDI header structure (MIDIHDR) used for SysEx transmission.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct MIDIHDR
     {

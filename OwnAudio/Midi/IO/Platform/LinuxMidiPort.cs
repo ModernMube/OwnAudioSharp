@@ -5,18 +5,51 @@ namespace OwnAudio.Midi.IO.Platform;
 
 #if LINUX
 
+/// <summary>
+/// Linux MIDI input port using ALSA rawmidi (libasound snd_rawmidi_*).
+/// Reads bytes on a background thread and assembles MIDI messages with running-status support.
+/// </summary>
 internal sealed partial class LinuxMidiInputPort : IMidiInputPort
 {
+    /// <summary>
+    /// ALSA rawmidi read handle.
+    /// </summary>
     private nint _handle;
+
+    /// <summary>
+    /// Background thread that reads raw bytes from the ALSA device.
+    /// </summary>
     private Thread? _readThread;
+
+    /// <summary>
+    /// Signals the read thread to exit.
+    /// </summary>
     private volatile bool _running;
+
+    /// <summary>
+    /// Guards against double-disposal.
+    /// </summary>
     private bool _disposed;
 
+    /// <summary>
+    /// Gets the display name or device path of this MIDI input port.
+    /// </summary>
     public string Name { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the ALSA handle is open.
+    /// </summary>
     public bool IsOpen => _handle != 0;
 
+    /// <summary>
+    /// Raised on the read thread when a complete MIDI message has been assembled.
+    /// </summary>
     public event Action<MidiMessage>? MessageReceived;
 
+    /// <summary>
+    /// Opens the ALSA rawmidi input at <paramref name="devicePath"/>.
+    /// Throws <see cref="InvalidOperationException"/> if the device cannot be opened.
+    /// </summary>
     public LinuxMidiInputPort(string name, string devicePath)
     {
         Name = name;
@@ -27,8 +60,14 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
             throw new InvalidOperationException($"Failed to open ALSA MIDI input '{devicePath}': {result}");
     }
 
+    /// <summary>
+    /// No-op — the device is already opened in the constructor.
+    /// </summary>
     public void Open() { }
 
+    /// <summary>
+    /// Stops the read thread and closes the ALSA handle.
+    /// </summary>
     public void Close()
     {
         Stop();
@@ -37,6 +76,9 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
         _handle = 0;
     }
 
+    /// <summary>
+    /// Starts the background read thread that delivers incoming MIDI messages.
+    /// </summary>
     public void Start()
     {
         if (_handle == 0) throw new InvalidOperationException("Port not open.");
@@ -49,6 +91,9 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
         _readThread.Start();
     }
 
+    /// <summary>
+    /// Signals the read thread to stop and waits up to one second for it to exit.
+    /// </summary>
     public void Stop()
     {
         _running = false;
@@ -56,6 +101,10 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
         _readThread = null;
     }
 
+    /// <summary>
+    /// Read loop executed on the background thread: reads raw bytes from the ALSA device
+    /// and assembles MIDI messages using running-status rules.
+    /// </summary>
     private unsafe void ReadLoop()
     {
         byte* buf = stackalloc byte[256];
@@ -79,7 +128,6 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
                 if (runningStatus == 0) continue;
 
                 byte type = (byte)(runningStatus & 0xF0);
-                // 2-byte messages: Program Change, Channel Pressure
                 if (type == 0xC0 || type == 0xD0)
                 {
                     byte d1 = pos < bytesRead ? buf[pos++] : (byte)0;
@@ -95,9 +143,11 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
         }
     }
 
+    /// <summary>
+    /// Returns all MIDI device paths found under /dev and /dev/snd matching the "midi*" pattern.
+    /// </summary>
     public static IReadOnlyList<string> GetInputPortNames()
     {
-        // Enumerate /dev/snd/midi* and /dev/midi*
         var names = new List<string>();
         foreach (var path in Directory.GetFiles("/dev", "midi*"))
             names.Add(path);
@@ -106,8 +156,14 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
         return names;
     }
 
+    /// <summary>
+    /// Returns the same device list as <see cref="GetInputPortNames"/> — rawmidi devices are bidirectional.
+    /// </summary>
     public static IReadOnlyList<string> GetOutputPortNames() => GetInputPortNames();
 
+    /// <summary>
+    /// Stops the read thread and closes the ALSA handle.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed) return;
@@ -116,6 +172,9 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// Finalizer that ensures the ALSA handle is released.
+    /// </summary>
     ~LinuxMidiInputPort() => Dispose();
 
     [LibraryImport("libasound", StringMarshalling = StringMarshalling.Utf8)]
@@ -128,14 +187,36 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
     private static unsafe partial long snd_rawmidi_read(nint rmidi, byte* buffer, nuint size);
 }
 
+/// <summary>
+/// Linux MIDI output port using ALSA rawmidi (libasound snd_rawmidi_*).
+/// Writes MIDI messages directly as raw bytes with correct length for the message type.
+/// </summary>
 internal sealed partial class LinuxMidiOutputPort : IMidiOutputPort
 {
+    /// <summary>
+    /// ALSA rawmidi write handle.
+    /// </summary>
     private nint _handle;
+
+    /// <summary>
+    /// Guards against double-disposal.
+    /// </summary>
     private bool _disposed;
 
+    /// <summary>
+    /// Gets the display name or device path of this MIDI output port.
+    /// </summary>
     public string Name { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the ALSA handle is open.
+    /// </summary>
     public bool IsOpen => _handle != 0;
 
+    /// <summary>
+    /// Opens the ALSA rawmidi output at <paramref name="devicePath"/>.
+    /// Throws <see cref="InvalidOperationException"/> if the device cannot be opened.
+    /// </summary>
     public LinuxMidiOutputPort(string name, string devicePath)
     {
         Name = name;
@@ -146,8 +227,14 @@ internal sealed partial class LinuxMidiOutputPort : IMidiOutputPort
             throw new InvalidOperationException($"Failed to open ALSA MIDI output '{devicePath}': {result}");
     }
 
+    /// <summary>
+    /// No-op — the device is already opened in the constructor.
+    /// </summary>
     public void Open() { }
 
+    /// <summary>
+    /// Closes the ALSA rawmidi handle.
+    /// </summary>
     public void Close()
     {
         if (_handle == 0) return;
@@ -155,6 +242,10 @@ internal sealed partial class LinuxMidiOutputPort : IMidiOutputPort
         _handle = 0;
     }
 
+    /// <summary>
+    /// Writes a short MIDI message to the ALSA device; sends 2 bytes for Program Change
+    /// and Channel Pressure, 3 bytes for all other message types.
+    /// </summary>
     public void Send(in MidiMessage message)
     {
         if (_handle == 0) throw new InvalidOperationException("Port not open.");
@@ -170,6 +261,9 @@ internal sealed partial class LinuxMidiOutputPort : IMidiOutputPort
         }
     }
 
+    /// <summary>
+    /// Writes a raw SysEx byte buffer directly to the ALSA device.
+    /// </summary>
     public void SendSysEx(ReadOnlySpan<byte> data)
     {
         if (_handle == 0) throw new InvalidOperationException("Port not open.");
@@ -180,6 +274,9 @@ internal sealed partial class LinuxMidiOutputPort : IMidiOutputPort
         }
     }
 
+    /// <summary>
+    /// Closes the ALSA handle and releases all resources.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed) return;
@@ -188,6 +285,9 @@ internal sealed partial class LinuxMidiOutputPort : IMidiOutputPort
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// Finalizer that ensures the ALSA handle is released.
+    /// </summary>
     ~LinuxMidiOutputPort() => Dispose();
 
     [LibraryImport("libasound", StringMarshalling = StringMarshalling.Utf8)]

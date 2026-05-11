@@ -2,14 +2,25 @@ using System.Buffers.Binary;
 
 namespace OwnAudio.Midi.File;
 
+/// <summary>
+/// Reads Standard MIDI Files (SMF) from a file path or stream and returns a <see cref="MidiFile"/> object.
+/// Supports all three MIDI file formats and handles running status, meta events, and SysEx blocks.
+/// </summary>
 public static class MidiFileReader
 {
+    /// <summary>
+    /// Reads a MIDI file from the specified path and returns the parsed <see cref="MidiFile"/>.
+    /// </summary>
     public static MidiFile Read(string path)
     {
         using var stream = System.IO.File.OpenRead(path);
         return Read(stream);
     }
 
+    /// <summary>
+    /// Reads a MIDI file from a stream and returns the parsed <see cref="MidiFile"/>.
+    /// Throws <see cref="InvalidDataException"/> if the stream does not contain a valid SMF.
+    /// </summary>
     public static MidiFile Read(Stream stream)
     {
         Span<byte> header = stackalloc byte[14];
@@ -25,7 +36,6 @@ public static class MidiFileReader
         ushort trackCount = BinaryPrimitives.ReadUInt16BigEndian(header[10..]);
         ushort ticksPerBeat = BinaryPrimitives.ReadUInt16BigEndian(header[12..]);
 
-        // Skip any extra header bytes beyond the standard 6
         if (chunkLength > 6)
             stream.Seek(chunkLength - 6, SeekOrigin.Current);
 
@@ -36,6 +46,9 @@ public static class MidiFileReader
         return new MidiFile(format, ticksPerBeat, tracks);
     }
 
+    /// <summary>
+    /// Reads a single MTrk chunk from the stream and returns the parsed <see cref="MidiTrack"/>.
+    /// </summary>
     private static MidiTrack ReadTrack(Stream stream)
     {
         Span<byte> trackHeader = stackalloc byte[8];
@@ -51,6 +64,10 @@ public static class MidiFileReader
         return new MidiTrack(ParseEvents(data));
     }
 
+    /// <summary>
+    /// Parses the raw track byte buffer into a list of <see cref="MidiEvent"/> instances.
+    /// Handles running status, meta events, SysEx, and two-byte message types.
+    /// </summary>
     private static List<MidiEvent> ParseEvents(ReadOnlySpan<byte> data)
     {
         var events = new List<MidiEvent>(64);
@@ -64,7 +81,7 @@ public static class MidiFileReader
 
             byte b = data[pos];
 
-            if (b == 0xFF) // Meta event
+            if (b == 0xFF)
             {
                 pos++;
                 if (pos >= data.Length) break;
@@ -73,11 +90,11 @@ public static class MidiFileReader
                 byte[] metaData = data.Slice(pos, metaLen).ToArray();
                 pos += metaLen;
                 events.Add(new MidiEvent(delta, metaType, metaData));
-                if (metaType == 0x2F) break; // End of Track
+                if (metaType == 0x2F) break;
                 continue;
             }
 
-            if (b == 0xF0 || b == 0xF7) // SysEx
+            if (b == 0xF0 || b == 0xF7)
             {
                 pos++;
                 int sysexLen = ReadVarLen(data, ref pos);
@@ -90,7 +107,6 @@ public static class MidiFileReader
                 continue;
             }
 
-            // MIDI event – running status
             if ((b & 0x80) != 0)
             {
                 runningStatus = b;
@@ -102,7 +118,6 @@ public static class MidiFileReader
             byte type = (byte)(runningStatus & 0xF0);
             byte d1 = pos < data.Length ? data[pos++] : (byte)0;
 
-            // 2-byte messages: Program Change (0xC0), Channel Pressure (0xD0)
             if (type == 0xC0 || type == 0xD0)
             {
                 events.Add(new MidiEvent(delta, runningStatus, d1, 0));
@@ -117,6 +132,9 @@ public static class MidiFileReader
         return events;
     }
 
+    /// <summary>
+    /// Reads a variable-length quantity from the byte span and advances the position.
+    /// </summary>
     private static int ReadVarLen(ReadOnlySpan<byte> data, ref int pos)
     {
         int value = 0;
