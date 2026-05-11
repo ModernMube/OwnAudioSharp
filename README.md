@@ -2,6 +2,13 @@
     <img src="Ownaudiologo.png" width="600">
 </div>
 
+> [!WARNING]
+> **Active development has moved to the [`develop/v3.0.0`](https://github.com/ModernMube/OwnAudioSharp/tree/develop/v3.0.0) branch.**
+> The v3.0.0 rewrite introduces Native AOT compatibility, a modular NuGet package structure
+> (`OwnAudioSharp.Native` + `OwnAudioSharp.Midi`), and removes all reflection-based dependencies.
+> **Development on the current `master` branch is paused.** For the latest features and bug fixes,
+> please follow or contribute to the `develop/v3.0.0` branch.
+
 <div align="center">
   <a href="https://www.nuget.org/packages/OwnAudioSharp">
     <img src="https://img.shields.io/badge/Nuget-OwnAudioSharp%20Nuget%20Package-blue" alt="OwnAudioSharp Package">
