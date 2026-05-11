@@ -1,6 +1,5 @@
-﻿using Melanchall.DryWetMidi.Common;
-using Melanchall.DryWetMidi.Core;
-using Logger;
+﻿using Logger;
+using OwnAudio.Midi.File;
 using Microsoft.ML.OnnxRuntime;
 using System.Numerics.Tensors;
 using System.Reflection;
@@ -644,67 +643,63 @@ public static class MidiWriter
         Log.Info($"Generating MIDI file with BPM: {bpm}");
         Log.Info($"Number of notes: {notes.Count}");
 
-        var midiFile = new MidiFile();  // The complete MIDI file
-        var track = new TrackChunk();   // One track to hold all our notes
+        const int TicksPerBeat = 480;
+        int microsecondsPerBeat = 60_000_000 / bpm;
 
-        var timedEvents = new List<(long absoluteTime, MidiEvent midiEvent)>();
+        // Collect (absoluteTick, event kind) – kinds:
+        //   (abs, 'T', tempo data) → meta 0x51
+        //   (abs, 'P', program)   → MIDI 0xC0
+        //   (abs, 'N', pitch, vel) → note-on 0x90
+        //   (abs, 'F', pitch)     → note-off 0x80
+        var raw = new List<(long abs, char kind, int a, int b)>(notes.Count * 2 + 2);
 
-        int microsecondsPerQuarterNote = 60_000_000 / bpm;
-        var tempoEvent = new SetTempoEvent(microsecondsPerQuarterNote);
-        timedEvents.Add((0, tempoEvent));  // Tempo event at time 0
+        raw.Add((0, 'T', microsecondsPerBeat, 0));
+        raw.Add((0, 'P', 4, 0)); // Rhodes Piano
 
-        var programChangeEvent = new ProgramChangeEvent
-        {
-            Channel = (FourBitNumber)0,  // MIDI channel 0 (first channel)
-            ProgramNumber = (SevenBitNumber)4 // Use the instrument (Rhodes Piano)
-        };
-
-        timedEvents.Add((0, programChangeEvent)); // Program change at time 0
-
-        int noteIndex = 0;
+        double qps = bpm / 60.0;
         foreach (var note in notes)
         {
-            double quarterNotesPerSecond = bpm / 60.0;
-            long startTicks = (long)(note.StartTime * 480 * quarterNotesPerSecond);
-            long endTicks = (long)(note.EndTime * 480 * quarterNotesPerSecond);
+            long startTick = (long)(note.StartTime * TicksPerBeat * qps);
+            long endTick   = (long)(note.EndTime   * TicksPerBeat * qps);
+            int velocity   = Math.Clamp((int)(note.Amplitude * 100f), 1, 127);
 
-            noteIndex++;
-
-            var noteOn = new NoteOnEvent(
-                (SevenBitNumber)note.Pitch,  // Which note to play
-                (SevenBitNumber)(int)(note.Amplitude * 100f) // How hard to play it (velocity)
-            );
-
-            var noteOff = new NoteOffEvent(
-                (SevenBitNumber)note.Pitch,  // Which note to stop
-                (SevenBitNumber)0               // Release velocity (usually 0)
-            );
-
-            timedEvents.Add((startTicks, noteOn));
-            timedEvents.Add((endTicks, noteOff));
+            raw.Add((startTick, 'N', note.Pitch, velocity));
+            raw.Add((endTick,   'F', note.Pitch, 0));
         }
 
-        timedEvents.Sort((a, b) => a.absoluteTime.CompareTo(b.absoluteTime));
+        raw.Sort((a, b) => a.abs.CompareTo(b.abs));
 
-        long previousTime = 0;
-        foreach (var (absoluteTime, midiEvent) in timedEvents)
+        var events = new List<MidiEvent>(raw.Count + 1);
+        long prev = 0;
+        foreach (var (abs, kind, a, b) in raw)
         {
-            midiEvent.DeltaTime = absoluteTime - previousTime;  // Time since last event
-            track.Events.Add(midiEvent);
-            previousTime = absoluteTime;
+            int delta = (int)(abs - prev);
+            prev = abs;
+
+            switch (kind)
+            {
+                case 'T':
+                    byte[] tempoBytes = [(byte)(a >> 16), (byte)(a >> 8), (byte)a];
+                    events.Add(new MidiEvent(delta, 0x51, tempoBytes));
+                    break;
+                case 'P':
+                    events.Add(new MidiEvent(delta, 0xC0, (byte)a, 0));
+                    break;
+                case 'N':
+                    events.Add(new MidiEvent(delta, 0x90, (byte)a, (byte)b));
+                    break;
+                case 'F':
+                    events.Add(new MidiEvent(delta, 0x80, (byte)a, 0));
+                    break;
+            }
         }
 
-        midiFile.Chunks.Add(track);
-        midiFile.TimeDivision = new TicksPerQuarterNoteTimeDivision(480);
-        if (File.Exists(outputPath))
-        {
-            File.Delete(outputPath);
-        }
-        midiFile.Write(outputPath);
+        var midiFile = new MidiFile(0, TicksPerBeat, [new MidiTrack(events)]);
+        MidiFileWriter.Write(midiFile, outputPath);
 
         Log.Info($"MIDI file saved: {outputPath}");
-        Log.Info($"Time division: 480 ticks per quarter note");
-        Log.Info($"Tempo: {bpm} BPM ({microsecondsPerQuarterNote} μs per quarter note)");
+        Log.Info($"Time division: {TicksPerBeat} ticks per quarter note");
+        Log.Info($"Tempo: {bpm} BPM ({microsecondsPerBeat} μs per quarter note)");
     }
 
     /// <summary>
