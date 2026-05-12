@@ -41,6 +41,11 @@ target_include_directories(ownaudio_ml
 
 target_compile_definitions(ownaudio_ml PRIVATE OWNAUDIO_ML_BUILD)
 
+# MSVC does not define M_PI unless _USE_MATH_DEFINES is set before <cmath>
+if(WIN32)
+    target_compile_definitions(ownaudio_ml PRIVATE _USE_MATH_DEFINES)
+endif()
+
 if(OWNAUDIO_ML_ENABLE_ONNX)
     target_include_directories(ownaudio_ml PRIVATE "${ONNXRUNTIME_ROOT}/include")
     target_link_libraries(ownaudio_ml PRIVATE ${ONNXRUNTIME_LIB})
