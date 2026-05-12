@@ -132,7 +132,7 @@ OWNAUDIO_ML_API int ownaudio_ml_analyze_spectrum(
 
     const double rms = std::sqrt(rms_sum / sample_count);
     result->rms_level     = (rms  > 1e-10)  ? 20.0f * (float)std::log10(rms)   : -120.0f;
-    result->peak_level    = (peak > 1e-10f)  ? 20.0f * (float)std::log10f(peak) : -120.0f;
+    result->peak_level    = (peak > 1e-10f)  ? 20.0f * (float)std::log10(peak) : -120.0f;
     // Approximate integrated loudness: LUFS ≈ RMS dBFS – 0.691
     result->loudness      = result->rms_level - 0.691f;
     result->dynamic_range = result->peak_level - result->rms_level;
@@ -153,7 +153,7 @@ OWNAUDIO_ML_API int ownaudio_ml_calculate_eq_adjustments(
         float s = source->frequency_bands[i];
         float t = target->frequency_bands[i];
         eq_out[i] = (s > 1e-10f && t > 1e-10f)
-                    ? 20.0f * std::log10f(t / s)
+                    ? 20.0f * std::log10(t / s)
                     : 0.0f;
     }
     return 0;
