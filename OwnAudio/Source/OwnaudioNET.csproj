@@ -31,7 +31,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Native</PackageId>
-    <Version>3.0.20</Version>
+    <Version>3.0.21</Version>
     <Authors>ModernMube</Authors>
     <Description>AOT-compatible cross-platform audio engine library for desktop platforms (Windows, Linux, macOS)</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;desktop;sound;multitrack</PackageTags>
@@ -46,19 +46,12 @@
   <!-- Common dependencies (MathNet.Numerics removed – replaced by OwnAudioFft) -->
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.0.2" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.26.0" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.203" PrivateAssets="All" />
     <PackageReference Include="OwnAudioVst" Version="1.5.20" />
-    <PackageReference Include="System.Numerics.Tensors" Version="10.0.7" />
   </ItemGroup>
 
   <!-- Embedded resources -->
   <ItemGroup>
-    <EmbeddedResource Include="nmp.onnx" />
-    <EmbeddedResource Include="best.onnx" />
-    <EmbeddedResource Include="default.onnx" />
-    <EmbeddedResource Include="karaoke.onnx" />
-    <EmbeddedResource Include="htdemucs.onnx" />
     <EmbeddedResource Include="basesample.bin" />
   </ItemGroup>
 
