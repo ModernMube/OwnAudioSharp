@@ -46,6 +46,16 @@
           LinkBase="runtimes" />
   </ItemGroup>
 
+  <!-- nmp.onnx bundled with the package: deployed to output directory on install -->
+  <ItemGroup>
+    <None Include="models\nmp.onnx"
+          CopyToOutputDirectory="PreserveNewest"
+          Pack="true"
+          PackagePath="contentFiles/any/any/">
+      <PackageCopyToOutput>true</PackageCopyToOutput>
+    </None>
+  </ItemGroup>
+
   <!-- Native ownaudio_ml library – platform-specific –– packed into the NuGet -->
   <ItemGroup>
     <None Include="runtimes\win-x64\native\ownaudio_ml.dll"

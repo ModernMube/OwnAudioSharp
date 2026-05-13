@@ -49,12 +49,17 @@ public static class ModelManager
     ];
 
     /// <summary>
-    /// Default model directory: <c>%LocalAppData%/OwnAudio/Models</c> on Windows,
+    /// Default model directory. Returns the application base directory when
+    /// <c>nmp.onnx</c> is already present there (bundled NuGet content file).
+    /// Falls back to <c>%LocalAppData%/OwnAudio/Models</c> on Windows,
     /// <c>~/.local/share/OwnAudio/Models</c> on Linux/macOS.
     /// </summary>
-    public static string DefaultModelDirectory { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "OwnAudio", "Models");
+    public static string DefaultModelDirectory { get; } =
+        File.Exists(Path.Combine(AppContext.BaseDirectory, "nmp.onnx"))
+            ? AppContext.BaseDirectory
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "OwnAudio", "Models");
 
     /// <summary>
     /// Ensures all required models are present in <paramref name="modelDirectory"/>.
