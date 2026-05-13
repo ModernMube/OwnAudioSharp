@@ -47,6 +47,13 @@
     <DefineConstants>$(DefineConstants);MOBILE</DefineConstants>
   </PropertyGroup>
 
+  <!-- Exclude ML/desktop-only features that require the ownaudio_ml native library -->
+  <ItemGroup>
+    <Compile Remove="Features\VocalRemover\**\*.cs" />
+    <Compile Remove="Features\ChorDetect\**\*.cs" />
+    <Compile Remove="Features\Extensions\AudioReaderNote.cs" />
+  </ItemGroup>
+
   <!-- Embedded resources -->
   <ItemGroup>
     <EmbeddedResource Include="basesample.bin" />

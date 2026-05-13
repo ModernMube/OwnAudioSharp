@@ -78,6 +78,24 @@ internal static unsafe partial class NativeMl
         string modelNames,
         NativeSeparationResult* result);
 
+    // ── BasicPitch Note Prediction ────────────────────────────────────────────
+
+    [LibraryImport(LibName)]
+    [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    internal static partial int ownaudio_ml_predict_notes(
+        float* input,
+        int sampleCount,
+        int sampleRate,
+        NativeNotesPredictionResult* result);
+
+    [LibraryImport(LibName)]
+    [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    internal static partial void ownaudio_ml_free_notes_result(NativeNotesPredictionResult* result);
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    internal static partial int ownaudio_ml_load_basic_pitch_model(string path);
+
     // ── Model Management ──────────────────────────────────────────────────────
 
     [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]

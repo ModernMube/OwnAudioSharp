@@ -134,6 +134,40 @@ OWNAUDIO_ML_API int ownaudio_ml_calculate_eq_adjustments(
     float*                    eq_adjustments_out,
     int                       band_count);
 
+/* ── BasicPitch Audio-to-MIDI Note Detection ─────────────────────────────── */
+
+typedef struct {
+    float* contours;   /* [frame_count × freq_bins] row-major */
+    float* notes;      /* [frame_count × 88] row-major */
+    float* onsets;     /* [frame_count × 88] row-major */
+    int    frame_count;
+    int    freq_bins;  /* = 264 (88 semitones × 3 bins per semitone) */
+} OwnAudioMlNotesPrediction;
+
+/**
+ * Predict notes from audio using the BasicPitch model.
+ * @param input        Mono float samples at @p sample_rate Hz.
+ * @param sample_count Number of samples.
+ * @param sample_rate  Sample rate in Hz (BasicPitch expects 22050 Hz).
+ * @param result       Output struct; call ownaudio_ml_free_notes_result when done.
+ */
+OWNAUDIO_ML_API int ownaudio_ml_predict_notes(
+    const float*               input,
+    int                        sample_count,
+    int                        sample_rate,
+    OwnAudioMlNotesPrediction* result);
+
+/**
+ * Free memory allocated by ownaudio_ml_predict_notes.
+ */
+OWNAUDIO_ML_API void ownaudio_ml_free_notes_result(OwnAudioMlNotesPrediction* result);
+
+/**
+ * Load the BasicPitch ONNX model from disk.
+ * @param path Absolute path to the basicpitch.onnx file.
+ */
+OWNAUDIO_ML_API int ownaudio_ml_load_basic_pitch_model(const char* path);
+
 /* ── Model Management ────────────────────────────────────────────────────── */
 
 /**

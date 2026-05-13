@@ -21,6 +21,17 @@ internal unsafe struct NativeChordResult
     public float Confidence;
 }
 
+/// <summary>Native result struct for BasicPitch audio-to-MIDI note prediction.</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct NativeNotesPredictionResult
+{
+    public float* Contours;   // [FrameCount × FreqBins] row-major
+    public float* Notes;      // [FrameCount × 88] row-major
+    public float* Onsets;     // [FrameCount × 88] row-major
+    public int    FrameCount;
+    public int    FreqBins;   // typically 264 (88 × 3)
+}
+
 /// <summary>Native struct for audio spectrum analysis (30-band).</summary>
 [StructLayout(LayoutKind.Sequential)]
 internal unsafe struct NativeAudioSpectrum

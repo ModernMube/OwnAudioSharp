@@ -68,6 +68,7 @@
     <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" PrivateAssets="all" IncludeAssets="runtime" />
     <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" PrivateAssets="all" IncludeAssets="runtime" Properties="TargetFramework=net10.0" />
     <ProjectReference Include="..\Midi\OwnAudio.Midi.csproj" />
+    <ProjectReference Include="..\ML\OwnAudio.ML.csproj" />
   </ItemGroup>
 
   <!-- Desktop platform references are no longer needed - NativeAudioEngine covers all platforms -->
