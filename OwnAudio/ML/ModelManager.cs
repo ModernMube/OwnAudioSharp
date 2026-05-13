@@ -97,6 +97,33 @@ public static class ModelManager
         return NativeMl.ownaudio_ml_init(modelDirectory);
     }
 
+    /// <summary>
+    /// Loads a specific model file into the native runtime.
+    /// Can be called after <see cref="Initialize"/> to switch models at runtime.
+    /// </summary>
+    /// <param name="modelName">
+    /// Logical name recognised by the native library:
+    /// <c>"htdemucs"</c> for vocal separation, <c>"nmp"</c> for chord detection.
+    /// </param>
+    /// <param name="path">Absolute path to the <c>.onnx</c> file.</param>
+    /// <returns>0 on success, negative on error.</returns>
+    public static int LoadModel(string modelName, string path)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(modelName);
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        return NativeMl.ownaudio_ml_load_model(modelName, path);
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> if the named model is loaded and ready for inference.
+    /// </summary>
+    /// <param name="modelName">Logical name, e.g. <c>"htdemucs"</c>, <c>"nmp"</c>.</param>
+    public static bool IsModelLoaded(string modelName)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(modelName);
+        return NativeMl.ownaudio_ml_is_model_loaded(modelName) == 1;
+    }
+
     /// <summary>Shuts down the native ML runtime.</summary>
     public static void Shutdown()
     {

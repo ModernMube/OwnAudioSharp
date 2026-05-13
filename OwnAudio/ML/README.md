@@ -99,6 +99,38 @@ SaveWav("instrumental.wav", result.Instrumental,  sampleRate, channels: 2);
 | `Vocals` | `float[]` | Isolated vocal track (stereo interleaved) |
 | `Instrumental` | `float[]` | Sum of drums + bass + other stems (stereo interleaved) |
 
+### Model selection
+
+If you have multiple HTDemucs variants (e.g. `htdemucs_ft.onnx`, `htdemucs_6s.onnx`), pass the path directly to `SeparateAsync`:
+
+```csharp
+// Load a fine-tuned variant for this call only
+SeparationResult result = await VocalSeparator.SeparateAsync(
+    audioData, sampleRate,
+    modelPath: "/path/to/models/htdemucs_ft.onnx");
+```
+
+Or pre-load explicitly and reuse across multiple calls:
+
+```csharp
+// Load once
+ModelManager.LoadModel("htdemucs", "/path/to/models/htdemucs_ft.onnx");
+
+// Check it is ready
+if (ModelManager.IsModelLoaded("htdemucs"))
+{
+    // modelPath: null → uses the already-loaded model
+    SeparationResult r1 = await VocalSeparator.SeparateAsync(audio1, sr);
+    SeparationResult r2 = await VocalSeparator.SeparateAsync(audio2, sr);
+}
+```
+
+| Method | Description |
+|---|---|
+| `ModelManager.LoadModel(name, path)` | Loads (or replaces) the named model at runtime; returns 0 on success |
+| `ModelManager.IsModelLoaded(name)` | Returns `true` if the model is ready for inference |
+| `SeparateAsync(..., modelPath)` | Optional per-call model path; loads it before running inference |
+
 ---
 
 ## 3. Chord Detection
