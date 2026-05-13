@@ -38,11 +38,6 @@
     <PackageCopyright>Copyright (c) 2025 ModernMube</PackageCopyright>
   </PropertyGroup>
 
-  <!-- Engine layer only – no circular dependency with OwnaudioNET -->
-  <ItemGroup>
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" />
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" Properties="TargetFramework=net10.0" />
-  </ItemGroup>
 
   <!-- Copy native libs to output directory so the P/Invoke works without install -->
   <ItemGroup>
