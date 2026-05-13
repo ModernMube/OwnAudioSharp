@@ -37,16 +37,16 @@ OWNAUDIO_ML_API int ownaudio_ml_init(const char* model_directory);
  */
 OWNAUDIO_ML_API void ownaudio_ml_shutdown(void);
 
-/* ── Vocal Separation (HTDemucs) ─────────────────────────────────────────── */
+/* ── Vocal / Stem Separation ─────────────────────────────────────────────── */
 
 typedef struct {
     float* vocals;          /* interleaved stereo vocals */
     float* instrumental;    /* interleaved stereo instrumental */
-    int    sample_count;    /* number of float samples per channel array */
+    int    sample_count;    /* total number of float values in each array */
 } OwnAudioMlSeparationResult;
 
 /**
- * Separate audio into vocals and instrumental stems.
+ * Separate audio into vocals and instrumental stems using the HTDemucs model.
  * @param input        Stereo interleaved float samples.
  * @param sample_count Total number of float values in @p input.
  * @param sample_rate  Sample rate in Hz (typically 44100 or 48000).
@@ -59,7 +59,23 @@ OWNAUDIO_ML_API int ownaudio_ml_separate_vocals(
     OwnAudioMlSeparationResult*   result);
 
 /**
- * Free memory allocated by ownaudio_ml_separate_vocals.
+ * Separate audio using one or more MDX models.
+ * When multiple models are named their outputs are averaged (ensemble).
+ * @param input        Stereo interleaved float samples.
+ * @param sample_count Total number of float values in @p input.
+ * @param sample_rate  Sample rate in Hz.
+ * @param model_names  Comma-separated logical model names, e.g. "best" or "best,default".
+ * @param result       Output struct; call ownaudio_ml_free_separation_result when done.
+ */
+OWNAUDIO_ML_API int ownaudio_ml_separate_mdx(
+    const float*                  input,
+    int                           sample_count,
+    int                           sample_rate,
+    const char*                   model_names,
+    OwnAudioMlSeparationResult*   result);
+
+/**
+ * Free memory allocated by ownaudio_ml_separate_vocals or ownaudio_ml_separate_mdx.
  */
 OWNAUDIO_ML_API void ownaudio_ml_free_separation_result(OwnAudioMlSeparationResult* result);
 

@@ -5,7 +5,8 @@ Part of the [OwnAudioSharp](https://github.com/modernmube/OwnAudioSharp) ecosyst
 
 ## Features
 
-- **Vocal Separation** — HTDemucs (4-stem: vocals / drums / bass / other) via ONNX Runtime C API
+- **Vocal Separation (HTDemucs)** — 4-stem: vocals / drums / bass / other via ONNX Runtime C API
+- **Vocal Separation (MDX)** — spectral masking; supports best / default / karaoke and custom MDX models; multi-model ensemble averaging
 - **Chord Detection** — HPCP chromagram + template matching; BasicPitch ONNX inference if model is present
 - **Spectrum Analysis** — 30-band FFT-based EQ fingerprint with RMS / peak / loudness / dynamic range
 - **EQ Matching** — per-band gain adjustments to match a source to a target spectrum
@@ -30,7 +31,7 @@ Or (once published to NuGet):
 
 | Namespace | Contents |
 |---|---|
-| `OwnAudio.ML` | `ModelManager`, `VocalSeparator`, `ChordDetector`, `AudioAnalyzer` |
+| `OwnAudio.ML` | `ModelManager`, `VocalSeparator`, `MdxSeparator`, `ChordDetector`, `AudioAnalyzer` |
 | `OwnAudio.ML` | `SeparationResult`, `DetectedChord`, `AudioSpectrum`, `ModelDownloadProgress` |
 
 ---
@@ -133,7 +134,49 @@ if (ModelManager.IsModelLoaded("htdemucs"))
 
 ---
 
-## 3. Chord Detection
+## 3. MDX Separation
+
+`MdxSeparator` uses MDX-format ONNX models (e.g. `best.onnx`, `default.onnx`, `karaoke.onnx`).
+The pipeline is STFT-based with a noise-reduction trick: each sub-chunk is inferred twice
+(normal and sign-inverted input) and the results are averaged for cleaner separation.
+
+### Single model
+
+```csharp
+using OwnAudio.ML;
+
+// Load a specific MDX model first
+ModelManager.LoadModel("best", Path.Combine(modelDir, "best.onnx"));
+
+SeparationResult result = await MdxSeparator.SeparateAsync(audioData, sampleRate, "best");
+
+SaveWav("vocals.wav",       result.Vocals,        sampleRate, channels: 2);
+SaveWav("instrumental.wav", result.Instrumental,  sampleRate, channels: 2);
+```
+
+### Multi-model ensemble (averaged output)
+
+Running several models and averaging their results typically gives better quality
+at the cost of proportionally longer processing time.
+
+```csharp
+// Load all desired models
+ModelManager.LoadModel("best",    Path.Combine(modelDir, "best.onnx"));
+ModelManager.LoadModel("default", Path.Combine(modelDir, "default.onnx"));
+
+// Ensemble: separates with both, averages the output
+SeparationResult result = await MdxSeparator.SeparateEnsembleAsync(
+    audioData, sampleRate,
+    modelNames: ["best", "default"]);
+```
+
+> **Note:** MDX models output either Vocals or Instrumental — the complement is calculated
+> as `original − output`. The separator auto-detects which stem the model produces from
+> the ONNX output tensor name or the logical model name.
+
+---
+
+## 4. Chord Detection
 
 `ChordDetector.DetectAsync` returns a list of chords with timestamps and confidence scores.
 
@@ -175,7 +218,7 @@ foreach (DetectedChord chord in chords)
 
 ---
 
-## 4. Spectrum Analysis
+## 5. Spectrum Analysis
 
 `AudioAnalyzer.AnalyzeAsync` computes a 30-band energy fingerprint and loudness metrics.
 
@@ -208,7 +251,7 @@ for (int i = 0; i < spectrum.FrequencyBands.Length; i++)
 
 ---
 
-## 5. EQ Matching
+## 6. EQ Matching
 
 `AudioAnalyzer.CalculateEqAdjustmentsAsync` returns per-band gain corrections (in dB) that bring a source spectrum in line with a target.
 
@@ -230,7 +273,7 @@ for (int i = 0; i < eqGains.Length; i++)
 
 ---
 
-## 6. Error Handling
+## 7. Error Handling
 
 All inference methods throw `OwnAudioMlException` on failure.
 
@@ -249,7 +292,7 @@ catch (OwnAudioMlException ex)
 
 ---
 
-## 7. Full example — Vocal separation with progress
+## 8. Full example — Vocal separation with progress
 
 ```csharp
 using OwnAudio.ML;

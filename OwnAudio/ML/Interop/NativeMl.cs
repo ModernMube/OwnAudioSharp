@@ -67,6 +67,17 @@ internal static unsafe partial class NativeMl
         float* eqAdjustmentsOut,
         int bandCount);
 
+    // ── MDX Separation ────────────────────────────────────────────────────────
+
+    [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
+    [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
+    internal static partial int ownaudio_ml_separate_mdx(
+        float* input,
+        int sampleCount,
+        int sampleRate,
+        string modelNames,
+        NativeSeparationResult* result);
+
     // ── Model Management ──────────────────────────────────────────────────────
 
     [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
