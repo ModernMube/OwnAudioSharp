@@ -29,7 +29,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp.ML</PackageId>
-    <Version>3.0.0</Version>
+    <Version>3.0.21</Version>
     <Authors>ModernMube</Authors>
     <Description>AI/ML audio features for OwnAudioSharp via native C++ library (vocal separation, chord detection, audio matchering). AOT-compatible P/Invoke wrapper over ownaudio_ml native library.</Description>
     <PackageTags>audio;ml;ai;vocal-separation;chord-detection;onnx;aot;cross-platform;windows;linux;macos</PackageTags>
