@@ -15,7 +15,7 @@ namespace ChordDetect
                 try
                 {
 
-                    string audioFilePath = @"path/audio/music.mp3";
+                    string audioFilePath = @"/Users/bela/Music/Sogorock/multioutput/Homokvar/0 New Track.wav";
 
                     FileSource audioSource = new FileSource(audioFilePath);
 
