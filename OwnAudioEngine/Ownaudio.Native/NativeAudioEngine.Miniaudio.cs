@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Logger;
 using Ownaudio.Core;
 using Ownaudio.Core.Common;
@@ -195,7 +196,7 @@ namespace Ownaudio.Native
                                 if (useInputRouting)
                                 {
                                     Span<float> logIn = stackalloc float[logicalSampleCount];
-                                    RouteInputChannels(pInput, logIn, (int)frameCount, (int)frameCount * physInChannels / (int)frameCount, logicalChannels, _config.InputChannelSelectors!);
+                                    RouteInputChannels(pInput, logIn, (int)frameCount, physInChannels, logicalChannels, _config.InputChannelSelectors!);
                                     _inputRing.Write(logIn);
                                 }
                                 else
@@ -247,17 +248,42 @@ namespace Ownaudio.Native
                 }
 
                 // Handle input (recording)
-                if (_config.EnableInput && pInput != null)
+                if (_config.EnableInput)
                 {
-                    if (useInputRouting)
+                    if (pInput == null)
                     {
-                        Span<float> logIn = stackalloc float[logicalSampleCount];
-                        RouteInputChannels(pInput, logIn, (int)frameCount, physInChannels, logicalChannels, _config.InputChannelSelectors!);
-                        _inputRing.Write(logIn);
+                        if (Interlocked.CompareExchange(ref _inputDiagLogged, 1, 0) == 0)
+                            Log.Warning("MiniAudio: pInput is NULL — duplex capture not delivering data. Check macOS microphone permission (System Settings → Privacy → Microphone).");
                     }
                     else
                     {
-                        _inputRing.Write(new Span<float>(pInput, logicalSampleCount));
+                        if (Interlocked.CompareExchange(ref _inputDiagLogged, 1, 0) == 0)
+                            Log.Info("MiniAudio: pInput is non-null — capture data is flowing from microphone.");
+
+                        var inputSpan = new Span<float>(pInput, logicalSampleCount);
+
+                        // One-time check: warn if all samples are zero (e.g. permission denied silently)
+                        if (Interlocked.CompareExchange(ref _inputSilenceLogged, 1, 0) == 0)
+                        {
+                            bool allZero = true;
+                            for (int i = 0; i < inputSpan.Length && allZero; i++)
+                                if (inputSpan[i] != 0f) allZero = false;
+                            if (allZero)
+                                Log.Warning("MiniAudio: First capture buffer is all zeros — microphone may be muted or permission denied (macOS: System Settings → Privacy → Microphone → Terminal).");
+                            else
+                                Log.Info("MiniAudio: First capture buffer contains non-zero audio data — microphone is active.");
+                        }
+
+                        if (useInputRouting)
+                        {
+                            Span<float> logIn = stackalloc float[logicalSampleCount];
+                            RouteInputChannels(pInput, logIn, (int)frameCount, physInChannels, logicalChannels, _config.InputChannelSelectors!);
+                            _inputRing.Write(logIn);
+                        }
+                        else
+                        {
+                            _inputRing.Write(inputSpan);
+                        }
                     }
                 }
             }
@@ -404,12 +430,45 @@ namespace Ownaudio.Native
 
             if (result != MaResult.Success)
             {
-                MaBinding.ma_free(_maDevice, IntPtr.Zero, "Device init failed");
-                _maDevice = IntPtr.Zero;
-                return (int)result;
+                Log.Warning($"MiniAudio device init failed with error {result} ({(int)result}). Retrying with default devices...");
+
+                // Retry with default devices — specific device IDs may be invalid on some platforms
+                // (e.g. macOS CoreAudio duplex with separate speaker/microphone devices).
+                IntPtr fallbackConfigPtr = MaBinding.allocate_device_config(
+                    deviceType,
+                    MaFormat.F32,
+                    physicalOutChannels,
+                    (uint)_config.SampleRate,
+                    _maCallback,
+                    IntPtr.Zero,
+                    IntPtr.Zero,
+                    (uint)_config.BufferSize
+                );
+
+                if (fallbackConfigPtr != IntPtr.Zero)
+                {
+                    result = MaBinding.ma_device_init(_maContext, fallbackConfigPtr, _maDevice);
+                    MaBinding.ma_free(fallbackConfigPtr, IntPtr.Zero, "Fallback device config cleanup");
+                }
+
+                if (result != MaResult.Success)
+                {
+                    MaBinding.ma_free(_maDevice, IntPtr.Zero, "Device init failed");
+                    _maDevice = IntPtr.Zero;
+                    Log.Error($"MiniAudio device reinitialization failed: {result} ({(int)result})");
+                    return (int)result;
+                }
+
+                // Clear persisted device IDs so future reinits also use defaults
+                _config.InputDeviceId = null;
+                _config.OutputDeviceId = null;
+                Log.Info("MiniAudio device reinitialized with default devices (fallback)");
+            }
+            else
+            {
+                Log.Info("MiniAudio device reinitialized successfully");
             }
 
-            Log.Info($"MiniAudio device reinitialized successfully");
             return 0;
         }
 

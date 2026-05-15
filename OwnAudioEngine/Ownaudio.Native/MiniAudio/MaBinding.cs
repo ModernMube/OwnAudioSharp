@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Ownaudio.Native.Utils;
 using Logger;
@@ -16,6 +17,8 @@ internal static partial class MaBinding
     /// Only the first call will actually load the library and initialize bindings.
     /// Subsequent calls will be ignored.
     /// </summary>
+    [UnconditionalSuppressMessage("AOT", "IL2026", Justification = "All delegate types passed to LoadFunc are statically defined in this assembly.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "All delegate types passed to LoadFunc are statically defined in this assembly.")]
     public static void InitializeBindings(LibraryLoader loader)
     {
         if (_isInitialized)
@@ -102,6 +105,8 @@ internal static partial class MaBinding
     /// Ensures MiniAudio bindings are initialized.
     /// If not already initialized, loads the library and initializes bindings.
     /// </summary>
+    [UnconditionalSuppressMessage("AOT", "IL2026", Justification = "All delegate types passed to LoadFunc are statically defined in this assembly.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "All delegate types passed to LoadFunc are statically defined in this assembly.")]
     public static void EnsureInitialized()
     {
         if (_isInitialized)

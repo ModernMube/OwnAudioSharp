@@ -1,10 +1,13 @@
 ﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using Ownaudio.Native.Utils;
 
 namespace Ownaudio.Native.PortAudio;
 
 internal static partial class PaBinding
 {
+    [UnconditionalSuppressMessage("AOT", "IL2026", Justification = "All delegate types passed to LoadFunc are statically defined in this assembly.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "All delegate types passed to LoadFunc are statically defined in this assembly.")]
     public static void InitializeBindings(LibraryLoader loader)
     {
         _initialize = loader.LoadFunc<Initialize>(nameof(Pa_Initialize));

@@ -45,7 +45,7 @@ public abstract partial class BaseAudioSource : IAudioSource
     public float Volume
     {
         get => _volume;
-        set => _volume = Math.Clamp(value, 0.0f, 1.0f);
+        set => _volume = Math.Clamp(value, 0.0f, 20.0f);
     }
 
     /// <inheritdoc/>

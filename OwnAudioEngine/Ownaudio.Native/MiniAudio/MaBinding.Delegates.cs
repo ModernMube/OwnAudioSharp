@@ -60,12 +60,13 @@ internal static partial class MaBinding
     private static MaMalloc? _maMalloc;
     private static MaFree? _maFree;
 
-    public const int MA_MAX_DEVICE_NAME_LENGTH = 256;
+    public const int MA_MAX_DEVICE_NAME_LENGTH = 255; // miniaudio.h: MA_MAX_DEVICE_NAME_LENGTH = 255 (not 256)
     public const int MA_MAX_DEVICE_ID_LENGTH = 256;
     public const int MA_MAX_NATIVE_DATA_FORMATS_PER_DEVICE = 256;
     public const int MA_DEVICE_INFO_NATIVE_DATA_FORMAT_ARRAY_SIZE = 64;
 
     #region Public Delegates
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public unsafe delegate void MaDataCallback(
         IntPtr pDevice,
         void* pOutput,
@@ -73,10 +74,12 @@ internal static partial class MaBinding
         uint frameCount
     );
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public unsafe delegate void MaStopCallback(
         IntPtr pDevice
     );
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public unsafe delegate MaResult MaEnumDevicesCallback(
         IntPtr context,
         MaDeviceType deviceType,

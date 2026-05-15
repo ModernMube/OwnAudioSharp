@@ -43,6 +43,9 @@ namespace Ownaudio.Native
         /// </summary>
         private bool _disposed;
 
+        private volatile int _inputDiagLogged;   // one-time log flags for input diagnostics
+        private volatile int _inputSilenceLogged;
+
         /// <summary>
         /// Running state: 0 = stopped, 1 = running.
         /// </summary>
@@ -306,6 +309,19 @@ namespace Ownaudio.Native
                 {
                     throw;
                 }
+            }
+
+            // PortAudio can return negative error codes (e.g. -9998 paInvalidDevice) on macOS
+            // when input and output are separate Core Audio devices (speaker vs microphone).
+            // Fall back to MiniAudio which handles duplex on separate devices correctly.
+            if (result < 0 && _backend == AudioEngineBackend.PortAudio)
+            {
+                Log.Warning($"PortAudio initialization returned error {result}. Falling back to MiniAudio...");
+                DisposePortAudio();
+                _portAudioLoader = null;
+                _backend = AudioEngineBackend.MiniAudio;
+                MaBinding.EnsureInitialized();
+                result = InitializeMiniAudio();
             }
 
             if (result == 0)
@@ -771,6 +787,8 @@ namespace Ownaudio.Native
                 return 0; // Already running
 
             _isBuffering = 1;
+            _inputDiagLogged = 0;
+            _inputSilenceLogged = 0;
 
             int result = _backend == AudioEngineBackend.PortAudio
                 ? StartPortAudio()

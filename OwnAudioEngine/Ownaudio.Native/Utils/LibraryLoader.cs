@@ -1,6 +1,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Reflection;
@@ -79,6 +80,8 @@ namespace Ownaudio.Native.Utils
         /// <typeparam name="TDelegate">The delegate type for the function</typeparam>
         /// <param name="functionName">The name of the function to load</param>
         /// <returns>A delegate to the loaded function</returns>
+        [RequiresDynamicCode("Delegate marshalling requires dynamic code generation.")]
+        [RequiresUnreferencedCode("Delegate types must be preserved for native interop.")]
         public TDelegate LoadFunc<TDelegate>(string functionName) where TDelegate : Delegate
         {
             if (!NativeLibrary.TryGetExport(_handle, functionName, out IntPtr funcPtr))
@@ -97,6 +100,8 @@ namespace Ownaudio.Native.Utils
         /// <typeparam name="TDelegate">The delegate type for the function</typeparam>
         /// <param name="functionName">The name of the function to load</param>
         /// <returns>A delegate to the loaded function, or null if not found</returns>
+        [RequiresDynamicCode("Delegate marshalling requires dynamic code generation.")]
+        [RequiresUnreferencedCode("Delegate types must be preserved for native interop.")]
         public TDelegate? TryLoadFunc<TDelegate>(string functionName) where TDelegate : Delegate
         {
             if (!NativeLibrary.TryGetExport(_handle, functionName, out IntPtr funcPtr))
