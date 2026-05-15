@@ -14,8 +14,9 @@ namespace OwnSeparator.BasicConsole
             Log.Info("OwnSeparator Audio Separation - Simplified");
             Log.Info("==========================================");
 
-            string audioFilePath = @"path/audio/music.flac";
-            string outputDirectory = @"path/output";
+            //string audioFilePath = @"path/audio/music.flac";
+            string audioFilePath = @"/path/audio/music.mp3";
+            string outputDirectory = @"/path/output";
 
             try
             {
