@@ -37,89 +37,104 @@
 
 ##
 
-**OwnAudioSharp** is a cross-platform audio framework with advanced features for professional audio applications. It combines native C++ engines for real-time audio processing with fully managed C# implementations, providing efficient and flexible audio solutions across all major platforms.
+## What is OwnAudioSharp?
 
+**OwnAudioSharp** is a cross-platform C# audio framework that gives developers professional-grade audio capabilities with a single, easy-to-use API — no native audio expertise required.
+
+The library is built on a native C++ engine (PortAudio / MiniAudio) backed by a fully managed C# layer. The result is GC-free, dropout-free, real-time audio on Windows, macOS, Linux, Android, and iOS — all from one NuGet package.
+
+### What it offers out of the box
+
+| Category | Capability |
+|---|---|
+| Playback & Mixing | Multi-track sync, real-time tempo/pitch, per-track volume |
+| Recording | Low-latency capture with device selection |
+| Effects | 15 real-time DSP effects (reverb, EQ, compressor, limiter, …) |
+| AI / ML | Vocal separation (HTDemucs 4-stem), reference mastering, chord detection |
+| MIDI | Hardware I/O, SMF file read/write, hardware-accurate clock |
+| Network | Sample-accurate multi-device sync over LAN |
+| Plugins | VST3 effect plugins with cross-platform editor GUI |
+| Calibration | SmartMaster speaker calibration with automatic EQ correction |
+
+### Recommended for
+
+- **Music players and DAWs** — synchronized multitrack playback with full effect processing
+- **Karaoke and stem apps** — AI vocal/instrument separation and real-time mixing
+- **DJ software** — tempo/pitch control, network sync, VST3 effects
+- **Music education tools** — chord recognition, MIDI capture, score generation
+- **Broadcast and podcast tools** — reference mastering, dynamic processing, automatic room calibration
+- **Live performance apps** — network-synchronized multi-room or multi-device setups
+- **Games and interactive audio** — low-latency output, real-time effect chains
 
 > [!IMPORTANT]
-> ## 🚀 Coming Soon — Version 3.0.0
+> ## Coming Soon — Version 3.0.0
 >
-> The next major code transformation is coming soon, with the goal of creating a **Native AOT compatible, modular NuGet package structure**.
->
-> **What is NOT changing:** the existing public API. Backwards compatibility will remain!
-> **Warning:** features marked obsolete will be removed from the package!
->
-> The user installs only the package they need:
+> The next major release introduces a **Native AOT compatible, modular NuGet package structure**. Install only what you need:
 >
 > ```xml
-> <!-- Audio playback and mixing only -->
-> <PackageReference Include="OwnAudioSharp.Basic" Version="3.0.0" />
->
-> <!-- Audio + MIDI handling -->
-> <PackageReference Include="OwnAudioSharp.Basic" Version="3.0.0" />
-> <PackageReference Include="OwnAudioSharp.Midi" Version="3.0.0" />
->
-> <!-- Audio + AI/ML features -->
-> <PackageReference Include="OwnAudioSharp.Basic" Version="3.0.0" />
-> <PackageReference Include="OwnAudioSharp.ML" Version="3.0.0" />
+> <PackageReference Include="OwnAudioSharp.Basic" Version="3.0.0" />   <!-- Playback + effects only -->
+> <PackageReference Include="OwnAudioSharp.Midi"  Version="3.0.0" />   <!-- MIDI support -->
+> <PackageReference Include="OwnAudioSharp.ML"    Version="3.0.0" />   <!-- AI/ML features -->
 > ```
 >
-> **AOT vs JIT performance**
->
-> | Metric | JIT (PGO) | Native AOT |
-> |---|---|---|
-> | Sustained throughput | 100% | 85-95% |
-> | Startup time | 100% | 800-1500% ← AOT wins |
-> | First playback | dropout | immediately |
-> | RAM usage | 100% | 70-80% ← AOT wins |
-> | SIMD performance | same | same |
->
-> **Conclusion:** AOT is worth it not because it is faster in sustained throughput, but because it is **more predictable, starts faster, and is easier to install**. JIT warmup dropout on first playback is a real, audible problem that AOT solves.
+> The public API is **not changing** — backwards compatibility is fully preserved.
 
 ---
 
-## 🎯 Platform Support
+## Installation
 
-- **Windows** - Native C++ engine
-- **macOS** - Native C++ engine  
-- **Linux** - Native C++ engine
-- **Android** - Native C++ engine
-- **iOS** - Native C++ engine
+Three packages are available depending on your platform and feature needs:
 
-## 🚀 Why OwnAudioSharp?
+| Package | Platforms | AI/ML | Size |
+|---|---|---|---|
+| `OwnAudioSharp` | Windows, Linux, macOS | ✅ Full | ~290 MB |
+| `OwnAudioSharp.Mobile` | Android, iOS | ✅ Full | ~90 MB |
+| `OwnAudioSharp.Basic` | All platforms | ❌ None | < 7 MB |
 
-OwnAudioSharp simplifies audio application development in C# by providing a comprehensive, easy-to-use API with professional-grade features:
+```bash
+dotnet add package OwnAudioSharp          # Desktop, full features
+dotnet add package OwnAudioSharp.Mobile   # Mobile, full features
+dotnet add package OwnAudioSharp.Basic    # Lightweight, no AI/ML
+```
 
-### Core Features
+**Requirement:** .NET 10.0 or later. PortAudio can be installed system-wide for optimal audio quality; otherwise the bundled MiniAudio backend is used automatically.
 
-- **Synchronized Multi-Track Playback** - Play multiple audio files in perfect sync using a central time clock, ideal for multitrack applications
-- **Real-Time Tempo & Pitch Control** - Adjust playback speed and pitch in real-time, even across multiple tracks simultaneously
-- **15 Professional Real-Time Effects** - Freely combine effects on inputs and outputs including reverb, EQ, compression, and more
-- **Network-Synchronized Playback** - Synchronize audio across multiple devices using server-client architecture
-- **Simple Recording & Playback** - Straightforward API for audio capture and playback
-- **SmartMaster Auto-Calibration** - Measure speakers with a microphone and automatically correct audio output for optimal sound quality
-- **Chord Detection** - Detect chords from audio files for music analysis and transcription
-- **Automatic Mastering** - Master audio based on reference tracks or built-in presets
-- **Vocal & Music Separation** - Separate audio into stems: vocals + music, or drums + bass + music + vocals
-- **Multi-Model Audio Pipeline** - Chain multiple separation models for advanced workflows (vocal extraction → enhancement → cleanup)
-- **VST3 Plugin Support** - Load and use VST3 audio effect plugins with cross-platform editor GUI
+---
 
-### 🎛️ **SmartMaster** - Intelligent Audio Mastering Chain with Auto-Calibration
-Professional audio mastering system with automatic speaker calibration using an external measurement microphone. The system analyzes your speakers' frequency response and automatically optimizes the audio output for optimal sound quality. Includes speaker profiles (HiFi, Headphone, Studio, Club, Concert), 31-band EQ, multiband compression, and brick-wall limiting.
+## Features
 
-**Use cases:** Automatic room correction, speaker calibration, broadcast preparation, professional mastering
+### Multi-Track Synchronized Playback
+Play multiple audio files in perfect sync using a shared central clock. Each track supports individual volume, pitch, and tempo control — ideal for DAW-style applications or multitrack players.
 
-### 🌐 **NetworkSync** - Multi-Device Audio Synchronization
-Synchronize audio playback across multiple devices on your local network with sample-accurate precision (<5ms on LAN). Zero-configuration with automatic server discovery, perfect for multi-room audio, live performances, DJ setups, and synchronized installations.
+### Real-Time Tempo & Pitch Control
+Adjust playback speed and pitch independently, in real time, even across multiple tracks simultaneously. Uses the SoundTouch engine under the hood.
 
-**Use cases:** Multi-room audio systems, live PA setups, museum installations, collaborative production
+### 15 Real-Time DSP Effects
+Apply reverb, equalizer, compressor, limiter, chorus, delay, distortion, and more to inputs or outputs. Effects are freely combinable and can be inserted per-track or on the master bus.
 
-### 🎵 **Audio Matchering** - AI-Driven Audio Mastering
-Reference-based mastering that analyzes your favorite tracks and applies their sonic characteristics to your audio. Automatic EQ matching and spectral processing deliver professional mastering results without expensive plugins.
+### VST3 Plugin Support
+Load VST3 audio effect plugins and use their native cross-platform editor GUI. Integrates into the effect chain the same way as built-in effects.
 
-**Use cases:** Music production, podcast mastering, audio restoration
+### Simple Recording & Playback
+Straightforward API for audio capture from any input device with configurable sample rate, buffer size, and channel count.
 
-### 🎤 **Vocal Remover** - AI Vocal Separation with HTDemucs
-State-of-the-art vocal and instrumental track separation using ONNX neural networks. Features the advanced **HTDemucs** model for professional-grade 4-stem separation (vocals, drums, bass, other) with margin-trimming technology to eliminate chunk boundary artifacts. Multiple quality models available including `htdemucs` (4-stem), `default`, `best`, and `karaoke` models. Provides professional-grade stem isolation for remixing, karaoke, and audio analysis.
+### SmartMaster — Automatic Speaker Calibration
+Measures your speakers using a microphone and automatically corrects the audio output for optimal sound quality. Includes built-in speaker profiles (HiFi, Headphone, Studio, Club, Concert), a 31-band EQ, multiband compression, and a brick-wall limiter.
+
+**Good for:** room correction, broadcast preparation, professional mastering chains.
+
+### NetworkSync — Multi-Device Audio Synchronization
+Synchronizes audio playback across multiple devices on the local network with sample-accurate precision (< 5 ms on LAN). Zero-configuration with automatic server discovery.
+
+**Good for:** multi-room audio, live PA setups, museum installations, collaborative production.
+
+### Audio Matchering — Reference-Based Mastering
+Analyzes a reference track and applies its spectral and dynamic characteristics to your audio. Delivers professional mastering results without expensive external plugins.
+
+**Good for:** music production, podcast finishing, audio restoration.
+
+### Vocal Remover — AI Stem Separation
+Separates audio into vocals and instruments (or full 4-stem: vocals, drums, bass, other) using ONNX neural networks. Features the **HTDemucs** model for high-quality stem isolation with margin-trimming to eliminate chunk-boundary artifacts.
 
 <div align="center">
   <a href="https://huggingface.co/ModernMube/HTDemucs_onnx/tree/main">
@@ -127,136 +142,51 @@ State-of-the-art vocal and instrumental track separation using ONNX neural netwo
   </a>
 </div>
 
-**HTDemucs Features:**
-- **4-Stem Separation**: Isolate vocals, drums, bass, and other instruments independently
-- **Margin-Trimming**: Advanced processing eliminates volume fluctuations at chunk boundaries
-- **High Quality**: Superior separation quality using hybrid transformer architecture
-- **Example Code**: See [VocalRemover Example](OwnAudio/Examples/Ownaudio.Example.HTDemucs/) for complete implementation
+The **Multi-Model Pipeline** runs several UVR MDX models in parallel and averages their outputs for superior separation quality with fewer artifacts. Available models: `htdemucs` (4-stem), `default`, `best`, `karaoke`.
 
-**🔗 Multi-Model Pipeline (NEW):**
-Run multiple UVR MDX models in parallel and average their outputs for superior separation quality. Each model independently processes the original audio, then the vocals and instrumentals are averaged across all models — combining their individual strengths into a single, higher-quality result.
-- **Parallel Averaging**: All models process the original audio independently, results are averaged
-- **Per-Model Output Type**: Configure each model as `Vocals` or `Instrumental` output for flexible mixing
-- **Intermediate Saves**: Optionally save each model's individual output for comparison and debugging
-- **Custom Workflows**: Combine any UVR MDX models to reduce artifacts and improve separation quality
-- **Example Code**: See [MultiModel Separator Example](OwnAudio/Examples/Ownaudio.Example.MultimodelSeparator/) for complete implementation
+> **NuGet users:** The HTDemucs model is embedded in the package — no manual download required.
+>
+> **Building from source:** Download [htdemucs.onnx](https://huggingface.co/ModernMube/HTDemucs_onnx/resolve/main/htdemucs.onnx) (166 MB) and place it alongside the other model files.
 
-> [!IMPORTANT]
-> **HTDemucs Model Setup**
-> 
-> **For NuGet Package Users:** The HTDemucs model is **included in the NuGet package** - no manual download required!
-> 
-> **For Source Code / Building from Source:**
-> 1. Download: [htdemucs.onnx](https://huggingface.co/ModernMube/HTDemucs_onnx/resolve/main/htdemucs.onnx) (166 MB)
-> 2. Copy to the same directory as other vocal remover models
-> 3. The model will be automatically detected by the API
+**Good for:** karaoke creation, remixing, instrumental extraction, stem mastering.
 
-**Use cases:** Karaoke creation, remixing, vocal analysis, instrumental extraction, stem mastering
+### Chord Detection — Real-Time Musical Analysis
+Recognizes major, minor, diminished, augmented, and extended chords (7th through 13th) from audio in real time or offline. Uses a chromagram-based analysis pipeline.
 
-### 🎸 **Chord Detection** - Advanced Musical Analysis
-Real-time and offline chord recognition supporting major, minor, diminished, augmented, and extended chords (7th, 9th, 11th, 13th). Chromagram-based analysis provides accurate recognition from simple to professional chord structures.
+**Good for:** music transcription, chord chart generation, music education, DJ software.
 
-**Use cases:** Music transcription, chord chart generation, music education, DJ software
+### MIDI — Hardware I/O, Files, and Clock
+
+> See the full API reference: [OwnAudio/Midi/README.md](OwnAudio/Midi/README.md)
+
+AOT-compatible, reflection-free MIDI library supporting Windows (WinMM), macOS (CoreMIDI), and Linux (ALSA rawmidi). Features real-time MIDI input/output, Standard MIDI File (SMF format 0/1) read/write/edit, and a hardware-accurate 24 PPQN MIDI clock.
+
+**Good for:** sequencers, virtual instruments, MIDI recorders, hardware sync.
 
 ---
 
-**📚 Complete Documentation:** Visit the [OwnAudioSharp website](https://modernmube.github.io/OwnAudioSharp/) for detailed API documentation, tutorials, and usage examples.
+## Engine Architecture
 
-**💻 Working Examples:** See the [Examples directory](OwnAudio/Examples/) for complete, runnable projects demonstrating each feature in action.
+OwnAudioSharp uses a two-layer architecture:
 
+```
+Application
+  └─ OwnaudioNet (high-level API)
+       └─ AudioEngineWrapper (lock-free, non-blocking)
+            └─ NativeAudioEngine (C++ PortAudio / MiniAudio)
+                 └─ Audio hardware
+```
 
+- **[Ownaudio.Core](OwnAudioEngine/Ownaudio.Core/README.md)** — platform-agnostic interfaces, managed MP3/WAV/FLAC decoders, lock-free ring buffers, SIMD converters, and object pools.
+- **[Ownaudio.Native](OwnAudioEngine/Ownaudio.Native/README.md)** — cross-platform native engine (PortAudio + MiniAudio fallback) for Windows, Linux, macOS, Android, and iOS.
 
-## ⚠️ Version History
-
-**Version 2.1.0+ (Current)** - Native engine with PortAudio/miniaudio backends
-
-**Version 2.0.0** - Attempted pure managed code (GC issues discovered)
-
-**Pre-2.0.0** - Native libraries (miniaudio, portaudio, ffmpeg)
-
-### Core Engine Features
-
-- **Native C++ Audio Engine (Default)**:
-  - GC-free, deterministic real-time audio processing
-  - PortAudio backend (if installed) or embedded miniaudio fallback
-  - Professional-grade performance on all platforms
-  - Zero audio glitches or dropouts
-
-- **Dual API Layers**:
-  - Low-level Core API for direct engine control
-  - High-level NET API for professional features
-
-- **Audio Processing**:
-  - Multi-format support (MP3, WAV, FLAC) with built-in decoders
-  - Real-time effects: reverb, compressor, equalizer, pitch shifting, tempo control
-  - Multi-source audio mixing with synchronized playback
-
-- **High Performance**:
-  - Native engine: Zero GC interference
-  - Lock-free ring buffers for thread safety
-  - SIMD-optimized audio processing
-
-## 📦 Installation
-
-Three packages are available depending on your target platform and feature requirements:
-
-| Package | Platforms | AI/ML Features | Size |
-|---|---|---|---|
-| `OwnAudioSharp` | Windows, Linux, macOS | ✅ Full | ~290 MB |
-| `OwnAudioSharp.Mobile` | Android, iOS | ✅ Full | ~90 MB |
-| `OwnAudioSharp.Basic` | Windows, Linux, macOS, Android, iOS | ❌ None | < 7 MB |
+All blocking engine methods (`Initialize`, `Stop`, `Send`) must be called off the UI thread. The high-level `OwnaudioNet` API handles threading internally.
 
 ---
 
-### OwnAudioSharp
-> Full-featured desktop audio library with AI-powered vocal removal, chord detection, and audio matchering for Windows, Linux, and macOS.
+## Documentation
 
-```powershell
-# NuGet Package Manager
-Install-Package OwnAudioSharp
-```
-```bash
-# .NET CLI
-dotnet add package OwnAudioSharp
-```
-
----
-
-### OwnAudioSharp.Mobile
-> Full-featured mobile audio library with AI-powered vocal removal, chord detection, and audio matchering for Android and iOS.
-
-```powershell
-# NuGet Package Manager
-Install-Package OwnAudioSharp.Mobile
-```
-```bash
-# .NET CLI
-dotnet add package OwnAudioSharp.Mobile
-```
-
----
-
-### OwnAudioSharp.Basic
-> Lightweight cross-platform audio library for desktop and mobile — without AI/ML features, ideal for apps that only need playback, recording, mixing, and effects.
-
-```powershell
-# NuGet Package Manager
-Install-Package OwnAudioSharp.Basic
-```
-```bash
-# .NET CLI
-dotnet add package OwnAudioSharp.Basic
-```
-
----
-
-### Requirements
-- .NET 10.0 or later
-- **Optional:** PortAudio library for best performance (automatically falls back to embedded miniaudio)
-
-## 📚 Documentation
-
-**Complete API documentation with examples is available on the official website:**
+Complete API reference, tutorials, and architecture guides are on the official website:
 
 <div align="center">
   <a href="https://modernmube.github.io/OwnAudioSharp/">
@@ -264,16 +194,13 @@ dotnet add package OwnAudioSharp.Basic
   </a>
 </div>
 
-The website includes:
-- Complete API reference for all classes and methods
-- Step-by-step tutorials and usage examples
-- Architecture and design documentation
-- Best practices and performance tips
-- Professional feature guides (vocal removal, mastering, chord detection)
+Working example projects are in the [OwnAudio/Examples/](OwnAudio/Examples/) directory.
 
-## 💡 Support
+---
 
-**OwnAudioSharp is completely free and open-source**, providing professional-grade audio features without licensing costs. If you find this library useful, especially for commercial purposes, consider supporting its continued development:
+## Support
+
+**OwnAudioSharp is free and open-source.** If you use it in a commercial product or find it saves you time, consider supporting its development:
 
 <div align="center">
   <a href="https://www.buymeacoffee.com/ModernMube" target="_blank">
@@ -281,21 +208,12 @@ The website includes:
   </a>
 </div>
 
-**Why support?**
-- Enables continued development and new features
-- Ensures timely bug fixes and updates
-- Improves documentation and examples
-- Saves you thousands in commercial audio library licensing costs
+Your support funds new features, platform improvements, bug fixes, and documentation — and keeps professional audio tooling freely available to the .NET community.
 
-Your support helps keep professional audio technology accessible to everyone!
+Issues and feature requests: [GitHub Issues](https://github.com/modernmube/OwnAudioSharp/issues)
 
-## 📄 License
+---
+
+## License
 
 See the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgements
-
-Special thanks to the creators of:
-- [DryWetMidi](https://github.com/melanchall/drywetmidi) - .NET library to work with MIDI data and MIDI devices
-- [soundtouch.net](https://github.com/owoudenberg/soundtouch.net) - .NET wrapper for SoundTouch
-- [Avalonia](https://github.com/AvaloniaUI/Avalonia) - Cross-platform .NET UI framework
