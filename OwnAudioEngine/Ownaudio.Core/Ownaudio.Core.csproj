@@ -21,7 +21,7 @@
     <PackageProjectUrl>https://github.com/yourusername/ownaudio</PackageProjectUrl>
     <RepositoryUrl>https://github.com/yourusername/ownaudio</RepositoryUrl>
     <PackageTags>audio;real-time;low-latency;zero-allocation;gc-free;android;ios;mobile</PackageTags>
-    <Version>3.2.0</Version>
+    <Version>3.3.0</Version>
   </PropertyGroup>
 
   <PropertyGroup>

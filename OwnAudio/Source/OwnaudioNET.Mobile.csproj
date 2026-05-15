@@ -24,7 +24,7 @@
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>OwnAudioSharp.Mobile</PackageId>
-    <Version>3.0.22</Version>
+    <Version>3.0.3</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for mobile platforms (Android and iOS)</Description>
     <PackageTags>audio;cross-platform;android;ios;mobile;sound;multitrack</PackageTags>
