@@ -66,19 +66,6 @@ The library is built on a native C++ engine (PortAudio / MiniAudio) backed by a 
 - **Live performance apps** — network-synchronized multi-room or multi-device setups
 - **Games and interactive audio** — low-latency output, real-time effect chains
 
-> [!IMPORTANT]
-> ## Coming Soon — Version 3.0.0
->
-> The next major release introduces a **Native AOT compatible, modular NuGet package structure**. Install only what you need:
->
-> ```xml
-> <PackageReference Include="OwnAudioSharp.Basic" Version="3.0.0" />   <!-- Playback + effects only -->
-> <PackageReference Include="OwnAudioSharp.Midi"  Version="3.0.0" />   <!-- MIDI support -->
-> <PackageReference Include="OwnAudioSharp.ML"    Version="3.0.0" />   <!-- AI/ML features -->
-> ```
->
-> The public API is **not changing** — backwards compatibility is fully preserved.
-
 ---
 
 ## Installation
