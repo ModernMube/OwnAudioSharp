@@ -130,6 +130,12 @@ namespace Ownaudio.Native
                 return -1;
             }
 
+            // The managed MaResamplerConfig uses IntPtr (8 bytes) for allocationCallbacks,
+            // but the native ma_allocation_callbacks is 32 bytes (4 function pointers).
+            // This 8-byte shortfall shifts every field after 'resampling' in the native struct.
+            // Write playback/capture format and channels at their actual native C offsets.
+            PatchNativeDeviceConfig(configPtr, physicalOutChannels, _config.EnableInput, physicalInChannels);
+
             // Initialize device
             result = MaBinding.ma_device_init(_maContext, configPtr, _maDevice);
             MaBinding.ma_free(configPtr, IntPtr.Zero, "Device config cleanup");
@@ -418,6 +424,8 @@ namespace Ownaudio.Native
                 return -1;
             }
 
+            PatchNativeDeviceConfig(configPtr, physicalOutChannels, _config.EnableInput, (uint)_physicalInputChannels);
+
             // Initialize device
             MaResult result = MaBinding.ma_device_init(_maContext, configPtr, _maDevice);
             MaBinding.ma_free(configPtr, IntPtr.Zero, "Device config cleanup");
@@ -447,6 +455,7 @@ namespace Ownaudio.Native
 
                 if (fallbackConfigPtr != IntPtr.Zero)
                 {
+                    PatchNativeDeviceConfig(fallbackConfigPtr, physicalOutChannels, _config.EnableInput, (uint)_physicalInputChannels);
                     result = MaBinding.ma_device_init(_maContext, fallbackConfigPtr, _maDevice);
                     MaBinding.ma_free(fallbackConfigPtr, IntPtr.Zero, "Fallback device config cleanup");
                 }
@@ -470,6 +479,30 @@ namespace Ownaudio.Native
             }
 
             return 0;
+        }
+
+        /// <summary>
+        /// Patches a native ma_device_config buffer to write playback/capture format and channel
+        /// count at the correct native C offsets.
+        ///
+        /// The managed MaResamplerConfig is 16 bytes larger than the actual native
+        /// ma_resampler_config (48 bytes on 64-bit in MiniAudio 0.11.x).
+        /// Marshal.StructureToPtr therefore writes playback/capture fields at wrong positions,
+        /// so MiniAudio reads zeros for channels and defaults to device native values.
+        ///
+        /// Verified native field offsets (from ma_device_init disassembly on arm64):
+        ///   playback.pDeviceID @ 112   playback.format @ 120   playback.channels @ 124
+        ///   capture.pDeviceID  @ 152   capture.format  @ 160   capture.channels  @ 164
+        /// </summary>
+        private static void PatchNativeDeviceConfig(IntPtr configPtr, uint playbackChannels, bool hasCapture, uint captureChannels)
+        {
+            Marshal.WriteInt32(configPtr, 120, (int)MaFormat.F32);
+            Marshal.WriteInt32(configPtr, 124, (int)playbackChannels);
+            if (hasCapture)
+            {
+                Marshal.WriteInt32(configPtr, 160, (int)MaFormat.F32);
+                Marshal.WriteInt32(configPtr, 164, (int)captureChannels);
+            }
         }
 
         /// <summary>
