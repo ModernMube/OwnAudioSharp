@@ -74,7 +74,7 @@ Three packages are available depending on your platform and feature needs:
 
 | Package | Platforms | AI/ML | Size |
 |---|---|---|---|
-| `OwnAudioSharp` | Windows, Linux, macOS | ✅ Full | ~290 MB |
+| `OwnAudioSharp.Native` | Windows, Linux, macOS | ✅ Full | ~290 MB |
 | `OwnAudioSharp.Mobile` | Android, iOS | ✅ Full | ~90 MB |
 | `OwnAudioSharp.Basic` | All platforms | ❌ None | < 7 MB |
 
