@@ -79,7 +79,7 @@ Three packages are available depending on your platform and feature needs:
 | `OwnAudioSharp.Basic` | All platforms | ❌ None | < 7 MB |
 
 ```bash
-dotnet add package OwnAudioSharp          # Desktop, full features
+dotnet add package OwnAudioSharp.Native   # Desktop, full features
 dotnet add package OwnAudioSharp.Mobile   # Mobile, full features
 dotnet add package OwnAudioSharp.Basic    # Lightweight, no AI/ML
 ```
