@@ -1,932 +1,190 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="en" data-theme="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Core API Reference - Ownaudio</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="docs.css">
+  <script>(function(){var t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);})();</script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OwnaudioNet &amp; AudioConfig — OwnAudioSharp</title>
+  <link rel="stylesheet" href="../assets/docs.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 </head>
-
 <body>
-    <nav class="nav">
-        <div class="nav-container">
-            <a href="../index.html" class="logo">OwnaudioSharp</a>
-            <ul class="nav-links">
-                <li><a href="quickstart.html">Quick Start</a></li>
-                <li><a href="api-core.html" class="active">Core API</a></li>
-                <li><a href="api-net.html">NET API</a></li>
-                <li><a href="examples.html">Examples</a></li>
-                <li><a href="effects.html">Effects</a></li>
-                <li><a href="networksync.html">Net Sync</a></li>
-                <li><a href="matchering.html">Mastering</a></li>
-                <li><a href="vocalremover.html">Vocal Sep</a></li>
-                <li><a href="chorddetect.html">Chords</a></li>
-                <li><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a></li>
-            </ul>
-        </div>
-    </nav>
+<nav class="topnav">
+  <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+  <a class="topnav-logo" href="../index.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>OwnAudioSharp</a>
+  <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="api-core.html" class="active">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
+  <div class="topnav-right"><span class="badge-version">v3.0.3</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
+</nav>
+<div id="sidebar-overlay" class="sidebar-overlay"></div>
+<div class="layout">
+<nav id="sidebar" class="sidebar">
+  <div class="sidebar-section"><span class="sidebar-label">Getting Started</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">High-Level API</span><ul class="sidebar-nav"><li><a href="api-core.html">OwnaudioNet</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-mixer.html">AudioMixer</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Audio Sources</span><ul class="sidebar-nav"><li><a href="api-sources.html">Source Overview</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#sourcewitheffects" class="sub">SourceWithEffects</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel Routing</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Processing</span><ul class="sidebar-nav"><li><a href="api-sync.html">Synchronization</a></li><li><a href="api-effects.html">Built-in Effects</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 Plugins</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">AI Features</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">MIDI</span><ul class="sidebar-nav"><li><a href="api-midi.html">MIDI Overview</a></li><li><a href="api-midi.html#port-management" class="sub">Port Management</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI File</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI Clock</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Reference</span><ul class="sidebar-nav"><li><a href="api-reference.html">Events &amp; Types</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#best-practices" class="sub">Best Practices</a></li></ul></div>
+</nav>
+<main class="main">
 
-    <div class="main">
-        <aside class="sidebar">
-            <h3>Core API</h3>
-            <ul class="sidebar-nav">
-                <li><a href="#overview" class="active">Overview</a></li>
-                <li><a href="#getting-started">Getting Started</a></li>
-                <li><a href="#interfaces">Interfaces</a></li>
-                <li><a href="#factories">Factories</a></li>
-                <li><a href="#configuration">Configuration</a></li>
-                <li><a href="#channel-routing">Channel Routing</a></li>
-                <li><a href="#enums">Enumerations</a></li>
-                <li><a href="#common">Common Components</a></li>
-            </ul>
-        </aside>
+<h1 class="page-title">OwnaudioNet</h1>
+<p class="page-subtitle">The static entry point for all audio operations. Namespace: <code>OwnaudioNET</code></p>
 
-        <main class="content">
-            <h1><span class="badge badge-core">Core</span> Ownaudio.Core API Reference</h1>
-            <p>
-                Low-level cross-platform audio engine providing real-time audio playback and recording with native
-                performance.
-            </p>
+<h2 id="properties">Properties</h2>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>IsInitialized</code></td><td><code>bool</code></td><td>Whether the audio system has been initialized.</td></tr>
+    <tr><td><code>IsRunning</code></td><td><code>bool</code></td><td>Whether the audio engine is actively processing.</td></tr>
+    <tr><td><code>Engine</code></td><td><code>AudioEngineWrapper?</code></td><td>The active engine wrapper. <code>null</code> before initialization. Access <code>UnderlyingEngine</code> for the <code>IAudioEngine</code>.</td></tr>
+    <tr><td><code>Version</code></td><td><code>Version</code></td><td>Library version (2.6.7).</td></tr>
+  </tbody>
+</table></div>
 
-            <div class="alert alert-info">
-                <strong>🚀 Native Engine (Default)</strong>
-                The native C++ engine is the default, providing GC-free, glitch-free audio processing. Uses
-                PortAudio (if installed) or embedded miniaudio fallback. Managed C# engines are available for
-                development/testing.
-            </div>
+<h2 id="initialization">Initialization &amp; Lifecycle</h2>
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>On Linux, <code>Initialize()</code> can block up to 5 seconds waiting for PulseAudio. Always use <code>InitializeAsync()</code> in UI applications.</p></div>
 
-            <h2 id="overview">Overview</h2>
-            <p>Ownaudio.Core is the foundation for cross-platform audio applications:</p>
-            <ul>
-                <li><strong>Native C++ engine (default)</strong> - GC-free, deterministic real-time audio</li>
-                <li><strong>Managed C# engines (optional)</strong> - Pure C# implementations for testing/development
-                </li>
-                <li><strong>Platform-native APIs</strong> - WASAPI (Windows), Core Audio (macOS/iOS), PulseAudio
-                    (Linux), AAudio (Android)</li>
-                <li><strong>Built-in decoders</strong> - WAV, MP3, and FLAC support</li>
-                <li><strong>Device management</strong> - Hot-plug support and device enumeration</li>
-                <li><strong>Automatic format conversion</strong> - Sample rate and channel conversion</li>
-            </ul>
+<div class="code-block"><div class="code-header"><span>C# — Synchronous (console apps / services)</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Default config: 48kHz, stereo, 512 frames
+OwnaudioNet.Initialize();
 
-            <h3>Supported Platforms</h3>
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Platform</th>
-                        <th>Native API</th>
-                        <th>Assembly</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>Windows</td>
-                        <td>WASAPI</td>
-                        <td>Ownaudio.Windows</td>
-                    </tr>
-                    <tr>
-                        <td>macOS</td>
-                        <td>Core Audio</td>
-                        <td>Ownaudio.macOS</td>
-                    </tr>
-                    <tr>
-                        <td>Linux</td>
-                        <td>PulseAudio</td>
-                        <td>Ownaudio.Linux</td>
-                    </tr>
-                    <tr>
-                        <td>iOS</td>
-                        <td>Core Audio</td>
-                        <td>Ownaudio.iOS</td>
-                    </tr>
-                    <tr>
-                        <td>Android</td>
-                        <td>AAudio</td>
-                        <td>Ownaudio.Android</td>
-                    </tr>
-                </tbody>
-            </table>
+// Custom config
+OwnaudioNet.Initialize(config);
 
-            <h2 id="getting-started">Getting Started</h2>
-            <p>Quick example to get you started with Ownaudio.Core:</p>
+// Unit testing — no hardware required
+OwnaudioNet.Initialize(config, useMockEngine: true);
 
-            <div class="code-block">
-                <div class="code-header">Basic Usage Example</div>
-                <pre><code class="language-csharp">using Ownaudio.Core;
-using Ownaudio.Decoders;
+// Start and stop
+OwnaudioNet.Start();
+OwnaudioNet.Stop();
 
-// Create and initialize engine
-using var engine = AudioEngineFactory.CreateDefault();
+// Full release of all resources
+OwnaudioNet.Shutdown();</code></pre></div>
 
-// Start the engine
-engine.Start();
+<div class="code-block"><div class="code-header"><span>C# — Asynchronous (recommended for UI apps)</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Default config
+await OwnaudioNet.InitializeAsync();
+await OwnaudioNet.InitializeAsync(cancellationToken);
 
-// Load and decode audio file
-using var decoder = AudioDecoderFactory.Create(
-    "music.mp3",
-    targetSampleRate: 48000,
-    targetChannels: 2
-);
+// Custom config
+await OwnaudioNet.InitializeAsync(config);
+await OwnaudioNet.InitializeAsync(config, useMockEngine: false, cancellationToken);
 
-// Read and play audio
-var buffer = new byte[4096 * 2 * sizeof(float)];
-while (true)
+// Pre-created engine (custom platform implementations)
+await OwnaudioNet.InitializeAsync(engine, config, cancellationToken);
+
+// Stop / Shutdown
+await OwnaudioNet.StopAsync(cancellationToken);
+await OwnaudioNet.ShutdownAsync(cancellationToken);</code></pre></div>
+
+<h2 id="config-factories">Configuration Factories</h2>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// 48kHz · stereo · 512 frames (~10.6ms)
+AudioConfig config = OwnaudioNet.CreateDefaultConfig();
+
+// 48kHz · stereo · 128 frames (~2.7ms)
+AudioConfig config = OwnaudioNet.CreateLowLatencyConfig();
+
+// 48kHz · stereo · 2048 frames (~42.7ms)
+AudioConfig config = OwnaudioNet.CreateHighLatencyConfig();</code></pre></div>
+
+<h2 id="devices">Device Management</h2>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Enumerate devices
+List&lt;AudioDeviceInfo&gt; outputs = OwnaudioNet.GetOutputDevices();
+List&lt;AudioDeviceInfo&gt; inputs  = OwnaudioNet.GetInputDevices();
+
+// Async variants
+List&lt;AudioDeviceInfo&gt; outputs = await OwnaudioNet.GetOutputDevicesAsync();
+List&lt;AudioDeviceInfo&gt; inputs  = await OwnaudioNet.GetInputDevicesAsync();
+
+// Use a specific device
+var device = outputs.First(d => d.Name.Contains("Focusrite"));
+config.OutputDeviceId = device.DeviceId;
+
+// Hot-plug monitoring — pause when opening VST editors
+OwnaudioNet.PauseDeviceMonitoring();
+// ... open editor ...
+OwnaudioNet.ResumeDeviceMonitoring();</code></pre></div>
+
+<h4>AudioDeviceInfo Properties</h4>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>DeviceId</code></td><td><code>string</code></td><td>Unique identifier — pass to <code>AudioConfig.OutputDeviceId</code>.</td></tr>
+    <tr><td><code>Name</code></td><td><code>string</code></td><td>Human-readable device name.</td></tr>
+    <tr><td><code>EngineName</code></td><td><code>string</code></td><td>Backend: <code>Wasapi</code>, <code>CoreAudio</code>, <code>PulseAudio</code>, etc.</td></tr>
+    <tr><td><code>IsInput</code> / <code>IsOutput</code></td><td><code>bool</code></td><td>Device direction.</td></tr>
+    <tr><td><code>IsDefault</code></td><td><code>bool</code></td><td>System default device for its type.</td></tr>
+    <tr><td><code>MaxInputChannels</code> / <code>MaxOutputChannels</code></td><td><code>int</code></td><td>Hardware channel limits.</td></tr>
+    <tr><td><code>State</code></td><td><code>AudioDeviceState</code></td><td><code>Active</code>, <code>Disabled</code>, <code>NotPresent</code>, <code>Unplugged</code>.</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="direct-io">Direct Audio I/O</h2>
+<p>These methods bypass the mixer. Prefer <a href="api-mixer.html">AudioMixer</a> + sources for most use cases.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Send interleaved samples to output
+OwnaudioNet.Send(ReadOnlySpan&lt;float&gt; samples);
+
+// Receive from input — ALWAYS return the buffer!
+float[]? buffer = OwnaudioNet.Receive(out int sampleCount);
+if (buffer != null)
 {
-    var result = decoder.ReadFrames(buffer);
-    if (result.IsEOF) break;
-    
-    if (result.FramesRead > 0)
-    {
-        int bytesRead = result.FramesRead * 2 * sizeof(float);
-        var samples = System.Runtime.InteropServices.MemoryMarshal
-            .Cast<byte, float>(buffer.AsSpan(0, bytesRead));
-        engine.Send(samples);
-    }
-}
+    // process buffer[0..sampleCount-1]
+    OwnaudioNet.ReturnInputBuffer(buffer); // returns buffer to pool (zero-allocation)
+}</code></pre></div>
+<div class="callout callout-danger"><div class="callout-icon">🚫</div><p>Never discard a buffer returned by <code>Receive()</code> without calling <code>ReturnInputBuffer()</code>. The buffer comes from a pool and leaking it causes memory growth.</p></div>
 
-// Stop the engine
-engine.Stop();</code></pre>
-            </div>
+<h2 id="mixer-registry">AudioMixer Registry</h2>
+<p>The last created <code>AudioMixer</code> is automatically registered for <a href="api-network.html">NetworkSync</a>. You can override this:</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Set the primary mixer explicitly (e.g. if you have multiple mixers)
+OwnaudioNet.SetPrimaryAudioMixer(mixer);
 
-            <h2 id="interfaces">Interfaces</h2>
+// Get the currently registered mixer
+AudioMixer? active = OwnaudioNet.GetRegisteredAudioMixer();</code></pre></div>
 
-            <h3>IAudioEngine</h3>
-            <p>Platform-independent audio engine interface for real-time playback and recording.</p>
+<!-- AudioConfig -->
+<h2 id="audioconfig">AudioConfig</h2>
+<p>Configuration object describing the audio stream format and hardware selection. Namespace: <code>Ownaudio.Core</code></p>
 
-            <div class="code-block">
-                <div class="code-header">IAudioEngine Interface</div>
-                <pre><code class="language-csharp">public interface IAudioEngine : IDisposable
-{
-    // Properties
-    int FramesPerBuffer { get; }
-    
-    // Lifecycle
-    int Initialize(AudioConfig config);
-    int Start();
-    int Stop();
-    int OwnAudioEngineActivate();
-    int OwnAudioEngineStopped();
-    
-    // Audio I/O
-    void Send(Span<float> samples);
-    int Receives(out float[] samples);
-    IntPtr GetStream();
-    
-    // Device Management
-    List<AudioDeviceInfo> GetOutputDevices();
-    List<AudioDeviceInfo> GetInputDevices();
-    int SetOutputDeviceByName(string deviceName);
-    int SetOutputDeviceByIndex(int deviceIndex);
-    int SetInputDeviceByName(string deviceName);
-    int SetInputDeviceByIndex(int deviceIndex);
-    
-    // Events
-    event EventHandler<AudioDeviceChangedEventArgs> OutputDeviceChanged;
-    event EventHandler<AudioDeviceChangedEventArgs> InputDeviceChanged;
-    event EventHandler<AudioDeviceStateChangedEventArgs> DeviceStateChanged;
-}</code></pre>
-            </div>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>SampleRate</code></td><td><code>int</code></td><td><code>48000</code></td><td>Sample rate in Hz. Common values: 44100, 48000, 96000.</td></tr>
+    <tr><td><code>Channels</code></td><td><code>int</code></td><td><code>2</code></td><td><code>1</code> = mono, <code>2</code> = stereo.</td></tr>
+    <tr><td><code>BufferSize</code></td><td><code>int</code></td><td><code>512</code></td><td>Desired frames per buffer. Actual size negotiated with driver.</td></tr>
+    <tr><td><code>EnableOutput</code></td><td><code>bool</code></td><td><code>true</code></td><td>Enable audio output (playback).</td></tr>
+    <tr><td><code>EnableInput</code></td><td><code>bool</code></td><td><code>false</code></td><td>Enable audio input (recording / microphone).</td></tr>
+    <tr><td><code>OutputDeviceId</code></td><td><code>string?</code></td><td><code>null</code></td><td>Output device ID from <code>AudioDeviceInfo.DeviceId</code>. <code>null</code> = system default.</td></tr>
+    <tr><td><code>InputDeviceId</code></td><td><code>string?</code></td><td><code>null</code></td><td>Input device ID. <code>null</code> = system default.</td></tr>
+    <tr><td><code>HostType</code></td><td><code>EngineHostType</code></td><td><code>None</code></td><td>Audio backend: <code>WASAPI</code>, <code>ASIO</code>, <code>CoreAudio</code>, <code>ALSA</code>, <code>Miniaudio</code>, <code>Portaudio</code>.</td></tr>
+    <tr><td><code>OutputChannelSelectors</code></td><td><code>int[]?</code></td><td><code>null</code></td><td>Physical output channels to use. <code>null</code> = sequential from 0.</td></tr>
+    <tr><td><code>InputChannelSelectors</code></td><td><code>int[]?</code></td><td><code>null</code></td><td>Physical input channels to use.</td></tr>
+  </tbody>
+</table></div>
 
-            <h4>Key Methods</h4>
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Method</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>Initialize(AudioConfig)</code></td>
-                        <td>Initialize engine with configuration. Returns 0 on success.</td>
-                    </tr>
-                    <tr>
-                        <td><code>Start()</code></td>
-                        <td>Start audio engine (thread-safe, idempotent).</td>
-                    </tr>
-                    <tr>
-                        <td><code>Stop()</code></td>
-                        <td>Stop audio engine gracefully (thread-safe, idempotent).</td>
-                    </tr>
-                    <tr>
-                        <td><code>Send(Span&lt;float&gt;)</code></td>
-                        <td>Send audio samples to output (blocking, zero-allocation).</td>
-                    </tr>
-                    <tr>
-                        <td><code>Receives(out float[])</code></td>
-                        <td>Receive audio samples from input (uses pooled buffers).</td>
-                    </tr>
-                </tbody>
-            </table>
+<div class="code-block"><div class="code-header"><span>C# — Common configurations</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Standard stereo output
+var config = new AudioConfig { SampleRate = 48000, Channels = 2, BufferSize = 512 };
 
-            <h3>IAudioDecoder</h3>
-            <p>Audio file decoder interface for WAV, MP3, and FLAC formats.</p>
-
-            <div class="code-block">
-                <div class="code-header">IAudioDecoder Interface</div>
-                <pre><code class="language-csharp">public interface IAudioDecoder : IDisposable
-{
-    AudioStreamInfo StreamInfo { get; }
-    
-    // Zero-allocation reading (recommended)
-    AudioDecoderResult ReadFrames(byte[] buffer);
-    
-    // Seeking
-    bool TrySeek(TimeSpan position, out string error);
-}</code></pre>
-            </div>
-
-            <h4>Usage Example</h4>
-            <div class="code-block">
-                <div class="code-header">Zero-Allocation Decoder Usage</div>
-                <pre><code class="language-csharp">// Create decoder
-using var decoder = AudioDecoderFactory.Create(
-    "music.mp3",
-    targetSampleRate: 48000,
-    targetChannels: 2
-);
-
-var info = decoder.StreamInfo;
-Console.WriteLine($"Duration: {info.Duration}");
-Console.WriteLine($"Sample Rate: {info.SampleRate} Hz");
-Console.WriteLine($"Channels: {info.Channels}");
-
-// Create reusable buffer
-int bufferSize = 4096 * info.Channels * sizeof(float);
-var buffer = new byte[bufferSize];
-
-// Decode frames efficiently
-while (true)
-{
-    var result = decoder.ReadFrames(buffer);
-    if (result.IsEOF) break;
-    
-    if (result.FramesRead > 0)
-    {
-        int bytesRead = result.FramesRead * info.Channels * sizeof(float);
-        var samples = System.Runtime.InteropServices.MemoryMarshal
-            .Cast<byte, float>(buffer.AsSpan(0, bytesRead));
-        
-        // Process audio samples
-        ProcessAudio(samples);
-    }
-}</code></pre>
-            </div>
-
-            <h2 id="factories">Factory Classes</h2>
-
-            <h3>AudioEngineFactory</h3>
-            <p>Creates platform-specific audio engine instances with automatic platform detection.</p>
-
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Method</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>Create(AudioConfig)</code></td>
-                        <td>Create engine with custom configuration</td>
-                    </tr>
-                    <tr>
-                        <td><code>CreateDefault()</code></td>
-                        <td>Create with default settings (48kHz, stereo, 512 frames)</td>
-                    </tr>
-                    <tr>
-                        <td><code>CreateLowLatency()</code></td>
-                        <td>Create with low latency settings (128 frames)</td>
-                    </tr>
-                    <tr>
-                        <td><code>CreateHighLatency()</code></td>
-                        <td>Create with high latency settings (2048 frames)</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="code-block">
-                <div class="code-header">Factory Usage</div>
-                <pre><code class="language-csharp">// Default configuration
-using var engine1 = AudioEngineFactory.CreateDefault();
-
-// Low latency
-using var engine2 = AudioEngineFactory.CreateLowLatency();
-
-// Custom configuration
+// Windows WASAPI, specific device, input disabled
 var config = new AudioConfig
 {
-    SampleRate = 44100,
-    Channels = 2,
-    BufferSize = 256,
-    EnableInput = true
-};
-using var engine3 = AudioEngineFactory.Create(config);</code></pre>
-            </div>
-
-            <h3>AudioDecoderFactory</h3>
-            <p>Creates audio decoders with automatic format detection from file extension or header.</p>
-
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Method</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>Create(string, int, int)</code></td>
-                        <td>Create decoder from file path (auto-detects format)</td>
-                    </tr>
-                    <tr>
-                        <td><code>Create(Stream, AudioFormat, int, int)</code></td>
-                        <td>Create decoder from stream with specified format</td>
-                    </tr>
-                    <tr>
-                        <td><code>DetectFormat(Stream)</code></td>
-                        <td>Detect audio format from stream header (magic bytes)</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <h4>Supported Formats</h4>
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Format</th>
-                        <th>Types</th>
-                        <th>Implementation</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>WAV</td>
-                        <td>PCM, IEEE Float, ADPCM</td>
-                        <td>Pure C# implementation</td>
-                    </tr>
-                    <tr>
-                        <td>MP3</td>
-                        <td>MPEG-1/2 Layer III</td>
-                        <td>Platform-specific or managed fallback</td>
-                    </tr>
-                    <tr>
-                        <td>FLAC</td>
-                        <td>Free Lossless Audio Codec</td>
-                        <td>Pure C# managed implementation</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="code-block">
-                <div class="code-header">Decoder Factory Usage</div>
-                <pre><code class="language-csharp">// From file path (auto-detect format)
-using var decoder1 = AudioDecoderFactory.Create(
-    "music.mp3",
-    targetSampleRate: 48000,
-    targetChannels: 2
-);
-
-// From stream with explicit format
-using var stream = File.OpenRead("audio.wav");
-using var decoder2 = AudioDecoderFactory.Create(
-    stream,
-    AudioFormat.Wav,
-    targetSampleRate: 48000,
-    targetChannels: 2
-);
-
-// Detect format
-using var fileStream = File.OpenRead("unknown.audio");
-var format = AudioDecoderFactory.DetectFormat(fileStream);
-Console.WriteLine($"Detected format: {format}");</code></pre>
-            </div>
-
-            <h2 id="configuration">Configuration</h2>
-
-            <h3>AudioConfig</h3>
-            <p>Audio engine configuration parameters.</p>
-
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Property</th>
-                        <th>Type</th>
-                        <th>Default</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>SampleRate</code></td>
-                        <td>int</td>
-                        <td>48000</td>
-                        <td>Sample rate in Hz (typical: 44100, 48000, 96000)</td>
-                    </tr>
-                    <tr>
-                        <td><code>Channels</code></td>
-                        <td>int</td>
-                        <td>2</td>
-                        <td>Number of channels (1=mono, 2=stereo)</td>
-                    </tr>
-                    <tr>
-                        <td><code>BufferSize</code></td>
-                        <td>int</td>
-                        <td>512</td>
-                        <td>Buffer size in frames (affects latency)</td>
-                    </tr>
-                    <tr>
-                        <td><code>EnableInput</code></td>
-                        <td>bool</td>
-                        <td>false</td>
-                        <td>Enable audio input/recording</td>
-                    </tr>
-                    <tr>
-                        <td><code>EnableOutput</code></td>
-                        <td>bool</td>
-                        <td>true</td>
-                        <td>Enable audio output/playback</td>
-                    </tr>
-                    <tr>
-                        <td><code>OutputDeviceId</code></td>
-                        <td>string?</td>
-                        <td>null</td>
-                        <td>Specific output device ID (null for default)</td>
-                    </tr>
-                    <tr>
-                        <td><code>InputDeviceId</code></td>
-                        <td>string?</td>
-                        <td>null</td>
-                        <td>Specific input device ID (null for default)</td>
-                    </tr>
-                    <tr>
-                        <td><code>HostType</code></td>
-                        <td>EngineHostType</td>
-                        <td>None</td>
-                        <td>Host API type (PortAudio only, ignored by miniaudio)</td>
-                    </tr>
-                    <tr>
-                        <td><code>InputChannelSelectors</code></td>
-                        <td>int[]?</td>
-                        <td>null</td>
-                        <td>Select which physical input channels to record from. Works on all backends. See <a
-                                href="#channel-routing">Channel Routing</a>.</td>
-                    </tr>
-                    <tr>
-                        <td><code>OutputChannelSelectors</code></td>
-                        <td>int[]?</td>
-                        <td>null</td>
-                        <td>Select which physical output channels to play back on. Works on all backends. See <a
-                                href="#channel-routing">Channel Routing</a>.</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <h4>Predefined Configurations</h4>
-            <ul>
-                <li><code>AudioConfig.Default</code> - 48kHz, stereo, 512 frames (~10.7ms latency)</li>
-                <li><code>AudioConfig.LowLatency</code> - 48kHz, stereo, 128 frames (~2.7ms latency)</li>
-                <li><code>AudioConfig.HighLatency</code> - 48kHz, stereo, 2048 frames (~42.7ms latency)</li>
-            </ul>
-
-            <div class="code-block">
-                <div class="code-header">Configuration Example</div>
-                <pre><code class="language-csharp">// Use predefined config
-var config1 = AudioConfig.Default;
-
-// Custom configuration
-var config2 = new AudioConfig
-{
-    SampleRate = 44100,
-    Channels = 1,           // Mono
-    BufferSize = 256,       // Low latency
-    EnableInput = true,
-    EnableOutput = true
+    SampleRate     = 48000,
+    Channels       = 2,
+    BufferSize     = 512,
+    HostType       = EngineHostType.WASAPI,
+    OutputDeviceId = myDevice.DeviceId,
+    EnableInput    = false
 };
 
-// Validate configuration
-if (config2.Validate())
-{
-    Console.WriteLine("Configuration is valid");
-}</code></pre>
-            </div>
-
-            <h3>AudioDeviceInfo</h3>
-            <p>Information about an audio device.</p>
-
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Property</th>
-                        <th>Type</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>DeviceId</code></td>
-                        <td>string</td>
-                        <td>Unique device identifier</td>
-                    </tr>
-                    <tr>
-                        <td><code>Name</code></td>
-                        <td>string</td>
-                        <td>Human-readable device name</td>
-                    </tr>
-                    <tr>
-                        <td><code>IsInput</code></td>
-                        <td>bool</td>
-                        <td>True if device supports input</td>
-                    </tr>
-                    <tr>
-                        <td><code>IsOutput</code></td>
-                        <td>bool</td>
-                        <td>True if device supports output</td>
-                    </tr>
-                    <tr>
-                        <td><code>IsDefault</code></td>
-                        <td>bool</td>
-                        <td>True if this is the default device</td>
-                    </tr>
-                    <tr>
-                        <td><code>State</code></td>
-                        <td>AudioDeviceState</td>
-                        <td>Current device state</td>
-                    </tr>
-                    <tr>
-                        <td><code>MaxInputChannels</code></td>
-                        <td>int</td>
-                        <td>Maximum number of input channels supported (0 if unavailable)</td>
-                    </tr>
-                    <tr>
-                        <td><code>MaxOutputChannels</code></td>
-                        <td>int</td>
-                        <td>Maximum number of output channels supported (0 if unavailable)</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="code-block">
-                <div class="code-header">Device Enumeration &amp; Channel Routing</div>
-                <pre><code class="language-csharp">using var engine = AudioEngineFactory.CreateDefault();
-
-// List output devices and their channel counts
-var devices = engine.GetOutputDevices();
-foreach (var device in devices)
-{
-    Console.WriteLine($"Device: {device.Name}");
-    Console.WriteLine($"  ID: {device.DeviceId}");
-    Console.WriteLine($"  Default: {device.IsDefault}");
-    Console.WriteLine($"  Max Input Channels: {device.MaxInputChannels}");
-    Console.WriteLine($"  Max Output Channels: {device.MaxOutputChannels}");
-}
-
-// Route stereo output to physical channels 4 and 5 (e.g. second pair of a multi-output interface)
+// 8-channel multi-output device
 var config = new AudioConfig
 {
-    Channels = 2,
-    OutputChannelSelectors = new[] { 4, 5 }  // physical channel indices (0-based)
-};
-using var engine2 = AudioEngineFactory.Create(config);
+    Channels               = 8,
+    OutputChannelSelectors = new[] { 0, 1, 2, 3, 4, 5, 6, 7 }
+};</code></pre></div>
 
-// ASIO with native hardware channel selection
-var asioConfig = new AudioConfig
-{
-    HostType = EngineHostType.ASIO,
-    Channels = 2,
-    OutputChannelSelectors = new[] { 4, 5 }  // native ASIO channel selectors
-};
-using var asioEngine = AudioEngineFactory.Create(asioConfig);</code></pre>
-            </div>
-
-            <h2 id="channel-routing">Channel Routing</h2>
-            <p>
-                Channel routing lets you direct audio to specific physical output channels on multi-output devices
-                (e.g. USB audio interfaces, ASIO cards, DAW-style monitor routing).
-                Set <code>OutputChannelSelectors</code> to an array of physical channel indices you want to use.
-                The array length <strong>must match</strong> the <code>Channels</code> property.
-            </p>
-
-            <div class="alert alert-info">
-                <strong>🔀 Universal Support</strong>
-                Channel routing works on <strong>all backends and platforms</strong> — not just ASIO.
-                For PortAudio + ASIO, native hardware channel selection is used (zero overhead).
-                For all other backends (WASAPI, CoreAudio, ALSA, MiniAudio), software routing
-                is applied inside the audio callback with no additional latency.
-            </div>
-
-            <h4>Routing Method by Backend</h4>
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Engine / Backend</th>
-                        <th>Platform</th>
-                        <th>Routing Method</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>PortAudio + ASIO</td>
-                        <td>Windows</td>
-                        <td>Native hardware (<code>PaAsioStreamInfo</code>)</td>
-                    </tr>
-                    <tr>
-                        <td>PortAudio + WASAPI</td>
-                        <td>Windows</td>
-                        <td>Software routing in callback</td>
-                    </tr>
-                    <tr>
-                        <td>MiniAudio</td>
-                        <td>Windows / macOS / Linux / Android / iOS</td>
-                        <td>Software routing in callback</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <h4>How It Works</h4>
-            <p>When <code>OutputChannelSelectors</code> is set, the engine internally opens the device with
-                <code>max(selectors)+1</code> physical channels. The audio callback maps
-                each logical channel to its designated physical channel, leaving others silent.
-            </p>
-
-            <div class="code-block">
-                <div class="code-header">Channel Routing – Stereo + Metronome on Separate Outputs</div>
-                <pre><code class="language-csharp">// 8-channel interface: stereo music on ch 0-1, click track on ch 4-5
-// Logical channels:  0   1   2   3
-// Physical channels: 0   1  (skip 2,3)  4   5
-var config = new AudioConfig
-{
-    SampleRate = 48000,
-    Channels   = 4,                             // 4 logical channels
-    OutputChannelSelectors = new[] { 0, 1, 4, 5 } // mapped to physical 0,1,4,5
-};
-
-using var engine = AudioEngineFactory.Create(config);
-engine.Start();
-
-// Build an interleaved 4-channel buffer per frame:
-// [frame0_ch0, frame0_ch1, frame0_ch2, frame0_ch3, frame1_ch0, ...]
-var buffer = new float[frameCount * 4];
-for (int i = 0; i &lt; frameCount; i++)
-{
-    buffer[i * 4 + 0] = musicLeft[i];     // → physical ch 0
-    buffer[i * 4 + 1] = musicRight[i];    // → physical ch 1
-    buffer[i * 4 + 2] = clickLeft[i];     // → physical ch 4
-    buffer[i * 4 + 3] = clickRight[i];    // → physical ch 5
-}
-
-engine.Send(buffer.AsSpan());</code></pre>
-            </div>
-
-            <div class="alert alert-warning">
-                <strong>⚠️ Validation Rule</strong>
-                The length of <code>OutputChannelSelectors</code> must equal the <code>Channels</code>
-                property value. <code>AudioConfig.Validate()</code> returns <code>false</code> if they mismatch
-                or if any selector index is negative.
-            </div>
-
-            <h3>AudioStreamInfo</h3>
-            <p>Information about an audio stream from a decoder.</p>
-
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Property</th>
-                        <th>Type</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>SampleRate</code></td>
-                        <td>int</td>
-                        <td>Sample rate in Hz</td>
-                    </tr>
-                    <tr>
-                        <td><code>Channels</code></td>
-                        <td>int</td>
-                        <td>Number of channels</td>
-                    </tr>
-                    <tr>
-                        <td><code>Duration</code></td>
-                        <td>TimeSpan</td>
-                        <td>Total duration of the stream</td>
-                    </tr>
-                    <tr>
-                        <td><code>TotalFrames</code></td>
-                        <td>long</td>
-                        <td>Total number of frames</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <h2 id="enums">Enumerations</h2>
-
-            <h3>AudioDeviceState</h3>
-            <p>Possible states of an audio device.</p>
-
-            <div class="code-block">
-                <div class="code-header">AudioDeviceState Enum</div>
-                <pre><code class="language-csharp">[Flags]
-public enum AudioDeviceState
-{
-    Active      = 0x00000001,  // Device is active and available
-    Disabled    = 0x00000002,  // Device is disabled
-    NotPresent  = 0x00000004,  // Device is not present
-    Unplugged   = 0x00000008,  // Device is unplugged
-    All         = 0x0000000F   // All device states
-}</code></pre>
-            </div>
-
-            <h3>AudioFormat</h3>
-            <p>Supported audio file formats.</p>
-
-            <div class="code-block">
-                <div class="code-header">AudioFormat Enum</div>
-                <pre><code class="language-csharp">public enum AudioFormat
-{
-    Unknown,  // Unknown format
-    Wav,      // WAV format (PCM, IEEE Float, ADPCM)
-    Mp3,      // MP3 format (MPEG-1/2/2.5 Layer III)
-    Flac      // FLAC format (Free Lossless Audio Codec)
-}</code></pre>
-            </div>
-
-            <h3>EngineHostType</h3>
-            <p>Host API types for PortAudio backend (ignored by miniaudio).</p>
-
-            <div class="code-block">
-                <div class="code-header">EngineHostType Enum</div>
-                <pre><code class="language-csharp">public enum EngineHostType
-{
-    None = 0,           // Use platform default
-    DirectSound = 1,    // Windows DirectSound
-    MME = 2,            // Windows MME
-    ASIO = 3,           // Windows ASIO
-    WASAPI = 13,        // Windows WASAPI (recommended)
-    CoreAudio = 5,      // macOS Core Audio
-    ALSA = 8,           // Linux ALSA
-    JACK = 12           // Linux JACK
-}</code></pre>
-            </div>
-
-            <h2 id="common">Common Components</h2>
-
-            <p>The <code>Ownaudio.Core.Common</code> namespace provides utility classes for audio processing:</p>
-
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Class</th>
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><code>AudioBuffer</code></td>
-                        <td>Efficient audio buffer management</td>
-                    </tr>
-                    <tr>
-                        <td><code>AudioChannelConverter</code></td>
-                        <td>Channel conversion (mono/stereo)</td>
-                    </tr>
-                    <tr>
-                        <td><code>AudioResampler</code></td>
-                        <td>Sample rate conversion</td>
-                    </tr>
-                    <tr>
-                        <td><code>AudioFormatConverter</code></td>
-                        <td>Format conversion utilities</td>
-                    </tr>
-                    <tr>
-                        <td><code>LockFreeRingBuffer</code></td>
-                        <td>Lock-free circular buffer for real-time audio</td>
-                    </tr>
-                    <tr>
-                        <td><code>AudioFramePool</code></td>
-                        <td>Object pool for audio frames</td>
-                    </tr>
-                    <tr>
-                        <td><code>SimdAudioConverter</code></td>
-                        <td>SIMD-optimized audio conversion</td>
-                    </tr>
-                    <tr>
-                        <td><code>DecodedAudioCache</code></td>
-                        <td>Cache for decoded audio data</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="alert alert-info" style="margin-top: 2rem;">
-                <strong>Performance Characteristics</strong>
-                <ul style="margin-top: 0.5rem;">
-                    <li><strong>Zero-allocation:</strong> Critical audio paths use zero-allocation techniques</li>
-                    <li><strong>Lock-free:</strong> Real-time safe data structures for thread synchronization</li>
-                    <li><strong>SIMD optimizations:</strong> Available on supported platforms</li>
-                    <li><strong>Thread-safe:</strong> All public APIs are thread-safe</li>
-                </ul>
-            </div>
-
-            <h3>Latency Reference</h3>
-            <table class="api-table">
-                <thead>
-                    <tr>
-                        <th>Buffer Size</th>
-                        <th>Latency @ 48kHz</th>
-                        <th>Use Case</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>128 frames</td>
-                        <td>~2.7 ms</td>
-                        <td>Professional audio, live monitoring</td>
-                    </tr>
-                    <tr>
-                        <td>256 frames</td>
-                        <td>~5.3 ms</td>
-                        <td>Low latency applications</td>
-                    </tr>
-                    <tr>
-                        <td>512 frames</td>
-                        <td>~10.7 ms</td>
-                        <td>Default, balanced performance</td>
-                    </tr>
-                    <tr>
-                        <td>1024 frames</td>
-                        <td>~21.3 ms</td>
-                        <td>Standard applications</td>
-                    </tr>
-                    <tr>
-                        <td>2048 frames</td>
-                        <td>~42.7 ms</td>
-                        <td>High reliability, less CPU usage</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div style="margin-top: 4rem; padding: 2rem; background: var(--surface); border-radius: 8px;">
-                <h3>Related Documentation</h3>
-                <ul style="list-style: none; padding: 0;">
-                    <li style="margin-bottom: 0.5rem;">
-                        <a href="quickstart.html" style="color: var(--primary-color);">📖 Quick Start Guide</a>
-                    </li>
-                    <li style="margin-bottom: 0.5rem;">
-                        <a href="api-net.html" style="color: var(--net-color);">🎛️ NET API Reference</a>
-                    </li>
-                    <li style="margin-bottom: 0.5rem;">
-                        <a href="examples.html" style="color: var(--primary-color);">💡 Code Examples</a>
-                    </li>
-                    <li style="margin-bottom: 0.5rem;">
-                        <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank"
-                            style="color: var(--primary-color);">🔗 GitHub Repository</a>
-                    </li>
-                </ul>
-            </div>
-        </main>
-    </div>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script
-        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
-    <script src="docs.js"></script>
-    <script>
-        // Active sidebar navigation
-        const sections = document.querySelectorAll('h2[id], h3[id]');
-        const navLinks = document.querySelectorAll('.sidebar-nav a');
-
-        window.addEventListener('scroll', () => {
-            let current = '';
-            sections.forEach(section => {
-                const sectionTop = section.offsetTop;
-                if (window.pageYOffset >= sectionTop - 150) {
-                    current = section.getAttribute('id');
-                }
-            });
-
-            navLinks.forEach(link => {
-                link.classList.remove('active');
-                if (link.getAttribute('href') === `#${current}`) {
-                    link.classList.add('active');
-                }
-            });
-        });
-
-        // Smooth scrolling
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'start'
-                    });
-                }
-            });
-        });
-    </script>
-</body>
-
-</html>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+<script src="../assets/docs.js"></script>
+</body></html>

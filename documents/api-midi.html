@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <script>(function(){var t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);})();</script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MIDI API — OwnAudioSharp</title>
+  <link rel="stylesheet" href="../assets/docs.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+</head>
+<body>
+<nav class="topnav">
+  <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+  <a class="topnav-logo" href="../index.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>OwnAudioSharp</a>
+  <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="api-core.html">API</a></li><li><a href="api-midi.html" class="active">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
+  <div class="topnav-right"><span class="badge-version">v3.0.3</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
+</nav>
+<div id="sidebar-overlay" class="sidebar-overlay"></div>
+<div class="layout">
+<nav id="sidebar" class="sidebar">
+  <div class="sidebar-section"><span class="sidebar-label">Getting Started</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">High-Level API</span><ul class="sidebar-nav"><li><a href="api-core.html">OwnaudioNet</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-mixer.html">AudioMixer</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Audio Sources</span><ul class="sidebar-nav"><li><a href="api-sources.html">Source Overview</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#sourcewitheffects" class="sub">SourceWithEffects</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel Routing</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Processing</span><ul class="sidebar-nav"><li><a href="api-sync.html">Synchronization</a></li><li><a href="api-effects.html">Built-in Effects</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 Plugins</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">AI Features</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">MIDI</span><ul class="sidebar-nav"><li><a href="api-midi.html">MIDI Overview</a></li><li><a href="api-midi.html#port-management" class="sub">Port Management</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI File</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI Clock</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Reference</span><ul class="sidebar-nav"><li><a href="api-reference.html">Events &amp; Types</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#best-practices" class="sub">Best Practices</a></li></ul></div>
+</nav>
+<main class="main">
+
+<h1 class="page-title">MIDI API</h1>
+<p class="page-subtitle">AOT-compatible, reflection-free MIDI I/O, file handling, and hardware clock. Available as a separate package: <span class="pkg-badge pkg-midi">OwnAudioSharp.Midi</span></p>
+
+<div class="card-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:2rem">
+  <div class="card"><div class="card-icon">🎹</div><div class="card-title">MIDI I/O</div><div class="card-desc">Real-time input/output via WinMM, CoreMIDI, or ALSA rawmidi.</div></div>
+  <div class="card"><div class="card-icon">📄</div><div class="card-title">MIDI File</div><div class="card-desc">Read, edit, and write Standard MIDI Files (SMF format 0 and 1).</div></div>
+  <div class="card"><div class="card-icon">🕐</div><div class="card-title">MIDI Clock</div><div class="card-desc">Hardware-accurate 24 PPQN clock with <code>ThreadPriority.Highest</code>.</div></div>
+</div>
+
+<h2>Namespaces</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Namespace</th><th>Contents</th></tr></thead>
+  <tbody>
+    <tr><td><code>OwnAudio.Midi.IO</code></td><td><code>MidiMessage</code>, <code>IMidiInputPort</code>, <code>IMidiOutputPort</code>, <code>MidiPortFactory</code></td></tr>
+    <tr><td><code>OwnAudio.Midi.File</code></td><td><code>MidiFile</code>, <code>MidiTrack</code>, <code>MidiEvent</code>, <code>MidiFileReader</code>, <code>MidiFileWriter</code></td></tr>
+    <tr><td><code>OwnAudio.Midi.Clock</code></td><td><code>MidiClock</code></td></tr>
+  </tbody>
+</table></div>
+
+<!-- Port Management -->
+<h2 id="port-management">Port Management</h2>
+<p>Use <code>MidiPortFactory</code> to enumerate devices and open ports. Ports are <code>IDisposable</code> — always wrap in <code>using</code>.</p>
+
+<div class="code-block"><div class="code-header"><span>C# — List available ports</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnAudio.Midi.IO;
+
+IReadOnlyList&lt;string&gt; inputs  = MidiPortFactory.GetInputPortNames();
+IReadOnlyList&lt;string&gt; outputs = MidiPortFactory.GetOutputPortNames();
+
+foreach (var name in inputs)
+    Console.WriteLine($"[IN]  {name}");
+foreach (var name in outputs)
+    Console.WriteLine($"[OUT] {name}");</code></pre></div>
+
+<div class="code-block"><div class="code-header"><span>C# — Open a port</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Open by index
+using IMidiInputPort  input  = MidiPortFactory.OpenInput(inputs[0]);
+
+// Open by name
+using IMidiOutputPort output = MidiPortFactory.OpenOutput("IAC Driver Bus 1");</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>Platform port names:</strong> Windows uses WinMM names (e.g. <code>"Microsoft GS Wavetable Synth"</code>), macOS uses CoreMIDI (e.g. <code>"IAC Driver Bus 1"</code>), Linux uses ALSA rawmidi paths (e.g. <code>"/dev/midi1"</code>).</p></div>
+
+<!-- Receiving MIDI -->
+<h2 id="receiving">Receiving MIDI Data</h2>
+<p>Subscribe to <code>MessageReceived</code> <strong>before</strong> calling <code>Start()</code>. The callback fires on a background thread — marshal to your UI thread if needed.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using IMidiInputPort input = MidiPortFactory.OpenInput("USB MIDI Interface");
+
+input.MessageReceived += OnMidiMessage;
+input.Start();
+
+Console.WriteLine("Listening... press Enter to stop.");
+Console.ReadLine();
+
+input.Stop();
+input.MessageReceived -= OnMidiMessage;
+
+void OnMidiMessage(MidiMessage msg)
+{
+    if (msg.IsNoteOn)
+        Console.WriteLine($"Note ON  — pitch={msg.Data1} vel={msg.Data2} ch={msg.Channel}");
+    else if (msg.IsNoteOff)
+        Console.WriteLine($"Note OFF — pitch={msg.Data1} ch={msg.Channel}");
+    else if (msg.IsControlChange)
+        Console.WriteLine($"CC #{msg.Data1} = {msg.Data2}  ch={msg.Channel}");
+    else if (msg.IsPitchBend)
+    {
+        int bend = (msg.Data2 &lt;&lt; 7) | msg.Data1; // 0..16383, centre = 8192
+        Console.WriteLine($"Pitch Bend = {bend}  ch={msg.Channel}");
+    }
+}</code></pre></div>
+
+<h3>MidiMessage Properties</h3>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>Status</code></td><td><code>byte</code></td><td>Raw status byte.</td></tr>
+    <tr><td><code>Data1</code></td><td><code>byte</code></td><td>First data byte (note number, CC number, …).</td></tr>
+    <tr><td><code>Data2</code></td><td><code>byte</code></td><td>Second data byte (velocity, CC value, …).</td></tr>
+    <tr><td><code>Timestamp</code></td><td><code>long</code></td><td>Nanoseconds since port open (platform-dependent precision).</td></tr>
+    <tr><td><code>Type</code></td><td><code>MidiMessageType</code></td><td>Enum: <code>NoteOn</code>, <code>NoteOff</code>, <code>ControlChange</code>, …</td></tr>
+    <tr><td><code>Channel</code></td><td><code>int</code></td><td>MIDI channel 0–15.</td></tr>
+    <tr><td><code>IsNoteOn</code></td><td><code>bool</code></td><td><code>true</code> if NoteOn with velocity &gt; 0.</td></tr>
+    <tr><td><code>IsNoteOff</code></td><td><code>bool</code></td><td><code>true</code> if NoteOff, or NoteOn with velocity = 0.</td></tr>
+    <tr><td><code>IsControlChange</code></td><td><code>bool</code></td><td>CC message.</td></tr>
+    <tr><td><code>IsPitchBend</code></td><td><code>bool</code></td><td>Pitch bend message.</td></tr>
+  </tbody>
+</table></div>
+
+<!-- Sending MIDI -->
+<h2 id="sending">Sending MIDI Data</h2>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using IMidiOutputPort output = MidiPortFactory.OpenOutput("USB MIDI Interface");
+
+// Note On / Note Off  (status = 0x90 | channel)
+output.Send(new MidiMessage(0x90, 60, 100)); // Middle C, velocity 100
+await Task.Delay(500);
+output.Send(new MidiMessage(0x80, 60, 0));   // Note Off
+
+// Control Change  (status = 0xB0 | channel)
+output.Send(new MidiMessage(0xB0, 7, 100));  // Volume (CC #7) = 100
+
+// Program Change  (status = 0xC0 | channel)
+output.Send(new MidiMessage(0xC0, 0, 0));    // Grand Piano
+
+// Pitch Bend — 14-bit split across LSB/MSB
+int bend = 10000; // 0..16383, centre = 8192
+output.Send(new MidiMessage(0xE0, (byte)(bend &amp; 0x7F), (byte)(bend &gt;&gt; 7)));
+
+// SysEx
+ReadOnlySpan&lt;byte&gt; sysex = [0xF0, 0x41, 0x10, 0x42, 0x12, 0xF7];
+output.SendSysEx(sysex);</code></pre></div>
+
+<h3>Common Status Bytes</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Message</th><th>Status byte</th><th>Data1</th><th>Data2</th></tr></thead>
+  <tbody>
+    <tr><td>Note Off</td><td><code>0x80 | ch</code></td><td>note (0–127)</td><td>velocity</td></tr>
+    <tr><td>Note On</td><td><code>0x90 | ch</code></td><td>note (0–127)</td><td>velocity</td></tr>
+    <tr><td>Aftertouch</td><td><code>0xA0 | ch</code></td><td>note</td><td>pressure</td></tr>
+    <tr><td>Control Change</td><td><code>0xB0 | ch</code></td><td>CC number</td><td>value</td></tr>
+    <tr><td>Program Change</td><td><code>0xC0 | ch</code></td><td>program</td><td>—</td></tr>
+    <tr><td>Channel Pressure</td><td><code>0xD0 | ch</code></td><td>pressure</td><td>—</td></tr>
+    <tr><td>Pitch Bend</td><td><code>0xE0 | ch</code></td><td>LSB (7-bit)</td><td>MSB (7-bit)</td></tr>
+  </tbody>
+</table></div>
+
+<!-- MIDI File -->
+<h2 id="midi-file">MIDI File</h2>
+<p><code>MidiFileReader</code> parses Standard MIDI Files (SMF format 0 &amp; 1). <code>MidiFile</code>, <code>MidiTrack</code>, and <code>MidiEvent</code> are immutable — edit by rebuilding the event list. Namespace: <code>OwnAudio.Midi.File</code></p>
+
+<div class="code-block"><div class="code-header"><span>C# — Reading a MIDI file</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnAudio.Midi.File;
+
+MidiFile file = MidiFileReader.Read("song.mid");
+
+Console.WriteLine($"Format: {file.Format}  Ticks/beat: {file.TicksPerBeat}");
+Console.WriteLine($"Tracks: {file.Tracks.Count}");
+
+foreach (MidiTrack track in file.Tracks)
+{
+    long absoluteTick = 0;
+
+    foreach (MidiEvent evt in track.Events)
+    {
+        absoluteTick += evt.DeltaTime;
+
+        if (evt.Type == MidiEventType.Midi)
+        {
+            byte msgType = (byte)(evt.Status &amp; 0xF0);
+            int  channel = evt.Status &amp; 0x0F;
+
+            if (msgType == 0x90 &amp;&amp; evt.Data2 > 0)
+                Console.WriteLine($"t={absoluteTick,8}  NoteOn  ch={channel} note={evt.Data1} vel={evt.Data2}");
+        }
+        else if (evt.Type == MidiEventType.Meta &amp;&amp; evt.IsTempoChange)
+        {
+            double bpm = 60_000_000.0 / evt.GetTempoMicroseconds();
+            Console.WriteLine($"t={absoluteTick,8}  Tempo {bpm:F1} BPM");
+        }
+    }
+}
+
+// Convert ticks → seconds  (tempo-dependent)
+int tempoUs = 500_000; // default 120 BPM
+double TicksToSeconds(long ticks) =>
+    ticks * tempoUs / (1_000_000.0 * file.TicksPerBeat);</code></pre></div>
+
+<div class="code-block"><div class="code-header"><span>C# — Editing (transpose all notes up 2 semitones)</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">MidiFile original = MidiFileReader.Read("song.mid");
+
+var editedEvents = new List&lt;MidiEvent&gt;();
+foreach (MidiEvent evt in original.Tracks[0].Events)
+{
+    if (evt.Type == MidiEventType.Midi)
+    {
+        byte msgType = (byte)(evt.Status &amp; 0xF0);
+        if (msgType == 0x90 || msgType == 0x80)
+        {
+            byte newNote = (byte)Math.Clamp(evt.Data1 + 2, 0, 127);
+            editedEvents.Add(new MidiEvent(evt.DeltaTime, evt.Status, newNote, evt.Data2));
+            continue;
+        }
+    }
+    editedEvents.Add(evt);
+}
+
+var editedFile = new MidiFile(
+    original.Format,
+    original.TicksPerBeat,
+    [new MidiTrack(editedEvents)]);
+
+MidiFileWriter.Write(editedFile, "song_transposed.mid");</code></pre></div>
+
+<div class="code-block"><div class="code-header"><span>C# — Writing from scratch (C major scale)</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">const ushort TicksPerBeat = 480;
+const int Bpm = 120;
+int tempoUs = 60_000_000 / Bpm;
+
+var events = new List&lt;MidiEvent&gt;();
+
+byte[] tempoBytes = [(byte)(tempoUs &gt;&gt; 16), (byte)(tempoUs &gt;&gt; 8), (byte)tempoUs];
+events.Add(new MidiEvent(0, 0x51, tempoBytes)); // Tempo meta event
+
+events.Add(new MidiEvent(0, 0xC0, 0, 0)); // Program Change — piano
+
+int[] scale = [60, 62, 64, 65, 67, 69, 71, 72]; // C D E F G A B C
+long cursor = 0;
+long T(double beats) => (long)(beats * TicksPerBeat);
+
+for (int i = 0; i &lt; scale.Length; i++)
+{
+    int deltaOn  = (int)(T(i)       - cursor); cursor = T(i);
+    int deltaOff = (int)(T(i + 0.9) - cursor); cursor = T(i + 0.9);
+
+    events.Add(new MidiEvent(deltaOn,  0x90, (byte)scale[i], 80));
+    events.Add(new MidiEvent(deltaOff, 0x80, (byte)scale[i],  0));
+}
+
+// End of Track is appended automatically by MidiFileWriter
+var midiFile = new MidiFile(0, TicksPerBeat, [new MidiTrack(events)]);
+MidiFileWriter.Write(midiFile, "c_major_scale.mid");</code></pre></div>
+
+<h3>MidiEvent Properties</h3>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>DeltaTime</code></td><td><code>int</code></td><td>Ticks since previous event.</td></tr>
+    <tr><td><code>Type</code></td><td><code>MidiEventType</code></td><td><code>Midi</code>, <code>Meta</code>, or <code>SysEx</code>.</td></tr>
+    <tr><td><code>Status</code></td><td><code>byte</code></td><td>Status byte (Midi events) or meta type (Meta events).</td></tr>
+    <tr><td><code>Data1</code></td><td><code>byte</code></td><td>First data byte.</td></tr>
+    <tr><td><code>Data2</code></td><td><code>byte</code></td><td>Second data byte.</td></tr>
+    <tr><td><code>MetaData</code></td><td><code>byte[]?</code></td><td>Raw payload for Meta and SysEx events.</td></tr>
+    <tr><td><code>IsTempoChange</code></td><td><code>bool</code></td><td><code>true</code> for Meta type 0x51 (Set Tempo).</td></tr>
+    <tr><td><code>IsEndOfTrack</code></td><td><code>bool</code></td><td><code>true</code> for Meta type 0x2F (End of Track).</td></tr>
+    <tr><td><code>GetTempoMicroseconds()</code></td><td><code>int</code></td><td>Microseconds per beat (only valid on tempo-change events).</td></tr>
+  </tbody>
+</table></div>
+
+<!-- MIDI Clock -->
+<h2 id="midi-clock">MIDI Clock</h2>
+<p>Sends MIDI Timing Clock pulses (0xF8) at 24 PPQN. The clock thread runs at <code>ThreadPriority.Highest</code> using a spin-wait loop for microsecond accuracy. Namespace: <code>OwnAudio.Midi.Clock</code></p>
+
+<div class="code-block"><div class="code-header"><span>C# — Internal clock (sequencer use)</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnAudio.Midi.Clock;
+
+using var clock = new MidiClock(bpm: 120.0);
+clock.Start();
+
+await Task.Delay(4000);
+
+clock.Bpm = 140.0; // change tempo while running
+
+await Task.Delay(4000);
+clock.Stop();</code></pre></div>
+
+<div class="code-block"><div class="code-header"><span>C# — Clock with hardware output port</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnAudio.Midi.IO;
+using OwnAudio.Midi.Clock;
+
+using IMidiOutputPort output = MidiPortFactory.OpenOutput("USB MIDI Interface");
+using var clock = new MidiClock(bpm: 120.0, outputPort: output);
+
+clock.Start();    // sends 0xFA (MIDI Start) then 0xF8 clock pulses
+// ...
+clock.Stop();     // sends 0xFC (MIDI Stop)
+clock.Continue(); // sends 0xFB (MIDI Continue) and resumes</code></pre></div>
+
+<h3>Automatic Clock Messages</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Event</th><th>MIDI Message</th><th>Byte</th></tr></thead>
+  <tbody>
+    <tr><td><code>Start()</code></td><td>MIDI Start</td><td><code>0xFA</code></td></tr>
+    <tr><td><code>Stop()</code></td><td>MIDI Stop</td><td><code>0xFC</code></td></tr>
+    <tr><td><code>Continue()</code></td><td>MIDI Continue</td><td><code>0xFB</code></td></tr>
+    <tr><td>Every pulse (24/beat)</td><td>MIDI Timing Clock</td><td><code>0xF8</code></td></tr>
+  </tbody>
+</table></div>
+
+<!-- Full example -->
+<h2 id="full-example">Full Example — MIDI Keyboard Recorder</h2>
+<p>Records incoming MIDI events with timestamps and saves to a Standard MIDI File.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnAudio.Midi.IO;
+using OwnAudio.Midi.File;
+
+var recordedEvents = new List&lt;(long absoluteTick, MidiEvent evt)&gt;();
+var startTime = DateTimeOffset.UtcNow;
+const ushort TicksPerBeat = 480;
+const int Bpm = 120;
+int tempoUs = 60_000_000 / Bpm;
+double ticksPerMs = TicksPerBeat * Bpm / 60_000.0;
+
+using IMidiInputPort input = MidiPortFactory.OpenInput(
+    MidiPortFactory.GetInputPortNames()[0]);
+
+input.MessageReceived += msg =>
+{
+    long ms   = (long)(DateTimeOffset.UtcNow - startTime).TotalMilliseconds;
+    long tick = (long)(ms * ticksPerMs);
+    recordedEvents.Add((tick, new MidiEvent(0, msg.Status, msg.Data1, msg.Data2)));
+};
+
+input.Start();
+Console.WriteLine("Recording... press Enter to stop.");
+Console.ReadLine();
+input.Stop();
+
+// Convert absolute ticks to delta times
+recordedEvents.Sort((a, b) => a.absoluteTick.CompareTo(b.absoluteTick));
+var midiEvents = new List&lt;MidiEvent&gt;();
+
+byte[] tempoBytes = [(byte)(tempoUs &gt;&gt; 16), (byte)(tempoUs &gt;&gt; 8), (byte)tempoUs];
+midiEvents.Add(new MidiEvent(0, 0x51, tempoBytes));
+
+long prev = 0;
+foreach (var (tick, evt) in recordedEvents)
+{
+    int delta = (int)(tick - prev);
+    prev = tick;
+    midiEvents.Add(new MidiEvent(delta, evt.Status, evt.Data1, evt.Data2));
+}
+
+var midiFile = new MidiFile(0, TicksPerBeat, [new MidiTrack(midiEvents)]);
+MidiFileWriter.Write(midiFile, "recording.mid");
+Console.WriteLine("Saved: recording.mid");</code></pre></div>
+
+<!-- Platform support -->
+<h2 id="platform-support">Platform Support</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Platform</th><th>I/O Backend</th><th>File R/W</th><th>Clock</th></tr></thead>
+  <tbody>
+    <tr><td>Windows</td><td>WinMM (<code>winmm.dll</code>)</td><td>✅</td><td>✅</td></tr>
+    <tr><td>macOS</td><td>CoreMIDI framework</td><td>✅</td><td>✅</td></tr>
+    <tr><td>Linux</td><td>ALSA rawmidi (<code>libasound</code>)</td><td>✅</td><td>✅</td></tr>
+  </tbody>
+</table></div>
+
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>All platform code is selected at <strong>compile time</strong> via <code>#if WINDOWS / MACOS / LINUX</code> — no runtime reflection. The library is fully compatible with .NET Native AOT (<code>IsAotCompatible=true</code>, <code>IsTrimmable=true</code>). All P/Invoke uses <code>[LibraryImport]</code> (source-generated, AOT-safe).</p></div>
+
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+<script src="../assets/docs.js"></script>
+</body></html>

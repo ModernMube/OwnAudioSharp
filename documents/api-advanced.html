@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <script>(function(){var t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);})();</script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Features — OwnAudioSharp</title>
+  <link rel="stylesheet" href="../assets/docs.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+</head>
+<body>
+<nav class="topnav">
+  <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+  <a class="topnav-logo" href="../index.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>OwnAudioSharp</a>
+  <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="api-core.html" class="active">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
+  <div class="topnav-right"><span class="badge-version">v3.0.3</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
+</nav>
+<div id="sidebar-overlay" class="sidebar-overlay"></div>
+<div class="layout">
+<nav id="sidebar" class="sidebar">
+  <div class="sidebar-section"><span class="sidebar-label">Getting Started</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">High-Level API</span><ul class="sidebar-nav"><li><a href="api-core.html">OwnaudioNet</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-mixer.html">AudioMixer</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Audio Sources</span><ul class="sidebar-nav"><li><a href="api-sources.html">Source Overview</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#sourcewitheffects" class="sub">SourceWithEffects</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel Routing</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Processing</span><ul class="sidebar-nav"><li><a href="api-sync.html">Synchronization</a></li><li><a href="api-effects.html">Built-in Effects</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 Plugins</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">AI Features</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">MIDI</span><ul class="sidebar-nav"><li><a href="api-midi.html">MIDI Overview</a></li><li><a href="api-midi.html#port-management" class="sub">Port Management</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI File</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI Clock</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Reference</span><ul class="sidebar-nav"><li><a href="api-reference.html">Events &amp; Types</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#best-practices" class="sub">Best Practices</a></li></ul></div>
+</nav>
+<main class="main">
+
+<h1 class="page-title">AI Features</h1>
+<p class="page-subtitle">AI-powered audio processing. Available in <span class="pkg-badge pkg-full">OwnAudioSharp</span> only — not in the Basic package.</p>
+
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>These features require the full <code>OwnAudioSharp</code> NuGet package (~290 MB) which includes the ONNX neural network model files. They are <strong>not available</strong> in <code>OwnAudioSharp.Basic</code>.</p></div>
+
+<!-- Vocal Remover -->
+<h2 id="vocal-remover">Vocal Remover</h2>
+<p>Separates vocals from instrumental using ONNX neural network models. Namespace: <code>OwnaudioNET.Features.Vocalremover</code></p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnaudioNET.Features.Vocalremover;
+
+var options = new SimpleSeparationOptions
+{
+    Model           = InternalModel.Best,   // see model table below
+    OutputDirectory = "output/",
+    NoiseReduction  = true
+};
+
+using var separator = new SimpleAudioSeparationService(options);
+separator.Initialize();
+
+var result = separator.Separate("song.mp3");
+
+Console.WriteLine(result.VocalsPath);       // path to vocals-only file
+Console.WriteLine(result.InstrumentalPath); // path to instrumental-only file</code></pre></div>
+
+<h3>Available Models</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Model</th><th>Speed</th><th>Quality</th><th>Best for</th></tr></thead>
+  <tbody>
+    <tr><td><code>InternalModel.Nmp</code></td><td>⚡ Fastest</td><td>Good</td><td>Real-time preview, rapid iteration</td></tr>
+    <tr><td><code>InternalModel.Default</code></td><td>Medium</td><td>Very Good</td><td>General purpose</td></tr>
+    <tr><td><code>InternalModel.Best</code></td><td>Slow</td><td>Excellent</td><td>Final quality separation</td></tr>
+    <tr><td><code>InternalModel.Karaoke</code></td><td>Medium</td><td>Excellent</td><td>Karaoke tracks, preserves vocals</td></tr>
+    <tr><td><code>InternalModel.HTDemucs</code></td><td>Slowest</td><td>Highest</td><td>Multi-stem (vocals, bass, drums, other)</td></tr>
+  </tbody>
+</table></div>
+
+<h3>SimpleSeparationOptions</h3>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>Model</code></td><td><code>InternalModel</code></td><td>Which ONNX model to use for separation.</td></tr>
+    <tr><td><code>OutputDirectory</code></td><td><code>string</code></td><td>Directory where output files are written.</td></tr>
+    <tr><td><code>NoiseReduction</code></td><td><code>bool</code></td><td>Apply post-processing noise reduction.</td></tr>
+  </tbody>
+</table></div>
+
+<!-- Chord Detection -->
+<h2 id="chord-detection">Chord Detection</h2>
+<p>Detects musical chords, key, and tempo from audio files. Namespace: <code>OwnaudioNET.Features</code></p>
+
+<div class="code-block"><div class="code-header"><span>C# — From a file</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var (chords, key, bpm) = ChordDetect.DetectFromFile("song.mp3", intervalSecond: 1.0f);
+
+foreach (var chord in chords)
+    Console.WriteLine($"{chord.TimeSeconds:F1}s  {chord.ChordName}");
+
+Console.WriteLine($"Key: {key}  BPM: {bpm}");</code></pre></div>
+
+<div class="code-block"><div class="code-header"><span>C# — From multiple files (mixed)</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Mixes all files before analysis
+var (chords, key, bpm) = ChordDetect.DetectFromFiles(
+    new[] { "guitar.wav", "piano.wav" },
+    intervalSecond: 0.5f);</code></pre></div>
+
+<div class="code-block"><div class="code-header"><span>C# — Real-time detection</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Continuous detection from an active note stream
+var (chord, stability) = ChordDetect.DetectRealtime(
+    notes,                   // List&lt;Note&gt;
+    DetectionMode.Standard,
+    bufferSize: 4096);
+
+Console.WriteLine($"Chord: {chord}  Stability: {stability:P0}");</code></pre></div>
+
+<h3>Return Types</h3>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Member</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>chords</code></td><td><code>List&lt;TimedChord&gt;</code></td><td>List of chords with timestamps.</td></tr>
+    <tr><td><code>TimedChord.TimeSeconds</code></td><td><code>double</code></td><td>Timestamp in seconds.</td></tr>
+    <tr><td><code>TimedChord.ChordName</code></td><td><code>string</code></td><td>Chord name (e.g. <code>"Cmaj"</code>, <code>"Am7"</code>).</td></tr>
+    <tr><td><code>key</code></td><td><code>MusicalKey</code></td><td>Detected musical key.</td></tr>
+    <tr><td><code>bpm</code></td><td><code>int</code></td><td>Detected tempo in BPM.</td></tr>
+    <tr><td><code>stability</code></td><td><code>float</code></td><td>Real-time detection confidence (0.0–1.0).</td></tr>
+  </tbody>
+</table></div>
+
+<!-- Matchering -->
+<h2 id="matchering">Auto-Mastering (Matchering)</h2>
+<p>AI-driven EQ matching and automated audio mastering. Namespace: <code>OwnaudioNET.Features</code></p>
+
+<div class="code-block"><div class="code-header"><span>C# — Analyze spectrum</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">AudioSpectrum spectrum = AudioAnalyzer.AnalyzeAudioFile("track.wav");</code></pre></div>
+
+<div class="code-block"><div class="code-header"><span>C# — EQ match to reference</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">AudioAnalyzer.ProcessEQMatching(
+    sourceFile: "my-mix.wav",
+    targetFile: "reference.wav",   // the "sound" to match
+    outputFile: "mastered.wav");</code></pre></div>
+
+<div class="code-block"><div class="code-header"><span>C# — Apply playback system preset</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">AudioAnalyzer.ProcessWithEnhancedPreset(
+    sourceFile: "my-mix.wav",
+    outputFile: "for-club.wav",
+    system:     PlaybackSystem.Club,  // Club, Car, Studio, HomeTheater
+    eqOnlyMode: true);</code></pre></div>
+
+<div class="code-block"><div class="code-header"><span>C# — Batch process</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">AudioAnalyzer.BatchProcessWithEnhancedPreset(
+    sourceFiles:    new[] { "track1.wav", "track2.wav", "track3.wav" },
+    baseSampleFile: "reference.wav",
+    outputDirectory: "output/",
+    system:         PlaybackSystem.Studio,
+    fileNameSuffix: "_mastered");</code></pre></div>
+
+<h3>PlaybackSystem Values</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Value</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>PlaybackSystem.Club</code></td><td>Optimized for nightclub / dance floor sound systems</td></tr>
+    <tr><td><code>PlaybackSystem.Car</code></td><td>Optimized for in-car audio systems</td></tr>
+    <tr><td><code>PlaybackSystem.Studio</code></td><td>Neutral studio monitor reference</td></tr>
+    <tr><td><code>PlaybackSystem.HomeTheater</code></td><td>Home theater speaker systems</td></tr>
+  </tbody>
+</table></div>
+
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+<script src="../assets/docs.js"></script>
+</body></html>

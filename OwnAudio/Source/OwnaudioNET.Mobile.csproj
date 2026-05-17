@@ -23,6 +23,7 @@
   <PropertyGroup>
     <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Mobile</PackageId>
     <Version>3.0.3</Version>
     <Authors>ModernMube</Authors>
@@ -37,8 +38,8 @@
 
   <!-- Common dependencies (including Avalonia for mobile) -->
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.0.2" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.203" PrivateAssets="All" />
+    <PackageReference Include="Avalonia" Version="12.0.3" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.300" PrivateAssets="All" />
     <PackageReference Include="OwnAudioVst" Version="1.5.20" />
   </ItemGroup>
 

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <script>(function(){var t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);})();</script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Effects &amp; VST3 — OwnAudioSharp</title>
+  <link rel="stylesheet" href="../assets/docs.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+</head>
+<body>
+<nav class="topnav">
+  <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+  <a class="topnav-logo" href="../index.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>OwnAudioSharp</a>
+  <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="api-core.html" class="active">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
+  <div class="topnav-right"><span class="badge-version">v3.0.3</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
+</nav>
+<div id="sidebar-overlay" class="sidebar-overlay"></div>
+<div class="layout">
+<nav id="sidebar" class="sidebar">
+  <div class="sidebar-section"><span class="sidebar-label">Getting Started</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">High-Level API</span><ul class="sidebar-nav"><li><a href="api-core.html">OwnaudioNet</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-mixer.html">AudioMixer</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Audio Sources</span><ul class="sidebar-nav"><li><a href="api-sources.html">Source Overview</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#sourcewitheffects" class="sub">SourceWithEffects</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel Routing</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Processing</span><ul class="sidebar-nav"><li><a href="api-sync.html">Synchronization</a></li><li><a href="api-effects.html">Built-in Effects</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 Plugins</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">AI Features</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">MIDI</span><ul class="sidebar-nav"><li><a href="api-midi.html">MIDI Overview</a></li><li><a href="api-midi.html#port-management" class="sub">Port Management</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI File</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI Clock</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Reference</span><ul class="sidebar-nav"><li><a href="api-reference.html">Events &amp; Types</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#best-practices" class="sub">Best Practices</a></li></ul></div>
+</nav>
+<main class="main">
+
+<h1 class="page-title">Effects &amp; VST3</h1>
+<p class="page-subtitle">Zero-allocation built-in DSP effects, SmartMaster, and VST3 plugin hosting. Namespace: <code>OwnaudioNET.Effects</code></p>
+
+<h2 id="ieffectprocessor">IEffectProcessor Interface</h2>
+<p>All effects implement <code>IEffectProcessor</code>. Add them to <a href="api-mixer.html#master-effects">mixer master chain</a> or to a <a href="api-sources.html#sourcewitheffects">SourceWithEffects</a> per-track chain.</p>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Member</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>Id</code></td><td><code>Guid</code></td><td>Unique identifier.</td></tr>
+    <tr><td><code>Name</code></td><td><code>string</code></td><td>Effect name.</td></tr>
+    <tr><td><code>Enabled</code></td><td><code>bool</code></td><td>Enable/disable without removing from chain.</td></tr>
+    <tr><td><code>Mix</code></td><td><code>float</code></td><td>Wet/dry mix (0.0 = dry only, 1.0 = wet only).</td></tr>
+    <tr><td><code>IsReady</code></td><td><code>bool</code></td><td>Whether initialized and ready to process.</td></tr>
+    <tr><td><code>Initialize(AudioConfig)</code></td><td>method</td><td>Called automatically when added to mixer or chain.</td></tr>
+    <tr><td><code>Process(Span&lt;float&gt;, int)</code></td><td>method</td><td>Zero-allocation in-place processing.</td></tr>
+    <tr><td><code>Reset()</code></td><td>method</td><td>Clear internal state (delay lines, filter history, etc.).</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="reverb">ReverbEffect</h2>
+<p>Professional quality reverb based on an optimized extended Freeverb algorithm.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var reverb = new ReverbEffect
+{
+    RoomSize   = 0.7f,  // 0.0–1.0 (larger = longer tail)
+    Damping    = 0.5f,  // 0.0–1.0 (higher = darker)
+    Mix        = 0.3f,  // 0.0–1.0 wet/dry
+    Width      = 1.0f,  // 0.0–1.0 stereo spread
+    Gain       = 1.0f,  // input gain
+    PreDelayMs = 20     // 0–500ms pre-delay
+};
+
+// Or use a preset
+reverb.SetPreset(ReverbPreset.LargeHall);</code></pre></div>
+<p><strong>Presets:</strong> <code>Default</code>, <code>SmallRoom</code>, <code>LargeHall</code>, <code>Cathedral</code>, <code>Plate</code>, <code>Spring</code>, <code>AmbientPad</code>, <code>VocalBooth</code>, <code>DrumRoom</code>, <code>Gated</code>, <code>Subtle</code></p>
+
+<h2 id="delay">DelayEffect</h2>
+<p>Stereo delay with ping-pong mode and feedback damping.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var delay = new DelayEffect
+{
+    Time     = 375,    // ms (1–5000)
+    Repeat   = 0.4f,   // feedback 0.0–1.0
+    Damping  = 0.3f,   // high-freq damping 0.0–1.0
+    Mix      = 0.3f,
+    PingPong = true    // stereo ping-pong
+};
+delay.SetPreset(DelayPreset.PingPong);</code></pre></div>
+<p><strong>Presets:</strong> <code>Default</code>, <code>SlapBack</code>, <code>ClassicEcho</code>, <code>Ambient</code>, <code>Rhythmic</code>, <code>PingPong</code>, <code>TapeEcho</code>, <code>Dub</code>, <code>Thickening</code></p>
+
+<h2 id="equalizer">EqualizerEffect</h2>
+<p>10-band parametric EQ. Bands: 31.25 Hz, 62.5 Hz, 125 Hz, 250 Hz, 500 Hz, 1 kHz, 2 kHz, 4 kHz, 8 kHz, 16 kHz.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var eq = new EqualizerEffect();
+eq.SetBandGain(0, +6.0f);   // boost 31Hz by 6dB
+eq.SetBandGain(9, -3.0f);   // cut 16kHz by 3dB
+float g = eq.GetBandGain(4); // query 500Hz band
+
+eq.SetPreset(EqualizerPreset.Rock);</code></pre></div>
+<p><strong>Presets:</strong> <code>Default</code>, <code>Bass</code>, <code>Treble</code>, <code>Rock</code>, <code>Classical</code>, <code>Pop</code>, <code>Jazz</code>, <code>Voice</code></p>
+
+<h2 id="compressor">CompressorEffect</h2>
+<p>Professional dynamic range compressor with makeup gain.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var comp = new CompressorEffect
+{
+    Threshold     = 0.7f,   // 0.0–1.0 linear amplitude
+    Ratio         = 4.0f,   // 1.0–100.0 (N:1)
+    AttackTimeMs  = 10f,    // 0.1–1000ms
+    ReleaseTimeMs = 100f,   // 1–2000ms
+    MakeupGain    = 1.2f    // linear amplitude multiplier
+};
+comp.SetPreset(CompressorPreset.VocalGentle);</code></pre></div>
+<p><strong>Presets:</strong> <code>Default</code>, <code>VocalGentle</code>, <code>VocalAggressive</code>, <code>Drums</code>, <code>Bass</code>, <code>MasteringLimiter</code>, <code>Vintage</code></p>
+
+<h2 id="all-effects">All Built-in Effects</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Class</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>ReverbEffect</code></td><td>Freeverb-based reverb with presets</td></tr>
+    <tr><td><code>DelayEffect</code></td><td>Stereo delay with ping-pong and damping</td></tr>
+    <tr><td><code>EqualizerEffect</code></td><td>10-band parametric EQ</td></tr>
+    <tr><td><code>Equalizer30BandEffect</code></td><td>30-band graphic EQ</td></tr>
+    <tr><td><code>CompressorEffect</code></td><td>Dynamic range compressor</td></tr>
+    <tr><td><code>LimiterEffect</code></td><td>Soft/hard peak limiter</td></tr>
+    <tr><td><code>ChorusEffect</code></td><td>Chorus / spatial thickening</td></tr>
+    <tr><td><code>FlangerEffect</code></td><td>Flanging / sweeping comb filter</td></tr>
+    <tr><td><code>PhaserEffect</code></td><td>Phase modulation</td></tr>
+    <tr><td><code>DistortionEffect</code></td><td>Distortion / hard clipping</td></tr>
+    <tr><td><code>OverdriveEffect</code></td><td>Overdrive / soft saturation</td></tr>
+    <tr><td><code>AutoGainEffect</code></td><td>Automatic gain control (AGC)</td></tr>
+    <tr><td><code>EnhancerEffect</code></td><td>Loudness enhancement / exciter</td></tr>
+    <tr><td><code>DynamicAmpEffect</code></td><td>Dynamic range amplification</td></tr>
+    <tr><td><code>RotaryEffect</code></td><td>Rotating speaker simulation (Leslie)</td></tr>
+  </tbody>
+</table></div>
+
+<!-- SmartMaster -->
+<h2 id="smartmaster">SmartMaster Effect</h2>
+<p>Intelligent adaptive mastering chain for the master bus. Includes 31-band EQ, compressor, subharmonic synthesizer, and auto-calibration via room measurement.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var smartMaster = new SmartMasterEffect();
+mixer.AddMasterEffect(smartMaster);
+
+// Factory preset by speaker type
+smartMaster.LoadSpeakerPreset(SpeakerType.StudioMonitor);
+// Other types: PA, Headphones, Car, HomeTheater, TV, Laptop
+
+// Save / load user presets
+smartMaster.Save("my-studio");
+smartMaster.Load("my-studio");
+
+// Reset to defaults
+smartMaster.ResetToDefaults();
+
+// Auto room measurement
+await smartMaster.StartMeasurementAsync(); // plays test signal, auto-calibrates EQ
+smartMaster.CancelMeasurement();
+MeasurementStatusInfo status = smartMaster.GetMeasurementStatus();
+
+// Lifecycle
+smartMaster.OnPlaybackStopped(); // call when transport stops</code></pre></div>
+
+<h3>SmartMasterConfig</h3>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var config = new SmartMasterConfig
+{
+    GraphicEQGains       = new float[31],  // per-band dB gains (0 = flat)
+    CompressorEnabled    = true,
+    CompressorThreshold  = 0.5f,           // 0.0–1.0 linear
+    CompressorRatio      = 4.0f,           // 4:1
+    CompressorAttack     = 10f,            // ms
+    CompressorRelease    = 100f,           // ms
+    SubharmonicEnabled   = false,
+    SubharmonicMix       = 0.0f,           // 0.0–1.0
+    SubharmonicFreqRange = 60.0f           // max frequency in Hz
+};</code></pre></div>
+
+<!-- VST3 -->
+<h2 id="vst3">VST3 Plugin Hosting</h2>
+<p>Load and host VST3 audio effect plugins as <code>IEffectProcessor</code> instances. Instruments are not supported — effects only.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnaudioNET.Effects;
+
+// Discover plugins
+List&lt;string&gt;         paths = VST3PluginHost.FindPlugins();
+List&lt;VST3PluginInfo&gt; info  = VST3PluginHost.ScanPluginsQuick();
+
+// Load plugin
+VST3PluginHost host = await VST3PluginHost.CreateAsync("/path/plugin.vst3");
+
+if (!host.IsEffect) { host.Dispose(); return; } // reject instruments
+
+// Initialize audio processing
+int sampleRate = OwnaudioNet.Engine!.Config.SampleRate;
+bool ready     = await host.InitializeAudioAsync(sampleRate, maxBlockSize: 1024);
+
+// Add to mixer or track effect chain
+mixer.AddMasterEffect(host.GetProcessor());
+// or: trackFx.AddEffect(host.GetProcessor());
+
+// Plugin UI
+host.OpenEditor();
+await host.OpenEditorAsync();
+host.CloseEditor();
+var size = await host.GetEditorSizeAsync();</code></pre></div>
+
+<h3>Parameters &amp; State</h3>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Read parameters
+VST3ParameterInfo[] params = await host.GetParametersAsync();
+int    count = await host.GetParameterCountAsync();
+double value = await host.GetParameterAsync(paramId);
+
+// Set parameters
+host.SetParameter(paramId, 0.5);
+await host.SetParametersAsync(new Dictionary&lt;int, double&gt; { { paramId, 0.75 } });
+
+// Preset state (for project save/load)
+byte[]? state = await host.GetStateAsync();
+await host.SetStateAsync(state);
+
+// Cleanup
+await host.DisposeAsync();
+// or:
+host.Dispose();</code></pre></div>
+
+<h3>VST3PluginHost Properties</h3>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>Name</code></td><td><code>string</code></td><td>Plugin name.</td></tr>
+    <tr><td><code>Vendor</code></td><td><code>string</code></td><td>Plugin vendor/manufacturer.</td></tr>
+    <tr><td><code>Version</code></td><td><code>string?</code></td><td>Plugin version string.</td></tr>
+    <tr><td><code>IsEffect</code></td><td><code>bool</code></td><td><code>true</code> for audio effect plugins.</td></tr>
+    <tr><td><code>IsInstrument</code></td><td><code>bool</code></td><td><code>true</code> for instrument plugins (not supported).</td></tr>
+    <tr><td><code>HasEditor</code></td><td><code>bool</code></td><td>Whether the plugin has a graphical editor.</td></tr>
+    <tr><td><code>IsEditorOpen</code></td><td><code>bool</code></td><td>Whether the editor window is currently open.</td></tr>
+    <tr><td><code>IsReady</code></td><td><code>bool</code></td><td>Whether initialized and ready to process audio.</td></tr>
+    <tr><td><code>PluginPath</code></td><td><code>string</code></td><td>Filesystem path to the .vst3 bundle.</td></tr>
+  </tbody>
+</table></div>
+
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Call <code>PauseDeviceMonitoring()</code> before opening the VST3 editor window and <code>ResumeDeviceMonitoring()</code> after closing to prevent device enumeration interference.</p></div>
+
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+<script src="../assets/docs.js"></script>
+</body></html>

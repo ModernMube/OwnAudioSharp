@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <script>(function(){var t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);})();</script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AudioMixer — OwnAudioSharp</title>
+  <link rel="stylesheet" href="../assets/docs.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+</head>
+<body>
+<nav class="topnav">
+  <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+  <a class="topnav-logo" href="../index.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>OwnAudioSharp</a>
+  <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="api-core.html" class="active">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
+  <div class="topnav-right"><span class="badge-version">v3.0.3</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
+</nav>
+<div id="sidebar-overlay" class="sidebar-overlay"></div>
+<div class="layout">
+<nav id="sidebar" class="sidebar">
+  <div class="sidebar-section"><span class="sidebar-label">Getting Started</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">High-Level API</span><ul class="sidebar-nav"><li><a href="api-core.html">OwnaudioNet</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-mixer.html">AudioMixer</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Audio Sources</span><ul class="sidebar-nav"><li><a href="api-sources.html">Source Overview</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#sourcewitheffects" class="sub">SourceWithEffects</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel Routing</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Processing</span><ul class="sidebar-nav"><li><a href="api-sync.html">Synchronization</a></li><li><a href="api-effects.html">Built-in Effects</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 Plugins</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">AI Features</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">MIDI</span><ul class="sidebar-nav"><li><a href="api-midi.html">MIDI Overview</a></li><li><a href="api-midi.html#port-management" class="sub">Port Management</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI File</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI Clock</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Reference</span><ul class="sidebar-nav"><li><a href="api-reference.html">Events &amp; Types</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#best-practices" class="sub">Best Practices</a></li></ul></div>
+</nav>
+<main class="main">
+
+<h1 class="page-title">AudioMixer</h1>
+<p class="page-subtitle">The central mixing engine. Combines multiple audio sources, applies master effects, and drives audio output. Namespace: <code>OwnaudioNET.Mixing</code></p>
+
+<h2 id="constructor">Constructor</h2>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// bufferSizeInFrames: use 1024 for complex multi-track setups
+var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine, bufferSizeInFrames: 512);</code></pre></div>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>engine</code></td><td><code>IAudioEngine</code></td><td>—</td><td>From <code>OwnaudioNet.Engine.UnderlyingEngine</code>.</td></tr>
+    <tr><td><code>bufferSizeInFrames</code></td><td><code>int</code></td><td><code>512</code></td><td>Internal mix buffer. Use 1024 for 20+ tracks.</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="properties">Properties</h2>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>MixerId</code></td><td><code>Guid</code></td><td>Unique identifier.</td></tr>
+    <tr><td><code>Config</code></td><td><code>AudioConfig</code></td><td>Audio configuration in use.</td></tr>
+    <tr><td><code>IsRunning</code></td><td><code>bool</code></td><td>Whether the mix thread is active.</td></tr>
+    <tr><td><code>SourceCount</code></td><td><code>int</code></td><td>Number of active sources.</td></tr>
+    <tr><td><code>MasterVolume</code></td><td><code>float</code></td><td>Master output volume (0.0 – 1.0). Settable at any time.</td></tr>
+    <tr><td><code>LeftPeak</code> / <code>RightPeak</code></td><td><code>float</code></td><td>Real-time peak levels (0.0 – 1.0) for VU metering.</td></tr>
+    <tr><td><code>TotalMixedFrames</code></td><td><code>long</code></td><td>Total frames processed since last <code>Start()</code>.</td></tr>
+    <tr><td><code>TotalUnderruns</code></td><td><code>long</code></td><td>Total buffer underruns since last <code>Start()</code>.</td></tr>
+    <tr><td><code>IsRecording</code></td><td><code>bool</code></td><td>Whether WAV recording is active.</td></tr>
+    <tr><td><code>MasterClock</code></td><td><code>MasterClock</code></td><td>Timeline clock for synchronized multi-track sync.</td></tr>
+    <tr><td><code>RenderingMode</code></td><td><code>ClockMode</code></td><td><code>Realtime</code> (default) or <code>Offline</code>.</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="lifecycle">Lifecycle</h2>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">mixer.Start();                      // begin audio processing
+mixer.Pause();                      // freeze mix thread
+mixer.Stop();                       // stop and clear all sources
+mixer.Seek(double positionInSec);   // seek master clock + all attached sources
+mixer.Dispose();                    // release all resources</code></pre></div>
+
+<h2 id="source-management">Source Management</h2>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Add and immediately start
+mixer.AddSource(source);
+
+// Add without starting — launch all at once for tight sync
+mixer.AddSourcePrepared(vocals);
+mixer.AddSourcePrepared(backing);
+mixer.StartPreparedSources(startPosition: 0.0); // atomic start
+
+// Remove
+mixer.RemoveSource(source);          // by reference
+mixer.RemoveSource(sourceGuid);      // by ID
+mixer.ClearSources();                // remove + stop all
+
+// Query
+IAudioSource[] all = mixer.GetSources();</code></pre></div>
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><code>AddSource()</code> and <code>RemoveSource()</code> are lock-free hot-swap operations — safe to call while the mixer is running.</p></div>
+<p>Maximum simultaneous sources per mixer: <code>AudioConstants.MaxAudioSources</code> = <strong>25</strong></p>
+
+<h2 id="master-effects">Master Effects</h2>
+<p>Effects applied to the final mixed signal in the order they are added. See <a href="api-effects.html">Effects</a> for the full effect list.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Add effects in chain order
+mixer.AddMasterEffect(new CompressorEffect { Ratio = 4f });
+mixer.AddMasterEffect(new ReverbEffect { RoomSize = 0.5f, Mix = 0.2f });
+mixer.AddMasterEffect(new LimiterEffect());
+
+// Manage
+mixer.RemoveMasterEffect(effect);   // returns bool
+mixer.ClearMasterEffects();
+IEffectProcessor[] fx = mixer.GetMasterEffects();</code></pre></div>
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>The effect must have <code>IsReady == true</code> before adding. For VST3 effects, call <code>await host.InitializeAudioAsync()</code> first.</p></div>
+
+<h2 id="recording">Recording</h2>
+<p>Records the final mixed output — post master-effects — to a WAV file.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">mixer.StartRecording("session.wav"); // start capturing
+// ... playback ...
+mixer.StopRecording();               // finalize and close the WAV file</code></pre></div>
+
+<h2 id="vu-metering">VU Metering</h2>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Update at ~10Hz (100ms timer)
+_vuTimer = new Timer(_ =>
+{
+    // Master bus
+    float leftDb  = 20f * MathF.Log10(Math.Max(mixer.LeftPeak,  1e-6f));
+    float rightDb = 20f * MathF.Log10(Math.Max(mixer.RightPeak, 1e-6f));
+    MasterLeftDb  = Math.Max(leftDb,  -60f);
+    MasterRightDb = Math.Max(rightDb, -60f);
+
+    // Per-track (if source is BaseAudioSource)
+    var (l, r) = source.OutputLevels;
+    TrackLeftDb = 20f * MathF.Log10(Math.Max(l, 1e-6f));
+}, null, 0, 100);</code></pre></div>
+
+<h2 id="events">Events</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Event</th><th>Args</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>PlaybackEnded</code></td><td><code>EventArgs</code></td><td>All sources reached <code>EndOfStream</code>.</td></tr>
+    <tr><td><code>BufferUnderrun</code></td><td><code>BufferUnderrunEventArgs</code></td><td>Mix thread couldn't fill buffer in time.</td></tr>
+    <tr><td><code>SourceError</code></td><td><code>AudioErrorEventArgs</code></td><td>An error occurred in one of the sources.</td></tr>
+    <tr><td><code>TrackDropout</code></td><td><code>TrackDropoutEventArgs</code></td><td>A source missed its master clock deadline.</td></tr>
+  </tbody>
+</table></div>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">mixer.PlaybackEnded += (_, _) =>
+{
+    // All tracks finished — update UI state
+};
+
+mixer.BufferUnderrun += (_, e) =>
+{
+    Console.WriteLine($"Underrun: {e.MissedFrames} frames at position {e.Position}");
+};
+
+mixer.TrackDropout += (_, e) =>
+{
+    Console.WriteLine($"Dropout on {e.TrackName}: {e.Reason} ({e.MissedFrames} frames)");
+};</code></pre></div>
+
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+<script src="../assets/docs.js"></script>
+</body></html>

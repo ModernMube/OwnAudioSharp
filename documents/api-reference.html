@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <script>(function(){var t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);})();</script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Events &amp; Reference — OwnAudioSharp</title>
+  <link rel="stylesheet" href="../assets/docs.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+</head>
+<body>
+<nav class="topnav">
+  <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+  <a class="topnav-logo" href="../index.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>OwnAudioSharp</a>
+  <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="api-core.html">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html" class="active">Reference</a></li></ul>
+  <div class="topnav-right"><span class="badge-version">v3.0.3</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
+</nav>
+<div id="sidebar-overlay" class="sidebar-overlay"></div>
+<div class="layout">
+<nav id="sidebar" class="sidebar">
+  <div class="sidebar-section"><span class="sidebar-label">Getting Started</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">High-Level API</span><ul class="sidebar-nav"><li><a href="api-core.html">OwnaudioNet</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-mixer.html">AudioMixer</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Audio Sources</span><ul class="sidebar-nav"><li><a href="api-sources.html">Source Overview</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#sourcewitheffects" class="sub">SourceWithEffects</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel Routing</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Processing</span><ul class="sidebar-nav"><li><a href="api-sync.html">Synchronization</a></li><li><a href="api-effects.html">Built-in Effects</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 Plugins</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">AI Features</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">MIDI</span><ul class="sidebar-nav"><li><a href="api-midi.html">MIDI Overview</a></li><li><a href="api-midi.html#port-management" class="sub">Port Management</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI File</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI Clock</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Reference</span><ul class="sidebar-nav"><li><a href="api-reference.html">Events &amp; Types</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#best-practices" class="sub">Best Practices</a></li></ul></div>
+</nav>
+<main class="main">
+
+<h1 class="page-title">Events &amp; Reference</h1>
+<p class="page-subtitle">Event argument types, enumerations, constants, and threading best practices.</p>
+
+<!-- Events Reference -->
+<h2 id="events">Events Reference</h2>
+
+<h3>AudioStateChangedEventArgs</h3>
+<p>Raised by <code>OwnaudioNet.AudioStateChanged</code> and by each audio source's <code>StateChanged</code> event.</p>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>PreviousState</code></td><td><code>AudioState</code></td><td>State before the transition.</td></tr>
+    <tr><td><code>CurrentState</code></td><td><code>AudioState</code></td><td>New state after the transition.</td></tr>
+    <tr><td><code>Timestamp</code></td><td><code>DateTime</code></td><td>When the transition occurred.</td></tr>
+  </tbody>
+</table></div>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">OwnaudioNet.AudioStateChanged += (_, e) =>
+{
+    Console.WriteLine($"{e.PreviousState} → {e.CurrentState}  at {e.Timestamp:T}");
+};</code></pre></div>
+
+<h3>BufferUnderrunEventArgs</h3>
+<p>Raised by <code>OwnaudioNet.BufferUnderrun</code> when the audio output buffer runs dry.</p>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>UnderrunCount</code></td><td><code>int</code></td><td>Cumulative underrun count since engine start.</td></tr>
+    <tr><td><code>Timestamp</code></td><td><code>DateTime</code></td><td>When the underrun occurred.</td></tr>
+  </tbody>
+</table></div>
+
+<h3>AudioErrorEventArgs</h3>
+<p>Raised by <code>OwnaudioNet.AudioError</code> on engine-level errors.</p>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>Message</code></td><td><code>string</code></td><td>Human-readable error description.</td></tr>
+    <tr><td><code>Exception</code></td><td><code>Exception?</code></td><td>Original exception (if any).</td></tr>
+    <tr><td><code>Timestamp</code></td><td><code>DateTime</code></td><td>When the error occurred.</td></tr>
+  </tbody>
+</table></div>
+
+<h3>TrackDropoutEventArgs</h3>
+<p>Raised by <code>AudioMixer.TrackDropout</code> when a hard-sync correction (Red Zone) occurs. See <a href="api-sync.html#drift-zones">Drift Correction Zones</a>.</p>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>TrackId</code></td><td><code>Guid</code></td><td>ID of the source that dropped out.</td></tr>
+    <tr><td><code>TrackName</code></td><td><code>string</code></td><td>Source name or type string.</td></tr>
+    <tr><td><code>MasterTimestamp</code></td><td><code>double</code></td><td>Clock position in seconds when dropout occurred.</td></tr>
+    <tr><td><code>MasterSamplePosition</code></td><td><code>long</code></td><td>Clock position in samples.</td></tr>
+    <tr><td><code>MissedFrames</code></td><td><code>int</code></td><td>Number of frames that were silent due to the dropout.</td></tr>
+    <tr><td><code>Reason</code></td><td><code>string</code></td><td>Human-readable cause description.</td></tr>
+    <tr><td><code>EventTimestamp</code></td><td><code>DateTime</code></td><td>Wall-clock time of the event.</td></tr>
+  </tbody>
+</table></div>
+
+<h3>AudioDeviceInfo</h3>
+<p>Returned by <code>OwnaudioNet.GetOutputDevices()</code> and <code>GetInputDevices()</code>.</p>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>DeviceId</code></td><td><code>string</code></td><td>Unique device identifier — pass to <code>AudioConfig.OutputDeviceId</code>.</td></tr>
+    <tr><td><code>Name</code></td><td><code>string</code></td><td>Human-readable device name.</td></tr>
+    <tr><td><code>EngineName</code></td><td><code>string</code></td><td>Backend: <code>Wasapi</code>, <code>CoreAudio</code>, <code>PulseAudio</code>, …</td></tr>
+    <tr><td><code>IsInput</code> / <code>IsOutput</code></td><td><code>bool</code></td><td>Device direction.</td></tr>
+    <tr><td><code>IsDefault</code></td><td><code>bool</code></td><td>System default device for its direction.</td></tr>
+    <tr><td><code>MaxInputChannels</code> / <code>MaxOutputChannels</code></td><td><code>int</code></td><td>Hardware channel limits.</td></tr>
+    <tr><td><code>State</code></td><td><code>AudioDeviceState</code></td><td><code>Active</code>, <code>Disabled</code>, <code>NotPresent</code>, <code>Unplugged</code>.</td></tr>
+  </tbody>
+</table></div>
+
+<!-- Enumerations -->
+<h2 id="enumerations">Enumerations</h2>
+
+<h3>AudioState</h3>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">AudioState.Stopped      // Not playing, position at 0
+AudioState.Playing      // Actively reading and outputting audio
+AudioState.Paused       // Paused, resumes from current position
+AudioState.EndOfStream  // Reached end (Loop = false)
+AudioState.Error        // Fatal error in source</code></pre></div>
+
+<h3>ClockMode</h3>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">ClockMode.Realtime       // Non-blocking — dropouts produce silence (live playback)
+ClockMode.Offline        // Blocking — waits for data (deterministic file rendering)
+ClockMode.NetworkServer  // Broadcasts clock to LAN clients
+ClockMode.NetworkClient  // Follows a remote server clock</code></pre></div>
+
+<h3>EngineStatus</h3>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">EngineStatus.Idle               // Initialized, not started
+EngineStatus.Running            // Processing audio
+EngineStatus.DeviceDisconnected // Device unplugged (monitoring for reconnect)
+EngineStatus.Error              // Fatal engine error</code></pre></div>
+
+<h3>EngineHostType</h3>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">EngineHostType.None       // Auto-select (recommended default)
+EngineHostType.WASAPI     // Windows Audio Session API
+EngineHostType.ASIO       // ASIO — Windows, ultra-low latency
+EngineHostType.CoreAudio  // macOS Core Audio
+EngineHostType.ALSA       // Linux ALSA
+EngineHostType.Miniaudio  // Cross-platform fallback
+EngineHostType.Portaudio  // PortAudio backend</code></pre></div>
+
+<!-- Best Practices -->
+<h2 id="best-practices">Best Practices</h2>
+
+<h3>Thread Safety</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>Operation</th><th>Safe Thread</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>OwnaudioNet.Initialize()</code></td><td>Background / <code>Task.Run</code></td><td>Blocks 50ms–5s (Linux PulseAudio). Use <code>InitializeAsync()</code>.</td></tr>
+    <tr><td><code>OwnaudioNet.Stop()</code> / <code>Shutdown()</code></td><td>Background / <code>Task.Run</code></td><td>Waits for audio thread join (up to 2s). Use async variants.</td></tr>
+    <tr><td><code>mixer.Start()</code>, <code>mixer.Stop()</code></td><td>Any</td><td>Thread-safe.</td></tr>
+    <tr><td><code>mixer.AddSource()</code> / <code>RemoveSource()</code></td><td>Any</td><td>Lock-free hot-swap.</td></tr>
+    <tr><td><code>source.Volume = …</code>, <code>source.Tempo = …</code></td><td>Any</td><td>Atomic property writes.</td></tr>
+    <tr><td><code>OwnaudioNet.Send()</code></td><td>Any</td><td>Lock-free ring buffer write, never blocks.</td></tr>
+  </tbody>
+</table></div>
+
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Never call <code>Initialize()</code>, <code>Stop()</code>, or <code>Shutdown()</code> from a UI thread. These operations block and will freeze your application. Always use the async variants or <code>Task.Run</code>.</p></div>
+
+<h3>Recommended Startup Pattern</h3>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">protected override async Task OnInitializedAsync()
+{
+    var config = OwnaudioNet.CreateDefaultConfig();
+    config.EnableInput = false;
+
+    if (OperatingSystem.IsWindows())
+        config.HostType = EngineHostType.WASAPI;
+
+    await OwnaudioNet.InitializeAsync(config);
+    OwnaudioNet.Start();
+
+    _mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine, bufferSizeInFrames: 1024);
+    _mixer.Start();
+}</code></pre></div>
+
+<h3>Recommended Shutdown Pattern</h3>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">public async Task DisposeAsync()
+{
+    _mixer?.Stop();
+    _mixer?.Dispose();
+
+    await OwnaudioNet.ShutdownAsync();
+}</code></pre></div>
+
+<h3>Zero-Allocation Rules</h3>
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Never allocate memory inside the audio render loop. Use <code>Span&lt;T&gt;</code>, pre-allocated buffers, and pool-returned arrays. Always call <code>ReturnInputBuffer()</code> after <code>Receive()</code> — omitting this call leaks native memory.</p></div>
+
+<div class="code-block"><div class="code-header"><span>C# — Correct buffer return</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var buffer = OwnaudioNet.Receive();
+if (buffer != null)
+{
+    try
+    {
+        // Process buffer.Data ...
+    }
+    finally
+    {
+        OwnaudioNet.ReturnInputBuffer(buffer); // MUST always be called
+    }
+}</code></pre></div>
+
+<h3>VU Metering Pattern</h3>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Poll at ~10 Hz — do not poll faster than the audio buffer interval
+_vuTimer = new Timer(_ =>
+{
+    float leftDb  = 20f * MathF.Log10(Math.Max(_mixer.LeftPeak,  1e-6f));
+    float rightDb = 20f * MathF.Log10(Math.Max(_mixer.RightPeak, 1e-6f));
+
+    LeftDb  = Math.Max(leftDb,  -60f); // clamp to -60 dBFS floor
+    RightDb = Math.Max(rightDb, -60f);
+
+    // Per-track stereo levels
+    var (l, r) = source.OutputLevels;
+}, null, 0, 100);</code></pre></div>
+
+<h3>Position Tracking Pattern</h3>
+<div class="code-block"><div class="code-header"><span>C# — High-precision display with interpolation</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">private double _lastEnginePos;
+private double _lastEnginePosAt;
+private readonly Stopwatch _watch = Stopwatch.StartNew();
+
+// Update at ~30 Hz (33 ms timer)
+private void OnPositionTimer()
+{
+    double enginePos = _mixer.MasterClock.CurrentTimestamp;
+    double nowSec    = _watch.Elapsed.TotalSeconds;
+
+    if (enginePos != _lastEnginePos)
+    {
+        _lastEnginePos   = enginePos;
+        _lastEnginePosAt = nowSec;
+    }
+
+    // Interpolate between engine callbacks for smooth UI
+    double displayPos = _lastEnginePos + (nowSec - _lastEnginePosAt);
+    CurrentPositionSeconds = displayPos;
+}
+
+// Or use ISynchronizable for sample-accurate per-source position
+if (source is ISynchronizable sync)
+{
+    int    sampleRate = OwnaudioNet.Engine!.Config.SampleRate;
+    double posSeconds = sync.SamplePosition / (double)sampleRate;
+}</code></pre></div>
+
+<h3>AudioConstants</h3>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">AudioConstants.MaxAudioSources  // 25  — maximum simultaneous sources per mixer
+AudioConstants.MinTempo         // 0.8 — minimum tempo multiplier (80% speed)
+AudioConstants.MaxTempo         // 1.2 — maximum tempo multiplier (120% speed)</code></pre></div>
+
+<h3>Volume Range</h3>
+<p>All source <code>Volume</code> properties accept values from <code>0.0</code> (silence) to <code>20.0</code> (maximum amplification). The default is <code>1.0</code> (unity gain). Values above <code>1.0</code> amplify the signal and may clip without a limiter.</p>
+
+<h3>Pitch Shift Range</h3>
+<p>The <code>PitchShift</code> property on audio sources accepts values from <code>-12</code> to <code>+12</code> semitones. Use in combination with <code>Tempo</code> to time-stretch without changing pitch.</p>
+
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+<script src="../assets/docs.js"></script>
+</body></html>

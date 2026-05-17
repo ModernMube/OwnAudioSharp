@@ -8,5 +8,5 @@
     </application>
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35" />
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="36" />
 </manifest>
