@@ -11,23 +11,15 @@
   </a>
 </div>
 
+
+
 <div align="center">
-  <a href="https://modernmube.github.io/OwnAudioSharp/documents/api-net.html">
-    <img src="https://img.shields.io/badge/Ownaudio%20NET%20API-blue" width="145">
-  </a>
-  <a href="https://modernmube.github.io/OwnAudioSharp/documents/matchering.html">
-    <img src="https://img.shields.io/badge/Audio%20Matchering%20API-blue" width="170">
-  </a>
-  <a href="https://modernmube.github.io/OwnAudioSharp/documents/vocalremover.html">
-    <img src="https://img.shields.io/badge/Vocal%20Remover%20API-blue" width="150">
-  </a>
-  <a href="https://modernmube.github.io/OwnAudioSharp/documents/chorddetect.html">
-    <img src="https://img.shields.io/badge/Chord%20Detect%20API-blue" width="135">
-  </a>
-  <a href="https://modernmube.github.io/OwnAudioSharp/documents/effects.html">
-    <img src="https://img.shields.io/badge/Effects%20and%20VST3_plugins-blue" width="200">
+  <a href="https://modernmube.github.io/OwnAudioSharp">
+    <img src="https://img.shields.io/badge/NEW_WEB-OwnAudioSharp_API_documents-green?style=for-the-badge" alt="Download" width="400">
   </a>
 </div>
+
+
 
 <div align="center">
   <a href="https://github.com/ModernMube/OwnAudioSharp/tree/master/OwnAudio/Examples">
