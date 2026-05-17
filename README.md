@@ -15,13 +15,8 @@
 
 <div align="center">
   <a href="https://modernmube.github.io/OwnAudioSharp">
-    <img src="https://img.shields.io/badge/NEW_WEB-OwnAudioSharp_API_documentation-green?style=for-the-badge" alt="Download" width="400">
+    <img src="https://img.shields.io/badge/NEW_WEB-OwnAudioSharp_API_documentation-darkgreen" width="400">
   </a>
-</div>
-
-
-
-<div align="center">
   <a href="https://github.com/ModernMube/OwnAudioSharp/tree/master/OwnAudio/Examples">
     <img src="https://img.shields.io/badge/Examples-Ownaudio%20Example%20Projects-red" width="330">
   </a>
