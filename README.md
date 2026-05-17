@@ -15,7 +15,7 @@
 
 <div align="center">
   <a href="https://modernmube.github.io/OwnAudioSharp">
-    <img src="https://img.shields.io/badge/NEW_WEB-OwnAudioSharp_API_documents-green?style=for-the-badge" alt="Download" width="400">
+    <img src="https://img.shields.io/badge/NEW_WEB-OwnAudioSharp_API_documentation-green?style=for-the-badge" alt="Download" width="400">
   </a>
 </div>
 
