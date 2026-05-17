@@ -11,23 +11,19 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Midi</PackageId>
-    <Version>3.0.3</Version>
+    <Version>3.0.4</Version>
     <Authors>ModernMube</Authors>
     <Description>AOT-compatible MIDI I/O and file handling for OwnAudioSharp. Supports real-time MIDI input/output (WinMM / CoreMIDI / ALSA), Standard MIDI File read/write, and a hardware-accurate MIDI clock.</Description>
     <PackageTags>midi;audio;aot;cross-platform;windows;linux;macos</PackageTags>
     <RepositoryUrl>https://github.com/ModernMube/OwnAudioSharp</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageCopyright>Copyright (c) 2025 ModernMube</PackageCopyright>
+    <PackageIcon>ownaudio.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-  </PropertyGroup>
-
-  <PropertyGroup>
-    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(DefineConstants);WINDOWS</DefineConstants>
-    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Linux'))">$(DefineConstants);LINUX</DefineConstants>
-    <DefineConstants Condition="$([MSBuild]::IsOSPlatform('OSX'))">$(DefineConstants);MACOS</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\ownaudio.png" Pack="true" PackagePath="\" />
   </ItemGroup>
 </Project>

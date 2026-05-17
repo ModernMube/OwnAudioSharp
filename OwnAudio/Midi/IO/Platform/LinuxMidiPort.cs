@@ -3,8 +3,6 @@ using System.Text;
 
 namespace OwnAudio.Midi.IO.Platform;
 
-#if LINUX
-
 /// <summary>
 /// Linux MIDI input port using ALSA rawmidi (libasound snd_rawmidi_*).
 /// Reads bytes on a background thread and assembles MIDI messages with running-status support.
@@ -299,5 +297,3 @@ internal sealed partial class LinuxMidiOutputPort : IMidiOutputPort
     [LibraryImport("libasound")]
     private static unsafe partial long snd_rawmidi_write(nint rmidi, byte* buffer, nuint size);
 }
-
-#endif

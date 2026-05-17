@@ -2,8 +2,6 @@ using System.Runtime.InteropServices;
 
 namespace OwnAudio.Midi.IO.Platform;
 
-#if WINDOWS
-
 /// <summary>
 /// Windows MIDI input port implemented via the winmm midiIn* API.
 /// Opens the device in the constructor using an unmanaged function pointer callback.
@@ -198,14 +196,14 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
     [LibraryImport("winmm")]
     private static partial int midiInGetNumDevs();
 
-    [LibraryImport("winmm")]
-    private static partial int midiInGetDevCaps(int deviceId, ref MIDIINCAPS caps, uint size);
+    [DllImport("winmm")]
+    private static extern int midiInGetDevCaps(int deviceId, ref MIDIINCAPS caps, uint size);
 
     [LibraryImport("winmm")]
     private static partial int midiOutGetNumDevs();
 
-    [LibraryImport("winmm")]
-    private static partial int midiOutGetDevCaps(int deviceId, ref MIDIOUTCAPS caps, uint size);
+    [DllImport("winmm")]
+    private static extern int midiOutGetDevCaps(int deviceId, ref MIDIOUTCAPS caps, uint size);
 
     /// <summary>
     /// Native capability structure for MIDI input devices (MIDIINCAPS).
@@ -377,5 +375,3 @@ internal sealed partial class WindowsMidiOutputPort : IMidiOutputPort
         public nint dwReserved4, dwReserved5, dwReserved6, dwReserved7;
     }
 }
-
-#endif

@@ -2,8 +2,6 @@ using System.Runtime.InteropServices;
 
 namespace OwnAudio.Midi.IO.Platform;
 
-#if MACOS
-
 /// <summary>
 /// macOS MIDI input port implemented via the CoreMIDI framework.
 /// Receives messages through an unmanaged MIDIReadProc callback registered on a CoreMIDI input port.
@@ -249,20 +247,15 @@ internal sealed partial class MacOsMidiInputPort : IMidiInputPort
     [LibraryImport(CoreFoundation)]
     private static partial void CFRelease(nint cf);
 
-    /// <summary>
-    /// kMIDIPropertyName CFStringRef symbol loaded at runtime from the CoreMIDI framework.
-    /// </summary>
-    private static readonly nint kMIDIPropertyName = GetMIDIPropertyName();
+    private static readonly Lazy<nint> s_kMIDIPropertyName =
+        new Lazy<nint>(() =>
+        {
+            var lib = NativeLibrary.Load(CoreMidi);
+            NativeLibrary.TryGetExport(lib, "kMIDIPropertyName", out nint ptr);
+            return Marshal.ReadIntPtr(ptr);
+        });
 
-    /// <summary>
-    /// Loads the kMIDIPropertyName pointer from the CoreMIDI native library at startup.
-    /// </summary>
-    private static nint GetMIDIPropertyName()
-    {
-        var lib = NativeLibrary.Load(CoreMidi);
-        NativeLibrary.TryGetExport(lib, "kMIDIPropertyName", out nint ptr);
-        return Marshal.ReadIntPtr(ptr);
-    }
+    private static nint kMIDIPropertyName => s_kMIDIPropertyName.Value;
 }
 
 /// <summary>
@@ -401,6 +394,7 @@ internal sealed partial class MacOsMidiOutputPort : IMidiOutputPort
     ~MacOsMidiOutputPort() => Dispose();
 
     private const string CoreMidi = "/System/Library/Frameworks/CoreMIDI.framework/CoreMIDI";
+
     private const string CoreFoundation = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
 
     [LibraryImport(CoreMidi)]
@@ -425,5 +419,3 @@ internal sealed partial class MacOsMidiOutputPort : IMidiOutputPort
     [LibraryImport(CoreFoundation)]
     private static partial void CFRelease(nint cf);
 }
-
-#endif

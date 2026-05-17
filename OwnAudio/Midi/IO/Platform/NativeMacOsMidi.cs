@@ -2,8 +2,6 @@ using System.Runtime.InteropServices;
 
 namespace OwnAudio.Midi.IO.Platform;
 
-#if MACOS
-
 /// <summary>
 /// Thin P/Invoke wrapper exposing the CoreMIDI source and destination index accessors
 /// used by <see cref="MidiPortFactory"/> to resolve endpoint handles by index.
@@ -24,24 +22,3 @@ internal static partial class NativeMacOsMidi
     [LibraryImport(CoreMidi)]
     internal static partial nint MIDIGetDestination(nint index);
 }
-
-#else
-
-/// <summary>
-/// Stub implementation of <see cref="NativeMacOsMidi"/> for non-macOS platforms,
-/// allowing <see cref="MidiPortFactory"/> to compile without conditional blocks.
-/// </summary>
-internal static class NativeMacOsMidi
-{
-    /// <summary>
-    /// Always returns zero — CoreMIDI is not available on this platform.
-    /// </summary>
-    internal static nint MIDIGetSource(nint index) => 0;
-
-    /// <summary>
-    /// Always returns zero — CoreMIDI is not available on this platform.
-    /// </summary>
-    internal static nint MIDIGetDestination(nint index) => 0;
-}
-
-#endif
