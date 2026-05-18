@@ -141,23 +141,80 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
         }
     }
 
-    /// <summary>
-    /// Returns all MIDI device paths found under /dev and /dev/snd matching the "midi*" pattern.
-    /// </summary>
     public static IReadOnlyList<string> GetInputPortNames()
+        => BuildDeviceMap(forInput: true).Keys.ToList();
+
+    public static IReadOnlyList<string> GetOutputPortNames()
+        => BuildDeviceMap(forInput: false).Keys.ToList();
+
+    internal static IReadOnlyDictionary<string, string> GetInputDeviceMap()
+        => BuildDeviceMap(forInput: true);
+
+    internal static IReadOnlyDictionary<string, string> GetOutputDeviceMap()
+        => BuildDeviceMap(forInput: false);
+
+    private static Dictionary<string, string> BuildDeviceMap(bool forInput)
     {
-        var names = new List<string>();
-        foreach (var path in Directory.GetFiles("/dev", "midi*"))
-            names.Add(path);
-        foreach (var path in Directory.GetFiles("/dev/snd", "midi*", SearchOption.TopDirectoryOnly))
-            names.Add(path);
-        return names;
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        const string procPath = "/proc/asound/rawmidi";
+        if (System.IO.File.Exists(procPath))
+        {
+            foreach (var line in System.IO.File.ReadAllLines(procPath))
+            {
+                var trimmed = line.Trim();
+                if (string.IsNullOrEmpty(trimmed)) continue;
+
+                // Format: " 0- 0: Short Name        : Long Name : Input/Output"
+                var parts = trimmed.Split(':', 4);
+                if (parts.Length < 4) continue;
+
+                var direction = parts[3].Trim();
+                if (forInput && !direction.Contains("Input")) continue;
+                if (!forInput && !direction.Contains("Output")) continue;
+
+                var deviceId = parts[0].Trim();
+                int dash = deviceId.IndexOf('-');
+                if (dash < 0) continue;
+
+                if (!int.TryParse(deviceId[..dash].Trim(), out int card)) continue;
+                if (!int.TryParse(deviceId[(dash + 1)..].Trim(), out int device)) continue;
+
+                var name = parts[1].Trim();
+                var hwPath = $"hw:{card},{device}";
+                var key = map.ContainsKey(name) ? $"{name} ({hwPath})" : name;
+                map[key] = hwPath;
+            }
+
+            if (map.Count > 0)
+                return map;
+        }
+
+        // Fallback: /dev/snd/midiCxDy nodes → hw:C,D
+        if (Directory.Exists("/dev/snd"))
+        {
+            foreach (var path in Directory.GetFiles("/dev/snd", "midi*"))
+            {
+                var fname = Path.GetFileName(path);
+                if (!TryParseMidiDeviceNode(fname, out int card, out int device)) continue;
+                var hwPath = $"hw:{card},{device}";
+                map[hwPath] = hwPath;
+            }
+        }
+
+        return map;
     }
 
-    /// <summary>
-    /// Returns the same device list as <see cref="GetInputPortNames"/> — rawmidi devices are bidirectional.
-    /// </summary>
-    public static IReadOnlyList<string> GetOutputPortNames() => GetInputPortNames();
+    private static bool TryParseMidiDeviceNode(string filename, out int card, out int device)
+    {
+        // midiC0D0 → card=0, device=0
+        card = device = 0;
+        int cIdx = filename.IndexOf('C');
+        int dIdx = cIdx >= 0 ? filename.IndexOf('D', cIdx + 1) : -1;
+        if (cIdx < 0 || dIdx < 0) return false;
+        return int.TryParse(filename[(cIdx + 1)..dIdx], out card)
+            && int.TryParse(filename[(dIdx + 1)..], out device);
+    }
 
     /// <summary>
     /// Stops the read thread and closes the ALSA handle.

@@ -59,7 +59,12 @@ public static class MidiPortFactory
             return new MacOsMidiInputPort(portName, src);
         }
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            return new LinuxMidiInputPort(portName, portName);
+        {
+            var deviceMap = LinuxMidiInputPort.GetInputDeviceMap();
+            if (!deviceMap.TryGetValue(portName, out var devicePath))
+                throw new ArgumentException($"MIDI input port not found: '{portName}'");
+            return new LinuxMidiInputPort(portName, devicePath);
+        }
         throw new PlatformNotSupportedException("MIDI is not supported on this platform.");
     }
 
@@ -85,7 +90,12 @@ public static class MidiPortFactory
             return new MacOsMidiOutputPort(portName, dest);
         }
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            return new LinuxMidiOutputPort(portName, portName);
+        {
+            var deviceMap = LinuxMidiInputPort.GetOutputDeviceMap();
+            if (!deviceMap.TryGetValue(portName, out var devicePath))
+                throw new ArgumentException($"MIDI output port not found: '{portName}'");
+            return new LinuxMidiOutputPort(portName, devicePath);
+        }
         throw new PlatformNotSupportedException("MIDI is not supported on this platform.");
     }
 }
