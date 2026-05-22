@@ -257,7 +257,7 @@ public sealed class MaDecoder : IAudioDecoder
             {
                 _configPtr = sf_allocate_decoder_config(
                     MaFormat.F32,
-                    (uint)(targetChannels > 0 ? targetChannels : 2),
+                    (uint)(targetChannels > 0 ? targetChannels : 0),
                     (uint)(targetSampleRate > 0 ? targetSampleRate : 44100)
                 );
             }
@@ -265,7 +265,7 @@ public sealed class MaDecoder : IAudioDecoder
             {
                 _configPtr = allocate_decoder_config(
                     MaFormat.F32,
-                    (uint)(targetChannels > 0 ? targetChannels : 2),
+                    (uint)(targetChannels > 0 ? targetChannels : 0),
                     (uint)(targetSampleRate > 0 ? targetSampleRate : 44100)
                 );
             }

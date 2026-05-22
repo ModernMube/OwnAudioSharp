@@ -140,69 +140,22 @@ public sealed class Mp3Decoder : BaseStreamDecoder
             "Android MediaCodec MP3 decoder not available. Ensure Ownaudio.Android package is referenced.");
 #elif WINDOWS
         LogDebug("Mp3Decoder", "Detected Windows platform (compile-time)");
-        // Try to load Windows Media Foundation decoder
-        try
-        {
-            var windowsDecoderType = Type.GetType(
-                "Ownaudio.Windows.Decoders.WindowsMFMp3Decoder, Ownaudio.Windows");
-
-            if (windowsDecoderType != null)
-            {
-                var instance = Activator.CreateInstance(windowsDecoderType);
-                if (instance is IPlatformMp3Decoder decoder)
-                    return decoder;
-            }
-        }
-        catch
-        {
-            // Fall through to error
-        }
-
         throw new AudioException(
             AudioErrorCategory.PlatformAPI,
-            "Windows Media Foundation MP3 decoder not available. Ensure Ownaudio.Windows package is referenced.");
+            "MP3 decoder not available. The Ownaudio.Native assembly was not loaded. " +
+            "Ensure OwnaudioNET is referenced, or manually call Assembly.Load(\"Ownaudio.Native\") at startup.");
 #elif MACOS
         LogDebug("Mp3Decoder", "Detected macOS platform (compile-time)");
-        try
-        {
-            var macosDecoderType = Type.GetType(
-                "Ownaudio.macOS.Decoders.CoreAudioMp3Decoder, Ownaudio.macOS");
-
-            if (macosDecoderType != null)
-            {
-                var instance = Activator.CreateInstance(macosDecoderType);
-                if (instance is IPlatformMp3Decoder decoder)
-                    return decoder;
-            }
-        }
-        catch {}
-
         throw new AudioException(
             AudioErrorCategory.PlatformAPI,
-            "macOS Core Audio MP3 decoder not available. Ensure Ownaudio.macOS package is referenced.");
+            "MP3 decoder not available. The Ownaudio.Native assembly was not loaded. " +
+            "Ensure OwnaudioNET is referenced, or manually call Assembly.Load(\"Ownaudio.Native\") at startup.");
 #elif LINUX
         LogDebug("Mp3Decoder", "Detected Linux platform (compile-time)");
-        // Try to load Linux GStreamer decoder
-        try
-        {
-            var linuxDecoderType = Type.GetType(
-                "Ownaudio.Linux.Decoders.GStreamerMp3Decoder, Ownaudio.Linux");
-
-            if (linuxDecoderType != null)
-            {
-                var instance = Activator.CreateInstance(linuxDecoderType);
-                if (instance is IPlatformMp3Decoder decoder)
-                    return decoder;
-            }
-        }
-        catch
-        {
-            // Fall through to error
-        }
-
         throw new AudioException(
             AudioErrorCategory.PlatformAPI,
-            "Linux GStreamer MP3 decoder not available. Ensure Ownaudio.Linux package is referenced and GStreamer 1.0 is installed.");
+            "MP3 decoder not available. The Ownaudio.Native assembly was not loaded. " +
+            "Ensure OwnaudioNET is referenced, or manually call Assembly.Load(\"Ownaudio.Native\") at startup.");
 #else
         LogError("Mp3Decoder", $"Unknown platform! OS={RuntimeInformation.OSDescription}");
 

@@ -1,4 +1,5 @@
-﻿using Ownaudio.Core;
+﻿using System.Runtime.CompilerServices;
+using Ownaudio.Core;
 using OwnaudioNET.Engine;
 using OwnaudioNET.Exceptions;
 using OwnaudioNET.Mixing;
@@ -11,6 +12,14 @@ namespace OwnaudioNET;
 /// </summary>
 public static partial class OwnaudioNet
 {
+#pragma warning disable CA2255
+    [ModuleInitializer]
+    internal static void RegisterNative()
+#pragma warning restore CA2255
+    {
+        _ = typeof(Ownaudio.Native.NativeAudioEngine);
+    }
+
     private static bool _initialized;
     private static AudioEngineWrapper? _engineWrapper;
     private static readonly object _initLock = new();
