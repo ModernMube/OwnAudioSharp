@@ -256,8 +256,6 @@ public sealed class CachedAudioDecoder : IAudioDecoder
     private readonly IAudioDecoder _baseDecoder;
     private readonly DecodedAudioCache _cache;
     private readonly string _sourceId;
-    private long _frameIndex;
-
     public AudioStreamInfo StreamInfo => _baseDecoder.StreamInfo;
 
     internal CachedAudioDecoder(IAudioDecoder baseDecoder, DecodedAudioCache cache, string sourceId)
@@ -265,7 +263,6 @@ public sealed class CachedAudioDecoder : IAudioDecoder
         _baseDecoder = baseDecoder ?? throw new ArgumentNullException(nameof(baseDecoder));
         _cache = cache ?? throw new ArgumentNullException(nameof(cache));
         _sourceId = sourceId ?? throw new ArgumentNullException(nameof(sourceId));
-        _frameIndex = 0;
     }
 
     public AudioDecoderResult ReadFrames(byte[] buffer)
@@ -280,9 +277,6 @@ public sealed class CachedAudioDecoder : IAudioDecoder
         // Reset frame index on seek
         if (_baseDecoder.TrySeek(position, out error))
         {
-            // Calculate frame index from position
-            // This is approximate - actual calculation depends on codec
-            _frameIndex = 0;
             return true;
         }
 

@@ -123,7 +123,7 @@ namespace OwnaudioNET.Features.Vocalremover
                             sessionOptions.AppendExecutionProvider("CoreML", coremlOptions);
                             Log.Info("CoreML enabled for HTDemucs (NeuralNetwork format fallback).");
                         }
-                        catch (Exception ex2)
+                        catch (Exception)
                         {
                             Log.Warning($"Both CoreML formats failed.");
                             throw;

@@ -62,7 +62,9 @@ public sealed class NetworkSyncServer : IDisposable
     /// <summary>
     /// Event raised when a client connects.
     /// </summary>
+#pragma warning disable CS0067
     public event EventHandler<ClientConnectedEventArgs>? ClientConnected;
+#pragma warning restore CS0067
 
     /// <summary>
     /// Event raised when a client disconnects.

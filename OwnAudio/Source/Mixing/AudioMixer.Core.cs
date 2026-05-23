@@ -7,7 +7,6 @@ using OwnaudioNET.Core;
 using OwnaudioNET.Engine;
 using OwnaudioNET.Events;
 using OwnaudioNET.Interfaces;
-using OwnaudioNET.Synchronization;
 
 namespace OwnaudioNET.Mixing;
 

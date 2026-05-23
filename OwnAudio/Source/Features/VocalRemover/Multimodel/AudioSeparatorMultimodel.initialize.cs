@@ -74,7 +74,7 @@ namespace OwnaudioNET.Features.Vocalremover
                             sessionOptions.AppendExecutionProvider("CoreML", coremlOptions);
                             Log.Info($"{modelInfo.Name}: CoreML enabled (NeuralNetwork format fallback).");
                         }
-                        catch (Exception ex2)
+                        catch (Exception)
                         {
                             Log.Warning($"{modelInfo.Name}: Both CoreML formats failed.");
                             throw;

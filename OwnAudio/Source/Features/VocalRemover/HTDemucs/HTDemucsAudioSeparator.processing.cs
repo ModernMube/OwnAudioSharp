@@ -147,7 +147,7 @@ namespace OwnaudioNET.Features.Vocalremover
         {
             var stems = new Dictionary<HTDemucsStem, float[,]>();
 
-            foreach (HTDemucsStem stem in Enum.GetValues(typeof(HTDemucsStem)))
+            foreach (HTDemucsStem stem in Enum.GetValues<HTDemucsStem>())
             {
                 if (stem == HTDemucsStem.All) continue;
                 if (_options.TargetStems.HasFlag(stem))

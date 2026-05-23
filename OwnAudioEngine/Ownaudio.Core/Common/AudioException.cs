@@ -44,7 +44,7 @@ namespace Ownaudio.Core.Common
 
         /// <summary>
         /// Audio device operation failed.
-        /// < /summary>
+        /// </summary>
         Device,
 
         /// <summary>
