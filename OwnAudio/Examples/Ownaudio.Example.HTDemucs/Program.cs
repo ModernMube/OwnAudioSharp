@@ -9,7 +9,7 @@ namespace HTDemucsExample
     /// </summary>
     class Program
     {
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             Log.Info("HTDemucs Audio Stem Separation Example");
             Log.Info("======================================");
@@ -29,10 +29,30 @@ namespace HTDemucsExample
 
             try
             {
-                // Create separation options using EMBEDDED htdemucs.onnx model
+                // Download the model on first run if it is not yet present
+                const InternalModel model = InternalModel.HTDemucs;
+
+                if (!VocalRemoverModelManager.IsModelAvailable(model))
+                {
+                    Log.Info("HTDemucs model not found â€“ downloading now (first-time setup, ~166 MB)...");
+                    Log.Info($"Storage: {VocalRemoverModelManager.DefaultModelsDirectory}");
+
+                    await VocalRemoverModelManager.DownloadModelAsync(
+                        model,
+                        new Progress<ModelDownloadProgress>(p =>
+                        {
+                            string pct = p.Percentage >= 0 ? $"{p.Percentage:F1}%" : "?%";
+                            Console.Write($"\r  Downloading: {pct}  ({p.BytesDownloaded / 1024 / 1024} MB)");
+                        }));
+
+                    Console.WriteLine();
+                    Log.Info("Download complete.");
+                }
+
+                // Create separation options
                 var options = new HTDemucsSeparationOptions
                 {
-                    Model = InternalModel.HTDemucs,  // Use embedded model
+                    Model = model,
                     OutputDirectory = outputDirectory,
                     ChunkSizeSeconds = 10,           // Process in 10-second chunks
                     OverlapFactor = 0.25f,           // 25% overlap between chunks
@@ -56,7 +76,7 @@ namespace HTDemucsExample
                 // Subscribe to progress events
                 separator.ProgressChanged += (s, progress) =>
                 {
-                    // Készíts EGY teljes status stringet
+                    // Kï¿½szï¿½ts EGY teljes status stringet
                     string statusLine = $"{progress.Status}: {progress.OverallProgress:F1}%";
 
                     if (progress.TotalChunks > 0)
@@ -64,7 +84,7 @@ namespace HTDemucsExample
                         statusLine += $" [{progress.ProcessedChunks}/{progress.TotalChunks} chunks]";
                     }
 
-                    // PadRight(80) törli a régi hosszabb szöveget
+                    // PadRight(80) tï¿½rli a rï¿½gi hosszabb szï¿½veget
                     Console.Write($"\r{statusLine.PadRight(80)}");
                 };
 
@@ -75,7 +95,7 @@ namespace HTDemucsExample
                     Log.Info($"Realtime factor: {result.AudioDuration.TotalSeconds / result.ProcessingTime.TotalSeconds:F1}x");
                 };
 
-                // Initialize model
+                // Initialize model (model file must already be downloaded at this point)
                 Log.Info("Initializing HTDemucs model...");
                 separator.Initialize();
                 Log.Info("Model initialized successfully!");
@@ -109,7 +129,7 @@ namespace HTDemucsExample
             catch (InvalidOperationException ex)
             {
                 Log.Info($"\nError - Invalid operation: {ex.Message}");
-                Log.Info("The embedded htdemucs.onnx model may be missing from the assembly.");
+                Log.Info("Make sure the model was downloaded before calling Initialize().");
             }
             catch (Exception ex)
             {

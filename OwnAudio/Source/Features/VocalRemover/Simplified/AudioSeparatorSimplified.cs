@@ -60,11 +60,6 @@ namespace OwnaudioNET.Features.Vocalremover
         /// </summary>
         public void Initialize()
         {
-            if (!File.Exists(_options.ModelPath) && _options.Model == InternalModel.None)
-            {
-                throw new FileNotFoundException($"Model file not found: {_options.ModelPath}");
-            }
-
             var sessionOptions = new SessionOptions
             {
                 LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING
@@ -136,15 +131,23 @@ namespace OwnaudioNET.Features.Vocalremover
                 Log.Info("Using CPU execution provider (GPU disabled in options).");
             }
 
-            if (File.Exists(_options.ModelPath))
+            string modelPath;
+            if (!string.IsNullOrEmpty(_options.ModelPath) && File.Exists(_options.ModelPath))
             {
-                _onnxSession = new InferenceSession(_options.ModelPath, sessionOptions);
+                modelPath = _options.ModelPath;
+            }
+            else if (_options.Model != InternalModel.None)
+            {
+                modelPath = VocalRemoverModelManager.GetModelPath(_options.Model);
             }
             else
             {
-                var modelBytes = AudioSeparationExtensions.LoadModelBytes(_options.Model);
-                _onnxSession = new InferenceSession(modelBytes, sessionOptions);
+                throw new InvalidOperationException(
+                    "Either ModelPath must point to a valid file or Model must be set to a valid InternalModel value. " +
+                    "Use VocalRemoverModelManager.DownloadModelAsync() to fetch missing models.");
             }
+
+            _onnxSession = new InferenceSession(modelPath, sessionOptions);
 
             AutoDetectModelDimensions();
             Log.Info($"Model parameters: DimF={_modelParams.DimF}, DimT={_modelParams.DimT}, NFft={_modelParams.NFft}");

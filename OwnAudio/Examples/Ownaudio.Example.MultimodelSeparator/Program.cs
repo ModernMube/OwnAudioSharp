@@ -113,6 +113,9 @@ namespace OwnSeparator.MultiModel
             Console.WriteLine("   Results will be averaged for better quality.");
             Console.WriteLine();
 
+            EnsureModel(InternalModel.Best);
+            EnsureModel(InternalModel.Karaoke);
+
             // Create separator using helper method
             var separator = MultiModelExtensions.CreateSimplePipeline(
                 model1: InternalModel.Best,
@@ -162,6 +165,10 @@ namespace OwnSeparator.MultiModel
             Console.WriteLine("Each model processes the original audio independently.");
             Console.WriteLine("   Results are averaged: (Best + Default + Karaoke) / 3");
             Console.WriteLine();
+
+            EnsureModel(InternalModel.Best);
+            EnsureModel(InternalModel.Default);
+            EnsureModel(InternalModel.Karaoke);
 
             // Create separator with 3 models
             var separator = MultiModelExtensions.CreateTriplePipeline(
@@ -259,6 +266,10 @@ namespace OwnSeparator.MultiModel
                 Margin = 44100,
                 SaveAllIntermediateResults = true  // Force save all
             };
+
+            EnsureModel(InternalModel.Best);
+            EnsureModel(InternalModel.Default);
+            EnsureModel(InternalModel.Karaoke);
 
             Console.WriteLine($"Pipeline configured with {options.Models.Count} models:");
             for (int i = 0; i < options.Models.Count; i++)
@@ -472,6 +483,10 @@ namespace OwnSeparator.MultiModel
                 SaveAllIntermediateResults = true  // Save individual model outputs
             };
 
+            EnsureModel(InternalModel.Best);
+            EnsureModel(InternalModel.Default);
+            EnsureModel(InternalModel.Karaoke);
+
             var separator = new MultiModelAudioSeparator(options);
 
             separator.ProgressChanged += (sender, progress) =>
@@ -628,6 +643,31 @@ namespace OwnSeparator.MultiModel
             Console.WriteLine("   Averaging reduces artifacts from both");
 
             separator.Dispose();
+        }
+
+        /// <summary>
+        /// Ensures the specified model is present in the models directory, downloading it if
+        /// necessary. Blocks the calling thread until the download completes.
+        /// </summary>
+        static void EnsureModel(InternalModel model)
+        {
+            if (VocalRemoverModelManager.IsModelAvailable(model))
+                return;
+
+            Console.WriteLine($"Model '{model}' not found – downloading (first-time setup)...");
+            Console.WriteLine($"Storage: {VocalRemoverModelManager.DefaultModelsDirectory}");
+
+            VocalRemoverModelManager.DownloadModelAsync(
+                model,
+                new Progress<ModelDownloadProgress>(p =>
+                {
+                    string pct = p.Percentage >= 0 ? $"{p.Percentage:F1}%" : "?%";
+                    Console.Write($"\r  [{model}] {pct}  ({p.BytesDownloaded / 1024 / 1024} MB)");
+                })
+            ).GetAwaiter().GetResult();
+
+            Console.WriteLine();
+            Console.WriteLine($"Download complete: {model}");
         }
 
         /// <summary>

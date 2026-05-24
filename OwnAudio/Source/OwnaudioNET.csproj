@@ -52,13 +52,11 @@
   </ItemGroup>
 
   <!-- Embedded resources -->
+  <!-- Note: VocalRemover ONNX models (best/default/karaoke/htdemucs) are NOT embedded. -->
+  <!-- They are downloaded on demand via VocalRemoverModelManager.DownloadModelAsync(). -->
   <ItemGroup>
     <EmbeddedResource Include="basesample.bin" />
     <EmbeddedResource Include="nmp.onnx" />
-    <EmbeddedResource Include="best.onnx" />
-    <EmbeddedResource Include="default.onnx" />
-    <EmbeddedResource Include="karaoke.onnx" />
-    <EmbeddedResource Include="htdemucs.onnx" />
   </ItemGroup>
 
   <!-- NuGet package files -->

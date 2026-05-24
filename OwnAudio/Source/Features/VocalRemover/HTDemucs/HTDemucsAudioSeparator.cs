@@ -163,17 +163,19 @@ namespace OwnaudioNET.Features.Vocalremover
                 Log.Info("Using CPU execution provider for HTDemucs.");
             }
 
-            if (useEmbeddedModel)
+            string modelPath;
+            if (!useEmbeddedModel)
             {
-                Log.Info($"Loading embedded HTDemucs model: {_options.Model}");
-                var modelBytes = AudioSeparationExtensions.LoadModelBytes(_options.Model);
-                _onnxSession = new InferenceSession(modelBytes, sessionOptions);
+                modelPath = _options.ModelPath!;
+                Log.Info($"Loading HTDemucs model from file: {modelPath}");
             }
             else
             {
-                Log.Info($"Loading HTDemucs model from file: {_options.ModelPath}");
-                _onnxSession = new InferenceSession(_options.ModelPath, sessionOptions);
+                modelPath = VocalRemoverModelManager.GetModelPath(_options.Model);
+                Log.Info($"Loading HTDemucs model from models directory: {modelPath}");
             }
+
+            _onnxSession = new InferenceSession(modelPath, sessionOptions);
 
             // Cache input/output names for AOT-compatible OrtRunner calls
             _onnxInputNames  = _onnxSession.InputMetadata.Keys.ToArray();

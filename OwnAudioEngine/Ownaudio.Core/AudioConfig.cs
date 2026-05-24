@@ -86,6 +86,17 @@ namespace Ownaudio.Core
         public int[]? OutputChannelSelectors { get; set; } = null;
 
         /// <summary>
+        /// When true, if the configured audio device disconnects unexpectedly, the engine
+        /// automatically switches to the current system default device and continues
+        /// playback/recording without interruption.
+        /// When the original device reconnects, the engine switches back to it automatically.
+        /// When false, the engine enters DeviceDisconnected state and waits for the
+        /// original device to reappear before resuming.
+        /// Default: true.
+        /// </summary>
+        public bool FallbackToDefaultOnDisconnect { get; set; } = true;
+
+        /// <summary>
         /// Validates the configuration parameters.
         /// </summary>
         /// <returns>True if configuration is valid, false otherwise.</returns>

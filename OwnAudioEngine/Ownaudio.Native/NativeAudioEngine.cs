@@ -223,6 +223,14 @@ namespace Ownaudio.Native
         /// </summary>
         private string? _originalInputDeviceId;
 
+        /// <summary>
+        /// Indicates that the engine switched to a fallback (default) device after the
+        /// configured device disconnected. The engine continues running on the fallback
+        /// device while monitoring for the original device to return.
+        /// 0 = not in fallback mode, 1 = using fallback device.
+        /// </summary>
+        private volatile int _isFallbackActive;
+
         #endregion
 
         #region Properties
@@ -512,7 +520,8 @@ namespace Ownaudio.Native
         /// <summary>
         /// Checks for device changes and handles device removal or reconnection.
         /// When a device is disconnected, this method monitors for the original device
-        /// to reappear instead of immediately switching to a default device.
+        /// to reappear. If fallback mode is active it triggers a switch back to the
+        /// original device as soon as it reappears in the device list.
         /// Uses lightweight counting first to avoid expensive full enumeration.
         /// </summary>
         private void CheckForDeviceChanges()
@@ -521,6 +530,45 @@ namespace Ownaudio.Native
             {
                 if (_isRunning == 0)
                     return;
+
+                if (_isFallbackActive == 1)
+                {
+                    int currentCount = GetRawDeviceCount();
+                    if (currentCount == _lastRawDeviceCount)
+                        return;
+
+                    _lastRawDeviceCount = currentCount;
+
+                    if (_disconnectedOutputDeviceName != null)
+                    {
+                        var currentOutputDevices = GetOutputDevices();
+                        var original = currentOutputDevices?.Find(d =>
+                            d.Name.Equals(_disconnectedOutputDeviceName, StringComparison.OrdinalIgnoreCase));
+
+                        if (original != null)
+                        {
+                            Log.Info($"Original output device '{_disconnectedOutputDeviceName}' returned. Switching back...");
+                            _ = HandleSwitchBackToOriginal(true, original);
+                            return;
+                        }
+                    }
+
+                    if (_disconnectedInputDeviceName != null)
+                    {
+                        var currentInputDevices = GetInputDevices();
+                        var original = currentInputDevices?.Find(d =>
+                            d.Name.Equals(_disconnectedInputDeviceName, StringComparison.OrdinalIgnoreCase));
+
+                        if (original != null)
+                        {
+                            Log.Info($"Original input device '{_disconnectedInputDeviceName}' returned. Switching back...");
+                            _ = HandleSwitchBackToOriginal(false, original);
+                            return;
+                        }
+                    }
+
+                    return;
+                }
 
                 if (_isDeviceDisconnected == 1)
                 {
@@ -610,15 +658,21 @@ namespace Ownaudio.Native
 
         /// <summary>
         /// Handles unexpected device removal.
-        /// The engine does NOT stop — audio data processing continues internally.
-        /// Only the hardware stream is stopped. The engine enters DeviceDisconnected state
-        /// and waits for the device to reconnect via the monitoring loop.
+        /// When <see cref="AudioConfig.FallbackToDefaultOnDisconnect"/> is true, the engine
+        /// immediately switches to the current system default device and continues running.
+        /// The original device is monitored for reconnection; when it reappears the engine
+        /// switches back automatically.
+        /// When <see cref="AudioConfig.FallbackToDefaultOnDisconnect"/> is false, the engine
+        /// enters <see cref="EngineStatus.DeviceDisconnected"/> state and waits for the
+        /// original device to return before resuming.
         /// </summary>
         /// <param name="isOutputDevice">
         /// True if the output (playback) device was removed; false for the input device.
         /// </param>
         private async Task HandleDeviceRemoved(bool isOutputDevice)
         {
+            _isFallbackActive = 0;
+
             if (Interlocked.CompareExchange(ref _isDeviceDisconnected, 1, 0) != 0)
                 return;
 
@@ -636,7 +690,7 @@ namespace Ownaudio.Native
                     _disconnectedOutputDeviceName = removedDeviceName;
                     _originalOutputDeviceId = _config.OutputDeviceId;
 
-                    Log.Warning($"Output device '{removedDeviceName}' disconnected. Engine entering DeviceDisconnected state.");
+                    Log.Warning($"Output device '{removedDeviceName}' disconnected.");
                 }
                 else
                 {
@@ -648,10 +702,8 @@ namespace Ownaudio.Native
                     _disconnectedInputDeviceName = removedDeviceName;
                     _originalInputDeviceId = _config.InputDeviceId;
 
-                    Log.Warning($"Input device '{removedDeviceName}' disconnected. Engine entering DeviceDisconnected state.");
+                    Log.Warning($"Input device '{removedDeviceName}' disconnected.");
                 }
-
-                _engineStatusValue = (int)EngineStatus.DeviceDisconnected;
 
                 if (_backend == AudioEngineBackend.PortAudio)
                     StopPortAudio();
@@ -674,6 +726,22 @@ namespace Ownaudio.Native
                     AudioDeviceState.Unplugged,
                     deviceInfo));
 
+                if (_config.FallbackToDefaultOnDisconnect)
+                {
+                    var currentDevices = isOutputDevice ? GetOutputDevices() : GetInputDevices();
+                    var defaultDevice = currentDevices?.Find(d => d.IsDefault);
+                    string? activeId = isOutputDevice ? _lastActiveOutputDeviceId : _lastActiveInputDeviceId;
+
+                    if (defaultDevice != null && defaultDevice.DeviceId != activeId)
+                    {
+                        Log.Info($"Attempting fallback to default device '{defaultDevice.Name}'...");
+                        bool switched = await SwitchToFallbackDevice(isOutputDevice, defaultDevice);
+                        if (switched)
+                            return;
+                    }
+                }
+
+                _engineStatusValue = (int)EngineStatus.DeviceDisconnected;
                 Log.Info($"Engine status: DeviceDisconnected. Monitoring for '{(isOutputDevice ? _disconnectedOutputDeviceName : _disconnectedInputDeviceName)}' to reconnect...");
             }
             catch (Exception ex)
@@ -773,6 +841,200 @@ namespace Ownaudio.Native
             }
         }
 
+        /// <summary>
+        /// Switches the audio stream to the specified fallback device after the configured
+        /// device has been disconnected. The engine continues running without interruption.
+        /// The original device name is preserved in <see cref="_disconnectedOutputDeviceName"/>
+        /// or <see cref="_disconnectedInputDeviceName"/> so the monitoring loop can detect
+        /// when it returns and trigger a switch back.
+        /// </summary>
+        /// <param name="isOutputDevice">
+        /// True to switch the output (playback) stream; false for the input stream.
+        /// </param>
+        /// <param name="fallbackDevice">
+        /// The device to switch to, typically the current system default.
+        /// </param>
+        /// <returns>
+        /// True if the switch succeeded and the engine is running on the fallback device;
+        /// false if the switch failed and the caller should enter DeviceDisconnected state.
+        /// </returns>
+        private async Task<bool> SwitchToFallbackDevice(bool isOutputDevice, AudioDeviceInfo fallbackDevice)
+        {
+            try
+            {
+                await Task.Delay(200);
+
+                string? previousOutputId = _config.OutputDeviceId;
+                string? previousInputId = _config.InputDeviceId;
+
+                if (isOutputDevice)
+                {
+                    _config.OutputDeviceId = null;
+                    if (_backend == AudioEngineBackend.PortAudio)
+                        _activeOutputDeviceIndex = Pa_GetDefaultOutputDevice();
+                }
+                else
+                {
+                    _config.InputDeviceId = null;
+                    if (_backend == AudioEngineBackend.PortAudio)
+                        _activeInputDeviceIndex = Pa_GetDefaultInputDevice();
+                }
+
+                int result = _backend == AudioEngineBackend.PortAudio
+                    ? ReinitializePortAudioStream()
+                    : ReinitializeMiniAudioDevice();
+
+                if (result != 0)
+                {
+                    Log.Error($"Fallback device init failed: {result}. Restoring original config.");
+                    _config.OutputDeviceId = previousOutputId;
+                    _config.InputDeviceId = previousInputId;
+                    return false;
+                }
+
+                result = _backend == AudioEngineBackend.PortAudio
+                    ? StartPortAudio()
+                    : StartMiniAudio();
+
+                if (result != 0)
+                {
+                    Log.Error($"Fallback device start failed: {result}. Restoring original config.");
+                    _config.OutputDeviceId = previousOutputId;
+                    _config.InputDeviceId = previousInputId;
+                    return false;
+                }
+
+                _isBuffering = 1;
+                _isDeviceDisconnected = 0;
+                _isFallbackActive = 1;
+
+                string fallbackId = fallbackDevice.DeviceId;
+                string previousDeviceName;
+
+                if (isOutputDevice)
+                {
+                    previousDeviceName = _disconnectedOutputDeviceName ?? "Unknown";
+                    _lastActiveOutputDeviceId = fallbackId;
+                }
+                else
+                {
+                    previousDeviceName = _disconnectedInputDeviceName ?? "Unknown";
+                    _lastActiveInputDeviceId = fallbackId;
+                }
+
+                _lastRawDeviceCount = GetRawDeviceCount();
+                _engineStatusValue = (int)EngineStatus.Running;
+
+                Log.Info($"Switched to fallback device '{fallbackDevice.Name}'. Monitoring for '{previousDeviceName}' to return.");
+
+                bool originalDeviceStillPresent = isOutputDevice
+                    ? (GetOutputDevices()?.Any(d => d.Name.Equals(_disconnectedOutputDeviceName, StringComparison.OrdinalIgnoreCase)) ?? false)
+                    : (GetInputDevices()?.Any(d => d.Name.Equals(_disconnectedInputDeviceName, StringComparison.OrdinalIgnoreCase)) ?? false);
+
+                if (originalDeviceStillPresent)
+                {
+                    if (isOutputDevice) _disconnectedOutputDeviceName = null;
+                    else _disconnectedInputDeviceName = null;
+                    _isFallbackActive = 0;
+                }
+
+                OutputDeviceChanged?.Invoke(this, new AudioDeviceChangedEventArgs(
+                    previousDeviceName,
+                    fallbackDevice.DeviceId,
+                    fallbackDevice));
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Error switching to fallback device: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Handles the return of the original device while the engine is running on a fallback
+        /// device. Reinitializes the hardware stream with the original device and resumes
+        /// playback or recording on it. Clears the fallback state on success.
+        /// </summary>
+        /// <param name="isOutputDevice">
+        /// True if the original output (playback) device returned; false for the input device.
+        /// </param>
+        /// <param name="originalDevice">
+        /// Information about the original device that has reappeared.
+        /// </param>
+        private async Task HandleSwitchBackToOriginal(bool isOutputDevice, AudioDeviceInfo originalDevice)
+        {
+            if (Interlocked.CompareExchange(ref _isFallbackActive, 0, 1) != 1)
+                return;
+
+            try
+            {
+                Log.Info($"Original device '{originalDevice.Name}' returned. Switching back...");
+
+                await Task.Delay(500);
+
+                if (isOutputDevice)
+                {
+                    _config.OutputDeviceId = originalDevice.DeviceId;
+                    if (_backend == AudioEngineBackend.PortAudio && int.TryParse(originalDevice.DeviceId, out int paIdx))
+                        _activeOutputDeviceIndex = paIdx;
+                    _lastActiveOutputDeviceId = originalDevice.DeviceId;
+                }
+                else
+                {
+                    _config.InputDeviceId = originalDevice.DeviceId;
+                    if (_backend == AudioEngineBackend.PortAudio && int.TryParse(originalDevice.DeviceId, out int paIdx))
+                        _activeInputDeviceIndex = paIdx;
+                    _lastActiveInputDeviceId = originalDevice.DeviceId;
+                }
+
+                _lastRawDeviceCount = GetRawDeviceCount();
+
+                int result = _backend == AudioEngineBackend.PortAudio
+                    ? ReinitializePortAudioStream()
+                    : ReinitializeMiniAudioDevice();
+
+                if (result != 0)
+                {
+                    Log.Error($"Failed to reinitialize original device: {result}");
+                    _isFallbackActive = 1;
+                    return;
+                }
+
+                result = _backend == AudioEngineBackend.PortAudio
+                    ? StartPortAudio()
+                    : StartMiniAudio();
+
+                if (result != 0)
+                {
+                    Log.Error($"Failed to start original device: {result}");
+                    _isFallbackActive = 1;
+                    return;
+                }
+
+                _isBuffering = 1;
+                _disconnectedOutputDeviceName = null;
+                _disconnectedInputDeviceName = null;
+                _originalOutputDeviceId = null;
+                _originalInputDeviceId = null;
+                _engineStatusValue = (int)EngineStatus.Running;
+
+                Log.Info($"Switched back to original device '{originalDevice.Name}'.");
+
+                DeviceReconnected?.Invoke(this, new AudioDeviceReconnectedEventArgs(
+                    originalDevice.DeviceId,
+                    originalDevice.Name,
+                    isOutputDevice,
+                    originalDevice));
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Error switching back to original device: {ex.Message}");
+                _isFallbackActive = 1;
+            }
+        }
+
         #endregion
 
         #region Start/Stop
@@ -819,6 +1081,9 @@ namespace Ownaudio.Native
 
             _isBuffering = 0;
             _isDeviceDisconnected = 0;
+            _isFallbackActive = 0;
+            _disconnectedOutputDeviceName = null;
+            _disconnectedInputDeviceName = null;
             _engineStatusValue = (int)EngineStatus.Idle;
 
             int result = _backend == AudioEngineBackend.PortAudio

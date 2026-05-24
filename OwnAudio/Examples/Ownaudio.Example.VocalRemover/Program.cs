@@ -9,7 +9,7 @@ namespace OwnSeparator.BasicConsole
     /// </summary>
     class Program
     {
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             Log.Info("OwnSeparator Audio Separation - Simplified");
             Log.Info("==========================================");
@@ -20,8 +20,28 @@ namespace OwnSeparator.BasicConsole
 
             try
             {
+                // Download the model on first run if it is not yet present
+                const InternalModel model = InternalModel.Default;
+
+                if (!VocalRemoverModelManager.IsModelAvailable(model))
+                {
+                    Log.Info($"Model '{model}' not found – downloading now (first-time setup)...");
+                    Log.Info($"Storage: {VocalRemoverModelManager.DefaultModelsDirectory}");
+
+                    await VocalRemoverModelManager.DownloadModelAsync(
+                        model,
+                        new Progress<ModelDownloadProgress>(p =>
+                        {
+                            string pct = p.Percentage >= 0 ? $"{p.Percentage:F1}%" : "?%";
+                            Console.Write($"\r  Downloading: {pct}  ({p.BytesDownloaded / 1024 / 1024} MB)");
+                        }));
+
+                    Console.WriteLine();
+                    Log.Info("Download complete.");
+                }
+
                 // Create and initialize the separator
-                (SimpleAudioSeparationService? service, string vocalPath, string instrumentPath) = Separator(InternalModel.Default, outputDirectory);
+                (SimpleAudioSeparationService? service, string vocalPath, string instrumentPath) = Separator(model, outputDirectory);
 
                 if (service != null)
                 {

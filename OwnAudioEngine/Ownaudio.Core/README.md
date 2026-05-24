@@ -374,8 +374,11 @@ public class AudioConfig
     public bool EnableOutput { get; set; } = true;     // Playback
     public string? OutputDeviceId { get; set; } = null;
     public string? InputDeviceId { get; set; } = null;
+    public bool FallbackToDefaultOnDisconnect { get; set; } = true;
 }
 ```
+
+When `FallbackToDefaultOnDisconnect` is `true` (default), the engine automatically switches to the current system default device if the configured device disconnects. Playback continues without interruption. When the original device reconnects, the engine switches back automatically. Set to `false` to retain the previous behaviour: the engine enters `DeviceDisconnected` state and waits for the original device to return.
 
 **Presets**:
 ```csharp

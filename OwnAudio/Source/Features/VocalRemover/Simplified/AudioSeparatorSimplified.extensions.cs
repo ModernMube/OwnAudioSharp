@@ -2,7 +2,6 @@ using Microsoft.ML.OnnxRuntime;
 using OwnaudioNET.Dsp;
 using Logger;
 using System.Numerics;
-using System.Reflection;
 
 namespace OwnaudioNET.Features.Vocalremover
 {
@@ -512,36 +511,22 @@ namespace OwnaudioNET.Features.Vocalremover
         }
 
         /// <summary>
-        /// Loads the model bytes from embedded assembly resources.
-        /// Assembly.GetManifestResourceStream is AOT-compatible.
+        /// Loads the model bytes from the local models directory managed by
+        /// <see cref="VocalRemoverModelManager"/>. Call
+        /// <see cref="VocalRemoverModelManager.DownloadModelAsync"/> first if the file is missing.
         /// </summary>
+        /// <param name="_model">The model whose bytes are to be loaded.</param>
+        /// <returns>Raw ONNX model bytes.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when <paramref name="_model"/> is <see cref="InternalModel.None"/>.
+        /// </exception>
         public static byte[] LoadModelBytes(InternalModel _model)
         {
-            var assembly = Assembly.GetExecutingAssembly();
-            string resourceName = _model switch
-            {
-                InternalModel.None     => throw new InvalidOperationException("Model is not set."),
-                InternalModel.Default  => "default.onnx",
-                InternalModel.Best     => "best.onnx",
-                InternalModel.Karaoke  => "karaoke.onnx",
-                InternalModel.HTDemucs => "htdemucs.onnx",
-                _                      => throw new ArgumentOutOfRangeException(nameof(_model))
-            };
+            if (_model == InternalModel.None)
+                throw new InvalidOperationException("Model is not set.");
 
-            foreach (var name in assembly.GetManifestResourceNames())
-            {
-                if (name.EndsWith(resourceName))
-                {
-                    resourceName = name;
-                    break;
-                }
-            }
-
-            using var stream = assembly.GetManifestResourceStream(resourceName)
-                ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found.");
-            using var ms = new MemoryStream();
-            stream.CopyTo(ms);
-            return ms.ToArray();
+            var path = VocalRemoverModelManager.GetModelPath(_model);
+            return File.ReadAllBytes(path);
         }
     }
 

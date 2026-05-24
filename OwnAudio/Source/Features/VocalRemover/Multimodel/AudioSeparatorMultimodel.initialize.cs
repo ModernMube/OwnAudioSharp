@@ -105,18 +105,19 @@ namespace OwnaudioNET.Features.Vocalremover
                 Log.Info($"{modelInfo.Name}: Using CPU (GPU disabled in options).");
             }
 
-            InferenceSession onnxSession;
-            if (useEmbeddedModel)
+            string modelFilePath;
+            if (!useEmbeddedModel)
             {
-                Log.Info($"{modelInfo.Name}: Loading embedded model: {modelInfo.Model}");
-                var modelBytes = AudioSeparationExtensions.LoadModelBytes(modelInfo.Model);
-                onnxSession = new InferenceSession(modelBytes, sessionOptions);
+                modelFilePath = modelInfo.ModelPath!;
+                Log.Info($"{modelInfo.Name}: Loading model from file: {modelFilePath}");
             }
             else
             {
-                Log.Info($"{modelInfo.Name}: Loading model from file: {modelInfo.ModelPath}");
-                onnxSession = new InferenceSession(modelInfo.ModelPath, sessionOptions);
+                modelFilePath = VocalRemoverModelManager.GetModelPath(modelInfo.Model);
+                Log.Info($"{modelInfo.Name}: Loading model from models directory: {modelFilePath}");
             }
+
+            InferenceSession onnxSession = new InferenceSession(modelFilePath, sessionOptions);
 
             var modelParams = new ModelParameters(
                 dimF: modelInfo.DimF,

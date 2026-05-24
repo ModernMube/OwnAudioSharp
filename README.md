@@ -59,11 +59,12 @@ The library is built on a native C++ engine (PortAudio / MiniAudio) backed by a 
 
 Three packages are available depending on your platform and feature needs:
 
-| Package | Platforms | AI/ML | Size |
+| Package | Platforms | AI/ML | Package size |
 |---|---|---|---|
-| `OwnAudioSharp.Native` | Windows, Linux, macOS | ✅ Full | ~290 MB |
-| `OwnAudioSharp.Mobile` | Android, iOS | ✅ Full | ~90 MB |
+| `OwnAudioSharp` | Windows, Linux, macOS | ✅ Full | ~20 MB |
 | `OwnAudioSharp.Basic` | All platforms | ❌ None | < 7 MB |
+
+> **AI model files** (best, default, karaoke, htdemucs ONNX models, total ~272 MB) are **not bundled** in the NuGet package. They are downloaded automatically on first use via `VocalRemoverModelManager.DownloadModelAsync()` and stored in the user's local application data folder.
 
 ```bash
 dotnet add package OwnAudioSharp.Native   # Desktop, full features
@@ -118,9 +119,7 @@ Separates audio into vocals and instruments (or full 4-stem: vocals, drums, bass
 
 The **Multi-Model Pipeline** runs several UVR MDX models in parallel and averages their outputs for superior separation quality with fewer artifacts. Available models: `htdemucs` (4-stem), `default`, `best`, `karaoke`.
 
-> **NuGet users:** The HTDemucs model is embedded in the package — no manual download required.
->
-> **Building from source:** Download [htdemucs.onnx](https://huggingface.co/ModernMube/HTDemucs_onnx/resolve/main/htdemucs.onnx) (166 MB) and place it alongside the other model files.
+> **Model download:** ONNX model files are not bundled in the NuGet package. Call `VocalRemoverModelManager.DownloadModelAsync()` to fetch a model on first use — it is saved to the user's local application data folder and reused automatically afterward. Custom model paths are also supported via `SimpleSeparationOptions.ModelPath`.
 
 **Good for:** karaoke creation, remixing, instrumental extraction, stem mastering.
 
