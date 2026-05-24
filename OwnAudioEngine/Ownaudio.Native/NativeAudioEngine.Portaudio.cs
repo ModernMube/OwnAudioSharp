@@ -175,14 +175,16 @@ namespace Ownaudio.Native
             if (_config.EnableInput && (_inputRing == null || _inputRing.Capacity != ringBufferSize))
                 _inputRing = new LockFreeRingBuffer<float>(ringBufferSize);
 
-            // Get output device info and log the actual device being used
+            // Get output device info and log the actual device being used.
+            // Latency is derived from the requested BufferSize/SampleRate rather than
+            // defaultLowOutputLatency to avoid a Focusrite firmware bug (PortAudio/portaudio#523)
+            // where querying the device's default latency increments its buffer size by 64 each launch.
             IntPtr outputDeviceInfoPtr = Pa_GetDeviceInfo(_activeOutputDeviceIndex);
             double outputLatency = _config.BufferSize / (double)_config.SampleRate;
 
             if (outputDeviceInfoPtr != IntPtr.Zero)
             {
                 var deviceInfo = Marshal.PtrToStructure<PaDeviceInfo>(outputDeviceInfoPtr);
-                outputLatency = deviceInfo.defaultLowOutputLatency;
 
                 IntPtr hostApiInfoPtr = Pa_GetHostApiInfo(deviceInfo.hostApi);
                 if (hostApiInfoPtr != IntPtr.Zero)
@@ -230,14 +232,8 @@ namespace Ownaudio.Native
 
             if (_config.EnableInput && _activeInputDeviceIndex >= 0)
             {
-                // Get device-specific recommended latency for input
-                IntPtr inputDeviceInfoPtr = Pa_GetDeviceInfo(_activeInputDeviceIndex);
+                // Latency derived from BufferSize/SampleRate (same reason as output — avoids PortAudio/portaudio#523).
                 double inputLatency = _config.BufferSize / (double)_config.SampleRate;
-                if (inputDeviceInfoPtr != IntPtr.Zero)
-                {
-                    var devInfo = Marshal.PtrToStructure<PaDeviceInfo>(inputDeviceInfoPtr);
-                    inputLatency = devInfo.defaultLowInputLatency;
-                }
 
                 // For non-ASIO: use physical input channel count
                 int inputChannelCount = (!isAsio && _config.InputChannelSelectors != null && _config.InputChannelSelectors.Length > 0)
