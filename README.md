@@ -67,7 +67,7 @@ Three packages are available depending on your platform and feature needs:
 > **AI model files** (best, default, karaoke, htdemucs ONNX models, total ~272 MB) are **not bundled** in the NuGet package. They are downloaded automatically on first use via `VocalRemoverModelManager.DownloadModelAsync()` and stored in the user's local application data folder.
 
 ```bash
-dotnet add package OwnAudioSharp.Native   # Desktop, full features
+dotnet add package OwnAudioSharp          # Desktop, full features
 dotnet add package OwnAudioSharp.Mobile   # Mobile, full features
 dotnet add package OwnAudioSharp.Basic    # Lightweight, no AI/ML
 ```
