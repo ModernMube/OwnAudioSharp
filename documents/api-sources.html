@@ -211,6 +211,33 @@ mixer.AddSource(music);
 mixer.AddSource(metronome);</code></pre></div>
 <div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>The <code>OutputChannelMapping</code> array length must equal the source's <code>Config.Channels</code>. Channels are zero-indexed.</p></div>
 
+<h3>Channel Conversion (Upmix / Downmix)</h3>
+<p><code>OutputChannelMapping</code> maps source channels 1-to-1 to output channels — it does not change the channel count of the source itself. To split a mono source across two channels, or sum a stereo source to mono, use the <code>targetChannels</code> parameter on <code>FileSource</code>. The decoder performs the conversion before mixing, and <code>Config.Channels</code> reflects the converted count.</p>
+
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Scenario</th><th>How</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td>Mono file → stereo output</td><td><code>targetChannels: 2</code></td><td>L and R are identical (duplication)</td></tr>
+    <tr><td>Stereo file → mono output</td><td><code>targetChannels: 1</code></td><td>(L + R) × 0.5 — equal power sum</td></tr>
+  </tbody>
+</table></div>
+
+<div class="code-block"><div class="code-header"><span>C# — Stereo file used as mono (downmix)</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Stereo file loaded as mono — decoder sums L+R to a single channel
+var source = new FileSource("stereo.wav", targetChannels: 1);
+// source.Config.Channels == 1
+
+source.OutputChannelMapping = new[] { 0 }; // route the mono signal to output channel 0
+mixer.AddSource(source);</code></pre></div>
+
+<div class="code-block"><div class="code-header"><span>C# — Mono file spread across two output channels (upmix)</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Mono file loaded as stereo — decoder duplicates the signal to both channels
+var source = new FileSource("mono.wav", targetChannels: 2);
+// source.Config.Channels == 2
+
+source.RouteToChannels(2, 3); // spread to output channels 2+3
+mixer.AddSource(source);</code></pre></div>
+
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Setting <code>OutputChannelMapping</code> to an array whose length does not match <code>Config.Channels</code> throws <code>ArgumentException</code>. Always set <code>targetChannels</code> first if you need a different channel count.</p></div>
+
 </main>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
