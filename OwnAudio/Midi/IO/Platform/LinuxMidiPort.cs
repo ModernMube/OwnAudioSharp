@@ -122,11 +122,24 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
             {
                 byte b = buf[pos++];
                 if ((b & 0x80) != 0) runningStatus = b;
+                else pos--;
 
                 if (runningStatus == 0) continue;
 
                 byte type = (byte)(runningStatus & 0xF0);
-                if (type == 0xC0 || type == 0xD0)
+                if (type == 0xf0) // SySex
+                {
+                    var span = new Span<byte>((void*)buf, 256);
+                    var len = ReadVLengthQuantity(span[pos..], out var read);
+                    pos += read;
+                    
+                    byte d1 = len-- > 0 && pos < bytesRead ? buf[pos++] : (byte)0;
+                    byte d2 = len-- > 0 && pos < bytesRead ? buf[pos++] : (byte)0;
+                    pos += Math.Max(0, len);
+
+                    MessageReceived?.Invoke(new MidiMessage(runningStatus, d1, d2));
+                }
+                else if (type == 0xC0 || type == 0xD0)
                 {
                     byte d1 = pos < bytesRead ? buf[pos++] : (byte)0;
                     MessageReceived?.Invoke(new MidiMessage(runningStatus, d1, 0));
@@ -139,6 +152,25 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
                 }
             }
         }
+    }
+
+    private static int ReadVLengthQuantity(Span<byte> data, out int read)
+    {
+        read = 0;
+        var d = data;
+        var result = 0;
+        while (d.Length > 0)
+        {
+            read++;
+            var b = d[0];
+            d = d[1..];
+            // Extract the first 7 bytes
+            result = (result << 7) | (b & 127);
+            // If the last byte isn't 1, stop reading
+            if (b >> 7 != 1) break;
+        }
+
+        return result;
     }
 
     public static IReadOnlyList<string> GetInputPortNames()
