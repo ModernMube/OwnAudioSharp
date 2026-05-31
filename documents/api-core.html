@@ -14,7 +14,7 @@
   <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
   <a class="topnav-logo" href="../index.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>OwnAudioSharp</a>
   <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="api-core.html" class="active">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
-  <div class="topnav-right"><span class="badge-version">v3.0.6</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
+  <div class="topnav-right"><span class="badge-version">v3.0.11</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
 </nav>
 <div id="sidebar-overlay" class="sidebar-overlay"></div>
 <div class="layout">
@@ -55,6 +55,9 @@ OwnaudioNet.Initialize(config);
 // Unit testing — no hardware required
 OwnaudioNet.Initialize(config, useMockEngine: true);
 
+// Heavy DSP load: 8+ sources or 2+ VST master effects (~170 ms headroom)
+OwnaudioNet.Initialize(config, bufferMultiplier: 16);
+
 // Start and stop
 OwnaudioNet.Start();
 OwnaudioNet.Stop();
@@ -68,14 +71,19 @@ await OwnaudioNet.InitializeAsync(cancellationToken);
 
 // Custom config
 await OwnaudioNet.InitializeAsync(config);
-await OwnaudioNet.InitializeAsync(config, useMockEngine: false, cancellationToken);
+await OwnaudioNet.InitializeAsync(config, useMockEngine: false, cancellationToken: cancellationToken);
+
+// Heavy DSP load: 8+ sources or 2+ VST master effects
+await OwnaudioNet.InitializeAsync(config, bufferMultiplier: 16, cancellationToken: cancellationToken);
 
 // Pre-created engine (custom platform implementations)
-await OwnaudioNet.InitializeAsync(engine, config, cancellationToken);
+await OwnaudioNet.InitializeAsync(engine, config, bufferMultiplier: 16, cancellationToken: cancellationToken);
 
 // Stop / Shutdown
 await OwnaudioNet.StopAsync(cancellationToken);
 await OwnaudioNet.ShutdownAsync(cancellationToken);</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>bufferMultiplier</strong> controls the size of the internal <code>CircularBuffer</code> between the mix thread and the audio hardware. Default 8 provides ~85 ms headroom at 48 kHz / 512 frames. Use <strong>16</strong> when running 8 or more simultaneous sources or 2 or more VST master effects, so the mix thread has time to complete heavy DSP without causing audio dropouts. Pair with <a href="api-mixer.html#heavy-load"><code>AudioMixer.Create()</code></a> to route output through this buffer.</p></div>
 
 <h2 id="config-factories">Configuration Factories</h2>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// 48kHz · stereo · 512 frames (~10.6ms)

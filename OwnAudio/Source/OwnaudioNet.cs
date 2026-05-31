@@ -70,9 +70,14 @@ public static partial class OwnaudioNet
     /// </summary>
     /// <param name="config">The audio configuration.</param>
     /// <param name="useMockEngine">If true, uses MockAudioEngine for testing (no hardware required).</param>
+    /// <param name="bufferMultiplier">
+    /// Multiplier applied to the engine buffer size when creating the internal circular buffer.
+    /// Increase to 16 when using <see cref="AudioMixer.Create"/> with 8 or more simultaneous
+    /// sources or 2 or more master effects. Default is 8 (~85 ms headroom at 48 kHz / 512 frames).
+    /// </param>
     /// <exception cref="ArgumentNullException">Thrown if config is null.</exception>
     /// <exception cref="AudioEngineException">Thrown if initialization fails.</exception>
-    public static void Initialize(AudioConfig config, bool useMockEngine = false)
+    public static void Initialize(AudioConfig config, bool useMockEngine = false, int bufferMultiplier = 8)
     {
         if (config == null)
             throw new ArgumentNullException(nameof(config));
@@ -94,7 +99,7 @@ public static partial class OwnaudioNet
                     engine = OwnaudioNET.Engine.AudioEngineFactory.CreateEngine(config);
                 }
 
-                _engineWrapper = new AudioEngineWrapper(engine, config);
+                _engineWrapper = new AudioEngineWrapper(engine, config, bufferMultiplier);
                 _initialized = true;
             }
             catch (Exception ex) when (ex is not AudioEngineException and not ArgumentNullException)
@@ -388,7 +393,7 @@ public static partial class OwnaudioNet
             Channels = 2,
             BufferSize = 512
         };
-        await InitializeAsync(defaultConfig, useMockEngine: false, cancellationToken);
+        await InitializeAsync(defaultConfig, useMockEngine: false, cancellationToken: cancellationToken);
     }
 
     /// <summary>
@@ -397,11 +402,16 @@ public static partial class OwnaudioNet
     /// </summary>
     /// <param name="config">The audio configuration.</param>
     /// <param name="useMockEngine">If true, uses MockAudioEngine for testing (no hardware required).</param>
+    /// <param name="bufferMultiplier">
+    /// Multiplier applied to the engine buffer size when creating the internal circular buffer.
+    /// Increase to 16 when using <see cref="AudioMixer.Create"/> with 8 or more simultaneous
+    /// sources or 2 or more master effects. Default is 8 (~85 ms headroom at 48 kHz / 512 frames).
+    /// </param>
     /// <param name="cancellationToken">Cancellation token to abort initialization.</param>
     /// <exception cref="ArgumentNullException">Thrown if config is null.</exception>
     /// <exception cref="AudioEngineException">Thrown if initialization fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
-    public static async Task InitializeAsync(AudioConfig config, bool useMockEngine = false, CancellationToken cancellationToken = default)
+    public static async Task InitializeAsync(AudioConfig config, bool useMockEngine = false, int bufferMultiplier = 8, CancellationToken cancellationToken = default)
     {
         if (config == null)
             throw new ArgumentNullException(nameof(config));
@@ -409,7 +419,7 @@ public static partial class OwnaudioNet
         await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Initialize(config, useMockEngine);
+            Initialize(config, useMockEngine, bufferMultiplier);
         }, cancellationToken).ConfigureAwait(false);
     }
 
@@ -419,11 +429,16 @@ public static partial class OwnaudioNet
     /// </summary>
     /// <param name="engine">A pre-initialized IAudioEngine instance.</param>
     /// <param name="config">The audio configuration used to initialize the engine.</param>
+    /// <param name="bufferMultiplier">
+    /// Multiplier applied to the engine buffer size when creating the internal circular buffer.
+    /// Increase to 16 when using <see cref="AudioMixer.Create"/> with 8 or more simultaneous
+    /// sources or 2 or more master effects. Default is 8 (~85 ms headroom at 48 kHz / 512 frames).
+    /// </param>
     /// <param name="cancellationToken">Cancellation token to abort initialization.</param>
     /// <exception cref="ArgumentNullException">Thrown if engine or config is null.</exception>
     /// <exception cref="AudioEngineException">Thrown if initialization fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
-    public static async Task InitializeAsync(IAudioEngine engine, AudioConfig config, CancellationToken cancellationToken = default)
+    public static async Task InitializeAsync(IAudioEngine engine, AudioConfig config, int bufferMultiplier = 8, CancellationToken cancellationToken = default)
     {
         if (engine == null)
             throw new ArgumentNullException(nameof(engine));
@@ -441,7 +456,7 @@ public static partial class OwnaudioNet
 
                 try
                 {
-                    _engineWrapper = new AudioEngineWrapper(engine, config);
+                    _engineWrapper = new AudioEngineWrapper(engine, config, bufferMultiplier);
                     _initialized = true;
                 }
                 catch (Exception ex) when (ex is not AudioEngineException and not ArgumentNullException)

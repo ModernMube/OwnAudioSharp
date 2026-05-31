@@ -14,7 +14,7 @@
   <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
   <a class="topnav-logo" href="../index.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>OwnAudioSharp</a>
   <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="api-core.html" class="active">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
-  <div class="topnav-right"><span class="badge-version">v3.0.6</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
+  <div class="topnav-right"><span class="badge-version">v3.0.11</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
 </nav>
 <div id="sidebar-overlay" class="sidebar-overlay"></div>
 <div class="layout">
@@ -33,15 +33,43 @@
 <p class="page-subtitle">The central mixing engine. Combines multiple audio sources, applies master effects, and drives audio output. Namespace: <code>OwnaudioNET.Mixing</code></p>
 
 <h2 id="constructor">Constructor</h2>
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// bufferSizeInFrames: use 1024 for complex multi-track setups
+<div class="code-block"><div class="code-header"><span>C# — Standard (up to ~8 sources, no VST effects)</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Direct path: mix thread writes straight to the platform audio engine
 var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine, bufferSizeInFrames: 512);</code></pre></div>
 <div class="table-wrap"><table class="prop-table">
   <thead><tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
   <tbody>
-    <tr><td><code>engine</code></td><td><code>IAudioEngine</code></td><td>—</td><td>From <code>OwnaudioNet.Engine.UnderlyingEngine</code>.</td></tr>
-    <tr><td><code>bufferSizeInFrames</code></td><td><code>int</code></td><td><code>512</code></td><td>Internal mix buffer. Use 1024 for 20+ tracks.</td></tr>
+    <tr><td><code>engine</code></td><td><code>IAudioEngine</code></td><td>—</td><td>From <code>OwnaudioNet.Engine!.UnderlyingEngine</code>.</td></tr>
+    <tr><td><code>bufferSizeInFrames</code></td><td><code>int</code></td><td><code>512</code></td><td>Internal mix chunk size. Use 1024 for 20+ tracks.</td></tr>
   </tbody>
 </table></div>
+
+<h2 id="heavy-load">Heavy Load Setup</h2>
+<p>When running <strong>8 or more simultaneous sources</strong> or <strong>2 or more master effects</strong> (especially VST plugins), use <code>AudioMixer.Create()</code> instead of the constructor. This routes mixer output through the <code>AudioEngineWrapper</code>'s internal <code>CircularBuffer</code>, giving the mix thread a pre-buffer of time to complete heavy DSP before the audio hardware needs its next block.</p>
+<div class="code-block"><div class="code-header"><span>C# — Step 1: initialize with larger buffer headroom</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// bufferMultiplier: 16 → ~170 ms headroom at 48 kHz / 512 frames
+// (default 8 → ~85 ms; increase further only if dropouts persist)
+await OwnaudioNet.InitializeAsync(config, bufferMultiplier: 16);</code></pre></div>
+<div class="code-block"><div class="code-header"><span>C# — Step 2: create mixer via factory (buffered path)</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">await OwnaudioNet.InitializeAsync(config, bufferMultiplier: 16);
+OwnaudioNet.Start();
+
+// AudioMixer.Create routes output through the CircularBuffer
+var mixer = AudioMixer.Create(OwnaudioNet.Engine!, bufferSizeInFrames: 512);
+
+// Add sources and effects as usual
+mixer.AddSource(source1);
+mixer.AddMasterEffect(new CompressorEffect());
+await host.InitializeAudioAsync(sampleRate: 48000, blockSize: 512);
+mixer.AddMasterEffect(host.GetProcessor()); // VST3
+
+mixer.Start();</code></pre></div>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>engineWrapper</code></td><td><code>AudioEngineWrapper</code></td><td>—</td><td>Pass <code>OwnaudioNet.Engine!</code>. The factory extracts the underlying engine and wires the circular buffer.</td></tr>
+    <tr><td><code>bufferSizeInFrames</code></td><td><code>int</code></td><td><code>512</code></td><td>Internal mix chunk size. Use 1024 for 20+ tracks.</td></tr>
+  </tbody>
+</table></div>
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>How it works:</strong> the mix thread writes into the <code>CircularBuffer</code> (sized <code>bufferMultiplier × engineBufferSize</code>). A dedicated pump thread reads from the buffer and forwards data to the audio hardware. The two threads operate independently, so a momentarily slow mix cycle does not immediately starve the hardware.</p></div>
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Call <code>OwnaudioNet.Start()</code> before <code>AudioMixer.Create()</code> so the wrapper's pump thread is already running when the mixer starts filling the buffer.</p></div>
 
 <h2 id="properties">Properties</h2>
 <div class="table-wrap"><table class="prop-table">
