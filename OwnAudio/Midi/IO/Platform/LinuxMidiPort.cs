@@ -121,12 +121,24 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
             while (pos < bytesRead)
             {
                 byte b = buf[pos++];
-                if ((b & 0x80) != 0) runningStatus = b;
-
-                if (runningStatus == 0) continue;
+                if ((b & 0x80) != 0)
+                    runningStatus = b;
+                else if (runningStatus == 0)
+                    continue;
+                else
+                    pos--;
 
                 byte type = (byte)(runningStatus & 0xF0);
-                if (type == 0xC0 || type == 0xD0)
+                if (runningStatus == 0xF0)
+                {
+                    byte d1 = pos < bytesRead ? buf[pos++] : (byte)0;
+                    byte d2 = pos < bytesRead ? buf[pos++] : (byte)0;
+                    while (pos < bytesRead && buf[pos] != 0xF7) pos++;
+                    if (pos < bytesRead) pos++;
+                    runningStatus = 0;
+                    MessageReceived?.Invoke(new MidiMessage(0xF0, d1, d2));
+                }
+                else if (type == 0xC0 || type == 0xD0)
                 {
                     byte d1 = pos < bytesRead ? buf[pos++] : (byte)0;
                     MessageReceived?.Invoke(new MidiMessage(runningStatus, d1, 0));
