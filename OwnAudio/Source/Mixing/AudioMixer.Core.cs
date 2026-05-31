@@ -27,6 +27,7 @@ namespace OwnaudioNET.Mixing;
 public sealed partial class AudioMixer : IDisposable
 {
     private readonly IAudioEngine _engine;
+    private readonly AudioEngineWrapper? _engineWrapper;
 
     private readonly ConcurrentDictionary<Guid, IAudioSource> _sources;
     private IAudioSource[] _cachedSourcesArray = Array.Empty<IAudioSource>(); 
@@ -49,10 +50,6 @@ public sealed partial class AudioMixer : IDisposable
 
     private volatile float _leftPeak;
     private volatile float _rightPeak;
-
-    private float[][] _parallelMixBuffers = Array.Empty<float[]>();
-    private float[][] _parallelReadBuffers = Array.Empty<float[]>();
-    private readonly object _parallelMixLock = new();
 
     private long _totalMixedFrames;
 #pragma warning disable CS0649 // Field is never assigned to, and will always have its default value
@@ -165,6 +162,33 @@ public sealed partial class AudioMixer : IDisposable
     /// Only fired once per playback session; resets when a new source is added.
     /// </summary>
     public event EventHandler? PlaybackEnded;
+
+    /// <summary>
+    /// Creates a new <see cref="AudioMixer"/> routed through an <see cref="AudioEngineWrapper"/>.
+    /// </summary>
+    /// <remarks>
+    /// Routes mixer output through the wrapper's internal <see cref="OwnaudioNET.BufferManagement.CircularBuffer"/>,
+    /// decoupling the mix thread from the platform audio engine.
+    /// The wrapper's pump thread handles the actual engine transfer, providing pre-buffer headroom
+    /// that prevents audio starvation under heavy DSP load (many sources, VST effects).
+    /// Use this factory instead of the <see cref="AudioMixer(IAudioEngine, int)"/> constructor when running
+    /// 8 or more simultaneous sources or 2 or more master effects.
+    /// </remarks>
+    /// <param name="engineWrapper">The audio engine wrapper. Must not be null.</param>
+    /// <param name="bufferSizeInFrames">Buffer size in frames for mixing (default: 512).</param>
+    /// <returns>A new <see cref="AudioMixer"/> instance backed by the wrapper's circular buffer.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when engineWrapper is null.</exception>
+    public static AudioMixer Create(AudioEngineWrapper engineWrapper, int bufferSizeInFrames = 512)
+    {
+        ArgumentNullException.ThrowIfNull(engineWrapper);
+        return new AudioMixer(engineWrapper.UnderlyingEngine, bufferSizeInFrames, engineWrapper);
+    }
+
+    private AudioMixer(IAudioEngine engine, int bufferSizeInFrames, AudioEngineWrapper wrapper)
+        : this(engine, bufferSizeInFrames)
+    {
+        _engineWrapper = wrapper;
+    }
 
     /// <summary>
     /// Initializes a new instance of the AudioMixer class.

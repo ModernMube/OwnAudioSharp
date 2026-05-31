@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using OwnaudioNET.Engine;
 using OwnaudioNET.Synchronization;
 using OwnaudioNET.Core;
 using OwnaudioNET.Events;
@@ -21,18 +22,6 @@ public sealed partial class AudioMixer
         float[] mixBuffer = new float[bufferSizeInSamples];
         float[] sourceBuffer = new float[bufferSizeInSamples];
 
-        int procCount = Environment.ProcessorCount;
-        lock (_parallelMixLock)
-        {
-            _parallelMixBuffers = new float[procCount][];
-            _parallelReadBuffers = new float[procCount][];
-            for (int i = 0; i < procCount; i++)
-            {
-                _parallelMixBuffers[i] = new float[bufferSizeInSamples];
-                _parallelReadBuffers[i] = new float[bufferSizeInSamples];
-            }
-        }
-
         while (!_shouldStop)
         {
             try
@@ -41,18 +30,6 @@ public sealed partial class AudioMixer
                 {
                     _pauseEvent.Wait(100);
                     continue;
-                }
-
-                if (_parallelMixBuffers[0].Length != bufferSizeInSamples)
-                {
-                    lock (_parallelMixLock)
-                    {
-                        for (int i = 0; i < procCount; i++)
-                        {
-                            _parallelMixBuffers[i] = new float[bufferSizeInSamples];
-                            _parallelReadBuffers[i] = new float[bufferSizeInSamples];
-                        }
-                    }
                 }
 
                 if (_sourcesArrayNeedsUpdate)
@@ -88,7 +65,7 @@ public sealed partial class AudioMixer
                         WriteToRecorder(mixBuffer.AsSpan(0, bufferSizeInSamples));
                     }
 
-                    _engine.Send(mixBuffer.AsSpan(0, bufferSizeInSamples));
+                    SendToOutput(mixBuffer.AsSpan(0, bufferSizeInSamples));
                     
                     Interlocked.Add(ref _totalMixedFrames, _bufferSizeInFrames);
 
@@ -97,7 +74,7 @@ public sealed partial class AudioMixer
                 }
                 else
                 {
-                    _engine.Send(mixBuffer.AsSpan(0, bufferSizeInSamples));
+                    SendToOutput(mixBuffer.AsSpan(0, bufferSizeInSamples));
                     
                     _leftPeak = 0.0f;
                     _rightPeak = 0.0f;
@@ -124,6 +101,22 @@ public sealed partial class AudioMixer
                 Thread.Sleep(_mixIntervalMs * 2);
             }
         }
+    }
+
+    /// <summary>
+    /// Sends the mixed buffer to the audio output.
+    /// When an <see cref="AudioEngineWrapper"/> was provided at construction, output is routed
+    /// through its internal <see cref="OwnaudioNET.BufferManagement.CircularBuffer"/> for pre-buffering.
+    /// Otherwise, output goes directly to the underlying <see cref="IAudioEngine"/>.
+    /// </summary>
+    /// <param name="buffer">Interleaved float audio data to send.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void SendToOutput(Span<float> buffer)
+    {
+        if (_engineWrapper != null)
+            _engineWrapper.Send(buffer);
+        else
+            _engine.Send(buffer);
     }
 
     /// <summary>

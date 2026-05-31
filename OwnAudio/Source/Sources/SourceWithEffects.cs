@@ -31,6 +31,8 @@ public sealed class SourceWithEffects : IAudioSource
     private readonly List<IEffectProcessor> _effects;
     private readonly object _effectsLock = new();
     private bool _disposed;
+    private IEffectProcessor[] _cachedEffects = Array.Empty<IEffectProcessor>();
+    private volatile bool _effectsChanged = false;
 
     /// <summary>
     /// Initializes a new instance of the SourceWithEffects class.
@@ -121,6 +123,7 @@ public sealed class SourceWithEffects : IAudioSource
         {
             effect.Initialize(Config);
             _effects.Add(effect);
+            _effectsChanged = true;
         }
     }
 
@@ -140,7 +143,10 @@ public sealed class SourceWithEffects : IAudioSource
 
         lock (_effectsLock)
         {
-            return _effects.Remove(effect);
+            bool removed = _effects.Remove(effect);
+            if (removed)
+                _effectsChanged = true;
+            return removed;
         }
     }
 
@@ -155,6 +161,7 @@ public sealed class SourceWithEffects : IAudioSource
         lock (_effectsLock)
         {
             _effects.Clear();
+            _effectsChanged = true;
         }
     }
 
@@ -205,22 +212,30 @@ public sealed class SourceWithEffects : IAudioSource
         if (framesRead == 0)
             return 0;
 
-        lock (_effectsLock)
+        if (_effectsChanged)
         {
-            if (_effects.Count == 0)
-                return framesRead; // Fast path: no effects
-
-            foreach (var effect in _effects)
+            lock (_effectsLock)
             {
-                try
+                if (_effectsChanged)
                 {
-                    if (effect.Enabled)
-                    {
-                        effect.Process(buffer, framesRead);
-                    }
+                    _cachedEffects = _effects.ToArray();
+                    _effectsChanged = false;
                 }
-                catch {}
             }
+        }
+
+        var effects = _cachedEffects;
+        if (effects.Length == 0)
+            return framesRead;
+
+        foreach (var effect in effects)
+        {
+            try
+            {
+                if (effect.Enabled)
+                    effect.Process(buffer, framesRead);
+            }
+            catch {}
         }
 
         return framesRead;

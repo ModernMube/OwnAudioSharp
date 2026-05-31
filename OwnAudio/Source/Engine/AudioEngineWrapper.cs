@@ -113,12 +113,22 @@ public sealed class AudioEngineWrapper : IDisposable
     /// </summary>
     /// <param name="engine">The external audio engine instance (must be initialized).</param>
     /// <param name="config">The audio configuration.</param>
+    /// <param name="bufferMultiplier">
+    /// Multiplier applied to the engine buffer size when creating the internal circular buffer.
+    /// Higher values provide more headroom at the cost of increased latency.
+    /// Increase to 16 or 32 when using <see cref="AudioMixer"/> with many sources or heavy DSP.
+    /// Default is 8 (approximately 85ms headroom at 48 kHz / 512 frames).
+    /// </param>
     /// <exception cref="ArgumentNullException">Thrown if engine or config is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if bufferMultiplier is not positive.</exception>
     /// <exception cref="AudioEngineException">Thrown if engine initialization parameters are invalid.</exception>
-    public AudioEngineWrapper(IAudioEngine engine, AudioConfig config)
+    public AudioEngineWrapper(IAudioEngine engine, AudioConfig config, int bufferMultiplier = 8)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _config = config ?? throw new ArgumentNullException(nameof(config));
+
+        if (bufferMultiplier <= 0)
+            throw new ArgumentOutOfRangeException(nameof(bufferMultiplier), "Buffer multiplier must be positive.");
 
         FramesPerBuffer = _engine.FramesPerBuffer;
         if (FramesPerBuffer <= 0)
@@ -129,7 +139,7 @@ public sealed class AudioEngineWrapper : IDisposable
         _bufferController = new AudioBufferController(
             engineBufferSize,
             _config.Channels,
-            bufferMultiplier: 8);
+            bufferMultiplier: bufferMultiplier);
 
         _pump = new AudioPump(
             _engine,
