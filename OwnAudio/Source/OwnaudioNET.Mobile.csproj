@@ -25,7 +25,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Mobile</PackageId>
-    <Version>3.0.7</Version>
+    <Version>3.0.10</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for mobile platforms (Android and iOS)</Description>
     <PackageTags>audio;cross-platform;android;ios;mobile;sound;multitrack</PackageTags>
@@ -38,9 +38,9 @@
 
   <!-- Common dependencies (including Avalonia for mobile) -->
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.0.3" />
+    <PackageReference Include="Avalonia" Version="12.0.4" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.300" PrivateAssets="All" />
-    <PackageReference Include="OwnAudioVst" Version="1.6.0" />
+    <PackageReference Include="OwnAudioVst" Version="1.6.3" />
   </ItemGroup>
 
   <!-- Define MOBILE symbol for mobile platforms -->
