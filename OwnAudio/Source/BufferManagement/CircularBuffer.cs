@@ -213,6 +213,7 @@ public sealed class CircularBuffer
             return 0;
 
         _readPos = (_readPos + toSkip) & (_capacity - 1);
+        Thread.MemoryBarrier();
         Interlocked.Add(ref _available, -toSkip);
 
         return toSkip;

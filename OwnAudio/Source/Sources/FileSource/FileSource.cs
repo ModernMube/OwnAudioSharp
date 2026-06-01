@@ -368,20 +368,23 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
         if (framesRead < frameCount && !_isEndOfStream)
         {
             if (samplesRead > 0)
+            {
+                ApplyVolume(buffer.Slice(0, samplesRead), samplesRead);
                 FadeOutTail(buffer.Slice(0, samplesRead), Math.Min(64, samplesRead));
+            }
 
             int remainingSamples = (frameCount - framesRead) * _streamInfo.Channels;
             FillWithSilence(buffer.Slice(samplesRead), remainingSamples);
 
             int silenceFrames = frameCount - framesRead;
-            
+
             double exactSilenceFrames = silenceFrames * _tempo;
             _fractionalFrameAccumulator += exactSilenceFrames;
             int silenceSourceFrames = (int)_fractionalFrameAccumulator;
             _fractionalFrameAccumulator -= silenceSourceFrames;
 
             UpdateSamplePosition(silenceSourceFrames);
-            
+
             double frameDuration = 1.0 / _streamInfo.SampleRate;
             double silenceSeconds = silenceFrames * frameDuration;
             double newPos, curPos;
@@ -395,7 +398,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
             OnBufferUnderrun(new BufferUnderrunEventArgs(
                 frameCount - framesRead,
                 currentFramePosition));
-            
+
             return frameCount;
         }
 

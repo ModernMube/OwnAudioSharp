@@ -127,8 +127,8 @@ public partial class FileSource
     {
         bool isSoundTouchActive = _soundTouch.IsProcessingNeeded();
         int targetFillLevel = isSoundTouchActive
-            ? (_buffer.Capacity * 1) / 2     // 50% for SoundTouch (was 87.5%)
-            : (_buffer.Capacity * 3) / 4;    // 75% for direct playback
+            ? (_buffer.Capacity * 3) / 4     // 75% for SoundTouch (needs more headroom for stretch latency)
+            : (_buffer.Capacity * 1) / 2;    // 50% for direct playback
 
         return _buffer.Available < targetFillLevel;
     }

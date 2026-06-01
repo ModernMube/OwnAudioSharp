@@ -375,7 +375,10 @@ public partial class FileSource
         if (framesRead < frameCount && !_isEndOfStream)
         {
             if (samplesRead > 0)
+            {
+                ApplyVolume(buffer.Slice(0, samplesRead), samplesRead);
                 FadeOutTail(buffer.Slice(0, samplesRead), Math.Min(64, samplesRead));
+            }
 
             int remainingSamples = (frameCount - framesRead) * _streamInfo.Channels;
             FillWithSilence(buffer.Slice(samplesRead), remainingSamples);
