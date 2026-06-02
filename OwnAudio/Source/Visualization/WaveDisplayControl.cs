@@ -388,9 +388,9 @@ namespace OwnaudioNET.Visualization
                 RenderRmsStyle(width, centerY, vScale, startSample, samplesPerPixel);
             }
 
-            for (int i = 0; i < _pointCacheSize; i += 2)
+            if (_pointCacheSize > 1)
             {
-                if (i + 1 < _pointCacheSize)
+                for (int i = 0; i < _pointCacheSize - 1; i += 2)
                 {
                     context.DrawLine(_waveformPen, _pointCache[i], _pointCache[i + 1]);
                 }

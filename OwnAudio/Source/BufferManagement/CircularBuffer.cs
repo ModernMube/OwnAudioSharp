@@ -74,6 +74,8 @@ public sealed class CircularBuffer
 
     /// <summary>
     /// Writes samples to the buffer.
+    /// When a <see cref="Clear"/> is pending the buffer is reset and the incoming data
+    /// is discarded (returns 0) so that stale pre-seek samples never enter the buffer.
     /// </summary>
     /// <param name="data">The data to write.</param>
     /// <returns>The number of samples actually written.</returns>
@@ -92,6 +94,7 @@ public sealed class CircularBuffer
                     _clearRequested = false;
                 }
             }
+            return 0;
         }
 
         int available = Volatile.Read(ref _available);
