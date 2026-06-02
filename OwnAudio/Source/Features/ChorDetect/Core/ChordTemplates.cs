@@ -25,18 +25,27 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
         }
 
         /// <summary>
-        /// Creates a chord template array from an array of pitch classes.
+        /// Perceptual weights by chord-tone position (index 0 = root, 1 = third, 2 = fifth, 3+ = extensions).
+        /// Based on Krumhansl–Kessler probe-tone research: root carries the strongest tonal identity,
+        /// followed by the third (major/minor quality), then the fifth and upper extensions.
+        /// Cosine similarity normalizes magnitudes at match time, so these are relative importance values.
         /// </summary>
-        /// <param name="pitchClasses">Array of pitch class numbers that form the chord</param>
-        /// <returns>A 12-element float array representing the chord template with equal weights</returns>
+        private static readonly float[] ToneWeights = { 1.0f, 0.85f, 0.65f, 0.45f, 0.30f, 0.20f };
+
+        /// <summary>
+        /// Creates a chord template array from an array of pitch classes.
+        /// Pitch classes must be ordered by harmonic importance (root first, then third, fifth, extensions).
+        /// </summary>
+        /// <param name="pitchClasses">Array of pitch class numbers that form the chord, root at index 0</param>
+        /// <returns>A 12-element float array representing the chord template with position-based weights</returns>
         public static float[] CreateTemplate(int[] pitchClasses)
         {
             var template = new float[12];
-            var weight = 1.0f / pitchClasses.Length;
 
-            foreach (var pc in pitchClasses)
+            for (int i = 0; i < pitchClasses.Length; i++)
             {
-                template[pc % 12] = weight;
+                float weight = i < ToneWeights.Length ? ToneWeights[i] : ToneWeights[ToneWeights.Length - 1];
+                template[pitchClasses[i] % 12] = weight;
             }
 
             return template;

@@ -31,13 +31,13 @@ public static class ChordDetect
 
         var convertOptions = new NotesConvertOptions
         {
-            OnsetThreshold = 0.5f,      // Sound onset sensitivity
-            FrameThreshold = 0.2f,      // Sound detection threshold
-            MinNoteLength = 15,         // Minimum sound length (ms)
-            MinFreq = 90f,              // Min frequency (Hz)
-            MaxFreq = 2800f,            // Max frequency (Hz)
-            IncludePitchBends = false,   // Pitch bend detection
-            MelodiaTrick = true      // Harmonic detection
+            OnsetThreshold = 0.5f,
+            FrameThreshold = 0.2f,
+            MinNoteLength = 15,
+            MinFreq = 65f,
+            MaxFreq = 2800f,
+            IncludePitchBends = false,
+            MelodiaTrick = true
         };
 
         var converter = new NotesConverter(modelOutput);
@@ -48,8 +48,8 @@ public static class ChordDetect
         var analyzer = new SongChordAnalyzer(
                 windowSize: intervalSecond,        // fallback if bpm = 0
                 hopSize: 0.5f,
-                minimumChordDuration: 1.0f,
-                confidence: 0.90f,
+                minimumChordDuration: 0.5f,
+                confidence: 0.65f,
                 bpm: detectTempo           // derive quarter-note window from detected BPM
             );
 
@@ -126,11 +126,11 @@ public static class ChordDetect
         {
             OnsetThreshold = 0.5f,
             FrameThreshold = 0.2f,
-            MinNoteLength = 25,
-            MinFreq = 90f,
+            MinNoteLength = 15,
+            MinFreq = 65f,
             MaxFreq = 2800f,
             IncludePitchBends = false,
-            MelodiaTrick = false
+            MelodiaTrick = true
         };
 
         var converter = new NotesConverter(modelOutput);
@@ -141,8 +141,8 @@ public static class ChordDetect
         var analyzer = new SongChordAnalyzer(
             windowSize: intervalSecond,        // fallback if bpm = 0
             hopSize: 0.5f,
-            minimumChordDuration: 1.0f,
-            confidence: 0.90f,
+            minimumChordDuration: 0.5f,
+            confidence: 0.65f,
             bpm: detectTempo           // derive quarter-note window from detected BPM
         );
 
