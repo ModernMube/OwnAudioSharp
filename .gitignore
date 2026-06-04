@@ -253,6 +253,7 @@ ClientBin/
 *.publishsettings
 orleans.codegen.cs
 .DS_Store
+*_report*.md
 
 #Ownaudio developer folders
 .claude/

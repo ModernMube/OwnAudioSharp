@@ -236,45 +236,21 @@ public sealed class MockAudioEngine : IAudioEngine
     }
 
     /// <inheritdoc/>
-    public int Receives(out float[] samples)
+    public int Receives(Span<float> destination)
     {
-        if (_disposed)
-        {
-            samples = Array.Empty<float>();
-            return -1;
-        }
-
-        if (_config == null)
-        {
-            samples = Array.Empty<float>();
-            return -2; // Not initialized
-        }
-
-        if (_state != 1)
-        {
-            samples = Array.Empty<float>();
-            return -3; // Not running
-        }
-
-        if (!_config.EnableInput)
-        {
-            samples = Array.Empty<float>();
-            return -4; // Input not enabled
-        }
+        if (_disposed) return -1;
+        if (_config == null) return -2;
+        if (_state != 1) return -3;
+        if (!_config.EnableInput) return -4;
 
         Interlocked.Increment(ref _receiveCallCount);
 
-        int sampleCount = _config.BufferSize * _config.Channels;
-        samples = new float[sampleCount];
-
         if (_generateTestSignal)
-        {
-            GenerateSineWave(samples.AsSpan(), _config.SampleRate, _config.Channels);
-        }
+            GenerateSineWave(destination, _config.SampleRate, _config.Channels);
 
-        Interlocked.Add(ref _totalSamplesReceived, sampleCount);
+        Interlocked.Add(ref _totalSamplesReceived, destination.Length);
 
-        return 0; // Success
+        return destination.Length;
     }
 
     /// <inheritdoc/>

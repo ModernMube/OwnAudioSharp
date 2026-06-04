@@ -41,9 +41,9 @@ public interface IAudioEngine : IDisposable
     int Start();
     int Stop();  // ⚠️ BLOCKING up to 2000ms
 
-    // Real-time I/O (⚠️ May block 1-20ms if buffer full/empty)
+    // Real-time I/O (⚠️ Send may block 1-20ms if buffer full)
     void Send(Span<float> samples);
-    int Receives(out float[] samples);
+    int Receives(Span<float> destination); // zero-allocation: caller provides the buffer
 
     // Device management
     List<AudioDeviceInfo> GetOutputDevices();
@@ -432,7 +432,7 @@ engine.Stop();              // Blocks up to 2000ms!
 | `Initialize()` | 50-500ms | 5000ms (Linux PulseAudio) |
 | `Stop()` | 10-100ms | 2000ms (thread join timeout) |
 | `Send()` | 0-5ms | 20ms (buffer full) |
-| `Receives()` | 0-5ms | 20ms (buffer empty) |
+| `Receives()` | < 0.1ms | 1ms (ring buffer read, zero-allocation) |
 
 ### Solutions
 
@@ -482,6 +482,8 @@ Ownaudio.Core itself has **no external dependencies**. Platform audio I/O requir
 The following operations are guaranteed to produce **zero allocations** after warmup:
 
 - ✅ `Send(Span<float>)` - Audio output
+- ✅ `Receives(Span<float>)` - Audio input (caller provides pre-allocated buffer)
+- ✅ `AudioEngineWrapper.Receive()` - Input via pooled buffer (`AudioBufferPool`)
 - ✅ `LockFreeRingBuffer<T>.Write/Read` - Thread communication
 - ✅ `AudioFramePool.Rent/Return` - Object pooling
 - ✅ `SimdAudioConverter.*` - Format conversion

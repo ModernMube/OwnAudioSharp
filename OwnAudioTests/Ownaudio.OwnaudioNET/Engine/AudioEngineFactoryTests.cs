@@ -105,13 +105,14 @@ public class AudioEngineFactoryTests
         // Give it time to generate some signal
         Thread.Sleep(50);
 
-        var result = engine.Receives(out var samples);
+        float[] buffer = new float[engine.FramesPerBuffer * 2];
+        var result = engine.Receives(buffer.AsSpan());
 
         // Assert
-        if (samples != null && samples.Length > 0)
+        if (result > 0)
         {
             // Should have non-zero samples if test signal is enabled
-            samples.Should().Contain(s => s != 0f);
+            buffer.AsSpan(0, result).ToArray().Should().Contain(s => s != 0f);
         }
     }
 

@@ -1147,29 +1147,17 @@ namespace Ownaudio.Native
         }
 
         /// <summary>
-        /// Receives audio samples from the input buffer (recording).
+        /// Receives audio samples from the input buffer into a caller-provided span.
+        /// Zero-allocation: reads directly into the destination without any heap allocation.
         /// </summary>
-        /// <param name="samples">Output array containing received audio samples.</param>
-        /// <returns>Number of samples read on success, -1 on error or if input is not enabled.</returns>
-        public int Receives(out float[] samples)
+        /// <param name="destination">Caller-allocated span to write captured samples into.</param>
+        /// <returns>Number of samples written on success, -1 on error or if input is not enabled.</returns>
+        public int Receives(Span<float> destination)
         {
-            if (_isRunning == 0)
-            {
-                samples = null!;
+            if (_isRunning == 0 || !_config.EnableInput)
                 return -1;
-            }
 
-            if (!_config.EnableInput)
-            {
-                samples = null!;
-                return -1;
-            }
-
-            int sampleCount = _config.BufferSize * _config.Channels;
-            samples = new float[sampleCount];
-
-            int samplesRead = _inputRing.Read(samples);
-            return samplesRead;
+            return _inputRing.Read(destination);
         }
 
         #endregion

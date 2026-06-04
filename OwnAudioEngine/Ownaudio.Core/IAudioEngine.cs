@@ -89,15 +89,12 @@ namespace Ownaudio.Core
         void Send(Span<float> samples);
 
         /// <summary>
-        /// Receives audio samples from the input device.
-        /// Uses a pre-allocated buffer pool to minimize allocations.
+        /// Receives audio samples from the input device into a caller-provided buffer.
+        /// Zero-allocation: the caller owns and reuses the destination buffer.
         /// </summary>
-        /// <param name="samples">Output array containing captured audio samples.</param>
-        /// <returns>0 on success, negative error code on failure.</returns>
-        /// <remarks>
-        /// The output array comes from an object pool. Return it when done if applicable.
-        /// </remarks>
-        int Receives(out float[] samples);
+        /// <param name="destination">Caller-allocated span to write captured samples into.</param>
+        /// <returns>Number of samples written on success, negative error code on failure.</returns>
+        int Receives(Span<float> destination);
 
         /// <summary>
         /// Gets a list of all available output devices.

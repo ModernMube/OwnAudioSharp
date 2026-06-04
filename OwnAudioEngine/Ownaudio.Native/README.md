@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Ownaudio.Native** is the PRIMARY audio engine for OwnAudioSharp 2.1.0+, providing cross-platform audio playback and recording using **PortAudio** (when available) or **MiniAudio** (bundled fallback).
+**Ownaudio.Native** is the PRIMARY audio engine for OwnAudioSharp v3.x, providing cross-platform audio playback and recording using **PortAudio** (when available) or **MiniAudio** (bundled fallback).
 
 This engine represents a hybrid approach that prioritizes PortAudio for better audio quality and system integration, while ensuring MiniAudio is always available as a reliable fallback.
 
@@ -166,8 +166,8 @@ User Thread                     Audio RT Thread
     │                               │               ├─ Processes audio
     │                               │               └─ Outputs to device
     │                               │
-    └─ Receives() ◄────────── Ring Buffer ◄────── Callback writes
-       (non-blocking)                              (input mode)
+    └─ Receives(Span) ◄─────── Ring Buffer ◄────── Callback writes
+       (zero-allocation)                           (input mode)
 ```
 
 ## Integration with AudioEngineFactory

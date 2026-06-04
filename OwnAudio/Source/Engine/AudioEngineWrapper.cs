@@ -258,27 +258,23 @@ public sealed class AudioEngineWrapper : IDisposable
 
     /// <summary>
     /// Receives audio samples from the input device.
-    /// Returns a buffer from the internal AudioBufferPool to minimize allocations.
+    /// Returns a buffer rented from the internal AudioBufferPool — zero heap allocation on the hot path.
     /// </summary>
     /// <param name="sampleCount">The number of samples received (output parameter).</param>
     /// <returns>
-    /// A buffer containing captured audio samples, or null if no data is available.
-    /// The caller is responsible for returning the buffer to the pool (optional, but recommended for performance).
-    /// </returns>
-    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if the engine is not running.</exception>
-    /// <remarks>
-    /// The returned buffer comes from the internal AudioBufferPool. While the pool will grow if needed,
-    /// it's recommended to return buffers when done to minimize allocations:
+    /// A pooled buffer containing captured audio samples, or null if no data is available.
+    /// The caller should return the buffer to the pool when done to avoid allocations:
     /// <code>
     /// var buffer = wrapper.Receive(out int count);
     /// if (buffer != null)
     /// {
-    ///     try { /* process buffer */ }
+    ///     try { /* process buffer[0..count] */ }
     ///     finally { wrapper.ReturnInputBuffer(buffer); }
     /// }
     /// </code>
-    /// </remarks>
+    /// </returns>
+    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if the engine is not running.</exception>
     public float[]? Receive(out int sampleCount)
     {
         ThrowIfDisposed();
@@ -288,22 +284,19 @@ public sealed class AudioEngineWrapper : IDisposable
 
         try
         {
-            int result = _engine.Receives(out float[] samples);
+            float[] buffer = _bufferController.RentInputBuffer()!;
 
-            if (result < 0)
+            int result = _engine.Receives(buffer.AsSpan());
+
+            if (result <= 0)
             {
+                _bufferController.ReturnInputBuffer(buffer);
                 sampleCount = 0;
                 return null;
             }
 
-            if (samples == null || samples.Length == 0)
-            {
-                sampleCount = 0;
-                return null;
-            }
-
-            sampleCount = result; // Use actual samples read, not buffer size
-            return samples;
+            sampleCount = result;
+            return buffer;
         }
         catch
         {
