@@ -57,8 +57,6 @@ namespace Ownaudio.EngineTest
                 Assert.IsTrue(stoppedState >= 0, "Engine should be in valid state");
             }
 
-            // Assert - no exceptions means success
-            Assert.IsTrue(true);
         }
 
         [TestMethod]
@@ -113,8 +111,6 @@ namespace Ownaudio.EngineTest
                 Assert.AreEqual(0, stopResult, "Stop should succeed");
             }
 
-            // Assert - no exceptions means success
-            Assert.IsTrue(true);
         }
 
         [TestMethod]

@@ -394,7 +394,6 @@ namespace Ownaudio.EngineTest
             {
                 Console.WriteLine("Note: Could not invoke DeviceStateChanged via reflection on sealed type. " +
                                   "Subscription was verified in the dedicated event test.");
-                Assert.IsTrue(true); // pass
                 engine.Stop();
                 return;
             }
@@ -457,7 +456,6 @@ namespace Ownaudio.EngineTest
             else
             {
                 Console.WriteLine("Note: Could not invoke DeviceReconnected via reflection. Subscription tested separately.");
-                Assert.IsTrue(true);
             }
 
             engine.Stop();

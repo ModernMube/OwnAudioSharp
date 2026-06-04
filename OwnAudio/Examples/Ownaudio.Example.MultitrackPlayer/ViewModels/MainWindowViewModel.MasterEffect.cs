@@ -320,12 +320,12 @@ public partial class MainWindowViewModel
                 _masterEffect?.SetTransportPlaying(_audioService.Mixer.IsRunning);
 
                 // AddMasterEffect validates IsReady, calls Initialize, and adds to chain.
-                _audioService.Mixer.AddMasterEffect(_masterEffect);
+                _audioService.Mixer.AddMasterEffect(_masterEffect!);
                 StatusMessage = "Master effect enabled";
             }
             else
             {
-                _audioService.Mixer.RemoveMasterEffect(_masterEffect);
+                _audioService.Mixer.RemoveMasterEffect(_masterEffect!);
                 StatusMessage = "Master effect disabled";
             }
         }

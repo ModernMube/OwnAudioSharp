@@ -89,7 +89,7 @@ namespace OwnSeparator.MultiModel
             {
                 Log.Warning($"Error occurred: {ex.Message}");
                 Log.Warning("Stack trace:");
-                Log.Warning(ex.StackTrace);
+                Log.Warning(ex.StackTrace ?? string.Empty);
             }
 
             Console.WriteLine();

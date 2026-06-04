@@ -142,7 +142,7 @@ public partial class MainWindowViewModel
     /// CRITICAL: Triggers full track resynchronization to prevent drift after extreme tempo changes.
     /// </summary>
     [RelayCommand]
-    private async void ResetControls()
+    private async Task ResetControls()
     {
         // Update UI properties
         TempoPercent = 100.0f;

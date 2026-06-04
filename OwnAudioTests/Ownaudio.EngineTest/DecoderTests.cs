@@ -25,8 +25,7 @@ namespace Ownaudio.EngineTest
             using var decoder = new WavDecoder(stream);
 
             // Assert
-            Assert.IsNotNull(decoder, "Decoder should be created");
-            Assert.IsNotNull(decoder.StreamInfo, "StreamInfo should be populated");
+            Assert.IsTrue(decoder.StreamInfo.SampleRate > 0, "StreamInfo should be populated");
         }
 
         [TestMethod]
