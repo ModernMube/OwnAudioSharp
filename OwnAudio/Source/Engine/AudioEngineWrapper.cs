@@ -201,6 +201,10 @@ public sealed class AudioEngineWrapper : IDisposable
             // Stop pump thread first
             _pump.Stop();
 
+            // Clear residual audio from the circular buffer so that the next Start()
+            // does not immediately play back stale samples from the previous session.
+            _bufferController.ClearOutputBuffer();
+
             // Stop the external audio engine
             int result = _engine.Stop();
             if (result < 0)

@@ -1052,6 +1052,11 @@ namespace Ownaudio.Native
             _inputDiagLogged = 0;
             _inputSilenceLogged = 0;
 
+            // Flush any stale samples left in the ring buffers from the previous session.
+            // The device is stopped at this point so no concurrent callback access occurs.
+            _outputRing?.Clear();
+            _inputRing?.Clear();
+
             int result = _backend == AudioEngineBackend.PortAudio
                 ? StartPortAudio()
                 : StartMiniAudio();
