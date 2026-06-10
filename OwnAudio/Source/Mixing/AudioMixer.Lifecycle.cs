@@ -1,5 +1,7 @@
 using System.Runtime.CompilerServices;
 using OwnaudioNET.Core;
+using OwnaudioNET.Interfaces;
+using OwnaudioNET.Sources;
 
 namespace OwnaudioNET.Mixing;
 
@@ -155,12 +157,29 @@ public sealed partial class AudioMixer
             if (source.State != AudioState.EndOfStream)
                 continue;
 
-            if (positionInSeconds >= source.Duration)
-                continue;
+            double targetPos = positionInSeconds;
+            double sourceDuration = source.Duration;
+
+            if (source is IMasterClockSource mcs)
+            {
+                double tempo = 1.0;
+                if (source is FileSource fs)
+                    tempo = fs.Tempo;
+
+                if (positionInSeconds >= mcs.StartOffset + sourceDuration / tempo)
+                    continue;
+
+                targetPos = Math.Max(0.0, (positionInSeconds - mcs.StartOffset) * tempo);
+            }
+            else
+            {
+                if (positionInSeconds >= sourceDuration)
+                    continue;
+            }
 
             try
             {
-                source.Seek(positionInSeconds);
+                source.Seek(targetPos);
                 source.Play();
             }
             catch {}
