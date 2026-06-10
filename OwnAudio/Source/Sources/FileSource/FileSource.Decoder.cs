@@ -103,6 +103,13 @@ public partial class FileSource
                     SetSamplePosition((long)(targetSeconds * _streamInfo.SampleRate));
                     _isEndOfStream = false;
 
+                    _buffer.Clear();
+                    lock (_soundTouchLock)
+                    {
+                        _soundTouch.Clear();
+                        _soundTouchAccumulationCount = 0;
+                    }
+
                     lock (_timingLock)
                     {
                         _totalSamplesProcessedFromFile = (long)(targetSeconds * _streamInfo.SampleRate);
