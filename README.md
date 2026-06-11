@@ -55,6 +55,21 @@ The library is built on a native C++ engine (PortAudio / MiniAudio) backed by a 
 
 ---
 
+## Coming Soon — FFmpeg Decoder Integration
+
+Development has started on optional **FFmpeg 8+ decoder support**. FFmpeg will not be bundled with OwnAudioSharp — it is treated as a system-level dependency.
+
+**How it works:**
+
+- If **FFmpeg 8 or later is installed** on the system (Windows, Linux, or macOS), OwnAudioSharp will detect and use it automatically as the primary decoder, unlocking support for virtually every audio and video container/codec (AAC, Opus, AC3, MKV, MP4, and more).
+- If **FFmpeg is not installed**, the library falls back to the existing built-in **MiniAudio decoder**, which remains the default and requires no additional setup.
+
+There is nothing to configure — decoder selection is fully automatic at runtime.
+
+> FFmpeg integration is currently under active development and will be pushed to the repository soon. The feature targets **FFmpeg 8.x** and later.
+
+---
+
 ## Installation
 
 Three packages are available depending on your platform and feature needs:
