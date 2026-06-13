@@ -56,6 +56,8 @@
 # lightweight (no AI/ML):
 dotnet add package OwnAudioSharp.Basic</code></pre></div>
 
+<div class="callout callout-info"><div class="callout-icon">🎞️</div><p><strong>Extended format support via FFmpeg 8+ (optional):</strong> Install FFmpeg 8+ system-wide and OwnAudioSharp automatically uses it as the primary decoder — adding AAC, OGG, Opus, WMA, AIFF, AC3, and more with zero code changes. Falls back to built-in MP3 / WAV / FLAC when FFmpeg is absent. See <a href="api-reference.html#ffmpeg">FFmpeg Integration</a>.</p></div>
+
 <h2 id="architecture">Architecture</h2>
 <p>OwnAudioSharp uses a two-layer design that keeps the real-time audio thread completely separate from your application code.</p>
 <div class="code-block"><div class="code-header"><span>Thread diagram</span><button class="copy-btn">Copy</button></div><pre><code>UI / Main Thread

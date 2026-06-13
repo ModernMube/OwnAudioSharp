@@ -30,6 +30,8 @@
 
 The library is built on a native C++ engine (PortAudio / MiniAudio) backed by a fully managed C# layer. The result is GC-free, dropout-free, real-time audio on Windows, macOS, Linux, Android, and iOS — all from one NuGet package.
 
+Built-in decoders cover **MP3, WAV, and FLAC** out of the box. When **FFmpeg 8+** is installed on the system, OwnAudioSharp automatically uses it as the primary decoder — expanding support to AAC, OGG, Opus, WMA, AIFF, AC3, and virtually any other format with no API changes required.
+
 ### What it offers out of the box
 
 | Category | Capability |
