@@ -434,7 +434,8 @@ FodyWeavers.xsd
 /OwnAudioVisualiser/OwnAudioVisualiser.sln
 
 # Local development notes
-OwnAudioSharp_Refactoring_Plan.md
+*_plan*.md
+*_terv*.md
 
 # Rider project structure cache files
 *.lscache

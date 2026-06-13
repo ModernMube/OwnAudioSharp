@@ -1,6 +1,15 @@
 namespace OwnAudio.Midi.IO;
 
 /// <summary>
+/// Delegate for receiving System Exclusive (SysEx) MIDI messages.
+/// The <paramref name="data"/> span is only valid for the duration of the callback.
+/// </summary>
+/// <param name="data">
+/// The complete SysEx byte sequence including the leading 0xF0 and trailing 0xF7 bytes.
+/// </param>
+public delegate void SysExReceivedHandler(ReadOnlySpan<byte> data);
+
+/// <summary>
 /// Base interface for all MIDI ports providing open/close lifecycle management.
 /// </summary>
 public interface IMidiPort : IDisposable
@@ -35,6 +44,12 @@ public interface IMidiInputPort : IMidiPort
     /// Raised when a MIDI message is received from the connected device.
     /// </summary>
     event Action<MidiMessage>? MessageReceived;
+
+    /// <summary>
+    /// Raised when a complete SysEx message (0xF0 ... 0xF7) has been received.
+    /// The span passed to the handler is only valid for the duration of the callback invocation.
+    /// </summary>
+    event SysExReceivedHandler? SysExReceived;
 
     /// <summary>
     /// Starts listening for incoming MIDI messages.

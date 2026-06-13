@@ -10,6 +10,9 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
 {
     private const int CALLBACK_FUNCTION = 0x30000;
     private const int MM_MIM_DATA = 0x3C3;
+    private const int MM_MIM_LONGDATA = 0x3C4;
+    private const int SysExBufferSize = 4096;
+    private const int SysExBufferCount = 4;
 
     /// <summary>
     /// Native winmm device handle.
@@ -32,6 +35,21 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
     private bool _started;
 
     /// <summary>
+    /// Unmanaged pointers to the MIDIHDR structures allocated for SysEx input buffers.
+    /// </summary>
+    private nint[] _sysexHeaderPtrs = new nint[SysExBufferCount];
+
+    /// <summary>
+    /// Unmanaged pointers to the raw data buffers referenced by each MIDIHDR.
+    /// </summary>
+    private nint[] _sysexBufferPtrs = new nint[SysExBufferCount];
+
+    /// <summary>
+    /// Set to true during <see cref="Close"/> to prevent re-queuing buffers from the callback.
+    /// </summary>
+    private volatile bool _closing;
+
+    /// <summary>
     /// Gets the display name of this MIDI input port.
     /// </summary>
     public string Name { get; }
@@ -45,6 +63,12 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
     /// Raised on the winmm callback thread when a short MIDI message arrives.
     /// </summary>
     public event Action<MidiMessage>? MessageReceived;
+
+    /// <summary>
+    /// Raised on the winmm callback thread when a complete SysEx message has been received.
+    /// The span is only valid during the callback invocation.
+    /// </summary>
+    public event SysExReceivedHandler? SysExReceived;
 
     /// <summary>
     /// Opens the MIDI input device identified by <paramref name="deviceId"/> using an unmanaged callback.
@@ -78,25 +102,74 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
     public void Open() { }
 
     /// <summary>
-    /// Stops listening, resets the device, and closes the native handle.
+    /// Stops listening, unprepares all SysEx headers, frees unmanaged memory, and closes the native handle.
     /// </summary>
     public void Close()
     {
         if (_handle == 0) return;
+        _closing = true;
         if (_started) Stop();
         midiInReset(_handle);
+
+        unsafe
+        {
+            uint hdrSize = (uint)sizeof(InputMIDIHDR);
+            for (int i = 0; i < SysExBufferCount; i++)
+            {
+                if (_sysexHeaderPtrs[i] != 0)
+                {
+                    midiInUnprepareHeader(_handle, _sysexHeaderPtrs[i], hdrSize);
+                    Marshal.FreeHGlobal(_sysexHeaderPtrs[i]);
+                    _sysexHeaderPtrs[i] = 0;
+                }
+                if (_sysexBufferPtrs[i] != 0)
+                {
+                    Marshal.FreeHGlobal(_sysexBufferPtrs[i]);
+                    _sysexBufferPtrs[i] = 0;
+                }
+            }
+        }
+
         midiInClose(_handle);
         _handle = 0;
+        _closing = false;
     }
 
     /// <summary>
-    /// Begins delivery of MIDI input messages via <see cref="MessageReceived"/>.
+    /// Begins delivery of MIDI input messages via <see cref="MessageReceived"/> and allocates SysEx receive buffers.
     /// </summary>
     public void Start()
     {
         if (_handle == 0) throw new InvalidOperationException("Port not open.");
         midiInStart(_handle);
         _started = true;
+        PrepareSysExBuffers();
+    }
+
+    /// <summary>
+    /// Allocates four unmanaged SysEx receive buffers, prepares each MIDIHDR, and submits them to the driver.
+    /// </summary>
+    private unsafe void PrepareSysExBuffers()
+    {
+        uint hdrSize = (uint)sizeof(InputMIDIHDR);
+        for (int i = 0; i < SysExBufferCount; i++)
+        {
+            nint bufPtr = Marshal.AllocHGlobal(SysExBufferSize);
+            nint hdrPtr = Marshal.AllocHGlobal((int)hdrSize);
+            System.Runtime.CompilerServices.Unsafe.InitBlockUnaligned((void*)hdrPtr, 0, hdrSize);
+
+            var hdr = (InputMIDIHDR*)hdrPtr;
+            hdr->lpData = bufPtr;
+            hdr->dwBufferLength = SysExBufferSize;
+            hdr->dwBytesRecorded = 0;
+            hdr->dwFlags = 0;
+
+            _sysexBufferPtrs[i] = bufPtr;
+            _sysexHeaderPtrs[i] = hdrPtr;
+
+            midiInPrepareHeader(_handle, hdrPtr, hdrSize);
+            midiInAddBuffer(_handle, hdrPtr, hdrSize);
+        }
     }
 
     /// <summary>
@@ -110,20 +183,34 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
     }
 
     /// <summary>
-    /// Unmanaged callback invoked by winmm on the driver thread for each incoming short MIDI message.
+    /// Unmanaged callback invoked by winmm on the driver thread for each incoming MIDI message.
+    /// Handles both short channel messages (MM_MIM_DATA) and long SysEx messages (MM_MIM_LONGDATA).
     /// </summary>
     [UnmanagedCallersOnly]
     private static unsafe void MidiInputCallback(nint handle, int msg, nint instance, nint param1, nint param2)
     {
-        if (msg != MM_MIM_DATA) return;
-
         var port = (WindowsMidiInputPort?)GCHandle.FromIntPtr(instance).Target;
         if (port is null) return;
 
-        byte status = (byte)(param1 & 0xFF);
-        byte data1 = (byte)((param1 >> 8) & 0xFF);
-        byte data2 = (byte)((param1 >> 16) & 0xFF);
-        port.MessageReceived?.Invoke(new MidiMessage(status, data1, data2));
+        if (msg == MM_MIM_DATA)
+        {
+            byte status = (byte)(param1 & 0xFF);
+            byte data1 = (byte)((param1 >> 8) & 0xFF);
+            byte data2 = (byte)((param1 >> 16) & 0xFF);
+            port.MessageReceived?.Invoke(new MidiMessage(status, data1, data2));
+        }
+        else if (msg == MM_MIM_LONGDATA)
+        {
+            var headerPtr = (InputMIDIHDR*)param1;
+            if (headerPtr != null && headerPtr->dwBytesRecorded > 0)
+            {
+                var span = new ReadOnlySpan<byte>((byte*)headerPtr->lpData, (int)headerPtr->dwBytesRecorded);
+                port.SysExReceived?.Invoke(span);
+            }
+
+            if (!port._closing)
+                midiInAddBuffer(handle, param1, (uint)sizeof(InputMIDIHDR));
+        }
     }
 
     /// <summary>
@@ -200,6 +287,15 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
     private static extern int midiInGetDevCaps(int deviceId, ref MIDIINCAPS caps, uint size);
 
     [LibraryImport("winmm")]
+    private static partial int midiInPrepareHeader(nint handle, nint headerPtr, uint size);
+
+    [LibraryImport("winmm")]
+    private static partial int midiInUnprepareHeader(nint handle, nint headerPtr, uint size);
+
+    [LibraryImport("winmm")]
+    private static partial int midiInAddBuffer(nint handle, nint headerPtr, uint size);
+
+    [LibraryImport("winmm")]
     private static partial int midiOutGetNumDevs();
 
     [DllImport("winmm")]
@@ -230,6 +326,63 @@ internal sealed partial class WindowsMidiInputPort : IMidiInputPort
         public string szPname;
         public ushort wTechnology, wVoices, wNotes, wChannelMask;
         public uint dwSupport;
+    }
+
+    /// <summary>
+    /// Native MIDI header structure (MIDIHDR) used for SysEx input buffer management.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct InputMIDIHDR
+    {
+        /// <summary>
+        /// Pointer to the unmanaged data buffer.
+        /// </summary>
+        public nint lpData;
+
+        /// <summary>
+        /// Length of the data buffer in bytes.
+        /// </summary>
+        public uint dwBufferLength;
+
+        /// <summary>
+        /// Number of bytes recorded into the buffer by the driver.
+        /// </summary>
+        public uint dwBytesRecorded;
+
+        /// <summary>
+        /// User-defined data value.
+        /// </summary>
+        public nint dwUser;
+
+        /// <summary>
+        /// Flags set by the driver indicating buffer state.
+        /// </summary>
+        public uint dwFlags;
+
+        /// <summary>
+        /// Reserved for driver use: pointer to next header in queue.
+        /// </summary>
+        public nint lpNext;
+
+        /// <summary>
+        /// Reserved for driver use.
+        /// </summary>
+        public nint reserved;
+
+        /// <summary>
+        /// Offset into the buffer of the next event to be processed.
+        /// </summary>
+        public uint dwOffset;
+
+        /// <summary>
+        /// Reserved fields for driver internal use (slots 0–7).
+        /// </summary>
+        public nint dwReserved0, dwReserved1, dwReserved2, dwReserved3;
+
+        /// <summary>
+        /// Reserved fields for driver internal use (slots 4–7).
+        /// </summary>
+        public nint dwReserved4, dwReserved5, dwReserved6, dwReserved7;
     }
 }
 
@@ -313,9 +466,9 @@ internal sealed partial class WindowsMidiOutputPort : IMidiOutputPort
                     dwBufferLength = (uint)data.Length,
                     dwBytesRecorded = (uint)data.Length
                 };
-                midiOutPrepareHeader(_handle, ref header, (uint)Marshal.SizeOf<MIDIHDR>());
-                midiOutLongMsg(_handle, ref header, (uint)Marshal.SizeOf<MIDIHDR>());
-                midiOutUnprepareHeader(_handle, ref header, (uint)Marshal.SizeOf<MIDIHDR>());
+                midiOutPrepareHeader(_handle, ref header, (uint)sizeof(MIDIHDR));
+                midiOutLongMsg(_handle, ref header, (uint)sizeof(MIDIHDR));
+                midiOutUnprepareHeader(_handle, ref header, (uint)sizeof(MIDIHDR));
             }
         }
     }

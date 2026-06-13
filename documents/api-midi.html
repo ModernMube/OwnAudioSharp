@@ -24,27 +24,40 @@
   <div class="sidebar-section"><span class="sidebar-label">Audio Sources</span><ul class="sidebar-nav"><li><a href="api-sources.html">Source Overview</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#sourcewitheffects" class="sub">SourceWithEffects</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel Routing</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Processing</span><ul class="sidebar-nav"><li><a href="api-sync.html">Synchronization</a></li><li><a href="api-effects.html">Built-in Effects</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 Plugins</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">AI Features</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">MIDI</span><ul class="sidebar-nav"><li><a href="api-midi.html">MIDI Overview</a></li><li><a href="api-midi.html#port-management" class="sub">Port Management</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI File</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI Clock</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">MIDI</span><ul class="sidebar-nav">
+    <li><a href="api-midi.html">MIDI Overview</a></li>
+    <li><a href="api-midi.html#port-management" class="sub">Port Management</a></li>
+    <li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li>
+    <li><a href="api-midi.html#sysex" class="sub">SysEx Receive</a></li>
+    <li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li>
+    <li><a href="api-midi.html#virtual-ports" class="sub">Virtual Ports</a></li>
+    <li><a href="api-midi.html#hotplug" class="sub">Hot-Plug</a></li>
+    <li><a href="api-midi.html#midi-file" class="sub">MIDI File</a></li>
+    <li><a href="api-midi.html#midi-clock" class="sub">MIDI Clock</a></li>
+    <li><a href="api-midi.html#audio-engine-clock" class="sub">AudioEngineClock</a></li>
+    <li><a href="api-midi.html#platform-support" class="sub">Platform Support</a></li>
+  </ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Reference</span><ul class="sidebar-nav"><li><a href="api-reference.html">Events &amp; Types</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#best-practices" class="sub">Best Practices</a></li></ul></div>
 </nav>
 <main class="main">
 
 <h1 class="page-title">MIDI API</h1>
-<p class="page-subtitle">AOT-compatible, reflection-free MIDI I/O, file handling, and hardware clock. Available as a separate package: <span class="pkg-badge pkg-midi">OwnAudioSharp.Midi</span></p>
+<p class="page-subtitle">AOT-compatible, reflection-free MIDI I/O, SysEx, virtual ports, hot-plug monitoring, file handling, and sample-accurate clocks. Available as a separate package: <span class="pkg-badge pkg-midi">OwnAudioSharp.Midi</span></p>
 
-<div class="card-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:2rem">
-  <div class="card"><div class="card-icon">🎹</div><div class="card-title">MIDI I/O</div><div class="card-desc">Real-time input/output via WinMM, CoreMIDI, or ALSA rawmidi.</div></div>
+<div class="card-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:2rem">
+  <div class="card"><div class="card-icon">🎹</div><div class="card-title">MIDI I/O</div><div class="card-desc">Real-time input/output via WinMM, CoreMIDI, or ALSA rawmidi. Full SysEx receive with zero-allocation state-machine parser.</div></div>
+  <div class="card"><div class="card-icon">🔌</div><div class="card-title">Virtual Ports</div><div class="card-desc">Create software MIDI endpoints on macOS (CoreMIDI) and Linux (ALSA Sequencer) for inter-app routing.</div></div>
   <div class="card"><div class="card-icon">📄</div><div class="card-title">MIDI File</div><div class="card-desc">Read, edit, and write Standard MIDI Files (SMF format 0 and 1).</div></div>
-  <div class="card"><div class="card-icon">🕐</div><div class="card-title">MIDI Clock</div><div class="card-desc">Hardware-accurate 24 PPQN clock with <code>ThreadPriority.Highest</code>.</div></div>
+  <div class="card"><div class="card-icon">🕐</div><div class="card-title">MIDI Clock</div><div class="card-desc">Thread-based 24 PPQN clock and audio-engine-driven sample-accurate <code>AudioEngineMidiClock</code>.</div></div>
 </div>
 
 <h2>Namespaces</h2>
 <div class="table-wrap"><table>
   <thead><tr><th>Namespace</th><th>Contents</th></tr></thead>
   <tbody>
-    <tr><td><code>OwnAudio.Midi.IO</code></td><td><code>MidiMessage</code>, <code>IMidiInputPort</code>, <code>IMidiOutputPort</code>, <code>MidiPortFactory</code></td></tr>
+    <tr><td><code>OwnAudio.Midi.IO</code></td><td><code>MidiMessage</code>, <code>IMidiInputPort</code>, <code>IMidiOutputPort</code>, <code>SysExReceivedHandler</code>, <code>MidiPortFactory</code></td></tr>
     <tr><td><code>OwnAudio.Midi.File</code></td><td><code>MidiFile</code>, <code>MidiTrack</code>, <code>MidiEvent</code>, <code>MidiFileReader</code>, <code>MidiFileWriter</code></td></tr>
-    <tr><td><code>OwnAudio.Midi.Clock</code></td><td><code>MidiClock</code></td></tr>
+    <tr><td><code>OwnAudio.Midi.Clock</code></td><td><code>MidiClock</code>, <code>AudioEngineMidiClock</code></td></tr>
   </tbody>
 </table></div>
 
@@ -68,7 +81,7 @@ using IMidiInputPort  input  = MidiPortFactory.OpenInput(inputs[0]);
 // Open by name
 using IMidiOutputPort output = MidiPortFactory.OpenOutput("IAC Driver Bus 1");</code></pre></div>
 
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>Platform port names:</strong> Windows uses WinMM names (e.g. <code>"Microsoft GS Wavetable Synth"</code>), macOS uses CoreMIDI (e.g. <code>"IAC Driver Bus 1"</code>), Linux uses ALSA rawmidi paths (e.g. <code>"/dev/midi1"</code>).</p></div>
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>Platform port names:</strong> Windows uses WinMM names (e.g. <code>"Microsoft GS Wavetable Synth"</code>), macOS uses CoreMIDI (e.g. <code>"IAC Driver Bus 1"</code>), Linux uses ALSA rawmidi paths (e.g. <code>"hw:1,0"</code>).</p></div>
 
 <!-- Receiving MIDI -->
 <h2 id="receiving">Receiving MIDI Data</h2>
@@ -114,8 +127,46 @@ void OnMidiMessage(MidiMessage msg)
     <tr><td><code>IsNoteOff</code></td><td><code>bool</code></td><td><code>true</code> if NoteOff, or NoteOn with velocity = 0.</td></tr>
     <tr><td><code>IsControlChange</code></td><td><code>bool</code></td><td>CC message.</td></tr>
     <tr><td><code>IsPitchBend</code></td><td><code>bool</code></td><td>Pitch bend message.</td></tr>
+    <tr><td><code>IsProgramChange</code></td><td><code>bool</code></td><td>Program change message.</td></tr>
   </tbody>
 </table></div>
+
+<!-- SysEx Receive -->
+<h2 id="sysex">Receiving SysEx Data</h2>
+<p><code>IMidiInputPort</code> exposes a dedicated <code>SysExReceived</code> event that delivers a complete <code>0xF0 … 0xF7</code> frame as a <code>ReadOnlySpan&lt;byte&gt;</code>. The span is only valid during the callback — copy it if you need to retain the data. The parser handles SysEx frames that arrive fragmented across multiple driver read calls or CoreMIDI packets.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnAudio.Midi.IO;
+
+using IMidiInputPort input = MidiPortFactory.OpenInput("USB MIDI Interface");
+
+input.SysExReceived += OnSysEx;
+input.Start();
+
+Console.ReadLine();
+input.Stop();
+
+void OnSysEx(ReadOnlySpan&lt;byte&gt; data)
+{
+    // data[0] == 0xF0,  data[^1] == 0xF7
+    Console.Write($"SysEx ({data.Length} bytes):");
+    foreach (byte b in data)
+        Console.Write($" {b:X2}");
+    Console.WriteLine();
+
+    // Copy if retention beyond this callback is needed
+    byte[] copy = data.ToArray();
+}</code></pre></div>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Platform</th><th>Implementation</th><th>Max SysEx size</th></tr></thead>
+  <tbody>
+    <tr><td>Windows (WinMM)</td><td>Four 4 KB unmanaged MIDIHDR buffers, rotated automatically</td><td>4 KB per buffer (multiple buffers chain)</td></tr>
+    <tr><td>macOS (CoreMIDI)</td><td>64 KB per-port accumulation buffer; handles cross-packet fragmentation</td><td>64 KB</td></tr>
+    <tr><td>Linux (ALSA rawmidi)</td><td>Byte-level state machine with running-status support; 64 KB accumulation buffer</td><td>64 KB</td></tr>
+  </tbody>
+</table></div>
+
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><code>SysExReceived</code> uses the custom <code>SysExReceivedHandler</code> delegate type (<code>delegate void SysExReceivedHandler(ReadOnlySpan&lt;byte&gt; data)</code>) because <code>Action&lt;ReadOnlySpan&lt;byte&gt;&gt;</code> is not directly usable as an event type. The callback is allocation-free in the hot path.</p></div>
 
 <!-- Sending MIDI -->
 <h2 id="sending">Sending MIDI Data</h2>
@@ -133,13 +184,24 @@ output.Send(new MidiMessage(0xB0, 7, 100));  // Volume (CC #7) = 100
 // Program Change  (status = 0xC0 | channel)
 output.Send(new MidiMessage(0xC0, 0, 0));    // Grand Piano
 
-// Pitch Bend — 14-bit split across LSB/MSB
+// Pitch Bend — 14-bit value split across LSB/MSB
 int bend = 10000; // 0..16383, centre = 8192
 output.Send(new MidiMessage(0xE0, (byte)(bend &amp; 0x7F), (byte)(bend &gt;&gt; 7)));
 
 // SysEx
 ReadOnlySpan&lt;byte&gt; sysex = [0xF0, 0x41, 0x10, 0x42, 0x12, 0xF7];
 output.SendSysEx(sysex);</code></pre></div>
+
+<h3>Timestamped Send (macOS only)</h3>
+<p>On macOS, <code>MacOsMidiOutputPort</code> exposes an additional overload that accepts an absolute nanosecond timestamp. CoreMIDI schedules the message at exactly that Mach time, eliminating OS scheduling jitter for sample-accurate playback. Pass <code>0</code> for immediate delivery.</p>
+
+<div class="code-block"><div class="code-header"><span>C# — macOS timestamped send</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnAudio.Midi.IO.Platform;
+
+if (output is MacOsMidiOutputPort macOutput)
+{
+    long nowNs = /* your nanosecond clock source */;
+    macOutput.Send(new MidiMessage(0x90, 60, 100), nowNs + 10_000_000); // 10 ms ahead
+}</code></pre></div>
 
 <h3>Common Status Bytes</h3>
 <div class="table-wrap"><table>
@@ -152,6 +214,64 @@ output.SendSysEx(sysex);</code></pre></div>
     <tr><td>Program Change</td><td><code>0xC0 | ch</code></td><td>program</td><td>—</td></tr>
     <tr><td>Channel Pressure</td><td><code>0xD0 | ch</code></td><td>pressure</td><td>—</td></tr>
     <tr><td>Pitch Bend</td><td><code>0xE0 | ch</code></td><td>LSB (7-bit)</td><td>MSB (7-bit)</td></tr>
+  </tbody>
+</table></div>
+
+<!-- Virtual MIDI Ports -->
+<h2 id="virtual-ports">Virtual MIDI Ports</h2>
+<p>Virtual ports create software MIDI endpoints that other applications can connect to — useful for inter-app MIDI routing, DAW integration, and loopback testing. Use <code>MidiPortFactory.CreateVirtualInput</code> and <code>CreateVirtualOutput</code>.</p>
+
+<div class="code-block"><div class="code-header"><span>C# — Create virtual ports</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnAudio.Midi.IO;
+
+// Virtual input — external apps send to "MyApp In", we receive
+using IMidiInputPort virtualIn = MidiPortFactory.CreateVirtualInput("MyApp In");
+virtualIn.MessageReceived += msg  =&gt; Console.WriteLine($"Virtual IN: {msg}");
+virtualIn.SysExReceived   += data =&gt; Console.WriteLine($"SysEx {data.Length} bytes");
+virtualIn.Start();
+
+// Virtual output — we send, external apps receive
+using IMidiOutputPort virtualOut = MidiPortFactory.CreateVirtualOutput("MyApp Out");
+virtualOut.Send(new MidiMessage(0x90, 60, 100));
+virtualOut.SendSysEx([0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7]); // MIDI Identity Request</code></pre></div>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Platform</th><th>Backend</th><th>Visibility</th></tr></thead>
+  <tbody>
+    <tr><td>macOS</td><td><code>MIDIDestinationCreate</code> / <code>MIDISourceCreate</code> (CoreMIDI)</td><td>System-wide; appears in all CoreMIDI clients and DAWs</td></tr>
+    <tr><td>Linux</td><td>ALSA Sequencer (<code>snd_seq_t</code>)</td><td>Visible as sequencer clients; connect with <code>aconnect -l</code></td></tr>
+    <tr><td>Windows</td><td>—</td><td>Not supported (WinMM has no virtual port API)</td></tr>
+  </tbody>
+</table></div>
+
+<!-- Hot-Plug Monitoring -->
+<h2 id="hotplug">Hot-Plug Device Monitoring</h2>
+<p>Subscribe to <code>MidiPortFactory.PortsChanged</code> to be notified when MIDI devices are connected or disconnected. Call <code>StartMonitoring()</code> once before subscribing.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnAudio.Midi.IO;
+
+MidiPortFactory.PortsChanged += OnPortsChanged;
+MidiPortFactory.StartMonitoring();
+
+Console.WriteLine("Monitoring device changes. Press Enter to stop.");
+Console.ReadLine();
+
+MidiPortFactory.StopMonitoring();
+MidiPortFactory.PortsChanged -= OnPortsChanged;
+
+void OnPortsChanged()
+{
+    IReadOnlyList&lt;string&gt; current = MidiPortFactory.GetInputPortNames();
+    Console.WriteLine($"Devices changed — {current.Count} input(s) available:");
+    foreach (var name in current)
+        Console.WriteLine($"  {name}");
+}</code></pre></div>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Platform</th><th>Mechanism</th><th>Overhead</th></tr></thead>
+  <tbody>
+    <tr><td>macOS</td><td>CoreMIDI client notification callback</td><td>Zero polling — event-driven</td></tr>
+    <tr><td>Linux</td><td><code>FileSystemWatcher</code> on <code>/dev/snd</code> watching <code>midi*</code> nodes</td><td>Minimal — kernel inotify</td></tr>
+    <tr><td>Windows</td><td>Not yet implemented</td><td>—</td></tr>
   </tbody>
 </table></div>
 
@@ -260,13 +380,13 @@ MidiFileWriter.Write(midiFile, "c_major_scale.mid");</code></pre></div>
     <tr><td><code>MetaData</code></td><td><code>byte[]?</code></td><td>Raw payload for Meta and SysEx events.</td></tr>
     <tr><td><code>IsTempoChange</code></td><td><code>bool</code></td><td><code>true</code> for Meta type 0x51 (Set Tempo).</td></tr>
     <tr><td><code>IsEndOfTrack</code></td><td><code>bool</code></td><td><code>true</code> for Meta type 0x2F (End of Track).</td></tr>
-    <tr><td><code>GetTempoMicroseconds()</code></td><td><code>int</code></td><td>Microseconds per beat (only valid on tempo-change events).</td></tr>
+    <tr><td><code>GetTempoMicroseconds()</code></td><td><code>int</code></td><td>Microseconds per beat (valid on tempo-change events only).</td></tr>
   </tbody>
 </table></div>
 
 <!-- MIDI Clock -->
-<h2 id="midi-clock">MIDI Clock</h2>
-<p>Sends MIDI Timing Clock pulses (0xF8) at 24 PPQN. The clock thread runs at <code>ThreadPriority.Highest</code> using a spin-wait loop for microsecond accuracy. Namespace: <code>OwnAudio.Midi.Clock</code></p>
+<h2 id="midi-clock">MIDI Clock — Thread-Based</h2>
+<p><code>MidiClock</code> sends MIDI Timing Clock pulses (0xF8) at 24 PPQN. The clock thread runs at <code>ThreadPriority.Highest</code> using a spin-wait loop for microsecond accuracy. Namespace: <code>OwnAudio.Midi.Clock</code></p>
 
 <div class="code-block"><div class="code-header"><span>C# — Internal clock (sequencer use)</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnAudio.Midi.Clock;
 
@@ -302,6 +422,42 @@ clock.Continue(); // sends 0xFB (MIDI Continue) and resumes</code></pre></div>
   </tbody>
 </table></div>
 
+<!-- AudioEngineMidiClock -->
+<h2 id="audio-engine-clock">MIDI Clock — Audio-Engine-Driven</h2>
+<p><code>AudioEngineMidiClock</code> derives 24 PPQN timing pulses directly from the audio render loop instead of a dedicated OS thread. This eliminates OS scheduling jitter entirely — each 0xF8 pulse is emitted at the exact sample boundary where it belongs. Call <code>UpdateTempo()</code> whenever the BPM or sample rate changes, then call <code>ProcessAudioBlock()</code> from your audio render callback on every block.</p>
+
+<div class="code-block"><div class="code-header"><span>C# — AudioEngineMidiClock</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnAudio.Midi.Clock;
+using OwnAudio.Midi.IO;
+
+using IMidiOutputPort output = MidiPortFactory.OpenOutput("USB MIDI Interface");
+
+var audioClock = new AudioEngineMidiClock();
+audioClock.UpdateTempo(bpm: 120.0, sampleRate: 48000);
+
+// Called by your audio engine for every render block:
+void OnAudioBlock(int blockSize)
+{
+    // Sends 0xF8 pulses at sample-accurate positions; zero allocation
+    audioClock.ProcessAudioBlock(blockSize, output);
+}
+
+// Change tempo at any time:
+audioClock.UpdateTempo(bpm: 140.0, sampleRate: 48000);</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>How it works:</strong> At 120 BPM / 48 000 Hz the clock fires every 1 000 samples (48 000 ÷ (120 × 24 ÷ 60)). A fractional accumulator tracks sub-sample remainder across blocks so tempo accuracy is maintained regardless of block size.</p></div>
+
+<h3>MidiClock vs AudioEngineMidiClock</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th></th><th><code>MidiClock</code></th><th><code>AudioEngineMidiClock</code></th></tr></thead>
+  <tbody>
+    <tr><td>Driving mechanism</td><td>Dedicated OS thread (<code>Highest</code> priority)</td><td>Audio render callback</td></tr>
+    <tr><td>Jitter</td><td>OS thread scheduling (~100 µs typical)</td><td>Sample-accurate (&lt; 1 sample)</td></tr>
+    <tr><td>CPU overhead</td><td>Spin-wait loop</td><td>Fractional counter per block</td></tr>
+    <tr><td>Start / Stop messages</td><td>✅ Automatic via output port</td><td>Manual — send manually if needed</td></tr>
+    <tr><td>Best for</td><td>Standalone clock, general purpose</td><td>DAW integration, audio engine sync</td></tr>
+  </tbody>
+</table></div>
+
 <!-- Full example -->
 <h2 id="full-example">Full Example — MIDI Keyboard Recorder</h2>
 <p>Records incoming MIDI events with timestamps and saves to a Standard MIDI File.</p>
@@ -319,7 +475,7 @@ double ticksPerMs = TicksPerBeat * Bpm / 60_000.0;
 using IMidiInputPort input = MidiPortFactory.OpenInput(
     MidiPortFactory.GetInputPortNames()[0]);
 
-input.MessageReceived += msg =>
+input.MessageReceived += msg =&gt;
 {
     long ms   = (long)(DateTimeOffset.UtcNow - startTime).TotalMilliseconds;
     long tick = (long)(ms * ticksPerMs);
@@ -332,7 +488,7 @@ Console.ReadLine();
 input.Stop();
 
 // Convert absolute ticks to delta times
-recordedEvents.Sort((a, b) => a.absoluteTick.CompareTo(b.absoluteTick));
+recordedEvents.Sort((a, b) =&gt; a.absoluteTick.CompareTo(b.absoluteTick));
 var midiEvents = new List&lt;MidiEvent&gt;();
 
 byte[] tempoBytes = [(byte)(tempoUs &gt;&gt; 16), (byte)(tempoUs &gt;&gt; 8), (byte)tempoUs];
@@ -353,15 +509,20 @@ Console.WriteLine("Saved: recording.mid");</code></pre></div>
 <!-- Platform support -->
 <h2 id="platform-support">Platform Support</h2>
 <div class="table-wrap"><table>
-  <thead><tr><th>Platform</th><th>I/O Backend</th><th>File R/W</th><th>Clock</th></tr></thead>
+  <thead><tr><th>Feature</th><th>Windows</th><th>macOS</th><th>Linux</th></tr></thead>
   <tbody>
-    <tr><td>Windows</td><td>WinMM (<code>winmm.dll</code>)</td><td>✅</td><td>✅</td></tr>
-    <tr><td>macOS</td><td>CoreMIDI framework</td><td>✅</td><td>✅</td></tr>
-    <tr><td>Linux</td><td>ALSA rawmidi (<code>libasound</code>)</td><td>✅</td><td>✅</td></tr>
+    <tr><td>Physical I/O</td><td>WinMM (<code>winmm.dll</code>)</td><td>CoreMIDI</td><td>ALSA rawmidi (<code>libasound</code>)</td></tr>
+    <tr><td>SysEx receive</td><td>✅ MIDIHDR buffers</td><td>✅ CoreMIDI packets</td><td>✅ State-machine parser</td></tr>
+    <tr><td>Virtual ports</td><td>—</td><td>✅ CoreMIDI</td><td>✅ ALSA Sequencer</td></tr>
+    <tr><td>Hot-plug detection</td><td>—</td><td>✅ CoreMIDI notify</td><td>✅ FileSystemWatcher</td></tr>
+    <tr><td>Timestamped send</td><td>—</td><td>✅ Mach Absolute Time</td><td>—</td></tr>
+    <tr><td>MIDI File R/W</td><td>✅</td><td>✅</td><td>✅</td></tr>
+    <tr><td><code>MidiClock</code></td><td>✅</td><td>✅</td><td>✅</td></tr>
+    <tr><td><code>AudioEngineMidiClock</code></td><td>✅</td><td>✅</td><td>✅</td></tr>
   </tbody>
 </table></div>
 
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>All platform code is selected at <strong>compile time</strong> via <code>#if WINDOWS / MACOS / LINUX</code> — no runtime reflection. The library is fully compatible with .NET Native AOT (<code>IsAotCompatible=true</code>, <code>IsTrimmable=true</code>). All P/Invoke uses <code>[LibraryImport]</code> (source-generated, AOT-safe).</p></div>
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>Platform selection happens at <strong>runtime</strong> via <code>RuntimeInformation.IsOSPlatform</code> — no compile-time defines are required in application code. The library is fully compatible with .NET Native AOT (<code>IsAotCompatible=true</code>, <code>IsTrimmable=true</code>). All P/Invoke uses <code>[LibraryImport]</code> (source-generated, AOT-safe); struct sizes in native calls use <code>sizeof(T)</code> rather than <code>Marshal.SizeOf&lt;T&gt;()</code> for zero-reflection hot paths.</p></div>
 
 </main>
 </div>

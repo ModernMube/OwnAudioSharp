@@ -30,6 +30,41 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
     private bool _disposed;
 
     /// <summary>
+    /// Tracks the current running status byte for channel messages.
+    /// </summary>
+    private byte _runningStatus;
+
+    /// <summary>
+    /// Indicates whether the parser is currently inside a SysEx message.
+    /// </summary>
+    private bool _inSysEx;
+
+    /// <summary>
+    /// Accumulation buffer for incoming SysEx bytes (maximum 64 KB).
+    /// </summary>
+    private readonly byte[] _sysexBuffer = new byte[65536];
+
+    /// <summary>
+    /// Number of bytes currently stored in <see cref="_sysexBuffer"/>.
+    /// </summary>
+    private int _sysexIndex;
+
+    /// <summary>
+    /// Partial channel message assembly buffer (up to 3 bytes), stored inline to avoid managed heap allocation.
+    /// </summary>
+    private ChannelMsgBuf _channelMsgBuf;
+
+    /// <summary>
+    /// Total number of bytes expected for the current channel message (2 or 3).
+    /// </summary>
+    private int _channelExpectedLen;
+
+    /// <summary>
+    /// Number of bytes received so far for the current channel message.
+    /// </summary>
+    private int _channelReceivedLen;
+
+    /// <summary>
     /// Gets the display name or device path of this MIDI input port.
     /// </summary>
     public string Name { get; }
@@ -43,6 +78,12 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
     /// Raised on the read thread when a complete MIDI message has been assembled.
     /// </summary>
     public event Action<MidiMessage>? MessageReceived;
+
+    /// <summary>
+    /// Raised on the read thread when a complete SysEx message (0xF0 ... 0xF7) has been assembled.
+    /// The span is only valid during the callback invocation.
+    /// </summary>
+    public event SysExReceivedHandler? SysExReceived;
 
     /// <summary>
     /// Opens the ALSA rawmidi input at <paramref name="devicePath"/>.
@@ -101,53 +142,91 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
 
     /// <summary>
     /// Read loop executed on the background thread: reads raw bytes from the ALSA device
-    /// and assembles MIDI messages using running-status rules.
+    /// and assembles MIDI messages using a full state machine with running-status and SysEx support.
+    /// Real-time messages (0xF8–0xFF) are dispatched immediately without disrupting parser state.
     /// </summary>
     private unsafe void ReadLoop()
     {
-        byte* buf = stackalloc byte[256];
-        byte runningStatus = 0;
+        byte* readBuf = stackalloc byte[1024];
 
         while (_running && _handle != 0)
         {
-            long bytesRead = snd_rawmidi_read(_handle, buf, 256);
+            long bytesRead = snd_rawmidi_read(_handle, readBuf, 1024);
             if (bytesRead <= 0)
             {
                 Thread.Sleep(1);
                 continue;
             }
 
-            int pos = 0;
-            while (pos < bytesRead)
+            for (int i = 0; i < bytesRead; i++)
             {
-                byte b = buf[pos++];
-                if ((b & 0x80) != 0)
-                    runningStatus = b;
-                else if (runningStatus == 0)
-                    continue;
-                else
-                    pos--;
+                byte b = readBuf[i];
 
-                byte type = (byte)(runningStatus & 0xF0);
-                if (runningStatus == 0xF0)
+                if (b >= 0xF8)
                 {
-                    byte d1 = pos < bytesRead ? buf[pos++] : (byte)0;
-                    byte d2 = pos < bytesRead ? buf[pos++] : (byte)0;
-                    while (pos < bytesRead && buf[pos] != 0xF7) pos++;
-                    if (pos < bytesRead) pos++;
-                    runningStatus = 0;
-                    MessageReceived?.Invoke(new MidiMessage(0xF0, d1, d2));
+                    MessageReceived?.Invoke(new MidiMessage(b, 0, 0));
+                    continue;
                 }
-                else if (type == 0xC0 || type == 0xD0)
+
+                if (b == 0xF0)
                 {
-                    byte d1 = pos < bytesRead ? buf[pos++] : (byte)0;
-                    MessageReceived?.Invoke(new MidiMessage(runningStatus, d1, 0));
+                    _inSysEx = true;
+                    _sysexIndex = 0;
+                    _sysexBuffer[_sysexIndex++] = b;
+                    _channelReceivedLen = 0;
+                    continue;
+                }
+
+                if (b == 0xF7)
+                {
+                    if (_inSysEx)
+                    {
+                        if (_sysexIndex < _sysexBuffer.Length)
+                            _sysexBuffer[_sysexIndex++] = b;
+                        SysExReceived?.Invoke(_sysexBuffer.AsSpan(0, _sysexIndex));
+                        _inSysEx = false;
+                    }
+                    continue;
+                }
+
+                if (b >= 0x80)
+                {
+                    _inSysEx = false;
+                    _runningStatus = b;
+                    _channelMsgBuf[0] = b;
+                    _channelReceivedLen = 1;
+                    byte msgType = (byte)(b & 0xF0);
+                    _channelExpectedLen = (msgType == 0xC0 || msgType == 0xD0) ? 2 : 3;
+                    continue;
+                }
+
+                if (_inSysEx)
+                {
+                    if (_sysexIndex < _sysexBuffer.Length)
+                        _sysexBuffer[_sysexIndex++] = b;
                 }
                 else
                 {
-                    byte d1 = pos < bytesRead ? buf[pos++] : (byte)0;
-                    byte d2 = pos < bytesRead ? buf[pos++] : (byte)0;
-                    MessageReceived?.Invoke(new MidiMessage(runningStatus, d1, d2));
+                    if (_channelReceivedLen == 0 && _runningStatus >= 0x80)
+                    {
+                        _channelMsgBuf[0] = _runningStatus;
+                        _channelReceivedLen = 1;
+                        byte msgType = (byte)(_runningStatus & 0xF0);
+                        _channelExpectedLen = (msgType == 0xC0 || msgType == 0xD0) ? 2 : 3;
+                    }
+
+                    if (_channelReceivedLen > 0 && _channelReceivedLen < 3)
+                    {
+                        _channelMsgBuf[_channelReceivedLen++] = b;
+                        if (_channelReceivedLen == _channelExpectedLen)
+                        {
+                            MessageReceived?.Invoke(new MidiMessage(
+                                _channelMsgBuf[0],
+                                _channelMsgBuf[1],
+                                _channelExpectedLen == 3 ? _channelMsgBuf[2] : (byte)0));
+                            _channelReceivedLen = 0;
+                        }
+                    }
                 }
             }
         }
@@ -252,6 +331,18 @@ internal sealed partial class LinuxMidiInputPort : IMidiInputPort
 
     [LibraryImport("libasound")]
     private static unsafe partial long snd_rawmidi_read(nint rmidi, byte* buffer, nuint size);
+
+    /// <summary>
+    /// Three-byte inline array used to assemble partial channel messages without managed heap allocation.
+    /// </summary>
+    [System.Runtime.CompilerServices.InlineArray(3)]
+    private struct ChannelMsgBuf
+    {
+        /// <summary>
+        /// First element of the inline array.
+        /// </summary>
+        private byte _e0;
+    }
 }
 
 /// <summary>

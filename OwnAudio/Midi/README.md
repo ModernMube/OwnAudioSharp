@@ -6,8 +6,12 @@ Part of the [OwnAudioSharp](https://github.com/modernmube/OwnAudioSharp) ecosyst
 ## Features
 
 - **MIDI I/O** — real-time input/output via platform-native APIs (WinMM / CoreMIDI / ALSA rawmidi)
+- **SysEx receive** — zero-allocation state-machine parser; complete frames delivered as `ReadOnlySpan<byte>`
+- **Virtual MIDI ports** — create software MIDI endpoints on macOS (CoreMIDI) and Linux (ALSA Sequencer)
+- **Hot-plug monitoring** — `MidiPortFactory.PortsChanged` event fires when devices are added or removed
+- **Timestamped send** — sample-accurate scheduled output on macOS via Mach Absolute Time
 - **MIDI File** — read, edit, and write Standard MIDI Files (SMF format 0 and 1)
-- **MIDI Clock** — hardware-accurate 24 PPQN clock with `ThreadPriority.Highest`
+- **MIDI Clock** — thread-based 24 PPQN clock (`MidiClock`) and audio-engine-driven sample-accurate clock (`AudioEngineMidiClock`)
 - **Native AOT ready** — `IsAotCompatible=true`, `IsTrimmable=true`, zero reflection
 - **Zero managed dependencies** — no third-party packages; pure P/Invoke
 
@@ -20,7 +24,7 @@ Part of the [OwnAudioSharp](https://github.com/modernmube/OwnAudioSharp) ecosyst
 Or (once published to NuGet):
 
 ```xml
-<PackageReference Include="OwnAudioSharp.Midi" Version="3.0.0" />
+<PackageReference Include="OwnAudioSharp.Midi" Version="3.1.0" />
 ```
 
 ---
@@ -29,9 +33,9 @@ Or (once published to NuGet):
 
 | Namespace | Contents |
 |---|---|
-| `OwnAudio.Midi.IO` | `MidiMessage`, `IMidiInputPort`, `IMidiOutputPort`, `MidiPortFactory` |
+| `OwnAudio.Midi.IO` | `MidiMessage`, `IMidiInputPort`, `IMidiOutputPort`, `SysExReceivedHandler`, `MidiPortFactory` |
 | `OwnAudio.Midi.File` | `MidiFile`, `MidiTrack`, `MidiEvent`, `MidiFileReader`, `MidiFileWriter` |
-| `OwnAudio.Midi.Clock` | `MidiClock` |
+| `OwnAudio.Midi.Clock` | `MidiClock`, `AudioEngineMidiClock` |
 
 ---
 
@@ -66,7 +70,7 @@ using IMidiOutputPort output = MidiPortFactory.OpenOutput("IAC Driver Bus 1");
 > **Platform notes**
 > - **Windows**: ports are named by WinMM (e.g. `"Microsoft GS Wavetable Synth"`)
 > - **macOS**: CoreMIDI names (e.g. `"IAC Driver Bus 1"`, `"USB MIDI Interface"`)
-> - **Linux**: ALSA rawmidi device paths (e.g. `"/dev/midi1"`, `"/dev/snd/midiC1D0"`)
+> - **Linux**: ALSA rawmidi device paths (e.g. `"/dev/midi1"`, `"hw:1,0"`)
 
 ---
 
@@ -123,7 +127,47 @@ void OnMidiMessage(MidiMessage msg)
 
 ---
 
-## 3. Sending MIDI Data
+## 3. Receiving SysEx Data
+
+`IMidiInputPort` exposes a dedicated `SysExReceived` event that delivers a complete `0xF0 … 0xF7`
+frame as a `ReadOnlySpan<byte>`. The span is only valid during the callback — copy it if you need
+to retain the data. The parser is allocation-free and handles SysEx frames that arrive fragmented
+across multiple driver read calls (ALSA rawmidi) or CoreMIDI packets.
+
+```csharp
+using OwnAudio.Midi.IO;
+
+using IMidiInputPort input = MidiPortFactory.OpenInput("USB MIDI Interface");
+
+input.SysExReceived += OnSysEx;
+input.Start();
+
+Console.ReadLine();
+
+input.Stop();
+
+// ─── Handler ───────────────────────────────────────────────
+void OnSysEx(ReadOnlySpan<byte> data)
+{
+    // data[0] == 0xF0, data[^1] == 0xF7
+    Console.Write($"SysEx ({data.Length} bytes):");
+    foreach (byte b in data)
+        Console.Write($" {b:X2}");
+    Console.WriteLine();
+
+    // Copy if you need to keep the bytes after this callback returns
+    byte[] copy = data.ToArray();
+}
+```
+
+> **Implementation notes**
+> - **Windows (WinMM)**: four 4 KB unmanaged buffers are pre-allocated and rotated automatically
+> - **macOS (CoreMIDI)**: a 64 KB per-port assembly buffer handles cross-packet fragmentation
+> - **Linux (ALSA rawmidi)**: a byte-level state machine with running-status support and a 64 KB assembly buffer
+
+---
+
+## 4. Sending MIDI Data
 
 ```csharp
 using OwnAudio.Midi.IO;
@@ -155,6 +199,21 @@ ReadOnlySpan<byte> sysex = [0xF0, 0x41, 0x10, 0x42, 0x12, 0xF7];
 output.SendSysEx(sysex);
 ```
 
+### Timestamped send (macOS only)
+
+On macOS the output port exposes an additional overload that accepts an absolute nanosecond
+timestamp. CoreMIDI schedules the message at exactly that Mach time, eliminating OS scheduling
+jitter for sample-accurate playback. Pass `0` for immediate delivery.
+
+```csharp
+// Cast to the concrete macOS type — only available on macOS
+if (output is OwnAudio.Midi.IO.Platform.MacOsMidiOutputPort macOutput)
+{
+    long nowNs = /* your clock source in nanoseconds */;
+    macOutput.Send(new MidiMessage(0x90, 60, 100), nowNs + 10_000_000); // 10 ms ahead
+}
+```
+
 ### Common status bytes
 
 | Message | Status byte formula | Data1 | Data2 |
@@ -169,7 +228,69 @@ output.SendSysEx(sysex);
 
 ---
 
-## 4. MIDI File — Reading
+## 5. Virtual MIDI Ports
+
+Virtual ports create software MIDI endpoints that other applications can connect to —
+useful for inter-app MIDI routing, DAW integration, and loopback testing.
+
+```csharp
+using OwnAudio.Midi.IO;
+
+// Create a virtual input — external apps send to "MyApp In", we receive
+using IMidiInputPort virtualIn = MidiPortFactory.CreateVirtualInput("MyApp In");
+virtualIn.MessageReceived += msg => Console.WriteLine($"Virtual IN: {msg}");
+virtualIn.SysExReceived  += data => Console.WriteLine($"Virtual SysEx: {data.Length} bytes");
+virtualIn.Start();
+
+// Create a virtual output — we send, external apps receive
+using IMidiOutputPort virtualOut = MidiPortFactory.CreateVirtualOutput("MyApp Out");
+virtualOut.Send(new MidiMessage(0x90, 60, 100));
+virtualOut.SendSysEx([0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7]); // Identity Request
+```
+
+> **Platform support**
+> - **macOS**: `MIDIDestinationCreate` / `MIDISourceCreate` via CoreMIDI — virtual endpoints appear system-wide
+> - **Linux**: ALSA Sequencer API (`snd_seq_t`) — ports appear as sequencer clients visible to `aconnect -l`
+> - **Windows**: not supported — WinMM has no virtual port API
+
+---
+
+## 6. Hot-Plug Device Monitoring
+
+Subscribe to `MidiPortFactory.PortsChanged` to be notified when MIDI devices are connected
+or disconnected. Call `StartMonitoring()` once before subscribing; call `StopMonitoring()` when
+done.
+
+```csharp
+using OwnAudio.Midi.IO;
+
+MidiPortFactory.PortsChanged += OnPortsChanged;
+MidiPortFactory.StartMonitoring();
+
+Console.WriteLine("Monitoring device changes. Press Enter to stop.");
+Console.ReadLine();
+
+MidiPortFactory.StopMonitoring();
+MidiPortFactory.PortsChanged -= OnPortsChanged;
+
+// ─── Handler ───────────────────────────────────────────────
+void OnPortsChanged()
+{
+    IReadOnlyList<string> current = MidiPortFactory.GetInputPortNames();
+    Console.WriteLine($"Devices changed — {current.Count} input(s) now available:");
+    foreach (var name in current)
+        Console.WriteLine($"  {name}");
+}
+```
+
+> **Platform notes**
+> - **macOS**: driven by the CoreMIDI client notification callback — zero polling overhead
+> - **Linux**: `FileSystemWatcher` on `/dev/snd` watching `midi*` nodes
+> - **Windows**: not yet implemented
+
+---
+
+## 7. MIDI File — Reading
 
 `MidiFileReader` parses Standard MIDI Files (`.mid`) with no external dependencies.
 
@@ -234,7 +355,7 @@ double TicksToSeconds(long ticks) =>
 
 ---
 
-## 5. MIDI File — Editing
+## 8. MIDI File — Editing
 
 `MidiFile`, `MidiTrack`, and `MidiEvent` are immutable by design.  
 To edit, rebuild the event list from the existing one:
@@ -298,7 +419,7 @@ MidiFileWriter.Write(modified, "song_140bpm.mid");
 
 ---
 
-## 6. MIDI File — Writing from scratch
+## 9. MIDI File — Writing from scratch
 
 ```csharp
 using OwnAudio.Midi.File;
@@ -342,7 +463,9 @@ MidiFileWriter.Write(midiFile, "c_major_scale.mid");
 
 ---
 
-## 7. MIDI Clock
+## 10. MIDI Clock
+
+### Thread-based clock — `MidiClock`
 
 `MidiClock` sends standard MIDI Timing Clock messages (0xF8) at 24 pulses per quarter note.  
 The clock thread runs at `ThreadPriority.Highest` using a spin-wait loop for microsecond accuracy.
@@ -363,7 +486,7 @@ await Task.Delay(4000);
 clock.Stop();
 ```
 
-### Clock with a hardware output port
+#### Clock with a hardware output port
 
 ```csharp
 using IMidiOutputPort output = MidiPortFactory.OpenOutput("USB MIDI Interface");
@@ -375,7 +498,7 @@ clock.Stop();    // sends 0xFC (MIDI Stop)
 clock.Continue();// sends 0xFB (MIDI Continue) and resumes clock
 ```
 
-### Clock messages sent automatically
+#### Clock messages sent automatically
 
 | Event | MIDI message | Byte |
 |---|---|---|
@@ -384,9 +507,48 @@ clock.Continue();// sends 0xFB (MIDI Continue) and resumes clock
 | `Continue()` | MIDI Continue | `0xFB` |
 | Every pulse | MIDI Timing Clock | `0xF8` |
 
+### Audio-engine-driven clock — `AudioEngineMidiClock`
+
+`AudioEngineMidiClock` derives 24 PPQN timing pulses directly from the audio render loop rather
+than a dedicated OS thread. This eliminates OS scheduling jitter entirely — each 0xF8 pulse is
+generated at the exact sample boundary where it belongs.
+
+Call `UpdateTempo()` once (or whenever the BPM changes), then call `ProcessAudioBlock()` from
+your audio render callback on every block.
+
+```csharp
+using OwnAudio.Midi.Clock;
+using OwnAudio.Midi.IO;
+
+using IMidiOutputPort output = MidiPortFactory.OpenOutput("USB MIDI Interface");
+
+var audioClock = new AudioEngineMidiClock();
+audioClock.UpdateTempo(bpm: 120.0, sampleRate: 48000);
+
+// Inside your audio render callback (called for every audio block):
+void OnAudioBlock(int blockSize)
+{
+    // Sends 0xF8 pulses at sample-accurate positions within the block
+    audioClock.ProcessAudioBlock(blockSize, output);
+}
+```
+
+> `ProcessAudioBlock` is allocation-free and safe to call from a real-time audio thread.
+> Call `UpdateTempo` whenever the BPM or sample rate changes — it recomputes the interval immediately.
+
+#### Comparison: `MidiClock` vs `AudioEngineMidiClock`
+
+| | `MidiClock` | `AudioEngineMidiClock` |
+|---|---|---|
+| Driving mechanism | Dedicated OS thread (`Highest` priority) | Audio render callback |
+| Jitter | OS thread scheduling (~100 µs typical) | Sample-accurate (< 1 sample) |
+| CPU overhead | Spin-wait loop | Fractional counter per block |
+| Use case | Standalone clock, general purpose | DAW, audio engine integration |
+| `Start` / `Stop` messages | ✅ automatic | Manual via output port |
+
 ---
 
-## 8. Full example — MIDI keyboard to file recorder
+## 11. Full example — MIDI keyboard to file recorder
 
 ```csharp
 using OwnAudio.Midi.IO;
@@ -438,19 +600,25 @@ Console.WriteLine("Saved: recording.mid");
 
 ## Platform support
 
-| Platform | I/O backend | File R/W | Clock |
+| Feature | Windows | macOS | Linux |
 |---|---|---|---|
-| Windows | WinMM (`winmm.dll`) | ✅ | ✅ |
-| macOS | CoreMIDI framework | ✅ | ✅ |
-| Linux | ALSA rawmidi (`libasound`) | ✅ | ✅ |
+| Physical I/O | WinMM (`winmm.dll`) | CoreMIDI | ALSA rawmidi (`libasound`) |
+| SysEx receive | ✅ (WinMM MIDIHDR buffers) | ✅ (CoreMIDI packets) | ✅ (state-machine parser) |
+| Virtual ports | — | ✅ CoreMIDI | ✅ ALSA Sequencer |
+| Hot-plug detection | — | ✅ CoreMIDI notify | ✅ FileSystemWatcher |
+| Timestamped send | — | ✅ Mach Absolute Time | — |
+| MIDI File R/W | ✅ | ✅ | ✅ |
+| `MidiClock` | ✅ | ✅ | ✅ |
+| `AudioEngineMidiClock` | ✅ | ✅ | ✅ |
 
-All platform code is selected at **compile time** via `#if WINDOWS / MACOS / LINUX` — no runtime reflection.
+All platform code is selected at **runtime** via `RuntimeInformation.IsOSPlatform` — no compile-time defines required in application code.
 
 ## AOT / Trimming
 
 The library is fully compatible with .NET Native AOT and trimming:
 
-- All P/Invoke uses `[LibraryImport]` (source-generated, AOT-safe)
+- All P/Invoke uses `[LibraryImport]` (source-generated, AOT-safe); `[DllImport]` is used only where `[LibraryImport]` does not support the required marshaling attributes
+- Struct sizes passed to native APIs use `sizeof(T)` (unsafe intrinsic, JIT constant) instead of `Marshal.SizeOf<T>()` in hot paths
 - No `Assembly.Load`, `Activator.CreateInstance`, or `GetType()` calls
 - `IsAotCompatible=true` and `IsTrimmable=true` are set in the `.csproj`
 - `0 IL2026 / IL2072 / IL3050` warnings on `dotnet publish --self-contained`
