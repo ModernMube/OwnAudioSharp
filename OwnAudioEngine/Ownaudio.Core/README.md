@@ -190,13 +190,13 @@ if (FFmpegConfig.IsAvailable)
 using var decoder = AudioDecoderFactory.Create("audio.aac", targetSampleRate: 48000, targetChannels: 2);
 ```
 
-**Supported FFmpeg versions:** 7 and 8 (libavcodec 61+).
+**Supported FFmpeg versions:** 8+ (libavcodec 62+).
 
 **System library paths searched automatically:**
 
 | Platform | Paths |
 |----------|-------|
-| Windows  | App directory, `PATH` (`avcodec-61.dll`, …) |
+| Windows  | App directory, `PATH` (`avcodec-62.dll`, …) |
 | macOS    | `/opt/homebrew/lib`, `/usr/local/lib` |
 | Linux    | `/usr/lib/<arch>-linux-gnu`, `/usr/lib`, `/usr/local/lib` |
 
