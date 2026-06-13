@@ -51,4 +51,17 @@ public interface IEffectProcessor : IDisposable
     /// the plugin has been audio-initialized via VST3PluginHost.InitializeAudioAsync().
     /// </summary>
     bool IsReady => true;
+
+    /// <summary>
+    /// Gets the processing latency introduced by this effect in samples.
+    /// </summary>
+    /// <remarks>
+    /// Zero-latency effects such as equalizers, compressors, and reverbs return 0.
+    /// Lookahead-based effects such as <see cref="AutoGainEffect"/> and
+    /// <see cref="LimiterEffect"/> return their actual lookahead buffer size.
+    /// VST3 plugins query the value from the native plugin after audio initialization.
+    /// This value is used by <see cref="AudioMixer.ApplyPluginDelayCompensation"/>
+    /// to align all tracks sample-accurately in the mixed output.
+    /// </remarks>
+    int LatencySamples => 0;
 }

@@ -74,6 +74,8 @@ dotnet add package OwnAudioSharp.Basic    # Lightweight, no AI/ML
 
 **Requirement:** .NET 10.0 or later. PortAudio can be installed system-wide for optimal audio quality; otherwise the bundled MiniAudio backend is used automatically.
 
+> **FFmpeg (optional):** If FFmpeg 7 or 8 dynamic libraries (`avcodec`, `avformat`, `avutil`, `swresample`) are installed on the system, OwnAudioSharp automatically uses them as the primary decoder — giving you support for virtually any audio format (AAC, OGG, Opus, WMA, AIFF, and more) without any API changes. If FFmpeg is not found, the built-in MP3/WAV/FLAC decoders are used as a seamless fallback. FFmpeg is **not** required and is **not** bundled with the package.
+
 ---
 
 ## Features

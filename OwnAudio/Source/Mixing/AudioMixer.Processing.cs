@@ -7,17 +7,21 @@ namespace OwnaudioNET.Mixing;
 public sealed partial class AudioMixer
 {
     /// <summary>
-    /// Mixes source samples into the mix buffer (additive mixing).
-    /// Zero-allocation hot path method with SIMD vectorization.
-    /// Performance: 4-8x faster on modern CPUs with hardware acceleration.
+    /// Adds interleaved float samples from <paramref name="sourceBuffer"/> into
+    /// <paramref name="mixBuffer"/> using additive mixing (summation).
+    /// When hardware SIMD acceleration is available, samples are processed in
+    /// vector-width batches (typically 4 or 8 floats at a time), providing a
+    /// four-to-eight-times throughput improvement on modern processors.
     /// </summary>
+    /// <param name="mixBuffer">Destination accumulation buffer; modified in place.</param>
+    /// <param name="sourceBuffer">Source samples to add into <paramref name="mixBuffer"/>.</param>
+    /// <param name="sampleCount">Number of interleaved samples to mix.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void MixIntoBuffer(float[] mixBuffer, float[] sourceBuffer, int sampleCount)
     {
         int i = 0;
         int simdLength = Vector<float>.Count;
 
-        // SIMD vectorized processing (processes 4-8 floats at once depending on CPU)
         if (Vector.IsHardwareAccelerated && sampleCount >= simdLength)
         {
             int simdLoopEnd = sampleCount - (sampleCount % simdLength);
@@ -39,14 +43,20 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Mixes source samples into specific output channels based on channel mapping.
-    /// Zero-allocation hot path method for selective channel routing.
+    /// Adds samples from <paramref name="sourceBuffer"/> into specific output channels of
+    /// <paramref name="mixBuffer"/> as defined by <paramref name="channelMapping"/>.
+    /// This allows a mono or stereo source to be routed to arbitrary output channels
+    /// in a multi-channel mix bus without allocating intermediate buffers.
+    /// If any mapped channel index is out of range the entire mix operation is aborted
+    /// to prevent buffer overruns or corruption.
     /// </summary>
-    /// <param name="mixBuffer">The output mix buffer</param>
-    /// <param name="sourceBuffer">The source audio buffer</param>
-    /// <param name="sampleCount">Number of samples to mix</param>
-    /// <param name="channelMapping">Target output channel indices (must match source channel count)</param>
-    /// <param name="totalOutputChannels">Total number of output channels in mix buffer</param>
+    /// <param name="mixBuffer">Destination multi-channel mix buffer; modified in place.</param>
+    /// <param name="sourceBuffer">Source audio samples in interleaved format.</param>
+    /// <param name="sampleCount">Total number of source samples to mix.</param>
+    /// <param name="channelMapping">
+    /// Array of zero-based output channel indices; must have one entry per source channel.
+    /// </param>
+    /// <param name="totalOutputChannels">Total number of channels in <paramref name="mixBuffer"/>.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void MixIntoBufferSelective(
         float[] mixBuffer,
@@ -61,7 +71,7 @@ public sealed partial class AudioMixer
         foreach (int ch in channelMapping)
         {
             if (ch < 0 || ch >= totalOutputChannels)
-                return; // Invalid channel index - skip mixing to prevent crashes
+                return;
         }
 
         for (int frame = 0; frame < frameCount; frame++)
@@ -77,17 +87,19 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Applies master volume to the mixed buffer.
-    /// Zero-allocation hot path method with SIMD vectorization.
-    /// Performance: 4-8x faster on modern CPUs with hardware acceleration.
+    /// Multiplies every sample in <paramref name="buffer"/> by the current master volume scalar.
+    /// When the volume is within 0.001 of 1.0 the method returns early, avoiding unnecessary work.
+    /// When hardware SIMD acceleration is available, samples are processed in vector-width batches
+    /// for a four-to-eight-times throughput improvement on modern processors.
     /// </summary>
+    /// <param name="buffer">Interleaved float audio buffer to scale in place.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ApplyMasterVolume(Span<float> buffer)
     {
         float volume = _masterVolume;
 
         if (Math.Abs(volume - 1.0f) < 0.001f)
-            return; // Skip if volume is ~1.0
+            return;
 
         int i = 0;
         int simdLength = Vector<float>.Count;
@@ -101,7 +113,7 @@ public sealed partial class AudioMixer
             {
                 var vec = new Vector<float>(buffer.Slice(i, simdLength));
                 vec *= volumeVec;
-                
+
                 vec.CopyTo(buffer.Slice(i, simdLength));
             }
         }
@@ -113,28 +125,20 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Applies master effects to the mixed buffer.
-    /// Effects are processed in the order they were added.
-    /// Zero-allocation hot path method using cached effect array.
+    /// Applies each registered master effect processor to <paramref name="buffer"/> in insertion order.
+    /// Uses a lock-free read of <c>_cachedEffects</c> via <see cref="Volatile.Read"/> so the real-time
+    /// audio thread never acquires a lock; the main thread publishes updates atomically through
+    /// <c>PublishEffectsCache()</c>. Effects that are not enabled are skipped without calling
+    /// <see cref="IEffectProcessor.Process"/>.
     /// </summary>
+    /// <param name="buffer">Interleaved float audio buffer to process in place.</param>
+    /// <param name="frameCount">Number of audio frames contained in <paramref name="buffer"/>.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ApplyMasterEffects(Span<float> buffer, int frameCount)
     {
-        if (_effectsChanged)
-        {
-            lock (_effectsLock)
-            {
-                if (_effectsChanged) // Double-check inside lock
-                {
-                    _cachedEffects = _masterEffects.ToArray();
-                    _effectsChanged = false;
-                }
-            }
-        }
-
-        var effects = _cachedEffects;
+        var effects = Volatile.Read(ref _cachedEffects);
         if (effects.Length == 0)
-            return; // No effects to apply
+            return;
 
         foreach (var effect in effects)
         {
@@ -150,17 +154,20 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Calculates peak levels for stereo output.
-    /// Updates LeftPeak and RightPeak fields.
-    /// Uses SIMD vectorization for optimal performance.
+    /// Scans <paramref name="buffer"/> to find the absolute peak sample value for the left
+    /// and right channels and stores the results in <c>_leftPeak</c> and <c>_rightPeak</c>.
+    /// Assumes strictly interleaved stereo layout (left sample at even indices, right at odd).
+    /// Uses stack-allocated temporary buffers and SIMD vector operations when hardware
+    /// acceleration is available to minimise latency on the real-time audio thread.
     /// </summary>
+    /// <param name="buffer">Interleaved stereo float audio buffer to analyse.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void CalculatePeakLevels(Span<float> buffer)
     {
         float leftPeak = 0.0f;
         float rightPeak = 0.0f;
 
-        int frameCount = buffer.Length / 2; // Stereo: 2 samples per frame
+        int frameCount = buffer.Length / 2;
         int simdLength = Vector<float>.Count;
 
         if (Vector.IsHardwareAccelerated && frameCount >= simdLength / 2)
@@ -188,7 +195,7 @@ public sealed partial class AudioMixer
                 leftPeakVec = Vector.Max(leftPeakVec, leftVec);
                 rightPeakVec = Vector.Max(rightPeakVec, rightVec);
             }
-            
+
             for (int j = 0; j < simdLength; j++)
             {
                 if (leftPeakVec[j] > leftPeak)
@@ -228,10 +235,13 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Applies a brickwall limiter to prevent digital clipping when summed sources exceed ±1.0.
-    /// Zero-allocation hot path with SIMD vectorization.
-    /// Called once per mix cycle, after all effects and volume processing.
+    /// Applies a hard brickwall limiter to <paramref name="buffer"/>, clamping every sample
+    /// to the range [−1.0, +1.0] to prevent digital clipping when multiple summed sources
+    /// cause the mix to exceed full scale.
+    /// Called once per mix cycle after all effects and volume processing have been applied.
+    /// Uses SIMD vector min/max operations when hardware acceleration is available.
     /// </summary>
+    /// <param name="buffer">Interleaved float audio buffer to limit in place.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void ApplyLimiter(Span<float> buffer)
     {
@@ -257,28 +267,6 @@ public sealed partial class AudioMixer
         {
             if (buffer[i] > 1.0f) buffer[i] = 1.0f;
             else if (buffer[i] < -1.0f) buffer[i] = -1.0f;
-        }
-    }
-
-    /// <summary>
-    /// Writes mixed audio to the recorder.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void WriteToRecorder(Span<float> buffer)
-    {
-        lock (_recorderLock)
-        {
-            if (_isRecording && _recorder != null)
-            {
-                try
-                {
-                    _recorder.WriteSamples(buffer);
-                }
-                catch
-                {
-                    _isRecording = false;
-                }
-            }
         }
     }
 }

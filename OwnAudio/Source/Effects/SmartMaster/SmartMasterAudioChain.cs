@@ -145,7 +145,22 @@ namespace OwnaudioNET.Effects.SmartMaster
         }
         
         #endregion
-        
+
+        #region Latency
+
+        /// <summary>
+        /// Gets the lookahead latency of the internal limiter in samples.
+        /// </summary>
+        /// <remarks>
+        /// The only latency-inducing component in the SmartMaster chain is the internal
+        /// <see cref="LimiterEffect"/>. All other components (EQ, compressor, subharmonic
+        /// synth, crossover, phase alignment) are zero-latency.
+        /// Returns 0 before <see cref="Configure"/> has been called.
+        /// </remarks>
+        public int LimiterLatencySamples => _limiter?.LatencySamples ?? 0;
+
+        #endregion
+
         #region Audio Processing (Hot Path - Zero GC)
         
         /// <summary>

@@ -53,7 +53,19 @@ namespace OwnaudioNET.Effects.SmartMaster
         }
         
         public float Mix { get; set; } = 1.0f;
-        
+
+        /// <summary>
+        /// Gets the processing latency introduced by the internal effect chain in samples.
+        /// </summary>
+        /// <remarks>
+        /// The SmartMaster chain consists of a graphic equalizer, optional subharmonic
+        /// synth, compressor, crossover, phase alignment, and a brick-wall limiter.
+        /// Only the internal <see cref="LimiterEffect"/> introduces latency (its lookahead
+        /// window). All other components are zero-latency IIR processors.
+        /// Returns 0 before <see cref="Initialize"/> has been called.
+        /// </remarks>
+        public int LatencySamples => _audioChain?.LimiterLatencySamples ?? 0;
+
         #endregion
         
         #region Constructor

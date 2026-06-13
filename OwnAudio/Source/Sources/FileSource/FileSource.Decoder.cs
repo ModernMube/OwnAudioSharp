@@ -113,6 +113,7 @@ public partial class FileSource
                     lock (_timingLock)
                     {
                         _totalSamplesProcessedFromFile = (long)(targetSeconds * _streamInfo.SampleRate);
+                        _soundTouchOutputFramesTotal = (long)(targetSeconds * _streamInfo.SampleRate);
                     }
                 }
                 else
@@ -298,6 +299,11 @@ public partial class FileSource
 
                 if (framesReceived > 0)
                 {
+                    lock (_timingLock)
+                    {
+                        _soundTouchOutputFramesTotal += framesReceived;
+                    }
+
                     int samplesToAdd = framesReceived * _streamInfo.Channels;
                     AddToSoundTouchAccumulationBuffer(_soundTouchOutputBuffer.AsSpan(0, samplesToAdd));
                 }

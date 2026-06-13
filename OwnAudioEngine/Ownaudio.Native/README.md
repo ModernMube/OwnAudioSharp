@@ -104,17 +104,15 @@ sudo pacman -S portaudio
 ### Current Status
 
 ✅ **Completed**:
-- Backend detection and selection logic
+- Backend detection and selection logic (PortAudio preferred, MiniAudio fallback)
 - PortAudio initialization and device enumeration
 - PortAudio playback callback with lock-free ring buffers
 - PortAudio input (recording) support
+- MiniAudio backend implementation (callback and initialization)
 - Device listing (input/output devices)
+- Device switching (SetOutputDeviceByName/Index)
 - Start/Stop control
 - Proper resource disposal
-
-⏳ **In Progress**:
-- MiniAudio backend implementation (callback and initialization)
-- Device switching (SetOutputDeviceByName/Index)
 
 ### Example Usage
 
@@ -172,44 +170,13 @@ User Thread                     Audio RT Thread
 
 ## Integration with AudioEngineFactory
 
-Once fully implemented, update `Ownaudio.Core/AudioEngineFactory.cs`:
+`AudioEngineFactory.CreateDefault()` automatically instantiates `NativeAudioEngine` on all platforms (Windows, Linux, macOS, Android, iOS). No manual wiring is required.
 
 ```csharp
-private static IAudioEngine CreateNativeEngine()
-{
-    try
-    {
-        var assembly = Assembly.Load("Ownaudio.Native");
-        var type = assembly.GetType("Ownaudio.Native.NativeAudioEngine");
-        return (IAudioEngine)Activator.CreateInstance(type);
-    }
-    catch
-    {
-        // Fallback to platform-specific engines
-        return null;
-    }
-}
-```
-
-And prioritize it in the `Create()` method:
-
-```csharp
-public static IAudioEngine Create(AudioConfig config)
-{
-    // Try native engine first
-    var nativeEngine = CreateNativeEngine();
-    if (nativeEngine != null)
-    {
-        if (nativeEngine.Initialize(config) == 0)
-            return nativeEngine;
-        nativeEngine.Dispose();
-    }
-
-    // Fallback to platform-specific engines
-    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        return CreateWindowsEngine();
-    // ... etc
-}
+// AudioEngineFactory selects NativeAudioEngine automatically on all platforms
+var engine = AudioEngineFactory.CreateDefault();
+await engine.InitializeAsync(AudioConfig.Default);
+engine.Start();
 ```
 
 ## Decoder Integration
@@ -224,7 +191,7 @@ Decoder implementation location: `Ownaudio.Core/Decoders/MiniAudio/`
 
 ## Build Requirements
 
-- **.NET 8.0+ SDK** (project currently targets .NET 8.0)
+- **.NET 10.0+ SDK**
 - **Platform-specific notes**:
   - Windows: No additional dependencies
   - Linux: Optional `libportaudio2` for system PortAudio

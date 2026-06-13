@@ -152,6 +152,18 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Gets the processing latency introduced by the lookahead buffer in samples.
+        /// </summary>
+        /// <remarks>
+        /// The limiter uses a configurable lookahead window (1–20 ms, default 5 ms)
+        /// to detect upcoming peaks before they arrive. The field <c>_lookAheadSamples</c>
+        /// is recalculated whenever <see cref="LookAheadMs"/> changes.
+        /// Example values at 48 000 Hz: 5 ms → 240 samples, 20 ms → 960 samples.
+        /// Reported to <see cref="AudioMixer.ApplyPluginDelayCompensation"/> for PDC alignment.
+        /// </remarks>
+        public int LatencySamples => _lookAheadSamples;
+
+        /// <summary>
         /// Professional limiter constructor with all parameters
         /// </summary>
         /// <param name="sampleRate">Sample rate</param>

@@ -76,8 +76,20 @@ namespace OwnaudioNET.Effects.VST
         /// </summary>
         public bool IsReady => !_disposed && _threaded.IsReady;
 
+        /// <summary>
+        /// Gets the processing latency introduced by the loaded VST3 plugin in samples.
+        /// </summary>
+        /// <remarks>
+        /// Returns 0 until the native <c>OwnVst3Wrapper</c> exposes
+        /// <c>IAudioProcessor::getLatencySamples()</c> through its managed wrapper.
+        /// Once the native layer is updated, this property will read the value from
+        /// <c>_threaded.InnerWrapper.LatencySamples</c> after <c>setupProcessing()</c>
+        /// completes. The property is safe to read from any thread.
+        /// </remarks>
+        public int LatencySamples => 0;
+
         #endregion
-        
+
         #region VST-specific read-only info
 
         /// <summary>Gets the vendor of the loaded VST3 plugin.</summary>

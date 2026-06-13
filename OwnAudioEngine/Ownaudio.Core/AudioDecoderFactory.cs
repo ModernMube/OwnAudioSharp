@@ -1,7 +1,9 @@
 using System;
 using Logger;
 using System.IO;
+using Ownaudio.Core;
 using Ownaudio.Core.Common;
+using Ownaudio.Decoders.FFmpeg;
 using Ownaudio.Decoders.Wav;
 using Ownaudio.Decoders.Flac;
 using Ownaudio.Decoders.Mp3;
@@ -56,6 +58,8 @@ public static class AudioDecoderFactory
         if (!File.Exists(filePath))
             throw new AudioException("AudioDecoderFactory ERROR: ", new FileNotFoundException($"Audio file not found: {filePath}", filePath));
 
+        FFmpegLoader.Initialize();
+
         var format = DetectFormatFromExtension(filePath);
         if (format == AudioFormat.Unknown)
         {
@@ -65,6 +69,30 @@ public static class AudioDecoderFactory
 
         if (format == AudioFormat.Unknown)
             throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException($"Unable to detect audio format for file: {filePath}"));
+
+        if (format == AudioFormat.FFmpeg)
+        {
+            if (!FFmpegConfig.IsAvailable)
+                throw new AudioException("AudioDecoderFactory ERROR: ",
+                    new AudioException($"Format '{Path.GetExtension(filePath)}' requires FFmpeg, but FFmpeg libraries were not found."));
+
+            return new FFmpegDecoder(filePath, targetSampleRate, targetChannels);
+        }
+
+        if (FFmpegConfig.IsAvailable)
+        {
+            try
+            {
+                var decoder = new FFmpegDecoder(filePath, targetSampleRate, targetChannels);
+                Log.Info($"Using FFmpeg decoder for {format} format");
+                return decoder;
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"FFmpeg decoder failed for {filePath}: {ex.Message}");
+                Log.Info("Falling back to MiniAudio or managed decoder...");
+            }
+        }
 
         if (NativeAvailable)
         {
@@ -82,9 +110,7 @@ public static class AudioDecoderFactory
         }
 
         if (format == AudioFormat.Mp3)
-        {
             return CreateMp3DecoderFromFile(filePath, targetSampleRate, targetChannels);
-        }
 
         var fileStream = File.OpenRead(filePath);
         return CreateDecoderInternal(fileStream, format, true, targetSampleRate, targetChannels);
@@ -182,6 +208,8 @@ public static class AudioDecoderFactory
 
     /// <summary>
     /// Detects audio format from file extension.
+    /// Returns <see cref="AudioFormat.FFmpeg"/> for formats that require FFmpeg
+    /// (OGG, Opus, AAC, M4A, WMA, AIFF, APE, etc.) when FFmpeg is available.
     /// </summary>
     /// <param name="filePath">File path to analyze.</param>
     /// <returns>Detected audio format or <see cref="AudioFormat.Unknown"/>.</returns>
@@ -194,9 +222,28 @@ public static class AudioDecoderFactory
 
         return extension switch
         {
-            ".wav" => AudioFormat.Wav,
-            ".mp3" => AudioFormat.Mp3,
+            ".wav"  => AudioFormat.Wav,
+            ".mp3"  => AudioFormat.Mp3,
             ".flac" => AudioFormat.Flac,
+
+            ".ogg"  or ".oga"  or
+            ".opus" or
+            ".aac"  or
+            ".m4a"  or ".m4b"  or ".m4r" or
+            ".mp4"  or
+            ".wma"  or
+            ".aiff" or ".aif"  or
+            ".ape"  or
+            ".wv"   or
+            ".mka"  or
+            ".ac3"  or
+            ".dts"  or
+            ".amr"  or
+            ".au"   or ".snd"  or
+            ".tta"  or
+            ".ra"   or ".rm"
+                => AudioFormat.FFmpeg,
+
             _ => AudioFormat.Unknown
         };
     }

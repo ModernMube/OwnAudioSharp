@@ -23,5 +23,11 @@ public enum AudioFormat
     /// <summary>
     /// FLAC audio format (Free Lossless Audio Codec).
     /// </summary>
-    Flac = 3
+    Flac = 3,
+
+    /// <summary>
+    /// Format handled exclusively by the FFmpeg decoder (OGG, Opus, AAC, M4A, WMA, AIFF, etc.).
+    /// Requires FFmpeg dynamic libraries to be present at runtime.
+    /// </summary>
+    FFmpeg = 4
 }

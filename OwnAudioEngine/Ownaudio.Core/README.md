@@ -161,9 +161,46 @@ Ownaudio.Core/
 
 ## Audio Decoders
 
-Ownaudio.Core includes **pure managed decoders** for common audio formats:
+Ownaudio.Core includes **pure managed decoders** for common audio formats, and optionally uses **FFmpeg** as the primary decoder when available.
 
-### Supported Formats
+### Decoder Priority
+
+`AudioDecoderFactory.Create()` selects the best available decoder automatically:
+
+1. **FFmpeg** (if installed) — supports virtually any format: AAC, OGG, Opus, WMA, AIFF, MP3, WAV, FLAC, …
+2. **MiniAudio** (if Ownaudio.Native is loaded) — cross-platform native decoder
+3. **Built-in managed decoders** — pure C# fallback for MP3, WAV, FLAC
+
+### FFmpeg Integration (Optional)
+
+FFmpeg is **not bundled** and is **not part of the public API**. When its dynamic libraries (`libavcodec`, `libavformat`, `libavutil`, `libswresample`) are found on the system, the engine uses them transparently.
+
+```csharp
+using Ownaudio.Core;
+
+// Optional: provide a custom directory containing FFmpeg libraries
+// Default is empty — standard system paths are searched automatically
+FFmpegConfig.CustomLibraryPath = "/usr/local/ffmpeg/lib";
+
+// Read-only: true if FFmpeg was detected and loaded successfully
+if (FFmpegConfig.IsAvailable)
+    Console.WriteLine("FFmpeg active — extended format support enabled.");
+
+// No other changes needed; the factory picks FFmpeg automatically
+using var decoder = AudioDecoderFactory.Create("audio.aac", targetSampleRate: 48000, targetChannels: 2);
+```
+
+**Supported FFmpeg versions:** 7 and 8 (libavcodec 61+).
+
+**System library paths searched automatically:**
+
+| Platform | Paths |
+|----------|-------|
+| Windows  | App directory, `PATH` (`avcodec-61.dll`, …) |
+| macOS    | `/opt/homebrew/lib`, `/usr/local/lib` |
+| Linux    | `/usr/lib/<arch>-linux-gnu`, `/usr/lib`, `/usr/local/lib` |
+
+### Built-in Managed Formats
 
 | Format | Extension | Codec | Compression | Performance |
 |--------|-----------|-------|-------------|-------------|
@@ -575,9 +612,9 @@ Platform-specific implementations return error codes:
 dotnet build OwnAudioEngine/Ownaudio.Core/Ownaudio.Core.csproj -c Release
 
 # Build for specific target framework
-dotnet build -f net9.0
-dotnet build -f net9.0-android35.0
-dotnet build -f net9.0-ios18.0
+dotnet build -f net10.0
+dotnet build -f net10.0-android
+dotnet build -f net10.0-ios
 
 # Output: Ownaudio.Core.dll
 ```

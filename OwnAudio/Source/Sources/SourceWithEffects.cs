@@ -34,6 +34,34 @@ public sealed class SourceWithEffects : IAudioSource
     private IEffectProcessor[] _cachedEffects = Array.Empty<IEffectProcessor>();
     private volatile bool _effectsChanged = false;
 
+    #region Plugin Delay Compensation Fields
+
+    /// <summary>
+    /// Ring buffer used to introduce a sample-accurate delay for PDC alignment.
+    /// Null when no delay compensation is active.
+    /// </summary>
+    private float[]? _delayBuffer;
+
+    /// <summary>
+    /// Current write position inside the circular delay buffer.
+    /// Advances by one sample each call to <see cref="ApplyDelayCompensation"/>.
+    /// </summary>
+    private int _delayWritePos;
+
+    /// <summary>
+    /// Current read position inside the circular delay buffer.
+    /// Lags <see cref="_delayWritePos"/> by exactly <see cref="_compensationSamples"/> frames.
+    /// </summary>
+    private int _delayReadPos;
+
+    /// <summary>
+    /// Number of frames of delay currently applied to this source for PDC.
+    /// Zero means compensation is disabled and <see cref="_delayBuffer"/> is null.
+    /// </summary>
+    private int _compensationSamples;
+
+    #endregion
+
     /// <summary>
     /// Initializes a new instance of the SourceWithEffects class.
     /// </summary>
@@ -193,6 +221,74 @@ public sealed class SourceWithEffects : IAudioSource
 
     #endregion
 
+    #region Plugin Delay Compensation
+
+    /// <summary>
+    /// Gets the total effect chain latency in samples.
+    /// </summary>
+    /// <remarks>
+    /// Sums the <see cref="IEffectProcessor.LatencySamples"/> value of every effect
+    /// currently in the chain. Zero-latency effects (EQ, compressor, reverb) return 0
+    /// and do not contribute. Call this before <see cref="AudioMixer.ApplyPluginDelayCompensation"/>
+    /// to determine the per-track latency.
+    /// This property acquires the effects lock briefly and must NOT be called from
+    /// the real-time audio thread.
+    /// </remarks>
+    public int EffectLatencySamples
+    {
+        get
+        {
+            lock (_effectsLock)
+            {
+                int total = 0;
+                foreach (var e in _effects)
+                    total += e.LatencySamples;
+                return total;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sets the delay compensation for this source in samples.
+    /// </summary>
+    /// <remarks>
+    /// Called by <see cref="AudioMixer.ApplyPluginDelayCompensation"/> before playback
+    /// starts. The compensation equals
+    /// <c>maxLatencyAcrossAllTracks − thisTrack.EffectLatencySamples</c>.
+    /// A ring buffer of <paramref name="samples"/> × <see cref="Config.Channels"/>
+    /// floats is allocated. Passing 0 disables compensation and releases the buffer.
+    /// </remarks>
+    /// <param name="samples">
+    /// Number of delay frames to apply. Must be ≥ 0.
+    /// </param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="samples"/> is negative.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">Thrown if the wrapper is disposed.</exception>
+    public void SetDelayCompensation(int samples)
+    {
+        ThrowIfDisposed();
+
+        if (samples < 0)
+            throw new ArgumentOutOfRangeException(nameof(samples));
+
+        _compensationSamples = samples;
+
+        if (samples > 0)
+        {
+            int bufferSize = samples * Config.Channels;
+            _delayBuffer = new float[bufferSize];
+            _delayWritePos = 0;
+            _delayReadPos = 0;
+        }
+        else
+        {
+            _delayBuffer = null;
+        }
+    }
+
+    #endregion
+
     #region IAudioSource Methods (with effect processing)
 
     /// <summary>
@@ -238,6 +334,9 @@ public sealed class SourceWithEffects : IAudioSource
             catch {}
         }
 
+        if (_compensationSamples > 0 && _delayBuffer != null)
+            framesRead = ApplyDelayCompensation(buffer, framesRead);
+
         return framesRead;
     }
 
@@ -256,6 +355,13 @@ public sealed class SourceWithEffects : IAudioSource
                 }
                 catch {}
             }
+        }
+
+        if (_delayBuffer != null)
+        {
+            Array.Clear(_delayBuffer, 0, _delayBuffer.Length);
+            _delayWritePos = 0;
+            _delayReadPos = 0;
         }
 
         return _innerSource.Seek(positionInSeconds);
@@ -292,6 +398,13 @@ public sealed class SourceWithEffects : IAudioSource
             }
         }
 
+        if (_delayBuffer != null)
+        {
+            Array.Clear(_delayBuffer, 0, _delayBuffer.Length);
+            _delayWritePos = 0;
+            _delayReadPos = 0;
+        }
+
         _innerSource.Stop();
     }
 
@@ -318,6 +431,44 @@ public sealed class SourceWithEffects : IAudioSource
     {
         add => _innerSource.Error += value;
         remove => _innerSource.Error -= value;
+    }
+
+    #endregion
+
+    #region Private Methods
+
+    /// <summary>
+    /// Applies ring-buffer delay compensation to align this source with
+    /// higher-latency tracks in the mix.
+    /// </summary>
+    /// <remarks>
+    /// Writes incoming samples into the circular delay buffer and simultaneously
+    /// reads back samples that are <c>_compensationSamples</c> frames older,
+    /// effectively introducing a fixed delay equal to the compensation amount.
+    /// This is a zero-allocation, zero-lock hot path.
+    /// </remarks>
+    /// <param name="buffer">The audio buffer to delay in-place.</param>
+    /// <param name="framesRead">The number of valid frames in the buffer.</param>
+    /// <returns>The number of frames written back to <paramref name="buffer"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private int ApplyDelayCompensation(Span<float> buffer, int framesRead)
+    {
+        if (_delayBuffer == null)
+            return framesRead;
+
+        int channels = Config.Channels;
+        int sampleCount = framesRead * channels;
+
+        for (int i = 0; i < sampleCount; i++)
+        {
+            _delayBuffer[_delayWritePos] = buffer[i];
+            _delayWritePos = (_delayWritePos + 1) % _delayBuffer.Length;
+
+            buffer[i] = _delayBuffer[_delayReadPos];
+            _delayReadPos = (_delayReadPos + 1) % _delayBuffer.Length;
+        }
+
+        return framesRead;
     }
 
     #endregion

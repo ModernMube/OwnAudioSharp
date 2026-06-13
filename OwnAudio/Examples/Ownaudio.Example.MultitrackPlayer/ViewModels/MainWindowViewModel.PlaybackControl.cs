@@ -106,10 +106,10 @@ public partial class MainWindowViewModel
                     }
                 }
 
-                System.Threading.Tasks.Parallel.ForEach(_cachedSourceArray, source =>
-                {
-                    source.Seek(startPosition);
-                });
+                // System.Threading.Tasks.Parallel.ForEach(_cachedSourceArray, source =>
+                // {
+                //     source.Seek(startPosition);
+                // });
 
                 System.Threading.Tasks.Parallel.ForEach(_cachedSourceArray, source =>
                 {
@@ -120,7 +120,7 @@ public partial class MainWindowViewModel
                 {
                     _audioService.Mixer.AddSource(source);
                 });
-                
+
                 if (_smartMaster != null && IsSmartMasterEnabled)
                 {
                     _audioService.Mixer.AddMasterEffect(_smartMaster);
@@ -170,7 +170,7 @@ public partial class MainWindowViewModel
     private async Task PauseAsync()
     {
         if (!IsPlaying) return;
-        
+
         _playbackTimer.Stop();
         IsPlaying = false;
         await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Pausing..."; });
@@ -180,7 +180,7 @@ public partial class MainWindowViewModel
             for (int i = 0; i < _cachedSourceArray.Length; i++)
             {
                 try { _cachedSourceArray[i].Pause(); }
-                catch {}
+                catch { }
             }
 
             // Pause VST transport — lock-free, safe from background thread.
@@ -230,15 +230,15 @@ public partial class MainWindowViewModel
                     {
                         _audioService.Mixer.RemoveSource(_cachedSourceArray[i].Id);
                     }
-                    catch {}
+                    catch { }
                 }
             }
-            
+
             if (_audioService.Mixer != null && _smartMaster != null)
             {
                 _audioService.Mixer.RemoveMasterEffect(_smartMaster);
             }
-            
+
             if (_smartMaster != null)
             {
                 _smartMaster.OnPlaybackStopped();
@@ -254,7 +254,7 @@ public partial class MainWindowViewModel
         CurrentPositionSeconds = 0;
         TrackDurationSeconds = 0;
         PositionDisplay = "00:00 / 00:00";
-        
+
         await Dispatcher.UIThread.InvokeAsync(() => { StatusMessage = "Stopped"; });
     }
 

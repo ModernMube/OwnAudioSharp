@@ -7,7 +7,7 @@ OwnAudioSharp is a professional-grade audio engine providing high-performance au
 ## Key Features
 
 - **Native Audio Engine**: Built on PortAudio and MiniAudio for professional-grade, low-latency audio processing across all platforms
-- **Multi-format Support**: Built-in decoders for MP3, WAV, and FLAC
+- **Multi-format Support**: Built-in decoders for MP3, WAV, and FLAC. If FFmpeg 7/8 is installed on the system, it is used automatically as the primary decoder, adding support for AAC, OGG, Opus, WMA, AIFF, and virtually any other format — no code changes required.
 - **Real-time Processing**: Zero-allocation design with lock-free buffers for professional-grade performance
 - **Advanced Audio Features**:
   - **Network Synchronization**: Multi-device audio sync across local network (< 5ms accuracy on LAN)
@@ -75,6 +75,33 @@ separator.Initialize();
 var result = separator.Separate("song.mp3");
 // result.VocalsPath and result.InstrumentalPath contain the output files
 ```
+
+## FFmpeg Integration (Optional)
+
+OwnAudioSharp automatically detects FFmpeg dynamic libraries on startup. This is **not part of the public API** — it happens transparently in the decoder layer.
+
+**Decoder priority:** FFmpeg → MiniAudio (native) → built-in managed decoder
+
+```csharp
+using Ownaudio.Core;
+
+// Optional: set a custom path before first use (default: empty = system paths)
+FFmpegConfig.CustomLibraryPath = @"C:\ffmpeg\bin"; // Windows example
+
+// Check whether FFmpeg was detected successfully
+if (FFmpegConfig.IsAvailable)
+    Console.WriteLine("FFmpeg decoder active — extended format support enabled.");
+else
+    Console.WriteLine("FFmpeg not found — using built-in decoders (MP3/WAV/FLAC).");
+
+// No API changes needed — AudioDecoderFactory selects the best decoder automatically
+var decoder = AudioDecoderFactory.Create("audio.aac", targetSampleRate: 48000, targetChannels: 2);
+```
+
+**Installation per platform:**
+- **Windows:** Place `avcodec-61.dll`, `avformat-61.dll`, `avutil-59.dll`, `swresample-5.dll` next to the executable, or anywhere on `PATH`.
+- **macOS:** `brew install ffmpeg`
+- **Linux:** `sudo apt install libavcodec-dev libavformat-dev` (or equivalent)
 
 ## Platform Support
 

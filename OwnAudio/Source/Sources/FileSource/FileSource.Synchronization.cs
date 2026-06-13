@@ -66,6 +66,7 @@ public partial class FileSource
         lock (_timingLock)
         {
             _totalSamplesProcessedFromFile = (long)(Math.Max(0, _trackLocalTime) * _streamInfo.SampleRate);
+            _soundTouchOutputFramesTotal = (long)(Math.Max(0, _trackLocalTime) * _streamInfo.SampleRate);
         }
 
         _gracePeriodEndTime = currentClockTime + SyncConfig.InitialGracePeriodSeconds;

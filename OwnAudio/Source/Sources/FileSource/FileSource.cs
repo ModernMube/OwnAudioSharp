@@ -70,6 +70,17 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
 
     // Input-driven timing tracking
     private long _totalSamplesProcessedFromFile = 0;
+
+    /// <summary>
+    /// Total number of audio frames actually emitted by SoundTouch since the last seek
+    /// or clock attachment. Used in <see cref="FileSource.Synchronization.cs"/> to derive
+    /// an accurate <c>_trackLocalTime</c> that accounts for SoundTouch's internal latency
+    /// and variable output batch size.
+    /// Updated exclusively from the decoder thread inside <c>_soundTouchLock</c>;
+    /// read from the mixer thread inside <c>_timingLock</c>.
+    /// </summary>
+    private long _soundTouchOutputFramesTotal = 0;
+
     private readonly object _timingLock = new();
     private bool _isSoftSyncActive = false;  // Track if soft sync is currently active
 
@@ -159,6 +170,46 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
             Math.Clamp(tempo, AudioConstants.MinTempo, AudioConstants.MaxTempo),
             clearBuffer: false,
             setGracePeriod: false);
+    }
+
+    /// <summary>
+    /// Sets tempo and flushes all internal buffers by seeking to the current decoded
+    /// content position. Unlike <see cref="SetTempoSmooth"/>, this eliminates the
+    /// residual drift caused by old-tempo audio remaining in the SoundTouch pipeline
+    /// and circular buffer after a tempo change.
+    /// <para>
+    /// The drift mechanism: <see cref="SetTempoSmooth"/> leaves ~50 ms of pre-buffered
+    /// old-tempo audio in the pipeline. When that audio drains, the source position is
+    /// ~5–15 ms off from what the <see cref="MasterClock"/> expects. Because this drift
+    /// falls below the 20 ms <c>SyncTolerance</c> green-zone threshold, the soft-sync
+    /// engine never corrects it, so the offset persists indefinitely.
+    /// </para>
+    /// <para>
+    /// Seeks to <c>Position</c> (actual decoder content position in seconds), not to the
+    /// clock-relative <c>_trackLocalTime</c>. These two values diverge when the initial
+    /// playback tempo is not 1.0, so using <c>_trackLocalTime</c> would jump the audio
+    /// to the wrong file location.
+    /// </para>
+    /// <para>
+    /// Call this method once after a tempo slider has settled (debounced on the caller's
+    /// side). A brief buffer-refill gap (~50 ms) may be audible immediately after the
+    /// call; use <see cref="PreBuffer"/> to minimise this gap if needed.
+    /// </para>
+    /// <para>
+    /// Has no effect when the source is not attached to a <see cref="MasterClock"/>.
+    /// </para>
+    /// </summary>
+    /// <param name="tempo">The tempo multiplier (0.8x to 1.2x) - HARD LIMIT enforced.</param>
+    public void SetTempoSynced(float tempo)
+    {
+        SetTempoInternal(
+            Math.Clamp(tempo, AudioConstants.MinTempo, AudioConstants.MaxTempo),
+            clearBuffer: false,
+            setGracePeriod: false);
+
+        if (_masterClock == null) return;
+
+        Seek(Position);
     }
 
     /// <summary>
