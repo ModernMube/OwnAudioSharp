@@ -31,7 +31,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp</PackageId>
-    <Version>3.1.0</Version>
+    <Version>3.1.3</Version>
     <Authors>ModernMube</Authors>
     <Description>AOT-compatible cross-platform audio engine library for desktop platforms (Windows, Linux, macOS)</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;desktop;sound;multitrack</PackageTags>
@@ -48,7 +48,7 @@
     <PackageReference Include="Avalonia" Version="12.0.4" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.26.0" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.300" PrivateAssets="All" />
-    <PackageReference Include="OwnAudioVst" Version="1.6.3" />
+    <PackageReference Include="OwnAudioVst" Version="1.6.4" />
   </ItemGroup>
 
   <!-- Embedded resources -->

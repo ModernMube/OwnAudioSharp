@@ -24,6 +24,12 @@ public partial class FileSource
         public const double SeekWindowSeconds = 5.0;
         public const double GracePeriodSeconds = 1.0;
         public const double InitialGracePeriodSeconds = 0.1;
+        public const double AdaptiveWindowSeconds = 3.0;
+        public const int RedZoneHitsToScaleUp = 5;
+        public const double GreenStreakToScaleDown = 8.0;
+        public const double AdaptiveScaleStep = 0.5;
+        public const double AdaptiveScaleMin = 1.0;
+        public const double AdaptiveScaleMax = 4.0;
     }
 
     #endregion
@@ -127,17 +133,17 @@ public partial class FileSource
             correctionMode = "Recovery";
             _consecutiveUnderruns--;
         }
-        else if (drift > 0.100)  // >100ms - large drift
+        else if (drift > 0.025)  // >25ms - large drift
         {
             correctionRate = 0.10;  // 10% for large drift (aggressive)
             correctionMode = "Large";
         }
-        else if (drift > 0.050)  // 50-100ms - medium drift
+        else if (drift > 0.013)  // 13-25ms - medium drift
         {
             correctionRate = 0.05;  // 5% for medium drift (moderate)
             correctionMode = "Medium";
         }
-        else  // 10-50ms - small drift
+        else  // 5-13ms - small drift
         {
             correctionRate = 0.01;  // 1% for small drift (gentle, stable)
             correctionMode = "Small";
@@ -170,6 +176,70 @@ public partial class FileSource
         _pendingSoftSyncTempoAdjustment = float.NaN;
     }
 
+    /// <summary>
+    /// Updates the adaptive scale factor based on recent synchronization performance.
+    /// Increases scale on frequent red zone hits; decreases on sustained green zone streaks.
+    /// </summary>
+    /// <param name="inRedZone">Whether the current frame triggered red zone correction.</param>
+    /// <param name="masterTimestamp">Current master clock timestamp for window tracking.</param>
+    private void UpdateAdaptiveScale(bool inRedZone, double masterTimestamp)
+    {
+        if (inRedZone)
+        {
+            _greenZoneStreak = 0.0;
+
+            if (_redZoneWindowStart <= 0.0)
+                _redZoneWindowStart = masterTimestamp;
+
+            _redZoneHits++;
+
+            double elapsed = masterTimestamp - _redZoneWindowStart;
+
+            if (elapsed >= SyncConfig.AdaptiveWindowSeconds)
+            {
+                if (_redZoneHits >= SyncConfig.RedZoneHitsToScaleUp)
+                {
+                    _adaptiveScale = Math.Min(_adaptiveScale + SyncConfig.AdaptiveScaleStep, SyncConfig.AdaptiveScaleMax);
+#if DEBUG
+                    Log.Debug($"[AdaptiveScale] Scale UP → {_adaptiveScale:F1}x (RedZoneHits={_redZoneHits} in {elapsed:F1}s)");
+#endif
+                }
+                _redZoneHits = 0;
+                _redZoneWindowStart = masterTimestamp;
+            }
+        }
+        else
+        {
+            if (_redZoneWindowStart > 0.0)
+            {
+                double elapsed = masterTimestamp - _redZoneWindowStart;
+                if (elapsed >= SyncConfig.AdaptiveWindowSeconds)
+                {
+                    _redZoneHits = 0;
+                    _redZoneWindowStart = 0.0;
+                }
+            }
+
+            if (_adaptiveScale > SyncConfig.AdaptiveScaleMin)
+            {
+                _greenZoneStreak += (1.0 / 48000.0) * 512;
+
+                if (_greenZoneStreak >= SyncConfig.GreenStreakToScaleDown)
+                {
+                    _adaptiveScale = Math.Max(_adaptiveScale - SyncConfig.AdaptiveScaleStep, SyncConfig.AdaptiveScaleMin);
+                    _greenZoneStreak = 0.0;
+#if DEBUG
+                    Log.Debug($"[AdaptiveScale] Scale DOWN → {_adaptiveScale:F1}x (GreenStreak={SyncConfig.GreenStreakToScaleDown}s)");
+#endif
+                }
+            }
+            else
+            {
+                _greenZoneStreak = 0.0;
+            }
+        }
+    }
+
     #endregion
 
     #region Time-Based Reading
@@ -189,13 +259,15 @@ public partial class FileSource
         }
 
         double targetTrackTime = relativeTimestamp;
+        double effectiveSyncTolerance = SyncTolerance * _adaptiveScale;
+        double effectiveSoftSyncTolerance = SoftSyncTolerance * _adaptiveScale;
 
         bool gracePeriodActive = targetTrackTime < _gracePeriodEndTime;
 
         if (gracePeriodActive)
         {
             double signedDrift = targetTrackTime - _trackLocalTime;
-            if (signedDrift < -SoftSyncTolerance)
+            if (signedDrift < -effectiveSoftSyncTolerance)
             {
                 gracePeriodActive = false;
                 _gracePeriodEndTime = 0.0;
@@ -210,7 +282,7 @@ public partial class FileSource
 
         if (!gracePeriodActive)
         {
-            if (drift <= SyncTolerance)
+            if (drift <= effectiveSyncTolerance)
             {
                 // GREEN ZONE: No correction needed
                 if (_consecutiveUnderruns > 0)
@@ -224,15 +296,19 @@ public partial class FileSource
                     _isSoftSyncActive = false;
                 }
 
+                UpdateAdaptiveScale(false, masterTimestamp);
+
 #if DEBUG
                 // Log.Info($"[GreenZone] Drift={drift:F4}s - No correction");
 #endif
             }
-            else if (drift <= SoftSyncTolerance && _consecutiveUnderruns == 0)
+            else if (drift <= effectiveSoftSyncTolerance && _consecutiveUnderruns == 0)
             {
                 // YELLOW ZONE: Apply soft sync (tempo adjustment)
                 ApplySoftSync(drift, targetTrackTime);
                 _isSoftSyncActive = true;
+
+                UpdateAdaptiveScale(false, masterTimestamp);
 
 #if DEBUG
                 Log.Info($"[YellowZone] Drift={drift:F4}s - Soft sync active");
@@ -269,6 +345,8 @@ public partial class FileSource
                         double newPosition = _currentPosition + driftInSeconds;
                         Interlocked.Exchange(ref _currentPosition, newPosition);
 
+                        UpdateAdaptiveScale(true, masterTimestamp);
+
 #if DEBUG
                         Log.Info($"[RedZone-BufferSkip] Drift={drift:F4}s - Skipped {driftFrames} frames in buffer (instant resync)");
 #endif
@@ -289,7 +367,9 @@ public partial class FileSource
                         {
                             PerformHardReset(targetTrackTime);
                             FillWithSilence(buffer, frameCount * _streamInfo.Channels);
-                            result = ReadResult.CreateSuccess(frameCount); // Return success to prevent further error handling in mixer
+                            result = ReadResult.CreateSuccess(frameCount);
+
+                            UpdateAdaptiveScale(true, masterTimestamp);
 
 #if DEBUG
                             Log.Info($"[RedZone] Seek cascade detected - Triggered HARD RESET");
@@ -297,8 +377,8 @@ public partial class FileSource
 
                             return true;
                         }
-                        
-                        double seekLatencyCompensation = _consecutiveUnderruns > 0 ? 0.300 : 0.100; // 300ms during recovery, 100ms normally
+
+                        double seekLatencyCompensation = _consecutiveUnderruns > 0 ? 0.300 : 0.100;
                         double filePosition = (targetTrackTime + seekLatencyCompensation) * _tempo;
 #if DEBUG
                         Log.Info($"[RedZone-Seek] Drift={drift:F4}s - Hard sync (seek to {filePosition:F4}s, +{seekLatencyCompensation:F3}s compensation)");
@@ -308,12 +388,14 @@ public partial class FileSource
                         {
                             FillWithSilence(buffer, frameCount * _streamInfo.Channels);
                             result = ReadResult.CreateFailure(0, "Seek failed during drift correction");
+                            UpdateAdaptiveScale(true, masterTimestamp);
                             return false;
                         }
                         _gracePeriodEndTime = targetTrackTime + SyncConfig.GracePeriodSeconds;
                         _trackLocalTime = targetTrackTime + seekLatencyCompensation;
                         FillWithSilence(buffer, frameCount * _streamInfo.Channels);
                         result = ReadResult.CreateSuccess(frameCount);
+                        UpdateAdaptiveScale(true, masterTimestamp);
                         return true;
                     }
                 }
@@ -329,6 +411,8 @@ public partial class FileSource
                     {
                         _trackLocalTime = targetTrackTime;
                     }
+
+                    UpdateAdaptiveScale(true, masterTimestamp);
 
 #if DEBUG
                     Log.Info($"[RedZone-Ahead] Drift={drift:F4}s - Clock jumped back, seeked decoder to {filePosition:F4}s");
@@ -364,7 +448,7 @@ public partial class FileSource
 
             UpdateSamplePosition(sourceFramesAdvanced);
 
-            double newPosition = _currentPosition + (framesRead * frameDuration);
+            double newPosition = _currentPosition + (sourceFramesAdvanced * frameDuration);
             Interlocked.Exchange(ref _currentPosition, newPosition);
 
             if (gracePeriodActive && _consecutiveUnderruns > 0)
@@ -391,7 +475,7 @@ public partial class FileSource
             UpdateSamplePosition(silenceSourceFrames);
 
             double frameDuration = 1.0 / _streamInfo.SampleRate;
-            double silenceSeconds = silenceFrames * frameDuration;
+            double silenceSeconds = silenceSourceFrames * frameDuration;
             double newPos = _currentPosition + silenceSeconds;
             Interlocked.Exchange(ref _currentPosition, newPos);
 

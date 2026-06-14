@@ -344,6 +344,22 @@ namespace OwnaudioNET.Visualization
         /// Renders the waveform based on the current display settings.
         /// </summary>
         /// <param name="context">The drawing context.</param>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private static double SampleToPixel(double sampleIndex, double startSample, double samplesPerPixel)
+        {
+            return (sampleIndex - startSample) / samplesPerPixel;
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        private static double PixelToSample(double pixel, double startSample, double samplesPerPixel)
+        {
+            return startSample + pixel * samplesPerPixel;
+        }
+
+        /// <summary>
+        /// Renders the waveform based on the current display settings.
+        /// </summary>
+        /// <param name="context">The drawing context.</param>
         public override void Render(DrawingContext context)
         {
             base.Render(context);
@@ -373,19 +389,20 @@ namespace OwnaudioNET.Visualization
 
             _pointCacheSize = 0;
 
-            var displayStyle = DisplayStyle;
+            if (samplesPerPixel < 1.0)
+            {
+                RenderZoomedInLineStyle(centerY, vScale, startSample, samplesPerPixel);
+            }
+            else
+            {
+                var displayStyle = DisplayStyle;
 
-            if (displayStyle == WaveformDisplayStyle.MinMax)
-            {
-                RenderMinMaxStyle(width, centerY, vScale, startSample, samplesPerPixel);
-            }
-            else if (displayStyle == WaveformDisplayStyle.Positive)
-            {
-                RenderPositiveStyle(width, height, vScale, startSample, samplesPerPixel);
-            }
-            else // RMS
-            {
-                RenderRmsStyle(width, centerY, vScale, startSample, samplesPerPixel);
+                if (displayStyle == WaveformDisplayStyle.MinMax)
+                    RenderMinMaxStyle(width, centerY, vScale, startSample, samplesPerPixel);
+                else if (displayStyle == WaveformDisplayStyle.Positive)
+                    RenderPositiveStyle(width, height, vScale, startSample, samplesPerPixel);
+                else
+                    RenderRmsStyle(width, centerY, vScale, startSample, samplesPerPixel);
             }
 
             if (_pointCacheSize > 1)
@@ -396,14 +413,18 @@ namespace OwnaudioNET.Visualization
                 }
             }
 
-            double pixelPosition = (PlaybackPosition - ScrollOffset) * zoom * width;
+            double pixelPosition = SampleToPixel(PlaybackPosition * totalSamples, startSample, samplesPerPixel);
 
             if ((pixelPosition >= 0 && pixelPosition <= width) || AutoFollow)
             {
                 double visualPosition = Math.Clamp(pixelPosition, 0, width);
 
-                _linePoints[0] = new Point(visualPosition, 0);
-                _linePoints[1] = new Point(visualPosition, height);
+                double snappedX = (_playbackPen.Thickness % 2 != 0)
+                    ? Math.Floor(visualPosition) + 0.5
+                    : Math.Round(visualPosition);
+
+                _linePoints[0] = new Point(snappedX, 0);
+                _linePoints[1] = new Point(snappedX, height);
                 context.DrawLine(_playbackPen, _linePoints[0], _linePoints[1]);
             }
         }
@@ -423,6 +444,30 @@ namespace OwnaudioNET.Visualization
             }
         }
 
+        private void RenderZoomedInLineStyle(double centerY, float vScale, double startSample, double samplesPerPixel)
+        {
+            int dataLen = _audioData!.Length;
+            int firstVisibleSample = (int)Math.Max(0, Math.Floor(startSample));
+            int lastVisibleSample = (int)Math.Min(dataLen, Math.Ceiling(startSample + Bounds.Width * samplesPerPixel) + 1);
+
+            if (firstVisibleSample >= dataLen) return;
+
+            double prevX = SampleToPixel(firstVisibleSample, startSample, samplesPerPixel);
+            double prevY = centerY + _audioData[firstVisibleSample] * vScale;
+
+            for (int i = firstVisibleSample + 1; i < lastVisibleSample; i++)
+            {
+                double curX = SampleToPixel(i, startSample, samplesPerPixel);
+                double curY = centerY + _audioData[i] * vScale;
+
+                _pointCache[_pointCacheSize++] = new Point(prevX, prevY);
+                _pointCache[_pointCacheSize++] = new Point(curX, curY);
+
+                prevX = curX;
+                prevY = curY;
+            }
+        }
+
         private void RenderMinMaxStyle(double width, double centerY, float vScale, double startSample, double samplesPerPixel)
         {
             int dataLen = _audioData!.Length;
@@ -430,8 +475,8 @@ namespace OwnaudioNET.Visualization
 
             for (int x = 0; x < width; x++)
             {
-                int sampleStart = (int)(startSample + x * samplesPerPixel);
-                int sampleEnd   = Math.Min((int)(startSample + (x + 1) * samplesPerPixel) + 1, dataLen);
+                int sampleStart = (int)Math.Max(0, Math.Floor(PixelToSample(x, startSample, samplesPerPixel)));
+                int sampleEnd   = (int)Math.Min(dataLen, Math.Ceiling(PixelToSample(x + 1, startSample, samplesPerPixel)));
                 if (sampleStart >= dataLen) break;
                 if (sampleEnd <= sampleStart) sampleEnd = sampleStart + 1;
 
@@ -457,8 +502,8 @@ namespace OwnaudioNET.Visualization
 
             for (int x = 0; x < width; x++)
             {
-                int sampleStart = (int)(startSample + x * samplesPerPixel);
-                int sampleEnd   = Math.Min((int)(startSample + (x + 1) * samplesPerPixel) + 1, dataLen);
+                int sampleStart = (int)Math.Max(0, Math.Floor(PixelToSample(x, startSample, samplesPerPixel)));
+                int sampleEnd   = (int)Math.Min(dataLen, Math.Ceiling(PixelToSample(x + 1, startSample, samplesPerPixel)));
                 if (sampleStart >= dataLen) break;
                 if (sampleEnd <= sampleStart) sampleEnd = sampleStart + 1;
 
@@ -483,8 +528,8 @@ namespace OwnaudioNET.Visualization
 
             for (int x = 0; x < width; x++)
             {
-                int sampleStart = (int)(startSample + x * samplesPerPixel);
-                int sampleEnd   = Math.Min((int)(startSample + (x + 1) * samplesPerPixel) + 1, dataLen);
+                int sampleStart = (int)Math.Max(0, Math.Floor(PixelToSample(x, startSample, samplesPerPixel)));
+                int sampleEnd   = (int)Math.Min(dataLen, Math.Ceiling(PixelToSample(x + 1, startSample, samplesPerPixel)));
                 if (sampleStart >= dataLen) break;
                 if (sampleEnd <= sampleStart) sampleEnd = sampleStart + 1;
 

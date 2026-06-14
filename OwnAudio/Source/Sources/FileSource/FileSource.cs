@@ -87,8 +87,14 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
     private readonly AutoResetEvent _bufferNeedsRefillEvent = new(false);
 
     // Adaptive drift correction tracking
-    private int _consecutiveUnderruns = 0;  // Counter for post-dropout aggressive recovery
-    private double _lastDrift = 0.0;  // Track drift history for velocity detection
+    private int _consecutiveUnderruns = 0;
+    private double _lastDrift = 0.0;
+
+    // Adaptive tolerance scaling
+    private double _adaptiveScale = 1.0;
+    private int _redZoneHits = 0;
+    private double _redZoneWindowStart = 0.0;
+    private double _greenZoneStreak = 0.0;
 
     private volatile bool _needsFadeIn = false;
 
@@ -98,23 +104,38 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
 
     /// <summary>
     /// Gets or sets the synchronization tolerance in seconds (Green Zone threshold).
-    /// OPTIMIZATION (Phase 3): Increased from 10ms to 20ms for 20+ track stability.
     /// Drift below this value requires no correction.
     /// </summary>
-    public double SyncTolerance { get; set; } = 0.020; // 20ms (was 10ms)
+    public double SyncTolerance { get; set; } = 0.005; // 5ms (was 20ms)
 
     /// <summary>
     /// Soft sync tolerance in seconds (Yellow Zone threshold).
-    /// OPTIMIZATION (Phase 3): Increased from 30ms to 100ms for 20+ track stability.
     /// Drift between SyncTolerance and SoftSyncTolerance triggers tempo adjustment.
     /// </summary>
-    public double SoftSyncTolerance { get; set; } = 0.100; // 100ms (was 30ms)
+    public double SoftSyncTolerance { get; set; } = 0.025; // 25ms (was 100ms)
 
     /// <summary>
     /// Maximum tempo adjustment percentage for soft sync.
     /// Default is 0.02 (2%).
     /// </summary>
     public double SoftSyncMaxTempoAdjustment { get; set; } = 0.02;
+
+    /// <summary>
+    /// Gets a diagnostic snapshot of the current adaptive synchronization state.
+    /// Returns a stack-allocated value type — safe to call from any thread without allocation.
+    /// </summary>
+    /// <remarks>
+    /// Monitor <see cref="SyncDiagnosticsSnapshot.AdaptiveScale"/> to detect whether the
+    /// adaptive tolerance system has elevated its thresholds. A scale above <c>1.0</c> may
+    /// indicate an underlying audio processing performance issue.
+    /// </remarks>
+    public SyncDiagnosticsSnapshot SyncDiagnostics => new SyncDiagnosticsSnapshot
+    {
+        AdaptiveScale                = _adaptiveScale,
+        EffectiveSyncToleranceMs     = SyncTolerance * _adaptiveScale * 1000.0,
+        EffectiveSoftSyncToleranceMs = SoftSyncTolerance * _adaptiveScale * 1000.0,
+        RedZoneHitsInWindow          = _redZoneHits,
+    };
 
     /// <inheritdoc/>
     public override AudioConfig Config => _config;
@@ -412,7 +433,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
             do
             {
                 currentPosition = Interlocked.CompareExchange(ref _currentPosition, 0, 0);
-                newPosition = currentPosition + (framesRead * frameDuration);
+                newPosition = currentPosition + (sourceFramesAdvanced * frameDuration);
             } while (Math.Abs(Interlocked.CompareExchange(ref _currentPosition, newPosition, currentPosition) - currentPosition) > double.Epsilon);
         }
 
@@ -437,7 +458,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
             UpdateSamplePosition(silenceSourceFrames);
 
             double frameDuration = 1.0 / _streamInfo.SampleRate;
-            double silenceSeconds = silenceFrames * frameDuration;
+            double silenceSeconds = silenceSourceFrames * frameDuration;
             double newPos, curPos;
             do
             {

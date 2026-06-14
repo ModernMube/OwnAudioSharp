@@ -22,7 +22,7 @@
   <div class="sidebar-section"><span class="sidebar-label">Getting Started</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">High-Level API</span><ul class="sidebar-nav"><li><a href="api-core.html">OwnaudioNet</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-mixer.html">AudioMixer</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Audio Sources</span><ul class="sidebar-nav"><li><a href="api-sources.html">Source Overview</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#sourcewitheffects" class="sub">SourceWithEffects</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel Routing</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Processing</span><ul class="sidebar-nav"><li><a href="api-sync.html">Synchronization</a></li><li><a href="api-effects.html">Built-in Effects</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 Plugins</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Processing</span><ul class="sidebar-nav"><li><a href="api-sync.html">Synchronization</a></li><li><a href="api-sync.html#drift-zones" class="sub">Drift Zones</a></li><li><a href="api-sync.html#adaptive-tolerance" class="sub">Adaptive Tolerance</a></li><li><a href="api-effects.html">Built-in Effects</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 Plugins</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">AI Features</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">MIDI</span><ul class="sidebar-nav"><li><a href="api-midi.html">MIDI Overview</a></li><li><a href="api-midi.html#port-management" class="sub">Port Management</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI File</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI Clock</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Reference</span><ul class="sidebar-nav"><li><a href="api-reference.html">Events &amp; Types</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#best-practices" class="sub">Best Practices</a></li></ul></div>
@@ -131,12 +131,35 @@ private void OnPositionTimer()
 <div class="table-wrap"><table>
   <thead><tr><th>Zone</th><th>Drift Range</th><th>Action</th></tr></thead>
   <tbody>
-    <tr><td><strong>Green</strong></td><td>&lt; <code>SyncTolerance</code> (20ms default)</td><td>No correction — within acceptable range.</td></tr>
-    <tr><td><strong>Yellow</strong></td><td><code>SyncTolerance</code> … <code>SoftSyncTolerance</code> (20–100ms)</td><td>Soft sync: gradual tempo adjustment up to ±2%.</td></tr>
-    <tr><td><strong>Red</strong></td><td>&gt; <code>SoftSyncTolerance</code> (100ms)</td><td>Hard sync: skip/fill buffer to realign immediately.</td></tr>
+    <tr><td><strong>Green</strong></td><td>&lt; <code>SyncTolerance</code> (5ms default)</td><td>No correction — within acceptable range.</td></tr>
+    <tr><td><strong>Yellow</strong></td><td><code>SyncTolerance</code> … <code>SoftSyncTolerance</code> (5–25ms)</td><td>Soft sync: gradual tempo adjustment up to ±2%.</td></tr>
+    <tr><td><strong>Red</strong></td><td>&gt; <code>SoftSyncTolerance</code> (25ms)</td><td>Hard sync: skip/fill buffer to realign immediately.</td></tr>
   </tbody>
 </table></div>
 <div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>The <code>TrackDropout</code> event on <code>AudioMixer</code> is raised when a Red Zone correction occurs, so you can log or react to sync issues.</p></div>
+
+<h2 id="adaptive-tolerance">Adaptive Tolerance</h2>
+<p>The sync engine monitors red-zone hit frequency and automatically widens the tolerance thresholds on hardware that cannot sustain the strict defaults. No configuration is required — the system self-tunes at runtime.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>AdaptiveScale</th><th>Green Zone</th><th>Yellow Zone</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>1.0</code></td><td>5 ms</td><td>25 ms</td><td>Optimal — strict defaults active.</td></tr>
+    <tr><td><code>2.0</code></td><td>10 ms</td><td>50 ms</td><td>Moderate load — tolerances doubled.</td></tr>
+    <tr><td><code>4.0</code></td><td>20 ms</td><td>100 ms</td><td>High load — fully relaxed (original values).</td></tr>
+  </tbody>
+</table></div>
+<p>The scale increases by <code>0.5</code> steps when ≥ 5 red-zone hits occur within a 3-second window, and decreases by <code>0.5</code> steps after 8 consecutive seconds in the green zone.</p>
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>A scale above <code>1.0</code> means the engine is compensating for processing pressure. Use <code>SyncDiagnostics</code> to detect this condition — it may indicate a bug or performance issue in a custom effect or processing pipeline.</p></div>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">SyncDiagnosticsSnapshot diag = fileSource.SyncDiagnostics;
+
+if (diag.IsRelaxed)
+{
+    Console.WriteLine($"Adaptive tolerance active — Scale: {diag.AdaptiveScale:F1}x");
+    Console.WriteLine($"Green zone: {diag.EffectiveSyncToleranceMs:F1} ms (baseline: 5 ms)");
+    Console.WriteLine($"Yellow zone: {diag.EffectiveSoftSyncToleranceMs:F1} ms (baseline: 25 ms)");
+    Console.WriteLine($"Red zone hits in window: {diag.RedZoneHitsInWindow}");
+}</code></pre></div>
+<p><code>SyncDiagnosticsSnapshot</code> is a <code>readonly struct</code> — zero heap allocation, safe to call from any thread.</p>
 
 <h2 id="offline-mode">Offline / File Rendering</h2>
 <p>Set <code>ClockMode.Offline</code> to render audio deterministically to a file without dropouts:</p>
