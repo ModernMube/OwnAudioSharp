@@ -31,7 +31,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp</PackageId>
-    <Version>3.1.3</Version>
+    <Version>3.1.5</Version>
     <Authors>ModernMube</Authors>
     <Description>AOT-compatible cross-platform audio engine library for desktop platforms (Windows, Linux, macOS)</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;desktop;sound;multitrack</PackageTags>

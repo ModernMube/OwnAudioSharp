@@ -242,8 +242,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
     private void SetTempoInternal(float value, bool clearBuffer, bool setGracePeriod)
     {
         float clamped = Math.Clamp(value, AudioConstants.MinTempo, AudioConstants.MaxTempo);
-        if (Math.Abs(_tempo - clamped) < 0.001f)
-            return;
+        bool tempoChanged = Math.Abs(_tempo - clamped) >= 0.001f;
 
         _tempo = clamped;
 
@@ -251,16 +250,21 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
         {
             // Convert multiplier to percentage for SoundTouch
             float tempoChangePercent = (_tempo - 1.0f) * 100.0f;
-            _soundTouch.TempoChange = tempoChangePercent;
+            float currentTempoChange = _soundTouch.TempoChange;
 
-            if (clearBuffer)
+            // Always sync SoundTouch if its internal value drifted (e.g. via soft-sync),
+            // even when _tempo itself did not change.
+            if (tempoChanged || Math.Abs(currentTempoChange - tempoChangePercent) >= 0.001f)
+                _soundTouch.TempoChange = tempoChangePercent;
+
+            if (tempoChanged && clearBuffer)
             {
                 _soundTouch.Clear();
-                _soundTouchAccumulationCount = 0; 
+                _soundTouchAccumulationCount = 0;
             }
         }
 
-        if (setGracePeriod)
+        if (tempoChanged && setGracePeriod)
         {
             _gracePeriodEndTime = _trackLocalTime + SyncConfig.GracePeriodSeconds;
         }

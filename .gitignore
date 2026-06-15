@@ -384,6 +384,7 @@ MigrationBackup/
 
 #ONNX model files
 htdemucs.onnx
+bitnet_model.onnx
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd

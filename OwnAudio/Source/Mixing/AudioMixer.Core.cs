@@ -362,10 +362,13 @@ public sealed partial class AudioMixer : IDisposable
 
         _mixerId = Guid.NewGuid();
 
+        int sampleRate = OwnaudioNet.Engine?.Config.SampleRate ?? 48000;
+        int channels = OwnaudioNet.Engine?.Config.Channels ?? 2;
+
         _config = new AudioConfig
         {
-            SampleRate = 48000,
-            Channels = 2,
+            SampleRate = sampleRate,
+            Channels = channels,
             BufferSize = _engine.FramesPerBuffer
         };
         _bufferSizeInFrames = bufferSizeInFrames;
@@ -373,8 +376,8 @@ public sealed partial class AudioMixer : IDisposable
         _sources = new ConcurrentDictionary<Guid, IAudioSource>();
 
         _masterClock = new MasterClock(
-            sampleRate: 48000,
-            channels: 2,
+            sampleRate: sampleRate,
+            channels: channels,
             mode: ClockMode.Realtime);
 
         _trackMetrics = new Dictionary<Guid, TrackPerformanceMetrics>();

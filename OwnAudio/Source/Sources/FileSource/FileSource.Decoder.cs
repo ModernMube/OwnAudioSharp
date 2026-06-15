@@ -66,22 +66,22 @@ public partial class FileSource
     private void ApplyPendingSoftSyncAdjustment()
     {
         float pendingAdjustment = _pendingSoftSyncTempoAdjustment;
-        if (!float.IsNaN(pendingAdjustment) && pendingAdjustment != 0f)
+        if (pendingAdjustment == 0f)
+            return;
+
+        lock (_soundTouchLock)
         {
-            lock (_soundTouchLock)
+            if (float.IsNaN(pendingAdjustment))
             {
-                if (float.IsNaN(pendingAdjustment))
-                {
-                    double originalTempoChange = (_tempo - 1.0f) * 100.0f;
-                    _soundTouch.TempoChange = (float)originalTempoChange;
-                }
-                else
-                {
-                    _soundTouch.TempoChange = pendingAdjustment;
-                }
+                double originalTempoChange = (_tempo - 1.0f) * 100.0f;
+                _soundTouch.TempoChange = (float)originalTempoChange;
             }
-            _pendingSoftSyncTempoAdjustment = 0f;
+            else
+            {
+                _soundTouch.TempoChange = pendingAdjustment;
+            }
         }
+        _pendingSoftSyncTempoAdjustment = 0f;
     }
 
     /// <summary>

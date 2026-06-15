@@ -64,7 +64,7 @@ public partial class FileSource
         else
         {
             Seek(0);
-            _trackLocalTime = targetTrackPosition;
+            _trackLocalTime = 0.0;
         }
 
         _fractionalFrameAccumulator = 0.0;
