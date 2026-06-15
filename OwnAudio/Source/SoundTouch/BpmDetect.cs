@@ -39,9 +39,23 @@ public sealed class BpmDetect : IDisposable
     private const float MaxBpm = 190f;
 
     /// <summary>
+    /// Centre of the perceptual tempo prior in BPM. The normalised autocorrelation
+    /// is weighted by a log-Gaussian peaking at this tempo to resolve octave
+    /// (half/double tempo) ambiguities towards musically typical values.
+    /// </summary>
+    private const float PreferredBpm = 120f;
+
+    /// <summary>
+    /// Standard deviation of the perceptual tempo prior, expressed in octaves.
+    /// Larger values flatten the prior; smaller values bias more strongly towards
+    /// <see cref="PreferredBpm"/>.
+    /// </summary>
+    private const float TempoPriorSigma = 0.9f;
+
+    /// <summary>
     /// Length of onset history in seconds.
     /// </summary>
-    private const float HistorySeconds = 5.0f;
+    private const float HistorySeconds = 8.0f;
 
     /// <summary>
     /// FFT complex buffer, re-used every hop.
@@ -74,11 +88,6 @@ public sealed class BpmDetect : IDisposable
     private readonly float[] _xcorrResult;
 
     /// <summary>
-    /// Reusable peak finder instance.
-    /// </summary>
-    private readonly PeakFinder _peakFinder;
-
-    /// <summary>
     /// Number of input channels.
     /// </summary>
     private readonly int _channels;
@@ -92,6 +101,20 @@ public sealed class BpmDetect : IDisposable
     /// Decimation factor: input samples per decimated sample.
     /// </summary>
     private readonly int _decimateBy;
+
+    /// <summary>
+    /// Effective sample rate after decimation, in Hz. Equals
+    /// <c>sampleRate / _decimateBy</c> and may differ from
+    /// <see cref="TargetSampleRate"/> when the input rate is not an integer
+    /// multiple of it (e.g. 48000 Hz decimates to 12000 Hz, not 11025 Hz).
+    /// </summary>
+    private readonly float _effectiveSampleRate;
+
+    /// <summary>
+    /// Number of spectral hops per second at the effective sample rate.
+    /// Used to convert autocorrelation lag (in hops) to BPM.
+    /// </summary>
+    private readonly float _hopRate;
 
     /// <summary>
     /// Write cursor in the circular slide buffer.
@@ -137,7 +160,10 @@ public sealed class BpmDetect : IDisposable
         _channels = Math.Max(1, numChannels);
         _decimateBy = Math.Max(1, sampleRate / TargetSampleRate);
 
-        _historySize = (int)(HistorySeconds * TargetSampleRate / HopSize);
+        _effectiveSampleRate = sampleRate / (float)_decimateBy;
+        _hopRate = _effectiveSampleRate / HopSize;
+
+        _historySize = (int)(HistorySeconds * _effectiveSampleRate / HopSize);
 
         _fftBuffer = new System.Numerics.Complex[FftSize];
         _prevMagnitudes = new float[FftSize / 2 + 1];
@@ -145,7 +171,6 @@ public sealed class BpmDetect : IDisposable
         _slideBuffer = new float[FftSize];
         _onsetHistory = new float[_historySize];
         _xcorrResult = new float[_historySize / 2 + 1];
-        _peakFinder = new PeakFinder();
 
         BuildHammingWindow();
     }
@@ -225,7 +250,7 @@ public sealed class BpmDetect : IDisposable
             history[i] -= mean;
         }
 
-        float hopRate = TargetSampleRate / (float)HopSize;
+        float hopRate = _hopRate;
         int lagMin = Math.Max(1, (int)(hopRate * 60f / MaxBpm));
         int lagMax = Math.Min(count / 2 - 1, (int)(hopRate * 60f / MinBpm) + 1);
 
@@ -239,25 +264,86 @@ public sealed class BpmDetect : IDisposable
             lagMax = _xcorrResult.Length - 1;
         }
 
+        // Normalised autocorrelation (Pearson-style coefficient). Dividing each lag
+        // by the geometric mean of the overlapping segment energies makes lags
+        // comparable, so spurious long-lag/edge peaks no longer dominate the true
+        // fundamental as they did with the raw dot product.
         Array.Clear(_xcorrResult, 0, lagMax + 1);
         for (int lag = 0; lag <= lagMax; lag++)
         {
-            _xcorrResult[lag] = VectorizedDotProduct(
-                history[..(count - lag)],
-                history[lag..count]);
+            ReadOnlySpan<float> a = history[..(count - lag)];
+            ReadOnlySpan<float> b = history[lag..count];
+
+            float cross = VectorizedDotProduct(a, b);
+            float energyA = VectorizedDotProduct(a, a);
+            float energyB = VectorizedDotProduct(b, b);
+            float denom = MathF.Sqrt(energyA * energyB);
+
+            _xcorrResult[lag] = denom > 1e-9f ? cross / denom : 0f;
         }
 
+        // Light 3-point smoothing. The autocorrelation peaks of a steady pulse are
+        // only one bin wide, so the previous 9-point moving average smeared and
+        // displaced them; a 3-point average removes single-bin noise without that.
         Span<float> smoothed = stackalloc float[lagMax + 1];
-        MAFilter(smoothed, _xcorrResult.AsSpan(0, lagMax + 1), 0, lagMax + 1, 9);
+        smoothed[0] = _xcorrResult[0];
+        smoothed[lagMax] = _xcorrResult[lagMax];
+        for (int i = 1; i < lagMax; i++)
+        {
+            smoothed[i] = (_xcorrResult[i - 1] + _xcorrResult[i] + _xcorrResult[i + 1]) / 3f;
+        }
 
-        double peak = _peakFinder.DetectPeak(smoothed, lagMin, lagMax + 1);
+        // Weight the smoothed autocorrelation by a perceptual tempo prior
+        // (log-Gaussian centred on PreferredBpm) and pick the strongest lag. This
+        // resolves octave errors, where the half-tempo lag often correlates as
+        // strongly as the true beat, towards musically plausible tempi.
+        int bestLag = -1;
+        float bestScore = float.NegativeInfinity;
+        for (int lag = lagMin; lag <= lagMax; lag++)
+        {
+            float bpmAtLag = hopRate * 60f / lag;
+            float logRatio = MathF.Log2(bpmAtLag / PreferredBpm) / TempoPriorSigma;
+            float weight = MathF.Exp(-0.5f * logRatio * logRatio);
+            float score = smoothed[lag] * weight;
 
-        if (peak < 1e-9)
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestLag = lag;
+            }
+        }
+
+        if (bestLag < 0)
         {
             return 0f;
         }
 
-        float bpm = hopRate * 60f / (float)peak;
+        // Parabolic interpolation around the winning bin for sub-bin lag resolution,
+        // replacing the fragile mass-centre estimate that failed near range edges.
+        float peakLag = bestLag;
+        if (bestLag > lagMin && bestLag < lagMax)
+        {
+            float y0 = smoothed[bestLag - 1];
+            float y1 = smoothed[bestLag];
+            float y2 = smoothed[bestLag + 1];
+            float curvature = y0 - 2f * y1 + y2;
+
+            if (MathF.Abs(curvature) > 1e-12f)
+            {
+                float delta = 0.5f * (y0 - y2) / curvature;
+                if (delta > -1f && delta < 1f)
+                {
+                    peakLag = bestLag + delta;
+                }
+            }
+        }
+
+        if (peakLag < 1e-9f)
+        {
+            return 0f;
+        }
+
+        float bpm = hopRate * 60f / peakLag;
         return Math.Clamp(bpm, MinBpm, MaxBpm);
     }
 
@@ -283,30 +369,6 @@ public sealed class BpmDetect : IDisposable
     #endregion
 
     #region Private Methods
-
-    /// <summary>
-    /// Computes an N-point moving average of <paramref name="source"/> into <paramref name="dest"/>.
-    /// Only the range [start, end) is processed; values outside that range are left untouched.
-    /// Zero-allocation: operates entirely on pre-allocated spans.
-    /// </summary>
-    private static void MAFilter(
-        Span<float> dest,
-        ReadOnlySpan<float> source,
-        int start, int end, int n)
-    {
-        int half = n / 2;
-        for (int i = start; i < end; i++)
-        {
-            int i1 = Math.Max(start, i - half);
-            int i2 = Math.Min(end, i + half + 1);
-            float sum = 0f;
-            for (int j = i1; j < i2; j++)
-            {
-                sum += source[j];
-            }
-            dest[i] = sum / (i2 - i1);
-        }
-    }
 
     /// <summary>
     /// Pre-computes Hamming window coefficients into _window.
