@@ -40,7 +40,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Basic</PackageId>
-    <Version>3.1.5</Version>
+    <Version>3.1.6</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for desktop (Windows, Linux, macOS) and mobile (Android, iOS) - Basic edition without AI/ML features (no VocalRemover, ChordDetect, Matchering)</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;android;ios;desktop;mobile;sound;multitrack</PackageTags>

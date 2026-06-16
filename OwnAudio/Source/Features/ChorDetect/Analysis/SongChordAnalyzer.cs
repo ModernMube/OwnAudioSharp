@@ -88,6 +88,18 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         private readonly float _minimumChordDuration;
 
         /// <summary>
+        /// Reusable buffer holding the notes active in the current analysis window.
+        /// Reused across windows to avoid a per-window list allocation on the hot path.
+        /// </summary>
+        private readonly List<Note> _windowNotes = new List<Note>();
+
+        /// <summary>
+        /// Reusable working set for progressive note pruning, populated only when the
+        /// full-window detection fails. Reused across windows to avoid allocations.
+        /// </summary>
+        private readonly List<Note> _workingSet = new List<Note>();
+
+        /// <summary>
         /// Gets the detected musical key of the song.
         /// </summary>
         public MusicalKey? DetectedKey { get; private set; }
@@ -186,7 +198,13 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         private List<TimedChord> AnalyzeWindows(List<Note> notes)
         {
             var chords = new List<TimedChord>();
-            var songDuration = notes.Max(n => n.EndTime);
+
+            float songDuration = 0f;
+            for (int i = 0; i < notes.Count; i++)
+            {
+                if (notes[i].EndTime > songDuration)
+                    songDuration = notes[i].EndTime;
+            }
 
             for (float time = 0; time < songDuration; time += _hopSize)
             {
@@ -228,53 +246,41 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         private (ChordAnalysis analysis, List<Note> notes)? GetAndPruneNotes(
             List<Note> allNotes, float windowStart, float windowEnd)
         {
-            // Step 1: collect every note active in this window
-            var windowNotes = allNotes
-                .Where(n => n.StartTime < windowEnd && n.EndTime > windowStart)
-                .ToList();
+            _windowNotes.Clear();
+            for (int i = 0; i < allNotes.Count; i++)
+            {
+                var note = allNotes[i];
+                if (note.StartTime < windowEnd && note.EndTime > windowStart)
+                    _windowNotes.Add(note);
+            }
 
-            if (windowNotes.Count < 3)
+            if (_windowNotes.Count < 3)
                 return null;
 
-            // Step 2: try with all notes
-            var analysis = _detector.TryAnalyzeChord(windowNotes);
+            var analysis = _detector.TryAnalyzeChord(_windowNotes);
             if (analysis != null)
-                return (analysis, windowNotes);
+                return (analysis, _windowNotes);
 
-            // Step 3: progressive pruning
-            var candidates = windowNotes
-                .Select(n => new
-                {
-                    Note = n,
-                    OverlapDuration = Math.Min(n.EndTime, windowEnd) - Math.Max(n.StartTime, windowStart)
-                })
-                .OrderBy(x => x.Note.Pitch)          // low to high pitch
-                .ThenBy(x => x.OverlapDuration)       // shortest within same pitch group first
-                .ToList();
-
-            var workingSet = windowNotes.ToList();
-
-            foreach (var candidate in candidates)
+            _workingSet.Clear();
+            _workingSet.AddRange(_windowNotes);
+            _workingSet.Sort((a, b) =>
             {
-                if (workingSet.Count <= 3)
-                    break;
+                int byPitch = a.Pitch.CompareTo(b.Pitch);
+                if (byPitch != 0)
+                    return byPitch;
+                return GetOverlap(a, windowStart, windowEnd).CompareTo(GetOverlap(b, windowStart, windowEnd));
+            });
 
-                workingSet.Remove(candidate.Note);
+            while (_workingSet.Count > 3)
+            {
+                _workingSet.RemoveAt(0);
 
-                analysis = _detector.TryAnalyzeChord(workingSet);
+                analysis = _detector.TryAnalyzeChord(_workingSet);
                 if (analysis != null)
-                    return (analysis, workingSet);
+                    return (analysis, _workingSet);
             }
 
-            // Step 4: last attempt when exactly 3 notes remain
-            if (workingSet.Count == 3)
-            {
-                analysis = _detector.TryAnalyzeChord(workingSet);
-                if (analysis != null)
-                    return (analysis, workingSet);
-            }
-
-            return null;    // No chord found even with minimum note count
+            return null;
         }
 
         /// <summary>
@@ -309,9 +315,16 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                 if (current.ChordName == next.ChordName &&
                     Math.Abs(current.EndTime - next.StartTime) <= _hopSize * 1.5f)
                 {
-                    var avgConfidence = (current.Confidence + next.Confidence) / 2;
+                    float currentDuration = current.EndTime - current.StartTime;
+                    float nextDuration = next.EndTime - next.StartTime;
+                    float totalDuration = currentDuration + nextDuration;
+
+                    float mergedConfidence = totalDuration > 0f
+                        ? (current.Confidence * currentDuration + next.Confidence * nextDuration) / totalDuration
+                        : (current.Confidence + next.Confidence) / 2f;
+
                     current = new TimedChord(current.StartTime, next.EndTime, current.ChordName,
-                                           avgConfidence, current.Notes);
+                                           mergedConfidence, current.Notes);
                 }
                 else
                 {

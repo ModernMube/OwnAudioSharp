@@ -182,14 +182,15 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
                 chroma[pitchClass] += note.Amplitude * duration;
             }
 
-            // Normalize
-            var sum = chroma.Sum();
-            if (sum > 0)
+            float sum = 0f;
+            for (int i = 0; i < 12; i++)
+                sum += chroma[i];
+
+            if (sum > 0f)
             {
+                float inverseSum = 1f / sum;
                 for (int i = 0; i < 12; i++)
-                {
-                    chroma[i] /= sum;
-                }
+                    chroma[i] *= inverseSum;
             }
 
             return chroma;
@@ -219,17 +220,24 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
         /// <returns>The Pearson correlation coefficient between the two arrays (-1.0 to 1.0).</returns>
         private float ComputeCorrelation(float[] x, float[] y)
         {
-            var n = x.Length;
-            var sumX = x.Sum();
-            var sumY = y.Sum();
-            var sumXY = x.Zip(y, (a, b) => a * b).Sum();
-            var sumX2 = x.Sum(a => a * a);
-            var sumY2 = y.Sum(a => a * a);
+            int n = x.Length;
+            float sumX = 0f, sumY = 0f, sumXY = 0f, sumX2 = 0f, sumY2 = 0f;
 
-            var numerator = n * sumXY - sumX * sumY;
-            var denominator = Math.Sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+            for (int i = 0; i < n; i++)
+            {
+                float xi = x[i];
+                float yi = y[i];
+                sumX += xi;
+                sumY += yi;
+                sumXY += xi * yi;
+                sumX2 += xi * xi;
+                sumY2 += yi * yi;
+            }
 
-            return denominator > 0 ? (float)(numerator / denominator) : 0;
+            double numerator = (double)n * sumXY - (double)sumX * sumY;
+            double denominator = Math.Sqrt(((double)n * sumX2 - (double)sumX * sumX) * ((double)n * sumY2 - (double)sumY * sumY));
+
+            return denominator > 0 ? (float)(numerator / denominator) : 0f;
         }
 
         /// <summary>
