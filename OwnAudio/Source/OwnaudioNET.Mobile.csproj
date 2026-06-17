@@ -71,41 +71,41 @@
   <ItemGroup>
     <!-- Core (always included) -->
     <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" PrivateAssets="all" IncludeAssets="runtime" />
-    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" PrivateAssets="all" IncludeAssets="runtime" />
+    <ProjectReference Include="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj" PrivateAssets="all" IncludeAssets="runtime" />
   </ItemGroup>
 
   <!-- Ensure platform-specific projects are built before packing -->
   <Target Name="BuildAndroidProjects" BeforeTargets="GenerateNuspec" Condition="$(TargetFramework.StartsWith('net10.0-android'))">
     <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-android35.0;BuildingForMobile=true" />
-    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-android35.0;BuildingForMobile=true" />
+    <MSBuild Projects="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-android35.0;BuildingForMobile=true" />
   </Target>
 
   <Target Name="BuildiOSProjects" BeforeTargets="GenerateNuspec" Condition="$(TargetFramework.StartsWith('net10.0-ios'))">
     <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-ios18.0;BuildingForMobile=true" />
-    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Native\Ownaudio.Native.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-ios18.0;BuildingForMobile=true" />
+    <MSBuild Projects="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-ios18.0;BuildingForMobile=true" />
   </Target>
 
   <!-- Include platform-specific assemblies in the NuGet package -->
   <ItemGroup>
     <!-- Android assemblies - NativeAudioEngine only -->
     <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-android35.0\Ownaudio.Core.dll" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-android35.0\Ownaudio.Core.dll')" Pack="true" PackagePath="lib\net10.0-android35.0\" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net10.0-android35.0\Ownaudio.Native.dll" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net10.0-android35.0\Ownaudio.Native.dll')" Pack="true" PackagePath="lib\net10.0-android35.0\" />
+    <None Include="..\..\OwnAudioEngine\OwnAudioRust\bin\$(Configuration)\net10.0-android35.0\OwnAudioRust.dll" Condition="Exists('..\..\OwnAudioEngine\OwnAudioRust\bin\$(Configuration)\net10.0-android35.0\OwnAudioRust.dll')" Pack="true" PackagePath="lib\net10.0-android35.0\" />
 
     <!-- iOS assemblies - NativeAudioEngine only -->
     <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-ios18.0\Ownaudio.Core.dll" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-ios18.0\Ownaudio.Core.dll')" Pack="true" PackagePath="lib\net10.0-ios18.0\" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net10.0-ios18.0\Ownaudio.Native.dll" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Native\bin\$(Configuration)\net10.0-ios18.0\Ownaudio.Native.dll')" Pack="true" PackagePath="lib\net10.0-ios18.0\" />
+    <None Include="..\..\OwnAudioEngine\OwnAudioRust\bin\$(Configuration)\net10.0-ios18.0\OwnAudioRust.dll" Condition="Exists('..\..\OwnAudioEngine\OwnAudioRust\bin\$(Configuration)\net10.0-ios18.0\OwnAudioRust.dll')" Pack="true" PackagePath="lib\net10.0-ios18.0\" />
   </ItemGroup>
 
   <!-- Include native runtime libraries in the NuGet package -->
   <ItemGroup>
     <!-- Android native libraries (ARM) -->
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\android-arm\**\*.*" Pack="true" PackagePath="runtimes\android-arm" />
+    <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\android-arm\**\*.*" Pack="true" PackagePath="runtimes\android-arm" />
     <!-- Android native libraries (ARM64) -->
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\android-arm64\**\*.*" Pack="true" PackagePath="runtimes\android-arm64" />
+    <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\android-arm64\**\*.*" Pack="true" PackagePath="runtimes\android-arm64" />
     <!-- Android native libraries (x64) -->
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\android-x64\**\*.*" Pack="true" PackagePath="runtimes\android-x64" />
+    <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\android-x64\**\*.*" Pack="true" PackagePath="runtimes\android-x64" />
     <!-- iOS native libraries (ARM64) - framework bundle -->
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Native\runtimes\iOS-arm64\**\*.*" Pack="true" PackagePath="runtimes\iOS-arm64" />
+    <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\iOS-arm64\**\*.*" Pack="true" PackagePath="runtimes\iOS-arm64" />
   </ItemGroup>
 
 </Project>

@@ -11,18 +11,18 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsAotCompatible>true</IsAotCompatible>
     <IsTrimmable>true</IsTrimmable>
-    <!-- Suppress nullable warnings (fields initialized in Initialize method), XML doc warnings,
-         and CA2255 (ModuleInitializer in library is intentional for AOT engine registration) -->
+    <!-- CS8618: fields initialized outside constructor (Native layer); CS1587: XML doc on non-member;
+         CA2255: ModuleInitializer in library is intentional for AOT engine registration -->
     <NoWarn>$(NoWarn);CS8618;CS1587;CA2255</NoWarn>
+    <RootNamespace>Ownaudio</RootNamespace>
     <Authors>Ownaudio Team</Authors>
     <Company>Ownaudio</Company>
-    <Product>Ownaudio Native</Product>
-    <Description>Native cross-platform audio engine using PortAudio/MiniAudio with MiniAudio decoder (Windows, Linux, macOS, Android, iOS)</Description>
+    <Product>OwnAudioRust</Product>
+    <Description>Rust-backed cross-platform audio engine for OwnAudioSharp. Contains the P/Invoke layer (Native), SafeHandle wrappers (Safe), and the high-level user-facing API (HighLevel).</Description>
     <Copyright>Copyright © 2025</Copyright>
     <PackageProjectUrl>https://github.com/modernmube/OwnAudioSharp</PackageProjectUrl>
     <RepositoryUrl>https://github.com/modernmube/OwnAudioSharp</RepositoryUrl>
-    <PackageTags>audio;portaudio;miniaudio;cross-platform;real-time;low-latency;decoder;android;ios;mobile</PackageTags>
-    <Version>3.3.1</Version>
+    <Version>1.0.0</Version>
     <Platforms>AnyCPU;x64;x86</Platforms>
     <!-- Exclude runtimes folder from default wildcard inclusions to prevent Android build from picking up wrong ABIs -->
     <DefaultItemExcludes>$(DefaultItemExcludes);runtimes\**</DefaultItemExcludes>
@@ -53,6 +53,11 @@
     <ProjectReference Include="..\Ownaudio.Core\Ownaudio.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+  </ItemGroup>
+
+  <!-- Desktop runtime natives (net10.0 only) -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <None Include="runtimes\win-x64\**\*.*">
       <Link>runtimes\win-x64\%(RecursiveDir)%(Filename)%(Extension)</Link>
@@ -104,6 +109,7 @@
     </None>
   </ItemGroup>
 
+  <!-- Android native libraries -->
   <ItemGroup Condition="$(TargetFramework.StartsWith('net10.0-android'))">
     <AndroidNativeLibrary Include="runtimes\android-arm\native\*.so">
       <Abi>armeabi-v7a</Abi>
@@ -117,10 +123,6 @@
       <Abi>x86_64</Abi>
       <Link>libs\x86_64\%(Filename)%(Extension)</Link>
     </AndroidNativeLibrary>
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Remove="runtimes\win-x64\native\libportaudio.old" />
   </ItemGroup>
 
 </Project>
