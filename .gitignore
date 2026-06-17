@@ -136,6 +136,7 @@ _ReSharper*/
 .vscode/
 .claude/
 .markdowns/
+.rust_plans/
 ClearFolders.bat
 ClearFolders.sh
 CLAUDE.md

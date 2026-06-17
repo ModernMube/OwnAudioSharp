@@ -1,0 +1,16 @@
+[package]
+name = "ownaudio-ffi"
+version = "0.1.0"
+edition = "2021"
+description = "C ABI FFI layer for OwnAudioSharp (wraps ownaudio-core)"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+name = "ownaudio_ffi"
+
+[dependencies]
+ownaudio-core = { path = "../ownaudio-core" }
+
+[build-dependencies]
+cbindgen = "0.27"

@@ -1,0 +1,19 @@
+[package]
+name = "ownaudio-core"
+version = "0.1.0"
+edition = "2021"
+description = "Cross-platform audio I/O core for OwnAudioSharp (Cpal-based)"
+license = "MIT"
+
+[lib]
+# cdylib csak a 3. lépésben (FFI réteg) kerül hozzá
+crate-type = ["lib"]
+
+[dependencies]
+cpal = "0.18"
+thiserror = "1.0"
+rtrb = "0.3"
+rubato = "0.15"
+
+[dev-dependencies]
+# az integrációs tesztekben ~1s sleep szükséges

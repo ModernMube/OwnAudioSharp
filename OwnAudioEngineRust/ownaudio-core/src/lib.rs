@@ -1,0 +1,49 @@
+//! # ownaudio-core
+//!
+//! Cross-platform audio I/O library for OwnAudioSharp, built on top of [cpal].
+//!
+//! This crate provides the first layer of the OwnAudioSharp Rust refactor:
+//! raw audio device enumeration and stream management.  DSP, mixing, and
+//! ring buffers will be added in subsequent layers.
+//!
+//! ## Quick start
+//!
+//! ```no_run
+//! use ownaudio_core::{AudioEngine, StreamConfig};
+//!
+//! let engine = AudioEngine::new().unwrap();
+//! let config = StreamConfig::stereo_f32(48_000);
+//!
+//! let stream = engine
+//!     .open_output_stream(None, &config, |buf| {
+//!         buf.fill(0.0); // silence
+//!     })
+//!     .unwrap();
+//!
+//! stream.play().unwrap();
+//! std::thread::sleep(std::time::Duration::from_secs(1));
+//! // stream is stopped and destroyed when dropped
+//! ```
+
+pub mod config;
+pub mod device;
+pub mod engine;
+pub mod error;
+pub mod format;
+pub mod mixer;
+pub mod resampler;
+pub mod ringbuffer;
+pub mod stream;
+
+// Flat re-exports for convenient use without module paths.
+pub use config::{SampleFormat, StreamConfig};
+pub use device::{
+    default_input_device, default_output_device, list_input_devices, list_output_devices,
+    AudioDeviceInfo,
+};
+pub use engine::AudioEngine;
+pub use error::{AudioError, Result};
+pub use mixer::Mixer;
+pub use resampler::Resampler;
+pub use ringbuffer::{ring_buffer, RingBufferReader, RingBufferWriter};
+pub use stream::{InputStream, OutputStream};

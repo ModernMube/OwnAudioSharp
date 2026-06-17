@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "ownaudio-core",
+    "ownaudio-ffi",
+]
+resolver = "2"
