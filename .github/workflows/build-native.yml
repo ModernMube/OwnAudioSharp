@@ -318,7 +318,8 @@ jobs:
 
       - name: Build android-arm64
         working-directory: OwnAudioEngineRust
-        run: cargo ndk --target aarch64-linux-android --platform 24 -- build --release
+        # cpal's Android backend uses AAudio, which requires API level 26 (Android 8.0).
+        run: cargo ndk --target aarch64-linux-android --platform 26 -- build --release
 
       - name: Collect artifacts
         run: |

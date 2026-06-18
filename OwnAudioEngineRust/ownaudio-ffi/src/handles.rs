@@ -146,6 +146,8 @@ pub(crate) struct TrackWrapper {
 /// All pointer fields are non-owning; the mixer must outlive all effect handles.
 pub(crate) struct EffectWrapper {
     /// Back-pointer to the owning mixer (non-owning).
+    /// Reserved for future use when effect-level mixer queries are added.
+    #[allow(dead_code)]
     pub mixer: *mut MixerWrapper,
     /// Index of the containing track.
     pub track_index: usize,

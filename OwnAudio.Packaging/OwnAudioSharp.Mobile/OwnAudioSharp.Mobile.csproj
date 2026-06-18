@@ -29,7 +29,8 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="$(TargetFramework.Contains('android'))">
-    <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
+    <!-- cpal's AAudio backend requires Android 8.0 (API 26) -->
+    <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="$(TargetFramework.Contains('ios'))">
