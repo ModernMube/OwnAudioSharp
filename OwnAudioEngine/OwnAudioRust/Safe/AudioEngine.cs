@@ -27,6 +27,17 @@ namespace Ownaudio.Safe;
 /// </remarks>
 public sealed class AudioEngine : IDisposable
 {
+    #region ABI versioning
+
+    /// <summary>
+    /// The ABI version this managed assembly was compiled against.
+    /// Must match the value returned by <c>ownaudio_v1_get_abi_version()</c> in the
+    /// loaded native binary.  Increment both values together for every breaking FFI change.
+    /// </summary>
+    public const uint ExpectedAbiVersion = 1u;
+
+    #endregion
+
     #region Fields
 
     private readonly AudioEngineHandle _handle;
@@ -46,6 +57,10 @@ public sealed class AudioEngine : IDisposable
     /// Equivalent to calling <see cref="Create(HostApi?)"/> with <see langword="null"/>.
     /// </summary>
     /// <returns>A new, ready-to-use <see cref="AudioEngine"/>.</returns>
+    /// <exception cref="AbiVersionMismatchException">
+    /// Thrown when the loaded native binary reports an ABI version that does not match
+    /// <see cref="ExpectedAbiVersion"/>.
+    /// </exception>
     /// <exception cref="OwnAudioException">Thrown when the native engine fails to initialize.</exception>
     public static AudioEngine Create() => Create(hostApi: null);
 
@@ -58,6 +73,10 @@ public sealed class AudioEngine : IDisposable
     /// (WASAPI on Windows, Core Audio on macOS, ALSA on Linux).
     /// </param>
     /// <returns>A new, ready-to-use <see cref="AudioEngine"/>.</returns>
+    /// <exception cref="AbiVersionMismatchException">
+    /// Thrown when the loaded native binary reports an ABI version that does not match
+    /// <see cref="ExpectedAbiVersion"/>.
+    /// </exception>
     /// <exception cref="HostApiNotAvailableException">
     /// Thrown when the requested host API is not compiled into this binary or not
     /// available on the current platform.
@@ -68,6 +87,8 @@ public sealed class AudioEngine : IDisposable
     /// <exception cref="OwnAudioException">Thrown for all other native engine failures.</exception>
     public static AudioEngine Create(HostApi? hostApi)
     {
+        VerifyAbiVersion();
+
         int code;
         IntPtr rawHandle;
 
@@ -89,6 +110,21 @@ public sealed class AudioEngine : IDisposable
         Marshal.InitHandle(handle, rawHandle);
 
         return new AudioEngine(handle);
+    }
+
+    /// <summary>
+    /// Verifies that the loaded native binary's ABI version matches <see cref="ExpectedAbiVersion"/>.
+    /// </summary>
+    /// <exception cref="AbiVersionMismatchException">
+    /// Thrown when the native binary reports a different ABI version.
+    /// </exception>
+    private static void VerifyAbiVersion()
+    {
+        uint nativeVersion = OwnAudioNative.ownaudio_v1_get_abi_version();
+        if (nativeVersion != ExpectedAbiVersion)
+        {
+            throw new AbiVersionMismatchException(nativeVersion, ExpectedAbiVersion);
+        }
     }
 
     #endregion

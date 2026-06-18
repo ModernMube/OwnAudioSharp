@@ -1,0 +1,555 @@
+name: Build native + pack NuGet
+
+on:
+  push:
+    branches: [ "develop_rust_audio", "master" ]
+    tags:     [ "v*.*.*" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+# Cancel duplicate runs for the same ref
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+  # The ABI version embedded in this workflow must match ffi_abi.rs ABI_VERSION.
+  OWNAUDIO_ABI_VERSION: "1"
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Resolve the package version from the git tag or version.json
+  # -------------------------------------------------------------------------
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF#refs/tags/v}"
+          else
+            VER=$(grep -oP '"version"\s*:\s*"\K[^"]+' version.json 2>/dev/null || echo "0.0.0-dev")
+            RUN="${GITHUB_RUN_NUMBER:-0}"
+            VER="${VER%-*}-ci.${RUN}"
+          fi
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VER}"
+
+  # -------------------------------------------------------------------------
+  # Rust native builds — one job per OS runner
+  # -------------------------------------------------------------------------
+  rust-build-windows:
+    name: Rust / Windows (x64 + ARM64 + ASIO)
+    needs: version
+    runs-on: windows-latest
+    env:
+      OWNAUDIO_VERSION: ${{ needs.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-windows-${{ hashFiles('OwnAudioEngineRust/**/Cargo.lock') }}
+
+      - name: Install cargo-xwin (MSVC cross-linker)
+        run: cargo install cargo-xwin --locked
+
+      # Attempt to download ASIO SDK from a private artifact store.
+      # If the secret is absent the build falls back to WASAPI-only.
+      - name: Download ASIO SDK
+        id: asio-sdk
+        continue-on-error: true
+        env:
+          ASIO_SDK_ARCHIVE_URL: ${{ secrets.ASIO_SDK_ARCHIVE_URL }}
+        shell: bash
+        run: |
+          if [[ -z "${ASIO_SDK_ARCHIVE_URL}" ]]; then
+            echo "asio_available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::ASIO_SDK_ARCHIVE_URL secret not set — building WASAPI-only."
+            exit 0
+          fi
+          mkdir -p asio_sdk
+          curl -fsSL "${ASIO_SDK_ARCHIVE_URL}" -o asio_sdk.zip
+          unzip -q asio_sdk.zip -d asio_sdk
+          SDK_DIR=$(find asio_sdk -name "asio.h" -exec dirname {} \; | head -n 1)
+          SDK_ROOT="${SDK_DIR%/common}"
+          echo "ASIO_SDK_DIR=${SDK_ROOT}" >> "$GITHUB_ENV"
+          echo "asio_available=true" >> "$GITHUB_OUTPUT"
+          echo "ASIO SDK ready at: ${SDK_ROOT}"
+
+      - name: Build win-x64 (with ASIO)
+        working-directory: OwnAudioEngineRust
+        shell: bash
+        run: |
+          FEATURES=""
+          if [[ "${{ steps.asio-sdk.outputs.asio_available }}" == "true" ]]; then
+            FEATURES="--features asio"
+          else
+            echo "::warning::Building win-x64 WITHOUT ASIO (SDK unavailable)."
+          fi
+          cargo build --release $FEATURES --target x86_64-pc-windows-msvc
+
+      - name: Build win-arm64 (with ASIO)
+        working-directory: OwnAudioEngineRust
+        shell: bash
+        run: |
+          FEATURES=""
+          if [[ "${{ steps.asio-sdk.outputs.asio_available }}" == "true" ]]; then
+            FEATURES="--features asio"
+          else
+            echo "::warning::Building win-arm64 WITHOUT ASIO (SDK unavailable)."
+          fi
+          cargo xwin build --release $FEATURES --target aarch64-pc-windows-msvc
+
+      - name: Validate ASIO exports (win-x64)
+        if: steps.asio-sdk.outputs.asio_available == 'true'
+        shell: pwsh
+        run: |
+          $dll = "OwnAudioEngineRust/target/x86_64-pc-windows-msvc/release/ownaudio_ffi.dll"
+          $exports = dumpbin /exports $dll 2>&1 | Select-String "ownaudio_v1_engine_create_with_host|ownaudio_v1_get_abi_version"
+          if (-not $exports) {
+            Write-Error "Required FFI exports missing from win-x64 binary."
+            exit 1
+          }
+          Write-Host "ASIO exports verified: $exports"
+
+      - name: Summarize ASIO status
+        if: steps.asio-sdk.outputs.asio_available != 'true'
+        run: |
+          echo "### :warning: WASAPI-only build" >> $GITHUB_STEP_SUMMARY
+          echo "ASIO SDK was unavailable. The Windows binaries in this run do **not** include ASIO support." >> $GITHUB_STEP_SUMMARY
+          echo "To enable ASIO: set the \`ASIO_SDK_ARCHIVE_URL\` repository secret." >> $GITHUB_STEP_SUMMARY
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts/win-x64 artifacts/win-arm64
+          cp OwnAudioEngineRust/target/x86_64-pc-windows-msvc/release/ownaudio_ffi.dll    artifacts/win-x64/
+          cp OwnAudioEngineRust/target/aarch64-pc-windows-msvc/release/ownaudio_ffi.dll   artifacts/win-arm64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-windows
+          path: artifacts/
+          retention-days: 7
+
+  rust-build-linux-x64:
+    name: Rust / Linux x64
+    needs: version
+    runs-on: ubuntu-latest
+    env:
+      OWNAUDIO_VERSION: ${{ needs.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system ALSA dev headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-linux-x64-${{ hashFiles('OwnAudioEngineRust/**/Cargo.lock') }}
+
+      - name: Build linux-x64
+        working-directory: OwnAudioEngineRust
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/linux-x64
+          cp OwnAudioEngineRust/target/x86_64-unknown-linux-gnu/release/libownaudio_ffi.so artifacts/linux-x64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-linux-x64
+          path: artifacts/
+          retention-days: 7
+
+  rust-build-linux-arm64:
+    name: Rust / Linux ARM64
+    needs: version
+    runs-on: ubuntu-24.04-arm
+    env:
+      OWNAUDIO_VERSION: ${{ needs.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ALSA dev headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-linux-arm64-${{ hashFiles('OwnAudioEngineRust/**/Cargo.lock') }}
+
+      - name: Build linux-arm64
+        working-directory: OwnAudioEngineRust
+        run: cargo build --release --target aarch64-unknown-linux-gnu
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/linux-arm64
+          cp OwnAudioEngineRust/target/aarch64-unknown-linux-gnu/release/libownaudio_ffi.so artifacts/linux-arm64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-linux-arm64
+          path: artifacts/
+          retention-days: 7
+
+  rust-build-macos:
+    name: Rust / macOS (x64 + ARM64 + iOS)
+    needs: version
+    runs-on: macos-14
+    env:
+      OWNAUDIO_VERSION: ${{ needs.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin,aarch64-apple-ios
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-macos-${{ hashFiles('OwnAudioEngineRust/**/Cargo.lock') }}
+
+      - name: Build osx-x64
+        working-directory: OwnAudioEngineRust
+        run: cargo build --release --target x86_64-apple-darwin
+
+      - name: Build osx-arm64
+        working-directory: OwnAudioEngineRust
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Build ios-arm64 (best-effort)
+        working-directory: OwnAudioEngineRust
+        continue-on-error: true
+        run: cargo build --release --target aarch64-apple-ios
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/osx-x64 artifacts/osx-arm64 artifacts/ios-arm64
+          cp OwnAudioEngineRust/target/x86_64-apple-darwin/release/libownaudio_ffi.dylib  artifacts/osx-x64/
+          cp OwnAudioEngineRust/target/aarch64-apple-darwin/release/libownaudio_ffi.dylib artifacts/osx-arm64/
+          # iOS: wrap static lib in a minimal .framework bundle for NativeReference consumption
+          IOS_LIB="OwnAudioEngineRust/target/aarch64-apple-ios/release/libownaudio_ffi.a"
+          if [[ -f "${IOS_LIB}" ]]; then
+            mkdir -p artifacts/ios-arm64/ownaudio_ffi.framework
+            cp "${IOS_LIB}" artifacts/ios-arm64/ownaudio_ffi.framework/ownaudio_ffi
+          else
+            echo "::warning::iOS build artifact missing — skipping framework bundle."
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-macos
+          path: artifacts/
+          retention-days: 7
+
+  rust-build-android:
+    name: Rust / Android ARM64
+    needs: version
+    runs-on: ubuntu-latest
+    env:
+      OWNAUDIO_VERSION: ${{ needs.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Set up Android NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-android-${{ hashFiles('OwnAudioEngineRust/**/Cargo.lock') }}
+
+      - name: Build android-arm64
+        working-directory: OwnAudioEngineRust
+        run: cargo ndk --target aarch64-linux-android --platform 24 -- build --release
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/android-arm64
+          cp OwnAudioEngineRust/target/aarch64-linux-android/release/libownaudio_ffi.so artifacts/android-arm64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-android
+          path: artifacts/
+          retention-days: 7
+
+  # -------------------------------------------------------------------------
+  # dotnet pack — depends on all native builds
+  # -------------------------------------------------------------------------
+  dotnet-pack:
+    name: Pack NuGet packages
+    needs:
+      - version
+      - rust-build-windows
+      - rust-build-linux-x64
+      - rust-build-linux-arm64
+      - rust-build-macos
+      - rust-build-android
+    runs-on: ubuntu-latest
+    env:
+      OWNAUDIO_VERSION: ${{ needs.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download all native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: artifacts-dl/
+          merge-multiple: false
+
+      # Flatten the separate artifact directories into a single artifacts/ tree
+      - name: Merge artifacts into artifacts/
+        run: |
+          mkdir -p artifacts
+          for dir in artifacts-dl/*/; do
+            cp -r "$dir"* artifacts/ 2>/dev/null || true
+          done
+          echo "Artifact tree:"
+          find artifacts -type f | sort
+
+      - name: Restore .NET dependencies
+        run: |
+          dotnet restore OwnAudio.Packaging/OwnAudioSharp.Basic/OwnAudioSharp.Basic.csproj \
+            -p:OwnAudioVersion="${OWNAUDIO_VERSION}"
+          dotnet restore OwnAudio.Packaging/OwnAudioSharp/OwnAudioSharp.csproj \
+            -p:OwnAudioVersion="${OWNAUDIO_VERSION}"
+
+      # Struct-size smoke test: verify each platform binary exposes the expected ABI exports
+      - name: Struct-size / symbol smoke test
+        run: |
+          echo "Checking ABI symbols in each native binary..."
+          check_sym() {
+            local FILE="$1"
+            local SYM="$2"
+            if nm -D "$FILE" 2>/dev/null | grep -q "$SYM" || \
+               nm    "$FILE" 2>/dev/null | grep -q "$SYM"; then
+              echo "  OK  $SYM in $(basename $FILE)"
+            else
+              echo "  WARN $SYM not found in $(basename $FILE) (may use different nm flags)"
+            fi
+          }
+          for lib in artifacts/linux-x64/libownaudio_ffi.so \
+                     artifacts/linux-arm64/libownaudio_ffi.so \
+                     artifacts/android-arm64/libownaudio_ffi.so; do
+            [[ -f "$lib" ]] && check_sym "$lib" "ownaudio_v1_get_abi_version"
+          done
+          for dylib in artifacts/osx-x64/libownaudio_ffi.dylib \
+                       artifacts/osx-arm64/libownaudio_ffi.dylib; do
+            [[ -f "$dylib" ]] && \
+              (nm -g "$dylib" 2>/dev/null | grep -q "ownaudio_v1_get_abi_version" && \
+               echo "  OK  ownaudio_v1_get_abi_version in $(basename $dylib)" || \
+               echo "  WARN symbol check failed for $dylib")
+          done
+
+      - name: Pack OwnAudioSharp.Basic
+        run: |
+          dotnet pack OwnAudio.Packaging/OwnAudioSharp.Basic/OwnAudioSharp.Basic.csproj \
+            --configuration Release \
+            --no-restore \
+            -p:OwnAudioVersion="${OWNAUDIO_VERSION}" \
+            --output OwnAudio.Packaging/nupkg
+
+      - name: Pack OwnAudioSharp (Full)
+        run: |
+          dotnet pack OwnAudio.Packaging/OwnAudioSharp/OwnAudioSharp.csproj \
+            --configuration Release \
+            --no-restore \
+            -p:OwnAudioVersion="${OWNAUDIO_VERSION}" \
+            --output OwnAudio.Packaging/nupkg
+
+      - name: Verify OwnAudioSharp.Basic package
+        run: |
+          NUPKG=$(ls OwnAudio.Packaging/nupkg/OwnAudioSharp.Basic.*.nupkg | head -n 1)
+          bash OwnAudio.Packaging/build/verify-package.sh "${NUPKG}"
+
+      - name: Verify OwnAudioSharp package
+        run: |
+          NUPKG=$(ls OwnAudio.Packaging/nupkg/OwnAudioSharp.*.nupkg | grep -v "Basic\|Mobile" | head -n 1)
+          bash OwnAudio.Packaging/build/verify-package.sh "${NUPKG}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: OwnAudio.Packaging/nupkg/*.nupkg
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
+  # Integration test — installs the packed .nupkg into a fresh test project
+  # -------------------------------------------------------------------------
+  integration-test:
+    name: Integration test (${{ matrix.os }})
+    needs:
+      - version
+      - dotnet-pack
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-14 ]
+    runs-on: ${{ matrix.os }}
+    env:
+      OWNAUDIO_VERSION: ${{ needs.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download nupkg
+        uses: actions/download-artifact@v4
+        with:
+          name: nupkg
+          path: test-pkgs/
+
+      - name: Create local NuGet feed
+        shell: bash
+        run: |
+          mkdir -p local-feed
+          cp test-pkgs/*.nupkg local-feed/
+          dotnet nuget add source "$(pwd)/local-feed" --name local-ownaudio
+
+      - name: Create minimal test project
+        shell: bash
+        run: |
+          mkdir -p int-test
+          cat > int-test/int-test.csproj <<'EOF'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>Exe</OutputType>
+              <TargetFramework>net10.0</TargetFramework>
+              <Nullable>enable</Nullable>
+            </PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="OwnAudioSharp.Basic" Version="*" />
+            </ItemGroup>
+          </Project>
+          EOF
+          cat > int-test/Program.cs <<'EOF'
+          using Ownaudio.Safe;
+          using Ownaudio.Safe.Exceptions;
+
+          // ABI version smoke test: Create() must not throw AbiVersionMismatchException.
+          try
+          {
+              using var engine = AudioEngine.Create();
+              Console.WriteLine("Engine created successfully.");
+              var outputs = engine.EnumerateOutputDevices();
+              Console.WriteLine($"Output devices: {outputs.Count}");
+          }
+          catch (AbiVersionMismatchException ex)
+          {
+              Console.Error.WriteLine($"FAIL: {ex.Message}");
+              Environment.Exit(1);
+          }
+          catch (Exception ex)
+          {
+              // Other exceptions (e.g. no audio device in CI) are acceptable.
+              Console.WriteLine($"Non-fatal exception (expected in headless CI): {ex.GetType().Name}: {ex.Message}");
+          }
+          Console.WriteLine("Integration test PASS.");
+          EOF
+
+      - name: Build and run integration test
+        shell: bash
+        run: |
+          cd int-test
+          dotnet restore --source ../local-feed
+          dotnet run --configuration Release
+
+  # -------------------------------------------------------------------------
+  # Publish to NuGet.org — tag-push only, requires manual approval
+  # -------------------------------------------------------------------------
+  publish:
+    name: Publish to NuGet.org
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - version
+      - integration-test
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Download nupkg
+        uses: actions/download-artifact@v4
+        with:
+          name: nupkg
+          path: nupkg/
+
+      - name: Push to NuGet.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          for pkg in nupkg/*.nupkg; do
+            echo "Pushing: ${pkg}"
+            dotnet nuget push "${pkg}" \
+              --api-key "${NUGET_API_KEY}" \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          done

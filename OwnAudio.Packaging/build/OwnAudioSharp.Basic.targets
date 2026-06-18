@@ -1,0 +1,42 @@
+<!--
+  OwnAudioSharp.Basic.targets
+  Shipped inside the NuGet package under build/ and buildTransitive/.
+
+  This file ensures that the native ownaudio_ffi library is resolved correctly
+  at both build time and AOT publish time for all consuming projects.
+
+  The standard runtimes/{rid}/native/ MSBuild convention handles most cases
+  automatically. This targets file provides defensive fallbacks for:
+    - AOT/NativeAOT publish pipelines that need the native lib on the publish path.
+    - Self-contained publish where CopyLocalLockFileAssemblies is true.
+-->
+<Project>
+
+  <PropertyGroup>
+    <!--
+      When the consuming project uses PublishAot=true, ensure native assets are
+      copied to the publish output directory so the linker can find them.
+    -->
+    <_OwnAudioNativeDir>$(MSBuildThisFileDirectory)..\runtimes\$(RuntimeIdentifier)\native\</_OwnAudioNativeDir>
+  </PropertyGroup>
+
+  <!--
+    For non-AOT self-contained publish: copy the native library to the publish dir
+    if it is not already present via the standard runtimes/ resolution.
+  -->
+  <Target Name="_OwnAudioCopyNativeToPublish"
+          AfterTargets="ResolveAssemblyReferences"
+          Condition="'$(PublishSingleFile)' != 'true' AND '$(RuntimeIdentifier)' != ''">
+
+    <ItemGroup>
+      <_OwnAudioNativeFiles Include="$(_OwnAudioNativeDir)*" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(_OwnAudioNativeFiles)"
+          DestinationFolder="$(PublishDir)"
+          SkipUnchangedFiles="true"
+          Condition="'@(_OwnAudioNativeFiles)' != '' AND '$(PublishDir)' != ''" />
+
+  </Target>
+
+</Project>

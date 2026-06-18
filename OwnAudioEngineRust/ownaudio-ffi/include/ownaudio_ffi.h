@@ -12,6 +12,21 @@
 #include <stdlib.h>
 
 /**
+ * The ABI version of this native binary.
+ *
+ * This constant is incremented whenever a **breaking** change is made to the FFI
+ * surface: adding, removing, or reordering `extern "C"` exports; changing struct
+ * layouts; or renaming enum variants. Consumers (the C# managed layer) call
+ * [`ownaudio_v1_get_abi_version`] at startup and reject the binary when the
+ * returned value does not match the version they were compiled against.
+ *
+ * **Rules for incrementing:**
+ * - Additive-only changes (new exports, new enum variants at the end) → no bump needed.
+ * - Any breaking change → bump by 1 and update `AudioEngine.ExpectedAbiVersion` in C#.
+ */
+#define ABI_VERSION 1
+
+/**
  * C-compatible error codes returned by every FFI function.
  *
  * Zero always means success.  All other values indicate failure; call
@@ -158,6 +173,33 @@ typedef struct OwnAudioDeviceInfo {
 } OwnAudioDeviceInfo;
 
 /**
+ * Opaque handle to a [`MultiTrackMixer`] instance.
+ *
+ * Create with `ownaudio_v1_mixer_create`; release with `ownaudio_v1_mixer_destroy`.
+ */
+typedef struct OwnAudioMixerHandle {
+    uint8_t _private[0];
+} OwnAudioMixerHandle;
+
+/**
+ * Opaque handle to a single audio [`Track`] inside a mixer.
+ *
+ * Create with `ownaudio_v1_track_create`; release with `ownaudio_v1_track_destroy`.
+ */
+typedef struct OwnAudioTrackHandle {
+    uint8_t _private[0];
+} OwnAudioTrackHandle;
+
+/**
+ * Opaque handle to an audio effect inside a track's effect chain.
+ *
+ * Create with `ownaudio_v1_track_add_effect`; release with `ownaudio_v1_effect_destroy`.
+ */
+typedef struct OwnAudioEffectHandle {
+    uint8_t _private[0];
+} OwnAudioEffectHandle;
+
+/**
  * Opaque handle to an [`AudioEngine`] instance.
  *
  * The C# side holds this as `IntPtr`.  Create with
@@ -257,6 +299,27 @@ typedef struct OwnAudioInputStreamHandle {
 const char *ownaudio_v1_last_error_message(void);
 
 /**
+ * Returns the ABI version of this native binary.
+ *
+ * The C# wrapper calls this function immediately after loading the library and
+ * compares the result to its compile-time constant. If the versions differ it
+ * raises `AbiVersionMismatchException` so the user gets a clear error instead of
+ * a cryptic access violation.
+ *
+ * Returns [`ABI_VERSION`] — always `1` for the initial v1 ABI surface.
+ */
+uint32_t ownaudio_v1_get_abi_version(void);
+
+/**
+ * Returns a null-terminated UTF-8 string describing the package version baked
+ * into this binary at compile time (e.g. `"1.0.0"` or `"1.2.0-ci.42"`).
+ *
+ * The pointer is valid for the lifetime of the process.  The caller must **not**
+ * free it.  The string is derived from `version.json` at build time via `build.rs`.
+ */
+const char *ownaudio_v1_get_package_version(void);
+
+/**
  * Lists all available output devices on the default host.
  *
  * On success, `*out_devices` points to a Rust-owned array of
@@ -285,6 +348,75 @@ int32_t ownaudio_v1_list_input_devices(struct OwnAudioDeviceInfo **out_devices, 
  * Passing `null` or `count = 0` is safe and has no effect.
  */
 void ownaudio_v1_free_device_list(struct OwnAudioDeviceInfo *devices, size_t count);
+
+/**
+ * Adds a new effect of the given type to the track's effect chain.
+ *
+ * - `mixer` — valid mixer handle (required to reach the track).
+ * - `track` — valid track handle.
+ * - `effect_type` — numeric effect type identifier (`EffectType` enum value).
+ * - `sample_rate` — sample rate in Hz; used to size internal buffers.
+ * - `out_effect` — receives the new effect handle on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ * Returns `OwnAudioErrorCode::InvalidHandle` (7) for an unknown `effect_type`.
+ */
+int32_t ownaudio_v1_track_add_effect(struct OwnAudioMixerHandle *mixer,
+                                     struct OwnAudioTrackHandle *track,
+                                     uint32_t effect_type,
+                                     float sample_rate,
+                                     struct OwnAudioEffectHandle **out_effect);
+
+/**
+ * Destroys an effect handle.
+ *
+ * Passing `null` is safe and has no effect.
+ * The effect is NOT removed from the track chain; call `ownaudio_v1_effect_remove` first.
+ */
+void ownaudio_v1_effect_destroy(struct OwnAudioEffectHandle *effect);
+
+/**
+ * Removes the effect from its track's effect chain and destroys the handle.
+ *
+ * - `mixer` — valid mixer handle.
+ * - `track` — valid track handle.
+ * - `effect` — valid effect handle to remove and destroy.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_effect_remove(struct OwnAudioMixerHandle *mixer,
+                                  struct OwnAudioTrackHandle *track,
+                                  struct OwnAudioEffectHandle *effect);
+
+/**
+ * Sets a parameter on an effect by numeric identifier.
+ *
+ * - `effect` — valid effect handle.
+ * - `param_id` — numeric parameter identifier (effect-specific).
+ * - `value` — new parameter value; clamped to the valid range silently.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) when the parameter is recognised.
+ * Returns `OwnAudioErrorCode::InvalidHandle` (7) when `param_id` is unknown.
+ */
+int32_t ownaudio_v1_effect_set_param(struct OwnAudioMixerHandle *mixer,
+                                     struct OwnAudioEffectHandle *effect,
+                                     uint32_t param_id,
+                                     float value);
+
+/**
+ * Reads the current value of an effect parameter.
+ *
+ * - `effect` — valid effect handle.
+ * - `param_id` — numeric parameter identifier.
+ * - `out_value` — receives the current value on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) when the parameter is recognised.
+ * Returns `OwnAudioErrorCode::InvalidHandle` (7) when `param_id` is unknown.
+ */
+int32_t ownaudio_v1_effect_get_param(struct OwnAudioMixerHandle *mixer,
+                                     struct OwnAudioEffectHandle *effect,
+                                     uint32_t param_id,
+                                     float *out_value);
 
 /**
  * Creates a new `AudioEngine` instance and writes its handle to `*out_handle`.
@@ -408,5 +540,114 @@ int32_t ownaudio_v1_input_stream_pause(struct OwnAudioInputStreamHandle *stream)
  * Passing `null` is safe and has no effect.
  */
 void ownaudio_v1_input_stream_destroy(struct OwnAudioInputStreamHandle *stream);
+
+/**
+ * Creates a new [`MultiTrackMixer`] and writes its handle to `*out_mixer`.
+ *
+ * - `sample_rate` — output sample rate in Hz.
+ * - `channels` — number of output channels (1 = mono, 2 = stereo).
+ * - `out_mixer` — receives the new mixer handle on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_mixer_create(float sample_rate,
+                                 uint16_t channels,
+                                 struct OwnAudioMixerHandle **out_mixer);
+
+/**
+ * Destroys a mixer handle and releases all associated resources.
+ *
+ * Passing `null` is safe and has no effect.
+ * All track and effect handles obtained from this mixer must be destroyed
+ * before calling this function.
+ */
+void ownaudio_v1_mixer_destroy(struct OwnAudioMixerHandle *mixer);
+
+/**
+ * Adds a new track to the mixer and writes its handle to `*out_track`.
+ *
+ * - `mixer` — valid mixer handle.
+ * - `out_track` — receives the new track handle on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_create(struct OwnAudioMixerHandle *mixer,
+                                 struct OwnAudioTrackHandle **out_track);
+
+/**
+ * Destroys a track handle.  Does NOT remove the track from the mixer.
+ *
+ * Call `ownaudio_v1_track_remove` first to remove the track from the mix,
+ * then this function to release the handle memory.
+ * Passing `null` is safe and has no effect.
+ */
+void ownaudio_v1_track_destroy(struct OwnAudioTrackHandle *track);
+
+/**
+ * Removes and destroys the track from the mixer.
+ *
+ * The track handle is invalidated after this call; do not use it afterwards.
+ * Passing `null` is safe and has no effect.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_remove(struct OwnAudioMixerHandle *mixer,
+                                 struct OwnAudioTrackHandle *track);
+
+/**
+ * Starts or resumes playback of the track.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_play(struct OwnAudioTrackHandle *track);
+
+/**
+ * Pauses the track without resetting its position.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_pause(struct OwnAudioTrackHandle *track);
+
+/**
+ * Stops the track and resets its position to zero.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_stop(struct OwnAudioTrackHandle *track);
+
+/**
+ * Sets the track's playback position to `sample_position`.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_seek(struct OwnAudioTrackHandle *track, uint64_t _sample_position);
+
+/**
+ * Sets the track gain (linear amplitude multiplier; 1.0 = unity).
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_set_gain(struct OwnAudioTrackHandle *track, float gain);
+
+/**
+ * Sets the track tempo ratio (1.0 = normal speed, 2.0 = double speed).
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_set_tempo(struct OwnAudioTrackHandle *track, float ratio);
+
+/**
+ * Sets the track pitch shift in semitones (-24 … +24).
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_set_pitch(struct OwnAudioTrackHandle *track, float semitones);
+
+/**
+ * Sets the track mute state (0.0 = unmuted, 1.0 = muted).
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_set_mute(struct OwnAudioTrackHandle *track, float muted);
 
 #endif  /* OWNAUDIO_FFI_H */

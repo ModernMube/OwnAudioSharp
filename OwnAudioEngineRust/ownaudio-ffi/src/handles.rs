@@ -1,4 +1,4 @@
-use ownaudio_core::{AudioEngine, InputStream, OutputStream};
+use ownaudio_core::{AudioEngine, InputStream, MultiTrackMixer, OutputStream};
 
 /// Opaque handle to an [`AudioEngine`] instance.
 ///
@@ -92,5 +92,105 @@ pub(crate) unsafe fn input_stream_from_ptr<'a>(
         None
     } else {
         Some(&mut *(ptr as *mut InputStreamWrapper))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Mixer / track / effect opaque handles
+// ---------------------------------------------------------------------------
+
+/// Opaque handle to a [`MultiTrackMixer`] instance.
+///
+/// Create with `ownaudio_v1_mixer_create`; release with `ownaudio_v1_mixer_destroy`.
+#[repr(C)]
+pub struct OwnAudioMixerHandle {
+    _private: [u8; 0],
+}
+
+/// Opaque handle to a single audio [`Track`] inside a mixer.
+///
+/// Create with `ownaudio_v1_track_create`; release with `ownaudio_v1_track_destroy`.
+#[repr(C)]
+pub struct OwnAudioTrackHandle {
+    _private: [u8; 0],
+}
+
+/// Opaque handle to an audio effect inside a track's effect chain.
+///
+/// Create with `ownaudio_v1_track_add_effect`; release with `ownaudio_v1_effect_destroy`.
+#[repr(C)]
+pub struct OwnAudioEffectHandle {
+    _private: [u8; 0],
+}
+
+// ---------------------------------------------------------------------------
+// Internal wrappers
+// ---------------------------------------------------------------------------
+
+pub(crate) struct MixerWrapper {
+    pub inner: MultiTrackMixer,
+}
+
+/// Borrows a track inside a mixer by index.
+///
+/// The `*mut MixerWrapper` is non-owning; the mixer must outlive all track handles.
+pub(crate) struct TrackWrapper {
+    /// Back-pointer to the owning mixer (non-owning).
+    pub mixer: *mut MixerWrapper,
+    /// Zero-based track index within the mixer.
+    pub track_index: usize,
+}
+
+/// References a single effect inside a track's effect chain.
+///
+/// All pointer fields are non-owning; the mixer must outlive all effect handles.
+pub(crate) struct EffectWrapper {
+    /// Back-pointer to the owning mixer (non-owning).
+    pub mixer: *mut MixerWrapper,
+    /// Index of the containing track.
+    pub track_index: usize,
+    /// Index of this effect within the track's chain.
+    pub effect_index: usize,
+}
+
+unsafe impl Send for MixerWrapper {}
+unsafe impl Sync for MixerWrapper {}
+unsafe impl Send for TrackWrapper {}
+unsafe impl Send for EffectWrapper {}
+
+// ---------------------------------------------------------------------------
+// Helper functions
+// ---------------------------------------------------------------------------
+
+/// Casts a raw `*mut OwnAudioMixerHandle` back to `&mut MixerWrapper`.
+pub(crate) unsafe fn mixer_from_ptr<'a>(
+    ptr: *mut OwnAudioMixerHandle,
+) -> Option<&'a mut MixerWrapper> {
+    if ptr.is_null() {
+        None
+    } else {
+        Some(&mut *(ptr as *mut MixerWrapper))
+    }
+}
+
+/// Casts a raw `*mut OwnAudioTrackHandle` back to `&mut TrackWrapper`.
+pub(crate) unsafe fn track_from_ptr<'a>(
+    ptr: *mut OwnAudioTrackHandle,
+) -> Option<&'a mut TrackWrapper> {
+    if ptr.is_null() {
+        None
+    } else {
+        Some(&mut *(ptr as *mut TrackWrapper))
+    }
+}
+
+/// Casts a raw `*mut OwnAudioEffectHandle` back to `&mut EffectWrapper`.
+pub(crate) unsafe fn effect_from_ptr<'a>(
+    ptr: *mut OwnAudioEffectHandle,
+) -> Option<&'a mut EffectWrapper> {
+    if ptr.is_null() {
+        None
+    } else {
+        Some(&mut *(ptr as *mut EffectWrapper))
     }
 }

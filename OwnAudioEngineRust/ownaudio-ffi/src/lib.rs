@@ -17,16 +17,23 @@
 
 pub mod callback;
 pub mod error_code;
+pub mod ffi_abi;
 pub mod ffi_config;
 pub mod ffi_device;
+pub mod ffi_effects;
 pub mod ffi_stream;
+pub mod ffi_track;
 pub mod handles;
 pub mod host_api;
 
 // Re-export the types that cbindgen needs to find at the crate root.
 pub use callback::{OwnAudioInputCallback, OwnAudioOutputCallback};
 pub use error_code::OwnAudioErrorCode;
+pub use ffi_abi::ABI_VERSION;
 pub use ffi_config::{OwnAudioSampleFormat, OwnAudioStreamConfig};
 pub use ffi_device::OwnAudioDeviceInfo;
-pub use handles::{OwnAudioEngineHandle, OwnAudioInputStreamHandle, OwnAudioOutputStreamHandle};
+pub use handles::{
+    OwnAudioEffectHandle, OwnAudioEngineHandle, OwnAudioInputStreamHandle,
+    OwnAudioMixerHandle, OwnAudioOutputStreamHandle, OwnAudioTrackHandle,
+};
 pub use host_api::OwnHostApi;

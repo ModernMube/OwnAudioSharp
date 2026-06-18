@@ -27,10 +27,12 @@
 
 pub mod config;
 pub mod device;
+pub mod effects;
 pub mod engine;
 pub mod error;
 pub mod format;
 pub mod mixer;
+pub mod multitrack;
 pub mod resampler;
 pub mod ringbuffer;
 pub mod stream;
@@ -41,9 +43,11 @@ pub use device::{
     default_input_device, default_output_device, list_input_devices, list_output_devices,
     AudioDeviceInfo,
 };
+pub use effects::{Effect, EffectChain, EffectType};
 pub use engine::AudioEngine;
 pub use error::{AudioError, Result};
 pub use mixer::Mixer;
+pub use multitrack::{MultiTrackMixer, SampleClock, Track, TrackState};
 pub use resampler::Resampler;
 pub use ringbuffer::{ring_buffer, RingBufferReader, RingBufferWriter};
 pub use stream::{InputStream, OutputStream};

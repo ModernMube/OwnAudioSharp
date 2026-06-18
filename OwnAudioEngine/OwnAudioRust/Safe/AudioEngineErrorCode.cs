@@ -47,4 +47,10 @@ public enum AudioEngineErrorCode
     /// The ASIO host API is compiled in but no ASIO driver is installed on this machine.
     /// </summary>
     AsioDriverNotFound = 11,
+
+    /// <summary>
+    /// The ABI version reported by the loaded native binary does not match the version
+    /// the managed layer was compiled against.  Reinstall the OwnAudioSharp NuGet package.
+    /// </summary>
+    AbiVersionMismatch = 12,
 }
