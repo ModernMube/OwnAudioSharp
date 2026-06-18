@@ -9,16 +9,28 @@ use crate::{
 
 /// Entry point for all audio I/O operations.
 ///
-/// `AudioEngine` itself holds no OS resources — resources are allocated when
-/// a stream is opened and released when the returned stream is dropped.
-pub struct AudioEngine;
+/// `AudioEngine` holds a `cpal::Host` that determines which OS audio backend
+/// is used for device enumeration and stream creation.  Use [`AudioEngine::new`]
+/// for the platform default host (WASAPI on Windows, CoreAudio on macOS, ALSA on Linux),
+/// or [`AudioEngine::new_with_host`] to select a specific host explicitly.
+pub struct AudioEngine {
+    host: cpal::Host,
+}
 
 impl AudioEngine {
-    /// Creates a new engine instance.
+    /// Creates a new engine instance using the platform default audio host.
     ///
     /// This call is cheap and does not open any audio device.
     pub fn new() -> Result<Self> {
-        Ok(AudioEngine)
+        Ok(AudioEngine { host: cpal::default_host() })
+    }
+
+    /// Creates a new engine instance using an explicitly provided `cpal::Host`.
+    ///
+    /// This is used by the FFI layer to select non-default host APIs such as ASIO
+    /// on Windows.  Prefer [`AudioEngine::new`] unless a specific host is required.
+    pub fn new_with_host(host: cpal::Host) -> Result<Self> {
+        Ok(AudioEngine { host })
     }
 
     /// Opens an output stream on the given device (or the system default if
@@ -39,7 +51,7 @@ impl AudioEngine {
         config: &StreamConfig,
         mut callback: impl FnMut(&mut [f32]) + Send + 'static,
     ) -> Result<OutputStream> {
-        let cpal_device = resolve_output_device(device.map(|d| d.name.as_str()))?;
+        let cpal_device = resolve_output_device(&self.host, device.map(|d| d.name.as_str()))?;
         let (stream_config, sample_format) = validate_output_config(&cpal_device, config)?;
 
         let err_fn = |e| eprintln!("[ownaudio-core] output stream error: {e}");
@@ -116,7 +128,7 @@ impl AudioEngine {
         config: &StreamConfig,
         mut callback: impl FnMut(&[f32]) + Send + 'static,
     ) -> Result<InputStream> {
-        let cpal_device = resolve_input_device(device.map(|d| d.name.as_str()))?;
+        let cpal_device = resolve_input_device(&self.host, device.map(|d| d.name.as_str()))?;
         let (stream_config, sample_format) = validate_input_config(&cpal_device, config)?;
 
         let err_fn = |e| eprintln!("[ownaudio-core] input stream error: {e}");
@@ -176,6 +188,6 @@ impl AudioEngine {
 
 impl Default for AudioEngine {
     fn default() -> Self {
-        AudioEngine
+        AudioEngine { host: cpal::default_host() }
     }
 }

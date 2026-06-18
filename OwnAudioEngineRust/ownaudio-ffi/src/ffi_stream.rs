@@ -11,6 +11,7 @@ use crate::handles::{
     InputStreamWrapper, OwnAudioEngineHandle, OwnAudioInputStreamHandle,
     OwnAudioOutputStreamHandle, OutputStreamWrapper,
 };
+use crate::host_api::{resolve_host, OwnHostApi};
 
 // ---------------------------------------------------------------------------
 // Engine lifecycle
@@ -32,6 +33,54 @@ pub extern "C" fn ownaudio_v1_engine_create(
         }
 
         match ownaudio_core::AudioEngine::new() {
+            Ok(engine) => {
+                let boxed = Box::new(EngineWrapper { inner: engine });
+                unsafe {
+                    *out_handle = Box::into_raw(boxed) as *mut OwnAudioEngineHandle;
+                }
+                OwnAudioErrorCode::Success as i32
+            }
+            Err(e) => {
+                set_last_error(e.to_string());
+                OwnAudioErrorCode::from(e) as i32
+            }
+        }
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Creates a new `AudioEngine` instance using an explicitly chosen host API, and writes
+/// its handle to `*out_handle`.
+///
+/// - `host_api` — the audio host API to use (e.g. `OwnHostApi::Asio`).
+///   Pass `OwnHostApi::Wasapi` / `OwnHostApi::CoreAudio` / `OwnHostApi::Alsa`
+///   to request the standard platform backend without relying on the compile-time default.
+/// - `out_handle` — receives the new engine handle on success.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+/// Returns `OwnAudioErrorCode::HostApiNotAvailable` (10) when the requested
+/// host API is not compiled into this binary.
+/// Returns `OwnAudioErrorCode::AsioDriverNotFound` (11) when ASIO is compiled
+/// in but no ASIO driver is installed on this machine.
+///
+/// If `out_handle` is null returns `OwnAudioErrorCode::NullPointer` (6).
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_engine_create_with_host(
+    host_api: OwnHostApi,
+    out_handle: *mut *mut OwnAudioEngineHandle,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_handle.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let host = match resolve_host(host_api) {
+            Ok(h) => h,
+            Err(code) => return code,
+        };
+
+        match ownaudio_core::AudioEngine::new_with_host(host) {
             Ok(engine) => {
                 let boxed = Box::new(EngineWrapper { inner: engine });
                 unsafe {

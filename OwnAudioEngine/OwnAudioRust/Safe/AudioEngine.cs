@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using Ownaudio.Audio;
 using Ownaudio.Native.RustAudio.Interop;
 using Ownaudio.Native.RustAudio.Structs;
 using Ownaudio.Safe.Callbacks;
@@ -19,7 +20,7 @@ namespace Ownaudio.Safe;
 /// owns an independent native engine context with its own device enumeration cache.
 /// </para>
 /// <para>
-/// <b>Thread safety:</b> <see cref="Create"/> and <see cref="Dispose"/> are safe to call
+/// <b>Thread safety:</b> <see cref="Create()"/> and <see cref="Dispose"/> are safe to call
 /// from any thread.  All other methods must not be called concurrently on the same instance
 /// unless otherwise documented.
 /// </para>
@@ -41,13 +42,45 @@ public sealed class AudioEngine : IDisposable
     }
 
     /// <summary>
-    /// Creates a new <see cref="AudioEngine"/> instance backed by a native engine context.
+    /// Creates a new <see cref="AudioEngine"/> instance using the platform default audio host.
+    /// Equivalent to calling <see cref="Create(HostApi?)"/> with <see langword="null"/>.
     /// </summary>
     /// <returns>A new, ready-to-use <see cref="AudioEngine"/>.</returns>
     /// <exception cref="OwnAudioException">Thrown when the native engine fails to initialize.</exception>
-    public static AudioEngine Create()
+    public static AudioEngine Create() => Create(hostApi: null);
+
+    /// <summary>
+    /// Creates a new <see cref="AudioEngine"/> instance using the specified audio host API,
+    /// or the platform default when <paramref name="hostApi"/> is <see langword="null"/>.
+    /// </summary>
+    /// <param name="hostApi">
+    /// The host API to use, or <see langword="null"/> for the platform default
+    /// (WASAPI on Windows, Core Audio on macOS, ALSA on Linux).
+    /// </param>
+    /// <returns>A new, ready-to-use <see cref="AudioEngine"/>.</returns>
+    /// <exception cref="HostApiNotAvailableException">
+    /// Thrown when the requested host API is not compiled into this binary or not
+    /// available on the current platform.
+    /// </exception>
+    /// <exception cref="AsioDriverNotFoundException">
+    /// Thrown when ASIO is compiled in but no ASIO driver is installed on this machine.
+    /// </exception>
+    /// <exception cref="OwnAudioException">Thrown for all other native engine failures.</exception>
+    public static AudioEngine Create(HostApi? hostApi)
     {
-        int code = OwnAudioNative.ownaudio_v1_engine_create(out IntPtr rawHandle);
+        int code;
+        IntPtr rawHandle;
+
+        if (hostApi.HasValue)
+        {
+            var nativeApi = (NativeHostApi)(int)hostApi.Value;
+            code = OwnAudioNative.ownaudio_v1_engine_create_with_host(nativeApi, out rawHandle);
+        }
+        else
+        {
+            code = OwnAudioNative.ownaudio_v1_engine_create(out rawHandle);
+        }
+
         ErrorCodeMapper.ThrowIfError(code, nameof(Create));
 
         var handle = new AudioEngineHandle();

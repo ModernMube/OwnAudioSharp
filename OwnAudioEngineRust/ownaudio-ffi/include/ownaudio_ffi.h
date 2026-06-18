@@ -59,6 +59,15 @@ typedef enum OwnAudioErrorCode {
      * An internal error not covered by the above codes.
      */
     InternalError = 9,
+    /**
+     * The requested host API (e.g. ASIO) is not compiled into this binary,
+     * or no compatible driver is installed on this machine.
+     */
+    HostApiNotAvailable = 10,
+    /**
+     * The ASIO host API is compiled in but no ASIO driver is installed on this machine.
+     */
+    AsioDriverNotFound = 11,
 } OwnAudioErrorCode;
 
 /**
@@ -78,6 +87,41 @@ typedef enum OwnAudioSampleFormat {
      */
     U16 = 2,
 } OwnAudioSampleFormat;
+
+/**
+ * Identifies the OS audio host API to use when creating an engine.
+ *
+ * Pass this value to `ownaudio_v1_engine_create_with_host` to select a
+ * specific backend instead of the platform default.
+ *
+ * Not all variants are available on every platform or binary build:
+ * - `Asio` requires Windows and a build compiled with `--features asio`.
+ * - `CoreAudio` is only meaningful on macOS.
+ * - `Alsa` is only meaningful on Linux.
+ *
+ * Requesting an unavailable variant returns
+ * [`OwnAudioErrorCode::HostApiNotAvailable`] (10) or
+ * [`OwnAudioErrorCode::AsioDriverNotFound`] (11); the call never panics.
+ */
+typedef enum OwnHostApi {
+    /**
+     * Windows Audio Session API — the default Windows audio backend.
+     */
+    Wasapi = 0,
+    /**
+     * Steinberg ASIO — low-latency Windows audio for professional interfaces.
+     * Requires `--features asio` at build time and an installed ASIO driver.
+     */
+    Asio = 1,
+    /**
+     * Apple Core Audio — the default macOS audio backend.
+     */
+    CoreAudio = 2,
+    /**
+     * Advanced Linux Sound Architecture — the default Linux audio backend.
+     */
+    Alsa = 3,
+} OwnHostApi;
 
 /**
  * Snapshot descriptor of an audio device, passed to the C# caller.
@@ -251,6 +295,26 @@ void ownaudio_v1_free_device_list(struct OwnAudioDeviceInfo *devices, size_t cou
  * Returns `OwnAudioErrorCode::Success` (0) on success.
  */
 int32_t ownaudio_v1_engine_create(struct OwnAudioEngineHandle **out_handle);
+
+/**
+ * Creates a new `AudioEngine` instance using an explicitly chosen host API, and writes
+ * its handle to `*out_handle`.
+ *
+ * - `host_api` — the audio host API to use (e.g. `OwnHostApi::Asio`).
+ *   Pass `OwnHostApi::Wasapi` / `OwnHostApi::CoreAudio` / `OwnHostApi::Alsa`
+ *   to request the standard platform backend without relying on the compile-time default.
+ * - `out_handle` — receives the new engine handle on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ * Returns `OwnAudioErrorCode::HostApiNotAvailable` (10) when the requested
+ * host API is not compiled into this binary.
+ * Returns `OwnAudioErrorCode::AsioDriverNotFound` (11) when ASIO is compiled
+ * in but no ASIO driver is installed on this machine.
+ *
+ * If `out_handle` is null returns `OwnAudioErrorCode::NullPointer` (6).
+ */
+int32_t ownaudio_v1_engine_create_with_host(enum OwnHostApi host_api,
+                                            struct OwnAudioEngineHandle **out_handle);
 
 /**
  * Destroys an engine handle created by `ownaudio_v1_engine_create`.

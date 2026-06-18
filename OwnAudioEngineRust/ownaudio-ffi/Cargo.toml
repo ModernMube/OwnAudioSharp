@@ -9,8 +9,17 @@ license = "MIT"
 crate-type = ["cdylib", "staticlib", "rlib"]
 name = "ownaudio_ffi"
 
+[features]
+default = []
+# Enable Windows ASIO host API support.
+# Requires ASIO_SDK_DIR env var pointing to the extracted Steinberg ASIO SDK root.
+# The SDK is available under a dual licence (proprietary + GPLv2).
+# See: https://www.steinberg.net/developers/
+asio = ["cpal/asio"]
+
 [dependencies]
 ownaudio-core = { path = "../ownaudio-core" }
+cpal = "0.18"
 
 [build-dependencies]
 cbindgen = "0.27"

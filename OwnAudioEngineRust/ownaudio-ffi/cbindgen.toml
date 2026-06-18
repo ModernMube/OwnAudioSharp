@@ -19,6 +19,7 @@ include = [
     "OwnAudioInputStreamHandle",
     "OwnAudioOutputCallback",
     "OwnAudioInputCallback",
+    "OwnHostApi",
 ]
 
 [fn]

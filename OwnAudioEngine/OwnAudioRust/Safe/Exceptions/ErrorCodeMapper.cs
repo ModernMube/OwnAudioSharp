@@ -52,6 +52,12 @@ internal static class ErrorCodeMapper
                 or NativeErrorCode.StreamControlFailed
                     => new StreamException(publicCode, message),
 
+            NativeErrorCode.HostApiNotAvailable
+                    => new HostApiNotAvailableException(message),
+
+            NativeErrorCode.AsioDriverNotFound
+                    => new AsioDriverNotFoundException(message),
+
             _ => new OwnAudioException(publicCode, message)
         };
     }
@@ -64,17 +70,19 @@ internal static class ErrorCodeMapper
     {
         return code switch
         {
-            NativeErrorCode.Success                => AudioEngineErrorCode.Success,
-            NativeErrorCode.DeviceNotFound         => AudioEngineErrorCode.DeviceNotFound,
+            NativeErrorCode.Success                 => AudioEngineErrorCode.Success,
+            NativeErrorCode.DeviceNotFound          => AudioEngineErrorCode.DeviceNotFound,
             NativeErrorCode.DeviceEnumerationFailed => AudioEngineErrorCode.DeviceEnumerationFailed,
-            NativeErrorCode.UnsupportedConfig      => AudioEngineErrorCode.UnsupportedConfig,
-            NativeErrorCode.StreamBuildFailed      => AudioEngineErrorCode.StreamBuildFailed,
-            NativeErrorCode.StreamControlFailed    => AudioEngineErrorCode.StreamControlFailed,
-            NativeErrorCode.NullPointer            => AudioEngineErrorCode.NullPointer,
-            NativeErrorCode.InvalidHandle          => AudioEngineErrorCode.InvalidHandle,
-            NativeErrorCode.InternalPanic          => AudioEngineErrorCode.InternalPanic,
-            NativeErrorCode.InternalError          => AudioEngineErrorCode.InternalError,
-            _                                      => AudioEngineErrorCode.InternalError,
+            NativeErrorCode.UnsupportedConfig       => AudioEngineErrorCode.UnsupportedConfig,
+            NativeErrorCode.StreamBuildFailed       => AudioEngineErrorCode.StreamBuildFailed,
+            NativeErrorCode.StreamControlFailed     => AudioEngineErrorCode.StreamControlFailed,
+            NativeErrorCode.NullPointer             => AudioEngineErrorCode.NullPointer,
+            NativeErrorCode.InvalidHandle           => AudioEngineErrorCode.InvalidHandle,
+            NativeErrorCode.InternalPanic           => AudioEngineErrorCode.InternalPanic,
+            NativeErrorCode.InternalError           => AudioEngineErrorCode.InternalError,
+            NativeErrorCode.HostApiNotAvailable     => AudioEngineErrorCode.HostApiNotAvailable,
+            NativeErrorCode.AsioDriverNotFound      => AudioEngineErrorCode.AsioDriverNotFound,
+            _                                       => AudioEngineErrorCode.InternalError,
         };
     }
 
@@ -97,17 +105,19 @@ internal static class ErrorCodeMapper
     {
         return code switch
         {
-            NativeErrorCode.Success                => "success",
-            NativeErrorCode.DeviceNotFound         => "audio device not found",
+            NativeErrorCode.Success                 => "success",
+            NativeErrorCode.DeviceNotFound          => "audio device not found",
             NativeErrorCode.DeviceEnumerationFailed => "device enumeration failed",
-            NativeErrorCode.UnsupportedConfig      => "stream configuration not supported by device",
-            NativeErrorCode.StreamBuildFailed      => "failed to build audio stream",
-            NativeErrorCode.StreamControlFailed    => "stream play/pause control failed",
-            NativeErrorCode.NullPointer            => "unexpected null pointer argument",
-            NativeErrorCode.InvalidHandle          => "invalid or already-destroyed handle",
-            NativeErrorCode.InternalPanic          => "internal panic in native audio engine",
-            NativeErrorCode.InternalError          => "internal error in native audio engine",
-            _                                      => $"unknown error code {(int)code}",
+            NativeErrorCode.UnsupportedConfig       => "stream configuration not supported by device",
+            NativeErrorCode.StreamBuildFailed       => "failed to build audio stream",
+            NativeErrorCode.StreamControlFailed     => "stream play/pause control failed",
+            NativeErrorCode.NullPointer             => "unexpected null pointer argument",
+            NativeErrorCode.InvalidHandle           => "invalid or already-destroyed handle",
+            NativeErrorCode.InternalPanic           => "internal panic in native audio engine",
+            NativeErrorCode.InternalError           => "internal error in native audio engine",
+            NativeErrorCode.HostApiNotAvailable     => "requested audio host API is not available on this system",
+            NativeErrorCode.AsioDriverNotFound      => "ASIO host API is available but no ASIO driver is installed",
+            _                                       => $"unknown error code {(int)code}",
         };
     }
 

@@ -88,7 +88,7 @@ public sealed class AudioEngine : IAsyncDisposable, IDisposable
 
         try
         {
-            safeEngine = Safe.AudioEngine.Create();
+            safeEngine = Safe.AudioEngine.Create(effectiveOptions.PreferredHostApi);
         }
         catch (OwnAudioException ex)
         {

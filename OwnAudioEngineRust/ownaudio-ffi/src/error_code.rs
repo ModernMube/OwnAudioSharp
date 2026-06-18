@@ -29,6 +29,11 @@ pub enum OwnAudioErrorCode {
     InternalPanic = 8,
     /// An internal error not covered by the above codes.
     InternalError = 9,
+    /// The requested host API (e.g. ASIO) is not compiled into this binary,
+    /// or no compatible driver is installed on this machine.
+    HostApiNotAvailable = 10,
+    /// The ASIO host API is compiled in but no ASIO driver is installed on this machine.
+    AsioDriverNotFound = 11,
 }
 
 impl From<ownaudio_core::AudioError> for OwnAudioErrorCode {

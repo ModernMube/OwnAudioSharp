@@ -76,11 +76,10 @@ pub fn default_input_device() -> Result<AudioDeviceInfo> {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/// Selects an output `cpal::Device` by name, or falls back to the default.
+/// Selects an output `cpal::Device` by name using the given host, or falls back to the default.
 ///
 /// Used by `engine.rs`; callers outside this crate never see `cpal::Device`.
-pub(crate) fn resolve_output_device(name: Option<&str>) -> Result<cpal::Device> {
-    let host = cpal::default_host();
+pub(crate) fn resolve_output_device(host: &cpal::Host, name: Option<&str>) -> Result<cpal::Device> {
     match name {
         None => host
             .default_output_device()
@@ -96,9 +95,8 @@ pub(crate) fn resolve_output_device(name: Option<&str>) -> Result<cpal::Device> 
     }
 }
 
-/// Selects an input `cpal::Device` by name, or falls back to the default.
-pub(crate) fn resolve_input_device(name: Option<&str>) -> Result<cpal::Device> {
-    let host = cpal::default_host();
+/// Selects an input `cpal::Device` by name using the given host, or falls back to the default.
+pub(crate) fn resolve_input_device(host: &cpal::Host, name: Option<&str>) -> Result<cpal::Device> {
     match name {
         None => host
             .default_input_device()

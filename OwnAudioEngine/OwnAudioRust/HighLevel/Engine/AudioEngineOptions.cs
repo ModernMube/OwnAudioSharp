@@ -37,5 +37,18 @@ public sealed class AudioEngineOptions
     /// </summary>
     public SampleFormat DefaultSampleFormat { get; init; } = SampleFormat.Float32;
 
+    /// <summary>
+    /// The audio host API to use for device access and stream creation, or
+    /// <see langword="null"/> to use the platform default (WASAPI on Windows,
+    /// Core Audio on macOS, ALSA on Linux).
+    /// </summary>
+    /// <remarks>
+    /// There is no automatic fallback: if the requested host API is unavailable
+    /// the engine throws <see cref="Safe.Exceptions.HostApiNotAvailableException"/>
+    /// or <see cref="Safe.Exceptions.AsioDriverNotFoundException"/> rather than
+    /// silently downgrading to a different backend.
+    /// </remarks>
+    public HostApi? PreferredHostApi { get; init; } = null;
+
     #endregion
 }

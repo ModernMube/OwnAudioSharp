@@ -37,4 +37,15 @@ internal enum NativeErrorCode : int
 
     /// <summary>An internal error not covered by the above codes.</summary>
     InternalError = 9,
+
+    /// <summary>
+    /// The requested host API (e.g. ASIO) is not compiled into this binary,
+    /// or no compatible driver is installed on this machine.
+    /// </summary>
+    HostApiNotAvailable = 10,
+
+    /// <summary>
+    /// The ASIO host API is compiled in but no ASIO driver is installed on this machine.
+    /// </summary>
+    AsioDriverNotFound = 11,
 }
