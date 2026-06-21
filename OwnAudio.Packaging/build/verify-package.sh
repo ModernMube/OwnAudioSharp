@@ -79,13 +79,18 @@ if [[ "${PKG_ID}" == "OwnAudioSharp.Mobile" ]]; then
         echo "  WARN ios-arm64 framework absent (best-effort in step 8)"
     fi
 else
+    # Desktop RIDs are mandatory for both Basic and Full.
     check_file "runtimes/win-x64/native/ownaudio_ffi.dll"
     check_file "runtimes/win-arm64/native/ownaudio_ffi.dll"
     check_file "runtimes/linux-x64/native/libownaudio_ffi.so"
     check_file "runtimes/linux-arm64/native/libownaudio_ffi.so"
     check_file "runtimes/osx-x64/native/libownaudio_ffi.dylib"
     check_file "runtimes/osx-arm64/native/libownaudio_ffi.dylib"
-    check_file "runtimes/android-arm64/native/libownaudio_ffi.so"
+    # The Full package (OwnAudioSharp) is desktop-only by design; only the
+    # cross-platform Basic package ships the android-arm64 native binary.
+    if [[ "${PKG_ID}" != "OwnAudioSharp" ]]; then
+        check_file "runtimes/android-arm64/native/libownaudio_ffi.so"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
