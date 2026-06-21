@@ -106,10 +106,41 @@ check_nuspec_field() {
     fi
 }
 
+# The <license> and <repository> elements carry their value in an attribute
+# (e.g. <license type="expression">MIT</license>, <repository url="..." />),
+# so they need attribute-aware extraction rather than the plain <field> match.
+check_nuspec_license() {
+    local VALUE
+    # <license type="expression">MIT</license> or <license type="file">LICENSE</license>
+    VALUE=$(grep -oP "<license[^>]*>\K[^<]+" "${NUSPEC_FILE}" | head -n 1 || true)
+    # Fall back to the legacy <licenseUrl> element.
+    if [[ -z "${VALUE}" ]]; then
+        VALUE=$(grep -oP "(?<=<licenseUrl>)[^<]+" "${NUSPEC_FILE}" | head -n 1 || true)
+    fi
+    if [[ -n "${VALUE}" ]]; then
+        echo "  OK  <license>: ${VALUE}"
+    else
+        echo "  FAIL <license> is empty or missing in .nuspec"
+        FAILED=1
+    fi
+}
+
+check_nuspec_repository() {
+    local VALUE
+    # <repository type="git" url="https://..." /> — value lives in the url attribute.
+    VALUE=$(grep -oP '<repository[^>]*\burl="\K[^"]+' "${NUSPEC_FILE}" | head -n 1 || true)
+    if [[ -n "${VALUE}" ]]; then
+        echo "  OK  <repository>: ${VALUE}"
+    else
+        echo "  FAIL <repository> is empty or missing in .nuspec"
+        FAILED=1
+    fi
+}
+
 check_nuspec_field "id"
 check_nuspec_field "version"
-check_nuspec_field "license"
-check_nuspec_field "repository"
+check_nuspec_license
+check_nuspec_repository
 check_nuspec_field "tags"
 
 # ---------------------------------------------------------------------------
