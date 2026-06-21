@@ -58,12 +58,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Load the MSVC developer environment so dumpbin/lib/link are on PATH.
-      # The "Validate ASIO exports" step relies on dumpbin, which is otherwise
-      # not exposed on the windows-latest runner.
-      - name: Set up MSVC developer environment
-        uses: ilammy/msvc-dev-cmd@v1
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -131,8 +125,21 @@ jobs:
         if: steps.asio-sdk.outputs.asio_available == 'true'
         shell: pwsh
         run: |
+          # dumpbin is not on PATH, and we must NOT load the full MSVC dev
+          # environment globally — doing so makes cc/rustc resolve link.exe via
+          # PATH, where the Git Bash coreutils 'link' shadows the MSVC linker
+          # and breaks the cargo build. Resolve dumpbin's full path locally.
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsRoot = & $vswhere -latest -products * -property installationPath
+          $dumpbin = Get-ChildItem "$vsRoot\VC\Tools\MSVC" -Recurse -Filter dumpbin.exe -ErrorAction SilentlyContinue |
+                     Select-Object -First 1 -ExpandProperty FullName
+          if (-not $dumpbin) {
+            Write-Error "dumpbin.exe not found under the Visual Studio installation."
+            exit 1
+          }
+          Write-Host "Using dumpbin: $dumpbin"
           $dll = "OwnAudioEngineRust/target/x86_64-pc-windows-msvc/release/ownaudio_ffi.dll"
-          $exports = dumpbin /exports $dll 2>&1 | Select-String "ownaudio_v1_engine_create_with_host|ownaudio_v1_get_abi_version"
+          $exports = & $dumpbin /exports $dll 2>&1 | Select-String "ownaudio_v1_engine_create_with_host|ownaudio_v1_get_abi_version"
           if (-not $exports) {
             Write-Error "Required FFI exports missing from win-x64 binary."
             exit 1
