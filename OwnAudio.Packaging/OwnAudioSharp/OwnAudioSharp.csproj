@@ -27,10 +27,23 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj" />
+    <ProjectReference Include="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj"
+                      PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"
+                      Version="10.0.0" />
   </ItemGroup>
 
-  <!-- Desktop-only RIDs: win, linux, osx -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeReferencedAssembliesInPackage</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+
+  <Target Name="IncludeReferencedAssembliesInPackage">
+    <ItemGroup>
+      <BuildOutputInPackage Include="$(OutputPath)OwnAudioRust.dll" />
+      <BuildOutputInPackage Include="$(OutputPath)Ownaudio.Core.dll" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <None Condition="Exists('..\..\artifacts\win-x64\ownaudio_ffi.dll')"
           Include="..\..\artifacts\win-x64\ownaudio_ffi.dll"

@@ -24,8 +24,22 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj" />
+    <ProjectReference Include="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj"
+                      PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"
+                      Version="10.0.0" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeReferencedAssembliesInPackage</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+
+  <Target Name="IncludeReferencedAssembliesInPackage">
+    <ItemGroup>
+      <BuildOutputInPackage Include="$(OutputPath)OwnAudioRust.dll" />
+      <BuildOutputInPackage Include="$(OutputPath)Ownaudio.Core.dll" />
+    </ItemGroup>
+  </Target>
 
   <!--
     Native binaries are built by the CI rust-build matrix jobs and placed in

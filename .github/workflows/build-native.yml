@@ -505,7 +505,7 @@ jobs:
             </packageSources>
           </configuration>
           EOF
-          cat > int-test/int-test.csproj <<'EOF'
+          cat > int-test/int-test.csproj <<EOF
           <Project Sdk="Microsoft.NET.Sdk">
             <PropertyGroup>
               <OutputType>Exe</OutputType>
@@ -513,8 +513,7 @@ jobs:
               <Nullable>enable</Nullable>
             </PropertyGroup>
             <ItemGroup>
-              <!-- "*-*" floats to the latest version including prereleases (e.g. 1.0.0-ci.N). -->
-              <PackageReference Include="OwnAudioSharp.Basic" Version="*-*" />
+              <PackageReference Include="OwnAudioSharp.Basic" Version="${OWNAUDIO_VERSION}" />
             </ItemGroup>
           </Project>
           EOF
