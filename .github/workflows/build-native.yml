@@ -523,34 +523,3 @@ jobs:
           cd int-test
           dotnet restore --source ../local-feed
           dotnet run --configuration Release
-
-  # -------------------------------------------------------------------------
-  # Publish to NuGet.org — tag-push only, requires manual approval
-  # -------------------------------------------------------------------------
-  publish:
-    name: Publish to NuGet.org
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs:
-      - version
-      - integration-test
-    runs-on: ubuntu-latest
-    environment: production
-
-    steps:
-      - name: Download nupkg
-        uses: actions/download-artifact@v4
-        with:
-          name: nupkg
-          path: nupkg/
-
-      - name: Push to NuGet.org
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-        run: |
-          for pkg in nupkg/*.nupkg; do
-            echo "Pushing: ${pkg}"
-            dotnet nuget push "${pkg}" \
-              --api-key "${NUGET_API_KEY}" \
-              --source https://api.nuget.org/v3/index.json \
-              --skip-duplicate
-          done
