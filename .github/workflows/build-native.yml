@@ -487,12 +487,24 @@ jobs:
         run: |
           mkdir -p local-feed
           cp test-pkgs/*.nupkg local-feed/
-          dotnet nuget add source "$(pwd)/local-feed" --name local-ownaudio
 
       - name: Create minimal test project
         shell: bash
         run: |
           mkdir -p int-test
+          # A project-local nuget.config points at the local feed with a
+          # relative path. This avoids `dotnet nuget add source`, which fails
+          # on Windows bash because $(pwd) yields an MSYS path the CLI rejects.
+          cat > int-test/nuget.config <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local-ownaudio" value="../local-feed" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+          </configuration>
+          EOF
           cat > int-test/int-test.csproj <<'EOF'
           <Project Sdk="Microsoft.NET.Sdk">
             <PropertyGroup>
@@ -501,7 +513,8 @@ jobs:
               <Nullable>enable</Nullable>
             </PropertyGroup>
             <ItemGroup>
-              <PackageReference Include="OwnAudioSharp.Basic" Version="*" />
+              <!-- "*-*" floats to the latest version including prereleases (e.g. 1.0.0-ci.N). -->
+              <PackageReference Include="OwnAudioSharp.Basic" Version="*-*" />
             </ItemGroup>
           </Project>
           EOF
@@ -534,5 +547,5 @@ jobs:
         shell: bash
         run: |
           cd int-test
-          dotnet restore --source ../local-feed
+          # Restore resolves the feed from the project-local nuget.config.
           dotnet run --configuration Release
