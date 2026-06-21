@@ -58,6 +58,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Load the MSVC developer environment so dumpbin/lib/link are on PATH.
+      # The "Validate ASIO exports" step relies on dumpbin, which is otherwise
+      # not exposed on the windows-latest runner.
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
