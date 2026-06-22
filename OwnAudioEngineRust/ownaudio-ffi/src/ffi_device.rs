@@ -104,25 +104,30 @@ pub extern "C" fn ownaudio_v1_list_input_devices(
 /// Passing `null` or `count = 0` is safe and has no effect.
 #[no_mangle]
 pub extern "C" fn ownaudio_v1_free_device_list(devices: *mut OwnAudioDeviceInfo, count: usize) {
-    if devices.is_null() || count == 0 {
-        return;
-    }
-
-    // SAFETY: `devices` was allocated by `devices_to_c` using Vec::into_raw_parts
-    // logic (Box::into_raw on a slice), and each `name` was allocated by
-    // CString::into_raw.
-    unsafe {
-        let slice = std::slice::from_raw_parts_mut(devices, count);
-        for info in slice.iter_mut() {
-            if !info.name.is_null() {
-                // Reclaim and drop the CString that owns this pointer.
-                drop(CString::from_raw(info.name as *mut c_char));
-                info.name = std::ptr::null();
-            }
+    // A panic while freeing must never unwind across the FFI boundary.
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if devices.is_null() || count == 0 {
+            return;
         }
-        // Reconstruct the Vec and let it drop to free the array.
-        drop(Vec::from_raw_parts(devices, count, count));
-    }
+
+        // SAFETY: `devices` was produced by `devices_to_c` via
+        // `Box::<[OwnAudioDeviceInfo]>::into_raw`, and each `name` was allocated
+        // by `CString::into_raw`.
+        unsafe {
+            let slice = std::slice::from_raw_parts_mut(devices, count);
+            for info in slice.iter_mut() {
+                if !info.name.is_null() {
+                    // Reclaim and drop the CString that owns this pointer.
+                    drop(CString::from_raw(info.name as *mut c_char));
+                    info.name = std::ptr::null();
+                }
+            }
+            // Reconstruct the boxed slice from the same fat pointer and let it
+            // drop to free the array. The slice length carries the exact
+            // allocation size, so this matches the original layout.
+            drop(Box::from_raw(slice as *mut [OwnAudioDeviceInfo]));
+        }
+    }));
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +137,7 @@ pub extern "C" fn ownaudio_v1_free_device_list(devices: *mut OwnAudioDeviceInfo,
 fn devices_to_c(
     devices: Vec<ownaudio_core::AudioDeviceInfo>,
 ) -> (*mut OwnAudioDeviceInfo, usize) {
-    let mut c_vec: Vec<OwnAudioDeviceInfo> = devices
+    let c_vec: Vec<OwnAudioDeviceInfo> = devices
         .into_iter()
         .map(|d| {
             let name_cstr = CString::new(d.name).unwrap_or_else(|_| {
@@ -151,11 +156,12 @@ fn devices_to_c(
         .collect();
 
     let count = c_vec.len();
-    // Shrink the vec so that len == capacity before transferring ownership,
-    // allowing `Vec::from_raw_parts(ptr, count, count)` in the free function.
-    c_vec.shrink_to_fit();
-    let ptr = c_vec.as_mut_ptr();
-    std::mem::forget(c_vec);
+    // Convert into a boxed slice so the allocation size is exactly `count`
+    // elements; the free function reconstructs the same fat pointer, avoiding
+    // the capacity mismatch that `Vec::from_raw_parts(ptr, count, count)` would
+    // risk after a non-exact `shrink_to_fit`.
+    let boxed: Box<[OwnAudioDeviceInfo]> = c_vec.into_boxed_slice();
+    let ptr = Box::into_raw(boxed) as *mut OwnAudioDeviceInfo;
 
     (ptr, count)
 }

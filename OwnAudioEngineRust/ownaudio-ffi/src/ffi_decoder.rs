@@ -230,10 +230,14 @@ pub extern "C" fn ownaudio_v1_decoder_is_eof(
 /// Passing `null` is safe and has no effect.
 #[no_mangle]
 pub extern "C" fn ownaudio_v1_decoder_destroy(handle: *mut OwnAudioDecoderHandle) {
-    if handle.is_null() {
-        return;
-    }
-    unsafe {
-        drop(Box::from_raw(handle as *mut DecoderWrapper));
-    }
+    // Dropping the decoder stops and joins the prefetch thread; a panic there
+    // must never unwind across the FFI boundary.
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if handle.is_null() {
+            return;
+        }
+        unsafe {
+            drop(Box::from_raw(handle as *mut DecoderWrapper));
+        }
+    }));
 }

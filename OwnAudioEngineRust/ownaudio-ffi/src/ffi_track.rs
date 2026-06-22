@@ -50,12 +50,15 @@ pub extern "C" fn ownaudio_v1_mixer_create(
 /// before calling this function.
 #[no_mangle]
 pub extern "C" fn ownaudio_v1_mixer_destroy(mixer: *mut OwnAudioMixerHandle) {
-    if mixer.is_null() {
-        return;
-    }
-    unsafe {
-        drop(Box::from_raw(mixer as *mut MixerWrapper));
-    }
+    // A panic in the mixer's Drop must never unwind across the FFI boundary.
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if mixer.is_null() {
+            return;
+        }
+        unsafe {
+            drop(Box::from_raw(mixer as *mut MixerWrapper));
+        }
+    }));
 }
 
 // ---------------------------------------------------------------------------
@@ -107,12 +110,15 @@ pub extern "C" fn ownaudio_v1_track_create(
 /// Passing `null` is safe and has no effect.
 #[no_mangle]
 pub extern "C" fn ownaudio_v1_track_destroy(track: *mut OwnAudioTrackHandle) {
-    if track.is_null() {
-        return;
-    }
-    unsafe {
-        drop(Box::from_raw(track as *mut TrackWrapper));
-    }
+    // A panic in the track handle's Drop must never unwind across the FFI boundary.
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if track.is_null() {
+            return;
+        }
+        unsafe {
+            drop(Box::from_raw(track as *mut TrackWrapper));
+        }
+    }));
 }
 
 /// Removes and destroys the track from the mixer.

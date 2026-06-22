@@ -104,13 +104,16 @@ pub extern "C" fn ownaudio_v1_engine_create_with_host(
 /// function.  Passing `null` is safe and has no effect.
 #[no_mangle]
 pub extern "C" fn ownaudio_v1_engine_destroy(handle: *mut OwnAudioEngineHandle) {
-    if handle.is_null() {
-        return;
-    }
-    // SAFETY: handle was produced by Box::into_raw in engine_create.
-    unsafe {
-        drop(Box::from_raw(handle as *mut EngineWrapper));
-    }
+    // A panic in the engine's Drop must never unwind across the FFI boundary.
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if handle.is_null() {
+            return;
+        }
+        // SAFETY: handle was produced by Box::into_raw in engine_create.
+        unsafe {
+            drop(Box::from_raw(handle as *mut EngineWrapper));
+        }
+    }));
 }
 
 // ---------------------------------------------------------------------------
@@ -242,12 +245,15 @@ pub extern "C" fn ownaudio_v1_output_stream_pause(
 /// Passing `null` is safe and has no effect.
 #[no_mangle]
 pub extern "C" fn ownaudio_v1_output_stream_destroy(stream: *mut OwnAudioOutputStreamHandle) {
-    if stream.is_null() {
-        return;
-    }
-    unsafe {
-        drop(Box::from_raw(stream as *mut OutputStreamWrapper));
-    }
+    // A panic while stopping/dropping the stream must not cross the FFI boundary.
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if stream.is_null() {
+            return;
+        }
+        unsafe {
+            drop(Box::from_raw(stream as *mut OutputStreamWrapper));
+        }
+    }));
 }
 
 // ---------------------------------------------------------------------------
@@ -370,12 +376,15 @@ pub extern "C" fn ownaudio_v1_input_stream_pause(stream: *mut OwnAudioInputStrea
 /// Passing `null` is safe and has no effect.
 #[no_mangle]
 pub extern "C" fn ownaudio_v1_input_stream_destroy(stream: *mut OwnAudioInputStreamHandle) {
-    if stream.is_null() {
-        return;
-    }
-    unsafe {
-        drop(Box::from_raw(stream as *mut InputStreamWrapper));
-    }
+    // A panic while stopping/dropping the stream must not cross the FFI boundary.
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if stream.is_null() {
+            return;
+        }
+        unsafe {
+            drop(Box::from_raw(stream as *mut InputStreamWrapper));
+        }
+    }));
 }
 
 // ---------------------------------------------------------------------------

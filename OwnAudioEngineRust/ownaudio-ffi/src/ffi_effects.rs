@@ -118,12 +118,15 @@ pub extern "C" fn ownaudio_v1_track_add_effect(
 /// The effect is NOT removed from the track chain; call `ownaudio_v1_effect_remove` first.
 #[no_mangle]
 pub extern "C" fn ownaudio_v1_effect_destroy(effect: *mut OwnAudioEffectHandle) {
-    if effect.is_null() {
-        return;
-    }
-    unsafe {
-        drop(Box::from_raw(effect as *mut EffectWrapper));
-    }
+    // A panic in the effect handle's Drop must never unwind across the FFI boundary.
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if effect.is_null() {
+            return;
+        }
+        unsafe {
+            drop(Box::from_raw(effect as *mut EffectWrapper));
+        }
+    }));
 }
 
 /// Removes the effect from its track's effect chain and destroys the handle.
