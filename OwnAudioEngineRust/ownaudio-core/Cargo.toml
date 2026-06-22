@@ -13,7 +13,7 @@ crate-type = ["lib"]
 cpal = "0.18"
 thiserror = "1.0"
 rtrb = "0.3"
-rubato = "0.15"
+rubato = { version = "0.15", features = ["fft_resampler"] }
 
 [dev-dependencies]
 # az integrációs tesztekben ~1s sleep szükséges

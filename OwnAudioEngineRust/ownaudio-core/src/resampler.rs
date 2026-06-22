@@ -1,21 +1,24 @@
-use rubato::{
-    Resampler as RubatoResampler, SincFixedIn, SincInterpolationParameters,
-    SincInterpolationType, WindowFunction,
-};
+use rubato::{FftFixedIn, Resampler as RubatoResampler};
 
 use crate::error::{AudioError, Result};
 
-/// Sample-rate converter built on rubato's `SincFixedIn`.
+/// Sample-rate converter built on rubato's `FftFixedIn`.
+///
+/// Uses FFT-based resampling for fixed input/output sample rate ratios
+/// (e.g. 44 100 → 48 000 Hz device conversion). This is considerably faster
+/// than sinc-based approaches and delivers the best quality for static ratios.
+/// SIMD acceleration is provided automatically via RustFFT:
+/// AVX/SSE on x86_64, NEON on aarch64.
 ///
 /// All working memory is pre-allocated in [`Resampler::new`]; the
 /// [`process`] method does not heap-allocate on the steady-state path.
 ///
 /// Input and output use **planar** layout (one `Vec<f32>` per channel),
-/// which matches rubato's native format.  Use [`crate::format::interleave`]
+/// which matches rubato's native format. Use [`crate::format::interleave`]
 /// and [`crate::format::deinterleave`] to convert between interleaved and
 /// planar representations.
 pub struct Resampler {
-    inner: SincFixedIn<f32>,
+    inner: FftFixedIn<f32>,
     /// Pre-allocated output scratch (one element per channel, each sized
     /// to hold `output_frames_max()` frames).
     output_scratch: Vec<Vec<f32>>,
@@ -24,12 +27,12 @@ pub struct Resampler {
 }
 
 impl Resampler {
-    /// Creates a new resampler.
+    /// Creates a new FFT-based resampler for a fixed sample-rate ratio.
     ///
     /// - `input_rate` / `output_rate` — source and target sample rates in Hz.
     /// - `channels` — number of audio channels (must match the slices passed to [`process`]).
-    /// - `max_input_frames` — the largest input chunk (frames per channel) that
-    ///   will ever be passed to [`process`].  Determines internal buffer sizes.
+    /// - `chunk_size` — exact number of input frames per [`process`] call.
+    ///   Every call to [`process`] must pass exactly this many frames per channel.
     ///
     /// # Errors
     /// Returns [`AudioError::ResamplerInit`] if rubato rejects the configuration.
@@ -37,20 +40,16 @@ impl Resampler {
         input_rate: u32,
         output_rate: u32,
         channels: usize,
-        max_input_frames: usize,
+        chunk_size: usize,
     ) -> Result<Self> {
-        let ratio = output_rate as f64 / input_rate as f64;
-
-        let params = SincInterpolationParameters {
-            sinc_len: 256,
-            f_cutoff: 0.95,
-            interpolation: SincInterpolationType::Linear,
-            oversampling_factor: 128,
-            window: WindowFunction::BlackmanHarris2,
-        };
-
-        let inner = SincFixedIn::<f32>::new(ratio, 2.0, params, max_input_frames, channels)
-            .map_err(|e| AudioError::ResamplerInit(e.to_string()))?;
+        let inner = FftFixedIn::<f32>::new(
+            input_rate as usize,
+            output_rate as usize,
+            chunk_size,
+            2, // sub_chunks: 2 gives better quality with minimal overhead
+            channels,
+        )
+        .map_err(|e| AudioError::ResamplerInit(e.to_string()))?;
 
         let max_out = inner.output_frames_max();
         let output_scratch = vec![vec![0.0f32; max_out]; channels];
@@ -65,15 +64,18 @@ impl Resampler {
 
     /// Resamples `input` (planar, one `Vec<f32>` per channel) into `out`.
     ///
-    /// `out` must already have `channels` elements, each with enough capacity
-    /// to hold the resampled output.  Use [`output_frames_max`] to size `out`
-    /// correctly.
+    /// Each channel slice in `input` must contain exactly `chunk_size` frames
+    /// (the value passed to [`new`]).
+    ///
+    /// `out` must have `channels` elements, each pre-allocated with at least
+    /// [`output_frames_max`] capacity. Use `vec![0.0f32; rs.output_frames_max()]`
+    /// when constructing these buffers and reuse them across calls.
     ///
     /// Returns the number of output frames written per channel.
     ///
     /// # Errors
     /// - [`AudioError::UnsupportedConfig`] if the number of frames in any
-    ///   `input` channel exceeds `max_input_frames` passed to [`new`].
+    ///   `input` channel does not equal `chunk_size` passed to [`new`].
     /// - [`AudioError::ResamplerProcess`] if rubato reports a processing error.
     ///
     /// # Panics
@@ -85,12 +87,12 @@ impl Resampler {
             "process: input and out must have the same channel count"
         );
 
-        let max_in = self.inner.input_frames_max();
-        if let Some(ch) = input.iter().find(|c| c.len() > max_in) {
+        let expected = self.inner.input_frames_max();
+        if let Some(ch) = input.iter().find(|c| c.len() != expected) {
             return Err(AudioError::UnsupportedConfig(format!(
-                "resampler: input has {} frames, max allowed is {}",
+                "resampler: input has {} frames, expected exactly {}",
                 ch.len(),
-                max_in
+                expected
             )));
         }
 
@@ -100,15 +102,19 @@ impl Resampler {
             .map_err(|e| AudioError::ResamplerProcess(e.to_string()))?;
 
         for (out_ch, scratch_ch) in out.iter_mut().zip(self.output_scratch.iter()) {
-            out_ch.resize(frames_written, 0.0);
-            out_ch.copy_from_slice(&scratch_ch[..frames_written]);
+            debug_assert!(
+                out_ch.len() >= frames_written,
+                "out buffer too small; pre-allocate with output_frames_max()"
+            );
+            out_ch[..frames_written].copy_from_slice(&scratch_ch[..frames_written]);
+            out_ch.truncate(frames_written);
         }
 
         Ok(frames_written)
     }
 
     /// Returns the maximum number of output frames that a single [`process`]
-    /// call can produce.  Use this to size the `out` parameter.
+    /// call can produce. Use this to size the `out` parameter.
     pub fn output_frames_max(&self) -> usize {
         self.inner.output_frames_max()
     }
@@ -143,10 +149,6 @@ mod tests {
         let input = vec![sine_channel(440.0, 44_100, frames_in)];
         let mut out = vec![vec![0.0f32; rs.output_frames_max()]];
         let written = rs.process(&input, &mut out).unwrap();
-        // Rubato's SincFixedIn may produce slightly fewer frames on the first
-        // call due to the sinc filter startup delay.  We verify only that
-        // output is non-empty and finite; the steady-state ratio is verified
-        // by `upsampling_steady_state_ratio` below.
         assert!(written > 0, "upsampling should produce output frames");
         assert!(
             out[0][..written].iter().all(|&s| s.is_finite()),
@@ -156,14 +158,14 @@ mod tests {
 
     #[test]
     fn upsampling_steady_state_ratio() {
-        // Run multiple chunks so the filter fills up and the output count
-        // matches the expected 44100→48000 ratio.
         let frames_in = 512;
         let mut rs = Resampler::new(44_100, 48_000, 1, frames_in).unwrap();
         let mut total_in = 0usize;
         let mut total_out = 0usize;
         for _ in 0..16 {
             let input = vec![sine_channel(440.0, 44_100, frames_in)];
+            // Re-allocate to output_frames_max each iteration since truncate
+            // shrinks the vec after the first process call.
             let mut out = vec![vec![0.0f32; rs.output_frames_max()]];
             let written = rs.process(&input, &mut out).unwrap();
             total_in += frames_in;
@@ -205,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn exceeding_max_input_frames_returns_error() {
+    fn wrong_input_size_returns_error() {
         let frames_in = 256;
         let mut rs = Resampler::new(44_100, 48_000, 1, frames_in).unwrap();
         let too_big = vec![vec![0.0f32; frames_in + 1]];
@@ -213,7 +215,7 @@ mod tests {
         let result = rs.process(&too_big, &mut out);
         assert!(
             matches!(result, Err(AudioError::UnsupportedConfig(_))),
-            "expected UnsupportedConfig error"
+            "expected UnsupportedConfig error for wrong input size"
         );
     }
 
