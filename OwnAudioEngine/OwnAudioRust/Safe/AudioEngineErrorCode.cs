@@ -53,4 +53,16 @@ public enum AudioEngineErrorCode
     /// the managed layer was compiled against.  Reinstall the OwnAudioSharp NuGet package.
     /// </summary>
     AbiVersionMismatch = 12,
+
+    /// <summary>The audio file could not be opened or its format could not be probed.</summary>
+    DecoderOpenFailed = 13,
+
+    /// <summary>No decoder backend supports the file's container or codec.</summary>
+    DecoderUnsupportedFormat = 14,
+
+    /// <summary>An error occurred while decoding audio data from the stream.</summary>
+    DecoderReadFailed = 15,
+
+    /// <summary>Seeking within the audio stream failed.</summary>
+    DecoderSeekFailed = 16,
 }

@@ -19,6 +19,7 @@ pub mod callback;
 pub mod error_code;
 pub mod ffi_abi;
 pub mod ffi_config;
+pub mod ffi_decoder;
 pub mod ffi_device;
 pub mod ffi_effects;
 pub mod ffi_stream;
@@ -31,9 +32,11 @@ pub use callback::{OwnAudioInputCallback, OwnAudioOutputCallback};
 pub use error_code::OwnAudioErrorCode;
 pub use ffi_abi::ABI_VERSION;
 pub use ffi_config::{OwnAudioSampleFormat, OwnAudioStreamConfig};
+pub use ffi_decoder::OwnAudioStreamInfo;
 pub use ffi_device::OwnAudioDeviceInfo;
 pub use handles::{
-    OwnAudioEffectHandle, OwnAudioEngineHandle, OwnAudioInputStreamHandle,
-    OwnAudioMixerHandle, OwnAudioOutputStreamHandle, OwnAudioTrackHandle,
+    OwnAudioDecoderHandle, OwnAudioEffectHandle, OwnAudioEngineHandle,
+    OwnAudioInputStreamHandle, OwnAudioMixerHandle, OwnAudioOutputStreamHandle,
+    OwnAudioTrackHandle,
 };
 pub use host_api::OwnHostApi;

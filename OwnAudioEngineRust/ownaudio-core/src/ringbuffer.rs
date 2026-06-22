@@ -54,6 +54,11 @@ impl RingBufferWriter {
         unsafe { chunk.commit_all() };
         to_write
     }
+
+    /// Returns the number of samples that can currently be written without overflow.
+    pub fn free(&self) -> usize {
+        self.producer.slots()
+    }
 }
 
 impl RingBufferReader {

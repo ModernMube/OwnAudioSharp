@@ -83,6 +83,22 @@ typedef enum OwnAudioErrorCode {
      * The ASIO host API is compiled in but no ASIO driver is installed on this machine.
      */
     AsioDriverNotFound = 11,
+    /**
+     * The audio file could not be opened or its format could not be probed.
+     */
+    DecoderOpenFailed = 12,
+    /**
+     * No decoder backend supports the file's container or codec.
+     */
+    DecoderUnsupportedFormat = 13,
+    /**
+     * An error occurred while decoding audio data from the stream.
+     */
+    DecoderReadFailed = 14,
+    /**
+     * Seeking within the audio stream failed.
+     */
+    DecoderSeekFailed = 15,
 } OwnAudioErrorCode;
 
 /**
@@ -137,6 +153,40 @@ typedef enum OwnHostApi {
      */
     Alsa = 3,
 } OwnHostApi;
+
+/**
+ * Opaque handle to a streaming audio file decoder.
+ *
+ * Create with `ownaudio_v1_decoder_open`; release with
+ * `ownaudio_v1_decoder_destroy`.
+ */
+typedef struct OwnAudioDecoderHandle {
+    uint8_t _private[0];
+} OwnAudioDecoderHandle;
+
+/**
+ * C-compatible mirror of [`ownaudio_core::AudioStreamInfo`], returned by value.
+ *
+ * Layout matches the core struct exactly (both are `#[repr(C)]`).
+ */
+typedef struct OwnAudioStreamInfo {
+    /**
+     * Number of interleaved channels in the decoded output.
+     */
+    uint32_t channels;
+    /**
+     * Output sample rate in Hz.
+     */
+    uint32_t sample_rate;
+    /**
+     * Total duration in milliseconds; `u64::MAX` if unknown.
+     */
+    uint64_t duration_ms;
+    /**
+     * Source bit depth, or `0` for float/compressed formats.
+     */
+    uint32_t bit_depth;
+} OwnAudioStreamInfo;
 
 /**
  * Snapshot descriptor of an audio device, passed to the C# caller.
@@ -318,6 +368,72 @@ uint32_t ownaudio_v1_get_abi_version(void);
  * free it.  The string is derived from `version.json` at build time via `build.rs`.
  */
 const char *ownaudio_v1_get_package_version(void);
+
+/**
+ * Opens an audio file for streaming decoding and writes the handle to
+ * `*out_decoder`.
+ *
+ * - `path` — null-terminated UTF-8 file path.
+ * - `target_sample_rate` — desired output sample rate in Hz; `0` keeps source.
+ * - `target_channels` — desired output channel count; `0` keeps source.
+ * - `prefetch_seconds` — prefetch buffer length in seconds; `<= 0` uses 2.0.
+ * - `out_decoder` — receives the new decoder handle on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.  The handle must be
+ * released with `ownaudio_v1_decoder_destroy`.
+ */
+int32_t ownaudio_v1_decoder_open(const char *path,
+                                 uint32_t target_sample_rate,
+                                 uint32_t target_channels,
+                                 float prefetch_seconds,
+                                 struct OwnAudioDecoderHandle **out_decoder);
+
+/**
+ * Reads up to `buffer_count` decoded interleaved `f32` samples into `buffer`
+ * and writes the number actually produced to `*out_samples_written`.
+ *
+ * Real-time safe: never blocks or allocates.  A value smaller than
+ * `buffer_count` means EOF or a transient prefetch underrun.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_decoder_read(struct OwnAudioDecoderHandle *handle,
+                                 float *buffer,
+                                 size_t buffer_count,
+                                 size_t *out_samples_written);
+
+/**
+ * Requests a non-blocking seek to `frame_position` (output sample frames).
+ *
+ * The prefetch thread performs the seek asynchronously; subsequent reads may
+ * briefly return pre-seek samples already buffered in the ring.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_decoder_seek(struct OwnAudioDecoderHandle *handle, uint64_t frame_position);
+
+/**
+ * Writes the decoded output stream metadata to `*out_info`.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_decoder_get_stream_info(struct OwnAudioDecoderHandle *handle,
+                                            struct OwnAudioStreamInfo *out_info);
+
+/**
+ * Writes `true` to `*out_is_eof` when the file has been fully decoded and the
+ * prefetch buffer is drained.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_decoder_is_eof(struct OwnAudioDecoderHandle *handle, bool *out_is_eof);
+
+/**
+ * Destroys a decoder handle, stopping and joining the prefetch thread.
+ *
+ * Passing `null` is safe and has no effect.
+ */
+void ownaudio_v1_decoder_destroy(struct OwnAudioDecoderHandle *handle);
 
 /**
  * Lists all available output devices on the default host.

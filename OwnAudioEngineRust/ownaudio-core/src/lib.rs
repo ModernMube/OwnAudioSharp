@@ -26,6 +26,7 @@
 //! ```
 
 pub mod config;
+pub mod decoder;
 pub mod device;
 pub mod effects;
 pub mod engine;
@@ -39,6 +40,7 @@ pub mod stream;
 
 // Flat re-exports for convenient use without module paths.
 pub use config::{SampleFormat, StreamConfig};
+pub use decoder::{open_streaming, AudioStreamInfo, DecoderReadResult, StreamingTrack};
 pub use device::{
     default_input_device, default_output_device, list_input_devices, list_output_devices,
     AudioDeviceInfo,

@@ -18,6 +18,7 @@ use std::os::raw::c_char;
 use ownaudio_ffi::{
     error_code::OwnAudioErrorCode,
     ffi_config::{OwnAudioSampleFormat, OwnAudioStreamConfig},
+    ffi_decoder::OwnAudioStreamInfo,
     ffi_device::OwnAudioDeviceInfo,
     host_api::OwnHostApi,
 };
@@ -114,6 +115,10 @@ fn error_code_discriminants() {
     assert_eq!(OwnAudioErrorCode::InternalError as i32, 9);
     assert_eq!(OwnAudioErrorCode::HostApiNotAvailable as i32, 10);
     assert_eq!(OwnAudioErrorCode::AsioDriverNotFound as i32, 11);
+    assert_eq!(OwnAudioErrorCode::DecoderOpenFailed as i32, 12);
+    assert_eq!(OwnAudioErrorCode::DecoderUnsupportedFormat as i32, 13);
+    assert_eq!(OwnAudioErrorCode::DecoderReadFailed as i32, 14);
+    assert_eq!(OwnAudioErrorCode::DecoderSeekFailed as i32, 15);
 }
 
 #[test]
@@ -122,4 +127,23 @@ fn host_api_discriminants() {
     assert_eq!(OwnHostApi::Asio as i32, 1);
     assert_eq!(OwnHostApi::CoreAudio as i32, 2);
     assert_eq!(OwnHostApi::Alsa as i32, 3);
+}
+
+// ---------------------------------------------------------------------------
+// OwnAudioStreamInfo — fixed 24-byte layout (u32, u32, u64, u32 + tail pad)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn stream_info_size_and_align() {
+    assert_eq!(size_of::<OwnAudioStreamInfo>(), 24, "OwnAudioStreamInfo size");
+    assert_eq!(align_of::<OwnAudioStreamInfo>(), 8, "OwnAudioStreamInfo align");
+}
+
+#[test]
+fn stream_info_field_offsets() {
+    assert_eq!(offset_of!(OwnAudioStreamInfo, channels), 0, "channels");
+    assert_eq!(offset_of!(OwnAudioStreamInfo, sample_rate), 4, "sample_rate");
+    assert_eq!(offset_of!(OwnAudioStreamInfo, duration_ms), 8, "duration_ms");
+    assert_eq!(offset_of!(OwnAudioStreamInfo, bit_depth), 16, "bit_depth");
+    // 4 bytes tail padding at offset 20 to round the struct up to 8-byte align.
 }

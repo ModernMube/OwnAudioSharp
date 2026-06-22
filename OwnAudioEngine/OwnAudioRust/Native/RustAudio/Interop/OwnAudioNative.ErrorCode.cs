@@ -48,4 +48,16 @@ internal enum NativeErrorCode : int
     /// The ASIO host API is compiled in but no ASIO driver is installed on this machine.
     /// </summary>
     AsioDriverNotFound = 11,
+
+    /// <summary>The audio file could not be opened or its format could not be probed.</summary>
+    DecoderOpenFailed = 12,
+
+    /// <summary>No decoder backend supports the file's container or codec.</summary>
+    DecoderUnsupportedFormat = 13,
+
+    /// <summary>An error occurred while decoding audio data from the stream.</summary>
+    DecoderReadFailed = 14,
+
+    /// <summary>Seeking within the audio stream failed.</summary>
+    DecoderSeekFailed = 15,
 }

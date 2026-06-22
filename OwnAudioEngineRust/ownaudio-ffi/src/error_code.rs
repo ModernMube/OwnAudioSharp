@@ -34,6 +34,14 @@ pub enum OwnAudioErrorCode {
     HostApiNotAvailable = 10,
     /// The ASIO host API is compiled in but no ASIO driver is installed on this machine.
     AsioDriverNotFound = 11,
+    /// The audio file could not be opened or its format could not be probed.
+    DecoderOpenFailed = 12,
+    /// No decoder backend supports the file's container or codec.
+    DecoderUnsupportedFormat = 13,
+    /// An error occurred while decoding audio data from the stream.
+    DecoderReadFailed = 14,
+    /// Seeking within the audio stream failed.
+    DecoderSeekFailed = 15,
 }
 
 impl From<ownaudio_core::AudioError> for OwnAudioErrorCode {
@@ -48,6 +56,10 @@ impl From<ownaudio_core::AudioError> for OwnAudioErrorCode {
             ownaudio_core::AudioError::RingBufferUnderrun { .. } => Self::InternalError,
             ownaudio_core::AudioError::ResamplerInit(_) => Self::InternalError,
             ownaudio_core::AudioError::ResamplerProcess(_) => Self::InternalError,
+            ownaudio_core::AudioError::DecoderOpen(_) => Self::DecoderOpenFailed,
+            ownaudio_core::AudioError::DecoderUnsupported(_) => Self::DecoderUnsupportedFormat,
+            ownaudio_core::AudioError::DecoderRead(_) => Self::DecoderReadFailed,
+            ownaudio_core::AudioError::DecoderSeek(_) => Self::DecoderSeekFailed,
         }
     }
 }

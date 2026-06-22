@@ -47,6 +47,21 @@ public class FfiStructLayoutParityTests
     }
 
     [TestMethod]
+    public void NativeAudioStreamInfo_SizeIs24()
+    {
+        Assert.AreEqual(24, Marshal.SizeOf<NativeAudioStreamInfo>(), "NativeAudioStreamInfo size");
+    }
+
+    [TestMethod]
+    public void NativeAudioStreamInfo_FieldOffsets()
+    {
+        Assert.AreEqual(0, (int)Marshal.OffsetOf<NativeAudioStreamInfo>(nameof(NativeAudioStreamInfo.Channels)), "Channels");
+        Assert.AreEqual(4, (int)Marshal.OffsetOf<NativeAudioStreamInfo>(nameof(NativeAudioStreamInfo.SampleRate)), "SampleRate");
+        Assert.AreEqual(8, (int)Marshal.OffsetOf<NativeAudioStreamInfo>(nameof(NativeAudioStreamInfo.DurationMs)), "DurationMs");
+        Assert.AreEqual(16, (int)Marshal.OffsetOf<NativeAudioStreamInfo>(nameof(NativeAudioStreamInfo.BitDepth)), "BitDepth");
+    }
+
+    [TestMethod]
     public void NativeDeviceInfo_SizeMatchesPointerWidth()
     {
         int expected = Ptr == 8 ? 24 : 16;
@@ -106,6 +121,10 @@ public class FfiStructLayoutParityTests
         Assert.AreEqual(9, (int)NativeErrorCode.InternalError);
         Assert.AreEqual(10, (int)NativeErrorCode.HostApiNotAvailable);
         Assert.AreEqual(11, (int)NativeErrorCode.AsioDriverNotFound);
+        Assert.AreEqual(12, (int)NativeErrorCode.DecoderOpenFailed);
+        Assert.AreEqual(13, (int)NativeErrorCode.DecoderUnsupportedFormat);
+        Assert.AreEqual(14, (int)NativeErrorCode.DecoderReadFailed);
+        Assert.AreEqual(15, (int)NativeErrorCode.DecoderSeekFailed);
     }
 
     [TestMethod]

@@ -1,4 +1,4 @@
-use ownaudio_core::{AudioEngine, InputStream, MultiTrackMixer, OutputStream};
+use ownaudio_core::{AudioEngine, InputStream, MultiTrackMixer, OutputStream, StreamingTrack};
 
 /// Opaque handle to an [`AudioEngine`] instance.
 ///
@@ -27,12 +27,25 @@ pub struct OwnAudioInputStreamHandle {
     _private: [u8; 0],
 }
 
+/// Opaque handle to a streaming audio file decoder.
+///
+/// Create with `ownaudio_v1_decoder_open`; release with
+/// `ownaudio_v1_decoder_destroy`.
+#[repr(C)]
+pub struct OwnAudioDecoderHandle {
+    _private: [u8; 0],
+}
+
 // ---------------------------------------------------------------------------
 // Internal wrapper types — never exposed across the FFI boundary
 // ---------------------------------------------------------------------------
 
 pub(crate) struct EngineWrapper {
     pub inner: AudioEngine,
+}
+
+pub(crate) struct DecoderWrapper {
+    pub inner: StreamingTrack,
 }
 
 pub(crate) struct OutputStreamWrapper {
@@ -92,6 +105,23 @@ pub(crate) unsafe fn input_stream_from_ptr<'a>(
         None
     } else {
         Some(&mut *(ptr as *mut InputStreamWrapper))
+    }
+}
+
+/// Casts a raw `*mut OwnAudioDecoderHandle` back to `&mut DecoderWrapper`.
+///
+/// Returns `None` if the pointer is null.
+///
+/// # Safety
+/// The caller must guarantee that `ptr` was obtained from
+/// `ownaudio_v1_decoder_open` and has not been destroyed yet.
+pub(crate) unsafe fn decoder_from_ptr<'a>(
+    ptr: *mut OwnAudioDecoderHandle,
+) -> Option<&'a mut DecoderWrapper> {
+    if ptr.is_null() {
+        None
+    } else {
+        Some(&mut *(ptr as *mut DecoderWrapper))
     }
 }
 

@@ -41,6 +41,22 @@ pub enum AudioError {
     /// Resampler encountered an error during processing.
     #[error("Resampler processing failed: {0}")]
     ResamplerProcess(String),
+
+    /// The audio file could not be opened or its format could not be probed.
+    #[error("Failed to open audio file: {0}")]
+    DecoderOpen(String),
+
+    /// No decoder backend could handle the file's container or codec.
+    #[error("Unsupported audio format: {0}")]
+    DecoderUnsupported(String),
+
+    /// An error occurred while decoding audio data from the stream.
+    #[error("Audio decode error: {0}")]
+    DecoderRead(String),
+
+    /// Seeking within the audio stream failed.
+    #[error("Audio seek failed: {0}")]
+    DecoderSeek(String),
 }
 
 /// Convenience alias — all public functions in this crate return this.

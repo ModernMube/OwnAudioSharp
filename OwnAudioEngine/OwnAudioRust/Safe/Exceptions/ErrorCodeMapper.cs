@@ -58,6 +58,12 @@ internal static class ErrorCodeMapper
             NativeErrorCode.AsioDriverNotFound
                     => new AsioDriverNotFoundException(message),
 
+            NativeErrorCode.DecoderOpenFailed
+                or NativeErrorCode.DecoderUnsupportedFormat
+                or NativeErrorCode.DecoderReadFailed
+                or NativeErrorCode.DecoderSeekFailed
+                    => new DecoderException(publicCode, message),
+
             _ => new OwnAudioException(publicCode, message)
         };
     }
@@ -82,6 +88,10 @@ internal static class ErrorCodeMapper
             NativeErrorCode.InternalError           => AudioEngineErrorCode.InternalError,
             NativeErrorCode.HostApiNotAvailable     => AudioEngineErrorCode.HostApiNotAvailable,
             NativeErrorCode.AsioDriverNotFound      => AudioEngineErrorCode.AsioDriverNotFound,
+            NativeErrorCode.DecoderOpenFailed       => AudioEngineErrorCode.DecoderOpenFailed,
+            NativeErrorCode.DecoderUnsupportedFormat => AudioEngineErrorCode.DecoderUnsupportedFormat,
+            NativeErrorCode.DecoderReadFailed       => AudioEngineErrorCode.DecoderReadFailed,
+            NativeErrorCode.DecoderSeekFailed       => AudioEngineErrorCode.DecoderSeekFailed,
             _                                       => AudioEngineErrorCode.InternalError,
         };
     }
@@ -117,6 +127,10 @@ internal static class ErrorCodeMapper
             NativeErrorCode.InternalError           => "internal error in native audio engine",
             NativeErrorCode.HostApiNotAvailable     => "requested audio host API is not available on this system",
             NativeErrorCode.AsioDriverNotFound      => "ASIO host API is available but no ASIO driver is installed",
+            NativeErrorCode.DecoderOpenFailed       => "failed to open or probe the audio file",
+            NativeErrorCode.DecoderUnsupportedFormat => "audio file format or codec is not supported",
+            NativeErrorCode.DecoderReadFailed       => "error while decoding audio data",
+            NativeErrorCode.DecoderSeekFailed       => "failed to seek within the audio stream",
             _                                       => $"unknown error code {(int)code}",
         };
     }
