@@ -1,0 +1,2188 @@
+namespace OwnaudioNET.BufferManagement
+{
+    public sealed class AudioBufferPool
+    {
+        public AudioBufferPool(int bufferSize, int initialPoolSize = 4, int maxPoolSize = 16) { }
+        public int BufferSize { get; }
+        public int PoolSize { get; }
+        public void Clear() { }
+        public OwnaudioNET.BufferManagement.AudioBufferPool.PoolStatistics GetStatistics() { }
+        public float[] Rent() { }
+        public void Return(float[] buffer) { }
+        public struct PoolStatistics
+        {
+            public int BufferSize { get; init; }
+            public int CurrentPoolSize { get; init; }
+            public int MaxPoolSize { get; init; }
+            public override string ToString() { }
+        }
+    }
+    public sealed class CircularBuffer
+    {
+        public CircularBuffer(int capacityInSamples) { }
+        public int Available { get; }
+        public int Capacity { get; }
+        public bool IsEmpty { get; }
+        public bool IsFull { get; }
+        public int WritableCount { get; }
+        public void Clear() { }
+        public void ClearWithZero() { }
+        public int Peek(System.Span<float> destination) { }
+        public int Read(System.Span<float> destination) { }
+        public int Skip(int sampleCount) { }
+        public int Write(System.ReadOnlySpan<float> data) { }
+    }
+}
+namespace OwnaudioNET.Core
+{
+    public static class AudioConstants
+    {
+        public const int MaxAudioSources = 25;
+        public const float MaxTempo = 1.2F;
+        public const float MinTempo = 0.8F;
+    }
+    public enum AudioState
+    {
+        Stopped = 0,
+        Playing = 1,
+        Paused = 2,
+        EndOfStream = 3,
+        Error = 4,
+    }
+}
+namespace OwnaudioNET.Dsp
+{
+    public static class OwnAudioFft
+    {
+        public static void Forward(System.Numerics.Complex[] data) { }
+        public static void Forward(System.Span<System.Numerics.Complex> data) { }
+        public static void Inverse(System.Numerics.Complex[] data) { }
+        public static void Inverse(System.Span<System.Numerics.Complex> data) { }
+    }
+}
+namespace OwnaudioNET.Effects
+{
+    public sealed class AutoGainEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public AutoGainEffect(OwnaudioNET.Effects.AutoGainPreset preset) { }
+        public AutoGainEffect(float targetLevel = 0.25, float attackCoeff = 0.99, float releaseCoeff = 0.999, float gateThreshold = 0.001, float maxGain = 4, float minGain = 0.25) { }
+        public float AttackCoefficient { get; set; }
+        public float CurrentGain { get; }
+        public bool Enabled { get; set; }
+        public float GateThreshold { get; set; }
+        public System.Guid Id { get; }
+        public float InputLevel { get; }
+        public int LatencySamples { get; }
+        public float MaximumGain { get; set; }
+        public float MinimumGain { get; set; }
+        public float Mix { get; set; }
+        public string Name { get; set; }
+        public float ReleaseCoefficient { get; set; }
+        public float TargetLevel { get; set; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetPreset(OwnaudioNET.Effects.AutoGainPreset preset) { }
+        public override string ToString() { }
+    }
+    public enum AutoGainPreset
+    {
+        Default = 0,
+        Music = 1,
+        Voice = 2,
+        Broadcast = 3,
+        Live = 4,
+    }
+    public sealed class ChorusEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public ChorusEffect(OwnaudioNET.Effects.ChorusPreset preset, int sampleRate = 44100) { }
+        public ChorusEffect(float rate = 1, float depth = 0.5, float mix = 0.5, int voices = 3, int sampleRate = 44100) { }
+        public float Depth { get; set; }
+        public bool Enabled { get; set; }
+        public System.Guid Id { get; }
+        public float Mix { get; set; }
+        public string Name { get; set; }
+        public float Rate { get; set; }
+        public int Voices { get; set; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetPreset(OwnaudioNET.Effects.ChorusPreset preset) { }
+        public override string ToString() { }
+    }
+    public enum ChorusPreset
+    {
+        Default = 0,
+        VocalSubtle = 1,
+        VocalLush = 2,
+        GuitarClassic = 3,
+        GuitarShimmer = 4,
+        SynthPad = 5,
+        StringEnsemble = 6,
+        VintageAnalog = 7,
+        Extreme = 8,
+    }
+    public sealed class CompressorEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public CompressorEffect(OwnaudioNET.Effects.CompressorPreset preset, float sampleRate = 44100) { }
+        public CompressorEffect(float threshold = 0.5, float ratio = 4, float attackTime = 100, float releaseTime = 200, float makeupGain = 1, float sampleRate = 44100) { }
+        public float AttackTime { get; set; }
+        public bool Enabled { get; set; }
+        public System.Guid Id { get; }
+        public float MakeupGain { get; set; }
+        public float Mix { get; set; }
+        public string Name { get; set; }
+        public float Ratio { get; set; }
+        public float ReleaseTime { get; set; }
+        public float SampleRate { get; set; }
+        public float Threshold { get; set; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetPreset(OwnaudioNET.Effects.CompressorPreset preset) { }
+        public override string ToString() { }
+        public static float DbToLinear(float dB) { }
+        public static float LinearToDb(float linear) { }
+    }
+    public enum CompressorPreset
+    {
+        Default = 0,
+        VocalGentle = 1,
+        VocalAggressive = 2,
+        Drums = 3,
+        Bass = 4,
+        MasteringLimiter = 5,
+        Vintage = 6,
+    }
+    public sealed class DelayEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public DelayEffect(OwnaudioNET.Effects.DelayPreset preset) { }
+        public DelayEffect(int time = 375, float repeat = 0.35, float mix = 0.3, float damping = 0.25, int sampleRate = 44100, bool pingPong = false) { }
+        public float Damping { get; set; }
+        public bool Enabled { get; set; }
+        public System.Guid Id { get; }
+        public float Mix { get; set; }
+        public string Name { get; set; }
+        public bool PingPong { get; set; }
+        public float Repeat { get; set; }
+        public int SampleRate { get; set; }
+        public int Time { get; set; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetPreset(OwnaudioNET.Effects.DelayPreset preset) { }
+        public override string ToString() { }
+    }
+    public enum DelayPreset
+    {
+        Default = 0,
+        SlapBack = 1,
+        ClassicEcho = 2,
+        Ambient = 3,
+        Rhythmic = 4,
+        PingPong = 5,
+        TapeEcho = 6,
+        Dub = 7,
+        Thickening = 8,
+    }
+    public sealed class DistortionEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public DistortionEffect(OwnaudioNET.Effects.DistortionPreset preset) { }
+        public DistortionEffect(float drive = 2, float mix = 1, float outputGain = 0.5) { }
+        public float Drive { get; set; }
+        public bool Enabled { get; set; }
+        public System.Guid Id { get; }
+        public float Mix { get; set; }
+        public string Name { get; set; }
+        public float OutputGain { get; set; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetPreset(OwnaudioNET.Effects.DistortionPreset preset) { }
+        public override string ToString() { }
+    }
+    public enum DistortionPreset
+    {
+        Default = 0,
+        WarmOverdrive = 1,
+        ClassicRock = 2,
+        HeavyMetal = 3,
+        VintageTube = 4,
+        BassDrive = 5,
+        FuzzBox = 6,
+        VocalSaturation = 7,
+        DigitalCrush = 8,
+    }
+    public sealed class DynamicAmpEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public DynamicAmpEffect(OwnaudioNET.Effects.DynamicAmpPreset preset, float sampleRateHz = 44100, float rmsWindowSeconds = 0.5) { }
+        public DynamicAmpEffect(float targetLevel = -12, float attackTimeSeconds = 0.5, float releaseTimeSeconds = 2, float noiseThresholdDbOrLinear = -50, float maxGainValue = 6, float sampleRateHz = 44100, float rmsWindowSeconds = 0.5, float initialGain = 1, float maxGainChangePerSecondDb = 12, float maxGainReductionDb = 12) { }
+        public float AttackTime { get; set; }
+        public float CurrentGain { get; }
+        public bool Enabled { get; set; }
+        public System.Guid Id { get; }
+        public float MaxGain { get; set; }
+        public float MaxGainChangePerSecondDb { get; set; }
+        public float MaxGainReductionDb { get; set; }
+        public float Mix { get; set; }
+        public string Name { get; }
+        public float NoiseGateThresholdDb { get; set; }
+        public float ReleaseTime { get; set; }
+        public float RmsWindowSeconds { get; set; }
+        public float TargetRmsLevelDb { get; set; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetPreset(OwnaudioNET.Effects.DynamicAmpPreset preset) { }
+        public override string ToString() { }
+    }
+    public enum DynamicAmpPreset
+    {
+        Default = 0,
+        Speech = 1,
+        Music = 2,
+        Broadcast = 3,
+        Mastering = 4,
+        Live = 5,
+        Transparent = 6,
+    }
+    public sealed class EnhancerEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public EnhancerEffect(OwnaudioNET.Effects.EnhancerPreset preset, float sampleRate = 44100) { }
+        public EnhancerEffect(float mix = 0.2, float cutFreq = 4000, float gain = 2.5, float sampleRate = 44100) { }
+        public float CutoffFrequency { get; set; }
+        public bool Enabled { get; set; }
+        public float Gain { get; set; }
+        public System.Guid Id { get; }
+        public float Mix { get; set; }
+        public string Name { get; set; }
+        public float SampleRate { get; set; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetPreset(OwnaudioNET.Effects.EnhancerPreset preset) { }
+        public override string ToString() { }
+    }
+    public enum EnhancerPreset
+    {
+        Default = 0,
+        VocalClarity = 1,
+        RockEdge = 2,
+        AcousticSparkle = 3,
+        MixCutter = 4,
+        Broadcast = 5,
+    }
+    public sealed class Equalizer30BandEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public Equalizer30BandEffect(OwnaudioNET.Effects.Equalizer30Preset preset, float sampleRate = 44100) { }
+        public Equalizer30BandEffect(float sampleRate = 44100, float[]? gains = null) { }
+        public bool Enabled { get; set; }
+        public System.Guid Id { get; }
+        public float this[int band] { get; set; }
+        public float Mix { get; set; }
+        public string Name { get; }
+        public float SampleRate { get; }
+        public void Dispose() { }
+        public float[] GetAllGains() { }
+        public float GetBandFrequency(int band) { }
+        public float GetBandGain(int band) { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> samples, int frameCount) { }
+        public void Reset() { }
+        public void SetAllGains(float[] gains) { }
+        public void SetBandGain(int band, float frequency, float q, float gainDB) { }
+        public void SetPreset(OwnaudioNET.Effects.Equalizer30Preset preset) { }
+        public override string ToString() { }
+    }
+    public enum Equalizer30Preset
+    {
+        Default = 0,
+        Bass = 1,
+        Treble = 2,
+        Rock = 3,
+        Classical = 4,
+        Pop = 5,
+        Jazz = 6,
+        Voice = 7,
+        Electronic = 8,
+        Acoustic = 9,
+    }
+    public sealed class EqualizerEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public EqualizerEffect(OwnaudioNET.Effects.EqualizerPreset preset, float sampleRate = 44100) { }
+        public EqualizerEffect(float sampleRate = 44100, float band0Gain = 0, float band1Gain = 0, float band2Gain = 0, float band3Gain = 0, float band4Gain = 0, float band5Gain = 0, float band6Gain = 0, float band7Gain = 0, float band8Gain = 0, float band9Gain = 0) { }
+        public float Band0Gain { get; set; }
+        public float Band1Gain { get; set; }
+        public float Band2Gain { get; set; }
+        public float Band3Gain { get; set; }
+        public float Band4Gain { get; set; }
+        public float Band5Gain { get; set; }
+        public float Band6Gain { get; set; }
+        public float Band7Gain { get; set; }
+        public float Band8Gain { get; set; }
+        public float Band9Gain { get; set; }
+        public bool Enabled { get; set; }
+        public System.Guid Id { get; }
+        public float Mix { get; set; }
+        public string Name { get; set; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetBandGain(int band, float frequency, float q, float gainDB) { }
+        public void SetPreset(OwnaudioNET.Effects.EqualizerPreset preset) { }
+        public override string ToString() { }
+    }
+    public enum EqualizerPreset
+    {
+        Default = 0,
+        Bass = 1,
+        Treble = 2,
+        Rock = 3,
+        Classical = 4,
+        Pop = 5,
+        Jazz = 6,
+        Voice = 7,
+    }
+    public sealed class FlangerEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public FlangerEffect(OwnaudioNET.Effects.FlangerPreset preset, int sampleRate = 44100) { }
+        public FlangerEffect(float rate = 0.5, float depth = 0.8, float feedback = 0.6, float mix = 0.5, int sampleRate = 44100) { }
+        public float Depth { get; set; }
+        public bool Enabled { get; set; }
+        public float Feedback { get; set; }
+        public System.Guid Id { get; }
+        public float Mix { get; set; }
+        public string Name { get; }
+        public float Rate { get; set; }
+        public int SampleRate { get; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetPreset(OwnaudioNET.Effects.FlangerPreset preset) { }
+        public override string ToString() { }
+    }
+    public enum FlangerPreset
+    {
+        Default = 0,
+        Classic = 1,
+        JetPlane = 2,
+        SubtleChorus = 3,
+        VocalDoubling = 4,
+        GuitarLead = 5,
+        AmbientWash = 6,
+        Percussive = 7,
+    }
+    public sealed class LimiterEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public LimiterEffect(float sampleRate, OwnaudioNET.Effects.LimiterPreset preset) { }
+        public LimiterEffect(float sampleRate, float threshold = -3, float ceiling = -0.1, float release = 50, float lookAheadMs = 5) { }
+        public float Ceiling { get; set; }
+        public bool Enabled { get; set; }
+        public System.Guid Id { get; }
+        public bool IsLimiting { get; }
+        public int LatencySamples { get; }
+        public float LookAheadMs { get; set; }
+        public float Mix { get; set; }
+        public string Name { get; }
+        public float Release { get; set; }
+        public float SampleRate { get; }
+        public float Threshold { get; set; }
+        public void Dispose() { }
+        public float GetGainReductionDb() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetPreset(OwnaudioNET.Effects.LimiterPreset preset) { }
+        public override string ToString() { }
+    }
+    public enum LimiterPreset
+    {
+        Default = 0,
+        Mastering = 1,
+        Broadcast = 2,
+        Live = 3,
+        DrumBus = 4,
+        VocalSafety = 5,
+        Bass = 6,
+        Podcast = 7,
+        Aggressive = 8,
+    }
+    public sealed class OverdriveEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public OverdriveEffect(OwnaudioNET.Effects.OverdrivePreset preset) { }
+        public OverdriveEffect(float gain = 2, float tone = 0.5, float mix = 1, float outputLevel = 0.7) { }
+        public bool Enabled { get; set; }
+        public float Gain { get; set; }
+        public System.Guid Id { get; }
+        public float Mix { get; set; }
+        public string Name { get; }
+        public float OutputLevel { get; set; }
+        public float Tone { get; set; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetPreset(OwnaudioNET.Effects.OverdrivePreset preset) { }
+        public override string ToString() { }
+    }
+    public enum OverdrivePreset
+    {
+        Default = 0,
+        CleanBoost = 1,
+        Blues = 2,
+        RockCrunch = 3,
+        Lead = 4,
+        VintugeTube = 5,
+        Bass = 6,
+        Screamer = 7,
+    }
+    public sealed class PhaserEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public PhaserEffect(OwnaudioNET.Effects.PhaserPreset preset, int sampleRate = 44100) { }
+        public PhaserEffect(float rate = 0.5, float depth = 0.7, float feedback = 0.5, float mix = 0.5, int stages = 4, int sampleRate = 44100) { }
+        public float Depth { get; set; }
+        public bool Enabled { get; set; }
+        public float Feedback { get; set; }
+        public System.Guid Id { get; }
+        public float Mix { get; set; }
+        public string Name { get; }
+        public float Rate { get; set; }
+        public int SampleRate { get; }
+        public int Stages { get; set; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetPreset(OwnaudioNET.Effects.PhaserPreset preset) { }
+        public override string ToString() { }
+    }
+    public enum PhaserPreset
+    {
+        Default = 0,
+        Vintage = 1,
+        Ambient = 2,
+        Tremolo = 3,
+        DeepSpace = 4,
+        GuitarSolo = 5,
+        Vocal = 6,
+        SynthPad = 7,
+    }
+    public sealed class ReverbEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public ReverbEffect(OwnaudioNET.Effects.ReverbPreset preset) { }
+        public ReverbEffect(float size = 0.5, float damp = 0.5, float wet = 0.33, float dry = 0.67, float stereoWidth = 1, float mix = 0.5, float gainLevel = 1) { }
+        public float Damping { get; set; }
+        public float DryLevel { get; set; }
+        public bool Enabled { get; set; }
+        public float Gain { get; set; }
+        public System.Guid Id { get; }
+        public float Mix { get; set; }
+        public string Name { get; set; }
+        public float RoomSize { get; set; }
+        public float StereoWidth { get; set; }
+        public float WetLevel { get; set; }
+        public float Width { get; set; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetPreset(OwnaudioNET.Effects.ReverbPreset preset) { }
+        public override string ToString() { }
+    }
+    public enum ReverbPreset
+    {
+        Default = 0,
+        SmallRoom = 1,
+        LargeHall = 2,
+        Cathedral = 3,
+        Plate = 4,
+        Spring = 5,
+        AmbientPad = 6,
+        VocalBooth = 7,
+        DrumRoom = 8,
+        Gated = 9,
+        Subtle = 10,
+    }
+    public sealed class RotaryEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public RotaryEffect(OwnaudioNET.Effects.RotaryPreset preset, int sampleRate = 44100) { }
+        public RotaryEffect(float hornSpeed = 6, float rotorSpeed = 1, float intensity = 0.7, float mix = 1, bool isFast = false, int sampleRate = 44100) { }
+        public bool Enabled { get; set; }
+        public float HornSpeed { get; set; }
+        public System.Guid Id { get; }
+        public float Intensity { get; set; }
+        public bool IsFast { get; set; }
+        public float Mix { get; set; }
+        public string Name { get; }
+        public float RotorSpeed { get; set; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetPreset(OwnaudioNET.Effects.RotaryPreset preset) { }
+        public override string ToString() { }
+    }
+    public enum RotaryPreset
+    {
+        Default = 0,
+        Hammond = 1,
+        Gospel = 2,
+        Rock = 3,
+        Jazz = 4,
+        Psychedelic = 5,
+        VintageSlow = 6,
+        VintageFast = 7,
+        Subtle = 8,
+    }
+}
+namespace OwnaudioNET.Effects.SmartMaster.Components
+{
+    public class CrossoverFilter
+    {
+        public CrossoverFilter(float sampleRate, float crossoverFreq) { }
+        public void Process(System.Span<float> input, System.Span<float> outputLR, System.Span<float> outputSub, int frameCount, int channel = 0) { }
+        public void Reset() { }
+        public void SetCrossoverFrequency(float freq) { }
+    }
+    public class FIRFilter
+    {
+        public FIRFilter(float[] kernel, int maxChannels = 2) { }
+        public void Process(System.Span<float> buffer, int frameCount, int channels) { }
+        public void Reset() { }
+        public static float[] CreateBandpassKernel(float sampleRate, float lowFreq, float highFreq, int kernelSize, float kaiserBeta = 5) { }
+    }
+    public class PhaseAlignment
+    {
+        public PhaseAlignment(float sampleRate) { }
+        public void Process(System.Span<float> buffer, int channel, int frameCount) { }
+        public void Reset() { }
+        public void SetDelays(float[] delays) { }
+        public void SetPhaseInversions(bool[] inversions) { }
+    }
+    public class SubharmonicSynth
+    {
+        public SubharmonicSynth(float sampleRate) { }
+        public bool Enabled { get; set; }
+        public float Mix { get; set; }
+        public void Process(System.Span<float> buffer, int frameCount, int channels) { }
+        public void Reset() { }
+    }
+}
+namespace OwnaudioNET.Effects.SmartMaster
+{
+    public class MeasurementResults
+    {
+        public MeasurementResults() { }
+        public float[] ChannelDelays { get; set; }
+        public float[] ChannelLevels { get; set; }
+        public bool[] ChannelPolarity { get; set; }
+        public float[] FrequencyResponse { get; set; }
+        public System.DateTime MeasurementDate { get; set; }
+        public string[] Warnings { get; set; }
+    }
+    public enum MeasurementStatus
+    {
+        Idle = 0,
+        Initializing = 1,
+        CheckingRightChannel = 2,
+        CheckingLeftChannel = 3,
+        CheckingSubwoofer = 4,
+        AnalyzingSpectrum = 5,
+        CalculatingCorrection = 6,
+        Completed = 7,
+        Error = 8,
+    }
+    public class MeasurementStatusInfo
+    {
+        public MeasurementStatusInfo() { }
+        public string CurrentStep { get; set; }
+        public string? ErrorMessage { get; set; }
+        public float Progress { get; set; }
+        public OwnaudioNET.Effects.SmartMaster.MeasurementStatus Status { get; set; }
+        public string[] Warnings { get; set; }
+    }
+    public class SmartMasterConfig
+    {
+        public SmartMasterConfig() { }
+        public float CompressorAttack { get; set; }
+        public bool CompressorEnabled { get; set; }
+        public float CompressorRatio { get; set; }
+        public float CompressorRelease { get; set; }
+        public float CompressorThreshold { get; set; }
+        public float CrossoverFrequency { get; set; }
+        public float[] GraphicEQGains { get; set; }
+        public OwnaudioNET.Effects.SmartMaster.MeasurementResults? LastMeasurement { get; set; }
+        public float LimiterCeiling { get; set; }
+        public float LimiterRelease { get; set; }
+        public float LimiterThreshold { get; set; }
+        public float MicInputGain { get; set; }
+        public float[][] ParametricEQGains { get; set; }
+        public bool[] PhaseInvert { get; set; }
+        public bool SubharmonicEnabled { get; set; }
+        public float SubharmonicFreqRange { get; set; }
+        public float SubharmonicMix { get; set; }
+        public float[] TimeDelays { get; set; }
+    }
+    public sealed class SmartMasterEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public SmartMasterEffect() { }
+        public bool Enabled { get; set; }
+        public System.Guid Id { get; }
+        public int LatencySamples { get; }
+        public float Mix { get; set; }
+        public string Name { get; set; }
+        public void CancelMeasurement() { }
+        public void Dispose() { }
+        public OwnaudioNET.Effects.SmartMaster.SmartMasterConfig GetConfiguration() { }
+        public float GetLastMicLevel() { }
+        public OwnaudioNET.Effects.SmartMaster.MeasurementStatusInfo GetMeasurementStatus() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Load(string presetName) { }
+        public void LoadSpeakerPreset(OwnaudioNET.Effects.SmartMaster.SpeakerType speakerType) { }
+        public void OnPlaybackStopped() { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void ResetToDefaults() { }
+        public void Save(string presetName) { }
+        public System.Threading.Tasks.Task StartMeasurementAsync() { }
+        public void StartMicMonitoring() { }
+        public void StopMicMonitoring() { }
+    }
+    public static class SmartMasterPresetFactory
+    {
+        public static OwnaudioNET.Effects.SmartMaster.SmartMasterConfig CreatePreset(OwnaudioNET.Effects.SmartMaster.SpeakerType speakerType) { }
+        public static string GetPresetFilename(OwnaudioNET.Effects.SmartMaster.SpeakerType speakerType) { }
+    }
+    public enum SpeakerType
+    {
+        Default = 0,
+        HiFi = 1,
+        Headphone = 2,
+        Studio = 3,
+        Club = 4,
+        Concert = 5,
+    }
+}
+namespace OwnaudioNET.Effects.VST
+{
+    public sealed class VST3EffectProcessor : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public bool Enabled { get; set; }
+        public System.Guid Id { get; }
+        public bool IsEffect { get; }
+        public bool IsInstrument { get; }
+        public bool IsReady { get; }
+        public int LatencySamples { get; }
+        public float Mix { get; set; }
+        public string Name { get; set; }
+        public string Vendor { get; }
+        public System.Threading.Tasks.Task ApplyParametersAsync(System.Collections.Generic.IReadOnlyDictionary<int, double> parameters) { }
+        public void Dispose() { }
+        [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "Width",
+                "Height"})]
+        public System.ValueTuple<int, int>? GetEditorSize() { }
+        public OwnaudioNET.Effects.VST.VST3ParameterInfo[] GetParameters() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void ResetPosition() { }
+        public void SetParameter(int id, double value) { }
+        public void SetTempo(double bpm) { }
+        public void SetTransportPlaying(bool playing) { }
+        public override string ToString() { }
+    }
+    public sealed class VST3ParameterInfo
+    {
+        public VST3ParameterInfo(uint id, string name, double value, double minValue = 0, double maxValue = 1, double defaultValue = 0) { }
+        public double DefaultValue { get; }
+        public uint Id { get; }
+        public double MaxValue { get; }
+        public double MinValue { get; }
+        public string Name { get; }
+        public double Value { get; set; }
+        public override string ToString() { }
+    }
+    public sealed class VST3PluginHost : System.IAsyncDisposable, System.IDisposable
+    {
+        public VST3PluginHost(string pluginPath) { }
+        public bool HasEditor { get; }
+        public bool IsEditorOpen { get; }
+        public bool IsEffect { get; }
+        public bool IsInstrument { get; }
+        public bool IsReady { get; }
+        public string Name { get; }
+        public string PluginPath { get; }
+        public OwnVST3Host.VstPluginState State { get; }
+        public string Vendor { get; }
+        public string? Version { get; }
+        public void CloseEditor() { }
+        public void Dispose() { }
+        public System.Threading.Tasks.ValueTask DisposeAsync() { }
+        [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "Width",
+                "Height"})]
+        public System.Threading.Tasks.Task<System.ValueTuple<int, int>?> GetEditorSizeAsync() { }
+        public System.Threading.Tasks.Task<double> GetParameterAsync(int id) { }
+        public System.Threading.Tasks.Task<int> GetParameterCountAsync() { }
+        public System.Threading.Tasks.Task<OwnaudioNET.Effects.VST.VST3ParameterInfo[]> GetParametersAsync() { }
+        public OwnaudioNET.Effects.VST.VST3EffectProcessor GetProcessor() { }
+        public System.Threading.Tasks.Task<byte[]?> GetStateAsync() { }
+        public System.Threading.Tasks.Task<bool> InitializeAudioAsync(int sampleRate, int maxBlockSize) { }
+        public void OpenEditor(string? title = null) { }
+        public System.Threading.Tasks.Task OpenEditorAsync(string? title = null) { }
+        public void SetParameter(int id, double value) { }
+        public System.Threading.Tasks.Task SetParametersAsync(System.Collections.Generic.IReadOnlyDictionary<int, double> parameters) { }
+        public System.Threading.Tasks.Task<bool> SetStateAsync(byte[] stateData) { }
+        public override string ToString() { }
+        public static System.Threading.Tasks.Task<OwnaudioNET.Effects.VST.VST3PluginHost> CreateAsync(string pluginPath) { }
+        public static System.Collections.Generic.List<string> FindPlugins(bool includeSubdirectories = true) { }
+        public static System.Collections.Generic.List<string> FindPlugins(string[] searchDirectories, bool includeSubdirectories = true) { }
+        public static System.Collections.Generic.List<OwnaudioNET.Effects.VST.VST3PluginInfo> ScanPlugins(bool includeSubdirectories = true) { }
+        public static System.Collections.Generic.List<OwnaudioNET.Effects.VST.VST3PluginInfo> ScanPluginsQuick(bool includeSubdirectories = true) { }
+    }
+    public sealed class VST3PluginInfo
+    {
+        public VST3PluginInfo() { }
+        public string DisplayName { get; }
+        public required bool IsEffect { get; init; }
+        public required bool IsInstrument { get; init; }
+        public required string Name { get; init; }
+        public required int ParameterCount { get; init; }
+        public required string Path { get; init; }
+        public required string Vendor { get; init; }
+        public string? Version { get; init; }
+        public override string ToString() { }
+    }
+}
+namespace OwnaudioNET.Engine
+{
+    public static class AudioEngineFactory
+    {
+        public static Ownaudio.Core.IAudioEngine CreateEngine(Ownaudio.Core.AudioConfig config) { }
+        public static OwnaudioNET.Engine.MockAudioEngine CreateMockEngine(Ownaudio.Core.AudioConfig config, bool generateTestSignal = false) { }
+        public static string GetPlatformEngineName() { }
+        public static bool IsNativeEngineAvailable() { }
+    }
+    public sealed class AudioEngineWrapper : System.IDisposable
+    {
+        public AudioEngineWrapper(Ownaudio.Core.IAudioEngine engine, Ownaudio.Core.AudioConfig config, int bufferMultiplier = 8) { }
+        public Ownaudio.Core.AudioConfig Config { get; }
+        public int FramesPerBuffer { get; }
+        public bool IsRunning { get; }
+        public int OutputBufferAvailable { get; }
+        public long TotalPumpedFrames { get; }
+        public long TotalUnderruns { get; }
+        public Ownaudio.Core.IAudioEngine UnderlyingEngine { get; }
+        public event System.EventHandler<OwnaudioNET.Events.BufferUnderrunEventArgs>? BufferUnderrun;
+        public event System.EventHandler<Ownaudio.Core.AudioDeviceStateChangedEventArgs>? DeviceStateChanged;
+        public event System.EventHandler<Ownaudio.Core.AudioDeviceChangedEventArgs>? InputDeviceChanged;
+        public event System.EventHandler<Ownaudio.Core.AudioDeviceChangedEventArgs>? OutputDeviceChanged;
+        public void ClearOutputBuffer() { }
+        public void Dispose() { }
+        public System.Collections.Generic.List<Ownaudio.Core.AudioDeviceInfo> GetInputDevices() { }
+        public System.Collections.Generic.List<Ownaudio.Core.AudioDeviceInfo> GetOutputDevices() { }
+        public void PauseDeviceMonitoring() { }
+        public float[]? Receive(out int sampleCount) { }
+        public void ResumeDeviceMonitoring() { }
+        public void ReturnInputBuffer(float[] buffer) { }
+        public void Send(System.ReadOnlySpan<float> samples) { }
+        public bool SetInputDeviceByName(string deviceName) { }
+        public bool SetOutputDeviceByName(string deviceName) { }
+        public void Start() { }
+        public void Stop() { }
+        public System.Threading.Tasks.Task StopAsync(System.Threading.CancellationToken cancellationToken = default) { }
+        public override string ToString() { }
+    }
+    public sealed class MockAudioEngine : Ownaudio.Core.IAudioEngine, System.IDisposable
+    {
+        public MockAudioEngine(bool generateTestSignal = false) { }
+        public int FramesPerBuffer { get; }
+        public int ReceiveCallCount { get; }
+        public int SendCallCount { get; }
+        public Ownaudio.Core.EngineStatus Status { get; }
+        public long TotalSamplesReceived { get; }
+        public long TotalSamplesSent { get; }
+        public event System.EventHandler<Ownaudio.Core.AudioDeviceReconnectedEventArgs>? DeviceReconnected;
+        public event System.EventHandler<Ownaudio.Core.AudioDeviceStateChangedEventArgs>? DeviceStateChanged;
+        public event System.EventHandler<Ownaudio.Core.AudioDeviceChangedEventArgs>? InputDeviceChanged;
+        public event System.EventHandler<Ownaudio.Core.AudioDeviceChangedEventArgs>? OutputDeviceChanged;
+        public event System.EventHandler? SimulatedCallback;
+        public void Dispose() { }
+        public System.Collections.Generic.List<Ownaudio.Core.AudioDeviceInfo> GetInputDevices() { }
+        public System.Collections.Generic.List<Ownaudio.Core.AudioDeviceInfo> GetOutputDevices() { }
+        public nint GetStream() { }
+        public int Initialize(Ownaudio.Core.AudioConfig config) { }
+        public int OwnAudioEngineActivate() { }
+        public int OwnAudioEngineStopped() { }
+        public void PauseDeviceMonitoring() { }
+        public int Receives(System.Span<float> destination) { }
+        public void ResetStatistics() { }
+        public void ResumeDeviceMonitoring() { }
+        public void Send(System.Span<float> samples) { }
+        public int SetInputDeviceByIndex(int deviceIndex) { }
+        public int SetInputDeviceByName(string deviceName) { }
+        public int SetOutputDeviceByIndex(int deviceIndex) { }
+        public int SetOutputDeviceByName(string deviceName) { }
+        public void SimulateDeviceStateChange(string deviceId, Ownaudio.Core.AudioDeviceState newState) { }
+        public void SimulateInputDeviceChange(string oldDeviceId, string newDeviceId) { }
+        public void SimulateOutputDeviceChange(string oldDeviceId, string newDeviceId) { }
+        public int Start() { }
+        public int Stop() { }
+    }
+}
+namespace OwnaudioNET.Events
+{
+    public sealed class AudioErrorEventArgs : System.EventArgs
+    {
+        public AudioErrorEventArgs(string message, System.Exception? exception = null) { }
+        public System.Exception? Exception { get; }
+        public string Message { get; }
+        public System.DateTime Timestamp { get; }
+        public override string ToString() { }
+    }
+    public sealed class AudioStateChangedEventArgs : System.EventArgs
+    {
+        public AudioStateChangedEventArgs(OwnaudioNET.Core.AudioState oldState, OwnaudioNET.Core.AudioState newState) { }
+        public OwnaudioNET.Core.AudioState NewState { get; }
+        public OwnaudioNET.Core.AudioState OldState { get; }
+        public System.DateTime Timestamp { get; }
+        public override string ToString() { }
+    }
+    public sealed class BufferUnderrunEventArgs : System.EventArgs
+    {
+        public BufferUnderrunEventArgs(int missedFrames, long position) { }
+        public int MissedFrames { get; }
+        public long Position { get; }
+        public System.DateTime Timestamp { get; }
+        public override string ToString() { }
+    }
+    public class TrackDropoutEventArgs : System.EventArgs
+    {
+        public TrackDropoutEventArgs(System.Guid trackId, string trackName, double masterTimestamp, long masterSamplePosition, int missedFrames, string reason) { }
+        public System.DateTime EventTimestamp { get; }
+        public long MasterSamplePosition { get; }
+        public double MasterTimestamp { get; }
+        public int MissedFrames { get; }
+        public string Reason { get; }
+        public System.Guid TrackId { get; }
+        public string TrackName { get; }
+        public override string ToString() { }
+    }
+}
+namespace OwnaudioNET.Exceptions
+{
+    public class AudioEngineException : OwnaudioNET.Exceptions.AudioException
+    {
+        public AudioEngineException() { }
+        public AudioEngineException(string message) { }
+        public AudioEngineException(string message, System.Exception innerException) { }
+        public AudioEngineException(string message, int errorCode) { }
+        public AudioEngineException(string message, int errorCode, System.Exception innerException) { }
+    }
+    public class AudioException : System.Exception
+    {
+        public AudioException() { }
+        public AudioException(string message) { }
+        public AudioException(string message, System.Exception innerException) { }
+        public AudioException(string message, int errorCode) { }
+        public AudioException(string message, int errorCode, System.Exception innerException) { }
+        public int? ErrorCode { get; }
+    }
+}
+namespace OwnaudioNET.Features.Extensions
+{
+    public static class Constants
+    {
+        public const float ANNOTATIONS_BASE_FREQUENCY = 27.5F;
+        public const int ANNOTATIONS_FPS = 86;
+        public const int ANNOTATIONS_N_SEMITONES = 88;
+        public const int ANNOT_N_FRAMES = 172;
+        public const int AUDIO_N_SAMPLES = 43844;
+        public const int AUDIO_SAMPLE_RATE = 22050;
+        public const int AUDIO_WINDOW_LEN = 2;
+        public const int CONTOURS_BINS_PER_SEMITONE = 3;
+        public const int FFT_HOP = 256;
+        public const int HOP_SIZE = 36164;
+        public const int MAX_FREQ_IDX = 87;
+        public const int MIDI_OFFSET = 21;
+        public const int N_FREQ_BINS_CONTOURS = 264;
+        public const int N_OVERLAPPING_FRAMES = 30;
+        public const int N_PITCH_BEND_TICKS = 8192;
+        public const int OVERLAP_LEN = 7680;
+    }
+    public class CustomTensor
+    {
+        public readonly float[]? Data;
+        public readonly System.IntPtr[]? Shape;
+        public CustomTensor(float[]? data, System.IntPtr[]? shape) { }
+        public Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<float> ToOnnxTensor() { }
+    }
+    public class MathTool
+    {
+        public MathTool() { }
+        public static float[] ARange(float start, float step, int count) { }
+        public static float Mean(in float[] data, int skip, int step, int length) { }
+    }
+    public static class MidiWriter
+    {
+        public static int DetectedTempo;
+        public static int DetectTempo(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> notes) { }
+        public static void GenerateMidiFile(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> notes, string outputPath, int bpm = 120) { }
+    }
+    public class Model : System.IDisposable
+    {
+        public Model() { }
+        public void Dispose() { }
+        public OwnaudioNET.Features.Extensions.ModelOutput Predict(OwnaudioNET.Features.Extensions.WaveBuffer waveBuffer, System.Action<double>? progressHandler = null) { }
+    }
+    public class ModelInput
+    {
+        public ModelInput(OwnaudioNET.Features.Extensions.WaveBuffer waveBuffer, Microsoft.ML.OnnxRuntime.NodeMetadata metadata) { }
+        public System.Collections.Generic.IEnumerable<System.ValueTuple<OwnaudioNET.Features.Extensions.CustomTensor, double>> Enumerate() { }
+    }
+    public class ModelOutput
+    {
+        public readonly OwnaudioNET.Features.Extensions.Tensor Contours;
+        public readonly OwnaudioNET.Features.Extensions.Tensor Notes;
+        public readonly OwnaudioNET.Features.Extensions.Tensor Onsets;
+        public ModelOutput(OwnaudioNET.Features.Extensions.Tensor c, OwnaudioNET.Features.Extensions.Tensor n, OwnaudioNET.Features.Extensions.Tensor o) { }
+    }
+    public class ModelOutputHelper
+    {
+        public readonly System.Collections.Generic.List<OwnaudioNET.Features.Extensions.CustomTensor> Contours;
+        public readonly System.Collections.Generic.List<OwnaudioNET.Features.Extensions.CustomTensor> Notes;
+        public readonly System.Collections.Generic.List<OwnaudioNET.Features.Extensions.CustomTensor> Onsets;
+        public ModelOutputHelper() { }
+        public OwnaudioNET.Features.Extensions.ModelOutput Create(int totalFrames) { }
+    }
+    public sealed class Note : System.IComparable<OwnaudioNET.Features.Extensions.Note>
+    {
+        public readonly float Amplitude;
+        public readonly float EndTime;
+        public readonly int Pitch;
+        public float[]? PitchBend;
+        public readonly float StartTime;
+        public Note(float startTime, float endTime, int pitch, float amplitude, float[]? pitchBend) { }
+        public int CompareTo(OwnaudioNET.Features.Extensions.Note? other) { }
+        public override string ToString() { }
+    }
+    public struct NotesConvertOptions : System.IEquatable<OwnaudioNET.Features.Extensions.NotesConvertOptions>
+    {
+        public int EnergyThreshold;
+        public float FrameThreshold;
+        public bool IncludePitchBends;
+        public bool InferOnsets;
+        public float? MaxFreq;
+        public bool MelodiaTrick;
+        public float? MinFreq;
+        public int MinNoteLength;
+        public float OnsetThreshold;
+        public NotesConvertOptions() { }
+    }
+    public class NotesConverter
+    {
+        public NotesConverter(OwnaudioNET.Features.Extensions.ModelOutput input) { }
+        public System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> Convert(OwnaudioNET.Features.Extensions.NotesConvertOptions opt) { }
+    }
+    public class NotesHelper
+    {
+        public NotesHelper() { }
+        public static System.ValueTuple<OwnaudioNET.Features.Extensions.Tensor, OwnaudioNET.Features.Extensions.Tensor> ConstrainFrequency(in OwnaudioNET.Features.Extensions.Tensor onsets, in OwnaudioNET.Features.Extensions.Tensor frames, float? maxFreq, float? minFreq) { }
+        public static System.Collections.Generic.IList<int> FindValidOnsetIndexs(in OwnaudioNET.Features.Extensions.Tensor onsets, float threshold) { }
+        public static OwnaudioNET.Features.Extensions.Tensor GetInferedOnsets(in OwnaudioNET.Features.Extensions.Tensor onsets, in OwnaudioNET.Features.Extensions.Tensor frames, int nDiff = 2) { }
+        public static int HzToMidi(float freq) { }
+        public static float[] MakeGaussianWindow(int count, int std) { }
+        public static float MidiPitchToContourBin(int pitch) { }
+        public static float MidiToHz(int pitch) { }
+        public static float ModelFrameToTime(int n) { }
+    }
+    public class OutputName
+    {
+        public readonly string Contour;
+        public readonly string Note;
+        public readonly string Onset;
+        public OutputName(Microsoft.ML.OnnxRuntime.InferenceSession session) { }
+    }
+    public class ShapeHelper
+    {
+        public readonly int Count;
+        public readonly int[] Shape;
+        public ShapeHelper(Microsoft.ML.OnnxRuntime.NodeMetadata metadata) { }
+    }
+    public class Tensor
+    {
+        public readonly float[]? Data;
+        public readonly System.IntPtr[]? Shape;
+        public Tensor(float[]? data, System.IntPtr[]? shape) { }
+        public OwnaudioNET.Features.Extensions.Tensor DeepClone() { }
+    }
+    public class WaveBuffer
+    {
+        public WaveBuffer() { }
+        public WaveBuffer(System.Span<float> _buffer) { }
+        public WaveBuffer(float[] _buffer) { }
+        public float[]? FloatBuffer { get; set; }
+        public int FloatBufferCount { get; set; }
+    }
+}
+namespace OwnaudioNET.Features.Matchering
+{
+    public class AudioAnalyzer
+    {
+        public AudioAnalyzer() { }
+        public OwnaudioNET.Features.Matchering.AudioSpectrum AnalyzeAudioFile(string filePath) { }
+        public void BatchProcessWithEnhancedPreset(string[] sourceFiles, string baseSampleFile, string outputDirectory, OwnaudioNET.Features.Matchering.PlaybackSystem system, string? fileNameSuffix = null) { }
+        public void ProcessEQMatching(string sourceFile, string targetFile, string outputFile) { }
+        public void ProcessWithEnhancedPreset(string sourceFile, string outputFile, OwnaudioNET.Features.Matchering.PlaybackSystem system, string? tempDirectory = null, bool eqOnlyMode = true) { }
+        public static System.Collections.Generic.Dictionary<OwnaudioNET.Features.Matchering.PlaybackSystem, OwnaudioNET.Features.Matchering.PlaybackPreset> GetAvailablePresets() { }
+    }
+    public class AudioSegment
+    {
+        public AudioSegment() { }
+        public float[] Data { get; set; }
+        public float Duration { get; set; }
+        public float EnergyLevel { get; set; }
+        public int SampleRate { get; set; }
+        public float StartTime { get; set; }
+    }
+    public class AudioSpectrum
+    {
+        public AudioSpectrum() { }
+        public float DynamicRange { get; set; }
+        public float[] FrequencyBands { get; set; }
+        public float Loudness { get; set; }
+        public float PeakLevel { get; set; }
+        public float RMSLevel { get; set; }
+    }
+    public class CompressionSettings
+    {
+        public CompressionSettings() { }
+        public float AttackTime { get; set; }
+        public float MakeupGain { get; set; }
+        public float Ratio { get; set; }
+        public float ReleaseTime { get; set; }
+        public float Threshold { get; set; }
+    }
+    public class DynamicAmpSettings
+    {
+        public DynamicAmpSettings() { }
+        public float AttackTime { get; set; }
+        public float MaxGain { get; set; }
+        public float ReleaseTime { get; set; }
+        public float TargetLevel { get; set; }
+    }
+    public class DynamicsInfo
+    {
+        public DynamicsInfo() { }
+        public float DynamicRange { get; set; }
+        public float Loudness { get; set; }
+        public float Peak { get; set; }
+        public float RMS { get; set; }
+    }
+    public class PlaybackPreset
+    {
+        public PlaybackPreset() { }
+        public OwnaudioNET.Features.Matchering.CompressionSettings Compression { get; set; }
+        public string Description { get; set; }
+        public OwnaudioNET.Features.Matchering.DynamicAmpSettings DynamicAmp { get; set; }
+        public float DynamicRange { get; set; }
+        public float[] FrequencyResponse { get; set; }
+        public string Name { get; set; }
+        public float TargetLoudness { get; set; }
+    }
+    public enum PlaybackSystem
+    {
+        ConcertPA = 0,
+        ClubPA = 1,
+        HiFiSpeakers = 2,
+        StudioMonitors = 3,
+        Headphones = 4,
+        Earbuds = 5,
+        CarStereo = 6,
+        Television = 7,
+        RadioBroadcast = 8,
+        Smartphone = 9,
+    }
+    public class SegmentAnalysis
+    {
+        public SegmentAnalysis() { }
+        public float Duration { get; set; }
+        public OwnaudioNET.Features.Matchering.DynamicsInfo Dynamics { get; set; }
+        public float EnergyLevel { get; set; }
+        public float[] FrequencySpectrum { get; set; }
+        public float OutlierScore { get; set; }
+        public int SegmentIndex { get; set; }
+        public float StartTime { get; set; }
+        public float Weight { get; set; }
+    }
+    public class SegmentedAnalysisConfig
+    {
+        public SegmentedAnalysisConfig() { }
+        public float MinSegmentEnergyThreshold { get; set; }
+        public float OutlierThreshold { get; set; }
+        public float OverlapRatio { get; set; }
+        public float SegmentLengthSeconds { get; set; }
+        public bool UseWeightedAveraging { get; set; }
+    }
+}
+namespace OwnaudioNET.Features.OwnChordDetect.Analysis
+{
+    public class ChordAnalysis
+    {
+        public ChordAnalysis(string chordName, float confidence, string explanation, string[] noteNames) { }
+        public string[] Alternatives { get; set; }
+        public string ChordName { get; }
+        public float[] Chromagram { get; set; }
+        public float Confidence { get; }
+        public string Explanation { get; }
+        public bool IsAmbiguous { get; set; }
+        public string[] NoteNames { get; }
+        public int[] PitchClasses { get; set; }
+        public override string ToString() { }
+    }
+    public class SongChordAnalyzer
+    {
+        public SongChordAnalyzer(float windowSize = 1, float hopSize = 0.5, float minimumChordDuration = 0.8, float confidence = 0.6, int bpm = 0) { }
+        public OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey? DetectedKey { get; }
+        public System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord> AnalyzeSong(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> songNotes) { }
+        public System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord> AnalyzeSongInKey(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> songNotes, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey key) { }
+    }
+    public class TimedChord
+    {
+        public TimedChord(float startTime, float endTime, string chordName, float confidence, string[] notes) { }
+        public string ChordName { get; }
+        public float Confidence { get; }
+        public float EndTime { get; }
+        public string[] Notes { get; }
+        public float StartTime { get; }
+        public override string ToString() { }
+    }
+}
+namespace OwnaudioNET.Features.OwnChordDetect
+{
+    public static class ChordDetect
+    {
+        public static System.ValueTuple<System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord>, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey, int> DetectFromFile(string audioFile, float intervalSecond = 1) { }
+        public static System.ValueTuple<System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord>, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey, int> DetectFromFiles(System.Collections.Generic.IReadOnlyList<string> audioFiles, float intervalSecond = 1) { }
+        [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "chord",
+                "stability"})]
+        public static System.ValueTuple<string, float> DetectRealtime(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> notes, OwnaudioNET.Features.OwnChordDetect.Detectors.DetectionMode mode = 3, int buffersize = 5) { }
+    }
+}
+namespace OwnaudioNET.Features.OwnChordDetect.Core
+{
+    public static class ChordTemplates
+    {
+        public static System.Collections.Generic.Dictionary<string, float[]> CreateAllTemplates(OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey? key = null, bool includeExtended = true) { }
+        public static float[] CreateTemplate(int[] pitchClasses) { }
+        public static string GetNoteName(int pitchClass, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey? key = null) { }
+    }
+    public class KeyDetector
+    {
+        public KeyDetector() { }
+        public OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey DetectKey(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> notes) { }
+    }
+    public class MusicalKey
+    {
+        public MusicalKey(string keyName, bool isMajor, int sharps, int flats, string[] preferredNoteNames) { }
+        public int Flats { get; }
+        public bool IsMajor { get; }
+        public string KeyName { get; }
+        public string[] PreferredNoteNames { get; }
+        public int Sharps { get; }
+        public override string ToString() { }
+    }
+}
+namespace OwnaudioNET.Features.OwnChordDetect.Detectors
+{
+    public class BaseChordDetector : OwnaudioNET.Features.OwnChordDetect.Detectors.ChordDetector
+    {
+        public BaseChordDetector(float confidenceThreshold = 0.7) { }
+    }
+    public class ChordDetector
+    {
+        public ChordDetector(OwnaudioNET.Features.OwnChordDetect.Detectors.DetectionMode mode = 1, float confidenceThreshold = 0.6, float ambiguityThreshold = 0.1, int bufferSize = 5) { }
+        public void AddChordTemplate(string chordName, int[] pitchClasses) { }
+        public OwnaudioNET.Features.OwnChordDetect.Analysis.ChordAnalysis AnalyzeChord(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> notes) { }
+        public OwnaudioNET.Features.OwnChordDetect.Analysis.ChordAnalysis AnalyzeChordInSongContext(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> allSongNotes, System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> chordNotes) { }
+        public OwnaudioNET.Features.OwnChordDetect.Analysis.ChordAnalysis AnalyzeChordWithKey(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> notes) { }
+        public float[] ComputeChromagram(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> notes, float windowStart = -1, float windowEnd = -1) { }
+        [return: System.Runtime.CompilerServices.TupleElementNames(new string?[]?[] {
+                "chord",
+                "confidence",
+                "isAmbiguous",
+                "alternatives"})]
+        protected System.ValueTuple<string, float, bool, string[]> DetectChordAdvancedBase(float[]? chromagram) { }
+        [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "chord",
+                "confidence"})]
+        public System.ValueTuple<string, float> DetectChordFromChromagram(float[] chromagram) { }
+        public OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey DetectKeyFromNotes(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> notes) { }
+        public System.Collections.Generic.Dictionary<string, float[]> GetChordTemplates() { }
+        public OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey GetCurrentKey() { }
+        [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "chord",
+                "confidence"})]
+        public System.Collections.Generic.List<System.ValueTuple<string, float>> GetTopMatches(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> notes, int topN = 5) { }
+        [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "chord",
+                "stability"})]
+        public System.ValueTuple<string, float> ProcessNotes(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> newNotes) { }
+        public void SetKey(OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey key) { }
+        public OwnaudioNET.Features.OwnChordDetect.Analysis.ChordAnalysis? TryAnalyzeChord(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> notes) { }
+    }
+    public enum DetectionMode
+    {
+        Basic = 0,
+        Extended = 1,
+        KeyAware = 2,
+        Optimized = 3,
+    }
+    public class ExtendedChordDetector : OwnaudioNET.Features.OwnChordDetect.Detectors.ChordDetector
+    {
+        public ExtendedChordDetector(float confidenceThreshold = 0.6) { }
+    }
+    public class KeyAwareChordDetector : OwnaudioNET.Features.OwnChordDetect.Detectors.ChordDetector
+    {
+        public KeyAwareChordDetector(float confidenceThreshold = 0.6, float ambiguityThreshold = 0) { }
+    }
+    public class OptimizedChordDetector : OwnaudioNET.Features.OwnChordDetect.Detectors.ChordDetector
+    {
+        public OptimizedChordDetector(float confidenceThreshold = 0.6, float ambiguityThreshold = 0.1) { }
+        [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "chord",
+                "confidence",
+                "isAmbiguous",
+                "alternatives"})]
+        public System.ValueTuple<string, float, bool, string[]> DetectChordAdvanced(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> notes) { }
+    }
+    public class RealTimeChordDetector
+    {
+        public RealTimeChordDetector(int bufferSize = 5, OwnaudioNET.Features.OwnChordDetect.Detectors.DetectionMode mode = 3) { }
+        [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "chord",
+                "stability"})]
+        public System.ValueTuple<string, float> ProcessNotes(System.Collections.Generic.List<OwnaudioNET.Features.Extensions.Note> newNotes) { }
+    }
+}
+namespace OwnaudioNET.Features.Vocalremover
+{
+    public static class AudioSeparationExtensions
+    {
+        public static OwnaudioNET.Features.Vocalremover.AudioSeparationService CreateDefaultService(OwnaudioNET.Features.Vocalremover.InternalModel _model) { }
+        public static OwnaudioNET.Features.Vocalremover.AudioSeparationService CreateDefaultService(string modelPath) { }
+        public static OwnaudioNET.Features.Vocalremover.AudioSeparationService CreatetService(OwnaudioNET.Features.Vocalremover.InternalModel _model, string _output) { }
+        public static OwnaudioNET.Features.Vocalremover.AudioSeparationService CreatetService(string _modelPath, string _output) { }
+        public static System.TimeSpan EstimateProcessingTime(string filePath) { }
+        public static bool IsValidAudioFile(string filePath) { }
+        public static byte[] LoadModelBytes(OwnaudioNET.Features.Vocalremover.InternalModel _model) { }
+    }
+    public class AudioSeparationService : System.IDisposable
+    {
+        public AudioSeparationService(OwnaudioNET.Features.Vocalremover.SimpleSeparationOptions options) { }
+        public event System.EventHandler<System.Exception>? ErrorOccurred;
+        public event System.EventHandler<OwnaudioNET.Features.Vocalremover.SimpleSeparationResult>? ProcessingCompleted;
+        public event System.EventHandler<string>? ProcessingStarted;
+        public event System.EventHandler<OwnaudioNET.Features.Vocalremover.SimpleSeparationProgress>? ProgressChanged;
+        public void Dispose() { }
+        protected virtual void Dispose(bool disposing) { }
+    }
+    public class HTDemucsAudioSeparator : System.IDisposable
+    {
+        public HTDemucsAudioSeparator(OwnaudioNET.Features.Vocalremover.HTDemucsSeparationOptions options) { }
+        public event System.EventHandler<OwnaudioNET.Features.Vocalremover.HTDemucsSeparationResult>? ProcessingCompleted;
+        public event System.EventHandler<OwnaudioNET.Features.Vocalremover.HTDemucsSeparationProgress>? ProgressChanged;
+        public void Dispose() { }
+        public void Initialize() { }
+        public OwnaudioNET.Features.Vocalremover.HTDemucsSeparationResult Separate(string inputFilePath) { }
+    }
+    public static class HTDemucsExtensions
+    {
+        public static OwnaudioNET.Features.Vocalremover.HTDemucsAudioSeparator CreateAllStems(string outputDirectory = "separated_htdemucs") { }
+        public static OwnaudioNET.Features.Vocalremover.HTDemucsAudioSeparator CreateDefaultSeparator(string outputDirectory = "separated_htdemucs") { }
+        public static OwnaudioNET.Features.Vocalremover.HTDemucsAudioSeparator CreateFromFile(string modelPath, string outputDirectory = "separated_htdemucs") { }
+        public static OwnaudioNET.Features.Vocalremover.HTDemucsAudioSeparator CreateStemSelector(OwnaudioNET.Features.Vocalremover.HTDemucsStem targetStems, string outputDirectory = "separated_htdemucs") { }
+        public static OwnaudioNET.Features.Vocalremover.HTDemucsAudioSeparator CreateVocalsOnly(string outputDirectory = "separated_htdemucs") { }
+        public static OwnaudioNET.Features.Vocalremover.HTDemucsAudioSeparator CreateWithModel(string modelPath, string outputDirectory = "separated_htdemucs") { }
+        public static System.TimeSpan EstimateProcessingTime(string filePath, bool useGPU = false) { }
+        public static string GetStemName(this OwnaudioNET.Features.Vocalremover.HTDemucsStem stem) { }
+        public static bool IsValidAudioFile(string filePath) { }
+    }
+    public class HTDemucsSeparationOptions
+    {
+        public HTDemucsSeparationOptions() { }
+        public int ChunkSizeSeconds { get; set; }
+        public float CrossfadeSeconds { get; set; }
+        public bool EnableGPU { get; set; }
+        public float MarginSeconds { get; set; }
+        public OwnaudioNET.Features.Vocalremover.InternalModel Model { get; set; }
+        public string? ModelPath { get; set; }
+        public string OutputDirectory { get; set; }
+        public float OverlapFactor { get; set; }
+        public int SegmentLength { get; set; }
+        public int TargetSampleRate { get; set; }
+        public OwnaudioNET.Features.Vocalremover.HTDemucsStem TargetStems { get; set; }
+    }
+    public class HTDemucsSeparationProgress
+    {
+        public HTDemucsSeparationProgress() { }
+        public string CurrentFile { get; set; }
+        public OwnaudioNET.Features.Vocalremover.HTDemucsStem? CurrentStem { get; set; }
+        public double OverallProgress { get; set; }
+        public int ProcessedChunks { get; set; }
+        public string Status { get; set; }
+        public int TotalChunks { get; set; }
+    }
+    public class HTDemucsSeparationResult
+    {
+        public HTDemucsSeparationResult() { }
+        public System.TimeSpan AudioDuration { get; set; }
+        public System.TimeSpan ProcessingTime { get; set; }
+        public int StemCount { get; }
+        public System.Collections.Generic.Dictionary<OwnaudioNET.Features.Vocalremover.HTDemucsStem, string> StemPaths { get; set; }
+    }
+    [System.Flags]
+    public enum HTDemucsStem
+    {
+        Vocals = 1,
+        Drums = 2,
+        Bass = 4,
+        Other = 8,
+        All = 15,
+    }
+    public enum InternalModel
+    {
+        None = 0,
+        Default = 1,
+        Best = 2,
+        Karaoke = 3,
+        HTDemucs = 4,
+    }
+    public class ModelDownloadProgress
+    {
+        public ModelDownloadProgress() { }
+        public long BytesDownloaded { get; set; }
+        public string FileName { get; set; }
+        public OwnaudioNET.Features.Vocalremover.InternalModel Model { get; set; }
+        public double Percentage { get; set; }
+        public long? TotalBytes { get; set; }
+    }
+    public enum ModelOutputType
+    {
+        Instrumental = 0,
+        Vocals = 1,
+    }
+    public class MultiModelAudioSeparator : System.IDisposable
+    {
+        public MultiModelAudioSeparator(OwnaudioNET.Features.Vocalremover.MultiModelSeparationOptions options) { }
+        public event System.EventHandler<OwnaudioNET.Features.Vocalremover.MultiModelSeparationResult>? ProcessingCompleted;
+        public event System.EventHandler<OwnaudioNET.Features.Vocalremover.MultiModelSeparationProgress>? ProgressChanged;
+        public void Dispose() { }
+        public void Initialize() { }
+        public OwnaudioNET.Features.Vocalremover.MultiModelSeparationResult Separate(string inputFilePath) { }
+    }
+    public static class MultiModelExtensions
+    {
+        public static OwnaudioNET.Features.Vocalremover.MultiModelAudioSeparator CreateSimplePipeline(OwnaudioNET.Features.Vocalremover.InternalModel model1, OwnaudioNET.Features.Vocalremover.InternalModel model2, string outputDirectory = "separated_multimodel", OwnaudioNET.Features.Vocalremover.ModelOutputType? model1OutputType = default, OwnaudioNET.Features.Vocalremover.ModelOutputType? model2OutputType = default) { }
+        public static OwnaudioNET.Features.Vocalremover.MultiModelAudioSeparator CreateTriplePipeline(OwnaudioNET.Features.Vocalremover.InternalModel model1, OwnaudioNET.Features.Vocalremover.InternalModel model2, OwnaudioNET.Features.Vocalremover.InternalModel model3, string outputDirectory = "separated_multimodel", OwnaudioNET.Features.Vocalremover.ModelOutputType? model1OutputType = default, OwnaudioNET.Features.Vocalremover.ModelOutputType? model2OutputType = default, OwnaudioNET.Features.Vocalremover.ModelOutputType? model3OutputType = default) { }
+        public static bool IsValidAudioFile(string filePath) { }
+    }
+    public class MultiModelInfo
+    {
+        public MultiModelInfo() { }
+        public int DimF { get; set; }
+        public int DimT { get; set; }
+        public bool DisableNoiseReduction { get; set; }
+        public OwnaudioNET.Features.Vocalremover.InternalModel Model { get; set; }
+        public string? ModelPath { get; set; }
+        public int NFft { get; set; }
+        public string Name { get; set; }
+        public OwnaudioNET.Features.Vocalremover.ModelOutputType? OutputType { get; set; }
+        public bool SaveIntermediateOutput { get; set; }
+    }
+    public class MultiModelSeparationOptions
+    {
+        public MultiModelSeparationOptions() { }
+        public int ChunkSizeSeconds { get; set; }
+        public bool EnableGPU { get; set; }
+        public int Margin { get; set; }
+        public System.Collections.Generic.List<OwnaudioNET.Features.Vocalremover.MultiModelInfo> Models { get; set; }
+        public string OutputDirectory { get; set; }
+        public bool SaveAllIntermediateResults { get; set; }
+    }
+    public class MultiModelSeparationProgress
+    {
+        public MultiModelSeparationProgress() { }
+        public string CurrentFile { get; set; }
+        public int CurrentModelIndex { get; set; }
+        public string CurrentModelName { get; set; }
+        public double OverallProgress { get; set; }
+        public int ProcessedChunks { get; set; }
+        public string Status { get; set; }
+        public int TotalChunks { get; set; }
+        public int TotalModels { get; set; }
+    }
+    public class MultiModelSeparationResult
+    {
+        public MultiModelSeparationResult() { }
+        public string InstrumentalPath { get; set; }
+        public System.Collections.Generic.Dictionary<string, string> IntermediatePaths { get; set; }
+        public int ModelsProcessed { get; set; }
+        public string OutputPath { get; set; }
+        public System.TimeSpan ProcessingTime { get; set; }
+        public string VocalsPath { get; set; }
+    }
+    public class STFTProcessor : System.IDisposable
+    {
+        public STFTProcessor(int nFft, int hopLength) { }
+        public float[] HannWindow { get; }
+        public int HopLength { get; }
+        public int NFft { get; }
+        public float[] ComputeISTFT(float[] spectrogram, int targetLength) { }
+        public float[] ComputeSpectrogram(float[] audioChunk) { }
+        public void Dispose() { }
+        public static float[] Flatten5D(float[] array) { }
+    }
+    public class SimpleAudioSeparationService : System.IDisposable
+    {
+        public SimpleAudioSeparationService(OwnaudioNET.Features.Vocalremover.SimpleSeparationOptions options) { }
+        public event System.EventHandler<OwnaudioNET.Features.Vocalremover.SimpleSeparationResult>? ProcessingCompleted;
+        public event System.EventHandler<OwnaudioNET.Features.Vocalremover.SimpleSeparationProgress>? ProgressChanged;
+        public void Dispose() { }
+        public void Initialize() { }
+        public OwnaudioNET.Features.Vocalremover.SimpleSeparationResult Separate(string inputFilePath) { }
+    }
+    public class SimpleSeparationOptions
+    {
+        public SimpleSeparationOptions() { }
+        public int ChunkSizeSeconds { get; set; }
+        public int DimF { get; set; }
+        public int DimT { get; set; }
+        public bool DisableNoiseReduction { get; set; }
+        public bool EnableGPU { get; set; }
+        public int Margin { get; set; }
+        public OwnaudioNET.Features.Vocalremover.InternalModel Model { get; set; }
+        public string? ModelPath { get; set; }
+        public int NFft { get; set; }
+        public string OutputDirectory { get; set; }
+    }
+    public class SimpleSeparationProgress
+    {
+        public SimpleSeparationProgress() { }
+        public string CurrentFile { get; set; }
+        public double OverallProgress { get; set; }
+        public int ProcessedChunks { get; set; }
+        public string Status { get; set; }
+        public int TotalChunks { get; set; }
+    }
+    public class SimpleSeparationResult
+    {
+        public SimpleSeparationResult() { }
+        public string InstrumentalPath { get; set; }
+        public System.TimeSpan ProcessingTime { get; set; }
+        public string VocalsPath { get; set; }
+    }
+    public static class SimpleSeparator
+    {
+        [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "service",
+                "vocalPath",
+                "instrumentPath"})]
+        public static System.ValueTuple<OwnaudioNET.Features.Vocalremover.SimpleAudioSeparationService?, string, string> Separator(OwnaudioNET.Features.Vocalremover.InternalModel model, string outputDirectory = "separated") { }
+    }
+    public static class VocalRemoverModelManager
+    {
+        public static string DefaultModelsDirectory { get; set; }
+        public static System.Threading.Tasks.Task DownloadModelAsync(OwnaudioNET.Features.Vocalremover.InternalModel model, System.IProgress<OwnaudioNET.Features.Vocalremover.ModelDownloadProgress>? progress = null, System.Threading.CancellationToken cancellationToken = default) { }
+        public static System.Threading.Tasks.Task EnsureModelsAvailableAsync(System.Collections.Generic.IEnumerable<OwnaudioNET.Features.Vocalremover.InternalModel> models, System.IProgress<OwnaudioNET.Features.Vocalremover.ModelDownloadProgress>? progress = null, System.Threading.CancellationToken cancellationToken = default) { }
+        public static string GetModelPath(OwnaudioNET.Features.Vocalremover.InternalModel model) { }
+        public static bool IsModelAvailable(OwnaudioNET.Features.Vocalremover.InternalModel model) { }
+    }
+}
+namespace OwnaudioNET.Interfaces
+{
+    public interface IAudioSource : System.IDisposable
+    {
+        Ownaudio.Core.AudioConfig Config { get; }
+        double Duration { get; }
+        System.Guid Id { get; }
+        bool IsEndOfStream { get; }
+        bool Loop { get; set; }
+        float PitchShift { get; set; }
+        double Position { get; }
+        OwnaudioNET.Core.AudioState State { get; }
+        Ownaudio.AudioStreamInfo StreamInfo { get; }
+        float Tempo { get; set; }
+        float Volume { get; set; }
+        event System.EventHandler<OwnaudioNET.Events.BufferUnderrunEventArgs>? BufferUnderrun;
+        event System.EventHandler<OwnaudioNET.Events.AudioErrorEventArgs>? Error;
+        event System.EventHandler<OwnaudioNET.Events.AudioStateChangedEventArgs>? StateChanged;
+        void Pause();
+        void Play();
+        int ReadSamples(System.Span<float> buffer, int frameCount);
+        bool Seek(double positionInSeconds);
+        void Stop();
+    }
+    public interface IEffectProcessor : System.IDisposable
+    {
+        bool Enabled { get; set; }
+        System.Guid Id { get; }
+        bool IsReady { get; }
+        int LatencySamples { get; }
+        float Mix { get; set; }
+        string Name { get; }
+        void Initialize(Ownaudio.Core.AudioConfig config);
+        void Process(System.Span<float> buffer, int frameCount);
+        void Reset();
+    }
+    public interface IMasterClockSource : OwnaudioNET.Interfaces.IAudioSource, System.IDisposable
+    {
+        bool IsAttachedToClock { get; }
+        double StartOffset { get; set; }
+        void AttachToClock(OwnaudioNET.Synchronization.MasterClock clock);
+        void DetachFromClock();
+        bool ReadSamplesAtTime(double masterTimestamp, System.Span<float> buffer, int frameCount, out OwnaudioNET.Interfaces.ReadResult result);
+    }
+    public interface ISynchronizable
+    {
+        bool IsSynchronized { get; set; }
+        long SamplePosition { get; }
+        string? SyncGroupId { get; set; }
+        void ResyncTo(long samplePosition);
+    }
+    public struct ReadResult
+    {
+        public string? ErrorMessage;
+        public int FramesRead;
+        public bool Success;
+        public static OwnaudioNET.Interfaces.ReadResult CreateFailure(int framesRead, string errorMessage) { }
+        public static OwnaudioNET.Interfaces.ReadResult CreateSuccess(int framesRead) { }
+    }
+}
+namespace OwnaudioNET.Mixing
+{
+    public sealed class AudioMixer : System.IDisposable
+    {
+        public AudioMixer(Ownaudio.Core.IAudioEngine engine, int bufferSizeInFrames = 512) { }
+        public Ownaudio.Core.AudioConfig Config { get; }
+        public bool IsRecording { get; }
+        public bool IsRunning { get; }
+        public float LeftPeak { get; }
+        public OwnaudioNET.Synchronization.MasterClock MasterClock { get; }
+        public float MasterVolume { get; set; }
+        public System.Guid MixerId { get; }
+        public OwnaudioNET.Synchronization.ClockMode RenderingMode { get; set; }
+        public float RightPeak { get; }
+        public int SourceCount { get; }
+        public long TotalMixedFrames { get; }
+        public long TotalUnderruns { get; }
+        public event System.EventHandler<OwnaudioNET.Events.BufferUnderrunEventArgs>? BufferUnderrun;
+        public event System.EventHandler? PlaybackEnded;
+        public event System.EventHandler<OwnaudioNET.Events.AudioErrorEventArgs>? SourceError;
+        public event System.EventHandler<OwnaudioNET.Events.TrackDropoutEventArgs>? TrackDropout;
+        public void AddMasterEffect(OwnaudioNET.Interfaces.IEffectProcessor effect) { }
+        public bool AddSource(OwnaudioNET.Interfaces.IAudioSource source) { }
+        public bool AddSourcePrepared(OwnaudioNET.Interfaces.IAudioSource source) { }
+        public void ApplyPluginDelayCompensation() { }
+        public void ClearMasterEffects() { }
+        public void ClearSources() { }
+        public void Dispose() { }
+        public OwnaudioNET.Interfaces.IEffectProcessor[] GetMasterEffects() { }
+        public OwnaudioNET.Interfaces.IAudioSource[] GetSources() { }
+        public void Pause() { }
+        public bool RemoveMasterEffect(OwnaudioNET.Interfaces.IEffectProcessor effect) { }
+        public bool RemoveSource(OwnaudioNET.Interfaces.IAudioSource source) { }
+        public bool RemoveSource(System.Guid sourceId) { }
+        public void Seek(double positionInSeconds) { }
+        public void Start() { }
+        public void StartPreparedSources(double startPosition = 0) { }
+        public void StartRecording(string filePath) { }
+        public void Stop() { }
+        public void StopRecording() { }
+        public override string ToString() { }
+        public static OwnaudioNET.Mixing.AudioMixer Create(OwnaudioNET.Engine.AudioEngineWrapper engineWrapper, int bufferSizeInFrames = 512) { }
+    }
+    public sealed class WaveFileWriter : System.IDisposable
+    {
+        public WaveFileWriter(string filePath, Ownaudio.Core.AudioConfig config) { }
+        public Ownaudio.Core.AudioConfig Config { get; }
+        public double Duration { get; }
+        public long TotalFramesWritten { get; }
+        public long TotalSamplesWritten { get; }
+        public void Dispose() { }
+        public override string ToString() { }
+        public void WriteSamples(System.ReadOnlySpan<float> samples) { }
+    }
+}
+namespace OwnaudioNET.Monitoring
+{
+    public struct DropoutRecord
+    {
+        public System.DateTime EventTime { get; set; }
+        public int MissedFrames { get; set; }
+        public string Reason { get; set; }
+        public double Timestamp { get; set; }
+        public override string ToString() { }
+    }
+    public class TrackPerformanceMetrics
+    {
+        public TrackPerformanceMetrics(System.Guid trackId, string trackName, int maxCpuSamples = 100, int maxDropoutHistory = 50) { }
+        public double AverageCpuUsage { get; }
+        public double BufferFillPercentage { get; }
+        public System.Collections.Generic.IReadOnlyList<OwnaudioNET.Monitoring.DropoutRecord> DropoutHistory { get; }
+        public int TotalDropoutCount { get; }
+        public System.Guid TrackId { get; }
+        public string TrackName { get; }
+        public void RecordCpuSample(double cpuPercentage) { }
+        public void RecordDropout(double timestamp, int missedFrames, string? reason = null) { }
+        public void Reset() { }
+        public override string ToString() { }
+        public void UpdateBufferFill(double fillPercentage) { }
+    }
+}
+namespace OwnaudioNET.NetworkSync
+{
+    public class ClientConnectedEventArgs : System.EventArgs
+    {
+        public ClientConnectedEventArgs(System.Net.IPEndPoint clientEndpoint) { }
+        public System.Net.IPEndPoint ClientEndpoint { get; }
+    }
+    public class ClientDisconnectedEventArgs : System.EventArgs
+    {
+        public ClientDisconnectedEventArgs(System.Net.IPEndPoint clientEndpoint) { }
+        public System.Net.IPEndPoint ClientEndpoint { get; }
+    }
+    public class CommandReceivedEventArgs : System.EventArgs
+    {
+        public CommandReceivedEventArgs(OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command command) { }
+        public OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command Command { get; }
+    }
+    public class ConnectionStateChangedEventArgs : System.EventArgs
+    {
+        public ConnectionStateChangedEventArgs(OwnaudioNET.NetworkSync.NetworkSyncProtocol.ConnectionState oldState, OwnaudioNET.NetworkSync.NetworkSyncProtocol.ConnectionState newState) { }
+        public OwnaudioNET.NetworkSync.NetworkSyncProtocol.ConnectionState NewState { get; }
+        public OwnaudioNET.NetworkSync.NetworkSyncProtocol.ConnectionState OldState { get; }
+    }
+    public sealed class LocalTimeProvider : System.IDisposable
+    {
+        public LocalTimeProvider() { }
+        public OwnaudioNET.NetworkSync.LocalTimeProvider.TimeSyncTier CurrentTier { get; }
+        public System.DateTime LastSyncTime { get; }
+        public double TimeOffset { get; }
+        public void Dispose() { }
+        public System.DateTime GetSynchronizedTime() { }
+        public long GetSynchronizedTimeTicks() { }
+        public System.Threading.Tasks.Task<OwnaudioNET.NetworkSync.LocalTimeProvider.TimeSyncTier> TrySyncAsync(System.Net.IPEndPoint? peerEndpoint = null) { }
+        public System.Threading.Tasks.Task<bool> TrySyncWithLocalNtpAsync(int timeout = 200) { }
+        public System.Threading.Tasks.Task<bool> TrySyncWithPeerAsync(System.Net.IPEndPoint serverEndpoint, int timeout = 1000) { }
+        public enum TimeSyncTier
+        {
+            SystemTime = 0,
+            PeerToPeer = 1,
+            LocalNtp = 2,
+        }
+    }
+    public sealed class NetworkSyncClient : System.IDisposable
+    {
+        public NetworkSyncClient(OwnaudioNET.Synchronization.MasterClock masterClock, string? serverAddress = null, int port = 9876, bool allowOfflinePlayback = true) { }
+        public double AverageLatency { get; }
+        public OwnaudioNET.NetworkSync.NetworkSyncProtocol.ConnectionState ConnectionState { get; }
+        public bool IsLocalControlAllowed { get; }
+        public bool IsRunning { get; }
+        public event System.EventHandler<OwnaudioNET.NetworkSync.CommandReceivedEventArgs>? CommandReceived;
+        public event System.EventHandler<OwnaudioNET.NetworkSync.ConnectionStateChangedEventArgs>? ConnectionStateChanged;
+        public void Dispose() { }
+        public System.Threading.Tasks.Task StartAsync() { }
+        public void Stop() { }
+    }
+    public static class NetworkSyncProtocol
+    {
+        public const uint MagicNumber = 1331121729u;
+        public const int MaxPacketSize = 256;
+        public const int ProtocolVersion = 1;
+        public static OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command CreateClockSyncCommand(long ntpTimestamp, double masterClockTimestamp, long masterClockSamplePosition, int sampleRate) { }
+        public static OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command CreatePauseCommand(long ntpTimestamp, long scheduledExecutionTime) { }
+        public static OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command CreatePingCommand(long clientSendTime, int sequenceNumber) { }
+        public static OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command CreatePlayCommand(long ntpTimestamp, long scheduledExecutionTime, double startPosition = 0) { }
+        public static OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command CreatePongCommand(long clientSendTime, int sequenceNumber) { }
+        public static OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command CreateSeekCommand(long ntpTimestamp, long scheduledExecutionTime, double targetPosition) { }
+        public static OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command CreateStopCommand(long ntpTimestamp) { }
+        public static OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command CreateTempoCommand(long ntpTimestamp, float tempoValue, bool useSmooth) { }
+        public static bool DeserializeCommand(System.ReadOnlySpan<byte> buffer, ref OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command cmd) { }
+        public static int SerializeCommand(ref OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command cmd, System.Span<byte> buffer) { }
+        public struct Command
+        {
+            public long ClientSendTime;
+            public long MasterClockSamplePosition;
+            public double MasterClockTimestamp;
+            public long NtpTimestamp;
+            public int SampleRate;
+            public long ScheduledExecutionTime;
+            public int SequenceNumber;
+            public double TargetPosition;
+            public float TempoValue;
+            public OwnaudioNET.NetworkSync.NetworkSyncProtocol.CommandType Type;
+            public bool UseSmooth;
+        }
+        public enum CommandType
+        {
+            ClockSync = 0,
+            Play = 1,
+            Pause = 2,
+            Stop = 3,
+            Seek = 4,
+            Tempo = 5,
+            Ping = 6,
+            Pong = 7,
+            ServerAnnouncement = 8,
+            ClientHandshake = 9,
+            ServerHandshake = 10,
+        }
+        public enum ConnectionState
+        {
+            Disconnected = 0,
+            Connecting = 1,
+            Connected = 2,
+            Synced = 3,
+        }
+    }
+    public sealed class NetworkSyncServer : System.IDisposable
+    {
+        public NetworkSyncServer(OwnaudioNET.Synchronization.MasterClock masterClock, int port = 9876) { }
+        public int ClientCount { get; }
+        public bool IsRunning { get; }
+        public event System.EventHandler<OwnaudioNET.NetworkSync.ClientConnectedEventArgs>? ClientConnected;
+        public event System.EventHandler<OwnaudioNET.NetworkSync.ClientDisconnectedEventArgs>? ClientDisconnected;
+        public void Dispose() { }
+        public bool EnqueueCommand(ref OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command command) { }
+        public void HandlePing(System.Net.IPEndPoint clientEndpoint, ref OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command pingCmd) { }
+        public System.Threading.Tasks.Task StartAsync() { }
+        public void Stop() { }
+    }
+    public class NetworkSyncStatus
+    {
+        public NetworkSyncStatus() { }
+        public double AverageLatency { get; }
+        public int ClientCount { get; }
+        public OwnaudioNET.NetworkSync.NetworkSyncProtocol.ConnectionState ConnectionState { get; }
+        public bool IsClient { get; }
+        public bool IsEnabled { get; }
+        public bool IsLocalControlAllowed { get; }
+        public bool IsServer { get; }
+        public double ServerLatency { get; }
+        public double SyncDrift { get; }
+        public OwnaudioNET.NetworkSync.LocalTimeProvider.TimeSyncTier TimeSyncTier { get; }
+    }
+}
+namespace OwnaudioNET
+{
+    public static class OwnaudioNet
+    {
+        public static OwnaudioNET.Engine.AudioEngineWrapper? Engine { get; }
+        public static bool IsInitialized { get; }
+        public static bool IsRunning { get; }
+        public static System.Version Version { get; }
+        public static event System.EventHandler<OwnaudioNET.NetworkSync.ConnectionStateChangedEventArgs>? NetworkSyncConnectionChanged;
+        public static bool BroadcastCommand(ref OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command command) { }
+        public static Ownaudio.Core.AudioConfig CreateDefaultConfig() { }
+        public static Ownaudio.Core.AudioConfig CreateHighLatencyConfig() { }
+        public static Ownaudio.Core.AudioConfig CreateLowLatencyConfig() { }
+        public static System.Collections.Generic.List<Ownaudio.Core.AudioDeviceInfo> GetInputDevices() { }
+        public static System.Threading.Tasks.Task<System.Collections.Generic.List<Ownaudio.Core.AudioDeviceInfo>> GetInputDevicesAsync(System.Threading.CancellationToken cancellationToken = default) { }
+        public static OwnaudioNET.NetworkSync.NetworkSyncStatus GetNetworkSyncStatus() { }
+        public static System.Collections.Generic.List<Ownaudio.Core.AudioDeviceInfo> GetOutputDevices() { }
+        public static System.Threading.Tasks.Task<System.Collections.Generic.List<Ownaudio.Core.AudioDeviceInfo>> GetOutputDevicesAsync(System.Threading.CancellationToken cancellationToken = default) { }
+        public static OwnaudioNET.Mixing.AudioMixer? GetRegisteredAudioMixer() { }
+        public static void Initialize() { }
+        public static void Initialize(Ownaudio.Core.AudioConfig config, bool useMockEngine = false, int bufferMultiplier = 8) { }
+        public static System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken = default) { }
+        public static System.Threading.Tasks.Task InitializeAsync(Ownaudio.Core.AudioConfig config, bool useMockEngine = false, int bufferMultiplier = 8, System.Threading.CancellationToken cancellationToken = default) { }
+        public static System.Threading.Tasks.Task InitializeAsync(Ownaudio.Core.IAudioEngine engine, Ownaudio.Core.AudioConfig config, int bufferMultiplier = 8, System.Threading.CancellationToken cancellationToken = default) { }
+        public static bool IsNetworkSyncLocalControlAllowed() { }
+        public static void PauseDeviceMonitoring() { }
+        public static float[]? Receive(out int sampleCount) { }
+        public static void ResumeDeviceMonitoring() { }
+        public static void ReturnInputBuffer(float[] buffer) { }
+        public static void Send(System.ReadOnlySpan<float> samples) { }
+        public static void SetPrimaryAudioMixer(OwnaudioNET.Mixing.AudioMixer mixer) { }
+        public static void Shutdown() { }
+        public static System.Threading.Tasks.Task ShutdownAsync(System.Threading.CancellationToken cancellationToken = default) { }
+        public static void Start() { }
+        public static System.Threading.Tasks.Task StartNetworkSyncClientAsync(string? serverAddress = null, int port = 9876, bool allowOfflinePlayback = true) { }
+        public static System.Threading.Tasks.Task StartNetworkSyncServerAsync(int port = 9876, bool useLocalTimeOnly = true) { }
+        public static void Stop() { }
+        public static System.Threading.Tasks.Task StopAsync(System.Threading.CancellationToken cancellationToken = default) { }
+        public static void StopNetworkSync() { }
+    }
+}
+namespace OwnaudioNET.Processing
+{
+    public sealed class SoundTouchProcessor : System.IDisposable
+    {
+        public SoundTouchProcessor(int sampleRate, int channels) { }
+        public int Channels { get; }
+        public float PitchSemiTones { get; set; }
+        public int SampleRate { get; }
+        public float TempoChange { get; set; }
+        public void Clear() { }
+        public void Dispose() { }
+        public void Flush() { }
+        public bool IsProcessingNeeded() { }
+        public void PutSamples(System.Span<float> samples, int frameCount) { }
+        public int ReceiveSamples(System.Span<float> output, int maxFrames) { }
+    }
+}
+namespace OwnaudioNET.Recording
+{
+    public class AudioRecorder : System.IDisposable
+    {
+        public AudioRecorder(Ownaudio.Core.AudioConfig config) { }
+        public bool IsRecording { get; }
+        public string? OutputFilePath { get; }
+        public int RecordedSampleCount { get; }
+        public void Clear() { }
+        public void Dispose() { }
+        public System.Threading.Tasks.Task SaveToFileAsync() { }
+        public void StartRecording(string outputFilePath, int bitDepth = 16) { }
+        public int StopRecording() { }
+        public void WriteSamples(System.ReadOnlySpan<float> samples) { }
+    }
+    public static class WaveFile
+    {
+        public static void Create(string filePath, byte[] rawData, int sampleRate, int channels, int bitPerSamples) { }
+        public static void Create(string filePath, float[] samples, int sampleRate, int channels, int bitPerSamples) { }
+        public static void Create(string filePath, string rawFilePath, int sampleRate, int channels, int bitPerSamples) { }
+    }
+}
+namespace OwnaudioNET.Sources
+{
+    public abstract class BaseAudioSource : OwnaudioNET.Interfaces.IAudioSource, OwnaudioNET.Interfaces.ISynchronizable, System.IDisposable
+    {
+        protected BaseAudioSource() { }
+        public abstract Ownaudio.Core.AudioConfig Config { get; }
+        public abstract double Duration { get; }
+        public System.Guid Id { get; }
+        public abstract bool IsEndOfStream { get; }
+        public bool IsSynchronized { get; set; }
+        public bool Loop { get; set; }
+        public int[]? OutputChannelMapping { get; set; }
+        [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "left",
+                "right"})]
+        public System.ValueTuple<float, float> OutputLevels { get; }
+        public virtual float PitchShift { get; set; }
+        public abstract double Position { get; }
+        public long SamplePosition { get; protected set; }
+        public OwnaudioNET.Core.AudioState State { get; protected set; }
+        public abstract Ownaudio.AudioStreamInfo StreamInfo { get; }
+        public string? SyncGroupId { get; set; }
+        public virtual float Tempo { get; set; }
+        public float Volume { get; set; }
+        public event System.EventHandler<OwnaudioNET.Events.BufferUnderrunEventArgs>? BufferUnderrun;
+        public event System.EventHandler<OwnaudioNET.Events.AudioErrorEventArgs>? Error;
+        public event System.EventHandler? PositionChanged;
+        public event System.EventHandler<OwnaudioNET.Events.AudioStateChangedEventArgs>? StateChanged;
+        protected void ApplyVolume(System.Span<float> buffer, int sampleCount) { }
+        protected void CalculateOutputLevels(System.Span<float> buffer, int sampleCount) { }
+        protected long CalculateSamplePosition(double timeInSeconds) { }
+        protected double CalculateTimePosition(long samplePos) { }
+        public void Dispose() { }
+        protected virtual void Dispose(bool disposing) { }
+        protected virtual void OnBufferUnderrun(OwnaudioNET.Events.BufferUnderrunEventArgs e) { }
+        protected virtual void OnError(OwnaudioNET.Events.AudioErrorEventArgs e) { }
+        protected virtual void OnSamplesRead(System.Span<float> buffer, int samplesRead) { }
+        protected virtual void OnStateChanged(OwnaudioNET.Events.AudioStateChangedEventArgs e) { }
+        public virtual void Pause() { }
+        public virtual void Play() { }
+        public abstract int ReadSamples(System.Span<float> buffer, int frameCount);
+        protected void ResetSamplePosition() { }
+        public virtual void ResyncTo(long samplePosition) { }
+        public OwnaudioNET.Sources.BaseAudioSource RouteToChannels(params int[] channels) { }
+        public abstract bool Seek(double positionInSeconds);
+        protected void SetSamplePosition(long position) { }
+        public virtual void Stop() { }
+        protected void ThrowIfDisposed() { }
+        protected void UpdatePositionChanged() { }
+        protected void UpdateSamplePosition(int framesRead) { }
+        protected static void FadeInHead(System.Span<float> buffer, int fadeSamples) { }
+        protected static void FadeOutTail(System.Span<float> buffer, int fadeSamples) { }
+        protected static void FillWithSilence(System.Span<float> buffer, int sampleCount) { }
+    }
+    public class FileSource : OwnaudioNET.Sources.BaseAudioSource, OwnaudioNET.Interfaces.IAudioSource, OwnaudioNET.Interfaces.IMasterClockSource, OwnaudioNET.Interfaces.ISynchronizable, System.IDisposable
+    {
+        public FileSource(Ownaudio.Decoders.IAudioDecoder decoder, int bufferSizeInFrames = 8192) { }
+        public FileSource(string filePath, int bufferSizeInFrames = 8192, int targetSampleRate = 48000, int targetChannels = 2) { }
+        public FileSource(System.IO.Stream stream, Ownaudio.Decoders.AudioFormat format, int bufferSizeInFrames = 8192, int targetSampleRate = 48000, int targetChannels = 2) { }
+        public override Ownaudio.Core.AudioConfig Config { get; }
+        public override double Duration { get; }
+        public bool IsAttachedToClock { get; }
+        public override bool IsEndOfStream { get; }
+        public override float PitchShift { get; set; }
+        public override double Position { get; }
+        public double SoftSyncMaxTempoAdjustment { get; set; }
+        public double SoftSyncTolerance { get; set; }
+        public double StartOffset { get; set; }
+        public override Ownaudio.AudioStreamInfo StreamInfo { get; }
+        public OwnaudioNET.Sources.SyncDiagnosticsSnapshot SyncDiagnostics { get; }
+        public double SyncTolerance { get; set; }
+        public override float Tempo { get; set; }
+        public void AttachToClock(OwnaudioNET.Synchronization.MasterClock clock) { }
+        public void DetachFromClock() { }
+        protected override void Dispose(bool disposing) { }
+        public byte[] GetByteAudioData(System.TimeSpan position, System.TimeSpan? duration = default) { }
+        public float[] GetFloatAudioData(System.TimeSpan position, System.TimeSpan? duration = default) { }
+        [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "left",
+                "right"})]
+        public System.ValueTuple<float, float>? GetOutputLevels() { }
+        public override void Pause() { }
+        public override void Play() { }
+        public void PreBuffer() { }
+        public override int ReadSamples(System.Span<float> buffer, int frameCount) { }
+        public bool ReadSamplesAtTime(double masterTimestamp, System.Span<float> buffer, int frameCount, out OwnaudioNET.Interfaces.ReadResult result) { }
+        public override void ResyncTo(long targetSamplePosition) { }
+        public override bool Seek(double positionInSeconds) { }
+        public void SetPitchSmooth(float pitchSemitones) { }
+        public void SetTempoSmooth(float tempo) { }
+        public void SetTempoSynced(float tempo) { }
+        public override void Stop() { }
+    }
+    public sealed class InputSource : OwnaudioNET.Sources.BaseAudioSource
+    {
+        public InputSource(OwnaudioNET.Engine.AudioEngineWrapper engine, int bufferSizeInFrames = 8192) { }
+        public override Ownaudio.Core.AudioConfig Config { get; }
+        public override double Duration { get; }
+        public override bool IsEndOfStream { get; }
+        public override double Position { get; }
+        public override Ownaudio.AudioStreamInfo StreamInfo { get; }
+        protected override void Dispose(bool disposing) { }
+        [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "left",
+                "right"})]
+        public System.ValueTuple<float, float> GetInputLevels() { }
+        public override void Pause() { }
+        public override void Play() { }
+        public override int ReadSamples(System.Span<float> buffer, int frameCount) { }
+        public override bool Seek(double positionInSeconds) { }
+        public override void Stop() { }
+    }
+    public sealed class SampleSource : OwnaudioNET.Sources.BaseAudioSource
+    {
+        public SampleSource(float[] samples, Ownaudio.Core.AudioConfig config) { }
+        public SampleSource(int bufferSizeInFrames, Ownaudio.Core.AudioConfig config) { }
+        public bool AllowDynamicUpdate { get; set; }
+        public override Ownaudio.Core.AudioConfig Config { get; }
+        public override double Duration { get; }
+        public override bool IsEndOfStream { get; }
+        public override double Position { get; }
+        public override Ownaudio.AudioStreamInfo StreamInfo { get; }
+        public void Clear() { }
+        protected override void Dispose(bool disposing) { }
+        public override int ReadSamples(System.Span<float> buffer, int frameCount) { }
+        public override bool Seek(double positionInSeconds) { }
+        public void SubmitSamples(System.ReadOnlySpan<float> samples) { }
+    }
+    public sealed class SourceWithEffects : OwnaudioNET.Interfaces.IAudioSource, System.IDisposable
+    {
+        public SourceWithEffects(OwnaudioNET.Interfaces.IAudioSource source) { }
+        public Ownaudio.Core.AudioConfig Config { get; }
+        public double Duration { get; }
+        public int EffectCount { get; }
+        public int EffectLatencySamples { get; }
+        public System.Guid Id { get; }
+        public bool IsEndOfStream { get; }
+        public bool Loop { get; set; }
+        public float PitchShift { get; set; }
+        public double Position { get; }
+        public OwnaudioNET.Core.AudioState State { get; }
+        public Ownaudio.AudioStreamInfo StreamInfo { get; }
+        public float Tempo { get; set; }
+        public float Volume { get; set; }
+        public event System.EventHandler<OwnaudioNET.Events.BufferUnderrunEventArgs>? BufferUnderrun;
+        public event System.EventHandler<OwnaudioNET.Events.AudioErrorEventArgs>? Error;
+        public event System.EventHandler<OwnaudioNET.Events.AudioStateChangedEventArgs>? StateChanged;
+        public void AddEffect(OwnaudioNET.Interfaces.IEffectProcessor effect) { }
+        public void ClearEffects() { }
+        public void Dispose() { }
+        public OwnaudioNET.Interfaces.IEffectProcessor[] GetEffects() { }
+        public void Pause() { }
+        public void Play() { }
+        public int ReadSamples(System.Span<float> buffer, int frameCount) { }
+        public bool RemoveEffect(OwnaudioNET.Interfaces.IEffectProcessor effect) { }
+        public bool Seek(double positionInSeconds) { }
+        public void SetDelayCompensation(int samples) { }
+        public void Stop() { }
+        public override string ToString() { }
+    }
+    public readonly struct SyncDiagnosticsSnapshot
+    {
+        public double AdaptiveScale { get; init; }
+        public double EffectiveSoftSyncToleranceMs { get; init; }
+        public double EffectiveSyncToleranceMs { get; init; }
+        public bool IsRelaxed { get; }
+        public int RedZoneHitsInWindow { get; init; }
+    }
+}
+namespace OwnaudioNET.Synchronization
+{
+    public enum ClockMode
+    {
+        Realtime = 0,
+        Offline = 1,
+        NetworkServer = 2,
+        NetworkClient = 3,
+    }
+    public sealed class MasterClock : System.IDisposable
+    {
+        public MasterClock(int sampleRate, int channels, OwnaudioNET.Synchronization.ClockMode mode = 0) { }
+        public int Channels { get; }
+        public long CurrentSamplePosition { get; }
+        public double CurrentTimestamp { get; }
+        public bool IsNetworkControlled { get; set; }
+        public OwnaudioNET.Synchronization.ClockMode Mode { get; set; }
+        public int SampleRate { get; }
+        public void Advance(int frameCount) { }
+        public void Dispose() { }
+        public void Reset() { }
+        public double SamplePositionToTimestamp(long samplePosition) { }
+        public void SeekTo(double timestamp) { }
+        public long TimestampToSamplePosition(double timestamp) { }
+    }
+}
+namespace OwnaudioNET.Visualization
+{
+    public class WaveAvaloniaDisplay : Avalonia.Controls.Control
+    {
+        public static readonly Avalonia.StyledProperty<bool> AutoFollowProperty;
+        public static readonly Avalonia.StyledProperty<OwnaudioNET.Visualization.WaveAvaloniaDisplay.WaveformDisplayStyle> DisplayStyleProperty;
+        public static readonly Avalonia.StyledProperty<Avalonia.Media.IBrush> PlaybackPositionBrushProperty;
+        public static readonly Avalonia.StyledProperty<double> PlaybackPositionProperty;
+        public static readonly Avalonia.StyledProperty<double> ScrollOffsetProperty;
+        public static readonly Avalonia.StyledProperty<double> VerticalScaleProperty;
+        public static readonly Avalonia.StyledProperty<Avalonia.Media.IBrush> WaveformBrushProperty;
+        public static readonly Avalonia.StyledProperty<double> ZoomFactorProperty;
+        public WaveAvaloniaDisplay() { }
+        public bool AutoFollow { get; set; }
+        public OwnaudioNET.Visualization.WaveAvaloniaDisplay.WaveformDisplayStyle DisplayStyle { get; set; }
+        public double PlaybackPosition { get; set; }
+        public Avalonia.Media.IBrush PlaybackPositionBrush { get; set; }
+        public double ScrollOffset { get; set; }
+        public double VerticalScale { get; set; }
+        public Avalonia.Media.IBrush WaveformBrush { get; set; }
+        public double ZoomFactor { get; set; }
+        public event System.EventHandler<double>? PlaybackPositionChanged;
+        public bool LoadFromAudioFile(string filePath, int maxSamples = 100000, bool preferFFmpeg = false, int channels = 1, int sampleRate = 44100) { }
+        public System.Threading.Tasks.Task<bool> LoadFromAudioFileAsync(string filePath, int maxSamples = 100000, bool preferFFmpeg = false, int channels = 1, int sampleRate = 44100, System.Threading.CancellationToken cancellationToken = default) { }
+        public bool LoadFromAudioStream(System.IO.Stream stream, Ownaudio.Decoders.AudioFormat audioFormat, bool preferFFmpeg = false, int channels = 1, int sampleRate = 44100) { }
+        protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e) { }
+        public override void Render(Avalonia.Media.DrawingContext context) { }
+        public void SetAudioData(float[] audioData) { }
+        public enum WaveformDisplayStyle
+        {
+            MinMax = 0,
+            Positive = 1,
+            RMS = 2,
+        }
+    }
+}
+namespace SoundTouch
+{
+    public sealed class BpmDetect : System.IDisposable
+    {
+        public BpmDetect(int numChannels, int sampleRate) { }
+        public void Dispose() { }
+        public int GetBeats(System.Span<float> pos, System.Span<float> strength) { }
+        public float GetBpm() { }
+        public void InputSamples(System.ReadOnlySpan<float> samples, int numSamples) { }
+    }
+    public abstract class FifoProcessor : SoundTouch.FifoSamplePipe
+    {
+        protected FifoProcessor(SoundTouch.FifoSamplePipe output) { }
+        public override int AvailableSamples { get; }
+        public override bool IsEmpty { get; }
+        protected SoundTouch.FifoSamplePipe Output { get; }
+        public override int AdjustAmountOfSamples(int numSamples) { }
+        public override System.Span<float> PtrBegin() { }
+        public override int ReceiveSamples(int maxSamples) { }
+        public override int ReceiveSamples(in System.Span<float> output, int maxSamples) { }
+        protected void SetOutPipe(SoundTouch.FifoSamplePipe output) { }
+    }
+    public sealed class FifoSampleBuffer : SoundTouch.FifoSamplePipe
+    {
+        public FifoSampleBuffer(int numberOfChannels = 2) { }
+        public override int AvailableSamples { get; }
+        public int Channels { get; set; }
+        public override bool IsEmpty { get; }
+        public void AddSilent(int numSamples) { }
+        public override int AdjustAmountOfSamples(int numSamples) { }
+        public override void Clear() { }
+        public override void Dispose() { }
+        public override System.Span<float> PtrBegin() { }
+        public System.Span<float> PtrEnd(int slackCapacity) { }
+        public void PutSamples(int numSamples) { }
+        public override void PutSamples(in System.ReadOnlySpan<float> samples, int numSamples) { }
+        public override int ReceiveSamples(int maxSamples) { }
+        public override int ReceiveSamples(in System.Span<float> output, int maxSamples) { }
+    }
+    public abstract class FifoSamplePipe : System.IDisposable
+    {
+        protected FifoSamplePipe() { }
+        public abstract int AvailableSamples { get; }
+        public abstract bool IsEmpty { get; }
+        public abstract int AdjustAmountOfSamples(int numSamples);
+        public abstract void Clear();
+        public virtual void Dispose() { }
+        public void MoveSamples(in SoundTouch.FifoSamplePipe other) { }
+        public abstract System.Span<float> PtrBegin();
+        public abstract void PutSamples(in System.ReadOnlySpan<float> samples, int numSamples);
+        public abstract int ReceiveSamples(int maxSamples);
+        public abstract int ReceiveSamples(in System.Span<float> output, int maxSamples);
+        protected static bool VerifyNumberOfChannels(int nChannels) { }
+    }
+    public enum SettingId
+    {
+        UseAntiAliasFilter = 0,
+        AntiAliasFilterLength = 1,
+        UseQuickSeek = 2,
+        SequenceDurationMs = 3,
+        SeekWindowDurationMs = 4,
+        OverlapDurationMs = 5,
+        NominalInputSequence = 6,
+        NominalOutputSequence = 7,
+        InitialLatency = 8,
+    }
+    public sealed class SoundTouchProcessor : SoundTouch.FifoProcessor
+    {
+        public SoundTouchProcessor() { }
+        public int Channels { get; set; }
+        public double Pitch { get; set; }
+        public double PitchOctaves { get; set; }
+        public double PitchSemiTones { get; set; }
+        public double Rate { get; set; }
+        public double RateChange { get; set; }
+        public int SampleRate { get; set; }
+        public double Tempo { get; set; }
+        public double TempoChange { get; set; }
+        public int UnprocessedSampleCount { get; }
+        public override void Clear() { }
+        public override void Dispose() { }
+        public void Flush() { }
+        public double GetInputOutputSampleRatio() { }
+        public int GetSetting(SoundTouch.SettingId settingId) { }
+        public override void PutSamples(in System.ReadOnlySpan<float> samples, int numSamples) { }
+        public override int ReceiveSamples(int maxSamples) { }
+        public override int ReceiveSamples(in System.Span<float> output, int maxSamples) { }
+        public bool SetSetting(SoundTouch.SettingId settingId, int value) { }
+    }
+}
