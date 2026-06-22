@@ -22,7 +22,6 @@ pub(crate) struct StreamResampler {
     in_chunk: Vec<Vec<f32>>,
     /// Reused per-channel output scratch, sized to `output_frames_max`.
     out_scratch: Vec<Vec<f32>>,
-    out_max: usize,
 }
 
 impl StreamResampler {
@@ -38,7 +37,6 @@ impl StreamResampler {
             in_acc: vec![Vec::with_capacity(CHUNK_FRAMES * 2); channels],
             in_chunk: vec![vec![0.0f32; CHUNK_FRAMES]; channels],
             out_scratch: vec![vec![0.0f32; out_max]; channels],
-            out_max,
         })
     }
 
@@ -63,8 +61,6 @@ impl StreamResampler {
                 self.in_chunk[c].clear();
                 self.in_chunk[c].extend_from_slice(&self.in_acc[c][..CHUNK_FRAMES]);
                 self.in_acc[c].drain(..CHUNK_FRAMES);
-                // `process` truncates the scratch vecs, so restore full length.
-                self.out_scratch[c].resize(self.out_max, 0.0);
             }
 
             let written = self

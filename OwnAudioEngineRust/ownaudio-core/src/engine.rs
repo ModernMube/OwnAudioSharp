@@ -56,11 +56,13 @@ impl AudioEngine {
 
         let err_fn = |e| eprintln!("[ownaudio-core] output stream error: {e}");
 
-        // Pre-allocate the f32 conversion buffer.  If buffer_size_frames is
-        // known we size it exactly; otherwise we use a conservative upper bound
-        // (4096 frames × channels) that fits any realistic callback buffer.
-        // On the first callback the buffer is resized once if the OS chose a
-        // different size; after that the real-time path is allocation-free.
+        // Pre-allocate the f32 conversion buffer once, at stream-init time.  If
+        // buffer_size_frames is known we size it exactly; otherwise we use a
+        // conservative upper bound (4096 frames × channels) that fits any
+        // realistic callback buffer.  In the callback we only ever take a
+        // sub-slice (`tmp[..data.len()]`); the buffer is grown solely if the OS
+        // hands us a larger buffer than anticipated — a one-time amortized cost,
+        // never a per-callback allocation in steady state.
         let pre_alloc = config
             .buffer_size_frames
             .unwrap_or(4096) as usize
@@ -79,11 +81,12 @@ impl AudioEngine {
                 cpal_device.build_output_stream(
                     stream_config,
                     move |data: &mut [i16], _| {
-                        if tmp.len() != data.len() {
+                        if data.len() > tmp.len() {
                             tmp.resize(data.len(), 0.0);
                         }
-                        callback(&mut tmp);
-                        crate::format::f32_to_i16(&tmp, data);
+                        let buf = &mut tmp[..data.len()];
+                        callback(buf);
+                        crate::format::f32_to_i16(buf, data);
                     },
                     err_fn,
                     None,
@@ -94,11 +97,12 @@ impl AudioEngine {
                 cpal_device.build_output_stream(
                     stream_config,
                     move |data: &mut [u16], _| {
-                        if tmp.len() != data.len() {
+                        if data.len() > tmp.len() {
                             tmp.resize(data.len(), 0.0);
                         }
-                        callback(&mut tmp);
-                        crate::format::f32_to_u16(&tmp, data);
+                        let buf = &mut tmp[..data.len()];
+                        callback(buf);
+                        crate::format::f32_to_u16(buf, data);
                     },
                     err_fn,
                     None,
@@ -150,11 +154,12 @@ impl AudioEngine {
                 cpal_device.build_input_stream(
                     stream_config,
                     move |data: &[i16], _| {
-                        if tmp.len() != data.len() {
+                        if data.len() > tmp.len() {
                             tmp.resize(data.len(), 0.0);
                         }
-                        crate::format::i16_to_f32(data, &mut tmp);
-                        callback(&tmp);
+                        let buf = &mut tmp[..data.len()];
+                        crate::format::i16_to_f32(data, buf);
+                        callback(buf);
                     },
                     err_fn,
                     None,
@@ -165,11 +170,12 @@ impl AudioEngine {
                 cpal_device.build_input_stream(
                     stream_config,
                     move |data: &[u16], _| {
-                        if tmp.len() != data.len() {
+                        if data.len() > tmp.len() {
                             tmp.resize(data.len(), 0.0);
                         }
-                        crate::format::u16_to_f32(data, &mut tmp);
-                        callback(&tmp);
+                        let buf = &mut tmp[..data.len()];
+                        crate::format::u16_to_f32(data, buf);
+                        callback(buf);
                     },
                     err_fn,
                     None,

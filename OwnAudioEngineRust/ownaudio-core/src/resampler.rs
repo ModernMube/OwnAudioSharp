@@ -68,8 +68,15 @@ impl Resampler {
     /// (the value passed to [`new`]).
     ///
     /// `out` must have `channels` elements, each pre-allocated with at least
-    /// [`output_frames_max`] capacity. Use `vec![0.0f32; rs.output_frames_max()]`
-    /// when constructing these buffers and reuse them across calls.
+    /// [`output_frames_max`] *length* (not merely capacity). Use
+    /// `vec![0.0f32; rs.output_frames_max()]` when constructing these buffers and
+    /// reuse them unchanged across calls.
+    ///
+    /// The output buffers are written in place and their length is **never**
+    /// modified, so the steady-state path performs no allocation and the caller
+    /// does not need to restore their length between calls. Only the first
+    /// `frames_written` samples of each `out` channel are valid; read them as
+    /// `&out[ch][..frames_written]`.
     ///
     /// Returns the number of output frames written per channel.
     ///
@@ -106,8 +113,10 @@ impl Resampler {
                 out_ch.len() >= frames_written,
                 "out buffer too small; pre-allocate with output_frames_max()"
             );
+            // Write in place without altering `out_ch`'s length: keeping the
+            // buffers at their pre-allocated size lets the caller reuse them
+            // across calls allocation-free (no truncate/resize churn).
             out_ch[..frames_written].copy_from_slice(&scratch_ch[..frames_written]);
-            out_ch.truncate(frames_written);
         }
 
         Ok(frames_written)
@@ -168,11 +177,11 @@ mod tests {
         let mut rs = Resampler::new(44_100, 48_000, 1, frames_in).unwrap();
         let mut total_in = 0usize;
         let mut total_out = 0usize;
+        // Allocate the output buffer once and reuse it: `process` no longer
+        // truncates, so the same buffer is valid across every iteration.
+        let mut out = vec![vec![0.0f32; rs.output_frames_max()]];
         for _ in 0..iterations {
             let input = vec![sine_channel(440.0, 44_100, frames_in)];
-            // Re-allocate to output_frames_max each iteration since truncate
-            // shrinks the vec after the first process call.
-            let mut out = vec![vec![0.0f32; rs.output_frames_max()]];
             let written = rs.process(&input, &mut out).unwrap();
             total_in += frames_in;
             total_out += written;
@@ -223,6 +232,25 @@ mod tests {
             matches!(result, Err(AudioError::UnsupportedConfig(_))),
             "expected UnsupportedConfig error for wrong input size"
         );
+    }
+
+    #[test]
+    fn process_preserves_output_buffer_length() {
+        // The output buffers must keep their pre-allocated length across calls so
+        // the caller can reuse them allocation-free (no truncate/resize churn).
+        let frames_in = 512;
+        let mut rs = Resampler::new(44_100, 48_000, 2, frames_in).unwrap();
+        let max = rs.output_frames_max();
+        let mut out = vec![vec![0.0f32; max]; 2];
+
+        for _ in 0..4 {
+            let ch = sine_channel(440.0, 44_100, frames_in);
+            let input = vec![ch.clone(), ch];
+            let written = rs.process(&input, &mut out).unwrap();
+            assert!(written <= max);
+            assert_eq!(out[0].len(), max, "out length must stay at output_frames_max");
+            assert_eq!(out[1].len(), max, "out length must stay at output_frames_max");
+        }
     }
 
     #[test]
