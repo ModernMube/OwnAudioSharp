@@ -453,6 +453,80 @@ jobs:
           retention-days: 30
 
   # -------------------------------------------------------------------------
+  # Commit built native binaries back into runtimes/ for local development
+  # -------------------------------------------------------------------------
+  update-runtimes:
+    name: Update runtimes/ with built natives
+    needs:
+      - rust-build-windows
+      - rust-build-linux-x64
+      - rust-build-linux-arm64
+      - rust-build-macos
+      - rust-build-android
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download all native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: native-dl/
+          merge-multiple: false
+
+      - name: Merge artifacts
+        run: |
+          mkdir -p native-merged
+          for dir in native-dl/*/; do
+            cp -r "$dir"* native-merged/ 2>/dev/null || true
+          done
+          echo "Downloaded artifacts:"
+          find native-merged -type f | sort
+
+      - name: Copy natives to runtimes/
+        run: |
+          RUNTIMES="OwnAudioEngine/OwnAudioRust/runtimes"
+
+          copy_if_exists() {
+            local SRC="$1"
+            local DST="$2"
+            if [[ -f "$SRC" ]]; then
+              mkdir -p "$(dirname "$DST")"
+              cp "$SRC" "$DST"
+              echo "  Copied: $SRC -> $DST"
+            else
+              echo "::warning::Missing artifact: $SRC"
+            fi
+          }
+
+          copy_if_exists "native-merged/win-x64/ownaudio_ffi.dll"         "$RUNTIMES/win-x64/native/ownaudio_ffi.dll"
+          copy_if_exists "native-merged/win-arm64/ownaudio_ffi.dll"       "$RUNTIMES/win-arm64/native/ownaudio_ffi.dll"
+          copy_if_exists "native-merged/linux-x64/libownaudio_ffi.so"     "$RUNTIMES/linux-x64/native/libownaudio_ffi.so"
+          copy_if_exists "native-merged/linux-arm64/libownaudio_ffi.so"   "$RUNTIMES/linux-arm64/native/libownaudio_ffi.so"
+          copy_if_exists "native-merged/osx-x64/libownaudio_ffi.dylib"    "$RUNTIMES/osx-x64/native/libownaudio_ffi.dylib"
+          copy_if_exists "native-merged/osx-arm64/libownaudio_ffi.dylib"  "$RUNTIMES/osx-arm64/native/libownaudio_ffi.dylib"
+          copy_if_exists "native-merged/android-arm64/libownaudio_ffi.so" "$RUNTIMES/android-arm64/native/libownaudio_ffi.so"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add OwnAudioEngine/OwnAudioRust/runtimes/
+          if git diff --cached --quiet; then
+            echo "No changes in runtimes/ -- nothing to commit."
+          else
+            git commit -m "chore(runtimes): update ownaudio_ffi native binaries [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
+
+  # -------------------------------------------------------------------------
   # Integration test — installs the packed .nupkg into a fresh test project
   # -------------------------------------------------------------------------
   integration-test:
