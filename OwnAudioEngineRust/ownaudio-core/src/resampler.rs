@@ -159,10 +159,16 @@ mod tests {
     #[test]
     fn upsampling_steady_state_ratio() {
         let frames_in = 512;
+        // The FFT resampler has a fixed start-up latency: the first calls emit
+        // fewer output frames while its internal delay line fills. That deficit
+        // is a constant number of frames, so it only vanishes as a fraction of
+        // the total once enough input has been processed. Measure over many
+        // chunks so the steady-state ratio converges to the true rate ratio.
+        let iterations = 256;
         let mut rs = Resampler::new(44_100, 48_000, 1, frames_in).unwrap();
         let mut total_in = 0usize;
         let mut total_out = 0usize;
-        for _ in 0..16 {
+        for _ in 0..iterations {
             let input = vec![sine_channel(440.0, 44_100, frames_in)];
             // Re-allocate to output_frames_max each iteration since truncate
             // shrinks the vec after the first process call.
