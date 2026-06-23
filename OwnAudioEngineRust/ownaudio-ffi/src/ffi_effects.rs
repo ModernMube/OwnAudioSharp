@@ -86,9 +86,9 @@ pub extern "C" fn ownaudio_v1_track_add_effect(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let track_index = track_wrapper.track_index;
+        let track_id = track_wrapper.id;
 
-        let track_ref = match mixer_wrapper.inner.track_mut(track_index) {
+        let track_ref = match mixer_wrapper.inner.track_mut(track_id) {
             Some(t) => t,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
@@ -98,7 +98,7 @@ pub extern "C" fn ownaudio_v1_track_add_effect(
 
         let effect_wrapper = Box::new(EffectWrapper {
             mixer: mixer as *mut crate::handles::MixerWrapper,
-            track_index,
+            track_id,
             effect_index,
         });
 
@@ -162,7 +162,7 @@ pub extern "C" fn ownaudio_v1_effect_remove(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let track_ref = match mixer_wrapper.inner.track_mut(track_wrapper.track_index) {
+        let track_ref = match mixer_wrapper.inner.track_mut(track_wrapper.id) {
             Some(t) => t,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
@@ -213,7 +213,7 @@ pub extern "C" fn ownaudio_v1_effect_set_param(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let track_ref = match mixer_wrapper.inner.track_mut(effect_wrapper.track_index) {
+        let track_ref = match mixer_wrapper.inner.track_mut(effect_wrapper.track_id) {
             Some(t) => t,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
@@ -266,7 +266,7 @@ pub extern "C" fn ownaudio_v1_effect_get_param(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let track_ref = match mixer_wrapper.inner.track_mut(effect_wrapper.track_index) {
+        let track_ref = match mixer_wrapper.inner.track_mut(effect_wrapper.track_id) {
             Some(t) => t,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };

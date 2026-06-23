@@ -1,4 +1,8 @@
-use ownaudio_core::{AudioEngine, InputStream, MultiTrackMixer, OutputStream, StreamingTrack};
+use std::sync::Arc;
+
+use ownaudio_core::{
+    AudioEngine, InputStream, MultiTrackMixer, OutputStream, StreamingTrack, TrackShared,
+};
 
 /// Opaque handle to an [`AudioEngine`] instance.
 ///
@@ -161,14 +165,23 @@ pub(crate) struct MixerWrapper {
     pub inner: MultiTrackMixer,
 }
 
-/// Borrows a track inside a mixer by index.
+/// References a track inside a mixer by its stable id.
 ///
-/// The `*mut MixerWrapper` is non-owning; the mixer must outlive all track handles.
+/// The `*mut MixerWrapper` is non-owning; the mixer must outlive all track
+/// handles.  The cloned [`TrackShared`] lets parameter setters mutate the track
+/// lock-free without dereferencing the mixer pointer, and stays valid even if
+/// the track is removed from the mixer.
 pub(crate) struct TrackWrapper {
     /// Back-pointer to the owning mixer (non-owning).
+    /// Reserved for the structural lock-free command-queue (TODO 2.6), which
+    /// will route add/remove through this pointer; parameter setters reach the
+    /// track via `shared` instead.
+    #[allow(dead_code)]
     pub mixer: *mut MixerWrapper,
-    /// Zero-based track index within the mixer.
-    pub track_index: usize,
+    /// Stable id of the track within the mixer.
+    pub id: u64,
+    /// Shared atomic parameter block for the track.
+    pub shared: Arc<TrackShared>,
 }
 
 /// References a single effect inside a track's effect chain.
@@ -179,8 +192,8 @@ pub(crate) struct EffectWrapper {
     /// Reserved for future use when effect-level mixer queries are added.
     #[allow(dead_code)]
     pub mixer: *mut MixerWrapper,
-    /// Index of the containing track.
-    pub track_index: usize,
+    /// Stable id of the containing track.
+    pub track_id: u64,
     /// Index of this effect within the track's chain.
     pub effect_index: usize,
 }

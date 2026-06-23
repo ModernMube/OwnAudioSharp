@@ -86,11 +86,12 @@ pub extern "C" fn ownaudio_v1_track_create(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let track_index = wrapper.inner.add_track();
+        let (id, shared) = wrapper.inner.add_track();
 
         let track_wrapper = Box::new(TrackWrapper {
             mixer: mixer as *mut MixerWrapper,
-            track_index,
+            id,
+            shared,
         });
 
         unsafe {
@@ -147,7 +148,7 @@ pub extern "C" fn ownaudio_v1_track_remove(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        mixer_wrapper.inner.remove_track(track_wrapper.track_index);
+        mixer_wrapper.inner.remove_track(track_wrapper.id);
         OwnAudioErrorCode::Success as i32
     }));
 
@@ -169,14 +170,7 @@ pub extern "C" fn ownaudio_v1_track_play(track: *mut OwnAudioTrackHandle) -> i32
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let mixer = match unsafe { wrapper.mixer.as_mut() } {
-            Some(m) => m,
-            None => return OwnAudioErrorCode::InvalidHandle as i32,
-        };
-
-        if let Some(t) = mixer.inner.track_mut(wrapper.track_index) {
-            t.state = ownaudio_core::TrackState::Playing;
-        }
+        wrapper.shared.set_state(ownaudio_core::TrackState::Playing);
 
         OwnAudioErrorCode::Success as i32
     }));
@@ -195,14 +189,7 @@ pub extern "C" fn ownaudio_v1_track_pause(track: *mut OwnAudioTrackHandle) -> i3
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let mixer = match unsafe { wrapper.mixer.as_mut() } {
-            Some(m) => m,
-            None => return OwnAudioErrorCode::InvalidHandle as i32,
-        };
-
-        if let Some(t) = mixer.inner.track_mut(wrapper.track_index) {
-            t.state = ownaudio_core::TrackState::Paused;
-        }
+        wrapper.shared.set_state(ownaudio_core::TrackState::Paused);
 
         OwnAudioErrorCode::Success as i32
     }));
@@ -221,14 +208,7 @@ pub extern "C" fn ownaudio_v1_track_stop(track: *mut OwnAudioTrackHandle) -> i32
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let mixer = match unsafe { wrapper.mixer.as_mut() } {
-            Some(m) => m,
-            None => return OwnAudioErrorCode::InvalidHandle as i32,
-        };
-
-        if let Some(t) = mixer.inner.track_mut(wrapper.track_index) {
-            t.state = ownaudio_core::TrackState::Stopped;
-        }
+        wrapper.shared.set_state(ownaudio_core::TrackState::Stopped);
 
         OwnAudioErrorCode::Success as i32
     }));
@@ -272,14 +252,7 @@ pub extern "C" fn ownaudio_v1_track_set_gain(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let mixer = match unsafe { wrapper.mixer.as_mut() } {
-            Some(m) => m,
-            None => return OwnAudioErrorCode::InvalidHandle as i32,
-        };
-
-        if let Some(t) = mixer.inner.track_mut(wrapper.track_index) {
-            t.gain = gain.max(0.0);
-        }
+        wrapper.shared.set_gain(gain);
 
         OwnAudioErrorCode::Success as i32
     }));
@@ -301,14 +274,7 @@ pub extern "C" fn ownaudio_v1_track_set_tempo(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let mixer = match unsafe { wrapper.mixer.as_mut() } {
-            Some(m) => m,
-            None => return OwnAudioErrorCode::InvalidHandle as i32,
-        };
-
-        if let Some(t) = mixer.inner.track_mut(wrapper.track_index) {
-            t.tempo_ratio = ratio.clamp(0.25, 4.0);
-        }
+        wrapper.shared.set_tempo_ratio(ratio);
 
         OwnAudioErrorCode::Success as i32
     }));
@@ -330,14 +296,7 @@ pub extern "C" fn ownaudio_v1_track_set_pitch(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let mixer = match unsafe { wrapper.mixer.as_mut() } {
-            Some(m) => m,
-            None => return OwnAudioErrorCode::InvalidHandle as i32,
-        };
-
-        if let Some(t) = mixer.inner.track_mut(wrapper.track_index) {
-            t.pitch_semitones = semitones.clamp(-24.0, 24.0);
-        }
+        wrapper.shared.set_pitch_semitones(semitones);
 
         OwnAudioErrorCode::Success as i32
     }));
@@ -359,14 +318,7 @@ pub extern "C" fn ownaudio_v1_track_set_mute(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let mixer = match unsafe { wrapper.mixer.as_mut() } {
-            Some(m) => m,
-            None => return OwnAudioErrorCode::InvalidHandle as i32,
-        };
-
-        if let Some(t) = mixer.inner.track_mut(wrapper.track_index) {
-            t.muted = muted >= 0.5;
-        }
+        wrapper.shared.set_muted(muted >= 0.5);
 
         OwnAudioErrorCode::Success as i32
     }));

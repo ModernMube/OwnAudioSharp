@@ -37,6 +37,7 @@ pub mod multitrack;
 pub mod resampler;
 pub mod ringbuffer;
 pub(crate) mod rt_guard;
+pub mod smoothing;
 pub mod stream;
 
 // Flat re-exports for convenient use without module paths.
@@ -50,7 +51,8 @@ pub use effects::{Effect, EffectChain, EffectType};
 pub use engine::AudioEngine;
 pub use error::{AudioError, Result};
 pub use mixer::Mixer;
-pub use multitrack::{MultiTrackMixer, SampleClock, Track, TrackState};
+pub use multitrack::{MultiTrackMixer, SampleClock, Track, TrackShared, TrackSource, TrackState};
 pub use resampler::Resampler;
 pub use ringbuffer::{ring_buffer, RingBufferReader, RingBufferWriter};
+pub use smoothing::SmoothedParam;
 pub use stream::{InputStream, OutputStream};
