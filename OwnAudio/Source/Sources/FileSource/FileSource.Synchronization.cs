@@ -448,7 +448,7 @@ public partial class FileSource
 
             UpdateSamplePosition(sourceFramesAdvanced);
 
-            double newPosition = _currentPosition + (sourceFramesAdvanced * frameDuration);
+            double newPosition = _currentPosition + (framesRead * frameDuration);
             Interlocked.Exchange(ref _currentPosition, newPosition);
 
             if (gracePeriodActive && _consecutiveUnderruns > 0)
@@ -475,7 +475,7 @@ public partial class FileSource
             UpdateSamplePosition(silenceSourceFrames);
 
             double frameDuration = 1.0 / _streamInfo.SampleRate;
-            double silenceSeconds = silenceSourceFrames * frameDuration;
+            double silenceSeconds = silenceFrames * frameDuration;
             double newPos = _currentPosition + silenceSeconds;
             Interlocked.Exchange(ref _currentPosition, newPos);
 

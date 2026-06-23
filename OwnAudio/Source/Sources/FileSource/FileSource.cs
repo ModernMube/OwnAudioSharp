@@ -437,7 +437,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
             do
             {
                 currentPosition = Interlocked.CompareExchange(ref _currentPosition, 0, 0);
-                newPosition = currentPosition + (sourceFramesAdvanced * frameDuration);
+                newPosition = currentPosition + (framesRead * frameDuration);
             } while (Math.Abs(Interlocked.CompareExchange(ref _currentPosition, newPosition, currentPosition) - currentPosition) > double.Epsilon);
         }
 
@@ -462,7 +462,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
             UpdateSamplePosition(silenceSourceFrames);
 
             double frameDuration = 1.0 / _streamInfo.SampleRate;
-            double silenceSeconds = silenceSourceFrames * frameDuration;
+            double silenceSeconds = silenceFrames * frameDuration;
             double newPos, curPos;
             do
             {
