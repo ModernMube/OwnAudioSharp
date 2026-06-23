@@ -32,6 +32,42 @@ The library is built on a native C++ engine (PortAudio / MiniAudio) backed by a 
 
 Built-in decoders cover **MP3, WAV, and FLAC** out of the box. When **FFmpeg 8+** is installed on the system, OwnAudioSharp automatically uses it as the primary decoder — expanding support to AAC, OGG, Opus, WMA, AIFF, AC3, and virtually any other format with no API changes required.
 
+---
+
+> ## 🚧 Major Architecture Evolution in Progress
+>
+> **A new branch is under active development that fundamentally reimagines the OwnAudioSharp engine.**
+>
+> Despite every effort to keep the managed API allocation-free, one hard truth remains: if the code *calling* the API allocates — and virtually all real-world C# code does — the .NET garbage collector will eventually pause it. Even a single GC pause of a few milliseconds is enough to produce an audible dropout in a real-time audio stream. No amount of API-level discipline can fully shield the audio thread from the GC that owns the entire process.
+>
+> **The decision has been made to rewrite the entire audio engine in Rust.**
+>
+> Rust delivers deterministic, GC-free execution with the same memory and thread-safety guarantees as managed code — enforced at compile time, not at runtime. A thin, audio-agnostic C# layer will remain as the public surface, bridging your application code to the native engine with zero overhead and zero managed allocations on the hot path.
+>
+> ### Core design principle: managed code never touches audio data
+> Every operation that processes, transforms, or moves audio samples is implemented exclusively in Rust. The managed C# layer handles configuration, control flow, and application logic — but **no audio data ever passes through managed code**. This is the fundamental guarantee that makes GC-pause-free real-time audio possible on .NET.
+>
+> Our primary goal is to give C# developers a genuinely usable, efficient, and cross-platform audio API — one that does not require native audio expertise and does not compromise on real-time performance.
+>
+> ### What changes under the hood
+> - The audio engine runs as native Rust code, completely outside the .NET runtime and its GC
+> - **All audio data processing happens in Rust** — managed code is never involved in the audio path
+> - Memory safety and data-race freedom are guaranteed by the Rust compiler — no runtime checks, no overhead
+> - The **MiniAudio** and **PortAudio** third-party dependencies are removed; the engine ships everything it needs
+> - Startup, latency, and stability characteristics will improve across all platforms
+>
+> ### What stays exactly the same
+> - **The OwnAudioSharp public API is unchanged** — your existing code will continue to compile and run without modification
+> - Distribution remains a single NuGet package — one `dotnet add package` and you're done
+> - All supported platforms (Windows, macOS, Linux, Android, iOS) remain fully supported
+>
+> ### One important API change: VocalRemover moves to a separate package
+> The **VocalRemover** (AI stem separation) feature will be removed from the core `OwnAudioSharp` package and released as a dedicated external package. This keeps the core package lean and focused on audio I/O, while giving users who need AI separation an opt-in dependency. Migration will require only a package reference change — the API surface stays the same.
+>
+> *Follow the development branch for updates. Contributions and early feedback are welcome.*
+
+---
+
 ### What it offers out of the box
 
 | Category | Capability |
@@ -54,8 +90,6 @@ Built-in decoders cover **MP3, WAV, and FLAC** out of the box. When **FFmpeg 8+*
 - **Broadcast and podcast tools** — reference mastering, dynamic processing, automatic room calibration
 - **Live performance apps** — network-synchronized multi-room or multi-device setups
 - **Games and interactive audio** — low-latency output, real-time effect chains
-
----
 
 ## Installation
 
