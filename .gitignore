@@ -440,3 +440,7 @@ FodyWeavers.xsd
 
 # Rider project structure cache files
 *.lscache
+
+# Rust development plans and build output
+.rust_plans/
+**/target/
