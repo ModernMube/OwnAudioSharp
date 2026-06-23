@@ -14,7 +14,7 @@
   <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
   <a class="topnav-logo" href="../index.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>OwnAudioSharp</a>
   <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="api-core.html" class="active">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
-  <div class="topnav-right"><span class="badge-version">v3.1.0</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
+  <div class="topnav-right"><span class="badge-version">v3.1.7</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
 </nav>
 <div id="sidebar-overlay" class="sidebar-overlay"></div>
 <div class="layout">
@@ -39,7 +39,7 @@
     <tr><td><code>IsInitialized</code></td><td><code>bool</code></td><td>Whether the audio system has been initialized.</td></tr>
     <tr><td><code>IsRunning</code></td><td><code>bool</code></td><td>Whether the audio engine is actively processing.</td></tr>
     <tr><td><code>Engine</code></td><td><code>AudioEngineWrapper?</code></td><td>The active engine wrapper. <code>null</code> before initialization. Access <code>UnderlyingEngine</code> for the <code>IAudioEngine</code>.</td></tr>
-    <tr><td><code>Version</code></td><td><code>Version</code></td><td>Library version (3.1.0).</td></tr>
+    <tr><td><code>Version</code></td><td><code>Version</code></td><td>Library version (3.1.7).</td></tr>
   </tbody>
 </table></div>
 
@@ -123,9 +123,21 @@ OwnaudioNet.ResumeDeviceMonitoring();</code></pre></div>
     <tr><td><code>IsInput</code> / <code>IsOutput</code></td><td><code>bool</code></td><td>Device direction.</td></tr>
     <tr><td><code>IsDefault</code></td><td><code>bool</code></td><td>System default device for its type.</td></tr>
     <tr><td><code>MaxInputChannels</code> / <code>MaxOutputChannels</code></td><td><code>int</code></td><td>Hardware channel limits.</td></tr>
+    <tr><td><code>DefaultSampleRate</code></td><td><code>double</code></td><td>Native sample rate reported by the platform at enumeration time. <code>0</code> = not available. Check <code>&gt; 0</code> before using. Available on PortAudio and MiniAudio backends. <em>Added in v3.1.7.</em></td></tr>
     <tr><td><code>State</code></td><td><code>AudioDeviceState</code></td><td><code>Active</code>, <code>Disabled</code>, <code>NotPresent</code>, <code>Unplugged</code>.</td></tr>
   </tbody>
 </table></div>
+
+<div class="code-block"><div class="code-header"><span>C# — Device selection with native sample rate</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Find a device and use its native rate to open without resampling
+var outputs = OwnaudioNet.GetOutputDevices();
+var device  = outputs.First(d => d.Name.Contains("Focusrite"));
+
+var config = new AudioConfig
+{
+    OutputDeviceId = device.DeviceId,
+    SampleRate     = device.DefaultSampleRate > 0 ? (int)device.DefaultSampleRate : 48000
+};</code></pre></div>
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>v3.1.7:</strong> <code>AudioConfig.OutputDeviceId</code> is now honoured at initialization time on both MiniAudio and PortAudio backends. Previously the device was applied only after a post-init <code>SetOutputDevice</code> call; initialization always opened the system default first. If the requested device fails, the engine automatically falls back to the default device and clears the stored ID.</p></div>
 
 <h2 id="direct-io">Direct Audio I/O</h2>
 <p>These methods bypass the mixer. Prefer <a href="api-mixer.html">AudioMixer</a> + sources for most use cases.</p>

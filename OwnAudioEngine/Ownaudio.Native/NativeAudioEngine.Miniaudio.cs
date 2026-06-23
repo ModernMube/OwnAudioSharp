@@ -109,19 +109,25 @@ namespace Ownaudio.Native
             uint physicalOutChannels = (uint)_physicalOutputChannels;
             uint physicalInChannels = (uint)(_config.EnableInput ? _physicalInputChannels : _physicalOutputChannels);
 
+            ResolveMiniAudioDeviceIds(out IntPtr playbackDeviceIdPtr, out IntPtr captureDeviceIdPtr);
+
             IntPtr configPtr = MaBinding.allocate_device_config(
                 deviceType,
                 MaFormat.F32,
                 physicalOutChannels,
                 (uint)_config.SampleRate,
                 _maCallback,
-                IntPtr.Zero, // default playback device
-                IntPtr.Zero, // default capture device
+                playbackDeviceIdPtr,
+                captureDeviceIdPtr,
                 (uint)_config.BufferSize
             );
 
             if (configPtr == IntPtr.Zero)
             {
+                if (playbackDeviceIdPtr != IntPtr.Zero)
+                    Marshal.FreeHGlobal(playbackDeviceIdPtr);
+                if (captureDeviceIdPtr != IntPtr.Zero)
+                    Marshal.FreeHGlobal(captureDeviceIdPtr);
                 MaBinding.ma_free(_maDevice, IntPtr.Zero, "Failed to allocate device config");
                 MaBinding.ma_context_uninit(_maContext);
                 MaBinding.ma_free(_maContext, IntPtr.Zero, "Context cleanup after config failure");
@@ -139,6 +145,35 @@ namespace Ownaudio.Native
             // Initialize device
             result = MaBinding.ma_device_init(_maContext, configPtr, _maDevice);
             MaBinding.ma_free(configPtr, IntPtr.Zero, "Device config cleanup");
+
+            if (playbackDeviceIdPtr != IntPtr.Zero)
+                Marshal.FreeHGlobal(playbackDeviceIdPtr);
+            if (captureDeviceIdPtr != IntPtr.Zero)
+                Marshal.FreeHGlobal(captureDeviceIdPtr);
+
+            if (result != MaResult.Success)
+            {
+                Log.Warning($"MiniAudio device init failed ({result}). Retrying with default devices...");
+
+                IntPtr fallbackConfigPtr = MaBinding.allocate_device_config(
+                    deviceType, MaFormat.F32, physicalOutChannels,
+                    (uint)_config.SampleRate, _maCallback,
+                    IntPtr.Zero, IntPtr.Zero, (uint)_config.BufferSize);
+
+                if (fallbackConfigPtr != IntPtr.Zero)
+                {
+                    PatchNativeDeviceConfig(fallbackConfigPtr, physicalOutChannels, _config.EnableInput, physicalInChannels);
+                    result = MaBinding.ma_device_init(_maContext, fallbackConfigPtr, _maDevice);
+                    MaBinding.ma_free(fallbackConfigPtr, IntPtr.Zero, "Fallback device config cleanup");
+                }
+
+                if (result == MaResult.Success)
+                {
+                    _config.OutputDeviceId = null;
+                    _config.InputDeviceId = null;
+                    Log.Info("MiniAudio initialized with default devices (fallback)");
+                }
+            }
 
             if (result != MaResult.Success)
             {
@@ -344,63 +379,7 @@ namespace Ownaudio.Native
 
             uint physicalOutChannels = (uint)_physicalOutputChannels;
 
-            // Parse device IDs from config if specified
-            IntPtr playbackDeviceIdPtr = IntPtr.Zero;
-            IntPtr captureDeviceIdPtr = IntPtr.Zero;
-
-            // For MiniAudio, device IDs are stored as "ma_output_X" or "ma_input_X" format
-            // We need to get the actual device ID from the enumeration
-            if (!string.IsNullOrEmpty(_config.OutputDeviceId) && _config.OutputDeviceId.StartsWith("ma_output_"))
-            {
-                // Extract index from device ID
-                if (int.TryParse(_config.OutputDeviceId.Substring("ma_output_".Length), out int deviceIndex))
-                {
-                    // Get device list and extract the actual device ID
-                    MaResult enumResult = MaBinding.ma_context_get_devices(
-                        _maContext,
-                        out IntPtr pPlaybackDevices,
-                        out IntPtr pCaptureDevices,
-                        out int playbackCount,
-                        out int captureCount);
-
-                    if (enumResult == MaResult.Success && deviceIndex < playbackCount)
-                    {
-                        int deviceInfoSize = Marshal.SizeOf<MaDeviceInfo>();
-                        IntPtr deviceInfoPtr = IntPtr.Add(pPlaybackDevices, deviceIndex * deviceInfoSize);
-                        var deviceInfo = Marshal.PtrToStructure<MaDeviceInfo>(deviceInfoPtr);
-
-                        // Allocate and copy device ID
-                        playbackDeviceIdPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MaDeviceId>());
-                        Marshal.StructureToPtr(deviceInfo.Id, playbackDeviceIdPtr, false);
-                    }
-                }
-            }
-
-            if (_config.EnableInput && !string.IsNullOrEmpty(_config.InputDeviceId) && _config.InputDeviceId.StartsWith("ma_input_"))
-            {
-                // Extract index from device ID
-                if (int.TryParse(_config.InputDeviceId.Substring("ma_input_".Length), out int deviceIndex))
-                {
-                    // Get device list and extract the actual device ID
-                    MaResult enumResult = MaBinding.ma_context_get_devices(
-                        _maContext,
-                        out IntPtr pPlaybackDevices,
-                        out IntPtr pCaptureDevices,
-                        out int playbackCount,
-                        out int captureCount);
-
-                    if (enumResult == MaResult.Success && deviceIndex < captureCount)
-                    {
-                        int deviceInfoSize = Marshal.SizeOf<MaDeviceInfo>();
-                        IntPtr deviceInfoPtr = IntPtr.Add(pCaptureDevices, deviceIndex * deviceInfoSize);
-                        var deviceInfo = Marshal.PtrToStructure<MaDeviceInfo>(deviceInfoPtr);
-
-                        // Allocate and copy device ID
-                        captureDeviceIdPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MaDeviceId>());
-                        Marshal.StructureToPtr(deviceInfo.Id, captureDeviceIdPtr, false);
-                    }
-                }
-            }
+            ResolveMiniAudioDeviceIds(out IntPtr playbackDeviceIdPtr, out IntPtr captureDeviceIdPtr);
 
             IntPtr configPtr = MaBinding.allocate_device_config(
                 deviceType,
@@ -482,6 +461,74 @@ namespace Ownaudio.Native
         }
 
         /// <summary>
+        /// Resolves the configured output and capture device IDs into unmanaged <c>MaDeviceId</c>
+        /// pointers that can be passed directly to <c>allocate_device_config</c>.
+        /// Both pointers default to <see cref="IntPtr.Zero"/> (platform default device) when the
+        /// corresponding config property is absent, malformed, or refers to an out-of-range index.
+        /// </summary>
+        /// <param name="playbackDeviceIdPtr">
+        /// On return: an <see cref="Marshal.AllocHGlobal(int)"/>-allocated pointer to the resolved
+        /// playback <c>MaDeviceId</c>, or <see cref="IntPtr.Zero"/> when the default device is used.
+        /// The caller is responsible for freeing this pointer with <see cref="Marshal.FreeHGlobal(IntPtr)"/>.
+        /// </param>
+        /// <param name="captureDeviceIdPtr">
+        /// On return: an <see cref="Marshal.AllocHGlobal(int)"/>-allocated pointer to the resolved
+        /// capture <c>MaDeviceId</c>, or <see cref="IntPtr.Zero"/> when the default device is used.
+        /// The caller is responsible for freeing this pointer with <see cref="Marshal.FreeHGlobal(IntPtr)"/>.
+        /// </param>
+        private void ResolveMiniAudioDeviceIds(out IntPtr playbackDeviceIdPtr, out IntPtr captureDeviceIdPtr)
+        {
+            playbackDeviceIdPtr = IntPtr.Zero;
+            captureDeviceIdPtr = IntPtr.Zero;
+
+            if (!string.IsNullOrEmpty(_config.OutputDeviceId) && _config.OutputDeviceId.StartsWith("ma_output_"))
+            {
+                if (int.TryParse(_config.OutputDeviceId.Substring("ma_output_".Length), out int deviceIndex))
+                {
+                    MaResult enumResult = MaBinding.ma_context_get_devices(
+                        _maContext,
+                        out IntPtr pPlaybackDevices,
+                        out _,
+                        out int playbackCount,
+                        out _);
+
+                    if (enumResult == MaResult.Success && deviceIndex < playbackCount)
+                    {
+                        int deviceInfoSize = Marshal.SizeOf<MaDeviceInfo>();
+                        IntPtr deviceInfoPtr = IntPtr.Add(pPlaybackDevices, deviceIndex * deviceInfoSize);
+                        var deviceInfo = Marshal.PtrToStructure<MaDeviceInfo>(deviceInfoPtr);
+
+                        playbackDeviceIdPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MaDeviceId>());
+                        Marshal.StructureToPtr(deviceInfo.Id, playbackDeviceIdPtr, false);
+                    }
+                }
+            }
+
+            if (_config.EnableInput && !string.IsNullOrEmpty(_config.InputDeviceId) && _config.InputDeviceId.StartsWith("ma_input_"))
+            {
+                if (int.TryParse(_config.InputDeviceId.Substring("ma_input_".Length), out int deviceIndex))
+                {
+                    MaResult enumResult = MaBinding.ma_context_get_devices(
+                        _maContext,
+                        out _,
+                        out IntPtr pCaptureDevices,
+                        out _,
+                        out int captureCount);
+
+                    if (enumResult == MaResult.Success && deviceIndex < captureCount)
+                    {
+                        int deviceInfoSize = Marshal.SizeOf<MaDeviceInfo>();
+                        IntPtr deviceInfoPtr = IntPtr.Add(pCaptureDevices, deviceIndex * deviceInfoSize);
+                        var deviceInfo = Marshal.PtrToStructure<MaDeviceInfo>(deviceInfoPtr);
+
+                        captureDeviceIdPtr = Marshal.AllocHGlobal(Marshal.SizeOf<MaDeviceId>());
+                        Marshal.StructureToPtr(deviceInfo.Id, captureDeviceIdPtr, false);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// Patches a native ma_device_config buffer to write playback/capture format and channel
         /// count at the correct native C offsets.
         ///
@@ -544,9 +591,10 @@ namespace Ownaudio.Native
                     // Convert device ID to string (use index as ID)
                     string deviceId = $"ma_output_{i}";
 
-                    // Extract max channel counts from nativeDataFormats
+                    // Extract max channel counts and first non-zero native sample rate from nativeDataFormats
                     int maxOutputChannels = 0;
                     int maxInputChannels = 0;
+                    double defaultSampleRate = 0;
 
                     if (deviceInfo.nativeDataFormats != null && deviceInfo.NativeDataFormatCount > 0)
                     {
@@ -555,6 +603,8 @@ namespace Ownaudio.Native
                             var format = deviceInfo.nativeDataFormats[j];
                             if (format.channels > maxOutputChannels)
                                 maxOutputChannels = (int)format.channels;
+                            if (defaultSampleRate == 0 && format.sampleRate > 0)
+                                defaultSampleRate = format.sampleRate;
                         }
                     }
 
@@ -567,7 +617,8 @@ namespace Ownaudio.Native
                         isDefault: deviceInfo.IsDefault,
                         state: AudioDeviceState.Active,
                         maxInputChannels: maxInputChannels,
-                        maxOutputChannels: maxOutputChannels
+                        maxOutputChannels: maxOutputChannels,
+                        defaultSampleRate: defaultSampleRate
                     ));
                 }
             }
@@ -618,9 +669,10 @@ namespace Ownaudio.Native
                     // Convert device ID to string (use index as ID)
                     string deviceId = $"ma_input_{i}";
 
-                    // Extract max channel counts from nativeDataFormats
+                    // Extract max channel counts and first non-zero native sample rate from nativeDataFormats
                     int maxInputChannels = 0;
                     int maxOutputChannels = 0;
+                    double defaultSampleRate = 0;
 
                     if (deviceInfo.nativeDataFormats != null && deviceInfo.NativeDataFormatCount > 0)
                     {
@@ -629,6 +681,8 @@ namespace Ownaudio.Native
                             var format = deviceInfo.nativeDataFormats[j];
                             if (format.channels > maxInputChannels)
                                 maxInputChannels = (int)format.channels;
+                            if (defaultSampleRate == 0 && format.sampleRate > 0)
+                                defaultSampleRate = format.sampleRate;
                         }
                     }
 
@@ -641,7 +695,8 @@ namespace Ownaudio.Native
                         isDefault: deviceInfo.IsDefault,
                         state: AudioDeviceState.Active,
                         maxInputChannels: maxInputChannels,
-                        maxOutputChannels: maxOutputChannels
+                        maxOutputChannels: maxOutputChannels,
+                        defaultSampleRate: defaultSampleRate
                     ));
                 }
             }

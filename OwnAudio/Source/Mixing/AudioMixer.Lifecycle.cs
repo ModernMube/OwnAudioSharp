@@ -35,7 +35,15 @@ public sealed partial class AudioMixer
         _pauseEvent.Set();
 
         if (!_mixThread.IsAlive)
+        {
+            _mixThread = new Thread(MixThreadLoop)
+            {
+                Name = "AudioMixer.MixThread",
+                IsBackground = true,
+                Priority = ThreadPriority.Highest
+            };
             _mixThread.Start();
+        }
     }
 
     /// <summary>
@@ -67,17 +75,13 @@ public sealed partial class AudioMixer
             return;
 
         _shouldStop = true;
-        _pauseEvent.Reset();
+        _isRunning = false;
+        _pauseEvent.Set();
 
-        // if (_mixThread.IsAlive)
-        // {
-        //     if (!_mixThread.Join(TimeSpan.FromSeconds(2)))
-        //     {
-        //         // Thread didn't exit gracefully
-        //     }
-        // }
+        if (_mixThread.IsAlive)
+            _mixThread.Join(TimeSpan.FromSeconds(2));
 
-        // Stop all sources
+        // Stop all sources — safe: mix thread has already exited at this point
         foreach (var source in _sources.Values)
         {
             try
@@ -86,8 +90,6 @@ public sealed partial class AudioMixer
             }
             catch {}
         }
-
-        _isRunning = false;
     }
 
     /// <summary>

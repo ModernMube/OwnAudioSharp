@@ -56,6 +56,14 @@ namespace Ownaudio.Core
         public int MaxOutputChannels { get; }
 
         /// <summary>
+        /// Gets the default (native) sample rate reported by the platform API for this device.
+        /// A value of <c>0</c> means the information was not available during enumeration or the
+        /// backend reported that all sample rates are supported (MiniAudio semantics).
+        /// Consumers should check <c>DefaultSampleRate &gt; 0</c> before relying on this value.
+        /// </summary>
+        public double DefaultSampleRate { get; }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="AudioDeviceInfo"/> class.
         /// </summary>
         /// <param name="deviceId">The unique device identifier.</param>
@@ -89,6 +97,10 @@ namespace Ownaudio.Core
         /// <param name="state">The device state.</param>
         /// <param name="maxInputChannels">Maximum number of input channels supported.</param>
         /// <param name="maxOutputChannels">Maximum number of output channels supported.</param>
+        /// <param name="defaultSampleRate">
+        /// The native default sample rate reported by the platform API.
+        /// Pass <c>0</c> (default) when the information is not available.
+        /// </param>
         public AudioDeviceInfo(
             string deviceId,
             string name,
@@ -98,7 +110,8 @@ namespace Ownaudio.Core
             bool isDefault,
             AudioDeviceState state,
             int maxInputChannels,
-            int maxOutputChannels)
+            int maxOutputChannels,
+            double defaultSampleRate = 0)
         {
             DeviceId = deviceId;
             Name = name;
@@ -109,6 +122,7 @@ namespace Ownaudio.Core
             State = state;
             MaxInputChannels = maxInputChannels;
             MaxOutputChannels = maxOutputChannels;
+            DefaultSampleRate = defaultSampleRate;
         }
 
         /// <summary>

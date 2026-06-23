@@ -137,6 +137,25 @@ namespace Ownaudio.Native
             int outputDeviceIndex = GetDeviceIndexForHost(requestedHostApi, false);
             int inputDeviceIndex = _config.EnableInput ? GetDeviceIndexForHost(requestedHostApi, true) : -1;
 
+            // Override with explicitly configured device indices when present.
+            // PortAudio device IDs are plain integers serialised as strings.
+            if (!string.IsNullOrEmpty(_config.OutputDeviceId) &&
+                int.TryParse(_config.OutputDeviceId, out int parsedOutputIndex) &&
+                parsedOutputIndex >= 0 && parsedOutputIndex < Pa_GetDeviceCount())
+            {
+                outputDeviceIndex = parsedOutputIndex;
+                Log.Info($"PortAudio: Using configured output device index {outputDeviceIndex}");
+            }
+
+            if (_config.EnableInput &&
+                !string.IsNullOrEmpty(_config.InputDeviceId) &&
+                int.TryParse(_config.InputDeviceId, out int parsedInputIndex) &&
+                parsedInputIndex >= 0 && parsedInputIndex < Pa_GetDeviceCount())
+            {
+                inputDeviceIndex = parsedInputIndex;
+                Log.Info($"PortAudio: Using configured input device index {inputDeviceIndex}");
+            }
+
             // Store active device indices for use in GetOutputDevices()/GetInputDevices()
             _activeOutputDeviceIndex = outputDeviceIndex;
             _activeInputDeviceIndex = inputDeviceIndex;
@@ -490,7 +509,8 @@ namespace Ownaudio.Native
                             isDefault: (i == defaultDeviceIndex),
                             state: AudioDeviceState.Active,
                             maxInputChannels: finalMaxInput,
-                            maxOutputChannels: finalMaxOutput
+                            maxOutputChannels: finalMaxOutput,
+                            defaultSampleRate: paDeviceInfo.defaultSampleRate
                         ));
                     }
                 }
@@ -569,7 +589,8 @@ namespace Ownaudio.Native
                             isDefault: (i == defaultDeviceIndex),
                             state: AudioDeviceState.Active,
                             maxInputChannels: finalMaxInput,
-                            maxOutputChannels: finalMaxOutput
+                            maxOutputChannels: finalMaxOutput,
+                            defaultSampleRate: paDeviceInfo.defaultSampleRate
                         ));
                     }
                 }

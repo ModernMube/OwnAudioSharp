@@ -81,9 +81,10 @@ public sealed partial class AudioMixer : IDisposable
 
     /// <summary>
     /// The dedicated high-priority background thread that runs <c>MixThreadLoop</c>.
-    /// Created and started once; lives for the lifetime of the mixer instance.
+    /// Recreated by <see cref="AudioMixer.Start"/> whenever a previous <see cref="AudioMixer.Stop"/>
+    /// caused the thread to exit, because a terminated <see cref="Thread"/> cannot be restarted.
     /// </summary>
-    private readonly Thread _mixThread;
+    private Thread _mixThread;
 
     /// <summary>
     /// Event used to pause the mix thread when the mixer is stopped without being disposed.
