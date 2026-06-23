@@ -64,7 +64,22 @@ impl OutputTrampolineState {
         } else {
             0
         };
-        (self.callback)(buf.as_mut_ptr(), frame_count, self.channels, self.user_data);
+        // Defense in depth: the cpal-boundary guard in `ownaudio-core`'s engine
+        // already catches any panic from this trampoline, and the foreign C#
+        // callback aborts at its own `extern "C"` ABI boundary if it were to
+        // panic.  We still wrap the invocation here so a panic originating in
+        // this trampoline's own Rust logic can never unwind, and so the buffer
+        // is left silent rather than partially written on failure.
+        let callback = self.callback;
+        let user_data = self.user_data;
+        let channels = self.channels;
+        let ptr = buf.as_mut_ptr();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            callback(ptr, frame_count, channels, user_data);
+        }));
+        if result.is_err() {
+            buf.fill(0.0);
+        }
     }
 }
 
@@ -85,7 +100,15 @@ impl InputTrampolineState {
         } else {
             0
         };
-        (self.callback)(buf.as_ptr(), frame_count, self.channels, self.user_data);
+        // See `OutputTrampolineState::call` for the layering rationale.  Input
+        // has no buffer to sanitise, so a caught panic is simply swallowed.
+        let callback = self.callback;
+        let user_data = self.user_data;
+        let channels = self.channels;
+        let ptr = buf.as_ptr();
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            callback(ptr, frame_count, channels, user_data);
+        }));
     }
 }
 

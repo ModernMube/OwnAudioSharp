@@ -69,10 +69,17 @@ impl AudioEngine {
             * config.channels as usize;
 
         // cpal 0.18: build_*_stream takes StreamConfig by value (it is Copy).
+        //
+        // Every data callback body is wrapped in `rt_guard::guard_output` so a
+        // panic (from the user/FFI callback or a format-conversion bug) can
+        // never unwind across the cpal/C audio-thread frame (UB).  On panic the
+        // device buffer is filled with per-format silence.
         let stream = match sample_format {
             cpal::SampleFormat::F32 => cpal_device.build_output_stream(
                 stream_config,
-                move |data: &mut [f32], _| callback(data),
+                move |data: &mut [f32], _| {
+                    crate::rt_guard::guard_output(data, 0.0, |buf| callback(buf));
+                },
                 err_fn,
                 None,
             )?,
@@ -81,12 +88,14 @@ impl AudioEngine {
                 cpal_device.build_output_stream(
                     stream_config,
                     move |data: &mut [i16], _| {
-                        if data.len() > tmp.len() {
-                            tmp.resize(data.len(), 0.0);
-                        }
-                        let buf = &mut tmp[..data.len()];
-                        callback(buf);
-                        crate::format::f32_to_i16(buf, data);
+                        crate::rt_guard::guard_output(data, 0i16, |data| {
+                            if data.len() > tmp.len() {
+                                tmp.resize(data.len(), 0.0);
+                            }
+                            let buf = &mut tmp[..data.len()];
+                            callback(buf);
+                            crate::format::f32_to_i16(buf, data);
+                        });
                     },
                     err_fn,
                     None,
@@ -97,12 +106,15 @@ impl AudioEngine {
                 cpal_device.build_output_stream(
                     stream_config,
                     move |data: &mut [u16], _| {
-                        if data.len() > tmp.len() {
-                            tmp.resize(data.len(), 0.0);
-                        }
-                        let buf = &mut tmp[..data.len()];
-                        callback(buf);
-                        crate::format::f32_to_u16(buf, data);
+                        // u16 silence is the mid-point (32768), not 0.
+                        crate::rt_guard::guard_output(data, 32768u16, |data| {
+                            if data.len() > tmp.len() {
+                                tmp.resize(data.len(), 0.0);
+                            }
+                            let buf = &mut tmp[..data.len()];
+                            callback(buf);
+                            crate::format::f32_to_u16(buf, data);
+                        });
                     },
                     err_fn,
                     None,
@@ -142,10 +154,15 @@ impl AudioEngine {
             .unwrap_or(4096) as usize
             * config.channels as usize;
 
+        // Each input callback body is wrapped in `rt_guard::guard_input` so a
+        // panic cannot unwind across the cpal/C audio-thread frame (UB).  Input
+        // has no output buffer to sanitise, so the panic is simply swallowed.
         let stream = match sample_format {
             cpal::SampleFormat::F32 => cpal_device.build_input_stream(
                 stream_config,
-                move |data: &[f32], _| callback(data),
+                move |data: &[f32], _| {
+                    crate::rt_guard::guard_input(|| callback(data));
+                },
                 err_fn,
                 None,
             )?,
@@ -154,12 +171,14 @@ impl AudioEngine {
                 cpal_device.build_input_stream(
                     stream_config,
                     move |data: &[i16], _| {
-                        if data.len() > tmp.len() {
-                            tmp.resize(data.len(), 0.0);
-                        }
-                        let buf = &mut tmp[..data.len()];
-                        crate::format::i16_to_f32(data, buf);
-                        callback(buf);
+                        crate::rt_guard::guard_input(|| {
+                            if data.len() > tmp.len() {
+                                tmp.resize(data.len(), 0.0);
+                            }
+                            let buf = &mut tmp[..data.len()];
+                            crate::format::i16_to_f32(data, buf);
+                            callback(buf);
+                        });
                     },
                     err_fn,
                     None,
@@ -170,12 +189,14 @@ impl AudioEngine {
                 cpal_device.build_input_stream(
                     stream_config,
                     move |data: &[u16], _| {
-                        if data.len() > tmp.len() {
-                            tmp.resize(data.len(), 0.0);
-                        }
-                        let buf = &mut tmp[..data.len()];
-                        crate::format::u16_to_f32(data, buf);
-                        callback(buf);
+                        crate::rt_guard::guard_input(|| {
+                            if data.len() > tmp.len() {
+                                tmp.resize(data.len(), 0.0);
+                            }
+                            let buf = &mut tmp[..data.len()];
+                            crate::format::u16_to_f32(data, buf);
+                            callback(buf);
+                        });
                     },
                     err_fn,
                     None,

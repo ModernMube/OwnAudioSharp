@@ -36,6 +36,7 @@ pub mod mixer;
 pub mod multitrack;
 pub mod resampler;
 pub mod ringbuffer;
+pub(crate) mod rt_guard;
 pub mod stream;
 
 // Flat re-exports for convenient use without module paths.
