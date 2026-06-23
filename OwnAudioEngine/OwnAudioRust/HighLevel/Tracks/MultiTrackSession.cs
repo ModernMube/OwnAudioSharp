@@ -124,15 +124,19 @@ public sealed class MultiTrackSession : IDisposable
     /// <summary>
     /// Starts all tracks simultaneously against the shared central clock.
     /// </summary>
+    /// <remarks>
+    /// All tracks are started in a single native call so they begin on the same
+    /// audio callback — a sample-accurate start.  This avoids the per-track
+    /// P/Invoke round-trips (and the synchronization drift they could introduce)
+    /// of starting each track individually.
+    /// </remarks>
     /// <exception cref="ObjectDisposedException">Thrown when the session is disposed.</exception>
     public void PlayAll()
     {
         ThrowIfDisposed();
 
-        foreach (AudioTrack track in _tracks)
-        {
-            track.Play();
-        }
+        int code = OwnAudioNative.ownaudio_v1_mixer_play_all(_mixerHandle.DangerousGetHandle());
+        ErrorCodeMapper.ThrowIfError(code, nameof(PlayAll));
     }
 
     /// <summary>

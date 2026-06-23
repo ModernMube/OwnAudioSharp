@@ -194,8 +194,9 @@ pub(crate) struct EffectWrapper {
     pub mixer: *mut MixerWrapper,
     /// Stable id of the containing track.
     pub track_id: u64,
-    /// Index of this effect within the track's chain.
-    pub effect_index: usize,
+    /// Stable id of this effect within the track's chain.  Unlike a positional
+    /// index, this stays valid when sibling effects are removed.
+    pub effect_id: u64,
 }
 
 unsafe impl Send for MixerWrapper {}

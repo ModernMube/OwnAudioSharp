@@ -30,6 +30,14 @@ internal static partial class OwnAudioNative
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial void ownaudio_v1_mixer_destroy(IntPtr mixer);
 
+    /// <summary>
+    /// Starts every track in the mixer in a single call against the shared clock.
+    /// </summary>
+    /// <param name="mixer">Valid mixer handle.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_play_all(IntPtr mixer);
+
     #endregion
 
     #region Track lifecycle

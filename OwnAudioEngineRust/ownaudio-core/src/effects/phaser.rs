@@ -45,7 +45,7 @@ impl Effect for Phaser {
             PARAM_FEEDBACK => { self.feedback = value.clamp(0.0, 1.0); true }
             PARAM_STAGES   => {
                 let s = (value as u32).clamp(2, 12);
-                self.stages = if s % 2 == 0 { s } else { s + 1 };
+                self.stages = if s.is_multiple_of(2) { s } else { s + 1 };
                 true
             }
             _ => false,

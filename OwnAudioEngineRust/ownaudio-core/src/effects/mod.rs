@@ -166,37 +166,65 @@ pub const PARAM_MIX: u32 = 1;
 // EffectChain
 // ---------------------------------------------------------------------------
 
+/// A single effect together with its stable identifier within a chain.
+///
+/// The id is assigned by the control thread when the effect is created and
+/// stays valid for the effect's lifetime, even when earlier effects are
+/// removed — so a handle never silently addresses the wrong effect (the same
+/// guarantee tracks gained with their stable ids).
+pub struct EffectEntry {
+    /// Stable id, unique within the owning chain.
+    pub id: u64,
+    /// The boxed effect itself.
+    pub effect: Box<dyn Effect>,
+}
+
 /// An ordered list of effects applied sequentially to an audio buffer.
 ///
-/// The chain is sized only outside the audio thread (add/remove via command
-/// queue); on the hot path only `process_all` is called, which iterates the
-/// existing `Vec` without allocating.
+/// Effects are addressed by stable id, not position.  The chain is resized only
+/// outside the audio thread (add/remove, ideally via the command queue); on the
+/// hot path only [`EffectChain::process_all`] is called, which iterates the
+/// existing `Vec` without allocating.  Pre-reserve capacity with
+/// [`EffectChain::with_capacity`] so audio-thread inserts never reallocate.
 pub struct EffectChain {
-    effects: Vec<Box<dyn Effect>>,
+    effects: Vec<EffectEntry>,
 }
 
 impl EffectChain {
     /// Creates an empty chain.
     pub fn new() -> Self {
-        Self { effects: Vec::new() }
-    }
-
-    /// Appends an effect to the end of the chain.
-    ///
-    /// Must only be called from outside the audio thread.
-    pub fn push(&mut self, effect: Box<dyn Effect>) {
-        self.effects.push(effect);
-    }
-
-    /// Removes and returns the effect at `index`, or `None` if out of range.
-    ///
-    /// Must only be called from outside the audio thread.
-    pub fn remove(&mut self, index: usize) -> Option<Box<dyn Effect>> {
-        if index < self.effects.len() {
-            Some(self.effects.remove(index))
-        } else {
-            None
+        Self {
+            effects: Vec::new(),
         }
+    }
+
+    /// Creates an empty chain with room for `capacity` effects pre-allocated,
+    /// so inserts up to that count never reallocate on the audio thread.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            effects: Vec::with_capacity(capacity),
+        }
+    }
+
+    /// Returns the number of effects the chain can hold before reallocating.
+    pub fn capacity(&self) -> usize {
+        self.effects.capacity()
+    }
+
+    /// Appends an effect with the given stable id to the end of the chain.
+    ///
+    /// Must only be called from outside the audio thread (or via a drained
+    /// command on the audio thread when spare capacity is guaranteed).
+    pub fn add_with_id(&mut self, id: u64, effect: Box<dyn Effect>) {
+        self.effects.push(EffectEntry { id, effect });
+    }
+
+    /// Removes and returns the effect with the given id, or `None` if absent.
+    ///
+    /// Preserves the order of the remaining effects.
+    pub fn remove_by_id(&mut self, id: u64) -> Option<EffectEntry> {
+        let pos = self.effects.iter().position(|e| e.id == id)?;
+        Some(self.effects.remove(pos))
     }
 
     /// Returns the number of effects in the chain.
@@ -209,25 +237,31 @@ impl EffectChain {
         self.effects.is_empty()
     }
 
+    /// Returns `true` when an effect with the given id is present.
+    pub fn contains_id(&self, id: u64) -> bool {
+        self.effects.iter().any(|e| e.id == id)
+    }
+
     /// Applies every enabled effect in order to `buffer`.
     ///
     /// Safe to call from the audio thread; never allocates.
     #[inline]
     pub fn process_all(&mut self, buffer: &mut [f32], channels: u16) {
-        for effect in &mut self.effects {
-            if effect.is_enabled() {
-                effect.process(buffer, channels);
+        for entry in &mut self.effects {
+            if entry.effect.is_enabled() {
+                entry.effect.process(buffer, channels);
             }
         }
     }
 
-    /// Returns a mutable reference to the effect at `index`, or `None`.
-    pub fn effect_mut<'a>(&'a mut self, index: usize) -> Option<&'a mut dyn Effect> {
-        if index < self.effects.len() {
-            Some(self.effects[index].as_mut())
-        } else {
-            None
+    /// Returns a mutable reference to the effect with the given id, or `None`.
+    pub fn effect_mut_by_id(&mut self, id: u64) -> Option<&mut (dyn Effect + '_)> {
+        for entry in &mut self.effects {
+            if entry.id == id {
+                return Some(entry.effect.as_mut());
+            }
         }
+        None
     }
 }
 

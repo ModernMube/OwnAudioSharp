@@ -88,18 +88,22 @@ pub extern "C" fn ownaudio_v1_track_add_effect(
 
         let track_id = track_wrapper.id;
 
+        // Allocate the stable effect id before borrowing the track, so the
+        // handle addresses this effect by id (surviving sibling removals)
+        // rather than by a shifting positional index.
+        let effect_id = mixer_wrapper.inner.alloc_effect_id();
+
         let track_ref = match mixer_wrapper.inner.track_mut(track_id) {
             Some(t) => t,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let effect_index = track_ref.effects.len();
-        track_ref.effects.push(effect);
+        track_ref.effects.add_with_id(effect_id, effect);
 
         let effect_wrapper = Box::new(EffectWrapper {
             mixer: mixer as *mut crate::handles::MixerWrapper,
             track_id,
-            effect_index,
+            effect_id,
         });
 
         unsafe {
@@ -167,7 +171,7 @@ pub extern "C" fn ownaudio_v1_effect_remove(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        track_ref.effects.remove(effect_wrapper.effect_index);
+        track_ref.effects.remove_by_id(effect_wrapper.effect_id);
 
         unsafe {
             drop(Box::from_raw(effect as *mut EffectWrapper));
@@ -218,7 +222,7 @@ pub extern "C" fn ownaudio_v1_effect_set_param(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let effect_ref = match track_ref.effects.effect_mut(effect_wrapper.effect_index) {
+        let effect_ref = match track_ref.effects.effect_mut_by_id(effect_wrapper.effect_id) {
             Some(e) => e,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
@@ -271,7 +275,7 @@ pub extern "C" fn ownaudio_v1_effect_get_param(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let effect_ref = match track_ref.effects.effect_mut(effect_wrapper.effect_index) {
+        let effect_ref = match track_ref.effects.effect_mut_by_id(effect_wrapper.effect_id) {
             Some(e) => e,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };

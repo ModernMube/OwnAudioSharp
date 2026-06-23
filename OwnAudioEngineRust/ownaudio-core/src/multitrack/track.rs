@@ -12,6 +12,11 @@ use crate::smoothing::SmoothedParam;
 /// zipper noise / click an abrupt gain change would otherwise produce.
 const GAIN_SMOOTH_MS: f32 = 5.0;
 
+/// Per-track effect-chain capacity pre-allocated at construction, so adding
+/// effects (even via a drained command on the audio thread) never reallocates
+/// the chain up to this many effects.
+pub const MAX_EFFECTS_PER_TRACK: usize = 32;
+
 /// Playback state of a single track.
 ///
 /// The numeric values are stable: they are stored in an [`AtomicU8`] inside
@@ -220,16 +225,27 @@ impl Track {
         Self {
             id,
             shared,
-            effects: EffectChain::new(),
+            effects: EffectChain::with_capacity(MAX_EFFECTS_PER_TRACK),
             source: None,
             scratch: vec![0.0f32; max_buffer_size],
             gain_smoother,
         }
     }
 
-    /// Replaces the track's audio source.
+    /// Replaces the track's audio source, dropping any previous one in place.
     pub fn set_source(&mut self, source: Option<Box<dyn TrackSource>>) {
         self.source = source;
+    }
+
+    /// Replaces the track's audio source and returns the previous one without
+    /// dropping it, so the caller (the audio thread, via a drained command) can
+    /// hand the old source back to the control thread for deallocation instead
+    /// of freeing heap memory on the real-time path.
+    pub fn replace_source(
+        &mut self,
+        source: Option<Box<dyn TrackSource>>,
+    ) -> Option<Box<dyn TrackSource>> {
+        std::mem::replace(&mut self.source, source)
     }
 
     /// Returns `true` when this track contributes audio to the mix.

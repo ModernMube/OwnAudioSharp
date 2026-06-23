@@ -680,6 +680,18 @@ int32_t ownaudio_v1_mixer_create(float sample_rate,
 void ownaudio_v1_mixer_destroy(struct OwnAudioMixerHandle *mixer);
 
 /**
+ * Starts every track in the mixer in a single call, against the shared clock.
+ *
+ * Sets all tracks to the playing state from the control thread in one
+ * operation, so they begin on the same audio callback — a sample-accurate
+ * start that avoids the per-track P/Invoke round-trips and the synchronisation
+ * drift they would introduce.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_mixer_play_all(struct OwnAudioMixerHandle *mixer);
+
+/**
  * Adds a new track to the mixer and writes its handle to `*out_track`.
  *
  * - `mixer` — valid mixer handle.

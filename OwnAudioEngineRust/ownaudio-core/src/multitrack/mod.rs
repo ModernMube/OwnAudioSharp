@@ -1,17 +1,27 @@
 //! Multi-track mixer with a shared sample-accurate transport clock.
 
 pub mod clock;
+pub mod command;
 pub mod track;
 
 pub use clock::SampleClock;
+pub use command::{command_channel, CommandReceiver, MixerCommand, MixerController, Retired};
 pub use track::{Track, TrackShared, TrackSource, TrackState};
 
+use crate::effects::EffectEntry;
+use rtrb::Producer;
 use std::sync::Arc;
 
 /// Default per-track scratch size in samples, used when the mixer is created
 /// without an explicit block size.  Covers a 4096-frame stereo callback; larger
 /// blocks grow the scratch once (amortised, never in steady state).
 const DEFAULT_MAX_BUFFER: usize = 4096 * 2;
+
+/// Maximum number of simultaneous tracks the mixer pre-allocates room for, so
+/// adding a track (even via a drained command on the audio thread) never
+/// reallocates the track vector.  Exceeding it is reported as an error rather
+/// than growing the vector on the audio thread.
+pub const MAX_TRACKS: usize = 256;
 
 /// Central multi-track mixer.
 ///
@@ -26,7 +36,8 @@ const DEFAULT_MAX_BUFFER: usize = 4096 * 2;
 /// stable [`Track::id`]s; lookups are by id, so a handle stays valid even after
 /// other tracks are removed.
 pub struct MultiTrackMixer {
-    /// Tracks in insertion order, each with a stable id.
+    /// Tracks in insertion order, each with a stable id.  Pre-allocated to
+    /// [`MAX_TRACKS`] so audio-thread inserts never reallocate.
     tracks: Vec<Track>,
     /// Shared sample-accurate clock.
     clock: SampleClock,
@@ -34,10 +45,17 @@ pub struct MultiTrackMixer {
     channels: u16,
     /// Sample rate in Hz, handed to new tracks for gain-smoothing.
     sample_rate: f32,
-    /// Monotonic id generator for new tracks.
+    /// Monotonic id generator for new tracks (direct, non-queued path).
     next_id: u64,
+    /// Monotonic id generator for new effects across all tracks (direct path).
+    next_effect_id: u64,
     /// Scratch size handed to new tracks.
     max_buffer_size: usize,
+    /// Optional lock-free command channel drained at the start of every
+    /// [`MultiTrackMixer::mix`].  When present, structural changes (add/remove
+    /// track, source, effects, effect params) arrive through it instead of via
+    /// direct `&mut` mutation, so they never race the audio thread.
+    commands: Option<CommandReceiver>,
 }
 
 impl MultiTrackMixer {
@@ -50,13 +68,49 @@ impl MultiTrackMixer {
     /// samples of scratch each.
     pub fn with_buffer_size(sample_rate: f32, channels: u16, max_buffer_size: usize) -> Self {
         Self {
-            tracks: Vec::new(),
+            tracks: Vec::with_capacity(MAX_TRACKS),
             clock: SampleClock::new(sample_rate),
             channels,
             sample_rate,
             next_id: 0,
+            next_effect_id: 0,
             max_buffer_size: max_buffer_size.max(1),
+            commands: None,
         }
+    }
+
+    /// Sample rate the mixer was created with (Hz).
+    pub fn sample_rate(&self) -> f32 {
+        self.sample_rate
+    }
+
+    /// Number of interleaved channels.
+    pub fn channels(&self) -> u16 {
+        self.channels
+    }
+
+    /// Per-track scratch size handed to new tracks.
+    pub fn max_buffer_size(&self) -> usize {
+        self.max_buffer_size
+    }
+
+    /// Allocates the next stable effect id (direct, non-queued FFI path).
+    ///
+    /// Effect ids are unique across the mixer for its lifetime, so an effect
+    /// handle keeps addressing the same effect even after sibling effects are
+    /// removed.
+    pub fn alloc_effect_id(&mut self) -> u64 {
+        let id = self.next_effect_id;
+        self.next_effect_id += 1;
+        id
+    }
+
+    /// Attaches a [`CommandReceiver`] whose queued structural changes are
+    /// drained — allocation-free — at the start of every [`MultiTrackMixer::mix`].
+    ///
+    /// Pairs with the [`MixerController`] returned by [`command_channel`].
+    pub fn attach_command_receiver(&mut self, receiver: CommandReceiver) {
+        self.commands = Some(receiver);
     }
 
     /// Appends a new track and returns its stable id together with a clone of
@@ -114,6 +168,19 @@ impl MultiTrackMixer {
         }
     }
 
+    /// Starts every track at once by setting them all to
+    /// [`TrackState::Playing`] in a single control-thread operation.
+    ///
+    /// Because all the state flips complete before the audio thread reads them
+    /// in the next [`MultiTrackMixer::mix`] call, every track begins on the same
+    /// render block — a sample-accurate start — without a per-track round-trip.
+    /// Must be called from outside the audio thread.
+    pub fn play_all(&self) {
+        for track in &self.tracks {
+            track.shared.set_state(TrackState::Playing);
+        }
+    }
+
     /// Returns the number of tracks.
     pub fn track_count(&self) -> usize {
         self.tracks.len()
@@ -131,6 +198,17 @@ impl MultiTrackMixer {
     /// so tracks never feed one another (no serial-chain bleed).  Must be called
     /// from the audio thread only; never allocates in steady state.
     pub fn mix(&mut self, output: &mut [f32]) {
+        // Apply any queued structural changes before rendering, so the audio
+        // thread remains the sole mutator of its tracks/effects.  Draining is
+        // allocation-free: commands carry their payloads by value and removed
+        // resources are handed back via the retirement queue.
+        if let Some(mut rx) = self.commands.take() {
+            while let Ok(cmd) = rx.commands.pop() {
+                self.apply_command(cmd, &mut rx.retire);
+            }
+            self.commands = Some(rx);
+        }
+
         let frames = (output.len() / self.channels.max(1) as usize) as u64;
 
         for sample in output.iter_mut() {
@@ -150,6 +228,95 @@ impl MultiTrackMixer {
         }
 
         self.clock.advance(frames);
+    }
+
+    /// Applies one drained [`MixerCommand`] to the mixer's owned data.
+    ///
+    /// Runs on the audio thread.  Never reallocates: inserts only use the
+    /// capacity reserved at construction, and any removed or capacity-refused
+    /// resource is pushed onto the retirement queue to be freed by the control
+    /// thread instead of being dropped here.
+    fn apply_command(&mut self, cmd: MixerCommand, retire: &mut Producer<Retired>) {
+        match cmd {
+            MixerCommand::AddTrack(track) => {
+                if self.tracks.len() < self.tracks.capacity() {
+                    self.tracks.push(track);
+                } else {
+                    // Would reallocate on the audio thread — refuse and retire.
+                    let _ = retire.push(Retired::Track(track));
+                }
+            }
+            MixerCommand::RemoveTrack(id) => {
+                if let Some(pos) = self.tracks.iter().position(|t| t.id == id) {
+                    let removed = self.tracks.remove(pos);
+                    let _ = retire.push(Retired::Track(removed));
+                }
+            }
+            MixerCommand::SetTrackSource { track_id, source } => match self.track_mut(track_id) {
+                Some(t) => {
+                    if let Some(old) = t.replace_source(source) {
+                        let _ = retire.push(Retired::Source(old));
+                    }
+                }
+                None => {
+                    if let Some(orphan) = source {
+                        let _ = retire.push(Retired::Source(orphan));
+                    }
+                }
+            },
+            MixerCommand::AddEffect {
+                track_id,
+                effect_id,
+                effect,
+            } => {
+                let chain = self.track_mut(track_id).map(|t| &mut t.effects);
+                match chain {
+                    Some(chain) if chain.len() < chain.capacity() => {
+                        chain.add_with_id(effect_id, effect);
+                    }
+                    _ => {
+                        // Unknown track or chain at capacity — retire the effect.
+                        let _ = retire.push(Retired::Effect(EffectEntry {
+                            id: effect_id,
+                            effect,
+                        }));
+                    }
+                }
+            }
+            MixerCommand::RemoveEffect {
+                track_id,
+                effect_id,
+            } => {
+                if let Some(t) = self.track_mut(track_id) {
+                    if let Some(entry) = t.effects.remove_by_id(effect_id) {
+                        let _ = retire.push(Retired::Effect(entry));
+                    }
+                }
+            }
+            MixerCommand::SetEffectParam {
+                track_id,
+                effect_id,
+                param_id,
+                value,
+            } => {
+                if let Some(t) = self.track_mut(track_id) {
+                    if let Some(effect) = t.effects.effect_mut_by_id(effect_id) {
+                        effect.set_param(param_id, value);
+                    }
+                }
+            }
+            MixerCommand::SetEffectEnabled {
+                track_id,
+                effect_id,
+                enabled,
+            } => {
+                if let Some(t) = self.track_mut(track_id) {
+                    if let Some(effect) = t.effects.effect_mut_by_id(effect_id) {
+                        effect.set_enabled(enabled);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -354,10 +521,57 @@ mod tests {
     }
 
     #[test]
+    fn play_all_starts_every_track_in_one_call() {
+        // A single play_all() must flip all tracks to Playing, so the very next
+        // mix renders every track together — sample-accurate start.
+        let mut mixer = MultiTrackMixer::new(48_000.0, 1);
+        let (a, _) = mixer.add_track();
+        let (b, _) = mixer.add_track();
+        mixer.set_track_source(a, Some(Box::new(VecSource::new(vec![1.0; 4]))));
+        mixer.set_track_source(b, Some(Box::new(VecSource::new(vec![2.0; 4]))));
+
+        // Nothing is audible before play_all.
+        let mut pre = [0.0f32; 4];
+        mixer.mix(&mut pre);
+        assert_eq!(pre, [0.0, 0.0, 0.0, 0.0]);
+
+        mixer.play_all();
+        assert_eq!(mixer.track_shared(a).unwrap().state(), TrackState::Playing);
+        assert_eq!(mixer.track_shared(b).unwrap().state(), TrackState::Playing);
+
+        let mut out = [0.0f32; 4];
+        mixer.mix(&mut out);
+        // Both tracks contribute on the same block: 1.0 + 2.0.
+        for &s in &out {
+            assert!((s - 3.0).abs() < 1e-6, "out={out:?}");
+        }
+    }
+
+    #[test]
     fn clock_advances_by_frame_count() {
         let mut mixer = MultiTrackMixer::new(48_000.0, 2);
         let mut out = [0.0f32; 8]; // 4 stereo frames
         mixer.mix(&mut out);
         assert_eq!(mixer.clock().position(), 4);
+    }
+
+    #[test]
+    fn track_vector_is_preallocated_and_never_reallocates_on_mix() {
+        // The track vector is reserved to MAX_TRACKS up front; draining queued
+        // AddTrack commands on the audio thread must not grow (reallocate) it.
+        let mut mixer = MultiTrackMixer::new(48_000.0, 1);
+        assert_eq!(mixer.tracks.capacity(), MAX_TRACKS);
+
+        let (mut ctl, rx) = command_channel(64, mixer.sample_rate(), mixer.max_buffer_size());
+        mixer.attach_command_receiver(rx);
+        for _ in 0..8 {
+            ctl.add_track().unwrap();
+        }
+        let mut out = [0.0f32; 16];
+        mixer.mix(&mut out);
+
+        assert_eq!(mixer.track_count(), 8);
+        // Capacity unchanged → no reallocation occurred on the audio thread.
+        assert_eq!(mixer.tracks.capacity(), MAX_TRACKS);
     }
 }
