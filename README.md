@@ -62,6 +62,7 @@ Built-in decoders cover **MP3, WAV, and FLAC** out of the box. When **FFmpeg 8+*
 > - All supported platforms (Windows, macOS, Linux, Android, iOS) remain fully supported
 >
 > ### One important API change: VocalRemover moves to a separate package
+> 
 > The **VocalRemover** (AI stem separation) feature will be removed from the core `OwnAudioSharp` package and released as a dedicated external package. This keeps the core package lean and focused on audio I/O, while giving users who need AI separation an opt-in dependency. Migration will require only a package reference change — the API surface stays the same.
 >
 > *Follow the development branch for updates. Contributions and early feedback are welcome.*
