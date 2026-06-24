@@ -8,8 +8,7 @@ Part of the [OwnAudioSharp](https://github.com/modernmube/OwnAudioSharp) ecosyst
 - **MIDI I/O** — real-time input/output via platform-native APIs (WinMM / CoreMIDI / ALSA rawmidi)
 - **SysEx receive** — zero-allocation state-machine parser; complete frames delivered as `ReadOnlySpan<byte>`
 - **Virtual MIDI ports** — create software MIDI endpoints on macOS (CoreMIDI) and Linux (ALSA Sequencer)
-- **Hot-plug monitoring** — `MidiPortFactory.PortsChanged` event fires when devices are added or removed
-- **Timestamped send** — sample-accurate scheduled output on macOS via Mach Absolute Time
+- **Hot-plug monitoring** — call `MidiPortFactory.StartMonitoring()` and the `PortsChanged` event fires (via background polling) when devices are added or removed
 - **MIDI File** — read, edit, and write Standard MIDI Files (SMF format 0 and 1)
 - **MIDI Clock** — thread-based 24 PPQN clock (`MidiClock`) and audio-engine-driven sample-accurate clock (`AudioEngineMidiClock`)
 - **Native AOT ready** — `IsAotCompatible=true`, `IsTrimmable=true`, zero reflection
@@ -199,20 +198,15 @@ ReadOnlySpan<byte> sysex = [0xF0, 0x41, 0x10, 0x42, 0x12, 0xF7];
 output.SendSysEx(sysex);
 ```
 
-### Timestamped send (macOS only)
+### Message timestamps
 
-On macOS the output port exposes an additional overload that accepts an absolute nanosecond
-timestamp. CoreMIDI schedules the message at exactly that Mach time, eliminating OS scheduling
-jitter for sample-accurate playback. Pass `0` for immediate delivery.
+`MidiMessage.Timestamp` carries a microsecond timestamp. On **input** it is the arrival time
+reported by the native backend. On **output** the field is currently **not** used for scheduling:
+the native core sends every message immediately. Schedule timing in managed code (for example via
+`AudioEngineMidiClock`) rather than relying on the timestamp for deferred delivery.
 
-```csharp
-// Cast to the concrete macOS type — only available on macOS
-if (output is OwnAudio.Midi.IO.Platform.MacOsMidiOutputPort macOutput)
-{
-    long nowNs = /* your clock source in nanoseconds */;
-    macOutput.Send(new MidiMessage(0x90, 60, 100), nowNs + 10_000_000); // 10 ms ahead
-}
-```
+> Sample-accurate, timestamp-scheduled output (CoreMIDI `MIDISend` with Mach Absolute Time on
+> macOS) is a planned enhancement; it is not implemented yet.
 
 ### Common status bytes
 
@@ -605,8 +599,8 @@ Console.WriteLine("Saved: recording.mid");
 | Physical I/O | WinMM (`winmm.dll`) | CoreMIDI | ALSA rawmidi (`libasound`) |
 | SysEx receive | ✅ (WinMM MIDIHDR buffers) | ✅ (CoreMIDI packets) | ✅ (state-machine parser) |
 | Virtual ports | — | ✅ CoreMIDI | ✅ ALSA Sequencer |
-| Hot-plug detection | — | ✅ CoreMIDI notify | ✅ FileSystemWatcher |
-| Timestamped send | — | ✅ Mach Absolute Time | — |
+| Hot-plug detection | ✅ polling | ✅ polling | ✅ polling |
+| Timestamped send | — | planned | — |
 | MIDI File R/W | ✅ | ✅ | ✅ |
 | `MidiClock` | ✅ | ✅ | ✅ |
 | `AudioEngineMidiClock` | ✅ | ✅ | ✅ |

@@ -2,15 +2,27 @@
 //!
 //! The clock runs a dedicated thread that fires a pulse callback at 24 pulses
 //! per quarter note (PPQN), the rate defined by the MIDI specification for the
-//! 0xF8 Timing Clock message. The thread uses a spin-wait between pulses to keep
-//! jitter low. Sending the actual 0xF8 message (and the Start/Stop/Continue
-//! transport messages) is left to the caller's pulse callback so that the timing
-//! source stays decoupled from any particular output port.
+//! 0xF8 Timing Clock message. Between pulses the thread uses a hybrid sleep/spin
+//! strategy: it sleeps for the bulk of the remaining interval (in short capped
+//! chunks so tempo and stop requests stay responsive) and only busy-spins for
+//! the final sub-millisecond window to keep jitter low. This keeps CPU usage
+//! near zero instead of pinning a core. Sending the actual 0xF8 message (and the
+//! Start/Stop/Continue transport messages) is left to the caller's pulse
+//! callback so that the timing source stays decoupled from any particular output
+//! port.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+
+/// Time remaining before a pulse below which the thread busy-spins instead of
+/// sleeping, trading a little CPU for sub-millisecond timing precision.
+const SPIN_THRESHOLD_US: f64 = 1_000.0;
+
+/// Upper bound on a single sleep, so the thread re-reads the tempo and the
+/// running flag at least this often even at very slow tempos.
+const MAX_SLEEP_US: u64 = 5_000;
 
 /// Standard MIDI timing resolution: 24 pulses per quarter note.
 const PULSES_PER_QUARTER_NOTE: f64 = 24.0;
@@ -119,12 +131,17 @@ fn run_clock(state: Arc<SharedState>, on_pulse: Box<PulseCallback>) {
         let interval_us = pulse_interval_us(bpm);
 
         let elapsed_us = start.elapsed().as_micros() as f64;
-        if elapsed_us >= next_pulse_us {
+        let diff_us = next_pulse_us - elapsed_us;
+
+        if diff_us <= 0.0 {
             on_pulse();
             next_pulse_us += interval_us;
+        } else if diff_us > SPIN_THRESHOLD_US {
+            let sleep_us = ((diff_us - SPIN_THRESHOLD_US) as u64).min(MAX_SLEEP_US);
+            std::thread::sleep(Duration::from_micros(sleep_us));
+        } else {
+            std::hint::spin_loop();
         }
-
-        std::hint::spin_loop();
     }
 }
 
@@ -163,5 +180,30 @@ mod tests {
         clock.stop();
         assert!(!clock.is_running());
         assert!(counter.load(Ordering::Relaxed) > 0);
+    }
+
+    #[test]
+    fn hybrid_timing_keeps_pulse_cadence() {
+        use std::sync::atomic::AtomicU32;
+
+        // At 120 BPM the clock fires 48 pulses per second (24 PPQN x 2 beats).
+        // Over ~300 ms that is ~14 pulses; allow a generous tolerance for
+        // scheduler jitter while still proving the sleep/spin path keeps time.
+        let counter = Arc::new(AtomicU32::new(0));
+        let counter_clone = Arc::clone(&counter);
+
+        let mut clock = MidiClock::new(120.0);
+        clock.start(Box::new(move || {
+            counter_clone.fetch_add(1, Ordering::Relaxed);
+        }));
+
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        clock.stop();
+
+        let pulses = counter.load(Ordering::Relaxed);
+        assert!(
+            (8..=20).contains(&pulses),
+            "expected ~14 pulses in 300 ms, got {pulses}"
+        );
     }
 }

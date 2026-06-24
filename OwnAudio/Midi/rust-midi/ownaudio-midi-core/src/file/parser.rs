@@ -68,7 +68,11 @@ fn read_track(data: &[u8], pos: usize) -> Result<(MidiTrackData, usize), MidiErr
 
 /// Parses the raw bytes of a single track body into a list of events.
 fn parse_events(data: &[u8]) -> Vec<MidiEventData> {
-    let mut events = Vec::with_capacity(64);
+    // A MIDI event is rarely shorter than 3 bytes (delta + status + one data
+    // byte), so estimate the capacity from the known track-body length to avoid
+    // repeated reallocations on large tracks, with a small floor for tiny ones.
+    let estimated = (data.len() / 3).max(64);
+    let mut events = Vec::with_capacity(estimated);
     let mut pos = 0usize;
     let mut running_status: u8 = 0;
 
