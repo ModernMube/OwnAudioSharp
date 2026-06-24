@@ -27,6 +27,7 @@
 
 pub mod config;
 pub mod decoder;
+pub mod denormal;
 pub mod device;
 pub mod effects;
 pub mod engine;
