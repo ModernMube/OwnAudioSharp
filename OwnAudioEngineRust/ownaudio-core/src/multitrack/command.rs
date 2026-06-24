@@ -168,6 +168,20 @@ pub fn command_channel(
 }
 
 impl MixerController {
+    /// Pushes a command, first draining the retirement queue so removed
+    /// resources are freed promptly on this (control) thread.
+    ///
+    /// Keeping the retirement queue drained on every enqueue means the audio
+    /// thread never finds it full and is never forced to drop a removed
+    /// resource itself (a heap free on the real-time path).  Callers therefore
+    /// do not need to remember to call [`MixerController::collect_retired`].
+    fn enqueue(&mut self, command: MixerCommand) -> Result<(), CommandError> {
+        self.collect_retired();
+        self.commands
+            .push(command)
+            .map_err(|_| CommandError::QueueFull)
+    }
+
     /// Builds a new track on the control thread, enqueues its insertion, and
     /// returns its stable id and a clone of its shared parameter block.
     ///
@@ -178,9 +192,7 @@ impl MixerController {
         let track = Track::new(id, self.sample_rate, self.max_buffer_size);
         let shared = track.shared.clone();
 
-        self.commands
-            .push(MixerCommand::AddTrack(track))
-            .map_err(|_| CommandError::QueueFull)?;
+        self.enqueue(MixerCommand::AddTrack(track))?;
 
         self.next_track_id += 1;
         self.track_registry.push((id, shared.clone()));
@@ -193,9 +205,7 @@ impl MixerController {
         if !self.track_registry.iter().any(|(tid, _)| *tid == id) {
             return Ok(false);
         }
-        self.commands
-            .push(MixerCommand::RemoveTrack(id))
-            .map_err(|_| CommandError::QueueFull)?;
+        self.enqueue(MixerCommand::RemoveTrack(id))?;
         self.track_registry.retain(|(tid, _)| *tid != id);
         Ok(true)
     }
@@ -206,9 +216,7 @@ impl MixerController {
         track_id: u64,
         source: Option<Box<dyn TrackSource>>,
     ) -> Result<(), CommandError> {
-        self.commands
-            .push(MixerCommand::SetTrackSource { track_id, source })
-            .map_err(|_| CommandError::QueueFull)
+        self.enqueue(MixerCommand::SetTrackSource { track_id, source })
     }
 
     /// Builds an effect insertion command, returning the new effect's stable id.
@@ -218,25 +226,21 @@ impl MixerController {
         effect: Box<dyn Effect>,
     ) -> Result<u64, CommandError> {
         let effect_id = self.next_effect_id;
-        self.commands
-            .push(MixerCommand::AddEffect {
-                track_id,
-                effect_id,
-                effect,
-            })
-            .map_err(|_| CommandError::QueueFull)?;
+        self.enqueue(MixerCommand::AddEffect {
+            track_id,
+            effect_id,
+            effect,
+        })?;
         self.next_effect_id += 1;
         Ok(effect_id)
     }
 
     /// Enqueues removal of an effect by id.
     pub fn remove_effect(&mut self, track_id: u64, effect_id: u64) -> Result<(), CommandError> {
-        self.commands
-            .push(MixerCommand::RemoveEffect {
-                track_id,
-                effect_id,
-            })
-            .map_err(|_| CommandError::QueueFull)
+        self.enqueue(MixerCommand::RemoveEffect {
+            track_id,
+            effect_id,
+        })
     }
 
     /// Enqueues a parameter change on an effect.
@@ -247,14 +251,12 @@ impl MixerController {
         param_id: u32,
         value: f32,
     ) -> Result<(), CommandError> {
-        self.commands
-            .push(MixerCommand::SetEffectParam {
-                track_id,
-                effect_id,
-                param_id,
-                value,
-            })
-            .map_err(|_| CommandError::QueueFull)
+        self.enqueue(MixerCommand::SetEffectParam {
+            track_id,
+            effect_id,
+            param_id,
+            value,
+        })
     }
 
     /// Enqueues an enable/bypass change on an effect.
@@ -264,13 +266,11 @@ impl MixerController {
         effect_id: u64,
         enabled: bool,
     ) -> Result<(), CommandError> {
-        self.commands
-            .push(MixerCommand::SetEffectEnabled {
-                track_id,
-                effect_id,
-                enabled,
-            })
-            .map_err(|_| CommandError::QueueFull)
+        self.enqueue(MixerCommand::SetEffectEnabled {
+            track_id,
+            effect_id,
+            enabled,
+        })
     }
 
     /// Returns a clone of the shared parameter block for a registered track.
@@ -555,6 +555,27 @@ mod tests {
         let mut out = [0.0f32; 4];
         mixer.mix(&mut out);
         assert_eq!(ctl.collect_retired(), 1);
+    }
+
+    #[test]
+    fn enqueue_auto_drains_the_retirement_queue() {
+        let (mut ctl, mut mixer) = wired();
+        let (id, shared) = ctl.add_track().unwrap();
+        ctl.set_track_source(id, Some(Box::new(VecSource::new(vec![1.0; 4]))))
+            .unwrap();
+        shared.set_state(TrackState::Playing);
+        let mut out = [0.0f32; 4];
+        mixer.mix(&mut out);
+
+        // Remove the track; the next mix retires it on the audio thread.
+        ctl.remove_track(id).unwrap();
+        mixer.mix(&mut out);
+
+        // The very next enqueue drains the retirement queue automatically, so an
+        // explicit collect afterwards finds nothing left — the caller never has
+        // to remember to drain, and the audio thread never sees a full queue.
+        ctl.add_track().unwrap();
+        assert_eq!(ctl.collect_retired(), 0);
     }
 
     #[test]
