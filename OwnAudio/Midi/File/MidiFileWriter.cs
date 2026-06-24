@@ -1,10 +1,13 @@
-using System.Buffers.Binary;
+using System.Runtime.InteropServices;
+using OwnAudio.Midi.Internal;
+using OwnAudio.Midi.Interop;
 
 namespace OwnAudio.Midi.File;
 
 /// <summary>
-/// Writes a <see cref="MidiFile"/> to a file path or stream in Standard MIDI File (SMF) format.
-/// Uses running status compression and automatically appends an End-of-Track meta event when missing.
+/// Writes a <see cref="MidiFile"/> to a file path or stream in Standard MIDI File
+/// (SMF) format. Serialization is performed by the native MIDI core, which applies
+/// running-status compression and appends an End-of-Track meta event when missing.
 /// </summary>
 public static class MidiFileWriter
 {
@@ -22,98 +25,108 @@ public static class MidiFileWriter
     /// </summary>
     public static void Write(MidiFile file, Stream stream)
     {
-        Span<byte> header = stackalloc byte[14];
-        header[0] = (byte)'M'; header[1] = (byte)'T';
-        header[2] = (byte)'h'; header[3] = (byte)'d';
-        BinaryPrimitives.WriteUInt32BigEndian(header[4..], 6);
-        BinaryPrimitives.WriteUInt16BigEndian(header[8..], file.Format);
-        BinaryPrimitives.WriteUInt16BigEndian(header[10..], (ushort)file.Tracks.Count);
-        BinaryPrimitives.WriteUInt16BigEndian(header[12..], file.TicksPerBeat);
-        stream.Write(header);
+        int code = MidiNativeMethods.ownaudio_midi_v1_writer_create(
+            file.Format, file.TicksPerBeat, out var writer);
+        MidiErrorCodeMapper.ThrowIfError(code, nameof(Write));
 
-        foreach (var track in file.Tracks)
-            WriteTrack(track, stream);
-    }
-
-    /// <summary>
-    /// Serializes a single track into an MTrk chunk and writes it to the stream.
-    /// Applies running-status compression and ensures the chunk ends with an End-of-Track event.
-    /// </summary>
-    private static void WriteTrack(MidiTrack track, Stream stream)
-    {
-        using var trackBuffer = new MemoryStream();
-
-        byte runningStatus = 0;
-        foreach (var evt in track.Events)
+        using (writer)
         {
-            WriteVarLen(trackBuffer, evt.DeltaTime);
+            foreach (var track in file.Tracks)
+            {
+                code = MidiNativeMethods.ownaudio_midi_v1_writer_begin_track(writer);
+                MidiErrorCodeMapper.ThrowIfError(code, nameof(Write));
 
-            if (evt.Type == MidiEventType.Meta)
-            {
-                trackBuffer.WriteByte(0xFF);
-                trackBuffer.WriteByte(evt.MetaType);
-                WriteVarLen(trackBuffer, evt.MetaData?.Length ?? 0);
-                if (evt.MetaData != null)
-                    trackBuffer.Write(evt.MetaData);
-                runningStatus = 0;
-            }
-            else if (evt.Type == MidiEventType.SysEx)
-            {
-                if (evt.MetaData != null)
-                    trackBuffer.Write(evt.MetaData);
-                runningStatus = 0;
-            }
-            else
-            {
-                if (evt.Status != runningStatus)
+                foreach (var evt in track.Events)
                 {
-                    trackBuffer.WriteByte(evt.Status);
-                    runningStatus = evt.Status;
+                    AddEvent(writer, evt);
                 }
-                trackBuffer.WriteByte(evt.Data1);
-
-                byte type = (byte)(evt.Status & 0xF0);
-                if (type != 0xC0 && type != 0xD0)
-                    trackBuffer.WriteByte(evt.Data2);
             }
-        }
 
-        if (track.Events.Count == 0 || !track.Events[^1].IsEndOfTrack)
-        {
-            WriteVarLen(trackBuffer, 0);
-            trackBuffer.WriteByte(0xFF);
-            trackBuffer.WriteByte(0x2F);
-            trackBuffer.WriteByte(0x00);
+            Serialize(writer, stream);
         }
-
-        Span<byte> chunkHeader = stackalloc byte[8];
-        chunkHeader[0] = (byte)'M'; chunkHeader[1] = (byte)'T';
-        chunkHeader[2] = (byte)'r'; chunkHeader[3] = (byte)'k';
-        BinaryPrimitives.WriteUInt32BigEndian(chunkHeader[4..], (uint)trackBuffer.Length);
-        stream.Write(chunkHeader);
-        trackBuffer.Position = 0;
-        trackBuffer.CopyTo(stream);
     }
 
     /// <summary>
-    /// Encodes an integer as a MIDI variable-length quantity and writes it to the stream.
-    /// Negative values are clamped to zero.
+    /// Appends a single event to the native writer's current track, pinning any
+    /// payload bytes for the duration of the native call.
     /// </summary>
-    private static void WriteVarLen(Stream stream, int value)
+    /// <param name="writer">
+    /// The native writer handle.
+    /// </param>
+    /// <param name="evt">
+    /// The managed event to serialize.
+    /// </param>
+    private static void AddEvent(MidiWriterHandle writer, MidiEvent evt)
     {
-        if (value < 0) value = 0;
-        Span<byte> buf = stackalloc byte[4];
-        int len = 0;
+        byte[]? payload = evt.MetaData;
+        int length = payload?.Length ?? 0;
 
-        buf[len++] = (byte)(value & 0x7F);
-        value >>= 7;
-        while (value > 0)
+        int code;
+        unsafe
         {
-            buf[len++] = (byte)((value & 0x7F) | 0x80);
-            value >>= 7;
+            fixed (byte* ptr = payload)
+            {
+                var native = new NativeMidiEvent
+                {
+                    DeltaTime = evt.DeltaTime,
+                    EventType = EventTypeToByte(evt.Type),
+                    Status = evt.Status,
+                    Data1 = evt.Data1,
+                    Data2 = evt.Data2,
+                    MetaType = evt.MetaType,
+                    MetaData = (IntPtr)ptr,
+                    MetaDataLen = (nuint)length
+                };
+                code = MidiNativeMethods.ownaudio_midi_v1_writer_add_event(writer, native);
+            }
+        }
+        MidiErrorCodeMapper.ThrowIfError(code, nameof(Write));
+    }
+
+    /// <summary>
+    /// Serializes the writer to SMF bytes and copies them into <paramref name="stream"/>,
+    /// releasing the native buffer afterwards.
+    /// </summary>
+    /// <param name="writer">
+    /// The native writer handle.
+    /// </param>
+    /// <param name="stream">
+    /// The destination stream.
+    /// </param>
+    private static void Serialize(MidiWriterHandle writer, Stream stream)
+    {
+        int code = MidiNativeMethods.ownaudio_midi_v1_writer_serialize(
+            writer, out IntPtr data, out nuint len);
+        MidiErrorCodeMapper.ThrowIfError(code, nameof(Write));
+
+        if (data == IntPtr.Zero || len == 0)
+        {
+            return;
         }
 
-        for (int i = len - 1; i >= 0; i--)
-            stream.WriteByte(buf[i]);
+        try
+        {
+            int length = (int)len;
+            var buffer = new byte[length];
+            Marshal.Copy(data, buffer, 0, length);
+            stream.Write(buffer, 0, length);
+        }
+        finally
+        {
+            MidiNativeMethods.ownaudio_midi_v1_free_bytes(data, len);
+        }
     }
+
+    /// <summary>
+    /// Maps a managed <see cref="MidiEventType"/> to the native event-type discriminant.
+    /// </summary>
+    /// <param name="type">
+    /// The managed event type.
+    /// </param>
+    private static byte EventTypeToByte(MidiEventType type) => type switch
+    {
+        MidiEventType.Meta => 1,
+        MidiEventType.SysEx => 2,
+        _ => 0
+    };
 }

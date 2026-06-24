@@ -1,0 +1,13 @@
+[package]
+name = "ownaudio-midi-core"
+version = "1.0.0"
+edition = "2021"
+description = "Cross-platform MIDI I/O, Standard MIDI File handling and timing core for OwnAudioSharp"
+license = "MIT"
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+midir = "0.10"
+thiserror = "1"

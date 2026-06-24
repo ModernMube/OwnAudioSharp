@@ -1,0 +1,342 @@
+name: Build native MIDI + pack NuGet
+
+on:
+  push:
+    branches: [ "develop_rust_audio", "master" ]
+    tags:     [ "midi-v*.*.*" ]
+    paths:
+      - "OwnAudio/Midi/**"
+      - ".github/workflows/build-native-midi.yml"
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - "OwnAudio/Midi/**"
+      - ".github/workflows/build-native-midi.yml"
+  workflow_dispatch:
+
+# Cancel duplicate runs for the same ref
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Rust native builds — one job per OS runner.
+  # The cdylib crate is `ownaudio_midi_ffi`, producing:
+  #   ownaudio_midi_ffi.dll / libownaudio_midi_ffi.so / libownaudio_midi_ffi.dylib
+  # -------------------------------------------------------------------------
+  rust-build-windows:
+    name: Rust / Windows (x64 + ARM64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-midi-windows-${{ hashFiles('OwnAudio/Midi/rust-midi/**/Cargo.lock') }}
+
+      - name: Install cargo-xwin (MSVC cross-linker)
+        run: cargo install cargo-xwin --locked
+
+      - name: Build win-x64
+        working-directory: OwnAudio/Midi/rust-midi
+        run: cargo build --release -p ownaudio-midi-ffi --target x86_64-pc-windows-msvc
+
+      - name: Build win-arm64
+        working-directory: OwnAudio/Midi/rust-midi
+        run: cargo xwin build --release -p ownaudio-midi-ffi --target aarch64-pc-windows-msvc
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/win-x64 artifacts/win-arm64
+          cp OwnAudio/Midi/rust-midi/target/x86_64-pc-windows-msvc/release/ownaudio_midi_ffi.dll  artifacts/win-x64/
+          cp OwnAudio/Midi/rust-midi/target/aarch64-pc-windows-msvc/release/ownaudio_midi_ffi.dll artifacts/win-arm64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: midi-native-windows
+          path: artifacts/
+          retention-days: 7
+
+  rust-build-linux-x64:
+    name: Rust / Linux x64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ALSA dev headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-midi-linux-x64-${{ hashFiles('OwnAudio/Midi/rust-midi/**/Cargo.lock') }}
+
+      - name: Build linux-x64
+        working-directory: OwnAudio/Midi/rust-midi
+        run: cargo build --release -p ownaudio-midi-ffi --target x86_64-unknown-linux-gnu
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/linux-x64
+          cp OwnAudio/Midi/rust-midi/target/x86_64-unknown-linux-gnu/release/libownaudio_midi_ffi.so artifacts/linux-x64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: midi-native-linux-x64
+          path: artifacts/
+          retention-days: 7
+
+  rust-build-linux-arm64:
+    name: Rust / Linux ARM64
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ALSA dev headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-midi-linux-arm64-${{ hashFiles('OwnAudio/Midi/rust-midi/**/Cargo.lock') }}
+
+      - name: Build linux-arm64
+        working-directory: OwnAudio/Midi/rust-midi
+        run: cargo build --release -p ownaudio-midi-ffi --target aarch64-unknown-linux-gnu
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/linux-arm64
+          cp OwnAudio/Midi/rust-midi/target/aarch64-unknown-linux-gnu/release/libownaudio_midi_ffi.so artifacts/linux-arm64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: midi-native-linux-arm64
+          path: artifacts/
+          retention-days: 7
+
+  rust-build-macos:
+    name: Rust / macOS (x64 + ARM64)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-midi-macos-${{ hashFiles('OwnAudio/Midi/rust-midi/**/Cargo.lock') }}
+
+      - name: Build osx-x64
+        working-directory: OwnAudio/Midi/rust-midi
+        run: cargo build --release -p ownaudio-midi-ffi --target x86_64-apple-darwin
+
+      - name: Build osx-arm64
+        working-directory: OwnAudio/Midi/rust-midi
+        run: cargo build --release -p ownaudio-midi-ffi --target aarch64-apple-darwin
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/osx-x64 artifacts/osx-arm64
+          cp OwnAudio/Midi/rust-midi/target/x86_64-apple-darwin/release/libownaudio_midi_ffi.dylib  artifacts/osx-x64/
+          cp OwnAudio/Midi/rust-midi/target/aarch64-apple-darwin/release/libownaudio_midi_ffi.dylib artifacts/osx-arm64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: midi-native-macos
+          path: artifacts/
+          retention-days: 7
+
+  # -------------------------------------------------------------------------
+  # dotnet pack — depends on all native builds
+  # -------------------------------------------------------------------------
+  dotnet-pack:
+    name: Pack OwnAudioSharp.Midi NuGet
+    needs:
+      - rust-build-windows
+      - rust-build-linux-x64
+      - rust-build-linux-arm64
+      - rust-build-macos
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download all native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: midi-native-*
+          path: native-dl/
+          merge-multiple: false
+
+      - name: Place natives into runtimes/
+        run: |
+          RUNTIMES="OwnAudio/Midi/runtimes"
+
+          copy_if_exists() {
+            local SRC="$1"
+            local DST="$2"
+            if [[ -f "$SRC" ]]; then
+              mkdir -p "$(dirname "$DST")"
+              cp "$SRC" "$DST"
+              echo "  Copied: $SRC -> $DST"
+            else
+              echo "::warning::Missing artifact: $SRC"
+            fi
+          }
+
+          copy_if_exists "native-dl/midi-native-windows/win-x64/ownaudio_midi_ffi.dll"        "$RUNTIMES/win-x64/native/ownaudio_midi_ffi.dll"
+          copy_if_exists "native-dl/midi-native-windows/win-arm64/ownaudio_midi_ffi.dll"      "$RUNTIMES/win-arm64/native/ownaudio_midi_ffi.dll"
+          copy_if_exists "native-dl/midi-native-linux-x64/linux-x64/libownaudio_midi_ffi.so"  "$RUNTIMES/linux-x64/native/libownaudio_midi_ffi.so"
+          copy_if_exists "native-dl/midi-native-linux-arm64/linux-arm64/libownaudio_midi_ffi.so" "$RUNTIMES/linux-arm64/native/libownaudio_midi_ffi.so"
+          copy_if_exists "native-dl/midi-native-macos/osx-x64/libownaudio_midi_ffi.dylib"     "$RUNTIMES/osx-x64/native/libownaudio_midi_ffi.dylib"
+          copy_if_exists "native-dl/midi-native-macos/osx-arm64/libownaudio_midi_ffi.dylib"   "$RUNTIMES/osx-arm64/native/libownaudio_midi_ffi.dylib"
+
+          echo "Runtimes tree:"
+          find "$RUNTIMES" -type f | sort
+
+      - name: Symbol smoke test
+        run: |
+          check_sym() {
+            local FILE="$1"
+            [[ -f "$FILE" ]] || return 0
+            if nm -D "$FILE" 2>/dev/null | grep -q "ownaudio_midi_v1_clock_create" || \
+               nm -g "$FILE" 2>/dev/null | grep -q "ownaudio_midi_v1_clock_create"; then
+              echo "  OK   ownaudio_midi_v1_clock_create in $(basename "$FILE")"
+            else
+              echo "::warning::ownaudio_midi_v1_clock_create not found in $FILE"
+            fi
+          }
+          check_sym "OwnAudio/Midi/runtimes/linux-x64/native/libownaudio_midi_ffi.so"
+          check_sym "OwnAudio/Midi/runtimes/linux-arm64/native/libownaudio_midi_ffi.so"
+          check_sym "OwnAudio/Midi/runtimes/osx-x64/native/libownaudio_midi_ffi.dylib"
+          check_sym "OwnAudio/Midi/runtimes/osx-arm64/native/libownaudio_midi_ffi.dylib"
+
+      - name: Pack OwnAudioSharp.Midi
+        run: |
+          dotnet pack OwnAudio/Midi/OwnAudio.Midi.csproj \
+            --configuration Release \
+            -p:GeneratePackageOnBuild=false \
+            --output nupkg-out
+
+      - name: Verify native binaries are in the package
+        run: |
+          NUPKG=$(ls nupkg-out/OwnAudioSharp.Midi.*.nupkg | head -n 1)
+          echo "Inspecting $NUPKG"
+          CONTENTS=$(unzip -l "$NUPKG")
+          echo "$CONTENTS" | grep -E "runtimes/.*/(native)/.*\.(dll|so|dylib)" || {
+            echo "::error::No native runtime binaries found in the package."
+            exit 1
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: midi-nupkg
+          path: nupkg-out/*.nupkg
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
+  # Commit built native binaries back into runtimes/ for local development
+  # -------------------------------------------------------------------------
+  update-runtimes:
+    name: Update MIDI runtimes/ with built natives
+    needs:
+      - rust-build-windows
+      - rust-build-linux-x64
+      - rust-build-linux-arm64
+      - rust-build-macos
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download all native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: midi-native-*
+          path: native-dl/
+          merge-multiple: false
+
+      - name: Copy natives to runtimes/
+        run: |
+          RUNTIMES="OwnAudio/Midi/runtimes"
+
+          copy_if_exists() {
+            local SRC="$1"
+            local DST="$2"
+            if [[ -f "$SRC" ]]; then
+              mkdir -p "$(dirname "$DST")"
+              cp "$SRC" "$DST"
+              echo "  Copied: $SRC -> $DST"
+            else
+              echo "::warning::Missing artifact: $SRC"
+            fi
+          }
+
+          copy_if_exists "native-dl/midi-native-windows/win-x64/ownaudio_midi_ffi.dll"        "$RUNTIMES/win-x64/native/ownaudio_midi_ffi.dll"
+          copy_if_exists "native-dl/midi-native-windows/win-arm64/ownaudio_midi_ffi.dll"      "$RUNTIMES/win-arm64/native/ownaudio_midi_ffi.dll"
+          copy_if_exists "native-dl/midi-native-linux-x64/linux-x64/libownaudio_midi_ffi.so"  "$RUNTIMES/linux-x64/native/libownaudio_midi_ffi.so"
+          copy_if_exists "native-dl/midi-native-linux-arm64/linux-arm64/libownaudio_midi_ffi.so" "$RUNTIMES/linux-arm64/native/libownaudio_midi_ffi.so"
+          copy_if_exists "native-dl/midi-native-macos/osx-x64/libownaudio_midi_ffi.dylib"     "$RUNTIMES/osx-x64/native/libownaudio_midi_ffi.dylib"
+          copy_if_exists "native-dl/midi-native-macos/osx-arm64/libownaudio_midi_ffi.dylib"   "$RUNTIMES/osx-arm64/native/libownaudio_midi_ffi.dylib"
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add OwnAudio/Midi/runtimes/
+          if git diff --cached --quiet; then
+            echo "No changes in runtimes/ -- nothing to commit."
+          else
+            git commit -m "chore(midi-runtimes): update ownaudio_midi_ffi native binaries [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          fi

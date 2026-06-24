@@ -1,10 +1,13 @@
-using System.Buffers.Binary;
+using System.Runtime.InteropServices;
+using OwnAudio.Midi.Internal;
+using OwnAudio.Midi.Interop;
 
 namespace OwnAudio.Midi.File;
 
 /// <summary>
-/// Reads Standard MIDI Files (SMF) from a file path or stream and returns a <see cref="MidiFile"/> object.
-/// Supports all three MIDI file formats and handles running status, meta events, and SysEx blocks.
+/// Reads Standard MIDI Files (SMF) from a file path or stream and returns a
+/// <see cref="MidiFile"/> object. Parsing is performed by the native MIDI core;
+/// this class rebuilds the managed model from the parsed native representation.
 /// </summary>
 public static class MidiFileReader
 {
@@ -23,127 +26,102 @@ public static class MidiFileReader
     /// </summary>
     public static MidiFile Read(Stream stream)
     {
-        Span<byte> header = stackalloc byte[14];
-        stream.ReadExactly(header);
+        byte[] data = ReadAllBytes(stream);
 
-        if (header[0] != 'M' || header[1] != 'T' || header[2] != 'h' || header[3] != 'd')
-            throw new InvalidDataException("Not a valid MIDI file (missing MThd header).");
+        unsafe
+        {
+            fixed (byte* ptr = data)
+            {
+                int code = MidiNativeMethods.ownaudio_midi_v1_file_parse(
+                    ptr, (nuint)data.Length, out var fileHandle);
+                MidiErrorCodeMapper.ThrowIfError(code, nameof(Read));
+                using (fileHandle)
+                {
+                    return BuildMidiFile(fileHandle);
+                }
+            }
+        }
+    }
 
-        uint chunkLength = BinaryPrimitives.ReadUInt32BigEndian(header[4..]);
-        if (chunkLength < 6) throw new InvalidDataException("Invalid MThd chunk length.");
+    /// <summary>
+    /// Reads the entire stream contents into a byte array.
+    /// </summary>
+    private static byte[] ReadAllBytes(Stream stream)
+    {
+        if (stream is MemoryStream existing)
+        {
+            return existing.ToArray();
+        }
 
-        ushort format = BinaryPrimitives.ReadUInt16BigEndian(header[8..]);
-        ushort trackCount = BinaryPrimitives.ReadUInt16BigEndian(header[10..]);
-        ushort ticksPerBeat = BinaryPrimitives.ReadUInt16BigEndian(header[12..]);
+        using var memory = new MemoryStream();
+        stream.CopyTo(memory);
+        return memory.ToArray();
+    }
 
-        if (chunkLength > 6)
-            stream.Seek(chunkLength - 6, SeekOrigin.Current);
+    /// <summary>
+    /// Builds the managed <see cref="MidiFile"/> by querying the parsed native file.
+    /// </summary>
+    /// <param name="handle">
+    /// Handle to the parsed native MIDI file.
+    /// </param>
+    private static MidiFile BuildMidiFile(MidiFileHandle handle)
+    {
+        MidiNativeMethods.ownaudio_midi_v1_file_get_format(handle, out ushort format);
+        MidiNativeMethods.ownaudio_midi_v1_file_get_ticks_per_beat(handle, out ushort ticksPerBeat);
+        MidiNativeMethods.ownaudio_midi_v1_file_get_track_count(handle, out nuint trackCount);
 
-        var tracks = new MidiTrack[trackCount];
-        for (int i = 0; i < trackCount; i++)
-            tracks[i] = ReadTrack(stream);
+        var tracks = new MidiTrack[(int)trackCount];
+        for (nuint t = 0; t < trackCount; t++)
+        {
+            MidiNativeMethods.ownaudio_midi_v1_file_get_event_count(handle, t, out nuint eventCount);
+            var events = new List<MidiEvent>((int)eventCount);
+            for (nuint e = 0; e < eventCount; e++)
+            {
+                MidiNativeMethods.ownaudio_midi_v1_file_get_event(handle, t, e, out var nativeEvent);
+                events.Add(ConvertNativeEvent(nativeEvent));
+            }
+            tracks[(int)t] = new MidiTrack(events);
+        }
 
         return new MidiFile(format, ticksPerBeat, tracks);
     }
 
     /// <summary>
-    /// Reads a single MTrk chunk from the stream and returns the parsed <see cref="MidiTrack"/>.
+    /// Converts a native event struct into the corresponding managed <see cref="MidiEvent"/>.
     /// </summary>
-    private static MidiTrack ReadTrack(Stream stream)
+    /// <param name="nativeEvent">
+    /// The native event read from the parsed file.
+    /// </param>
+    private static MidiEvent ConvertNativeEvent(NativeMidiEvent nativeEvent)
     {
-        Span<byte> trackHeader = stackalloc byte[8];
-        stream.ReadExactly(trackHeader);
-
-        if (trackHeader[0] != 'M' || trackHeader[1] != 'T' || trackHeader[2] != 'r' || trackHeader[3] != 'k')
-            throw new InvalidDataException("Expected MTrk chunk.");
-
-        int length = (int)BinaryPrimitives.ReadUInt32BigEndian(trackHeader[4..]);
-        var data = new byte[length];
-        stream.ReadExactly(data);
-
-        return new MidiTrack(ParseEvents(data));
+        switch (nativeEvent.EventType)
+        {
+            case 1:
+                return new MidiEvent(nativeEvent.DeltaTime, nativeEvent.MetaType, ReadPayload(nativeEvent));
+            case 2:
+                return new MidiEvent(nativeEvent.DeltaTime, ReadPayload(nativeEvent));
+            default:
+                return new MidiEvent(
+                    nativeEvent.DeltaTime, nativeEvent.Status, nativeEvent.Data1, nativeEvent.Data2);
+        }
     }
 
     /// <summary>
-    /// Parses the raw track byte buffer into a list of <see cref="MidiEvent"/> instances.
-    /// Handles running status, meta events, SysEx, and two-byte message types.
+    /// Copies a native event payload into a managed byte array.
     /// </summary>
-    private static List<MidiEvent> ParseEvents(ReadOnlySpan<byte> data)
+    /// <param name="nativeEvent">
+    /// The native event whose <see cref="NativeMidiEvent.MetaData"/> is copied.
+    /// </param>
+    private static byte[] ReadPayload(NativeMidiEvent nativeEvent)
     {
-        var events = new List<MidiEvent>(64);
-        int pos = 0;
-        byte runningStatus = 0;
-
-        while (pos < data.Length)
+        int length = (int)nativeEvent.MetaDataLen;
+        if (length == 0 || nativeEvent.MetaData == IntPtr.Zero)
         {
-            int delta = ReadVarLen(data, ref pos);
-            if (pos >= data.Length) break;
-
-            byte b = data[pos];
-
-            if (b == 0xFF)
-            {
-                pos++;
-                if (pos >= data.Length) break;
-                byte metaType = data[pos++];
-                int metaLen = ReadVarLen(data, ref pos);
-                byte[] metaData = data.Slice(pos, metaLen).ToArray();
-                pos += metaLen;
-                events.Add(new MidiEvent(delta, metaType, metaData));
-                if (metaType == 0x2F) break;
-                continue;
-            }
-
-            if (b == 0xF0 || b == 0xF7)
-            {
-                pos++;
-                int sysexLen = ReadVarLen(data, ref pos);
-                var sysex = new byte[sysexLen + 1];
-                sysex[0] = b;
-                data.Slice(pos, sysexLen).CopyTo(sysex.AsSpan(1));
-                pos += sysexLen;
-                runningStatus = 0;
-                events.Add(new MidiEvent(delta, sysex));
-                continue;
-            }
-
-            if ((b & 0x80) != 0)
-            {
-                runningStatus = b;
-                pos++;
-            }
-
-            if (runningStatus == 0) continue;
-
-            byte type = (byte)(runningStatus & 0xF0);
-            byte d1 = pos < data.Length ? data[pos++] : (byte)0;
-
-            if (type == 0xC0 || type == 0xD0)
-            {
-                events.Add(new MidiEvent(delta, runningStatus, d1, 0));
-            }
-            else
-            {
-                byte d2 = pos < data.Length ? data[pos++] : (byte)0;
-                events.Add(new MidiEvent(delta, runningStatus, d1, d2));
-            }
+            return Array.Empty<byte>();
         }
 
-        return events;
-    }
-
-    /// <summary>
-    /// Reads a variable-length quantity from the byte span and advances the position.
-    /// </summary>
-    private static int ReadVarLen(ReadOnlySpan<byte> data, ref int pos)
-    {
-        int value = 0;
-        for (int i = 0; i < 4 && pos < data.Length; i++)
-        {
-            byte b = data[pos++];
-            value = (value << 7) | (b & 0x7F);
-            if ((b & 0x80) == 0) break;
-        }
-        return value;
+        var payload = new byte[length];
+        Marshal.Copy(nativeEvent.MetaData, payload, 0, length);
+        return payload;
     }
 }

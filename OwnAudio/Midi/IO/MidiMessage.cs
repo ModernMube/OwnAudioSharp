@@ -21,7 +21,7 @@ public readonly struct MidiMessage
     public readonly byte Data2;
 
     /// <summary>
-    /// Message arrival timestamp in nanoseconds.
+    /// Message arrival timestamp in microseconds.
     /// </summary>
     public readonly long Timestamp;
 

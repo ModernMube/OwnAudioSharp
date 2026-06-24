@@ -1,0 +1,16 @@
+[package]
+name = "ownaudio-midi-ffi"
+version = "1.0.0"
+edition = "2021"
+description = "C ABI FFI layer for the OwnAudioSharp MIDI core (wraps ownaudio-midi-core)"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+name = "ownaudio_midi_ffi"
+
+[dependencies]
+ownaudio-midi-core = { path = "../ownaudio-midi-core" }
+
+[build-dependencies]
+cbindgen = "0.27"
