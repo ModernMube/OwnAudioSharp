@@ -15,6 +15,7 @@ thiserror = "1.0"
 rtrb = "0.3"
 rubato = { version = "0.15", features = ["fft_resampler"] }
 log = "0.4"
+ownaudio-soundtouch = { path = "../ownaudio-soundtouch" }
 
 # Pure-Rust streaming audio decoder. Always compiled in and dependency-free at
 # runtime, so the native library loads on every platform without FFmpeg.

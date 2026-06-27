@@ -1,0 +1,13 @@
+[package]
+name = "ownaudio-soundtouch"
+version = "0.1.0"
+edition = "2021"
+description = "WSOLA time-stretch / pitch-shift / rate-transpose engine for OwnAudioSharp, ported from the C# SoundTouch.Net implementation. Self-contained, real-time safe, zero external dependencies."
+license = "LGPL-2.1-or-later"
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+
+[dev-dependencies]

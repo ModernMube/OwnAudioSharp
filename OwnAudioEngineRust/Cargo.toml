@@ -2,5 +2,6 @@
 members = [
     "ownaudio-core",
     "ownaudio-ffi",
+    "ownaudio-soundtouch",
 ]
 resolver = "2"

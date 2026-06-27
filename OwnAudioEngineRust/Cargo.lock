@@ -830,6 +830,7 @@ version = "0.1.0"
 dependencies = [
  "cpal",
  "log",
+ "ownaudio-soundtouch",
  "rtrb",
  "rubato",
  "symphonia",
@@ -844,6 +845,10 @@ dependencies = [
  "cpal",
  "ownaudio-core",
 ]
+
+[[package]]
+name = "ownaudio-soundtouch"
+version = "0.1.0"
 
 [[package]]
 name = "pin-project-lite"
