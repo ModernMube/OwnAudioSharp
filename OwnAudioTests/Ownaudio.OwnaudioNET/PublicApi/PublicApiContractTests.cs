@@ -29,6 +29,10 @@ public sealed class PublicApiContractTests
     private static readonly ApiGeneratorOptions GeneratorOptions = new()
     {
         IncludeAssemblyAttributes = false,
+        // The phase-3 Rust-backed clone lives in the temporary OwnaudioNET.RustNext namespace.
+        // It is validated separately against this same frozen baseline (namespace-normalized,
+        // see TODO items 0.2 / 3.6), so it must not leak into the original-surface contract here.
+        DenyNamespacePrefixes = new[] { "OwnaudioNET.RustNext" },
     };
 
     /// <summary>
