@@ -38,6 +38,22 @@ internal static partial class OwnAudioNative
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_mixer_play_all(IntPtr mixer);
 
+    /// <summary>
+    /// Pauses every track in the mixer in a single call against the shared clock.
+    /// </summary>
+    /// <param name="mixer">Valid mixer handle.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_pause_all(IntPtr mixer);
+
+    /// <summary>
+    /// Stops every track in the mixer in a single call against the shared clock.
+    /// </summary>
+    /// <param name="mixer">Valid mixer handle.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_stop_all(IntPtr mixer);
+
     #endregion
 
     #region Track lifecycle
@@ -129,6 +145,75 @@ internal static partial class OwnAudioNative
     /// <returns>Zero on success; non-zero error code otherwise.</returns>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_track_set_mute(IntPtr track, float muted);
+
+    #endregion
+
+    #region Track source feed
+
+    /// <summary>
+    /// Creates a lock-free ring buffer feeding the track and writes the write-side
+    /// handle to <paramref name="outSource"/>.
+    /// </summary>
+    /// <param name="mixer">Valid mixer handle that owns the track.</param>
+    /// <param name="track">Valid track handle whose source is (re)installed.</param>
+    /// <param name="capacitySamples">
+    /// Ring-buffer capacity in interleaved <c>f32</c> samples; sized for the desired
+    /// buffering latency (<c>sampleRate × channels × latencySeconds</c>).
+    /// </param>
+    /// <param name="outSource">Receives the write-side source handle on success.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_set_ring_source(
+        IntPtr mixer,
+        IntPtr track,
+        nuint capacitySamples,
+        out IntPtr outSource);
+
+    /// <summary>
+    /// Pushes up to <paramref name="sampleCount"/> interleaved <c>f32</c> samples
+    /// into the track feed and writes the number actually accepted to
+    /// <paramref name="outWritten"/>.
+    /// </summary>
+    /// <param name="source">Valid source handle.</param>
+    /// <param name="samples">Reference to the first sample to push.</param>
+    /// <param name="sampleCount">Number of samples available at <paramref name="samples"/>.</param>
+    /// <param name="outWritten">Receives the number of samples accepted.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    /// <remarks>Real-time safe and non-blocking; a full buffer accepts fewer samples.</remarks>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_source_write(
+        IntPtr source,
+        in float samples,
+        nuint sampleCount,
+        out nuint outWritten);
+
+    /// <summary>
+    /// Writes the number of samples that can currently be written without overflow
+    /// to <paramref name="outFree"/>.
+    /// </summary>
+    /// <param name="source">Valid source handle.</param>
+    /// <param name="outFree">Receives the free-sample count.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_source_free_samples(
+        IntPtr source,
+        out nuint outFree);
+
+    /// <summary>
+    /// Clears a track's audio source, silencing it.
+    /// </summary>
+    /// <param name="mixer">Valid mixer handle that owns the track.</param>
+    /// <param name="track">Valid track handle whose source is cleared.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_clear_source(IntPtr mixer, IntPtr track);
+
+    /// <summary>
+    /// Destroys a track-source write handle and releases its ring-buffer producer.
+    /// </summary>
+    /// <param name="source">Source handle to destroy; passing <see cref="IntPtr.Zero"/> is safe.</param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial void ownaudio_v1_track_source_destroy(IntPtr source);
 
     #endregion
 }

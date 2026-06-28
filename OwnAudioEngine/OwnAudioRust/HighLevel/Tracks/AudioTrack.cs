@@ -25,7 +25,15 @@ public sealed class AudioTrack : IDisposable
 {
     #region Fields
 
+    /// <summary>
+    /// Ring-buffer feed capacity expressed in seconds of audio; the native source
+    /// is sized to <c>sampleRate × channels × this</c> so producers can run ahead
+    /// of the audio thread without overflowing under normal scheduling.
+    /// </summary>
+    private const float SourceBufferSeconds = 2.0f;
+
     private readonly TrackHandle _handle;
+    private readonly TrackSourceHandle _sourceHandle;
     private readonly IntPtr _mixerHandle;
     private readonly float _sampleRate;
     private bool _disposed;
@@ -39,12 +47,26 @@ public sealed class AudioTrack : IDisposable
 
     #region Construction
 
-    internal AudioTrack(TrackHandle handle, IntPtr mixerHandle, float sampleRate)
+    internal AudioTrack(TrackHandle handle, IntPtr mixerHandle, float sampleRate, ushort channels)
     {
         _handle      = handle;
         _mixerHandle = mixerHandle;
         _sampleRate  = sampleRate;
         Effects      = new TrackEffectChain(mixerHandle, handle.DangerousGetHandle());
+
+        // Install a lock-free ring buffer as the track's audio source so decoded
+        // samples can be pushed via Write from any thread; the audio thread owns
+        // the read side. Size it for a couple of seconds of look-ahead.
+        nuint capacity = (nuint)Math.Max(1, (long)(sampleRate * Math.Max((ushort)1, channels) * SourceBufferSeconds));
+        int code = OwnAudioNative.ownaudio_v1_track_set_ring_source(
+            mixerHandle,
+            handle.DangerousGetHandle(),
+            capacity,
+            out IntPtr rawSource);
+        ErrorCodeMapper.ThrowIfError(code, nameof(AudioTrack));
+
+        _sourceHandle = new TrackSourceHandle();
+        Marshal.InitHandle(_sourceHandle, rawSource);
     }
 
     #endregion
@@ -172,6 +194,57 @@ public sealed class AudioTrack : IDisposable
 
     #endregion
 
+    #region Source feed
+
+    /// <summary>
+    /// Pushes decoded interleaved <c>f32</c> samples into the track's lock-free
+    /// audio feed and returns the number of samples actually accepted.
+    /// </summary>
+    /// <remarks>
+    /// Real-time safe and non-blocking: when the native ring buffer is full, fewer
+    /// samples (or zero) are accepted and the caller should retry the remainder
+    /// later. Samples are interleaved per the session's channel count. Use
+    /// <see cref="FreeSampleCount"/> to size writes against the available space.
+    /// </remarks>
+    /// <param name="samples">Interleaved samples to push.</param>
+    /// <returns>The number of samples accepted into the buffer.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the track is disposed.</exception>
+    public int Write(ReadOnlySpan<float> samples)
+    {
+        ThrowIfDisposed();
+        if (samples.IsEmpty)
+        {
+            return 0;
+        }
+
+        int code = OwnAudioNative.ownaudio_v1_track_source_write(
+            _sourceHandle.DangerousGetHandle(),
+            in MemoryMarshal.GetReference(samples),
+            (nuint)samples.Length,
+            out nuint written);
+        ErrorCodeMapper.ThrowIfError(code, nameof(Write));
+        return (int)written;
+    }
+
+    /// <summary>
+    /// Gets the number of samples that can currently be written without overflow.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown when the track is disposed.</exception>
+    public int FreeSampleCount
+    {
+        get
+        {
+            ThrowIfDisposed();
+            int code = OwnAudioNative.ownaudio_v1_track_source_free_samples(
+                _sourceHandle.DangerousGetHandle(),
+                out nuint free);
+            ErrorCodeMapper.ThrowIfError(code, nameof(FreeSampleCount));
+            return (int)free;
+        }
+    }
+
+    #endregion
+
     #region IDisposable
 
     /// <summary>
@@ -181,6 +254,7 @@ public sealed class AudioTrack : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _sourceHandle.Dispose();
         _handle.Dispose();
     }
 

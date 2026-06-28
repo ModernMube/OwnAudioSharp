@@ -46,6 +46,41 @@ internal static unsafe partial class OwnAudioNative
         out IntPtr outStream);
 
     /// <summary>
+    /// Opens an output stream driven directly by a multi-track mixer and writes
+    /// its handle to <paramref name="outStream"/>.
+    /// </summary>
+    /// <param name="engine">Valid handle from <see cref="ownaudio_v1_engine_create"/>.</param>
+    /// <param name="mixer">
+    /// Valid handle from <see cref="ownaudio_v1_mixer_create"/>.  Its sample rate
+    /// and channel count must match <paramref name="config"/>.  The mixer is moved
+    /// onto the audio thread and renders every buffer itself, so no managed
+    /// callback is involved.
+    /// </param>
+    /// <param name="deviceName">
+    /// Pointer to a null-terminated UTF-8 device name, or <see cref="IntPtr.Zero"/>
+    /// to use the system default output device.
+    /// </param>
+    /// <param name="config">Pointer to a filled <see cref="NativeStreamConfig"/>; must not be null.</param>
+    /// <param name="outStream">Receives the new stream handle on success.</param>
+    /// <returns>
+    /// <see cref="NativeErrorCode.Success"/> (0) on success;
+    /// a non-zero <see cref="NativeErrorCode"/> otherwise.
+    /// </returns>
+    /// <remarks>
+    /// The stream starts paused; call <see cref="ownaudio_v1_output_stream_play"/>
+    /// to begin output.  Destroy the stream before destroying the mixer.
+    /// Mirrors:
+    /// <c>ownaudio_v1_mixer_open_output_stream(engine, mixer, device_name, config, out_stream) → i32</c>
+    /// </remarks>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_open_output_stream(
+        IntPtr engine,
+        IntPtr mixer,
+        IntPtr deviceName,
+        in NativeStreamConfig config,
+        out IntPtr outStream);
+
+    /// <summary>
     /// Starts (or resumes) audio output on the given stream.
     /// </summary>
     /// <param name="stream">Valid handle from <see cref="ownaudio_v1_open_output_stream"/>.</param>

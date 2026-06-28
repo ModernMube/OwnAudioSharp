@@ -2,12 +2,15 @@
 //!
 //! Faithful Rust port of the reference C# `OwnaudioNET.Effects.LimiterEffect`
 //! DSP: a look-ahead delay line feeds a sliding-window-maximum peak detector
-//! (an array-based monotonic deque, O(1) amortized, zero-allocation), the
-//! per-sample required gain reduction is stored in an envelope buffer, and the
-//! applied gain is the minimum over the active window, smoothed with an adaptive
-//! release toward unity (instant attack).  A final hard ceiling clamps the
-//! output.  All buffers are pre-allocated at the maximum look-ahead size during
-//! construction, so parameter changes never reallocate on the audio thread.
+//! (an array-based monotonic deque, O(1) amortized, zero-allocation); the
+//! per-sample required gain reduction feeds a second, sliding-window-**minimum**
+//! monotonic deque, and the applied gain is that window minimum, smoothed with
+//! an adaptive release toward unity (instant attack).  The window minimum is the
+//! same value the reference computes with a per-sample linear scan of an
+//! envelope buffer, but computed in O(1) amortized rather than O(window).  A
+//! final hard ceiling clamps the output.  All buffers are pre-allocated at the
+//! maximum look-ahead size during construction, so parameter changes never
+//! reallocate on the audio thread.
 //! Parameter identifiers, ranges and defaults mirror the C# effect (threshold,
 //! ceiling and release are dB / ms facing on both sides) so the two
 //! implementations are numerically equivalent (the basis of the 2.2 reference
@@ -68,18 +71,26 @@ pub struct Limiter {
     lookahead_samples: usize,
     active_buffer_size: usize,
 
-    // Look-ahead delay line and per-sample required-gain envelope.
+    // Look-ahead delay line.
     delay_buffer: Vec<f32>,
-    envelope_buffer: Vec<f32>,
     delay_index: usize,
-    envelope_index: usize,
 
-    // Monotonic deque for the sliding-window maximum (array-based, circular).
+    // Monotonic deque for the sliding-window maximum of |input| (array-based,
+    // circular).
     deque_indices: Vec<i64>,
     deque_values: Vec<f32>,
     deque_head: usize,
     deque_tail: usize,
     deque_size: usize,
+
+    // Monotonic deque for the sliding-window minimum of the required gain.
+    // Replaces the former per-sample linear scan over an envelope buffer with an
+    // O(1) amortized window minimum that returns the identical value.
+    min_deque_indices: Vec<i64>,
+    min_deque_values: Vec<f32>,
+    min_deque_head: usize,
+    min_deque_tail: usize,
+    min_deque_size: usize,
 
     current_gain: f32,
     target_gain: f32,
@@ -113,14 +124,17 @@ impl Limiter {
             lookahead_samples,
             active_buffer_size: lookahead_samples,
             delay_buffer: vec![0.0; max_buffer_size],
-            envelope_buffer: vec![1.0; max_buffer_size],
             delay_index: 0,
-            envelope_index: 0,
             deque_indices: vec![0; max_buffer_size],
             deque_values: vec![0.0; max_buffer_size],
             deque_head: 0,
             deque_tail: 0,
             deque_size: 0,
+            min_deque_indices: vec![0; max_buffer_size],
+            min_deque_values: vec![0.0; max_buffer_size],
+            min_deque_head: 0,
+            min_deque_tail: 0,
+            min_deque_size: 0,
             current_gain: 1.0,
             target_gain: 1.0,
             absolute_sample_index: 0,
@@ -134,17 +148,16 @@ impl Limiter {
         for s in self.delay_buffer.iter_mut().take(self.active_buffer_size) {
             *s = 0.0;
         }
-        for s in self.envelope_buffer.iter_mut().take(self.active_buffer_size) {
-            *s = 1.0;
-        }
         self.current_gain = 1.0;
         self.target_gain = 1.0;
         self.delay_index = 0;
-        self.envelope_index = 0;
         self.absolute_sample_index = 0;
         self.deque_head = 0;
         self.deque_tail = 0;
         self.deque_size = 0;
+        self.min_deque_head = 0;
+        self.min_deque_tail = 0;
+        self.min_deque_size = 0;
     }
 
     /// Recomputes the look-ahead window from `lookahead_ms`; resets when it
@@ -192,6 +205,37 @@ impl Limiter {
         }
     }
 
+    /// Sliding-window minimum of the required gain over the active window
+    /// (monotonic deque).  Pushes `required` for the current sample and returns
+    /// the window minimum — the same value the former linear scan of the
+    /// envelope buffer produced, computed in O(1) amortized.
+    fn min_gain_window(&mut self, required: f32) -> f32 {
+        let expire_threshold = self.absolute_sample_index - self.active_buffer_size as i64;
+
+        while self.min_deque_size > 0
+            && self.min_deque_indices[self.min_deque_head] <= expire_threshold
+        {
+            self.min_deque_head = (self.min_deque_head + 1) % self.max_buffer_size;
+            self.min_deque_size -= 1;
+        }
+
+        while self.min_deque_size > 0 {
+            let back_idx = (self.min_deque_tail + self.max_buffer_size - 1) % self.max_buffer_size;
+            if self.min_deque_values[back_idx] <= required {
+                break;
+            }
+            self.min_deque_tail = back_idx;
+            self.min_deque_size -= 1;
+        }
+
+        self.min_deque_indices[self.min_deque_tail] = self.absolute_sample_index;
+        self.min_deque_values[self.min_deque_tail] = required;
+        self.min_deque_tail = (self.min_deque_tail + 1) % self.max_buffer_size;
+        self.min_deque_size += 1;
+
+        self.min_deque_values[self.min_deque_head]
+    }
+
     /// Required instantaneous gain for a given window peak (reference parity).
     fn gain_reduction(&self, peak_level: f32) -> f32 {
         if peak_level <= self.threshold_lin {
@@ -202,16 +246,9 @@ impl Limiter {
         (target_level / peak_level).max(MIN_GAIN)
     }
 
-    /// Smoothed gain: minimum required gain over the active window, with instant
-    /// attack and an adaptive release toward unity (reference parity).
-    fn smoothed_gain(&mut self) -> f32 {
-        let mut min_gain = 1.0f32;
-        for &g in self.envelope_buffer.iter().take(self.active_buffer_size) {
-            if g < min_gain {
-                min_gain = g;
-            }
-        }
-
+    /// Smoothed gain from the window-minimum required gain, with instant attack
+    /// and an adaptive release toward unity (reference parity).
+    fn smoothed_gain(&mut self, min_gain: f32) -> f32 {
         self.target_gain = min_gain;
 
         if self.target_gain < self.current_gain {
@@ -265,9 +302,9 @@ impl Effect for Limiter {
 
             let peak = self.peak_level();
             let required = self.gain_reduction(peak);
-            self.envelope_buffer[self.envelope_index] = required;
+            let min_gain = self.min_gain_window(required);
 
-            let mut smooth = self.smoothed_gain();
+            let mut smooth = self.smoothed_gain(min_gain);
             if !smooth.is_finite() {
                 smooth = 1.0;
                 self.current_gain = 1.0;
@@ -280,7 +317,6 @@ impl Effect for Limiter {
             *sample = processed;
 
             self.delay_index = (self.delay_index + 1) % self.active_buffer_size;
-            self.envelope_index = (self.envelope_index + 1) % self.active_buffer_size;
             self.absolute_sample_index += 1;
         }
     }

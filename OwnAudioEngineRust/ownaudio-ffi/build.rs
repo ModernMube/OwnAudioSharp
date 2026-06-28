@@ -45,6 +45,13 @@ fn main() {
     )
     .expect("Unable to read cbindgen.toml");
 
+    // Regenerate the header whenever any FFI source changes, otherwise cargo
+    // would cache the build-script output (it only re-runs on the explicitly
+    // declared rerun-if-changed inputs above) and the header would drift out of
+    // sync with newly added or changed `extern "C"` exports.
+    println!("cargo:rerun-if-changed=src");
+    println!("cargo:rerun-if-changed=cbindgen.toml");
+
     cbindgen::Builder::new()
         .with_crate(&crate_dir)
         .with_config(config)

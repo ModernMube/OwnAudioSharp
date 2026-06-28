@@ -34,7 +34,14 @@ use std::sync::Arc;
 
 use crate::effects::{Effect, EffectEntry};
 
-use super::track::{Track, TrackShared, TrackSource};
+use super::track::{Track, TrackShared, TrackSource, TrackState};
+
+/// Upper bound (exclusive) of effect parameter ids probed for their default
+/// values when an effect is added, so the control-side shadow can answer
+/// [`MixerController::get_effect_param`] while the effect itself lives on the
+/// audio thread.  Every effect parameter id in this crate falls well below this
+/// bound (the widest, the 30-band equaliser, reaches id 31).
+const PARAM_PROBE_MAX: u32 = 64;
 
 /// A structural change to be applied by the audio thread at the top of the next
 /// render block.  Payloads that own heap memory are carried by value so moving
@@ -107,6 +114,47 @@ pub enum CommandError {
     QueueFull,
 }
 
+/// Control-side mirror of one effect's parameter values.
+///
+/// The effect itself is owned by the audio thread once it has been drained from
+/// the command queue, so its parameters can no longer be read directly from the
+/// control thread.  This shadow caches every parameter value — seeded with the
+/// effect's defaults when it is added and updated on every
+/// [`MixerController::set_effect_param`] — so `get_param` can be answered
+/// synchronously without ever touching the audio thread.
+struct EffectShadow {
+    /// Stable effect id this shadow mirrors.
+    effect_id: u64,
+    /// Id of the track that owns the effect, so the shadow can be dropped when
+    /// the whole track is removed.
+    track_id: u64,
+    /// Cached `(param_id, value)` pairs.  A small linear vector: the parameter
+    /// count per effect is tiny (≤ 32) and lookups happen off the audio thread.
+    params: Vec<(u32, f32)>,
+}
+
+impl EffectShadow {
+    /// Returns the cached value for `param_id`, or `None` when unknown.
+    fn get(&self, param_id: u32) -> Option<f32> {
+        self.params
+            .iter()
+            .find(|(id, _)| *id == param_id)
+            .map(|(_, v)| *v)
+    }
+
+    /// Updates the cached value for `param_id`.  Returns `true` when the
+    /// parameter is one this effect exposes (i.e. it was seeded at add time).
+    fn set(&mut self, param_id: u32, value: f32) -> bool {
+        match self.params.iter_mut().find(|(id, _)| *id == param_id) {
+            Some(slot) => {
+                slot.1 = value;
+                true
+            }
+            None => false,
+        }
+    }
+}
+
 /// The audio-thread end of the command channel: the command queue to drain and
 /// the retirement queue to push removed resources onto.
 ///
@@ -134,6 +182,10 @@ pub struct MixerController {
     /// Live tracks' shared parameter blocks, kept so the control thread can
     /// answer parameter queries without reaching into the mixer.
     track_registry: Vec<(u64, Arc<TrackShared>)>,
+    /// Control-side shadow of each live effect's parameters (see
+    /// [`EffectShadow`]), so `get_param` is answerable while the effect lives on
+    /// the audio thread.
+    effect_shadows: Vec<EffectShadow>,
 }
 
 /// Creates a paired [`MixerController`] / [`CommandReceiver`].
@@ -159,6 +211,7 @@ pub fn command_channel(
         sample_rate,
         max_buffer_size: max_buffer_size.max(1),
         track_registry: Vec::with_capacity(super::MAX_TRACKS),
+        effect_shadows: Vec::new(),
     };
     let receiver = CommandReceiver {
         commands: cmd_rx,
@@ -207,7 +260,44 @@ impl MixerController {
         }
         self.enqueue(MixerCommand::RemoveTrack(id))?;
         self.track_registry.retain(|(tid, _)| *tid != id);
+        // Drop the shadows of every effect that lived on the removed track.
+        self.effect_shadows.retain(|s| s.track_id != id);
         Ok(true)
+    }
+
+    /// Starts every registered track at once by flipping its shared state to
+    /// [`TrackState::Playing`] from the control thread.
+    ///
+    /// Because all the state writes complete before the audio thread reads them
+    /// in the next [`MultiTrackMixer::mix`], every track begins on the same
+    /// render block — a sample-accurate start — without a per-track round-trip.
+    /// Works whether or not the mixer has been moved onto the audio thread,
+    /// since it touches only the shared (atomic) blocks the controller holds.
+    pub fn play_all(&self) {
+        for (_, shared) in &self.track_registry {
+            shared.set_state(TrackState::Playing);
+        }
+    }
+
+    /// Pauses every registered track at once by flipping its shared state to
+    /// [`TrackState::Paused`] from the control thread.
+    ///
+    /// Like [`play_all`](Self::play_all), every state write completes before the
+    /// audio thread reads them in the next [`MultiTrackMixer::mix`], so all
+    /// tracks pause on the same render block without a per-track round-trip.
+    pub fn pause_all(&self) {
+        for (_, shared) in &self.track_registry {
+            shared.set_state(TrackState::Paused);
+        }
+    }
+
+    /// Stops every registered track at once by flipping its shared state to
+    /// [`TrackState::Stopped`] from the control thread (sample-accurate, no
+    /// per-track round-trip).
+    pub fn stop_all(&self) {
+        for (_, shared) in &self.track_registry {
+            shared.set_state(TrackState::Stopped);
+        }
     }
 
     /// Enqueues a replacement of the track's audio source.
@@ -220,52 +310,110 @@ impl MixerController {
     }
 
     /// Builds an effect insertion command, returning the new effect's stable id.
+    ///
+    /// Before the effect is handed to the audio thread its default parameter
+    /// values are probed (param ids `0..PARAM_PROBE_MAX`) and cached in a
+    /// control-side shadow, so [`MixerController::get_effect_param`] can read
+    /// them back synchronously afterwards.
     pub fn add_effect(
         &mut self,
         track_id: u64,
         effect: Box<dyn Effect>,
     ) -> Result<u64, CommandError> {
         let effect_id = self.next_effect_id;
+
+        // Snapshot the effect's defaults before it moves to the audio thread.
+        let mut params = Vec::new();
+        for param_id in 0..PARAM_PROBE_MAX {
+            if let Some(value) = effect.get_param(param_id) {
+                params.push((param_id, value));
+            }
+        }
+
         self.enqueue(MixerCommand::AddEffect {
             track_id,
             effect_id,
             effect,
         })?;
         self.next_effect_id += 1;
+        self.effect_shadows.push(EffectShadow {
+            effect_id,
+            track_id,
+            params,
+        });
         Ok(effect_id)
     }
 
-    /// Enqueues removal of an effect by id.
+    /// Enqueues removal of an effect by id and drops its parameter shadow.
     pub fn remove_effect(&mut self, track_id: u64, effect_id: u64) -> Result<(), CommandError> {
         self.enqueue(MixerCommand::RemoveEffect {
             track_id,
             effect_id,
-        })
+        })?;
+        self.effect_shadows.retain(|s| s.effect_id != effect_id);
+        Ok(())
     }
 
-    /// Enqueues a parameter change on an effect.
+    /// Enqueues a parameter change on an effect, updating the control-side
+    /// shadow so a subsequent [`MixerController::get_effect_param`] reflects it.
+    ///
+    /// Returns `Ok(true)` when the effect exposes `param_id` (the change is
+    /// queued), `Ok(false)` when the parameter is unknown for this effect (no
+    /// command is enqueued), mirroring the effect's own `set_param` contract.
     pub fn set_effect_param(
         &mut self,
         track_id: u64,
         effect_id: u64,
         param_id: u32,
         value: f32,
-    ) -> Result<(), CommandError> {
+    ) -> Result<bool, CommandError> {
+        let known = match self
+            .effect_shadows
+            .iter_mut()
+            .find(|s| s.effect_id == effect_id)
+        {
+            Some(shadow) => shadow.set(param_id, value),
+            None => false,
+        };
+
+        if !known {
+            return Ok(false);
+        }
+
         self.enqueue(MixerCommand::SetEffectParam {
             track_id,
             effect_id,
             param_id,
             value,
-        })
+        })?;
+        Ok(true)
     }
 
-    /// Enqueues an enable/bypass change on an effect.
+    /// Reads back an effect parameter from the control-side shadow.
+    ///
+    /// Returns `None` when the effect or parameter is unknown.
+    pub fn get_effect_param(&self, effect_id: u64, param_id: u32) -> Option<f32> {
+        self.effect_shadows
+            .iter()
+            .find(|s| s.effect_id == effect_id)
+            .and_then(|s| s.get(param_id))
+    }
+
+    /// Enqueues an enable/bypass change on an effect, keeping the control-side
+    /// shadow's [`PARAM_ENABLED`](crate::effects::PARAM_ENABLED) entry in step.
     pub fn set_effect_enabled(
         &mut self,
         track_id: u64,
         effect_id: u64,
         enabled: bool,
     ) -> Result<(), CommandError> {
+        if let Some(shadow) = self
+            .effect_shadows
+            .iter_mut()
+            .find(|s| s.effect_id == effect_id)
+        {
+            shadow.set(crate::effects::PARAM_ENABLED, if enabled { 1.0 } else { 0.0 });
+        }
         self.enqueue(MixerCommand::SetEffectEnabled {
             track_id,
             effect_id,
@@ -311,7 +459,7 @@ impl Drop for MixerController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::effects::{EffectType, PARAM_ENABLED};
+    use crate::effects::{EffectType, PARAM_ENABLED, PARAM_MIX};
     use crate::multitrack::{MultiTrackMixer, TrackState};
 
     /// In-memory source yielding a fixed buffer once, then silence.
@@ -576,6 +724,113 @@ mod tests {
         // to remember to drain, and the audio thread never sees a full queue.
         ctl.add_track().unwrap();
         assert_eq!(ctl.collect_retired(), 0);
+    }
+
+    #[test]
+    fn play_all_via_controller_starts_registered_tracks() {
+        // The controller can start every track through the shared blocks alone,
+        // so play_all works even though the mixer owns the tracks.
+        let (mut ctl, mut mixer) = wired();
+        let (a, _) = ctl.add_track().unwrap();
+        let (b, _) = ctl.add_track().unwrap();
+        ctl.set_track_source(a, Some(Box::new(VecSource::new(vec![1.0; 4]))))
+            .unwrap();
+        ctl.set_track_source(b, Some(Box::new(VecSource::new(vec![2.0; 4]))))
+            .unwrap();
+
+        // Nothing audible before play_all.
+        let mut pre = [0.0f32; 4];
+        mixer.mix(&mut pre);
+        assert_eq!(pre, [0.0, 0.0, 0.0, 0.0]);
+
+        ctl.play_all();
+        let mut out = [0.0f32; 4];
+        mixer.mix(&mut out);
+        for &s in &out {
+            assert!((s - 3.0).abs() < 1e-6, "out={out:?}");
+        }
+    }
+
+    #[test]
+    fn effect_shadow_seeds_defaults_and_reflects_writes() {
+        let (mut ctl, _mixer) = wired();
+        let (id, _shared) = ctl.add_track().unwrap();
+        let eid = ctl
+            .add_effect(
+                id,
+                Box::new(ScalarGain {
+                    enabled: true,
+                    gain: 2.0,
+                }),
+            )
+            .unwrap();
+
+        // Defaults were probed at add time and are readable synchronously.
+        assert_eq!(ctl.get_effect_param(eid, PARAM_GAIN), Some(2.0));
+        assert_eq!(ctl.get_effect_param(eid, PARAM_ENABLED), Some(1.0));
+        // Unknown parameter / unknown effect → None.
+        assert_eq!(ctl.get_effect_param(eid, 999), None);
+        assert_eq!(ctl.get_effect_param(12345, PARAM_GAIN), None);
+
+        // A known write returns true and updates the shadow.
+        assert_eq!(ctl.set_effect_param(id, eid, PARAM_GAIN, 5.0), Ok(true));
+        assert_eq!(ctl.get_effect_param(eid, PARAM_GAIN), Some(5.0));
+
+        // An unknown write returns false and leaves the shadow untouched.
+        assert_eq!(ctl.set_effect_param(id, eid, 999, 1.0), Ok(false));
+        assert_eq!(ctl.get_effect_param(eid, 999), None);
+
+        // set_effect_enabled keeps the PARAM_ENABLED shadow in step.
+        ctl.set_effect_enabled(id, eid, false).unwrap();
+        assert_eq!(ctl.get_effect_param(eid, PARAM_ENABLED), Some(0.0));
+    }
+
+    #[test]
+    fn effect_shadow_seeds_real_effect_defaults() {
+        // A real effect's defaults must be captured by the probe, not just the
+        // test stub's.  Distortion exposes drive (id 2) defaulting to 2.0.
+        use crate::effects::Distortion;
+        let (mut ctl, _mixer) = wired();
+        let (id, _shared) = ctl.add_track().unwrap();
+        let eid = ctl
+            .add_effect(id, Box::new(Distortion::new(48_000.0)))
+            .unwrap();
+        const PARAM_DRIVE: u32 = 2;
+        assert_eq!(ctl.get_effect_param(eid, PARAM_DRIVE), Some(2.0));
+        assert!(ctl.get_effect_param(eid, PARAM_MIX).is_some());
+    }
+
+    #[test]
+    fn removing_effect_and_track_drops_their_shadows() {
+        let (mut ctl, _mixer) = wired();
+        let (id, _shared) = ctl.add_track().unwrap();
+        let eid = ctl
+            .add_effect(
+                id,
+                Box::new(ScalarGain {
+                    enabled: true,
+                    gain: 1.0,
+                }),
+            )
+            .unwrap();
+        assert!(ctl.get_effect_param(eid, PARAM_GAIN).is_some());
+
+        ctl.remove_effect(id, eid).unwrap();
+        assert_eq!(ctl.get_effect_param(eid, PARAM_GAIN), None);
+
+        // Effect shadows are also dropped when the whole track is removed.
+        let eid2 = ctl
+            .add_effect(
+                id,
+                Box::new(ScalarGain {
+                    enabled: true,
+                    gain: 1.0,
+                }),
+            )
+            .unwrap();
+        assert!(ctl.get_effect_param(eid2, PARAM_GAIN).is_some());
+        ctl.remove_track(id).unwrap();
+        assert_eq!(ctl.get_effect_param(eid2, PARAM_GAIN), None);
     }
 
     #[test]

@@ -27,7 +27,7 @@ public sealed class AudioOutputStream : IDisposable
     #region Fields
 
     private readonly AudioOutputStreamHandle _handle;
-    private readonly AudioOutputCallbackMarshaller _marshaller;
+    private readonly AudioOutputCallbackMarshaller? _marshaller;
     private bool _disposed;
 
     #endregion
@@ -47,11 +47,17 @@ public sealed class AudioOutputStream : IDisposable
 
     private AudioOutputStream(
         AudioOutputStreamHandle handle,
-        AudioOutputCallbackMarshaller marshaller)
+        AudioOutputCallbackMarshaller? marshaller)
     {
         _handle     = handle;
         _marshaller = marshaller;
-        _marshaller.CallbackError += (_, ex) => CallbackError?.Invoke(this, ex);
+
+        // Mixer-driven streams render natively and have no managed callback, so
+        // there is no marshaller to forward errors from.
+        if (_marshaller is not null)
+        {
+            _marshaller.CallbackError += (_, ex) => CallbackError?.Invoke(this, ex);
+        }
     }
 
     /// <summary>
@@ -101,6 +107,53 @@ public sealed class AudioOutputStream : IDisposable
         Marshal.InitHandle(handle, rawStream);
 
         return new AudioOutputStream(handle, marshaller);
+    }
+
+    /// <summary>
+    /// Opens an output stream driven directly by a native multi-track mixer.
+    /// Called exclusively by <see cref="AudioEngine"/>.
+    /// </summary>
+    /// <remarks>
+    /// The mixer renders every buffer on the audio thread itself, so there is no
+    /// managed callback and no per-buffer P/Invoke.
+    /// </remarks>
+    internal static unsafe AudioOutputStream OpenMixerDriven(
+        AudioEngineHandle engine,
+        MixerHandle mixer,
+        AudioDevice? device,
+        AudioStreamConfig config)
+    {
+        NativeStreamConfig nativeConfig = config.ToNative();
+        IntPtr deviceNamePtr = device is not null
+            ? Marshal.StringToCoTaskMemUTF8(device.Name)
+            : IntPtr.Zero;
+
+        int code;
+        IntPtr rawStream;
+
+        try
+        {
+            code = OwnAudioNative.ownaudio_v1_mixer_open_output_stream(
+                engine.DangerousGetHandle(),
+                mixer.DangerousGetHandle(),
+                deviceNamePtr,
+                in nativeConfig,
+                out rawStream);
+        }
+        finally
+        {
+            if (deviceNamePtr != IntPtr.Zero)
+            {
+                Marshal.FreeCoTaskMem(deviceNamePtr);
+            }
+        }
+
+        ErrorCodeMapper.ThrowIfError(code, nameof(OpenMixerDriven));
+
+        var handle = new AudioOutputStreamHandle();
+        Marshal.InitHandle(handle, rawStream);
+
+        return new AudioOutputStream(handle, marshaller: null);
     }
 
     #endregion
@@ -154,7 +207,7 @@ public sealed class AudioOutputStream : IDisposable
 
         // Destroy the native stream first so the callback stops firing before the pin is freed.
         _handle.Dispose();
-        _marshaller.Dispose();
+        _marshaller?.Dispose();
     }
 
     #endregion

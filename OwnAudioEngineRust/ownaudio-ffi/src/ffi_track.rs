@@ -1,12 +1,19 @@
 //! FFI exports for mixer and track lifecycle management.
 
-use ownaudio_core::multitrack::MultiTrackMixer;
+use ownaudio_core::multitrack::{command_channel, MultiTrackMixer};
 
-use crate::error_code::OwnAudioErrorCode;
+use crate::error_code::{set_last_error, OwnAudioErrorCode};
 use crate::handles::{
     mixer_from_ptr, track_from_ptr, MixerWrapper, OwnAudioMixerHandle, OwnAudioTrackHandle,
     TrackWrapper,
 };
+
+/// Capacity of the control→audio command ring buffer (and its retirement
+/// return queue).  Comfortably exceeds the mixer's [`MAX_TRACKS`] so a burst of
+/// structural changes never overflows before the audio thread drains them.
+///
+/// [`MAX_TRACKS`]: ownaudio_core::multitrack::MAX_TRACKS
+const COMMAND_QUEUE_CAPACITY: usize = 1024;
 
 // ---------------------------------------------------------------------------
 // Mixer lifecycle
@@ -30,8 +37,17 @@ pub extern "C" fn ownaudio_v1_mixer_create(
             return OwnAudioErrorCode::NullPointer as i32;
         }
 
-        let mixer = MultiTrackMixer::new(sample_rate, channels);
-        let boxed = Box::new(MixerWrapper { inner: mixer });
+        let mut mixer = MultiTrackMixer::new(sample_rate, channels);
+        let (controller, receiver) =
+            command_channel(COMMAND_QUEUE_CAPACITY, mixer.sample_rate(), mixer.max_buffer_size());
+        mixer.attach_command_receiver(receiver);
+
+        let boxed = Box::new(MixerWrapper {
+            controller,
+            mixer: Some(mixer),
+            sample_rate,
+            channels,
+        });
 
         unsafe {
             *out_mixer = Box::into_raw(boxed) as *mut OwnAudioMixerHandle;
@@ -77,7 +93,53 @@ pub extern "C" fn ownaudio_v1_mixer_play_all(mixer: *mut OwnAudioMixerHandle) ->
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        wrapper.inner.play_all();
+        wrapper.controller.play_all();
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Pauses every track in the mixer in a single call, against the shared clock.
+///
+/// Sets all tracks to the paused state from the control thread in one
+/// operation, so they pause on the same audio callback — avoiding the per-track
+/// P/Invoke round-trips and the synchronisation drift they would introduce.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_mixer_pause_all(mixer: *mut OwnAudioMixerHandle) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        wrapper.controller.pause_all();
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Stops every track in the mixer in a single call, against the shared clock.
+///
+/// Sets all tracks to the stopped state from the control thread in one
+/// operation, so they stop on the same audio callback — avoiding the per-track
+/// P/Invoke round-trips and the synchronisation drift they would introduce.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_mixer_stop_all(mixer: *mut OwnAudioMixerHandle) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        wrapper.controller.stop_all();
 
         OwnAudioErrorCode::Success as i32
     }));
@@ -110,7 +172,13 @@ pub extern "C" fn ownaudio_v1_track_create(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let (id, shared) = wrapper.inner.add_track();
+        let (id, shared) = match wrapper.controller.add_track() {
+            Ok(pair) => pair,
+            Err(_) => {
+                set_last_error("mixer command queue is full; track not added");
+                return OwnAudioErrorCode::InternalError as i32;
+            }
+        };
 
         let track_wrapper = Box::new(TrackWrapper {
             mixer: mixer as *mut MixerWrapper,
@@ -172,8 +240,13 @@ pub extern "C" fn ownaudio_v1_track_remove(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        mixer_wrapper.inner.remove_track(track_wrapper.id);
-        OwnAudioErrorCode::Success as i32
+        match mixer_wrapper.controller.remove_track(track_wrapper.id) {
+            Ok(_) => OwnAudioErrorCode::Success as i32,
+            Err(_) => {
+                set_last_error("mixer command queue is full; track not removed");
+                OwnAudioErrorCode::InternalError as i32
+            }
+        }
     }));
 
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)

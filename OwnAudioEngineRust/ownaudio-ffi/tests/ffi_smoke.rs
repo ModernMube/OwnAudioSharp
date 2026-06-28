@@ -171,3 +171,154 @@ fn output_stream_create_play_pause_destroy_smoke() {
 
     ownaudio_v1_engine_destroy(engine);
 }
+
+// ---------------------------------------------------------------------------
+// Track-source feed (ring buffer) tests
+// ---------------------------------------------------------------------------
+
+mod track_source {
+    use ownaudio_ffi::error_code::OwnAudioErrorCode;
+    use ownaudio_ffi::ffi_source::{
+        ownaudio_v1_track_clear_source, ownaudio_v1_track_set_ring_source,
+        ownaudio_v1_track_source_destroy, ownaudio_v1_track_source_free_samples,
+        ownaudio_v1_track_source_write,
+    };
+    use ownaudio_ffi::ffi_track::{
+        ownaudio_v1_mixer_create, ownaudio_v1_mixer_destroy, ownaudio_v1_mixer_pause_all,
+        ownaudio_v1_mixer_play_all, ownaudio_v1_mixer_stop_all, ownaudio_v1_track_create,
+        ownaudio_v1_track_destroy,
+    };
+    use ownaudio_ffi::handles::{
+        OwnAudioMixerHandle, OwnAudioTrackHandle, OwnAudioTrackSourceHandle,
+    };
+
+    #[test]
+    fn transport_all_null_handle_is_invalid_handle() {
+        assert_eq!(
+            ownaudio_v1_mixer_pause_all(std::ptr::null_mut()),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        assert_eq!(
+            ownaudio_v1_mixer_stop_all(std::ptr::null_mut()),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+    }
+
+    #[test]
+    fn mixer_play_pause_stop_all_smoke() {
+        let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_mixer_create(48_000.0, 2, &mut mixer),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        let mut track_a: *mut OwnAudioTrackHandle = std::ptr::null_mut();
+        let mut track_b: *mut OwnAudioTrackHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_track_create(mixer, &mut track_a),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(
+            ownaudio_v1_track_create(mixer, &mut track_b),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        assert_eq!(
+            ownaudio_v1_mixer_play_all(mixer),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(
+            ownaudio_v1_mixer_pause_all(mixer),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(
+            ownaudio_v1_mixer_stop_all(mixer),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        ownaudio_v1_track_destroy(track_a);
+        ownaudio_v1_track_destroy(track_b);
+        ownaudio_v1_mixer_destroy(mixer);
+    }
+
+    #[test]
+    fn write_null_handle_is_null_pointer() {
+        let mut written: usize = 123;
+        let samples = [0.0f32; 4];
+        let code = ownaudio_v1_track_source_write(
+            std::ptr::null_mut(),
+            samples.as_ptr(),
+            samples.len(),
+            &mut written,
+        );
+        assert_eq!(code, OwnAudioErrorCode::NullPointer as i32);
+    }
+
+    #[test]
+    fn destroy_null_is_safe() {
+        ownaudio_v1_track_source_destroy(std::ptr::null_mut());
+    }
+
+    #[test]
+    fn set_ring_source_write_and_free_smoke() {
+        let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_mixer_create(48_000.0, 2, &mut mixer),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert!(!mixer.is_null());
+
+        let mut track: *mut OwnAudioTrackHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_track_create(mixer, &mut track),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        let mut source: *mut OwnAudioTrackSourceHandle = std::ptr::null_mut();
+        let cap = 8usize;
+        assert_eq!(
+            ownaudio_v1_track_set_ring_source(mixer, track, cap, &mut source),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert!(!source.is_null());
+
+        // The empty ring exposes its full capacity as free.
+        let mut free: usize = 0;
+        assert_eq!(
+            ownaudio_v1_track_source_free_samples(source, &mut free),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(free, cap);
+
+        // Writing more than fits accepts only the capacity, reports it back.
+        let data = [1.0f32; 16];
+        let mut written: usize = 0;
+        assert_eq!(
+            ownaudio_v1_track_source_write(source, data.as_ptr(), data.len(), &mut written),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(written, cap);
+
+        // Now full: zero free, next write accepts nothing.
+        assert_eq!(
+            ownaudio_v1_track_source_free_samples(source, &mut free),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(free, 0);
+        assert_eq!(
+            ownaudio_v1_track_source_write(source, data.as_ptr(), data.len(), &mut written),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(written, 0);
+
+        // Clearing the source and re-installing is accepted.
+        assert_eq!(
+            ownaudio_v1_track_clear_source(mixer, track),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        ownaudio_v1_track_source_destroy(source);
+        ownaudio_v1_track_destroy(track);
+        ownaudio_v1_mixer_destroy(mixer);
+    }
+}

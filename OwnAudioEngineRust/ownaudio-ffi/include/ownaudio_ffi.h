@@ -250,6 +250,18 @@ typedef struct OwnAudioEffectHandle {
 } OwnAudioEffectHandle;
 
 /**
+ * Opaque handle to the write side of a track's audio-feed ring buffer.
+ *
+ * Create with `ownaudio_v1_track_set_ring_source`; release with
+ * `ownaudio_v1_track_source_destroy`.  The matching read side is owned by the
+ * track on the audio thread, so the control thread pushes decoded samples
+ * through this handle without ever touching the mixer.
+ */
+typedef struct OwnAudioTrackSourceHandle {
+    uint8_t _private[0];
+} OwnAudioTrackSourceHandle;
+
+/**
  * Opaque handle to an [`AudioEngine`] instance.
  *
  * The C# side holds this as `IntPtr`.  Create with
@@ -535,6 +547,88 @@ int32_t ownaudio_v1_effect_get_param(struct OwnAudioMixerHandle *mixer,
                                      float *out_value);
 
 /**
+ * Creates a lock-free ring buffer feeding the track and writes the write-side
+ * handle to `*out_source`.
+ *
+ * - `mixer` — valid mixer handle that owns the track.
+ * - `track` — valid track handle whose source is to be (re)installed.
+ * - `capacity_samples` — fixed ring-buffer capacity in interleaved `f32`
+ *   samples; sized for the desired buffering latency
+ *   (`sample_rate * channels * latency_seconds`).  Clamped up to 1.
+ * - `out_source` — receives the write-side handle on success.
+ *
+ * The reader is installed through the mixer's lock-free command queue, so it
+ * becomes the track's source on the next render block; any previous source is
+ * retired off the audio thread.  Samples written before the reader is installed
+ * are buffered and played once it is — the ring buffer is live immediately.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.  Destroy the returned
+ * handle with `ownaudio_v1_track_source_destroy`.
+ */
+int32_t ownaudio_v1_track_set_ring_source(struct OwnAudioMixerHandle *mixer,
+                                          struct OwnAudioTrackHandle *track,
+                                          size_t capacity_samples,
+                                          struct OwnAudioTrackSourceHandle **out_source);
+
+/**
+ * Pushes up to `sample_count` interleaved `f32` samples into the track feed and
+ * writes the number actually accepted to `*out_written`.
+ *
+ * Lock-free and non-blocking: when the ring buffer is full, fewer samples (or
+ * zero) are written and the caller must retry later (back-pressure).  Use
+ * [`ownaudio_v1_track_source_free_samples`] to size writes against the free
+ * space.
+ *
+ * - `source` — valid handle from `ownaudio_v1_track_set_ring_source`.
+ * - `samples` — pointer to the first of `sample_count` `f32` samples.
+ * - `sample_count` — number of samples available at `samples`.
+ * - `out_written` — receives the number of samples accepted.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_source_write(struct OwnAudioTrackSourceHandle *source,
+                                       const float *samples,
+                                       size_t sample_count,
+                                       size_t *out_written);
+
+/**
+ * Writes the number of samples that can currently be written without overflow
+ * to `*out_free`.
+ *
+ * - `source` — valid handle from `ownaudio_v1_track_set_ring_source`.
+ * - `out_free` — receives the free-sample count.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_source_free_samples(struct OwnAudioTrackSourceHandle *source,
+                                              size_t *out_free);
+
+/**
+ * Clears a track's audio source, silencing it.
+ *
+ * The current source (if any) is retired off the audio thread on the next
+ * render block.  Any [`OwnAudioTrackSourceHandle`] previously returned for this
+ * track keeps writing into a now-detached ring buffer until it is destroyed;
+ * callers should destroy the stale source handle after clearing.
+ *
+ * - `mixer` — valid mixer handle that owns the track.
+ * - `track` — valid track handle whose source is to be cleared.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_clear_source(struct OwnAudioMixerHandle *mixer,
+                                       struct OwnAudioTrackHandle *track);
+
+/**
+ * Destroys a track-source write handle and releases its ring-buffer producer.
+ *
+ * Passing `null` is safe and has no effect.  Dropping the producer does not
+ * disturb the track's reader on the audio thread; the track simply underruns
+ * (renders silence) once the buffered samples are consumed.
+ */
+void ownaudio_v1_track_source_destroy(struct OwnAudioTrackSourceHandle *source);
+
+/**
  * Creates a new `AudioEngine` instance and writes its handle to `*out_handle`.
  *
  * The handle must be released with `ownaudio_v1_engine_destroy` when no
@@ -595,6 +689,42 @@ int32_t ownaudio_v1_open_output_stream(struct OwnAudioEngineHandle *engine,
                                        OwnAudioOutputCallback callback,
                                        void *user_data,
                                        struct OwnAudioOutputStreamHandle **out_stream);
+
+/**
+ * Opens an output stream **driven by a multi-track mixer** and writes its
+ * handle to `*out_stream`.
+ *
+ * Unlike `ownaudio_v1_open_output_stream` (which calls back into C# for every
+ * buffer), this moves the mixer onto the cpal audio thread: on every callback
+ * the stream calls [`MultiTrackMixer::mix`], which drains the lock-free command
+ * queue and renders all active tracks — no per-buffer P/Invoke, no GC, no
+ * cross-thread data race.
+ *
+ * - `engine` — a valid handle returned by `ownaudio_v1_engine_create`.
+ * - `mixer` — a valid handle returned by `ownaudio_v1_mixer_create`; its
+ *   sample rate and channel count should match `config`.
+ * - `device_name` — null-terminated UTF-8 device name, or `null` for the
+ *   system default output device.
+ * - `config` — pointer to a filled `OwnAudioStreamConfig`; must not be null.
+ * - `out_stream` — receives the new stream handle on success.
+ *
+ * The mixer is consumed: after this call the mixer handle keeps working for
+ * structural changes and parameter access (via its command queue), but the
+ * mixer can no longer be attached to another stream.  Calling this twice on the
+ * same mixer returns `OwnAudioErrorCode::InvalidHandle`.
+ *
+ * The stream starts paused; call `ownaudio_v1_output_stream_play` to begin
+ * output.  Destroy the stream before destroying the mixer.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * [`MultiTrackMixer::mix`]: ownaudio_core::MultiTrackMixer::mix
+ */
+int32_t ownaudio_v1_mixer_open_output_stream(struct OwnAudioEngineHandle *engine,
+                                             struct OwnAudioMixerHandle *mixer,
+                                             const char *device_name,
+                                             const struct OwnAudioStreamConfig *config,
+                                             struct OwnAudioOutputStreamHandle **out_stream);
 
 /**
  * Starts (or resumes) audio output on the given stream.
@@ -690,6 +820,28 @@ void ownaudio_v1_mixer_destroy(struct OwnAudioMixerHandle *mixer);
  * Returns `OwnAudioErrorCode::Success` (0) on success.
  */
 int32_t ownaudio_v1_mixer_play_all(struct OwnAudioMixerHandle *mixer);
+
+/**
+ * Pauses every track in the mixer in a single call, against the shared clock.
+ *
+ * Sets all tracks to the paused state from the control thread in one
+ * operation, so they pause on the same audio callback — avoiding the per-track
+ * P/Invoke round-trips and the synchronisation drift they would introduce.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_mixer_pause_all(struct OwnAudioMixerHandle *mixer);
+
+/**
+ * Stops every track in the mixer in a single call, against the shared clock.
+ *
+ * Sets all tracks to the stopped state from the control thread in one
+ * operation, so they stop on the same audio callback — avoiding the per-track
+ * P/Invoke round-trips and the synchronisation drift they would introduce.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_mixer_stop_all(struct OwnAudioMixerHandle *mixer);
 
 /**
  * Adds a new track to the mixer and writes its handle to `*out_track`.

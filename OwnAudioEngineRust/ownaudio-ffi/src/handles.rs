@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
+use ownaudio_core::multitrack::MixerController;
 use ownaudio_core::{
-    AudioEngine, InputStream, MultiTrackMixer, OutputStream, StreamingTrack, TrackShared,
+    AudioEngine, InputStream, MultiTrackMixer, OutputStream, RingBufferWriter, StreamingTrack,
+    TrackShared,
 };
 
 /// Opaque handle to an [`AudioEngine`] instance.
@@ -157,12 +159,42 @@ pub struct OwnAudioEffectHandle {
     _private: [u8; 0],
 }
 
+/// Opaque handle to the write side of a track's audio-feed ring buffer.
+///
+/// Create with `ownaudio_v1_track_set_ring_source`; release with
+/// `ownaudio_v1_track_source_destroy`.  The matching read side is owned by the
+/// track on the audio thread, so the control thread pushes decoded samples
+/// through this handle without ever touching the mixer.
+#[repr(C)]
+pub struct OwnAudioTrackSourceHandle {
+    _private: [u8; 0],
+}
+
 // ---------------------------------------------------------------------------
 // Internal wrappers
 // ---------------------------------------------------------------------------
 
+/// Owns one multi-track mixer's control- and audio-side state.
+///
+/// The [`MultiTrackMixer`] is the audio thread's exclusive data; the control
+/// thread (this FFI layer) only ever touches it through `controller`, the
+/// lock-free command queue.  Structural changes (tracks, sources, effects,
+/// effect parameters) are enqueued on `controller` and drained by the mixer at
+/// the top of each render block, so they never race the audio thread.
+///
+/// `mixer` holds the [`MultiTrackMixer`] until an output stream takes ownership
+/// of it (see `ownaudio_v1_mixer_open_output_stream`), at which point it becomes
+/// `None` and the mixer renders on the cpal audio thread.  Parameter reads and
+/// structural writes keep working through `controller` regardless.
 pub(crate) struct MixerWrapper {
-    pub inner: MultiTrackMixer,
+    /// Control-thread command queue / parameter shadow for the mixer.
+    pub controller: MixerController,
+    /// The mixer itself, until an output stream moves it onto the audio thread.
+    pub mixer: Option<MultiTrackMixer>,
+    /// Output sample rate the mixer was created with (Hz).
+    pub sample_rate: f32,
+    /// Output channel count the mixer was created with.
+    pub channels: u16,
 }
 
 /// References a track inside a mixer by its stable id.
@@ -199,10 +231,25 @@ pub(crate) struct EffectWrapper {
     pub effect_id: u64,
 }
 
+/// Owns the write side of a track's audio-feed ring buffer.
+///
+/// The control thread (FFI / C#) pushes decoded interleaved samples through
+/// `writer`; the matching [`RingBufferReader`] was installed as the track's
+/// [`TrackSource`] on the audio thread.  Both ends are lock-free and
+/// independently owned, so dropping this handle never disturbs the audio thread.
+///
+/// [`RingBufferReader`]: ownaudio_core::RingBufferReader
+/// [`TrackSource`]: ownaudio_core::TrackSource
+pub(crate) struct TrackSourceWrapper {
+    /// Lock-free producer feeding the track's source.
+    pub writer: RingBufferWriter,
+}
+
 unsafe impl Send for MixerWrapper {}
 unsafe impl Sync for MixerWrapper {}
 unsafe impl Send for TrackWrapper {}
 unsafe impl Send for EffectWrapper {}
+unsafe impl Send for TrackSourceWrapper {}
 
 // ---------------------------------------------------------------------------
 // Helper functions
@@ -238,5 +285,16 @@ pub(crate) unsafe fn effect_from_ptr<'a>(
         None
     } else {
         Some(&mut *(ptr as *mut EffectWrapper))
+    }
+}
+
+/// Casts a raw `*mut OwnAudioTrackSourceHandle` back to `&mut TrackSourceWrapper`.
+pub(crate) unsafe fn track_source_from_ptr<'a>(
+    ptr: *mut OwnAudioTrackSourceHandle,
+) -> Option<&'a mut TrackSourceWrapper> {
+    if ptr.is_null() {
+        None
+    } else {
+        Some(&mut *(ptr as *mut TrackSourceWrapper))
     }
 }

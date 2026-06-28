@@ -200,6 +200,38 @@ public sealed class AudioEngine : IDisposable
     }
 
     /// <summary>
+    /// Opens an output stream driven directly by a native multi-track mixer.
+    /// The mixer renders every buffer on the real-time audio thread itself, so no
+    /// managed callback is involved and the audio data never crosses back into
+    /// managed memory.
+    /// </summary>
+    /// <param name="mixer">
+    /// Handle to a native mixer (see <see cref="Ownaudio.Audio.Tracks.MultiTrackSession"/>).
+    /// Its sample rate and channel count must match <paramref name="config"/>.
+    /// </param>
+    /// <param name="device">
+    /// The output device to use, or <see langword="null"/> to use the system default.
+    /// </param>
+    /// <param name="config">Stream parameters (sample rate, channels, format, buffer size).</param>
+    /// <returns>A new <see cref="AudioOutputStream"/> in the paused state.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when this engine has been disposed.</exception>
+    /// <exception cref="System.ArgumentNullException">
+    /// Thrown when <paramref name="mixer"/> or <paramref name="config"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="StreamException">Thrown when the stream cannot be opened.</exception>
+    public AudioOutputStream OpenMixerOutputStream(
+        MixerHandle mixer,
+        AudioDevice? device,
+        AudioStreamConfig config)
+    {
+        Guard.NotDisposed(_disposed, nameof(AudioEngine));
+        Guard.NotNull(mixer, nameof(mixer));
+        Guard.NotNull(config, nameof(config));
+
+        return AudioOutputStream.OpenMixerDriven(_handle, mixer, device, config);
+    }
+
+    /// <summary>
     /// Opens an input stream with the given configuration and registers the capture callback.
     /// The stream starts in the paused state; call <see cref="AudioInputStream.Play"/> to begin.
     /// </summary>

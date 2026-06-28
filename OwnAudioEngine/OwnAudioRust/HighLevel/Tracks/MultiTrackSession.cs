@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Ownaudio.Native.RustAudio.Interop;
+using Ownaudio.Safe;
 using Ownaudio.Safe.Exceptions;
 using Ownaudio.Safe.Handles;
 
@@ -29,7 +30,9 @@ public sealed class MultiTrackSession : IDisposable
 
     private readonly MixerHandle _mixerHandle;
     private readonly float _sampleRate;
+    private readonly ushort _channels;
     private readonly List<AudioTrack> _tracks = new();
+    private AudioOutputStream? _outputStream;
     private bool _disposed;
 
     #endregion
@@ -47,6 +50,7 @@ public sealed class MultiTrackSession : IDisposable
     public MultiTrackSession(float sampleRate, ushort channels)
     {
         _sampleRate = sampleRate;
+        _channels = channels;
 
         int code = OwnAudioNative.ownaudio_v1_mixer_create(sampleRate, channels, out IntPtr rawMixer);
         ErrorCodeMapper.ThrowIfError(code, nameof(MultiTrackSession));
@@ -89,7 +93,7 @@ public sealed class MultiTrackSession : IDisposable
         var handle = new TrackHandle();
         Marshal.InitHandle(handle, rawTrack);
 
-        var track = new AudioTrack(handle, _mixerHandle.DangerousGetHandle(), _sampleRate);
+        var track = new AudioTrack(handle, _mixerHandle.DangerousGetHandle(), _sampleRate, _channels);
         _tracks.Add(track);
         return track;
     }
@@ -119,6 +123,58 @@ public sealed class MultiTrackSession : IDisposable
 
     #endregion
 
+    #region Output
+
+    /// <summary>
+    /// Opens an output stream driven directly by this session's native mixer and
+    /// starts rendering on the real-time audio thread.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The mixer is moved onto the cpal audio thread: every buffer is rendered
+    /// natively (draining the lock-free command queue and summing all active
+    /// tracks) with no per-buffer managed callback.  Track and effect changes
+    /// keep flowing through the session's mixer handle while audio plays.
+    /// </para>
+    /// <para>
+    /// The returned stream is owned by the session and disposed with it; it can
+    /// also be paused/resumed directly.  Only one output stream may be opened per
+    /// session.
+    /// </para>
+    /// </remarks>
+    /// <param name="engine">The native audio engine that owns the output device.</param>
+    /// <param name="device">
+    /// The output device to use, or <see langword="null"/> for the system default.
+    /// </param>
+    /// <returns>The started <see cref="AudioOutputStream"/>.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the session is disposed.</exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="engine"/> is <see langword="null"/>.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when an output stream has already been opened for this session.
+    /// </exception>
+    public AudioOutputStream OpenOutput(Safe.AudioEngine engine, AudioDevice? device = null)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(engine);
+
+        if (_outputStream is not null)
+        {
+            throw new InvalidOperationException(
+                "An output stream has already been opened for this session.");
+        }
+
+        var config = new AudioStreamConfig((int)_sampleRate, _channels);
+        AudioOutputStream stream = engine.OpenMixerOutputStream(_mixerHandle, device, config);
+        stream.Play();
+
+        _outputStream = stream;
+        return stream;
+    }
+
+    #endregion
+
     #region Transport
 
     /// <summary>
@@ -140,31 +196,37 @@ public sealed class MultiTrackSession : IDisposable
     }
 
     /// <summary>
-    /// Pauses all tracks.
+    /// Pauses all tracks simultaneously against the shared central clock.
     /// </summary>
+    /// <remarks>
+    /// All tracks are paused in a single native call so they pause on the same
+    /// audio callback, avoiding the per-track P/Invoke round-trips (and the
+    /// synchronization drift they could introduce) of pausing each individually.
+    /// </remarks>
     /// <exception cref="ObjectDisposedException">Thrown when the session is disposed.</exception>
     public void PauseAll()
     {
         ThrowIfDisposed();
 
-        foreach (AudioTrack track in _tracks)
-        {
-            track.Pause();
-        }
+        int code = OwnAudioNative.ownaudio_v1_mixer_pause_all(_mixerHandle.DangerousGetHandle());
+        ErrorCodeMapper.ThrowIfError(code, nameof(PauseAll));
     }
 
     /// <summary>
-    /// Stops all tracks and resets their positions to zero.
+    /// Stops all tracks simultaneously against the shared central clock.
     /// </summary>
+    /// <remarks>
+    /// All tracks are stopped in a single native call so they stop on the same
+    /// audio callback, avoiding the per-track P/Invoke round-trips (and the
+    /// synchronization drift they could introduce) of stopping each individually.
+    /// </remarks>
     /// <exception cref="ObjectDisposedException">Thrown when the session is disposed.</exception>
     public void StopAll()
     {
         ThrowIfDisposed();
 
-        foreach (AudioTrack track in _tracks)
-        {
-            track.Stop();
-        }
+        int code = OwnAudioNative.ownaudio_v1_mixer_stop_all(_mixerHandle.DangerousGetHandle());
+        ErrorCodeMapper.ThrowIfError(code, nameof(StopAll));
     }
 
     #endregion
@@ -178,6 +240,11 @@ public sealed class MultiTrackSession : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+
+        // Stop and tear down the output stream first so the audio thread releases
+        // the mixer before the mixer handle (and tracks) are destroyed.
+        _outputStream?.Dispose();
+        _outputStream = null;
 
         foreach (AudioTrack track in _tracks)
         {

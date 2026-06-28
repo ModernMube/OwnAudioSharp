@@ -7,8 +7,8 @@ use crate::callback::{make_input_trampoline, make_output_trampoline, OwnAudioInp
 use crate::error_code::{set_last_error, OwnAudioErrorCode};
 use crate::ffi_config::OwnAudioStreamConfig;
 use crate::handles::{
-    engine_from_ptr, input_stream_from_ptr, output_stream_from_ptr, EngineWrapper,
-    InputStreamWrapper, OwnAudioEngineHandle, OwnAudioInputStreamHandle,
+    engine_from_ptr, input_stream_from_ptr, mixer_from_ptr, output_stream_from_ptr, EngineWrapper,
+    InputStreamWrapper, OwnAudioEngineHandle, OwnAudioInputStreamHandle, OwnAudioMixerHandle,
     OwnAudioOutputStreamHandle, OutputStreamWrapper,
 };
 use crate::host_api::{resolve_host, OwnHostApi};
@@ -181,6 +181,123 @@ pub extern "C" fn ownaudio_v1_open_output_stream(
                 OwnAudioErrorCode::Success as i32
             }
             Err(e) => {
+                set_last_error(e.to_string());
+                OwnAudioErrorCode::from(e) as i32
+            }
+        }
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Opens an output stream **driven by a multi-track mixer** and writes its
+/// handle to `*out_stream`.
+///
+/// Unlike `ownaudio_v1_open_output_stream` (which calls back into C# for every
+/// buffer), this moves the mixer onto the cpal audio thread: on every callback
+/// the stream calls [`MultiTrackMixer::mix`], which drains the lock-free command
+/// queue and renders all active tracks — no per-buffer P/Invoke, no GC, no
+/// cross-thread data race.
+///
+/// - `engine` — a valid handle returned by `ownaudio_v1_engine_create`.
+/// - `mixer` — a valid handle returned by `ownaudio_v1_mixer_create`; its
+///   sample rate and channel count should match `config`.
+/// - `device_name` — null-terminated UTF-8 device name, or `null` for the
+///   system default output device.
+/// - `config` — pointer to a filled `OwnAudioStreamConfig`; must not be null.
+/// - `out_stream` — receives the new stream handle on success.
+///
+/// The mixer is consumed: after this call the mixer handle keeps working for
+/// structural changes and parameter access (via its command queue), but the
+/// mixer can no longer be attached to another stream.  Calling this twice on the
+/// same mixer returns `OwnAudioErrorCode::InvalidHandle`.
+///
+/// The stream starts paused; call `ownaudio_v1_output_stream_play` to begin
+/// output.  Destroy the stream before destroying the mixer.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// [`MultiTrackMixer::mix`]: ownaudio_core::MultiTrackMixer::mix
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_mixer_open_output_stream(
+    engine: *mut OwnAudioEngineHandle,
+    mixer: *mut OwnAudioMixerHandle,
+    device_name: *const c_char,
+    config: *const OwnAudioStreamConfig,
+    out_stream: *mut *mut OwnAudioOutputStreamHandle,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if engine.is_null() || mixer.is_null() || config.is_null() || out_stream.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        // The mixer renders into the device buffer assuming its own channel
+        // count and rate; a mismatch with the stream config would silently
+        // misinterpret the interleaved frames, so reject it up front.
+        let c_config = unsafe { *config };
+        if c_config.channels != mixer_wrapper.channels
+            || c_config.sample_rate as f32 != mixer_wrapper.sample_rate
+        {
+            set_last_error(format!(
+                "stream config ({} Hz, {} ch) does not match mixer ({} Hz, {} ch)",
+                c_config.sample_rate,
+                c_config.channels,
+                mixer_wrapper.sample_rate,
+                mixer_wrapper.channels,
+            ));
+            return OwnAudioErrorCode::UnsupportedConfig as i32;
+        }
+
+        // Take exclusive ownership of the mixer for the audio thread.  If it was
+        // already moved onto a stream, refuse rather than aliasing it.
+        let mut multitrack = match mixer_wrapper.mixer.take() {
+            Some(m) => m,
+            None => {
+                set_last_error("mixer is already attached to an output stream");
+                return OwnAudioErrorCode::InvalidHandle as i32;
+            }
+        };
+
+        let engine_wrapper = match unsafe { engine_from_ptr(engine) } {
+            Some(w) => w,
+            None => {
+                // Restore the mixer so the caller can retry / destroy cleanly.
+                mixer_wrapper.mixer = Some(multitrack);
+                return OwnAudioErrorCode::InvalidHandle as i32;
+            }
+        };
+
+        let core_config: ownaudio_core::StreamConfig = c_config.into();
+
+        let device_info = parse_device_name(device_name);
+
+        // The mixer renders directly into the device buffer; its `mix` drains the
+        // command queue allocation-free at the top of every block.
+        let open = engine_wrapper.inner.open_output_stream(
+            device_info.as_ref(),
+            &core_config,
+            move |buf: &mut [f32]| {
+                multitrack.mix(buf);
+            },
+        );
+
+        match open {
+            Ok(stream) => {
+                let boxed = Box::new(OutputStreamWrapper { inner: stream });
+                unsafe {
+                    *out_stream = Box::into_raw(boxed) as *mut OwnAudioOutputStreamHandle;
+                }
+                OwnAudioErrorCode::Success as i32
+            }
+            Err(e) => {
+                // The closure (and the mixer it captured) is dropped on error;
+                // the mixer cannot be recovered, but the handle stays valid for
+                // destruction.  Report the failure to the caller.
                 set_last_error(e.to_string());
                 OwnAudioErrorCode::from(e) as i32
             }

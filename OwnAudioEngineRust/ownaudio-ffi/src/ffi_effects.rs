@@ -88,17 +88,17 @@ pub extern "C" fn ownaudio_v1_track_add_effect(
 
         let track_id = track_wrapper.id;
 
-        // Allocate the stable effect id before borrowing the track, so the
-        // handle addresses this effect by id (surviving sibling removals)
-        // rather than by a shifting positional index.
-        let effect_id = mixer_wrapper.inner.alloc_effect_id();
-
-        let track_ref = match mixer_wrapper.inner.track_mut(track_id) {
-            Some(t) => t,
-            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        // Enqueue the insertion on the lock-free command queue; the controller
+        // assigns the stable effect id (surviving sibling removals) and seeds
+        // the parameter shadow from the effect's defaults before handing it to
+        // the audio thread.
+        let effect_id = match mixer_wrapper.controller.add_effect(track_id, effect) {
+            Ok(id) => id,
+            Err(_) => {
+                set_last_error("mixer command queue is full; effect not added");
+                return OwnAudioErrorCode::InternalError as i32;
+            }
         };
-
-        track_ref.effects.add_with_id(effect_id, effect);
 
         let effect_wrapper = Box::new(EffectWrapper {
             mixer: mixer as *mut crate::handles::MixerWrapper,
@@ -151,10 +151,11 @@ pub extern "C" fn ownaudio_v1_effect_remove(
             return OwnAudioErrorCode::NullPointer as i32;
         }
 
-        let track_wrapper = match unsafe { track_from_ptr(track) } {
-            Some(w) => w,
-            None => return OwnAudioErrorCode::InvalidHandle as i32,
-        };
+        // The track handle is validated for API symmetry; the effect's own
+        // track id drives the removal.
+        if unsafe { track_from_ptr(track) }.is_none() {
+            return OwnAudioErrorCode::InvalidHandle as i32;
+        }
 
         let effect_wrapper = match unsafe { effect_from_ptr(effect) } {
             Some(w) => w,
@@ -166,12 +167,14 @@ pub extern "C" fn ownaudio_v1_effect_remove(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let track_ref = match mixer_wrapper.inner.track_mut(track_wrapper.id) {
-            Some(t) => t,
-            None => return OwnAudioErrorCode::InvalidHandle as i32,
-        };
+        let remove = mixer_wrapper
+            .controller
+            .remove_effect(effect_wrapper.track_id, effect_wrapper.effect_id);
 
-        track_ref.effects.remove_by_id(effect_wrapper.effect_id);
+        if remove.is_err() {
+            set_last_error("mixer command queue is full; effect not removed");
+            return OwnAudioErrorCode::InternalError as i32;
+        }
 
         unsafe {
             drop(Box::from_raw(effect as *mut EffectWrapper));
@@ -217,23 +220,25 @@ pub extern "C" fn ownaudio_v1_effect_set_param(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let track_ref = match mixer_wrapper.inner.track_mut(effect_wrapper.track_id) {
-            Some(t) => t,
-            None => return OwnAudioErrorCode::InvalidHandle as i32,
-        };
-
-        let effect_ref = match track_ref.effects.effect_mut_by_id(effect_wrapper.effect_id) {
-            Some(e) => e,
-            None => return OwnAudioErrorCode::InvalidHandle as i32,
-        };
-
-        let known = effect_ref.set_param(param_id, value);
-
-        if known {
-            OwnAudioErrorCode::Success as i32
-        } else {
-            set_last_error(format!("unknown param_id {} for this effect", param_id));
-            OwnAudioErrorCode::InvalidHandle as i32
+        // The change is enqueued on the command queue (applied by the audio
+        // thread next block) and mirrored in the control-side shadow.  An
+        // unknown parameter is reported via the shadow's known-parameter set,
+        // matching the effect's own `set_param` contract.
+        match mixer_wrapper.controller.set_effect_param(
+            effect_wrapper.track_id,
+            effect_wrapper.effect_id,
+            param_id,
+            value,
+        ) {
+            Ok(true) => OwnAudioErrorCode::Success as i32,
+            Ok(false) => {
+                set_last_error(format!("unknown param_id {} for this effect", param_id));
+                OwnAudioErrorCode::InvalidHandle as i32
+            }
+            Err(_) => {
+                set_last_error("mixer command queue is full; parameter not set");
+                OwnAudioErrorCode::InternalError as i32
+            }
         }
     }));
 
@@ -270,17 +275,13 @@ pub extern "C" fn ownaudio_v1_effect_get_param(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let track_ref = match mixer_wrapper.inner.track_mut(effect_wrapper.track_id) {
-            Some(t) => t,
-            None => return OwnAudioErrorCode::InvalidHandle as i32,
-        };
-
-        let effect_ref = match track_ref.effects.effect_mut_by_id(effect_wrapper.effect_id) {
-            Some(e) => e,
-            None => return OwnAudioErrorCode::InvalidHandle as i32,
-        };
-
-        match effect_ref.get_param(param_id) {
+        // Read from the control-side shadow: the effect itself lives on the
+        // audio thread, so it cannot be dereferenced here.  The shadow is seeded
+        // with the effect's defaults at add time and kept current on every set.
+        match mixer_wrapper
+            .controller
+            .get_effect_param(effect_wrapper.effect_id, param_id)
+        {
             Some(v) => {
                 unsafe { *out_value = v; }
                 OwnAudioErrorCode::Success as i32

@@ -180,10 +180,15 @@ impl Effect for Equalizer30 {
         self.ensure_channel_state(channels);
 
         let frame_count = buffer.len() / channels;
-        for ch in 0..channels {
-            let state_base = ch * BANDS;
-            for frame in 0..frame_count {
-                let i = frame * channels + ch;
+        // Frame-outer / channel-inner traversal keeps the interleaved buffer
+        // access sequential (cache-friendly, auto-vectorizable); each channel's
+        // recursive state still evolves in frame order, so the output is bit
+        // identical to a channel-outer traversal.
+        for frame in 0..frame_count {
+            let frame_base = frame * channels;
+            for ch in 0..channels {
+                let state_base = ch * BANDS;
+                let i = frame_base + ch;
                 let mut input = buffer[i];
 
                 for a in 0..self.active_count {

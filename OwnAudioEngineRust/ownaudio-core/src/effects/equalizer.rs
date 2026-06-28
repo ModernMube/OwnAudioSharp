@@ -203,10 +203,15 @@ impl Effect for Equalizer {
 
         let dry = 1.0 - self.mix;
         let frame_count = buffer.len() / channels;
-        for ch in 0..channels {
-            let state_base = ch * TOTAL_FILTERS;
-            for frame in 0..frame_count {
-                let i = frame * channels + ch;
+        // Frame-outer / channel-inner traversal keeps the interleaved buffer
+        // access sequential (cache-friendly, auto-vectorizable); each channel's
+        // recursive state still evolves in frame order, so the output is bit
+        // identical to a channel-outer traversal.
+        for frame in 0..frame_count {
+            let frame_base = frame * channels;
+            for ch in 0..channels {
+                let state_base = ch * TOTAL_FILTERS;
+                let i = frame_base + ch;
                 let input = buffer[i];
                 let mut sample = input;
 
