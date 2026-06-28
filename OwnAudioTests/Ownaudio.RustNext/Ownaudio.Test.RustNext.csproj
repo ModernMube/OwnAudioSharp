@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="10.0.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" Version="8.10.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.6.0" />
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\OwnAudio\Source\OwnaudioNET.csproj" />
+    <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="FluentAssertions" />
+    <Using Include="Moq" />
+  </ItemGroup>
+
+  <ItemGroup Label="A2: link the unmodified OwnaudioNET behavioral test sources (exclude A1 surface tests and RustNext-native tests)">
+    <Compile Include="..\Ownaudio.OwnaudioNET\**\*.cs"
+             Exclude="..\Ownaudio.OwnaudioNET\obj\**\*.cs;..\Ownaudio.OwnaudioNET\bin\**\*.cs;..\Ownaudio.OwnaudioNET\PublicApi\**\*.cs;..\Ownaudio.OwnaudioNET\RustNextOwnaudioNetTests.cs;..\Ownaudio.OwnaudioNET\AssemblyInfo.cs">
+      <Link>FromOwnaudioNET\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup Label="A2 clone redirection: every cloned behavioral type the linked tests use resolves to OwnaudioNET.RustNext.* instead of the root namespace">
+    <Using Include="OwnaudioNET.RustNext.OwnaudioNet" Alias="OwnaudioNet" />
+    <Using Include="OwnaudioNET.RustNext.Mixing.AudioMixer" Alias="AudioMixer" />
+    <Using Include="OwnaudioNET.RustNext.Sources.SampleSource" Alias="SampleSource" />
+    <Using Include="OwnaudioNET.RustNext.Sources.FileSource" Alias="FileSource" />
+    <Using Include="OwnaudioNET.RustNext.Effects.ReverbEffect" Alias="ReverbEffect" />
+    <Using Include="OwnaudioNET.RustNext.Effects.ReverbPreset" Alias="ReverbPreset" />
+    <Using Include="OwnaudioNET.RustNext.Effects.DelayEffect" Alias="DelayEffect" />
+    <Using Include="OwnaudioNET.RustNext.Effects.ChorusEffect" Alias="ChorusEffect" />
+    <Using Include="OwnaudioNET.RustNext.Effects.ChorusPreset" Alias="ChorusPreset" />
+    <Using Include="OwnaudioNET.RustNext.Effects.CompressorEffect" Alias="CompressorEffect" />
+    <Using Include="OwnaudioNET.RustNext.Effects.DistortionEffect" Alias="DistortionEffect" />
+    <Using Include="OwnaudioNET.RustNext.Effects.DistortionPreset" Alias="DistortionPreset" />
+    <Using Include="OwnaudioNET.RustNext.Effects.EnhancerEffect" Alias="EnhancerEffect" />
+    <Using Include="OwnaudioNET.RustNext.Effects.AutoGainEffect" Alias="AutoGainEffect" />
+    <Using Include="OwnaudioNET.RustNext.Effects.AutoGainPreset" Alias="AutoGainPreset" />
+    <Using Include="OwnaudioNET.RustNext.Effects.EqualizerEffect" Alias="EqualizerEffect" />
+  </ItemGroup>
+
+</Project>
