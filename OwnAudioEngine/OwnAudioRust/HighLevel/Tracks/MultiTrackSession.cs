@@ -32,6 +32,7 @@ public sealed class MultiTrackSession : IDisposable
     private readonly float _sampleRate;
     private readonly ushort _channels;
     private readonly List<AudioTrack> _tracks = new();
+    private readonly List<TrackFeeder> _feeders = new();
     private AudioOutputStream? _outputStream;
     private bool _disposed;
 
@@ -99,6 +100,58 @@ public sealed class MultiTrackSession : IDisposable
     }
 
     /// <summary>
+    /// Opens an audio file, adds a new track, and wires a started
+    /// <see cref="TrackFeeder"/> that streams the decoded samples into the track.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The file is decoded to the session's sample rate and channel count, so the
+    /// resulting audio is layout-matched to the mixer.  The feeder begins filling the
+    /// track's buffer immediately, but playback does not start until transport is
+    /// driven (for example <see cref="PlayAll"/>).
+    /// </para>
+    /// <para>
+    /// The returned feeder, its decoder, and the track are all owned by the session
+    /// and released when the session is disposed (or the track is removed via
+    /// <see cref="RemoveTrack"/>).  Use <see cref="TrackFeeder.Track"/> to reach the
+    /// created track and <see cref="TrackFeeder.Completed"/> to observe end-of-stream.
+    /// </para>
+    /// </remarks>
+    /// <param name="filePath">Path to the audio file to stream.</param>
+    /// <returns>The started <see cref="TrackFeeder"/> driving the new track.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the session is disposed.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="filePath"/> is null/blank.</exception>
+    /// <exception cref="Ownaudio.Safe.Exceptions.OwnAudioException">
+    /// Thrown when the file cannot be opened or the native track cannot be created.
+    /// </exception>
+    public TrackFeeder AddFileTrack(string filePath)
+    {
+        ThrowIfDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+        var decoder = new StreamingAudioDecoder(
+            filePath,
+            targetSampleRate: (int)_sampleRate,
+            targetChannels: _channels);
+
+        AudioTrack track;
+        try
+        {
+            track = AddTrack();
+        }
+        catch
+        {
+            decoder.Dispose();
+            throw;
+        }
+
+        var feeder = new TrackFeeder(decoder, track);
+        _feeders.Add(feeder);
+        feeder.Start();
+        return feeder;
+    }
+
+    /// <summary>
     /// Removes and disposes the specified track.
     /// </summary>
     /// <param name="track">Track to remove.</param>
@@ -113,6 +166,17 @@ public sealed class MultiTrackSession : IDisposable
 
         if (_tracks.Remove(track))
         {
+            // Stop and dispose any feeder targeting this track before the track is
+            // removed, so the pump thread cannot write into a destroyed track.
+            for (int i = _feeders.Count - 1; i >= 0; i--)
+            {
+                if (_feeders[i].Track == track)
+                {
+                    _feeders[i].Dispose();
+                    _feeders.RemoveAt(i);
+                }
+            }
+
             OwnAudioNative.ownaudio_v1_track_remove(
                 _mixerHandle.DangerousGetHandle(),
                 track.GetNativeHandle());
@@ -245,6 +309,15 @@ public sealed class MultiTrackSession : IDisposable
         // the mixer before the mixer handle (and tracks) are destroyed.
         _outputStream?.Dispose();
         _outputStream = null;
+
+        // Stop the feeder pump threads (and their decoders) before disposing the
+        // tracks they write into, so no pump can touch a destroyed track.
+        foreach (TrackFeeder feeder in _feeders)
+        {
+            feeder.Dispose();
+        }
+
+        _feeders.Clear();
 
         foreach (AudioTrack track in _tracks)
         {
