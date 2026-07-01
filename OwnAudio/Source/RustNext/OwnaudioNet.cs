@@ -16,7 +16,7 @@ namespace OwnaudioNET.RustNext;
 /// Rust audio engine via <see cref="RustAudioEngine"/>.
 /// Provides factory methods and global configuration for the audio system.
 /// </summary>
-public static class OwnaudioNet
+public static partial class OwnaudioNet
 {
     private static bool _initialized;
     private static AudioEngineWrapper? _engineWrapper;
