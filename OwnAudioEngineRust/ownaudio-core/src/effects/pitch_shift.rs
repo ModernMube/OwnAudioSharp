@@ -27,6 +27,13 @@ pub const PARAM_SEMITONES: u32 = 2;
 /// avoiding the pointless latency of running SoundTouch at unity pitch.
 const BYPASS_THRESHOLD: f32 = 0.01;
 
+/// Conservative up-front scratch capacity, in samples, matching the mixer's
+/// default block convention (a 4096-frame stereo callback).  Pre-sizing here
+/// keeps the very first `process` call allocation-free on the audio thread; a
+/// larger-than-anticipated block grows it once (amortised, never in steady
+/// state).
+const PREALLOC_SCRATCH: usize = 4096 * 2;
+
 /// Real-time pitch shift effect backed by the WSOLA SoundTouch pipeline.
 pub struct PitchShift {
     enabled: bool,
@@ -36,7 +43,8 @@ pub struct PitchShift {
     /// Channel count the processor is currently configured for (0 = none yet).
     channels: u16,
     processor: Option<SoundTouchProcessor>,
-    /// Reusable wet-signal scratch, sized to the current block.
+    /// Reusable wet-signal scratch, pre-sized to [`PREALLOC_SCRATCH`] and grown
+    /// at most once should a larger block ever arrive.
     scratch: Vec<f32>,
 }
 
@@ -50,7 +58,7 @@ impl PitchShift {
             sample_rate,
             channels: 0,
             processor: None,
-            scratch: Vec::new(),
+            scratch: vec![0.0; PREALLOC_SCRATCH],
         }
     }
 

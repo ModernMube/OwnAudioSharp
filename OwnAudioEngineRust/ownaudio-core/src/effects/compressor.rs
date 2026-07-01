@@ -1,18 +1,27 @@
 //! Dynamic range compressor with soft-knee and peak detection.
 //!
-//! Faithful Rust port of the reference C# `OwnaudioNET.Effects.CompressorEffect`
-//! DSP: a peak envelope follower (separate attack / release one-pole
-//! coefficients) drives a soft-knee static curve (6 dB knee, quadratic
-//! interpolation inside the knee, linear `1/ratio − 1` slope above it); the
-//! resulting gain reduction is applied together with a makeup gain.  The
-//! envelope is shared across the interleaved samples exactly as the reference
-//! iterates them.  Parameter identifiers, ranges and defaults mirror the C#
-//! effect (threshold and makeup are dB-facing on both sides) so the two
-//! implementations are numerically equivalent (the basis of the 2.2 reference
-//! comparison).
+//! Rust DSP derived from the reference C# `OwnaudioNET.Effects.CompressorEffect`:
+//! a peak envelope follower (separate attack / release one-pole coefficients)
+//! drives a soft-knee static curve (6 dB knee, quadratic interpolation inside
+//! the knee, linear `1/ratio − 1` slope above it); the resulting gain reduction
+//! is applied together with a makeup gain.  Parameter identifiers, ranges and
+//! defaults mirror the C# effect (threshold and makeup are dB-facing on both
+//! sides).
+//!
+//! **Stereo-linked detection (intentional divergence from the C# reference):**
+//! the C# effect walks a single envelope across the interleaved samples, so the
+//! left and right channels of a frame receive gains one envelope step apart —
+//! this drifts the stereo image as the signal level changes.  This port instead
+//! detects per frame from the linked channel peak (`max(|L|, |R|, …)`), advances
+//! one envelope per frame and applies the *same* gain to every channel of the
+//! frame, so the inter-channel balance is preserved exactly.  Mono input (one
+//! channel per frame) stays bit identical to the per-sample reference, and the
+//! per-frame path also does half the transcendental work of the per-sample one
+//! on stereo.  The `matches_reference_dsp` test therefore compares against a
+//! frame-linked f64 ground truth, not the C# per-sample walk.
 //!
 //! **Denormal protection (2.12):** the recursive envelope is flushed every
-//! sample so a decaying detector never parks in the subnormal range.
+//! frame so a decaying detector never parks in the subnormal range.
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
@@ -101,11 +110,12 @@ impl Effect for Compressor {
         EffectType::Compressor
     }
 
-    fn process(&mut self, buffer: &mut [f32], _channels: u16) {
+    fn process(&mut self, buffer: &mut [f32], channels: u16) {
         if !self.enabled {
             return;
         }
 
+        let ch = channels.max(1) as usize;
         let att = self.attack_coeff;
         let rel = self.release_coeff;
         let mkp = self.makeup_lin;
@@ -115,11 +125,19 @@ impl Effect for Compressor {
         let k_upper = self.knee_upper_db;
         let mut env = self.envelope;
 
-        for sample in buffer.iter_mut() {
-            let input = *sample;
-            let abs_input = input.abs();
+        for frame in buffer.chunks_mut(ch) {
+            // 1. Stereo-linked detection: the loudest channel of the frame
+            //    drives the shared envelope, so every channel is compressed by
+            //    the identical gain and the stereo image never drifts.
+            let mut abs_input = 0.0f32;
+            for &s in frame.iter() {
+                let a = s.abs();
+                if a > abs_input {
+                    abs_input = a;
+                }
+            }
 
-            // 1. Peak envelope detection with separate attack / release.
+            // 2. Peak envelope detection with separate attack / release.
             if abs_input > env {
                 env = att * env + (1.0 - att) * abs_input;
             } else {
@@ -127,26 +145,28 @@ impl Effect for Compressor {
             }
             env = denormal::flush(env);
 
-            // 2. Below the noise floor: pass through with makeup only.
-            if env < ENV_FLOOR {
-                *sample = input * mkp;
-                continue;
-            }
-
-            // 3. Soft-knee compression characteristic.
-            let env_db = 20.0 * env.log10();
-            let gain_reduction_db = if env_db < k_lower {
-                0.0
-            } else if env_db > k_upper {
-                slope * (env_db - t_db)
+            // 3. Soft-knee compression characteristic → one gain for the frame.
+            //    Below the noise floor the reduction is unity (makeup only).
+            let gain = if env < ENV_FLOOR {
+                1.0
             } else {
-                let over = env_db - k_lower;
-                slope * (over * over) / (2.0 * KNEE_WIDTH_DB)
+                let env_db = 20.0 * env.log10();
+                let gain_reduction_db = if env_db < k_lower {
+                    0.0
+                } else if env_db > k_upper {
+                    slope * (env_db - t_db)
+                } else {
+                    let over = env_db - k_lower;
+                    slope * (over * over) / (2.0 * KNEE_WIDTH_DB)
+                };
+                10.0f32.powf(gain_reduction_db * 0.05)
             };
 
-            // 4. Apply gain reduction together with makeup gain.
-            let gain = 10.0f32.powf(gain_reduction_db * 0.05);
-            *sample = input * gain * mkp;
+            // 4. Apply the shared gain together with makeup to every channel.
+            let applied = gain * mkp;
+            for s in frame.iter_mut() {
+                *s *= applied;
+            }
         }
 
         self.envelope = env;
@@ -255,32 +275,43 @@ mod tests {
             }
         }
 
-        fn process(&mut self, input: &[f32]) -> Vec<f32> {
+        /// Frame-linked f64 ground truth: one envelope/gain per frame, driven by
+        /// the per-frame linked channel peak, applied to every channel.
+        fn process(&mut self, input: &[f32], channels: usize) -> Vec<f32> {
+            let ch = channels.max(1);
             let mut out = vec![0.0f32; input.len()];
             let mut env = self.envelope;
-            for (o, &x) in out.iter_mut().zip(input.iter()) {
-                let input = x as f64;
-                let abs_input = input.abs();
+            for (out_frame, in_frame) in out.chunks_mut(ch).zip(input.chunks(ch)) {
+                let mut abs_input = 0.0f64;
+                for &s in in_frame.iter() {
+                    let a = (s as f64).abs();
+                    if a > abs_input {
+                        abs_input = a;
+                    }
+                }
                 if abs_input > env {
                     env = self.attack_coeff * env + (1.0 - self.attack_coeff) * abs_input;
                 } else {
                     env = self.release_coeff * env + (1.0 - self.release_coeff) * abs_input;
                 }
-                if env < ENV_FLOOR as f64 {
-                    *o = (input * self.makeup_lin) as f32;
-                    continue;
-                }
-                let env_db = 20.0 * env.log10();
-                let gr_db = if env_db < self.knee_lower_db {
-                    0.0
-                } else if env_db > self.knee_upper_db {
-                    self.slope * (env_db - self.threshold_db)
+                let gain = if env < ENV_FLOOR as f64 {
+                    1.0
                 } else {
-                    let over = env_db - self.knee_lower_db;
-                    self.slope * (over * over) / (2.0 * KNEE_WIDTH_DB as f64)
+                    let env_db = 20.0 * env.log10();
+                    let gr_db = if env_db < self.knee_lower_db {
+                        0.0
+                    } else if env_db > self.knee_upper_db {
+                        self.slope * (env_db - self.threshold_db)
+                    } else {
+                        let over = env_db - self.knee_lower_db;
+                        self.slope * (over * over) / (2.0 * KNEE_WIDTH_DB as f64)
+                    };
+                    10.0f64.powf(gr_db * 0.05)
                 };
-                let gain = 10.0f64.powf(gr_db * 0.05);
-                *o = (input * gain * self.makeup_lin) as f32;
+                let applied = gain * self.makeup_lin;
+                for (o, &s) in out_frame.iter_mut().zip(in_frame.iter()) {
+                    *o = (s as f64 * applied) as f32;
+                }
             }
             self.envelope = env;
             out
@@ -441,7 +472,7 @@ mod tests {
 
             let mut produced = input.clone();
             c.process(&mut produced, 2);
-            let expected = reference.process(&input);
+            let expected = reference.process(&input, 2);
 
             let err = rms_error_db(&produced, &expected);
             assert!(

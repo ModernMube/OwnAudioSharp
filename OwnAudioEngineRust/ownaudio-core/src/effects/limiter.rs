@@ -1,20 +1,32 @@
 //! Look-ahead brick-wall limiter.
 //!
-//! Faithful Rust port of the reference C# `OwnaudioNET.Effects.LimiterEffect`
-//! DSP: a look-ahead delay line feeds a sliding-window-maximum peak detector
-//! (an array-based monotonic deque, O(1) amortized, zero-allocation); the
-//! per-sample required gain reduction feeds a second, sliding-window-**minimum**
-//! monotonic deque, and the applied gain is that window minimum, smoothed with
-//! an adaptive release toward unity (instant attack).  The window minimum is the
-//! same value the reference computes with a per-sample linear scan of an
-//! envelope buffer, but computed in O(1) amortized rather than O(window).  A
-//! final hard ceiling clamps the output.  All buffers are pre-allocated at the
-//! maximum look-ahead size during construction, so parameter changes never
-//! reallocate on the audio thread.
-//! Parameter identifiers, ranges and defaults mirror the C# effect (threshold,
-//! ceiling and release are dB / ms facing on both sides) so the two
-//! implementations are numerically equivalent (the basis of the 2.2 reference
-//! comparison).
+//! Rust DSP derived from the reference C# `OwnaudioNET.Effects.LimiterEffect`:
+//! a look-ahead delay line feeds a sliding-window-maximum peak detector (an
+//! array-based monotonic deque, O(1) amortized, zero-allocation); the required
+//! gain reduction feeds a second, sliding-window-**minimum** monotonic deque,
+//! and the applied gain is that window minimum, smoothed with an adaptive
+//! release toward unity (instant attack).  A final hard ceiling clamps the
+//! output.  All buffers are pre-allocated at construction (the max look-ahead in
+//! frames × up to [`PREALLOC_CHANNELS`]), so parameter changes never reallocate
+//! on the audio thread; a wider-than-expected channel count grows the delay line
+//! once (amortized, off the steady-state hot path).  Parameter identifiers,
+//! ranges and defaults mirror the C# effect (threshold, ceiling and release are
+//! dB / ms facing on both sides).
+//!
+//! **Stereo-linked, frame-based detection (intentional divergence from the C#
+//! reference):** the C# effect runs one interleaved-sample delay line and one
+//! detector, so a stereo frame's two channels are analysed one step apart — the
+//! stereo image drifts and one channel can momentarily exceed the intended
+//! reduction (undesirable for a brick-wall limiter).  This port works per frame:
+//! the detector is driven by the linked channel peak (`max(|L|, |R|, …)`), the
+//! delay line stores whole interleaved frames, and the single smoothed gain is
+//! applied to every channel of the delayed frame before the per-channel ceiling
+//! clamp.  Because the window is measured in *frames*, the look-ahead is exactly
+//! `lookahead_ms` regardless of channel count (the per-sample version's window
+//! shrank with channel count).  Mono input (one channel per frame) stays
+//! equivalent to the per-sample reference; the `matches_reference_dsp` test
+//! compares against a frame-linked f64 ground truth whose window minimum is
+//! computed by an independent linear scan.
 //!
 //! No denormal flush is required here: the smoothed gain converges toward unity
 //! and the gain-reduction floor is 0.1, so the recursive state is always bounded
@@ -43,6 +55,10 @@ const MAX_LOOKAHEAD_MS: f32 = 20.0;
 /// Minimum gain the reduction is allowed to reach (reference parity, -20 dB).
 const MIN_GAIN: f32 = 0.1;
 
+/// Channel count the delay line is pre-sized for, so a stereo stream never
+/// reallocates on the audio thread.  A wider stream grows it once.
+const PREALLOC_CHANNELS: usize = 2;
+
 #[inline]
 fn db_to_linear(db: f32) -> f32 {
     10.0f32.powf(db / 20.0)
@@ -67,16 +83,23 @@ pub struct Limiter {
     threshold_lin: f32,
     ceiling_lin: f32,
     release: f32,
+    /// Maximum look-ahead window, in frames (the deque capacity).
     max_buffer_size: usize,
-    lookahead_samples: usize,
+    /// Current look-ahead, in frames.
+    lookahead_frames: usize,
+    /// Active detection/delay window, in frames.
     active_buffer_size: usize,
+    /// Channel count the delay line is currently laid out for (0 = none yet).
+    channels: usize,
 
-    // Look-ahead delay line.
+    // Look-ahead delay line, storing whole interleaved frames back to back
+    // (`frame_slot * channels + ch`).
     delay_buffer: Vec<f32>,
+    /// Current write slot, in frames.
     delay_index: usize,
 
-    // Monotonic deque for the sliding-window maximum of |input| (array-based,
-    // circular).
+    // Monotonic deque for the sliding-window maximum of the per-frame linked
+    // peak (array-based, circular; indices are frame indices).
     deque_indices: Vec<i64>,
     deque_values: Vec<f32>,
     deque_head: usize,
@@ -94,7 +117,8 @@ pub struct Limiter {
 
     current_gain: f32,
     target_gain: f32,
-    absolute_sample_index: i64,
+    /// Monotonic frame counter driving the deque expiry windows.
+    absolute_frame_index: i64,
 }
 
 impl Limiter {
@@ -108,7 +132,8 @@ impl Limiter {
         };
         let max_buffer_size = ((MAX_LOOKAHEAD_MS * sample_rate / 1000.0) as usize).max(1);
         let lookahead_ms = 5.0f32;
-        let lookahead_samples = ((lookahead_ms * sample_rate / 1000.0) as usize).clamp(1, max_buffer_size);
+        let lookahead_frames =
+            ((lookahead_ms * sample_rate / 1000.0) as usize).clamp(1, max_buffer_size);
 
         let mut limiter = Self {
             enabled: true,
@@ -121,9 +146,10 @@ impl Limiter {
             ceiling_lin: db_to_linear(-0.1),
             release: release_coeff(50.0, sample_rate),
             max_buffer_size,
-            lookahead_samples,
-            active_buffer_size: lookahead_samples,
-            delay_buffer: vec![0.0; max_buffer_size],
+            lookahead_frames,
+            active_buffer_size: lookahead_frames,
+            channels: 0,
+            delay_buffer: vec![0.0; max_buffer_size * PREALLOC_CHANNELS],
             delay_index: 0,
             deque_indices: vec![0; max_buffer_size],
             deque_values: vec![0.0; max_buffer_size],
@@ -137,21 +163,34 @@ impl Limiter {
             min_deque_size: 0,
             current_gain: 1.0,
             target_gain: 1.0,
-            absolute_sample_index: 0,
+            absolute_frame_index: 0,
         };
         limiter.reset_state();
         limiter
     }
 
+    /// Ensures the delay line is laid out for `channels`; relayout (and reset)
+    /// happens only when the channel count changes — a stereo stream pays this
+    /// once on the first block, never in steady state.
+    fn ensure_channels(&mut self, channels: usize) {
+        if channels == self.channels {
+            return;
+        }
+        self.channels = channels;
+        let needed = self.max_buffer_size * channels;
+        if self.delay_buffer.len() < needed {
+            self.delay_buffer.resize(needed, 0.0);
+        }
+        self.reset_state();
+    }
+
     /// Clears the active state without changing parameters (reference `Reset`).
     fn reset_state(&mut self) {
-        for s in self.delay_buffer.iter_mut().take(self.active_buffer_size) {
-            *s = 0.0;
-        }
+        self.delay_buffer.iter_mut().for_each(|s| *s = 0.0);
         self.current_gain = 1.0;
         self.target_gain = 1.0;
         self.delay_index = 0;
-        self.absolute_sample_index = 0;
+        self.absolute_frame_index = 0;
         self.deque_head = 0;
         self.deque_tail = 0;
         self.deque_size = 0;
@@ -163,26 +202,24 @@ impl Limiter {
     /// Recomputes the look-ahead window from `lookahead_ms`; resets when it
     /// changes (reference parity).
     fn update_lookahead(&mut self) {
-        let new_samples = ((self.lookahead_ms * self.sample_rate / 1000.0) as usize)
+        let new_frames = ((self.lookahead_ms * self.sample_rate / 1000.0) as usize)
             .clamp(1, self.max_buffer_size);
-        if new_samples != self.lookahead_samples {
-            self.lookahead_samples = new_samples;
-            self.active_buffer_size = new_samples;
+        if new_frames != self.lookahead_frames {
+            self.lookahead_frames = new_frames;
+            self.active_buffer_size = new_frames;
             self.reset_state();
         }
     }
 
-    /// Sliding-window maximum of `|input|` over the active window (monotonic
-    /// deque).  Returns the current window peak.
-    fn peak_level(&mut self) -> f32 {
-        let expire_threshold = self.absolute_sample_index - self.active_buffer_size as i64;
+    /// Sliding-window maximum of the per-frame linked peak over the active
+    /// window (monotonic deque).  `current_abs` is this frame's linked peak.
+    fn peak_level(&mut self, current_abs: f32) -> f32 {
+        let expire_threshold = self.absolute_frame_index - self.active_buffer_size as i64;
 
         while self.deque_size > 0 && self.deque_indices[self.deque_head] <= expire_threshold {
             self.deque_head = (self.deque_head + 1) % self.max_buffer_size;
             self.deque_size -= 1;
         }
-
-        let current_abs = self.delay_buffer[self.delay_index].abs();
 
         while self.deque_size > 0 {
             let back_idx = (self.deque_tail + self.max_buffer_size - 1) % self.max_buffer_size;
@@ -193,24 +230,20 @@ impl Limiter {
             self.deque_size -= 1;
         }
 
-        self.deque_indices[self.deque_tail] = self.absolute_sample_index;
+        self.deque_indices[self.deque_tail] = self.absolute_frame_index;
         self.deque_values[self.deque_tail] = current_abs;
         self.deque_tail = (self.deque_tail + 1) % self.max_buffer_size;
         self.deque_size += 1;
 
-        if self.deque_size > 0 {
-            self.deque_values[self.deque_head]
-        } else {
-            0.0
-        }
+        self.deque_values[self.deque_head]
     }
 
     /// Sliding-window minimum of the required gain over the active window
-    /// (monotonic deque).  Pushes `required` for the current sample and returns
-    /// the window minimum — the same value the former linear scan of the
-    /// envelope buffer produced, computed in O(1) amortized.
+    /// (monotonic deque).  Pushes `required` for the current frame and returns
+    /// the window minimum — the same value a linear scan of the envelope buffer
+    /// produces, computed in O(1) amortized.
     fn min_gain_window(&mut self, required: f32) -> f32 {
-        let expire_threshold = self.absolute_sample_index - self.active_buffer_size as i64;
+        let expire_threshold = self.absolute_frame_index - self.active_buffer_size as i64;
 
         while self.min_deque_size > 0
             && self.min_deque_indices[self.min_deque_head] <= expire_threshold
@@ -228,7 +261,7 @@ impl Limiter {
             self.min_deque_size -= 1;
         }
 
-        self.min_deque_indices[self.min_deque_tail] = self.absolute_sample_index;
+        self.min_deque_indices[self.min_deque_tail] = self.absolute_frame_index;
         self.min_deque_values[self.min_deque_tail] = required;
         self.min_deque_tail = (self.min_deque_tail + 1) % self.max_buffer_size;
         self.min_deque_size += 1;
@@ -291,16 +324,33 @@ impl Effect for Limiter {
         EffectType::Limiter
     }
 
-    fn process(&mut self, buffer: &mut [f32], _channels: u16) {
+    fn process(&mut self, buffer: &mut [f32], channels: u16) {
         if !self.enabled {
             return;
         }
 
-        for sample in buffer.iter_mut() {
-            let input = *sample;
-            self.delay_buffer[self.delay_index] = input;
+        self.ensure_channels(channels.max(1) as usize);
+        let ch = self.channels;
 
-            let peak = self.peak_level();
+        for frame in buffer.chunks_mut(ch) {
+            // 1. Stereo-linked detection: the loudest channel of the frame
+            //    drives the shared gain, guaranteeing every channel is held at
+            //    or below the ceiling with an identical reduction.
+            let mut frame_peak = 0.0f32;
+            for &s in frame.iter() {
+                let a = s.abs();
+                if a > frame_peak {
+                    frame_peak = a;
+                }
+            }
+
+            // 2. Write the whole frame into the look-ahead delay line.
+            let slot = self.delay_index * ch;
+            for (c, &s) in frame.iter().enumerate() {
+                self.delay_buffer[slot + c] = s;
+            }
+
+            let peak = self.peak_level(frame_peak);
             let required = self.gain_reduction(peak);
             let min_gain = self.min_gain_window(required);
 
@@ -311,13 +361,17 @@ impl Effect for Limiter {
                 self.target_gain = 1.0;
             }
 
-            let delayed_idx = (self.delay_index + self.active_buffer_size - self.lookahead_samples)
+            // 3. Apply the shared, smoothed gain to every channel of the delayed
+            //    frame, then hard-clamp each channel to the ceiling.
+            let delayed = (self.delay_index + self.active_buffer_size - self.lookahead_frames)
                 % self.active_buffer_size;
-            let processed = self.apply_ceiling(self.delay_buffer[delayed_idx] * smooth);
-            *sample = processed;
+            let dslot = delayed * ch;
+            for (c, s) in frame.iter_mut().enumerate() {
+                *s = self.apply_ceiling(self.delay_buffer[dslot + c] * smooth);
+            }
 
             self.delay_index = (self.delay_index + 1) % self.active_buffer_size;
-            self.absolute_sample_index += 1;
+            self.absolute_frame_index += 1;
         }
     }
 
@@ -383,14 +437,17 @@ impl Effect for Limiter {
 mod tests {
     use super::*;
 
-    /// f64 ground-truth transcription of the reference C# DSP.
+    /// Frame-linked f64 ground truth.  Detection, gain and delay all work per
+    /// frame; the window minimum is computed with an independent linear scan of
+    /// a per-frame envelope buffer (so it cross-checks the impl's min-deque).
     struct Reference {
         threshold_lin: f64,
         ceiling_lin: f64,
         release: f64,
         max_buffer_size: usize,
-        lookahead_samples: usize,
+        lookahead_frames: usize,
         active_buffer_size: usize,
+        channels: usize,
         delay_buffer: Vec<f64>,
         envelope_buffer: Vec<f64>,
         delay_index: usize,
@@ -402,7 +459,7 @@ mod tests {
         deque_size: usize,
         current_gain: f64,
         target_gain: f64,
-        absolute_sample_index: i64,
+        absolute_frame_index: i64,
     }
 
     impl Reference {
@@ -412,18 +469,20 @@ mod tests {
             ceiling_db: f64,
             release_ms: f64,
             lookahead_ms: f64,
+            channels: usize,
         ) -> Self {
             let max_buffer_size = ((MAX_LOOKAHEAD_MS as f64 * sample_rate / 1000.0) as usize).max(1);
-            let lookahead_samples =
+            let lookahead_frames =
                 ((lookahead_ms * sample_rate / 1000.0) as usize).clamp(1, max_buffer_size);
             Self {
                 threshold_lin: 10.0f64.powf(threshold_db / 20.0),
                 ceiling_lin: 10.0f64.powf(ceiling_db / 20.0),
                 release: 1.0 - (-1.0 / (release_ms * sample_rate / 1000.0)).exp(),
                 max_buffer_size,
-                lookahead_samples,
-                active_buffer_size: lookahead_samples,
-                delay_buffer: vec![0.0; max_buffer_size],
+                lookahead_frames,
+                active_buffer_size: lookahead_frames,
+                channels,
+                delay_buffer: vec![0.0; max_buffer_size * channels],
                 envelope_buffer: vec![1.0; max_buffer_size],
                 delay_index: 0,
                 envelope_index: 0,
@@ -434,17 +493,16 @@ mod tests {
                 deque_size: 0,
                 current_gain: 1.0,
                 target_gain: 1.0,
-                absolute_sample_index: 0,
+                absolute_frame_index: 0,
             }
         }
 
-        fn peak_level(&mut self) -> f64 {
-            let expire = self.absolute_sample_index - self.active_buffer_size as i64;
+        fn peak_level(&mut self, current_abs: f64) -> f64 {
+            let expire = self.absolute_frame_index - self.active_buffer_size as i64;
             while self.deque_size > 0 && self.deque_indices[self.deque_head] <= expire {
                 self.deque_head = (self.deque_head + 1) % self.max_buffer_size;
                 self.deque_size -= 1;
             }
-            let current_abs = self.delay_buffer[self.delay_index].abs();
             while self.deque_size > 0 {
                 let back = (self.deque_tail + self.max_buffer_size - 1) % self.max_buffer_size;
                 if self.deque_values[back] >= current_abs {
@@ -453,15 +511,11 @@ mod tests {
                 self.deque_tail = back;
                 self.deque_size -= 1;
             }
-            self.deque_indices[self.deque_tail] = self.absolute_sample_index;
+            self.deque_indices[self.deque_tail] = self.absolute_frame_index;
             self.deque_values[self.deque_tail] = current_abs;
             self.deque_tail = (self.deque_tail + 1) % self.max_buffer_size;
             self.deque_size += 1;
-            if self.deque_size > 0 {
-                self.deque_values[self.deque_head]
-            } else {
-                0.0
-            }
+            self.deque_values[self.deque_head]
         }
 
         fn gain_reduction(&self, peak: f64) -> f64 {
@@ -513,10 +567,21 @@ mod tests {
         }
 
         fn process(&mut self, input: &[f32]) -> Vec<f32> {
+            let ch = self.channels;
             let mut out = vec![0.0f32; input.len()];
-            for (o, &x) in out.iter_mut().zip(input.iter()) {
-                self.delay_buffer[self.delay_index] = x as f64;
-                let peak = self.peak_level();
+            for (out_frame, in_frame) in out.chunks_mut(ch).zip(input.chunks(ch)) {
+                let mut frame_peak = 0.0f64;
+                for &x in in_frame.iter() {
+                    let a = (x as f64).abs();
+                    if a > frame_peak {
+                        frame_peak = a;
+                    }
+                }
+                let slot = self.delay_index * ch;
+                for (c, &x) in in_frame.iter().enumerate() {
+                    self.delay_buffer[slot + c] = x as f64;
+                }
+                let peak = self.peak_level(frame_peak);
                 let required = self.gain_reduction(peak);
                 self.envelope_buffer[self.envelope_index] = required;
                 let mut smooth = self.smoothed_gain();
@@ -525,12 +590,15 @@ mod tests {
                     self.current_gain = 1.0;
                     self.target_gain = 1.0;
                 }
-                let idx = (self.delay_index + self.active_buffer_size - self.lookahead_samples)
+                let delayed = (self.delay_index + self.active_buffer_size - self.lookahead_frames)
                     % self.active_buffer_size;
-                *o = self.apply_ceiling(self.delay_buffer[idx] * smooth) as f32;
+                let dslot = delayed * ch;
+                for (c, o) in out_frame.iter_mut().enumerate() {
+                    *o = self.apply_ceiling(self.delay_buffer[dslot + c] * smooth) as f32;
+                }
                 self.delay_index = (self.delay_index + 1) % self.active_buffer_size;
                 self.envelope_index = (self.envelope_index + 1) % self.active_buffer_size;
-                self.absolute_sample_index += 1;
+                self.absolute_frame_index += 1;
             }
             out
         }
@@ -642,6 +710,27 @@ mod tests {
     }
 
     #[test]
+    fn stereo_channels_share_one_gain() {
+        // With a linked detector both channels of every frame are scaled by the
+        // same reduction, so identical channels stay bit-identical after
+        // limiting (no stereo-image drift).
+        let mut l = Limiter::new(48_000.0);
+        l.set_param(PARAM_THRESHOLD, -12.0);
+        let frames = 4_096;
+        let mut buf = Vec::with_capacity(frames * 2);
+        for i in 0..frames {
+            let t = i as f32 / 48_000.0;
+            let v = 0.8 * (2.0 * std::f32::consts::PI * 320.0 * t).sin();
+            buf.push(v);
+            buf.push(v);
+        }
+        l.process(&mut buf, 2);
+        for frame in buf.chunks(2) {
+            assert_eq!(frame[0], frame[1], "linked gain must keep L == R");
+        }
+    }
+
+    #[test]
     fn output_is_finite_and_length_preserved() {
         let mut l = Limiter::new(48_000.0);
         l.set_param(PARAM_THRESHOLD, -10.0);
@@ -682,7 +771,7 @@ mod tests {
             l.set_param(PARAM_LOOKAHEAD, look);
 
             let mut reference = Reference::new(
-                48_000.0, thr as f64, ceil as f64, rel as f64, look as f64,
+                48_000.0, thr as f64, ceil as f64, rel as f64, look as f64, 2,
             );
 
             let mut produced = input.clone();
