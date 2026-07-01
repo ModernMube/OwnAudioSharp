@@ -75,6 +75,32 @@ public sealed class TrackEffectChain
     }
 
     /// <summary>
+    /// Adds a new effect to the end of the chain, inferring its type from the
+    /// requested wrapper type and returning the strongly-typed instance.
+    /// </summary>
+    /// <typeparam name="T">
+    /// The effect wrapper type (for example <see cref="Ownaudio.Audio.Effects.ChorusEffect"/>),
+    /// so the caller can set its parameters without a cast.
+    /// </typeparam>
+    /// <param name="sampleRate">Sample rate in Hz; used to size DSP buffers.</param>
+    /// <returns>The newly created, strongly-typed effect instance.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <typeparamref name="T"/> is not a known effect wrapper type.
+    /// </exception>
+    /// <exception cref="Ownaudio.Safe.Exceptions.OwnAudioException">
+    /// Thrown when the native call fails.
+    /// </exception>
+    public T Add<T>(float sampleRate) where T : class
+    {
+        if (!EffectTypeByWrapper.TryGetValue(typeof(T), out EffectType effectType))
+        {
+            throw new ArgumentException($"Unknown effect wrapper type: {typeof(T).Name}", nameof(T));
+        }
+
+        return (T)Add(effectType, sampleRate);
+    }
+
+    /// <summary>
     /// Removes and disposes the effect at the given index.
     /// </summary>
     /// <param name="index">Zero-based index of the effect to remove.</param>
@@ -102,6 +128,32 @@ public sealed class TrackEffectChain
     #endregion
 
     #region Private helpers
+
+    /// <summary>
+    /// Maps each effect wrapper type to its <see cref="EffectType"/> so the
+    /// generic <see cref="Add{T}"/> can resolve the native effect id.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<Type, EffectType> EffectTypeByWrapper =
+        new Dictionary<Type, EffectType>
+        {
+            [typeof(ReverbEffect)]      = EffectType.Reverb,
+            [typeof(EqualizerEffect)]   = EffectType.Equalizer,
+            [typeof(CompressorEffect)]  = EffectType.Compressor,
+            [typeof(LimiterEffect)]     = EffectType.Limiter,
+            [typeof(DelayEffect)]       = EffectType.Delay,
+            [typeof(ChorusEffect)]      = EffectType.Chorus,
+            [typeof(DistortionEffect)]  = EffectType.Distortion,
+            [typeof(OverdriveEffect)]   = EffectType.Overdrive,
+            [typeof(FlangerEffect)]     = EffectType.Flanger,
+            [typeof(PhaserEffect)]      = EffectType.Phaser,
+            [typeof(RotaryEffect)]      = EffectType.Rotary,
+            [typeof(AutoGainEffect)]    = EffectType.AutoGain,
+            [typeof(EnhancerEffect)]    = EffectType.Enhancer,
+            [typeof(GateEffect)]        = EffectType.Gate,
+            [typeof(PitchShiftEffect)]  = EffectType.PitchShift,
+            [typeof(DynamicAmpEffect)]  = EffectType.DynamicAmp,
+            [typeof(Equalizer30Effect)] = EffectType.Equalizer30,
+        };
 
     private object CreateWrapper(EffectType effectType, EffectHandle handle)
     {
