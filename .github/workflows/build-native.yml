@@ -386,12 +386,36 @@ jobs:
           echo "Artifact tree:"
           find artifacts -type f | sort
 
+      # The real packaging projects (OwnAudio/Source/OwnaudioNET*.csproj) embed the
+      # native binaries from OwnAudioRust/runtimes/{rid}/native/, so the freshly
+      # downloaded artifacts must be staged into that layout before packing.
+      - name: Stage native binaries into runtimes/
+        run: |
+          RT="OwnAudioEngine/OwnAudioRust/runtimes"
+          stage() {
+            if [[ -f "artifacts/$1" ]]; then
+              mkdir -p "$RT/$(dirname "$2")"
+              cp "artifacts/$1" "$RT/$2"
+              echo "  staged: artifacts/$1 -> $RT/$2"
+            else
+              echo "::warning::native artifact missing: artifacts/$1"
+            fi
+          }
+          stage "win-x64/ownaudio_ffi.dll"         "win-x64/native/ownaudio_ffi.dll"
+          stage "win-arm64/ownaudio_ffi.dll"       "win-arm64/native/ownaudio_ffi.dll"
+          stage "linux-x64/libownaudio_ffi.so"     "linux-x64/native/libownaudio_ffi.so"
+          stage "linux-arm64/libownaudio_ffi.so"   "linux-arm64/native/libownaudio_ffi.so"
+          stage "osx-x64/libownaudio_ffi.dylib"    "osx-x64/native/libownaudio_ffi.dylib"
+          stage "osx-arm64/libownaudio_ffi.dylib"  "osx-arm64/native/libownaudio_ffi.dylib"
+          stage "android-arm64/libownaudio_ffi.so" "android-arm64/native/libownaudio_ffi.so"
+
+      # Pack the REAL high-level projects (they compile OwnAudio/Source/** into the
+      # OwnaudioNET public API assembly). The old OwnAudio.Packaging/* wrappers only
+      # re-packaged OwnAudioRust and produced truncated packages missing the API.
       - name: Restore .NET dependencies
         run: |
-          dotnet restore OwnAudio.Packaging/OwnAudioSharp.Basic/OwnAudioSharp.Basic.csproj \
-            -p:OwnAudioVersion="${OWNAUDIO_VERSION}"
-          dotnet restore OwnAudio.Packaging/OwnAudioSharp/OwnAudioSharp.csproj \
-            -p:OwnAudioVersion="${OWNAUDIO_VERSION}"
+          dotnet restore OwnAudio/Source/OwnaudioNET.Basic.csproj
+          dotnet restore OwnAudio/Source/OwnaudioNET.csproj
 
       # Struct-size smoke test: verify each platform binary exposes the expected ABI exports
       - name: Struct-size / symbol smoke test
@@ -420,36 +444,40 @@ jobs:
                echo "  WARN symbol check failed for $dylib")
           done
 
+      # Version is the csproj <Version> (source of truth; bumped per release).
+      # We deliberately do NOT override it from version.json here — the real
+      # projects don't use $(OwnAudioVersion), and overriding would desync the
+      # Full package from its OwnAudioSharp.Midi dependency version.
       - name: Pack OwnAudioSharp.Basic
         run: |
-          dotnet pack OwnAudio.Packaging/OwnAudioSharp.Basic/OwnAudioSharp.Basic.csproj \
+          dotnet pack OwnAudio/Source/OwnaudioNET.Basic.csproj \
             --configuration Release \
             --no-restore \
-            -p:OwnAudioVersion="${OWNAUDIO_VERSION}" \
-            --output OwnAudio.Packaging/nupkg
+            -p:GeneratePackageOnBuild=false \
+            --output packages-out
 
       - name: Pack OwnAudioSharp (Full)
         run: |
-          dotnet pack OwnAudio.Packaging/OwnAudioSharp/OwnAudioSharp.csproj \
+          dotnet pack OwnAudio/Source/OwnaudioNET.csproj \
             --configuration Release \
             --no-restore \
-            -p:OwnAudioVersion="${OWNAUDIO_VERSION}" \
-            --output OwnAudio.Packaging/nupkg
+            -p:GeneratePackageOnBuild=false \
+            --output packages-out
 
       - name: Verify OwnAudioSharp.Basic package
         run: |
-          NUPKG=$(ls OwnAudio.Packaging/nupkg/OwnAudioSharp.Basic.*.nupkg | head -n 1)
+          NUPKG=$(ls packages-out/OwnAudioSharp.Basic.*.nupkg | head -n 1)
           bash OwnAudio.Packaging/build/verify-package.sh "${NUPKG}"
 
       - name: Verify OwnAudioSharp package
         run: |
-          NUPKG=$(ls OwnAudio.Packaging/nupkg/OwnAudioSharp.*.nupkg | grep -v "Basic\|Mobile" | head -n 1)
+          NUPKG=$(ls packages-out/OwnAudioSharp.*.nupkg | grep -v "Basic\|Mobile" | head -n 1)
           bash OwnAudio.Packaging/build/verify-package.sh "${NUPKG}"
 
       - uses: actions/upload-artifact@v4
         with:
           name: nupkg
-          path: OwnAudio.Packaging/nupkg/*.nupkg
+          path: packages-out/*.nupkg
           retention-days: 30
 
   # -------------------------------------------------------------------------
@@ -566,6 +594,10 @@ jobs:
         shell: bash
         run: |
           mkdir -p int-test
+          # Derive the version from the actually-packed nupkg (the real projects
+          # carry their version in the csproj, so we must not assume version.json).
+          PKG_VER=$(ls test-pkgs/OwnAudioSharp.Basic.*.nupkg | head -n1 | sed -E 's|.*/OwnAudioSharp\.Basic\.(.+)\.nupkg|\1|')
+          echo "Detected package version: ${PKG_VER}"
           # A project-local nuget.config points at the local feed with a
           # relative path. This avoids `dotnet nuget add source`, which fails
           # on Windows bash because $(pwd) yields an MSYS path the CLI rejects.
@@ -588,7 +620,7 @@ jobs:
               <ImplicitUsings>enable</ImplicitUsings>
             </PropertyGroup>
             <ItemGroup>
-              <PackageReference Include="OwnAudioSharp.Basic" Version="${OWNAUDIO_VERSION}" />
+              <PackageReference Include="OwnAudioSharp.Basic" Version="${PKG_VER}" />
             </ItemGroup>
           </Project>
           EOF
@@ -614,6 +646,13 @@ jobs:
               // Other exceptions (e.g. no audio device in CI) are acceptable.
               Console.WriteLine($"Non-fatal exception (expected in headless CI): {ex.GetType().Name}: {ex.Message}");
           }
+
+          // High-level API presence check: a truncated package (one that ships only
+          // the low-level engine and omits the OwnaudioNET public API assembly) fails
+          // to COMPILE here. This guards against the packaging regression where the
+          // OwnAudio.Packaging wrappers produced API-less packages.
+          Console.WriteLine($"High-level API type: {typeof(OwnaudioNET.Mixing.AudioMixer).FullName}");
+
           Console.WriteLine("Integration test PASS.");
           EOF
 

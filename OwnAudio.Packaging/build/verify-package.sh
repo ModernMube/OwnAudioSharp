@@ -171,7 +171,7 @@ fi
 # Check 4: No internal namespace types in public surface
 # ---------------------------------------------------------------------------
 echo ""
-echo "[4/4] Checking managed assembly surface..."
+echo "[4/5] Checking managed assembly surface..."
 
 MANAGED_DLL=$(find "${TMPDIR}" -name "OwnAudioRust.dll" | head -n 1)
 if [[ -z "${MANAGED_DLL}" ]]; then
@@ -188,6 +188,26 @@ if [[ -n "${MANAGED_DLL}" ]]; then
     fi
 else
     echo "  SKIP No managed DLL found for surface check."
+fi
+
+# ---------------------------------------------------------------------------
+# Check 5: High-level API assembly present (anti-truncation guard)
+# ---------------------------------------------------------------------------
+echo ""
+echo "[5/5] Checking high-level OwnaudioNET API assembly..."
+
+# Every shipped package (Basic / Full / Mobile) must carry the OwnaudioNET public
+# API assembly compiled from OwnAudio/Source/**. A package that ships only the
+# low-level engine (OwnAudioRust.dll) is TRUNCATED and must fail verification.
+API_DLL=$(find "${TMPDIR}/lib" -name "OwnaudioNET*.dll" 2>/dev/null | head -n 1)
+if [[ -z "${API_DLL}" ]]; then
+    echo "  FAIL No OwnaudioNET*.dll under lib/ — package is TRUNCATED (missing public API)."
+    FAILED=1
+elif ! strings "${API_DLL}" 2>/dev/null | grep -q "OwnaudioNET.Mixing"; then
+    echo "  FAIL $(basename "${API_DLL}") does not expose the OwnaudioNET.Mixing namespace — API assembly looks empty."
+    FAILED=1
+else
+    echo "  OK  $(basename "${API_DLL}") present with OwnaudioNET public namespaces."
 fi
 
 # ---------------------------------------------------------------------------
