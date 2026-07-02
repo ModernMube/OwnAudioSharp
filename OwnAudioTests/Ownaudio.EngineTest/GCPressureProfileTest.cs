@@ -1,189 +1,174 @@
 using System;
-using System.IO;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Ownaudio;
 using Ownaudio.Core;
 using OwnaudioNET.Mixing;
 using OwnaudioNET.Sources;
-using System.Linq;
-using System.Collections.Generic;
 
 namespace Ownaudio.EngineTest;
 
 /// <summary>
-/// GC Pressure Profiling Test for MultitrackPlayer scenario.
-/// Tests 22 simultaneous tracks playing for 60 seconds and measures GC pressure.
+/// GC-pressure acceptance test for the Rust refactor (TODO item 2.5).
 /// </summary>
+/// <remarks>
+/// <para>
+/// Drives the shipping managed path — <see cref="AudioMixer"/> pumping many
+/// <see cref="SampleSource"/>s into the Rust-backed engine — for a sustained interval and asserts
+/// that the steady-state hot path does not churn the garbage collector. The refactor's goal is a
+/// zero-allocation managed pipeline feeding the native engine, so a healthy run produces no Gen2
+/// collections, negligible managed heap growth and a near-zero Gen0 rate.
+/// </para>
+/// <para>
+/// The test is self-contained: it synthesises one shared, looping sine buffer for all tracks (no
+/// external audio files), and skips gracefully when the host has no output device able to open the
+/// requested configuration (environmental, not an engine defect). The measurement window defaults to
+/// 60 s and can be shortened for local iteration via the <c>OWNAUDIO_GC_TEST_SECONDS</c> environment
+/// variable.
+/// </para>
+/// </remarks>
 [TestClass]
 public class GCPressureProfileTest
 {
+    private const int TrackCount = 22;
+    private const int SampleRate = 48000;
+    private const int Channels = 2;
+    private const int BufferFrames = 512;
+    private const int DefaultDurationSeconds = 60;
+
+    // Acceptance thresholds for the steady-state managed hot path.
+    private const int MaxGen2Collections = 0;
+    private const double MaxManagedGrowthMb = 10.0;
+    private const double MaxGen0PerSecond = 1.0;
+
     [TestMethod]
-    [Timeout(90000)] // 90 second timeout
-    public void TestMultitrackPlayback_22Tracks_60Seconds_MeasureGCPressure()
+    [TestCategory("LongRunning")]
+    [Timeout(120000)]
+    public void MultitrackPlayback_22Tracks_SteadyState_HotPathIsAllocationFree()
     {
-        // This test requires 22 test audio files
-        // Skip if not available
-        string testDataPath = Path.Combine(Environment.CurrentDirectory, "TestAssets");
-        if (!Directory.Exists(testDataPath))
-        {
-            Assert.Inconclusive("TestAssets directory not found. Skipping GC pressure test.");
-            return;
-        }
-
-        var audioFiles = Directory.GetFiles(testDataPath, "*.wav")
-            .Concat(Directory.GetFiles(testDataPath, "*.mp3"))
-            .Take(22)
-            .ToArray();
-
-        if (audioFiles.Length < 2)
-        {
-            Assert.Inconclusive($"Need at least 2 audio files for testing. Found: {audioFiles.Length}");
-            return;
-        }
-
-        Console.WriteLine($"Starting GC Pressure Test with {audioFiles.Length} tracks...");
-        Console.WriteLine($"Test duration: 60 seconds");
-        Console.WriteLine("===================================================");
-
-        // Initialize engine
-        var engine = AudioEngineFactory.CreateDefault();
+        int durationSeconds = ResolveDurationSeconds();
 
         var config = new AudioConfig
         {
-            SampleRate = 48000,
-            Channels = 2,
-            BufferSize = 512
+            SampleRate = SampleRate,
+            Channels = Channels,
+            BufferSize = BufferFrames,
         };
 
-        engine.Initialize(config);
+        // Skip gracefully when no usable output device exists on this host (e.g. headless CI).
+        using IAudioEngine engine = EngineTestSupport.CreateOrSkip(config);
         engine.Start();
 
-        // Create mixer
-        var mixer = new AudioMixer(engine, bufferSizeInFrames: 512);
-        mixer.Start();
+        using var mixer = new AudioMixer(engine, bufferSizeInFrames: BufferFrames);
 
-        // Create and add 22 sources (or duplicate if we have fewer files)
-        var sources = new List<FileSource>();
-        for (int i = 0; i < 22; i++)
+        // One shared, looping 2-second stereo sine feeds every track. SampleSource.ReadSamples is
+        // allocation-free (span copies only), so any GC growth measured here comes from the
+        // mixer/engine pump path, which is exactly what the acceptance criterion guards.
+        float[] sine = GenerateStereoSine(seconds: 2, sampleRate: SampleRate, frequencyHz: 220.0);
+
+        var sources = new List<SampleSource>(TrackCount);
+        for (int i = 0; i < TrackCount; i++)
         {
-            var filePath = audioFiles[i % audioFiles.Length];
-            var source = new FileSource(filePath, bufferSizeInFrames: 8192,
-                targetSampleRate: 48000, targetChannels: 2);
-            source.Volume = 1.0f / 22.0f; // Reduce volume to prevent clipping
+            var source = new SampleSource(sine, config)
+            {
+                Loop = true,
+                Volume = 1.0f / TrackCount,
+            };
             sources.Add(source);
-        }
-
-        // Add all sources to mixer
-        foreach (var source in sources)
-        {
             mixer.AddSource(source);
         }
 
-        // Start playback
-        foreach (var source in sources)
+        mixer.Start();
+        foreach (SampleSource source in sources)
         {
             source.Play();
         }
 
-        // GC Baseline measurement
+        // Let the pipeline reach steady state before taking a forced-GC baseline.
+        Thread.Sleep(1000);
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
-        Thread.Sleep(500); // Stabilize
+        Thread.Sleep(500);
 
-        long initialGen0 = GC.CollectionCount(0);
-        long initialGen1 = GC.CollectionCount(1);
-        long initialGen2 = GC.CollectionCount(2);
-        long initialMemory = GC.GetTotalMemory(false);
-
-        Console.WriteLine($"Baseline GC Stats:");
-        Console.WriteLine($"  Gen0: {initialGen0}, Gen1: {initialGen1}, Gen2: {initialGen2}");
-        Console.WriteLine($"  Memory: {initialMemory / 1024}KB");
-        Console.WriteLine("===================================================");
+        long baseGen0 = GC.CollectionCount(0);
+        long baseGen1 = GC.CollectionCount(1);
+        long baseGen2 = GC.CollectionCount(2);
+        long baseMemory = GC.GetTotalMemory(forceFullCollection: false);
 
         var stopwatch = Stopwatch.StartNew();
-        var measurementInterval = TimeSpan.FromSeconds(5);
-        var nextMeasurement = measurementInterval;
-
-        while (stopwatch.Elapsed < TimeSpan.FromSeconds(60))
+        while (stopwatch.Elapsed < TimeSpan.FromSeconds(durationSeconds))
         {
-            Thread.Sleep(100);
-
-            if (stopwatch.Elapsed >= nextMeasurement)
-            {
-                long currentGen0 = GC.CollectionCount(0) - initialGen0;
-                long currentGen1 = GC.CollectionCount(1) - initialGen1;
-                long currentGen2 = GC.CollectionCount(2) - initialGen2;
-                long currentMemory = GC.GetTotalMemory(false);
-                long memoryDelta = currentMemory - initialMemory;
-
-                Console.WriteLine($"[{stopwatch.Elapsed.TotalSeconds:F1}s] " +
-                    $"Gen0: {currentGen0}, Gen1: {currentGen1}, Gen2: {currentGen2}, " +
-                    $"Mem: {currentMemory / 1024}KB ({(memoryDelta >= 0 ? "+" : "")}{memoryDelta / 1024}KB)");
-
-                nextMeasurement += measurementInterval;
-            }
+            Thread.Sleep(200);
         }
-
         stopwatch.Stop();
 
-        // Final measurements
-        long finalGen0 = GC.CollectionCount(0) - initialGen0;
-        long finalGen1 = GC.CollectionCount(1) - initialGen1;
-        long finalGen2 = GC.CollectionCount(2) - initialGen2;
-        long finalMemory = GC.GetTotalMemory(false);
-        long totalMemoryDelta = finalMemory - initialMemory;
+        long gen0 = GC.CollectionCount(0) - baseGen0;
+        long gen1 = GC.CollectionCount(1) - baseGen1;
+        long gen2 = GC.CollectionCount(2) - baseGen2;
+        long memoryGrowth = GC.GetTotalMemory(forceFullCollection: false) - baseMemory;
 
-        Console.WriteLine("===================================================");
-        Console.WriteLine("Final GC Statistics (60 seconds):");
-        Console.WriteLine($"  Gen0 Collections: {finalGen0} ({finalGen0 / 60.0:F2} per second)");
-        Console.WriteLine($"  Gen1 Collections: {finalGen1} ({finalGen1 / 60.0:F2} per second)");
-        Console.WriteLine($"  Gen2 Collections: {finalGen2} ({finalGen2 / 60.0:F2} per second)");
-        Console.WriteLine($"  Memory Delta: {totalMemoryDelta / 1024}KB");
-        Console.WriteLine($"  Final Memory: {finalMemory / 1024}KB");
-        Console.WriteLine("===================================================");
-
-        // Cleanup
-        foreach (var source in sources)
+        foreach (SampleSource source in sources)
         {
             source.Stop();
             source.Dispose();
         }
         mixer.Stop();
-        mixer.Dispose();
         engine.Stop();
-        engine.Dispose();
 
-        double gen0PerSecond = finalGen0 / 60.0;
-        double gen1PerSecond = finalGen1 / 60.0;
-        long memoryGrowthMB = totalMemoryDelta / (1024 * 1024);
+        double elapsedSeconds = stopwatch.Elapsed.TotalSeconds;
+        double gen0PerSecond = gen0 / elapsedSeconds;
+        double memoryGrowthMb = memoryGrowth / (1024.0 * 1024.0);
 
-        Console.WriteLine("\nAcceptance Criteria Check:");
-        Console.WriteLine($"  Gen0/sec: {gen0PerSecond:F3} (target: < 0.167) [{(gen0PerSecond < 0.167 ? "PASS" : "FAIL")}]");
-        Console.WriteLine($"  Gen1/60s: {finalGen1} (target: < 2) [{(finalGen1 < 2 ? "PASS" : "FAIL")}]");
-        Console.WriteLine($"  Gen2/60s: {finalGen2} (target: 0) [{(finalGen2 == 0 ? "PASS" : "FAIL")}]");
-        Console.WriteLine($"  Memory Growth: {memoryGrowthMB}MB (target: < 10MB) [{(memoryGrowthMB < 10 ? "PASS" : "FAIL")}]");
+        Console.WriteLine("GC pressure over {0:F1}s with {1} tracks (Rust engine):", elapsedSeconds, TrackCount);
+        Console.WriteLine("  Gen0: {0} ({1:F3}/s)  Gen1: {2}  Gen2: {3}", gen0, gen0PerSecond, gen1, gen2);
+        Console.WriteLine("  Managed heap growth: {0:F2} MB", memoryGrowthMb);
 
-        // Assert (warning only, not strict failure)
-        if (gen0PerSecond > 0.5)
+        Assert.AreEqual(MaxGen2Collections, gen2,
+            $"Gen2 collections during steady-state playback must be {MaxGen2Collections}, was {gen2} " +
+            "(indicates large/long-lived allocations churning on the hot path).");
+
+        Assert.IsTrue(memoryGrowthMb < MaxManagedGrowthMb,
+            $"Steady-state managed heap growth must stay under {MaxManagedGrowthMb:F0} MB, was {memoryGrowthMb:F2} MB.");
+
+        Assert.IsTrue(gen0PerSecond < MaxGen0PerSecond,
+            $"Steady-state Gen0 rate must stay under {MaxGen0PerSecond:F1}/s, was {gen0PerSecond:F3}/s " +
+            "(indicates per-buffer allocations on the managed pump path).");
+    }
+
+    /// <summary>
+    /// Returns the measurement duration in seconds, honouring the <c>OWNAUDIO_GC_TEST_SECONDS</c>
+    /// override (clamped to a sensible range) so local iteration can use a shorter window.
+    /// </summary>
+    private static int ResolveDurationSeconds()
+    {
+        string? raw = Environment.GetEnvironmentVariable("OWNAUDIO_GC_TEST_SECONDS");
+        if (int.TryParse(raw, out int seconds) && seconds > 0)
         {
-            Console.WriteLine($"\nWARNING: High Gen0 collection rate: {gen0PerSecond:F3}/sec");
-        }
-        if (finalGen1 > 5)
-        {
-            Console.WriteLine($"\nWARNING: High Gen1 collections: {finalGen1} in 60s");
-        }
-        if (finalGen2 > 0)
-        {
-            Console.WriteLine($"\nWARNING: Gen2 collections detected: {finalGen2} in 60s");
-        }
-        if (memoryGrowthMB > 10)
-        {
-            Console.WriteLine($"\nWARNING: High memory growth: {memoryGrowthMB}MB in 60s");
+            return Math.Clamp(seconds, 1, 100);
         }
 
-        Console.WriteLine("\nGC Pressure Profile Test Completed");
+        return DefaultDurationSeconds;
+    }
+
+    /// <summary>
+    /// Builds an interleaved stereo sine buffer of the requested length. Allocated once, before the
+    /// baseline, so it never counts toward the measured hot-path pressure.
+    /// </summary>
+    private static float[] GenerateStereoSine(int seconds, int sampleRate, double frequencyHz)
+    {
+        int frames = seconds * sampleRate;
+        var buffer = new float[frames * Channels];
+        double step = 2.0 * Math.PI * frequencyHz / sampleRate;
+
+        for (int frame = 0; frame < frames; frame++)
+        {
+            float value = (float)(0.25 * Math.Sin(frame * step));
+            buffer[frame * Channels] = value;
+            buffer[frame * Channels + 1] = value;
+        }
+
+        return buffer;
     }
 }
