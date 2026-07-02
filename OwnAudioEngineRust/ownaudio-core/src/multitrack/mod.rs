@@ -324,6 +324,7 @@ impl MultiTrackMixer {
 mod tests {
     use super::track::TrackSource;
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     /// In-memory test source that yields a fixed buffer once, then silence.
     struct VecSource {
@@ -573,5 +574,83 @@ mod tests {
         assert_eq!(mixer.track_count(), 8);
         // Capacity unchanged → no reallocation occurred on the audio thread.
         assert_eq!(mixer.tracks.capacity(), MAX_TRACKS);
+    }
+
+    /// A [`TrackSource`] that emits a monotonically increasing sample ramp (each
+    /// sample equals its global index) and records how many samples it has been
+    /// asked for.  The ramp lets the mix output be checked for gap-free continuity
+    /// across blocks, while the counter lets each track's consumption be compared
+    /// to the transport clock — together detecting any inter-track or clock drift.
+    struct RampSource {
+        next: u64,
+        read_total: Arc<AtomicU64>,
+    }
+
+    impl RampSource {
+        fn new(read_total: Arc<AtomicU64>) -> Self {
+            Self { next: 0, read_total }
+        }
+    }
+
+    impl TrackSource for RampSource {
+        fn read(&mut self, out: &mut [f32]) -> usize {
+            for s in out.iter_mut() {
+                *s = self.next as f32;
+                self.next += 1;
+            }
+            self.read_total.fetch_add(out.len() as u64, Ordering::Relaxed);
+            out.len()
+        }
+    }
+
+    #[test]
+    fn tracks_stay_sample_locked_over_many_blocks_no_drift() {
+        // 2.4 sync-drift regression: many tracks driven by the shared clock must
+        // advance in exact lockstep over thousands of blocks.  The mixed output
+        // stays a gap-free sum of ramps (any skipped or repeated sample would break
+        // the continuity), the clock advances by exactly one frame per output frame,
+        // and every track consumes exactly the clock's worth of samples — zero
+        // accumulated drift.  The default track gain is unity and its smoother rests
+        // there, so the ramp arithmetic stays exact.
+        const CHANNELS: u16 = 1;
+        const BLOCK: usize = 512;
+        const BLOCKS: usize = 4000;
+        const TRACKS: usize = 3;
+
+        let mut mixer = MultiTrackMixer::new(48_000.0, CHANNELS);
+        let counters: Vec<Arc<AtomicU64>> =
+            (0..TRACKS).map(|_| Arc::new(AtomicU64::new(0))).collect();
+        for c in &counters {
+            let (id, _) = mixer.add_track();
+            mixer.set_track_source(id, Some(Box::new(RampSource::new(c.clone()))));
+            play(&mut mixer, id);
+        }
+
+        let mut out = [0.0f32; BLOCK];
+        for block in 0..BLOCKS {
+            mixer.mix(&mut out);
+            for (i, &sample) in out.iter().enumerate() {
+                let global = block as u64 * BLOCK as u64 + i as u64;
+                let expected = (TRACKS as u64 * global) as f32;
+                assert_eq!(
+                    sample, expected,
+                    "sync drift at block {block}, offset {i}: got {sample}, expected {expected}"
+                );
+            }
+        }
+
+        let total_frames = (BLOCKS * BLOCK) as u64;
+        assert_eq!(
+            mixer.clock().position(),
+            total_frames,
+            "clock must advance by exactly one frame per output frame"
+        );
+        for (t, c) in counters.iter().enumerate() {
+            assert_eq!(
+                c.load(Ordering::Relaxed),
+                total_frames * CHANNELS as u64,
+                "track {t} consumed a different sample count than the clock → drift"
+            );
+        }
     }
 }
