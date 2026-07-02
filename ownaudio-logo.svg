@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 150" width="440" role="img" aria-label="OwnAudio">
+  <style>
+    .wm { font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+  </style>
+  <text x="280" y="92" text-anchor="middle" class="wm" font-size="96" letter-spacing="-2">
+    <tspan fill="#FF7A18" font-weight="200">Own</tspan><tspan fill="#1B6FDE" font-weight="800">audio</tspan>
+  </text>
+  <g fill="none" stroke-linecap="round">
+    <path d="M96 122 h368" stroke="#E5E7EB" stroke-width="2"/>
+    <path d="M232 122 q24 -18 48 0 t48 0" stroke="#1B6FDE" stroke-width="3"/>
+  </g>
+</svg>
