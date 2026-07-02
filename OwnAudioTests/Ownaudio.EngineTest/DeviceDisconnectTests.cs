@@ -1,7 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Ownaudio.Core;
 using Ownaudio.Core.Common;
-using Ownaudio.Native;
 using System;
 using System.Reflection;
 using System.Threading;

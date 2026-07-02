@@ -9,6 +9,6 @@ namespace OwnaudioNET.Effects.SmartMaster;
 /// </summary>
 [JsonSerializable(typeof(SmartMasterConfig))]
 [JsonSourceGenerationOptions(WriteIndented = true)]
-internal partial class SmartMasterJsonContext : JsonSerializerContext
+internal partial class SmartMasterRustNextJsonContext : JsonSerializerContext
 {
 }

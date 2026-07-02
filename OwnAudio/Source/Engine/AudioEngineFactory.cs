@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Threading;
 using Ownaudio.Core;
-using Ownaudio.Native;
 using OwnaudioNET.Exceptions;
 using Logger;
 
@@ -10,16 +9,15 @@ namespace OwnaudioNET.Engine;
 /// <summary>
 /// AOT-compatible factory that creates and initializes <see cref="IAudioEngine"/> instances
 /// without any reflection or dynamic type loading. All platforms share a single
-/// <see cref="NativeAudioEngine"/> backed by PortAudio (Windows x64 primary) or MiniAudio
-/// (all other platforms and Windows fallback). A <see cref="MockAudioEngine"/> is also
-/// available for unit testing without audio hardware.
+/// Rust-backed engine (<c>RustAudioEngine</c>, driven by the native cpal audio backend).
+/// A <see cref="MockAudioEngine"/> is also available for unit testing without audio hardware.
 /// </summary>
 public static class AudioEngineFactory
 {
     #region Public Factory Methods
 
     /// <summary>
-    /// Creates and initializes a <see cref="NativeAudioEngine"/> for the current platform.
+    /// Creates and initializes the Rust-backed audio engine for the current platform.
     /// </summary>
     /// <param name="config">Audio configuration; must pass <see cref="AudioConfig.Validate"/>.</param>
     /// <returns>Initialized engine ready for playback or recording.</returns>
@@ -34,7 +32,7 @@ public static class AudioEngineFactory
             throw new AudioEngineException(
                 "Invalid audio configuration. Check SampleRate, Channels, BufferSize, and Enable* flags.");
 
-        IAudioEngine engine = new NativeAudioEngine();
+        IAudioEngine engine = new RustAudioEngine();
 
         try
         {
@@ -104,13 +102,13 @@ public static class AudioEngineFactory
     }
 
     /// <summary>
-    /// Returns true when a <see cref="NativeAudioEngine"/> can be created on this platform.
+    /// Returns true when the Rust-backed audio engine can be created on this platform.
     /// </summary>
     public static bool IsNativeEngineAvailable()
     {
         try
         {
-            using var probe = new NativeAudioEngine();
+            using var probe = new RustAudioEngine();
             return true;
         }
         catch
@@ -123,7 +121,7 @@ public static class AudioEngineFactory
     /// Returns the display name of the engine used on the current platform.
     /// </summary>
     public static string GetPlatformEngineName()
-        => "NativeAudioEngine (PortAudio/MiniAudio)";
+        => "RustAudioEngine (cpal)";
 
     #endregion
 

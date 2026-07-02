@@ -13,9 +13,8 @@ namespace Ownaudio.OwnaudioNET.Tests.PublicApi;
 /// The test uses <see cref="ApiGenerator"/> to produce a deterministic
 /// textual representation of the entire public/protected surface of the <c>OwnaudioNET</c>
 /// assembly, then compares it against the version-controlled
-/// <c>OwnaudioNET.PublicApi.approved.txt</c> baseline.
-/// The clone (phase 3, <c>OwnaudioNET.RustNext</c>) can be diffed automatically against this
-/// frozen contract for the cut-over acceptance gate (see item 0.2 / 6.1).
+/// <c>OwnaudioNET.PublicApi.approved.txt</c> baseline. After the phase-6 cut-over this same
+/// baseline proved the Rust-backed surface is byte-for-byte identical to the pre-refactor API.
 /// To intentionally update the baseline, delete the <c>.approved.txt</c> file and re-run the
 /// test (it regenerates), or copy the emitted <c>.received.txt</c> content over it.
 /// </remarks>
@@ -29,10 +28,6 @@ public sealed class PublicApiContractTests
     private static readonly ApiGeneratorOptions GeneratorOptions = new()
     {
         IncludeAssemblyAttributes = false,
-        // The phase-3 Rust-backed clone lives in the temporary OwnaudioNET.RustNext namespace.
-        // It is validated separately against this same frozen baseline (namespace-normalized,
-        // see TODO items 0.2 / 3.6), so it must not leak into the original-surface contract here.
-        DenyNamespacePrefixes = new[] { "OwnaudioNET.RustNext" },
     };
 
     /// <summary>

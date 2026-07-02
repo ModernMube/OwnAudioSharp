@@ -103,7 +103,7 @@ public static class AudioEngineFactory
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) platform = "Linux";
 
         return $"Platform: {platform}\n" +
-               $"Implementation: NativeAudioEngine (PortAudio/MiniAudio)\n" +
+               $"Implementation: RustAudioEngine (cpal)\n" +
                $"OS Description: {RuntimeInformation.OSDescription}\n" +
                $"Framework: {RuntimeInformation.FrameworkDescription}";
     }

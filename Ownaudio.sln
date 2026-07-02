@@ -55,8 +55,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "OwnAudioTests", "OwnAudioTe
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OwnAudio.MidiTest", "OwnAudioTests\OwnAudio.MidiTest\OwnAudio.MidiTest.csproj", "{3BE09E8F-D7E7-4EFC-8886-B53AC927FE04}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ownaudio.Test.RustNext", "OwnAudioTests\Ownaudio.RustNext\Ownaudio.Test.RustNext.csproj", "{B339CDC9-D0A3-4B64-92BA-028D21101770}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -298,18 +296,6 @@ Global
 		{3BE09E8F-D7E7-4EFC-8886-B53AC927FE04}.Release|x64.Build.0 = Release|Any CPU
 		{3BE09E8F-D7E7-4EFC-8886-B53AC927FE04}.Release|x86.ActiveCfg = Release|Any CPU
 		{3BE09E8F-D7E7-4EFC-8886-B53AC927FE04}.Release|x86.Build.0 = Release|Any CPU
-		{B339CDC9-D0A3-4B64-92BA-028D21101770}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{B339CDC9-D0A3-4B64-92BA-028D21101770}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{B339CDC9-D0A3-4B64-92BA-028D21101770}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{B339CDC9-D0A3-4B64-92BA-028D21101770}.Debug|x64.Build.0 = Debug|Any CPU
-		{B339CDC9-D0A3-4B64-92BA-028D21101770}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{B339CDC9-D0A3-4B64-92BA-028D21101770}.Debug|x86.Build.0 = Debug|Any CPU
-		{B339CDC9-D0A3-4B64-92BA-028D21101770}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{B339CDC9-D0A3-4B64-92BA-028D21101770}.Release|Any CPU.Build.0 = Release|Any CPU
-		{B339CDC9-D0A3-4B64-92BA-028D21101770}.Release|x64.ActiveCfg = Release|Any CPU
-		{B339CDC9-D0A3-4B64-92BA-028D21101770}.Release|x64.Build.0 = Release|Any CPU
-		{B339CDC9-D0A3-4B64-92BA-028D21101770}.Release|x86.ActiveCfg = Release|Any CPU
-		{B339CDC9-D0A3-4B64-92BA-028D21101770}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -335,7 +321,6 @@ Global
 		{0E2B41F6-7F11-32E0-66A9-3DB06389FFA8} = {CB231427-6176-683F-CCA0-FEF399EC9951}
 		{F83C5B21-2C1F-49B5-9974-AD3C9A5B5C08} = {0E2B41F6-7F11-32E0-66A9-3DB06389FFA8}
 		{3BE09E8F-D7E7-4EFC-8886-B53AC927FE04} = {DF08F50D-6DE3-AF0C-0957-6C29FA1CC1F1}
-		{B339CDC9-D0A3-4B64-92BA-028D21101770} = {19ECC34F-C8B2-4CB0-AEFF-090EF0EC46B8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {1F9E84F3-54D4-4849-89A2-B6D0BF288902}

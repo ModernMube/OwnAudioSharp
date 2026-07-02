@@ -107,7 +107,7 @@ namespace OwnaudioNET.Effects.SmartMaster
                 string json = File.ReadAllText(filePath);
                 
                 var loadedConfig = JsonSerializer.Deserialize(
-                    json, SmartMasterJsonContext.Default.SmartMasterConfig);
+                    json, SmartMasterRustNextJsonContext.Default.SmartMasterConfig);
                 
                 if (loadedConfig == null)
                     throw new InvalidOperationException("Failed to deserialize preset");
@@ -173,7 +173,7 @@ namespace OwnaudioNET.Effects.SmartMaster
         private void SaveInternal(SmartMasterConfig config, string filePath)
         {
             string json = JsonSerializer.Serialize(
-                config, SmartMasterJsonContext.Default.SmartMasterConfig);
+                config, SmartMasterRustNextJsonContext.Default.SmartMasterConfig);
             File.WriteAllText(filePath, json);
         }
     }

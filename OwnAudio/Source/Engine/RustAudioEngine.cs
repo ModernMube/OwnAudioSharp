@@ -6,7 +6,7 @@ using Ownaudio.Core.Common;
 using OwnaudioNET.Exceptions;
 using RustSafe = Ownaudio.Safe;
 
-namespace OwnaudioNET.RustNext.Engine;
+namespace OwnaudioNET.Engine;
 
 /// <summary>
 /// <see cref="IAudioEngine"/> implementation backed by the native Rust audio engine
@@ -14,7 +14,7 @@ namespace OwnaudioNET.RustNext.Engine;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This adapter is the foundation of the phase-3 <c>OwnaudioNET.RustNext</c> clone: it
+/// This adapter is the foundation of the phase-3 <c>OwnaudioNET</c> clone: it
 /// presents the exact blocking push/pull contract that the existing
 /// <see cref="OwnaudioNET.Mixing.AudioEngineWrapper"/> expects
 /// (<see cref="Send"/> blocks until buffer space is available, <see cref="Receives"/>

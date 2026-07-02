@@ -31,7 +31,7 @@ public class TestProgram
             // Step 1: Initialize Audio Engine
             Log.Info("[1/6] Initializing audio engine...");
 
-            // Use the standard OwnaudioNet API - it will automatically use NativeAudioEngine
+            // Use the standard OwnaudioNet API - it uses the Rust-backed engine (cpal)
             AudioConfig config = new AudioConfig()
             {
                 SampleRate = 48000,

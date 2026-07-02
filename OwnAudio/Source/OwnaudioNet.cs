@@ -1,4 +1,7 @@
-﻿using System.Runtime.CompilerServices;
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Ownaudio.Core;
 using OwnaudioNET.Engine;
 using OwnaudioNET.Exceptions;
@@ -7,24 +10,17 @@ using OwnaudioNET.Mixing;
 namespace OwnaudioNET;
 
 /// <summary>
-/// Main entry point for the OwnaudioNET library.
+/// Main entry point for the OwnaudioNET library — Rust-backed clone (phase-3 temp namespace).
+/// Behaviourally identical to <see cref="OwnaudioNET.OwnaudioNet"/> but driven by the native
+/// Rust audio engine via <see cref="RustAudioEngine"/>.
 /// Provides factory methods and global configuration for the audio system.
 /// </summary>
 public static partial class OwnaudioNet
 {
-#pragma warning disable CA2255
-    [ModuleInitializer]
-    internal static void RegisterNative()
-#pragma warning restore CA2255
-    {
-        _ = typeof(Ownaudio.Native.NativeAudioEngine);
-    }
-
     private static bool _initialized;
     private static AudioEngineWrapper? _engineWrapper;
     private static readonly object _initLock = new();
 
-    // AudioMixer registry for NetworkSync
     private static AudioMixer? _registeredMixer;
     private static readonly object _mixerRegistryLock = new();
 
@@ -89,15 +85,7 @@ public static partial class OwnaudioNet
 
             try
             {
-                IAudioEngine engine;
-                if (useMockEngine)
-                {
-                    engine = OwnaudioNET.Engine.AudioEngineFactory.CreateMockEngine(config, generateTestSignal: false);
-                }
-                else
-                {
-                    engine = OwnaudioNET.Engine.AudioEngineFactory.CreateEngine(config);
-                }
+                IAudioEngine engine = CreateEngine(config, useMockEngine);
 
                 _engineWrapper = new AudioEngineWrapper(engine, config, bufferMultiplier);
                 _initialized = true;
@@ -474,7 +462,7 @@ public static partial class OwnaudioNet
     /// <param name="cancellationToken">Cancellation token to abort the wait (not the stop itself).</param>
     /// <exception cref="InvalidOperationException">Thrown if not initialized.</exception>
     /// <exception cref="AudioEngineException">Thrown if stop fails.</exception>
-    /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception> 
+    /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
     public static async Task StopAsync(CancellationToken cancellationToken = default)
     {
         await Task.Run(() =>
@@ -561,5 +549,47 @@ public static partial class OwnaudioNet
 
             return _engineWrapper.GetInputDevices();
         }, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Creates the backing <see cref="IAudioEngine"/> for the requested configuration.
+    /// Uses the native Rust engine by default, or the in-process mock engine when
+    /// <paramref name="useMockEngine"/> is requested (no audio hardware required).
+    /// </summary>
+    /// <param name="config">The audio configuration.</param>
+    /// <param name="useMockEngine">When true, returns a hardware-free mock engine.</param>
+    /// <returns>An initialized engine ready for playback or recording.</returns>
+    private static IAudioEngine CreateEngine(AudioConfig config, bool useMockEngine)
+    {
+        if (useMockEngine)
+        {
+            return OwnaudioNET.Engine.AudioEngineFactory.CreateMockEngine(config, generateTestSignal: false);
+        }
+
+        if (!config.Validate())
+            throw new AudioEngineException(
+                "Invalid audio configuration. Check SampleRate, Channels, BufferSize, and Enable* flags.");
+
+        IAudioEngine engine = new RustAudioEngine();
+        try
+        {
+            int result = engine.Initialize(config);
+            if (result < 0)
+            {
+                engine.Dispose();
+                throw new AudioEngineException(
+                    $"Rust audio engine initialization failed with error code: {result}", result);
+            }
+            return engine;
+        }
+        catch (AudioEngineException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            engine.Dispose();
+            throw new AudioEngineException($"Failed to initialize Rust audio engine: {ex.Message}", ex);
+        }
     }
 }
