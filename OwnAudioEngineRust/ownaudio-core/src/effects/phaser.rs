@@ -16,6 +16,7 @@
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
+use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
 
 /// Param ID 2 — LFO modulation rate in Hz (0.1 … 10.0).
 pub const PARAM_RATE: u32 = 2;
@@ -58,6 +59,7 @@ pub struct Phaser {
 
     filters: [AllPass; MAX_STAGES],
     lfo_phase: f32,
+    mix_ramp: RampedParam,
 }
 
 impl Phaser {
@@ -76,6 +78,7 @@ impl Phaser {
             sample_rate,
             filters: [AllPass::default(); MAX_STAGES],
             lfo_phase: 0.0,
+            mix_ramp: RampedParam::new(0.5, sample_rate, DEFAULT_SMOOTH_MS),
         }
     }
 
@@ -95,13 +98,13 @@ impl Effect for Phaser {
     }
 
     fn process(&mut self, buffer: &mut [f32], _channels: u16) {
+        self.mix_ramp.begin_block();
         if !self.enabled {
             return;
         }
 
         let two_pi = std::f32::consts::PI * 2.0;
         let depth = self.depth;
-        let mix = self.mix;
         let feedback = self.feedback;
         let stages = self.stages;
         let lfo_increment = two_pi * self.rate_hz / self.sample_rate;
@@ -112,6 +115,7 @@ impl Effect for Phaser {
         let mut lfo_phase = self.lfo_phase;
 
         for sample in buffer.iter_mut() {
+            let mix = self.mix_ramp.advance();
             let input = *sample;
 
             let lfo_value = lfo_phase.sin();
@@ -144,6 +148,7 @@ impl Effect for Phaser {
             }
             PARAM_MIX => {
                 self.mix = value.clamp(0.0, 1.0);
+                self.mix_ramp.set(self.mix);
                 true
             }
             PARAM_RATE => {
@@ -181,6 +186,7 @@ impl Effect for Phaser {
     fn reset(&mut self) {
         self.filters = [AllPass::default(); MAX_STAGES];
         self.lfo_phase = 0.0;
+        self.mix_ramp.reset(self.mix);
     }
 
     fn is_enabled(&self) -> bool {

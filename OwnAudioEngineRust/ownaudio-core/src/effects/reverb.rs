@@ -14,6 +14,7 @@
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
+use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
 
 /// Param ID 2 — room size (0.0 … 1.0). Larger values lengthen the tail.
 pub const PARAM_ROOM_SIZE: u32 = 2;
@@ -68,6 +69,7 @@ pub struct Reverb {
     damp_val: f32,
     wet1: f32,
     wet2: f32,
+    mix_ramp: RampedParam,
 }
 
 impl Reverb {
@@ -109,6 +111,7 @@ impl Reverb {
             damp_val: 0.0,
             wet1: 0.0,
             wet2: 0.0,
+            mix_ramp: RampedParam::new(0.5, sample_rate, DEFAULT_SMOOTH_MS),
         };
         reverb.update_coefficients();
         reverb
@@ -137,6 +140,7 @@ impl Effect for Reverb {
     }
 
     fn process(&mut self, buffer: &mut [f32], channels: u16) {
+        self.mix_ramp.begin_block();
         if !self.enabled || channels == 0 {
             return;
         }
@@ -149,12 +153,12 @@ impl Effect for Reverb {
         let damp = self.damp_val;
         let g = self.gain;
         let dry = self.dry_level;
-        let mix = self.mix;
         let w1 = self.wet1;
         let w2 = self.wet2;
 
         for frame in 0..frame_count {
             let idx = frame * channels;
+            let mix = self.mix_ramp.advance();
 
             let input_l = buffer[idx];
             let input_r = if is_stereo { buffer[idx + 1] } else { input_l };
@@ -243,6 +247,7 @@ impl Effect for Reverb {
             }
             PARAM_MIX => {
                 self.mix = value.clamp(0.0, 1.0);
+                self.mix_ramp.set(self.mix);
                 true
             }
             PARAM_ROOM_SIZE => {
@@ -300,6 +305,7 @@ impl Effect for Reverb {
         }
         self.pre_delay_buffer.iter_mut().for_each(|s| *s = 0.0);
         self.pre_delay_index = 0;
+        self.mix_ramp.reset(self.mix);
     }
 
     fn is_enabled(&self) -> bool {

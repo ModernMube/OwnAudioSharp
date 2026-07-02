@@ -16,6 +16,7 @@
 //! pre-allocated during construction and never reallocated on the audio thread.
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
+use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
 
 /// Param ID 2 — LFO modulation rate in Hz (0.1 … 10).
 pub const PARAM_RATE: u32 = 2;
@@ -44,6 +45,7 @@ pub struct Chorus {
     lfo_phase: f32,
     lfo_increment: f32,
     voice_phases: [f32; MAX_VOICES],
+    mix_ramp: RampedParam,
 }
 
 impl Chorus {
@@ -69,6 +71,7 @@ impl Chorus {
             lfo_phase: 0.0,
             lfo_increment: 0.0,
             voice_phases,
+            mix_ramp: RampedParam::new(0.5, sample_rate, DEFAULT_SMOOTH_MS),
         };
         chorus.recalculate_increment();
         chorus
@@ -87,7 +90,10 @@ impl Effect for Chorus {
     }
 
     fn process(&mut self, buffer: &mut [f32], _channels: u16) {
-        if !self.enabled || self.mix < MIX_BYPASS_THRESHOLD {
+        self.mix_ramp.begin_block();
+        if !self.enabled
+            || (self.mix < MIX_BYPASS_THRESHOLD && self.mix_ramp.current() < MIX_BYPASS_THRESHOLD)
+        {
             return;
         }
 
@@ -95,7 +101,6 @@ impl Effect for Chorus {
         let two_pi = std::f32::consts::PI * 2.0;
 
         let depth = self.depth;
-        let mix = self.mix;
         let voices = self.voices;
         let lfo_inc = self.lfo_increment;
 
@@ -105,6 +110,7 @@ impl Effect for Chorus {
         let mut lfo_phase = self.lfo_phase;
 
         for sample in buffer.iter_mut() {
+            let mix = self.mix_ramp.advance();
             let input = *sample;
 
             // Write the dry signal into the delay line.
@@ -159,6 +165,7 @@ impl Effect for Chorus {
             }
             PARAM_MIX => {
                 self.mix = value.clamp(0.0, 1.0);
+                self.mix_ramp.set(self.mix);
                 true
             }
             PARAM_RATE => {
@@ -193,6 +200,7 @@ impl Effect for Chorus {
         self.delay_buffer.iter_mut().for_each(|s| *s = 0.0);
         self.buffer_index = 0;
         self.lfo_phase = 0.0;
+        self.mix_ramp.reset(self.mix);
     }
 
     fn is_enabled(&self) -> bool {

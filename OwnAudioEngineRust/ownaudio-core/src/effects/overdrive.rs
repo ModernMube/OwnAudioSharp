@@ -9,6 +9,7 @@
 //! basis of the 2.2 reference comparison).
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
+use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
 
 /// Param ID 2 — input gain (1.0 … 5.0). Controls the amount of overdrive.
 pub const PARAM_GAIN: u32 = 2;
@@ -29,12 +30,13 @@ pub struct Overdrive {
     output_level: f32,
     low_pass_state: f32,
     high_pass_state: f32,
+    mix_ramp: RampedParam,
 }
 
 impl Overdrive {
     /// Creates a new [`Overdrive`] with the reference default parameters
     /// (gain 2.0, tone 0.5, mix 1.0, output level 0.7).
-    pub fn new(_sample_rate: f32) -> Self {
+    pub fn new(sample_rate: f32) -> Self {
         Self {
             enabled: true,
             mix: 1.0,
@@ -43,6 +45,7 @@ impl Overdrive {
             output_level: 0.7,
             low_pass_state: 0.0,
             high_pass_state: 0.0,
+            mix_ramp: RampedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
         }
     }
 
@@ -83,18 +86,21 @@ impl Effect for Overdrive {
     }
 
     fn process(&mut self, buffer: &mut [f32], _channels: u16) {
-        if !self.enabled || self.mix < MIX_BYPASS_THRESHOLD {
+        self.mix_ramp.begin_block();
+        if !self.enabled
+            || (self.mix < MIX_BYPASS_THRESHOLD && self.mix_ramp.current() < MIX_BYPASS_THRESHOLD)
+        {
             return;
         }
 
-        let dry = 1.0 - self.mix;
         for sample in buffer.iter_mut() {
+            let mix = self.mix_ramp.advance();
             let input = *sample;
             let gained = input * self.gain;
             let mut overdriven = Self::tube_saturation(gained);
             overdriven = self.apply_tone_control(overdriven);
             overdriven *= self.output_level;
-            *sample = input * dry + overdriven * self.mix;
+            *sample = input * (1.0 - mix) + overdriven * mix;
         }
     }
 
@@ -106,6 +112,7 @@ impl Effect for Overdrive {
             }
             PARAM_MIX => {
                 self.mix = value.clamp(0.0, 1.0);
+                self.mix_ramp.set(self.mix);
                 true
             }
             PARAM_GAIN => {
@@ -138,6 +145,7 @@ impl Effect for Overdrive {
     fn reset(&mut self) {
         self.low_pass_state = 0.0;
         self.high_pass_state = 0.0;
+        self.mix_ramp.reset(self.mix);
     }
 
     fn is_enabled(&self) -> bool {

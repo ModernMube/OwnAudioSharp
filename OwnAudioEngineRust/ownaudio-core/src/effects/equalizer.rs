@@ -18,6 +18,7 @@
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
+use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
 
 /// Band gain parameter IDs (dB, -12 … +12).
 pub const PARAM_BAND_0: u32 = 2; // 31.25 Hz
@@ -97,6 +98,7 @@ pub struct Equalizer {
     // `channel * TOTAL_FILTERS + filter`.
     z1: Vec<f32>,
     z2: Vec<f32>,
+    mix_ramp: RampedParam,
 }
 
 impl Equalizer {
@@ -121,6 +123,7 @@ impl Equalizer {
             active_count: 0,
             z1: vec![0.0; PREALLOC_CHANNELS * TOTAL_FILTERS],
             z2: vec![0.0; PREALLOC_CHANNELS * TOTAL_FILTERS],
+            mix_ramp: RampedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
         };
         for band in 0..BANDS {
             eq.update_filter(band);
@@ -190,10 +193,11 @@ impl Effect for Equalizer {
     }
 
     fn process(&mut self, buffer: &mut [f32], channels: u16) {
+        self.mix_ramp.begin_block();
         if !self.enabled
             || channels == 0
             || self.active_count == 0
-            || self.mix < MIX_BYPASS_THRESHOLD
+            || (self.mix < MIX_BYPASS_THRESHOLD && self.mix_ramp.current() < MIX_BYPASS_THRESHOLD)
         {
             return;
         }
@@ -201,7 +205,6 @@ impl Effect for Equalizer {
         let channels = channels as usize;
         self.ensure_channel_state(channels);
 
-        let dry = 1.0 - self.mix;
         let frame_count = buffer.len() / channels;
         // Frame-outer / channel-inner traversal keeps the interleaved buffer
         // access sequential (cache-friendly, auto-vectorizable); each channel's
@@ -209,6 +212,8 @@ impl Effect for Equalizer {
         // identical to a channel-outer traversal.
         for frame in 0..frame_count {
             let frame_base = frame * channels;
+            let mix = self.mix_ramp.advance();
+            let dry = 1.0 - mix;
             for ch in 0..channels {
                 let state_base = ch * TOTAL_FILTERS;
                 let i = frame_base + ch;
@@ -232,7 +237,7 @@ impl Effect for Equalizer {
                     sample = SOFT_LIMIT_THRESHOLD * sample.tanh();
                 }
 
-                buffer[i] = input * dry + sample * self.mix;
+                buffer[i] = input * dry + sample * mix;
             }
         }
     }
@@ -245,6 +250,7 @@ impl Effect for Equalizer {
             }
             PARAM_MIX => {
                 self.mix = value.clamp(0.0, 1.0);
+                self.mix_ramp.set(self.mix);
                 true
             }
             PARAM_BAND_0..=PARAM_BAND_9 => {
@@ -272,6 +278,7 @@ impl Effect for Equalizer {
     fn reset(&mut self) {
         self.z1.iter_mut().for_each(|s| *s = 0.0);
         self.z2.iter_mut().for_each(|s| *s = 0.0);
+        self.mix_ramp.reset(self.mix);
     }
 
     fn is_enabled(&self) -> bool {

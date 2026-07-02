@@ -18,6 +18,7 @@
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
+use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
 
 /// Param ID 2 — open threshold in dB (-80 … 0).
 pub const PARAM_THRESHOLD: u32 = 2;
@@ -50,6 +51,7 @@ pub struct Gate {
     // Envelope state.
     gain: f32,
     hold_counter: u32,
+    mix_ramp: RampedParam,
 }
 
 impl Gate {
@@ -75,6 +77,7 @@ impl Gate {
             hold_frames: 0,
             gain: 0.0,
             hold_counter: 0,
+            mix_ramp: RampedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
         };
         g.recompute();
         g
@@ -101,16 +104,21 @@ impl Effect for Gate {
     }
 
     fn process(&mut self, buffer: &mut [f32], channels: u16) {
-        if !self.enabled || channels == 0 || self.mix < MIX_BYPASS_THRESHOLD {
+        self.mix_ramp.begin_block();
+        if !self.enabled
+            || channels == 0
+            || (self.mix < MIX_BYPASS_THRESHOLD && self.mix_ramp.current() < MIX_BYPASS_THRESHOLD)
+        {
             return;
         }
 
         let channels = channels as usize;
-        let dry = 1.0 - self.mix;
         let frame_count = buffer.len() / channels;
 
         for frame in 0..frame_count {
             let base = frame * channels;
+            let mix = self.mix_ramp.advance();
+            let dry = 1.0 - mix;
 
             // Detector: peak magnitude across the channels of this frame.
             let mut level = 0.0f32;
@@ -138,7 +146,7 @@ impl Effect for Gate {
             for ch in 0..channels {
                 let i = base + ch;
                 let input = buffer[i];
-                buffer[i] = input * dry + (input * g) * self.mix;
+                buffer[i] = input * dry + (input * g) * mix;
             }
         }
     }
@@ -151,6 +159,7 @@ impl Effect for Gate {
             }
             PARAM_MIX => {
                 self.mix = value.clamp(0.0, 1.0);
+                self.mix_ramp.set(self.mix);
                 true
             }
             PARAM_THRESHOLD => {
@@ -192,6 +201,7 @@ impl Effect for Gate {
     fn reset(&mut self) {
         self.gain = 0.0;
         self.hold_counter = 0;
+        self.mix_ramp.reset(self.mix);
     }
 
     fn is_enabled(&self) -> bool {

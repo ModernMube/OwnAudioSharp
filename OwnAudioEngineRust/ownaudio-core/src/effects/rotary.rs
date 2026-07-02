@@ -18,6 +18,7 @@
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
+use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
 
 /// Param ID 2 — horn rotation speed in Hz (2.0 … 15.0).
 pub const PARAM_HORN_SPEED: u32 = 2;
@@ -80,6 +81,7 @@ pub struct Rotary {
 
     low_pass: OnePoleLowPass,
     high_pass_low: OnePoleLowPass,
+    mix_ramp: RampedParam,
 }
 
 impl Rotary {
@@ -105,6 +107,7 @@ impl Rotary {
             rotor_phase: 0.0,
             low_pass: OnePoleLowPass::new(CROSSOVER_HZ, sample_rate),
             high_pass_low: OnePoleLowPass::new(CROSSOVER_HZ, sample_rate),
+            mix_ramp: RampedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
         }
     }
 }
@@ -115,12 +118,14 @@ impl Effect for Rotary {
     }
 
     fn process(&mut self, buffer: &mut [f32], _channels: u16) {
-        if !self.enabled || self.mix < MIX_BYPASS_THRESHOLD {
+        self.mix_ramp.begin_block();
+        if !self.enabled
+            || (self.mix < MIX_BYPASS_THRESHOLD && self.mix_ramp.current() < MIX_BYPASS_THRESHOLD)
+        {
             return;
         }
 
         let two_pi = std::f32::consts::PI * 2.0;
-        let mix = self.mix;
         let intensity = self.intensity;
 
         let current_horn_speed = if self.is_fast { self.horn_speed * 3.0 } else { self.horn_speed };
@@ -135,6 +140,7 @@ impl Effect for Rotary {
         let mut rotor_phase = self.rotor_phase;
 
         for sample in buffer.iter_mut() {
+            let mix = self.mix_ramp.advance();
             let input = *sample;
 
             let low_freq = self.low_pass.process(input);
@@ -184,6 +190,7 @@ impl Effect for Rotary {
             }
             PARAM_MIX => {
                 self.mix = value.clamp(0.0, 1.0);
+                self.mix_ramp.set(self.mix);
                 true
             }
             PARAM_HORN_SPEED => {
@@ -227,6 +234,7 @@ impl Effect for Rotary {
         self.rotor_phase = 0.0;
         self.low_pass.reset();
         self.high_pass_low.reset();
+        self.mix_ramp.reset(self.mix);
     }
 
     fn is_enabled(&self) -> bool {

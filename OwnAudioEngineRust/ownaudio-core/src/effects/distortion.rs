@@ -8,6 +8,7 @@
 //! reference comparison).
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
+use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
 
 /// Param ID 2 — drive amount (1.0 … 10.0). Higher values create more distortion.
 pub const PARAM_DRIVE: u32 = 2;
@@ -23,17 +24,19 @@ pub struct Distortion {
     mix: f32,
     drive: f32,
     output_gain: f32,
+    mix_ramp: RampedParam,
 }
 
 impl Distortion {
     /// Creates a new [`Distortion`] with the reference default parameters
     /// (drive 2.0, mix 1.0, output gain 0.5).
-    pub fn new(_sample_rate: f32) -> Self {
+    pub fn new(sample_rate: f32) -> Self {
         Self {
             enabled: true,
             mix: 1.0,
             drive: 2.0,
             output_gain: 0.5,
+            mix_ramp: RampedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
         }
     }
 
@@ -59,15 +62,20 @@ impl Effect for Distortion {
     }
 
     fn process(&mut self, buffer: &mut [f32], _channels: u16) {
-        if !self.enabled || self.mix < MIX_BYPASS_THRESHOLD {
+        self.mix_ramp.begin_block();
+        // Bypass only once the smoothed mix has fully settled below the floor, so a
+        // live fade to dry still ramps instead of clicking off.
+        if !self.enabled
+            || (self.mix < MIX_BYPASS_THRESHOLD && self.mix_ramp.current() < MIX_BYPASS_THRESHOLD)
+        {
             return;
         }
 
-        let dry = 1.0 - self.mix;
         for sample in buffer.iter_mut() {
+            let mix = self.mix_ramp.advance();
             let input = *sample;
             let distorted = Self::soft_clip(input * self.drive) * self.output_gain;
-            *sample = input * dry + distorted * self.mix;
+            *sample = input * (1.0 - mix) + distorted * mix;
         }
     }
 
@@ -79,6 +87,7 @@ impl Effect for Distortion {
             }
             PARAM_MIX => {
                 self.mix = value.clamp(0.0, 1.0);
+                self.mix_ramp.set(self.mix);
                 true
             }
             PARAM_DRIVE => {
@@ -103,7 +112,9 @@ impl Effect for Distortion {
         }
     }
 
-    fn reset(&mut self) {}
+    fn reset(&mut self) {
+        self.mix_ramp.reset(self.mix);
+    }
 
     fn is_enabled(&self) -> bool {
         self.enabled
@@ -282,5 +293,49 @@ mod tests {
         let mut second = input.clone();
         d.process(&mut second, 2);
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn mix_change_during_playback_ramps_not_clicks() {
+        // A mix change made *before* the first block snaps (steady-state fidelity),
+        // but a change *during* playback must ramp toward the new value rather than
+        // jumping — otherwise the wet/dry blend clicks (zipper noise).
+        let mut d = Distortion::new(48_000.0);
+        d.set_param(PARAM_MIX, 1.0); // fully wet
+
+        // A loud constant input so the wet (distorted) value differs from the dry input.
+        let dry = 0.9f32;
+        let wet = Distortion::soft_clip(dry * 2.0) * 0.5; // drive 2.0, output gain 0.5
+
+        // First block establishes the "playing" state so later changes ramp.
+        let mut warmup = vec![dry; 256];
+        d.process(&mut warmup, 2);
+        assert!((warmup[0] - wet).abs() < 1e-5, "warmup should be fully wet");
+
+        // Now fade to dry mid-stream.
+        d.set_param(PARAM_MIX, 0.0);
+        let mut block = vec![dry; 256];
+        d.process(&mut block, 2);
+
+        // The first sample after the change must still be close to wet (the ramp has
+        // only just started), not an instant jump to the dry input.
+        assert!(
+            (block[0] - wet).abs() < 0.5 * (dry - wet),
+            "mix must ramp, not click: first sample {} jumped toward dry {}",
+            block[0],
+            dry
+        );
+        // And the block must trend monotonically from wet toward dry.
+        assert!(block[255] > block[0], "mix ramp must move toward dry across the block");
+
+        // After a long fade the output settles at the dry input.
+        for _ in 0..16 {
+            let mut more = vec![dry; 256];
+            d.process(&mut more, 2);
+            if (more[255] - dry).abs() < 1e-3 {
+                return;
+            }
+        }
+        panic!("mix ramp did not converge to dry");
     }
 }

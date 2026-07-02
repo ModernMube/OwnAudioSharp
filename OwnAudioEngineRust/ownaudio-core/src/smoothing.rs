@@ -6,6 +6,10 @@
 //! value toward the new one over a short time constant, one sample at a time, on
 //! the real-time path with no allocation and no panic.
 
+/// Default one-pole time constant (ms) for control-parameter ramping — short
+/// enough to be inaudible as latency, long enough to remove zipper noise.
+pub const DEFAULT_SMOOTH_MS: f32 = 5.0;
+
 /// One-pole low-pass smoother for a single scalar parameter.
 ///
 /// The control thread calls [`SmoothedParam::set_target`] with the new value;
@@ -95,6 +99,72 @@ impl SmoothedParam {
     }
 }
 
+/// A [`SmoothedParam`] with "snap before the first render block, ramp during
+/// playback" semantics.
+///
+/// A value set *before* the effect has rendered any audio takes effect instantly
+/// (so parameters configured at construction time keep the effect's steady-state
+/// output bit-identical to an un-smoothed implementation), while a value changed
+/// *during* playback ramps toward the target to avoid zipper noise.
+///
+/// The owner calls [`begin_block`](Self::begin_block) once at the top of each
+/// `process` call, [`set`](Self::set) whenever the control value changes, and
+/// [`advance`](Self::advance) once per frame (or sample) in the render loop.
+#[derive(Debug, Clone, Copy)]
+pub struct RampedParam {
+    inner: SmoothedParam,
+    started: bool,
+}
+
+impl RampedParam {
+    /// Creates a ramped parameter resting at `initial`, ramping with a one-pole
+    /// time constant of `time_ms` at `sample_rate` Hz once playback has begun.
+    pub fn new(initial: f32, sample_rate: f32, time_ms: f32) -> Self {
+        Self {
+            inner: SmoothedParam::new(initial, sample_rate, time_ms),
+            started: false,
+        }
+    }
+
+    /// Sets the control value: snaps instantly before the first render block, and
+    /// ramps toward the target once playback has begun.
+    #[inline]
+    pub fn set(&mut self, value: f32) {
+        if self.started {
+            self.inner.set_target(value);
+        } else {
+            self.inner.snap(value);
+        }
+    }
+
+    /// Marks that a render block is starting, so subsequent [`set`](Self::set)
+    /// calls ramp instead of snapping.  Call once at the top of `process`.
+    #[inline]
+    pub fn begin_block(&mut self) {
+        self.started = true;
+    }
+
+    /// Advances one frame and returns the next ramped value.
+    #[inline]
+    pub fn advance(&mut self) -> f32 {
+        self.inner.advance()
+    }
+
+    /// Returns the current value without advancing.
+    #[inline]
+    pub fn current(&self) -> f32 {
+        self.inner.current()
+    }
+
+    /// Resets to the pre-playback state and snaps to `value`, so the next block
+    /// starts from a known point without fading in from a stale value.
+    #[inline]
+    pub fn reset(&mut self, value: f32) {
+        self.started = false;
+        self.inner.snap(value);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -161,5 +231,41 @@ mod tests {
         let mut s = SmoothedParam::new(0.0, 48_000.0, 0.0);
         s.set_target(0.7);
         assert_eq!(s.advance(), 0.7);
+    }
+
+    #[test]
+    fn ramped_param_snaps_before_first_block() {
+        // A value set before begin_block takes effect instantly, so an effect
+        // configured before it renders stays bit-identical to the un-smoothed path.
+        let mut p = RampedParam::new(0.5, 48_000.0, 5.0);
+        p.set(0.9);
+        p.begin_block();
+        assert_eq!(p.advance(), 0.9);
+    }
+
+    #[test]
+    fn ramped_param_ramps_during_playback() {
+        // A change after playback has begun ramps rather than jumping.
+        let mut p = RampedParam::new(0.0, 48_000.0, 5.0);
+        p.begin_block();
+        p.set(1.0);
+        let first = p.advance();
+        assert!(first > 0.0 && first < 1.0, "first step must move but not jump: {first}");
+        for _ in 0..2000 {
+            p.advance();
+        }
+        assert!((p.current() - 1.0).abs() < 1e-3, "must converge: {}", p.current());
+    }
+
+    #[test]
+    fn ramped_param_reset_restores_snap_semantics() {
+        let mut p = RampedParam::new(0.0, 48_000.0, 5.0);
+        p.begin_block();
+        p.set(1.0);
+        p.reset(0.25);
+        // After reset the next set snaps again (pre-playback semantics).
+        p.set(0.8);
+        p.begin_block();
+        assert_eq!(p.advance(), 0.8);
     }
 }

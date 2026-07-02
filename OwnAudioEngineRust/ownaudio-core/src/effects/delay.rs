@@ -14,6 +14,7 @@
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
+use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
 
 /// Param ID 2 — delay time in milliseconds (1 … 5000).
 pub const PARAM_TIME_MS: u32 = 2;
@@ -43,6 +44,7 @@ pub struct Delay {
     last_output_l: f32,
     last_output_r: f32,
     delay_samples: f32,
+    mix_ramp: RampedParam,
 }
 
 impl Delay {
@@ -65,6 +67,7 @@ impl Delay {
             last_output_l: 0.0,
             last_output_r: 0.0,
             delay_samples: 0.0,
+            mix_ramp: RampedParam::new(0.30, sample_rate, DEFAULT_SMOOTH_MS),
         };
         delay.update_delay_samples();
         delay
@@ -84,7 +87,11 @@ impl Effect for Delay {
 
     fn process(&mut self, buffer: &mut [f32], channels: u16) {
         // The reference effect only processes stereo material.
-        if !self.enabled || self.mix < MIX_BYPASS_THRESHOLD || channels != 2 {
+        self.mix_ramp.begin_block();
+        if !self.enabled
+            || (self.mix < MIX_BYPASS_THRESHOLD && self.mix_ramp.current() < MIX_BYPASS_THRESHOLD)
+            || channels != 2
+        {
             return;
         }
 
@@ -92,7 +99,6 @@ impl Effect for Delay {
         let frame_count = buffer.len() / 2;
 
         let rep = self.feedback;
-        let mx = self.mix;
         let damp = self.damping;
         let ds = self.delay_samples;
         let pp = self.ping_pong;
@@ -101,6 +107,7 @@ impl Effect for Delay {
         let mut last_r = self.last_output_r;
 
         for frame in 0..frame_count {
+            let mx = self.mix_ramp.advance();
             let idx_l = frame * 2;
             let idx_r = frame * 2 + 1;
 
@@ -164,6 +171,7 @@ impl Effect for Delay {
             }
             PARAM_MIX => {
                 self.mix = value.clamp(0.0, 1.0);
+                self.mix_ramp.set(self.mix);
                 true
             }
             PARAM_TIME_MS => {
@@ -205,6 +213,7 @@ impl Effect for Delay {
         self.write_index = 0;
         self.last_output_l = 0.0;
         self.last_output_r = 0.0;
+        self.mix_ramp.reset(self.mix);
     }
 
     fn is_enabled(&self) -> bool {

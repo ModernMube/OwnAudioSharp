@@ -15,6 +15,7 @@
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
+use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
 
 /// Param ID 2 — pre-saturation gain (0.1 … 10.0).
 pub const PARAM_GAIN: u32 = 2;
@@ -34,6 +35,7 @@ pub struct Enhancer {
     alpha: f32,
     x_prev: f32,
     y_prev: f32,
+    mix_ramp: RampedParam,
 }
 
 impl Enhancer {
@@ -50,6 +52,7 @@ impl Enhancer {
             alpha: 0.0,
             x_prev: 0.0,
             y_prev: 0.0,
+            mix_ramp: RampedParam::new(0.2, sample_rate, DEFAULT_SMOOTH_MS),
         };
         enhancer.update_filter_coefficient();
         enhancer
@@ -72,18 +75,21 @@ impl Effect for Enhancer {
     }
 
     fn process(&mut self, buffer: &mut [f32], _channels: u16) {
-        if !self.enabled || self.mix < MIX_BYPASS_THRESHOLD {
+        self.mix_ramp.begin_block();
+        if !self.enabled
+            || (self.mix < MIX_BYPASS_THRESHOLD && self.mix_ramp.current() < MIX_BYPASS_THRESHOLD)
+        {
             return;
         }
 
         let alpha = self.alpha;
         let gain = self.gain;
-        let mix = self.mix;
 
         let mut x_prev = self.x_prev;
         let mut y_prev = self.y_prev;
 
         for sample in buffer.iter_mut() {
+            let mix = self.mix_ramp.advance();
             let original = *sample;
 
             let high_freq = denormal::flush(alpha * (y_prev + original - x_prev));
@@ -107,6 +113,7 @@ impl Effect for Enhancer {
             }
             PARAM_MIX => {
                 self.mix = value.clamp(0.0, 1.0);
+                self.mix_ramp.set(self.mix);
                 true
             }
             PARAM_GAIN => {
@@ -135,6 +142,7 @@ impl Effect for Enhancer {
     fn reset(&mut self) {
         self.x_prev = 0.0;
         self.y_prev = 0.0;
+        self.mix_ramp.reset(self.mix);
     }
 
     fn is_enabled(&self) -> bool {
