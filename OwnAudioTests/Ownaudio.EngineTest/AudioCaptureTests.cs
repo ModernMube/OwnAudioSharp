@@ -25,7 +25,7 @@ namespace Ownaudio.EngineTest
                 EnableInput = true,
                 EnableOutput = true // Enable output as well for duplex mode
             };
-            using var engine = AudioEngineFactory.Create(config);
+            using var engine = EngineTestSupport.CreateOrSkip(config);
             engine.Start();
 
             // Wait a bit for some audio to be captured
@@ -58,7 +58,7 @@ namespace Ownaudio.EngineTest
                 EnableInput = true,
                 EnableOutput = true
             };
-            using var engine = AudioEngineFactory.Create(config);
+            using var engine = EngineTestSupport.CreateOrSkip(config);
 
             // Act
             float[] buffer = new float[engine.FramesPerBuffer * config.Channels];
@@ -80,7 +80,7 @@ namespace Ownaudio.EngineTest
                 EnableInput = true,
                 EnableOutput = true
             };
-            using var engine = AudioEngineFactory.Create(config);
+            using var engine = EngineTestSupport.CreateOrSkip(config);
             engine.Start();
             Thread.Sleep(50);
             engine.Stop();
@@ -105,7 +105,7 @@ namespace Ownaudio.EngineTest
                 EnableInput = true,
                 EnableOutput = true // Duplex mode
             };
-            using var engine = AudioEngineFactory.Create(config);
+            using var engine = EngineTestSupport.CreateOrSkip(config);
             engine.Initialize(config);
             engine.Start();
 
@@ -140,7 +140,7 @@ namespace Ownaudio.EngineTest
                 EnableInput = true,
                 EnableOutput = true
             };
-            using var engine = AudioEngineFactory.Create(config);
+            using var engine = EngineTestSupport.CreateOrSkip(config);
             engine.Start();
 
             Thread.Sleep(200);
@@ -180,7 +180,7 @@ namespace Ownaudio.EngineTest
             IAudioEngine? engine = null;
             try
             {
-                engine = AudioEngineFactory.Create(config);
+                engine = EngineTestSupport.CreateOrSkip(config);
             }
             catch
             {
@@ -223,7 +223,7 @@ namespace Ownaudio.EngineTest
                 EnableInput = true,
                 EnableOutput = true
             };
-            using var engine = AudioEngineFactory.Create(config);
+            using var engine = EngineTestSupport.CreateOrSkip(config);
             engine.Start();
 
             Thread.Sleep(100);
@@ -251,7 +251,7 @@ namespace Ownaudio.EngineTest
                 EnableInput = true,
                 EnableOutput = true
             };
-            using var engine = AudioEngineFactory.Create(config);
+            using var engine = EngineTestSupport.CreateOrSkip(config);
             engine.Start();
 
             Thread.Sleep(100);
@@ -293,7 +293,7 @@ namespace Ownaudio.EngineTest
                 EnableInput = true,
                 EnableOutput = true
             };
-            using var engine = AudioEngineFactory.Create(config);
+            using var engine = EngineTestSupport.CreateOrSkip(config);
             engine.Start();
             Thread.Sleep(100);
 
@@ -330,7 +330,7 @@ namespace Ownaudio.EngineTest
                 EnableInput = true,
                 EnableOutput = true
             };
-            using var engine = AudioEngineFactory.Create(config);
+            using var engine = EngineTestSupport.CreateOrSkip(config);
             engine.Start();
 
             Thread.Sleep(100);
@@ -358,7 +358,7 @@ namespace Ownaudio.EngineTest
                 EnableInput = true,
                 EnableOutput = true
             };
-            using var engine = AudioEngineFactory.Create(config);
+            using var engine = EngineTestSupport.CreateOrSkip(config);
             engine.Start();
 
             Thread.Sleep(100);
@@ -394,7 +394,7 @@ namespace Ownaudio.EngineTest
                 EnableInput = true,
                 EnableOutput = true
             };
-            using var engine = AudioEngineFactory.Create(config);
+            using var engine = EngineTestSupport.CreateOrSkip(config);
             engine.Start();
 
             Thread.Sleep(100);

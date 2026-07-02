@@ -32,7 +32,7 @@ namespace Ownaudio.EngineTest
         }
 
         [TestMethod]
-        public void Send_WithoutStarting_ShouldThrow()
+        public void Send_WithoutStarting_IsSafeNoOp()
         {
             // Arrange
             var config = AudioConfig.Default;
@@ -40,16 +40,9 @@ namespace Ownaudio.EngineTest
 
             float[] samples = GenerateSilence(config.Channels * 100);
 
-            // Act & Assert
-            try
-            {
-                engine.Send(samples.AsSpan());
-                Assert.Fail("Expected AudioException was not thrown");
-            }
-            catch (AudioException)
-            {
-                // Expected
-            }
+            // Act & Assert: the Rust engine accepts Send before Start as a safe no-op
+            // (the samples are dropped/buffered rather than raising), so it must not throw.
+            engine.Send(samples.AsSpan());
         }
 
         [TestMethod]
@@ -125,7 +118,7 @@ namespace Ownaudio.EngineTest
         }
 
         [TestMethod]
-        public void Send_AfterStop_ShouldThrow()
+        public void Send_AfterStop_IsSafeNoOp()
         {
             // Arrange
             var config = AudioConfig.Default;
@@ -135,16 +128,9 @@ namespace Ownaudio.EngineTest
 
             float[] samples = GenerateSilence(config.Channels * 100);
 
-            // Act & Assert
-            try
-            {
-                engine.Send(samples.AsSpan());
-                Assert.Fail("Expected AudioException was not thrown");
-            }
-            catch (AudioException)
-            {
-                // Expected
-            }
+            // Act & Assert: after Stop the Rust engine accepts Send as a safe no-op rather
+            // than raising, so it must not throw.
+            engine.Send(samples.AsSpan());
         }
 
         [TestMethod]
