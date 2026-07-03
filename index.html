@@ -9,61 +9,14 @@
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OwnAudioSharp — Cross-Platform Audio Library for .NET</title>
-  <meta name="description" content="Professional-grade, zero-allocation cross-platform audio library for .NET. Multi-track mixing, real-time effects, VST3, MIDI, and AI features.">
+  <title>OwnAudioSharp — A Rust audio engine with a C# soul</title>
+  <meta name="description" content="OwnAudioSharp 4.0 runs your entire audio path in a purpose-built Rust engine, wrapped in a 100% C# API. Zero GC on the real-time path, zero external dependencies, truly cross-platform.">
   <link rel="stylesheet" href="assets/docs.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
   <style>
     body { display: flex; flex-direction: column; min-height: 100vh; }
     .page-wrap { flex: 1; }
-
-    /* Full-width nav for index */
-    .topnav { padding: 0 2rem; }
-
-    /* Hero gradient backdrop */
-    .hero-wrap {
-      background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(167,139,250,.18) 0%, transparent 70%);
-    }
-
-    .hero { padding: 6rem 2rem 4rem; max-width: 820px; margin: 0 auto; text-align: center; }
-
-    /* Package grid */
-    .pkg-section { padding: 0 2rem 3rem; max-width: 900px; margin: 0 auto; }
-    .pkg-section h2 { font-size: 1.3rem; font-weight: 700; margin-bottom: 1rem; text-align: center; border: none; }
-
-    /* API navigation section */
-    .nav-section { padding: 0 2rem 4rem; max-width: 900px; margin: 0 auto; }
-    .nav-section h2 { font-size: 1.3rem; font-weight: 700; margin-bottom: .3rem; border: none; }
-    .nav-section p { margin-bottom: 1rem; }
-
-    /* Features strip */
-    .features-strip {
-      display: flex; flex-wrap: wrap; gap: .5rem;
-      justify-content: center; margin-bottom: 2rem;
-    }
-    .feature-chip {
-      background: var(--bg-elevated);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      font-size: .78rem; font-weight: 500;
-      padding: .3rem .85rem;
-      color: var(--text-secondary);
-      display: flex; align-items: center; gap: .35rem;
-    }
-
-    /* Quick start block on homepage */
-    .home-code { max-width: 700px; margin: 0 auto 3rem; text-align: left; }
-
-    /* Platform badges */
-    .platform-row { display: flex; flex-wrap: wrap; justify-content: center; gap: .4rem; margin-bottom: 2.5rem; }
-    .platform-chip {
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      font-size: .75rem; font-weight: 600;
-      padding: .25rem .7rem;
-      border-radius: var(--radius-sm);
-      color: var(--text-muted);
-    }
+    .topnav { padding: 0 1.75rem; }
   </style>
 </head>
 <body>
@@ -82,7 +35,7 @@
     <li><a href="documents/api-reference.html">Reference</a></li>
   </ul>
   <div class="topnav-right">
-    <span class="badge-version">v3.1.0</span>
+    <span class="badge-version">v4.0.0</span>
     <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
     </a>
@@ -95,17 +48,18 @@
 
 <div class="page-wrap">
 
-  <!-- Hero -->
+  <!-- ─── HERO ─────────────────────────────────────────────────────────── -->
   <div class="hero-wrap">
     <div class="hero">
-      <div class="hero-eyebrow">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        Professional Audio for .NET
-      </div>
-      <h1>Cross-Platform Audio<br>Library for .NET</h1>
+      <span class="hero-eyebrow">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        OwnAudioSharp 4.0 · Now powered by Rust
+      </span>
+      <h1>A <span class="gradient-text">Rust</span> audio engine<br>with a <span class="gradient-text">C#</span> soul.</h1>
       <p class="hero-sub">
-        Zero-allocation, real-time audio engine with multi-track mixing, built-in DSP effects,
-        VST3 plugin hosting, MIDI, network synchronization, and AI-powered audio processing.
+        The entire audio path — decode, mix, effects, resample, playback and capture —
+        now runs in a purpose-built native Rust engine. You still write 100% C#.
+        The result: <strong>zero garbage collection</strong> on the real-time path, and audio that never stutters.
       </p>
 
       <div class="hero-actions">
@@ -124,14 +78,14 @@
       </div>
 
       <div class="features-strip">
-        <span class="feature-chip">⚡ Zero-allocation RT paths</span>
-        <span class="feature-chip">🔒 Thread-safe API</span>
-        <span class="feature-chip">🎛️ 15+ built-in effects</span>
+        <span class="feature-chip">🦀 Rust engine, C# surface</span>
+        <span class="feature-chip">♻️ Zero GC on the audio thread</span>
+        <span class="feature-chip">📦 Zero external dependencies</span>
+        <span class="feature-chip">🎛️ 17 built-in DSP effects</span>
         <span class="feature-chip">🔌 VST3 plugin hosting</span>
-        <span class="feature-chip">🎹 MIDI I/O &amp; File</span>
-        <span class="feature-chip">🌐 Network sync &lt;5ms</span>
-        <span class="feature-chip">🤖 AI vocal removal</span>
-        <span class="feature-chip">🎵 MP3 · WAV · FLAC · +FFmpeg 8</span>
+        <span class="feature-chip">🎹 MIDI I/O · SMF · Clock</span>
+        <span class="feature-chip">🌐 Network sync &lt;5&nbsp;ms</span>
+        <span class="feature-chip">🎵 MP3 · FLAC · WAV · AAC · MP4 · OGG · AIFF</span>
       </div>
 
       <div class="platform-row">
@@ -144,11 +98,113 @@
     </div>
   </div>
 
-  <!-- Quick Start Code -->
-  <div class="home-code">
-    <div class="code-block">
-      <div class="code-header"><span>C# — Basic Setup</span><button class="copy-btn">Copy</button></div>
-      <pre><code class="language-csharp">using OwnaudioNET;
+  <!-- ─── THE DIFFERENTIATOR ───────────────────────────────────────────── -->
+  <section class="section section-narrow">
+    <p class="section-eyebrow">The 4.0 idea</p>
+    <h2 class="section-title">One unchanged API.<br>A completely new engine.</h2>
+    <p class="section-lead">
+      Your code doesn't change — 4.0 is fully backward compatible. What changed is everything
+      underneath it. From the first sample to the last byte, your audio is now processed by a
+      native Rust core written specifically for this package. Nothing like it exists for C# today.
+    </p>
+
+    <div class="stack">
+      <div class="stack-layer is-csharp">
+        <div>
+          <div class="stack-layer-title">Your application + OwnAudioSharp API</div>
+          <div class="stack-layer-desc">100% C# · <code>OwnaudioNet</code>, <code>AudioMixer</code>, sources, effects — unchanged</div>
+        </div>
+        <span class="stack-tag">C#</span>
+      </div>
+      <div class="stack-arrow">↓</div>
+      <div class="stack-layer">
+        <div>
+          <div class="stack-layer-title">AudioEngineWrapper</div>
+          <div class="stack-layer-desc">Lock-free, non-blocking managed bridge</div>
+        </div>
+        <span class="stack-tag">managed</span>
+      </div>
+      <div class="stack-arrow">↓</div>
+      <div class="stack-layer is-rust">
+        <div>
+          <div class="stack-layer-title">Native Rust engine</div>
+          <div class="stack-layer-desc"><code>ownaudio-ffi</code> + <code>ownaudio-core</code> — decode, mix, DSP, resample, I/O</div>
+        </div>
+        <span class="stack-tag">Rust</span>
+      </div>
+      <div class="stack-arrow">↓</div>
+      <div class="stack-layer">
+        <div>
+          <div class="stack-layer-title">Audio hardware</div>
+          <div class="stack-layer-desc">WASAPI · CoreAudio · ALSA · (ASIO optional)</div>
+        </div>
+        <span class="stack-tag">OS</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── WHY IT MATTERS ───────────────────────────────────────────────── -->
+  <div class="band band-dark">
+    <section class="section">
+      <p class="section-eyebrow">Why the Rust + C# pairing wins</p>
+      <h2 class="section-title">Native performance,<br>managed developer experience.</h2>
+      <p class="section-lead">
+        The hardest problem in .NET audio is the garbage collector — one collection at the wrong
+        moment and the buffer underruns. 4.0 removes that failure mode entirely by moving every
+        sample off the managed heap.
+      </p>
+
+      <div class="value-grid">
+        <div class="value-card">
+          <div class="value-card-icon">♻️</div>
+          <h3>Zero GC, zero dropouts</h3>
+          <p>Not a single sample is processed on the managed heap. No matter what your surrounding
+          C# code does to the garbage collector, the audio never stutters.</p>
+        </div>
+        <div class="value-card">
+          <div class="value-card-icon">🦀</div>
+          <h3>A purpose-built Rust core</h3>
+          <p>Lock-free ring buffers, SIMD converters, pre-allocated DSP and a sinc resampler —
+          engineered to strict real-time constraints, not adapted from a general-purpose library.</p>
+        </div>
+        <div class="value-card">
+          <div class="value-card-icon">📦</div>
+          <h3>Zero external dependencies</h3>
+          <p>One NuGet package. The native engine — including the audio decoder — is bundled and
+          built specifically for it. Nothing else to install, no system codecs to configure.</p>
+        </div>
+        <div class="value-card">
+          <div class="value-card-icon">⚡</div>
+          <h3>Low CPU &amp; memory</h3>
+          <p>Real-time headroom on desktop and mobile alike, with a small memory footprint —
+          engineered to professional, industry-standard behaviour.</p>
+        </div>
+        <div class="value-card">
+          <div class="value-card-icon">🔒</div>
+          <h3>Backward compatible</h3>
+          <p>The public C# API is unchanged. Upgrade to 4.0 and keep your existing code — you get
+          the new engine's guarantees without a rewrite.</p>
+        </div>
+        <div class="value-card">
+          <div class="value-card-icon">🌍</div>
+          <h3>Truly cross-platform</h3>
+          <p>Windows, macOS, Linux, Android and iOS from a single API and a single codebase —
+          the same Rust engine everywhere.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ─── QUICK START ──────────────────────────────────────────────────── -->
+  <section class="section section-narrow">
+    <p class="section-eyebrow">Familiar C#, native speed</p>
+    <h2 class="section-title">Five lines to playing audio.</h2>
+    <p class="section-lead">The API you already know. The engine you always wanted underneath it.</p>
+
+    <div class="home-code">
+      <div class="code-block">
+        <div class="code-header"><span>C# — Basic Setup</span><button class="copy-btn">Copy</button></div>
+        <pre><code class="language-csharp">using OwnaudioNET;
 using OwnaudioNET.Mixing;
 using OwnaudioNET.Sources;
 
@@ -156,68 +212,147 @@ using OwnaudioNET.Sources;
 await OwnaudioNet.InitializeAsync();
 OwnaudioNet.Start();
 
-// Create the mixer
+// Create the mixer — backed by the native Rust engine
 var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine);
 mixer.Start();
 
-// Play a file
+// Play a file — decoded by the built-in Rust decoder, no FFmpeg required
 var track = new FileSource("song.mp3");
 mixer.AddSource(track);
 
-// Add reverb
+// Add reverb — real-time DSP running natively, off the managed heap
 var reverb = new ReverbEffect { RoomSize = 0.7f, Mix = 0.3f };
 mixer.AddMasterEffect(reverb);
 
 // Cleanup
 mixer.Dispose();
 await OwnaudioNet.ShutdownAsync();</code></pre>
-    </div>
-  </div>
-
-  <!-- Packages -->
-  <div class="pkg-section">
-    <h2>Choose Your Package</h2>
-    <div class="pkg-grid">
-      <div class="pkg-card">
-        <div class="pkg-card-name" style="color:var(--accent)">OwnAudioSharp</div>
-        <div class="pkg-card-desc">Full package with AI/ML models for vocal separation, chord detection, and matchering.</div>
-        <div class="pkg-card-size">~290 MB · Windows · Linux · macOS</div>
-      </div>
-      <div class="pkg-card">
-        <div class="pkg-card-name" style="color:var(--success)">OwnAudioSharp.Basic</div>
-        <div class="pkg-card-desc">Lean package — core audio, 15+ effects, VST3, network sync, pitch/tempo. No AI/ML.</div>
-        <div class="pkg-card-size">&lt;5 MB · All platforms incl. Android &amp; iOS</div>
-      </div>
-      <div class="pkg-card">
-        <div class="pkg-card-name" style="color:var(--warning)">OwnAudioSharp.Midi</div>
-        <div class="pkg-card-desc">Standalone AOT-compatible MIDI library — I/O, SMF file read/write, hardware clock.</div>
-        <div class="pkg-card-size">&lt;1 MB · Windows · Linux · macOS</div>
       </div>
     </div>
-    <div class="code-block" style="margin-top:1rem; max-width:440px; margin-left:auto; margin-right:auto;">
-      <div class="code-header"><span>Shell</span><button class="copy-btn">Copy</button></div>
-      <pre><code class="language-bash">dotnet add package OwnAudioSharp
-dotnet add package OwnAudioSharp.Basic
-dotnet add package OwnAudioSharp.Midi</code></pre>
-    </div>
+  </section>
+
+  <!-- ─── THE ROAD TO 4.0 ──────────────────────────────────────────────── -->
+  <div class="band">
+    <section class="section section-narrow">
+      <p class="section-eyebrow">Four generations</p>
+      <h2 class="section-title">The road to 4.0.</h2>
+      <p class="section-lead">
+        A truly GC-independent audio API took four generations — each one solved a problem the last one exposed.
+      </p>
+
+      <div class="timeline">
+        <div class="tl-item">
+          <div class="tl-ver">1.0</div>
+          <div class="tl-body">
+            <h4>MiniAudio + PortAudio + FFmpeg</h4>
+            <p>Proved the core idea and shaped the API — but left performance on the table.</p>
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-ver">2.0</div>
+          <div class="tl-body">
+            <h4>Fully managed, zero native dependencies</h4>
+            <p>Clean and portable, but the GC's impact on the real-time audio path could not be eliminated.</p>
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-ver">3.0</div>
+          <div class="tl-body">
+            <h4>Optimized native I/O, managed DSP</h4>
+            <p>Fast — until the <em>host</em> application caused GC pressure, which stalled the managed processing stage.</p>
+          </div>
+        </div>
+        <div class="tl-item is-current">
+          <div class="tl-ver">4.0</div>
+          <div class="tl-body">
+            <h4>The entire audio chain runs in native Rust</h4>
+            <p>A C# audio API that is completely unaffected by the GC — professional, industry-standard
+            behaviour for real-world .NET audio apps. This is the payoff.</p>
+          </div>
+        </div>
+      </div>
+    </section>
   </div>
 
-  <!-- FFmpeg callout -->
-  <div class="pkg-section" style="padding-top:0">
-    <div style="background:var(--bg-elevated);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:var(--radius);padding:1rem 1.25rem;max-width:860px;margin:0 auto;">
-      <p style="margin:0;font-size:.92rem;"><strong>🎞️ Extended format support via FFmpeg 8+ (optional)</strong><br>
-      If <a href="documents/api-reference.html#ffmpeg">FFmpeg 8+</a> is installed on the system, OwnAudioSharp automatically uses it as the primary decoder — unlocking AAC, OGG, Opus, WMA, AIFF, AC3, MKV, MP4, and virtually any other format with <strong>zero code changes</strong>. Falls back to the built-in MP3 / WAV / FLAC decoders when FFmpeg is not present. FFmpeg is not bundled and not required.</p>
+  <!-- ─── WHAT YOU GET ─────────────────────────────────────────────────── -->
+  <section class="section">
+    <p class="section-eyebrow">Everything in the box</p>
+    <h2 class="section-title">A complete audio toolkit.</h2>
+    <p class="section-lead">
+      Recommended for music players and DAWs, DJ software, music-education tools, broadcast and
+      podcast pipelines, live-performance apps, and low-latency game audio.
+    </p>
+
+    <div class="card-grid">
+      <div class="card"><div class="card-icon">🎚️</div><div class="card-title">Multi-Track Mixing</div><div class="card-desc">Sample-accurate sync via a shared clock, per-track volume, real-time tempo &amp; pitch.</div></div>
+      <div class="card"><div class="card-icon">🎛️</div><div class="card-title">17 DSP Effects</div><div class="card-desc">Reverb, EQ (10/30-band), compressor, limiter, delay, chorus and more — per-track or master.</div></div>
+      <div class="card"><div class="card-icon">🔌</div><div class="card-title">VST3 Plugins</div><div class="card-desc">Host VST3 effect plugins with their native cross-platform editor GUI.</div></div>
+      <div class="card"><div class="card-icon">🎙️</div><div class="card-title">Recording</div><div class="card-desc">Low-latency capture with device selection, sample rate and channel control.</div></div>
+      <div class="card"><div class="card-icon">🎹</div><div class="card-title">MIDI</div><div class="card-desc">Hardware I/O, SMF file read/write, hardware-accurate 24 PPQN clock — AOT-friendly.</div></div>
+      <div class="card"><div class="card-icon">🌐</div><div class="card-title">Network Sync</div><div class="card-desc">Sample-accurate multi-device playback over LAN, &lt;5 ms, with server auto-discovery.</div></div>
+      <div class="card"><div class="card-icon">🎯</div><div class="card-title">SmartMaster</div><div class="card-desc">Speaker calibration with a mic: 31-band EQ, multiband compression, brick-wall limiter.</div></div>
+      <div class="card"><div class="card-icon">🎚️</div><div class="card-title">Audio Matchering</div><div class="card-desc">Reference-based mastering — apply a track's spectral &amp; dynamic character to yours.</div></div>
+      <div class="card"><div class="card-icon">🎼</div><div class="card-title">Chord Detection</div><div class="card-desc">Real-time chromagram analysis: major, minor, diminished, augmented and 7th–13th chords.</div></div>
     </div>
+  </section>
+
+  <!-- ─── PACKAGES ─────────────────────────────────────────────────────── -->
+  <div class="band band-dark">
+    <section class="section section-narrow">
+      <p class="section-eyebrow">Pick your build</p>
+      <h2 class="section-title">One API. The right footprint.</h2>
+      <p class="section-lead">Choose the package that fits your platform and size budget. Add-ons attach only when you need them.</p>
+
+      <div class="pkg-grid">
+        <div class="pkg-card">
+          <div class="pkg-card-name" style="color:var(--accent)">OwnAudioSharp</div>
+          <div class="pkg-card-desc">Desktop — full feature set: mixing, 17 effects, VST3, network sync, recording, mastering and analysis.</div>
+          <div class="pkg-card-size">Windows · macOS · Linux</div>
+        </div>
+        <div class="pkg-card">
+          <div class="pkg-card-name" style="color:var(--success)">OwnAudioSharp.Mobile</div>
+          <div class="pkg-card-desc">Android &amp; iOS build of the engine and API, tuned for mobile real-time constraints.</div>
+          <div class="pkg-card-size">Android ARM64 · iOS ARM64</div>
+        </div>
+        <div class="pkg-card">
+          <div class="pkg-card-name" style="color:var(--warning)">OwnAudioSharp.Basic</div>
+          <div class="pkg-card-desc">Lightweight core — audio I/O, effects, VST3, sync and pitch/tempo. No AI/ML models.</div>
+          <div class="pkg-card-size">All platforms · minimal size</div>
+        </div>
+        <div class="pkg-card">
+          <div class="pkg-card-name" style="color:var(--violet)">OwnVocalRemover <span class="pkg-badge pkg-addon">Add-on</span></div>
+          <div class="pkg-card-desc">Optional ONNX-based vocal separation, split out of the core API — reference it only when you need it.</div>
+          <div class="pkg-card-size">Attach on demand</div>
+        </div>
+      </div>
+
+      <div class="code-block" style="margin-top:1.5rem; max-width:480px; margin-left:auto; margin-right:auto;">
+        <div class="code-header"><span>Shell</span><button class="copy-btn">Copy</button></div>
+        <pre><code class="language-bash">dotnet add package OwnAudioSharp          # Desktop — full features
+dotnet add package OwnAudioSharp.Mobile   # Android / iOS
+dotnet add package OwnAudioSharp.Basic    # Lightweight
+dotnet add package OwnVocalRemover        # Optional vocal separation add-on</code></pre>
+      </div>
+
+      <div class="callout callout-info" style="max-width:640px;margin-left:auto;margin-right:auto;">
+        <div class="callout-icon">ℹ️</div>
+        <p><strong>.NET 10.0 or later.</strong> The native Rust engine — including the built-in decoder for
+        MP3, FLAC, WAV, AAC, MP4/M4A, OGG/Vorbis and AIFF — is bundled in the package. FFmpeg 8+ remains
+        supported as an optional legacy fallback for exotic formats, but is neither bundled nor required.</p>
+      </div>
+    </section>
   </div>
 
-  <!-- API Navigation Cards -->
-  <div class="nav-section">
-    <h2>Browse the API</h2>
-    <p class="section-sub" style="text-align:center; margin-bottom:1rem;">Every public type, method, property, and event — verified against source code.</p>
+  <!-- ─── BROWSE THE API ───────────────────────────────────────────────── -->
+  <section class="section">
+    <p class="section-eyebrow">Documentation</p>
+    <h2 class="section-title">Browse the API.</h2>
+    <p class="section-lead">Every public type, method, property and event — verified against source code.</p>
+
     <div class="api-grid">
       <a href="documents/quickstart.html" class="api-card">
         <div class="api-card-title">⚡ Quick Start</div>
-        <div class="api-card-desc">Installation, first project, and architecture overview.</div>
+        <div class="api-card-desc">Installation, first project, and the 4.0 architecture overview.</div>
       </a>
       <a href="documents/api-core.html" class="api-card">
         <div class="api-card-title">🔧 OwnaudioNet &amp; Config</div>
@@ -237,15 +372,15 @@ dotnet add package OwnAudioSharp.Midi</code></pre>
       </a>
       <a href="documents/api-effects.html" class="api-card">
         <div class="api-card-title">🎛️ Effects &amp; VST3</div>
-        <div class="api-card-desc">15+ built-in DSP effects, SmartMaster, VST3 plugin hosting.</div>
+        <div class="api-card-desc">17 built-in DSP effects, SmartMaster, VST3 plugin hosting.</div>
       </a>
       <a href="documents/api-network.html" class="api-card">
         <div class="api-card-title">🌐 Network Sync</div>
-        <div class="api-card-desc">Multi-device LAN synchronization &lt;5ms, server &amp; client modes.</div>
+        <div class="api-card-desc">Multi-device LAN synchronization &lt;5 ms, server &amp; client modes.</div>
       </a>
       <a href="documents/api-advanced.html" class="api-card">
-        <div class="api-card-title">🤖 AI Features</div>
-        <div class="api-card-desc">Vocal Remover (ONNX), Chord Detection, Auto-Mastering.</div>
+        <div class="api-card-title">🧠 Analysis &amp; Mastering</div>
+        <div class="api-card-desc">Chord Detection, Audio Matchering, and the OwnVocalRemover add-on.</div>
       </a>
       <a href="documents/api-midi.html" class="api-card">
         <div class="api-card-title">🎹 MIDI API</div>
@@ -256,12 +391,22 @@ dotnet add package OwnAudioSharp.Midi</code></pre>
         <div class="api-card-desc">Events, enumerations, threading rules, and best practices.</div>
       </a>
     </div>
+  </section>
+
+  <!-- ─── CTA ──────────────────────────────────────────────────────────── -->
+  <div class="cta">
+    <h2>Native audio, without leaving C#.</h2>
+    <p>Free and open-source. If it ships in your product, consider supporting its development.</p>
+    <div class="hero-actions" style="margin-bottom:0;">
+      <a href="documents/quickstart.html" class="btn btn-primary">Get Started</a>
+      <a href="https://www.buymeacoffee.com/ModernMube" target="_blank" class="btn btn-secondary">☕ Buy Me a Coffee</a>
+    </div>
   </div>
 
 </div><!-- .page-wrap -->
 
 <footer class="footer">
-  <div>OwnAudioSharp v3.1.0 · MIT License · © 2025 ModernMube</div>
+  <div>OwnAudioSharp v4.0.0 · MIT License · © 2026 ModernMube</div>
   <div style="display:flex; gap:1.25rem;">
     <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a>
     <a href="https://www.nuget.org/packages/OwnAudioSharp" target="_blank">NuGet</a>

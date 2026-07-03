@@ -14,7 +14,7 @@
   <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
   <a class="topnav-logo" href="../index.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>OwnAudioSharp</a>
   <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="api-core.html">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html" class="active">Reference</a></li></ul>
-  <div class="topnav-right"><span class="badge-version">v3.1.0</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
+  <div class="topnav-right"><span class="badge-version">v4.0.0</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
 </nav>
 <div id="sidebar-overlay" class="sidebar-overlay"></div>
 <div class="layout">
@@ -23,14 +23,36 @@
   <div class="sidebar-section"><span class="sidebar-label">High-Level API</span><ul class="sidebar-nav"><li><a href="api-core.html">OwnaudioNet</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-mixer.html">AudioMixer</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Audio Sources</span><ul class="sidebar-nav"><li><a href="api-sources.html">Source Overview</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#sourcewitheffects" class="sub">SourceWithEffects</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel Routing</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Processing</span><ul class="sidebar-nav"><li><a href="api-sync.html">Synchronization</a></li><li><a href="api-effects.html">Built-in Effects</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 Plugins</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">AI Features</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">MIDI</span><ul class="sidebar-nav"><li><a href="api-midi.html">MIDI Overview</a></li><li><a href="api-midi.html#port-management" class="sub">Port Management</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI File</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI Clock</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Reference</span><ul class="sidebar-nav"><li><a href="api-reference.html">Events &amp; Types</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#best-practices" class="sub">Best Practices</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Reference</span><ul class="sidebar-nav"><li><a href="api-reference.html">Events &amp; Types</a></li><li><a href="api-reference.html#architecture" class="sub">Architecture</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#best-practices" class="sub">Best Practices</a></li></ul></div>
 </nav>
 <main class="main">
 
 <h1 class="page-title">Events &amp; Reference</h1>
-<p class="page-subtitle">Event argument types, enumerations, constants, and threading best practices.</p>
+<p class="page-subtitle">Architecture, event argument types, enumerations, constants, and threading best practices.</p>
+
+<!-- Architecture -->
+<h2 id="architecture">Architecture (4.0)</h2>
+<p>OwnAudioSharp 4.0 is a thin C# surface over a purpose-built native <strong>Rust</strong> engine. The public API is unchanged from 3.x — the change is entirely underneath it. From the first sample to the last byte, decoding, mixing, effects, resampling, playback and capture all run in native code, so <strong>not a single sample is processed on the managed heap</strong>. The result is an audio path that is completely unaffected by the .NET garbage collector.</p>
+
+<div class="code-block"><div class="code-header"><span>Layer stack</span><button class="copy-btn">Copy</button></div><pre><code>Application
+  └─ OwnaudioNet / AudioMixer / sources / effects   [your unchanged C# code]
+       └─ AudioEngineWrapper                          [lock-free, non-blocking bridge]
+            └─ Native Rust engine                     [ownaudio-ffi + ownaudio-core]
+                 └─ Audio hardware                    [WASAPI / CoreAudio / ALSA · ASIO optional]</code></pre></div>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Layer</th><th>Language</th><th>Responsibility</th></tr></thead>
+  <tbody>
+    <tr><td>OwnaudioNet + API</td><td>C#</td><td>The developer-facing surface — same types and methods as previous versions.</td></tr>
+    <tr><td>AudioEngineWrapper</td><td>C#</td><td>Lock-free, non-blocking managed bridge to the native engine.</td></tr>
+    <tr><td>ownaudio-ffi</td><td>Rust</td><td>Stable C ABI: opaque handles, error mapping, panic-safe entry points, callback trampolines.</td></tr>
+    <tr><td>ownaudio-core</td><td>Rust</td><td>Device I/O, mixing, 17 DSP effects, sinc resampler, lock-free ring buffers — zero-allocation real-time path.</td></tr>
+  </tbody>
+</table></div>
+
+<div class="callout callout-success"><div class="callout-icon">♻️</div><p><strong>Why it matters:</strong> no matter what the surrounding C# code does to the garbage collector, the audio never stutters — because the real-time path never touches the managed heap. This is the payoff of the 4.0 redesign, delivered without breaking your existing code.</p></div>
 
 <!-- Events Reference -->
 <h2 id="events">Events Reference</h2>
@@ -247,10 +269,10 @@ AudioConstants.MaxTempo         // 1.2 — maximum tempo multiplier (120% speed)
 <p>The <code>PitchShift</code> property on audio sources accepts values from <code>-12</code> to <code>+12</code> semitones. Use in combination with <code>Tempo</code> to time-stretch without changing pitch.</p>
 
 <!-- FFmpeg Integration -->
-<h2 id="ffmpeg">FFmpeg Integration (Optional)</h2>
-<p>OwnAudioSharp automatically detects FFmpeg 8+ dynamic libraries on startup and uses them as the primary decoder. This is <strong>not part of the public API</strong> — no code changes are required. If FFmpeg is not installed, the built-in MP3/WAV/FLAC decoders are used as a seamless fallback.</p>
+<h2 id="ffmpeg">FFmpeg Integration (Optional Legacy Fallback)</h2>
+<p>As of 4.0, decoding is handled entirely by the native Rust engine, which reads <strong>MP3, FLAC, WAV (PCM/ADPCM), AAC, MP4/M4A, OGG/Vorbis and AIFF</strong> out of the box with no external dependencies. FFmpeg is <strong>no longer required</strong>. It remains supported as an <strong>optional legacy fallback</strong>: if FFmpeg 8+ dynamic libraries are detected on startup, they can be used to decode exotic formats (Opus, WMA, AC3, and others) that fall outside the built-in set. This is <strong>not part of the public API</strong> — no code changes are required, and FFmpeg is neither bundled nor needed for normal use.</p>
 
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>Decoder priority:</strong> FFmpeg → MiniAudio (native) → built-in managed decoder (MP3 / WAV / FLAC).</p></div>
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>Decoder priority:</strong> built-in Rust decoder (MP3 / FLAC / WAV / AAC / MP4 / OGG / AIFF) → optional FFmpeg fallback for additional formats when installed.</p></div>
 
 <div class="code-block"><div class="code-header"><span>C# — FFmpeg availability check</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using Ownaudio.Core;
 
@@ -260,9 +282,9 @@ FFmpegConfig.CustomLibraryPath = @"C:\ffmpeg\bin"; // Windows example
 
 // Check availability — FFmpegConfig.IsAvailable is set automatically at load time
 if (FFmpegConfig.IsAvailable)
-    Console.WriteLine("FFmpeg active — AAC, OGG, Opus, WMA, AIFF and more are supported.");
+    Console.WriteLine("FFmpeg fallback active — extra formats such as Opus, WMA and AC3 are also supported.");
 else
-    Console.WriteLine("FFmpeg not found — using built-in decoders (MP3 / WAV / FLAC).");
+    Console.WriteLine("FFmpeg not found — using the built-in Rust decoder (MP3 / FLAC / WAV / AAC / MP4 / OGG / AIFF).");
 
 // No other changes needed; AudioDecoderFactory picks the best decoder automatically
 using var decoder = AudioDecoderFactory.Create("audio.aac", targetSampleRate: 48000, targetChannels: 2);</code></pre></div>

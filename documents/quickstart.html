@@ -21,7 +21,7 @@
     <li><a href="api-reference.html">Reference</a></li>
   </ul>
   <div class="topnav-right">
-    <span class="badge-version">v3.1.0</span>
+    <span class="badge-version">v4.0.0</span>
     <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a>
     <button id="theme-toggle" class="btn-icon" title="Toggle theme"></button>
   </div>
@@ -33,38 +33,43 @@
   <div class="sidebar-section"><span class="sidebar-label">High-Level API</span><ul class="sidebar-nav"><li><a href="api-core.html">OwnaudioNet</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-mixer.html">AudioMixer</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Audio Sources</span><ul class="sidebar-nav"><li><a href="api-sources.html">Source Overview</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#sourcewitheffects" class="sub">SourceWithEffects</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel Routing</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Processing</span><ul class="sidebar-nav"><li><a href="api-sync.html">Synchronization</a></li><li><a href="api-effects.html">Built-in Effects</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 Plugins</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">AI Features</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">MIDI</span><ul class="sidebar-nav"><li><a href="api-midi.html">MIDI Overview</a></li><li><a href="api-midi.html#port-management" class="sub">Port Management</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI File</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI Clock</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Reference</span><ul class="sidebar-nav"><li><a href="api-reference.html">Events &amp; Types</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#best-practices" class="sub">Best Practices</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Reference</span><ul class="sidebar-nav"><li><a href="api-reference.html">Events &amp; Types</a></li><li><a href="api-reference.html#architecture" class="sub">Architecture</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#best-practices" class="sub">Best Practices</a></li></ul></div>
 </nav>
 <main class="main">
 
 <h1 class="page-title">Quick Start</h1>
 <p class="page-subtitle">Get OwnAudioSharp running in your .NET project in minutes.</p>
 
+<div class="callout callout-info"><div class="callout-icon">🦀</div><p><strong>New in 4.0:</strong> the entire audio path now runs in a purpose-built native Rust engine, wrapped in the same C# API you already use. The upgrade is fully backward compatible — your existing code keeps working, and gains a real-time path with <strong>zero garbage collection</strong>. <a href="api-reference.html#architecture">Read about the architecture →</a></p></div>
+
 <h2 id="installation">Installation</h2>
-<p>Choose the package that fits your use case:</p>
+<p>Choose the package that fits your use case. Requires <strong>.NET 10.0 or later</strong>. The native Rust engine — including the built-in audio decoder — is bundled; there are no external codecs to configure.</p>
 <div class="table-wrap"><table>
-  <thead><tr><th>Package</th><th>Size</th><th>Platforms</th><th>Includes AI/ML</th></tr></thead>
+  <thead><tr><th>Package</th><th>Platforms</th><th>What's included</th></tr></thead>
   <tbody>
-    <tr><td><code>OwnAudioSharp</code></td><td>~20 MB</td><td>Windows, Linux, macOS</td><td>✅ Vocal removal, chords, matchering<br><small>AI models downloaded on first use (~272 MB total)</small></td></tr>
-    <tr><td><code>OwnAudioSharp.Basic</code></td><td>&lt;5 MB</td><td>+ Android, iOS</td><td>❌ Core audio only</td></tr>
-    <tr><td><code>OwnAudioSharp.Midi</code></td><td>&lt;1 MB</td><td>Windows, Linux, macOS</td><td>— MIDI standalone</td></tr>
+    <tr><td><code>OwnAudioSharp</code></td><td>Windows, Linux, macOS</td><td>Full desktop feature set — mixing, 17 effects, VST3, network sync, recording, mastering &amp; analysis</td></tr>
+    <tr><td><code>OwnAudioSharp.Mobile</code></td><td>Android, iOS</td><td>The engine and API tuned for mobile real-time constraints</td></tr>
+    <tr><td><code>OwnAudioSharp.Basic</code></td><td>All platforms</td><td>Lightweight core audio, effects, VST3, sync, pitch/tempo — no AI/ML models</td></tr>
+    <tr><td><code>OwnAudioSharp.Midi</code></td><td>Windows, Linux, macOS</td><td>Standalone AOT-compatible MIDI library</td></tr>
+    <tr><td><code>OwnVocalRemover</code> <span class="pkg-badge pkg-addon">Add-on</span></td><td>Windows, Linux, macOS</td><td>Optional ONNX-based vocal separation, split out of the core API — reference only when needed</td></tr>
   </tbody>
 </table></div>
-<div class="code-block"><div class="code-header"><span>Shell</span><button class="copy-btn">Copy</button></div><pre><code class="language-bash">dotnet add package OwnAudioSharp
-# lightweight (no AI/ML):
-dotnet add package OwnAudioSharp.Basic</code></pre></div>
+<div class="code-block"><div class="code-header"><span>Shell</span><button class="copy-btn">Copy</button></div><pre><code class="language-bash">dotnet add package OwnAudioSharp          # Desktop — full features
+dotnet add package OwnAudioSharp.Mobile   # Android / iOS
+dotnet add package OwnAudioSharp.Basic    # Lightweight
+dotnet add package OwnVocalRemover        # Optional vocal separation add-on</code></pre></div>
 
-<div class="callout callout-info"><div class="callout-icon">🎞️</div><p><strong>Extended format support via FFmpeg 8+ (optional):</strong> Install FFmpeg 8+ system-wide and OwnAudioSharp automatically uses it as the primary decoder — adding AAC, OGG, Opus, WMA, AIFF, AC3, and more with zero code changes. Falls back to built-in MP3 / WAV / FLAC when FFmpeg is absent. See <a href="api-reference.html#ffmpeg">FFmpeg Integration</a>.</p></div>
+<div class="callout callout-success"><div class="callout-icon">🎵</div><p><strong>Formats out of the box:</strong> the pure-Rust decoder handles MP3, FLAC, WAV (PCM/ADPCM), AAC, MP4/M4A, OGG/Vorbis and AIFF on every platform — no FFmpeg, no system dependencies. FFmpeg 8+ remains supported as an optional legacy fallback for exotic formats; see <a href="api-reference.html#ffmpeg">FFmpeg Integration</a>.</p></div>
 
 <h2 id="architecture">Architecture</h2>
-<p>OwnAudioSharp uses a two-layer design that keeps the real-time audio thread completely separate from your application code.</p>
+<p>OwnAudioSharp is a thin C# surface over a native Rust engine. The design keeps the real-time audio thread — now entirely inside Rust — completely separate from your application code and the garbage collector.</p>
 <div class="code-block"><div class="code-header"><span>Thread diagram</span><button class="copy-btn">Copy</button></div><pre><code>UI / Main Thread
   └─> OwnaudioNet.Send()     [lock-free ring buffer, &lt;0.1ms]
-       └─> AudioEngineWrapper
-            └─> Pump Thread  [dedicated background thread]
-                 └─> Audio RT Thread  [WASAPI / CoreAudio / PulseAudio / Oboe]</code></pre></div>
+       └─> AudioEngineWrapper   [managed bridge, non-blocking]
+            └─> Native Rust engine   [ownaudio-ffi + ownaudio-core]
+                 └─> Audio RT Thread  [WASAPI / CoreAudio / ALSA — zero GC]</code></pre></div>
 <div class="callout callout-warning"><div class="callout-icon">⚠️</div><p><strong>Never call blocking engine methods from the UI thread.</strong> Use <code>InitializeAsync()</code>, <code>StopAsync()</code>, and <code>ShutdownAsync()</code> in all UI applications (WPF, WinForms, MAUI, Avalonia).</p></div>
 
 <h2 id="basic-playback">Basic Playback</h2>
