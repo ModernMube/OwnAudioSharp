@@ -134,7 +134,7 @@ internal static unsafe partial class MaBinding
                 loader.GetExport("ma_resampler_process_pcm_frames");
             _resamplerSetRate = (delegate* unmanaged[Cdecl]<IntPtr, uint, uint, MaResult>)
                 loader.GetExport("ma_resampler_set_rate");
-            _resamplerConfigInit = (delegate* unmanaged[Cdecl]<MaFormat, MaFormat, uint, uint, uint, uint, MaResampleAlgorithm, MaResamplerConfig>)
+            _resamplerConfigInit = (delegate* unmanaged[Cdecl]<MaFormat, uint, uint, uint, MaResampleAlgorithm, MaResamplerConfig>)
                 loader.GetExport("ma_resampler_config_init");
 
             _maMalloc = (delegate* unmanaged[Cdecl]<ulong, IntPtr, IntPtr>)
@@ -1140,7 +1140,8 @@ internal static unsafe partial class MaBinding
                 sampleRateIn = sampleRateIn,
                 sampleRateOut = sampleRateOut,
                 algorithm = algorithm,
-                pAllocationCallbacks = IntPtr.Zero
+                pBackendVTable = IntPtr.Zero,
+                pBackendUserData = IntPtr.Zero
             };
 
             if (algorithm == MaResampleAlgorithm.Linear)
@@ -1151,7 +1152,9 @@ internal static unsafe partial class MaBinding
             return config;
         }
 
-        return _resamplerConfigInit(formatIn, formatOut, channelsIn, channelsOut, sampleRateIn, sampleRateOut, algorithm);
+        // The native function takes a single format/channel pair; formatOut/channelsOut only
+        // participate in the managed fallback above (kept for signature compatibility).
+        return _resamplerConfigInit(formatIn, channelsIn, sampleRateIn, sampleRateOut, algorithm);
     }
 
     #endregion
