@@ -53,6 +53,11 @@
     <ProjectReference Include="..\Ownaudio.Core\Ownaudio.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Lets the engine tests assert the MaBinding struct layouts against the native miniaudio ABI. -->
+    <InternalsVisibleTo Include="Ownaudio.Test.Engine" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <None Include="runtimes\win-x64\**\*.*">
       <Link>runtimes\win-x64\%(RecursiveDir)%(Filename)%(Extension)</Link>
