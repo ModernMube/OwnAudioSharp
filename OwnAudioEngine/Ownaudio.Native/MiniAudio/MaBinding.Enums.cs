@@ -393,35 +393,15 @@ internal static partial class MaBinding
     }
 
     /// <summary>
-    /// Resampler algorithm types
+    /// Resampler algorithm types (matches miniaudio 0.11's <c>ma_resample_algorithm</c>,
+    /// which only defines linear and custom — the 0.10-era sinc algorithm was removed).
     /// </summary>
     public enum MaResampleAlgorithm
     {
         /// <summary>Linear interpolation. Fast but lower quality.</summary>
         Linear = 0,
-        /// <summary>Sinc interpolation. Slower but better quality.</summary>
-        Sinc,
         /// <summary>Custom/extensible algorithm.</summary>
         Custom
-    }
-
-    /// <summary>
-    /// Sinc resampler window function types
-    /// </summary>
-    public enum MaSincResamplerWindowFunction
-    {
-        /// <summary>Rectangular window (no windowing).</summary>
-        Rectangular = 0,
-        /// <summary>Hann window.</summary>
-        Hann,
-        /// <summary>Hamming window.</summary>
-        Hamming,
-        /// <summary>Blackman window.</summary>
-        Blackman,
-        /// <summary>Blackman-Harris window.</summary>
-        BlackmanHarris,
-        /// <summary>Blackman-Nuttall window.</summary>
-        BlackmanNuttall
     }
 
     /// <summary>

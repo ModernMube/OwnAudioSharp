@@ -258,8 +258,9 @@ internal static unsafe partial class MaBinding
     /// <summary>
     /// Function pointer to the native ma_resampler_config_init function.
     /// Initializes resampler settings structure with default parameters.
+    /// Native signature: ma_resampler_config_init(format, channels, sampleRateIn, sampleRateOut, algorithm).
     /// </summary>
-    private static delegate* unmanaged[Cdecl]<MaFormat, MaFormat, uint, uint, uint, uint, MaResampleAlgorithm, MaResamplerConfig> _resamplerConfigInit;
+    private static delegate* unmanaged[Cdecl]<MaFormat, uint, uint, uint, MaResampleAlgorithm, MaResamplerConfig> _resamplerConfigInit;
 
     /// <summary>
     /// Function pointer to the native ma_free function.

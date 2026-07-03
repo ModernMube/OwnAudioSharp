@@ -620,8 +620,17 @@ internal static partial class MaBinding
     }
 
     /// <summary>
-    /// Field representing struct.
+    /// Mirror of miniaudio 0.11's <c>ma_resampler_config</c>. Layout must match the native struct
+    /// exactly (48 bytes on 64-bit): after <c>algorithm</c> come the two custom-backend pointers,
+    /// then the <c>linear</c> options.
     /// </summary>
+    /// <remarks>
+    /// This previously used the miniaudio 0.10 shape (a single allocation-callbacks pointer plus a
+    /// <c>sinc</c> config that no longer exists in 0.11), which made the struct 64 bytes and shifted
+    /// every subsequent <see cref="MaDeviceConfig"/> field by 16 bytes — most importantly
+    /// <c>playback.pDeviceID</c> and <c>capture.pDeviceID</c>, so explicit device selection was
+    /// silently ignored and the default device was always opened.
+    /// </remarks>
     [StructLayout(LayoutKind.Sequential)]
     public struct MaResamplerConfig
     {
@@ -651,19 +660,19 @@ internal static partial class MaBinding
         public MaResampleAlgorithm algorithm;
 
         /// <summary>
-        /// Field representing IntPtr.
+        /// Pointer to a custom resampling backend vtable (<c>ma_resampling_backend_vtable*</c>), or zero.
         /// </summary>
-        public IntPtr pAllocationCallbacks;
+        public IntPtr pBackendVTable;
+
+        /// <summary>
+        /// User data pointer passed to the custom resampling backend, or zero.
+        /// </summary>
+        public IntPtr pBackendUserData;
 
         /// <summary>
         /// Field representing MaResamplerLinearConfig.
         /// </summary>
         public MaResamplerLinearConfig linear;
-
-        /// <summary>
-        /// Field representing MaResamplerSincConfig.
-        /// </summary>
-        public MaResamplerSincConfig sinc;
     }
 
     /// <summary>
@@ -676,28 +685,6 @@ internal static partial class MaBinding
         /// Field representing uint.
         /// </summary>
         public uint lpfOrder;
-    }
-
-    /// <summary>
-    /// Field representing struct.
-    /// </summary>
-    [StructLayout(LayoutKind.Sequential)]
-    public struct MaResamplerSincConfig
-    {
-        /// <summary>
-        /// Field representing MaSincResamplerWindowFunction.
-        /// </summary>
-        public MaSincResamplerWindowFunction windowFunction;
-
-        /// <summary>
-        /// Field representing double.
-        /// </summary>
-        public double windowWidth;
-
-        /// <summary>
-        /// Field representing double.
-        /// </summary>
-        public double transitionWidth;
     }
 
     /// <summary>
@@ -824,15 +811,20 @@ internal static partial class MaBinding
     }
 
     /// <summary>
-    /// Field representing struct.
+    /// Mirror of miniaudio's <c>ma_context</c>. Only the prefix through <see cref="backend"/> is
+    /// layout-accurate; the remainder intentionally over-sizes the struct so
+    /// <c>allocate_context</c> reserves at least <c>sizeof(ma_context)</c> (688 bytes native).
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct MaContext
     {
         /// <summary>
-        /// Field representing IntPtr.
+        /// The native <c>ma_backend_callbacks</c> block: 13 function pointers (104 bytes on 64-bit).
+        /// Previously declared as a single IntPtr, which put <see cref="backend"/> at offset 8
+        /// instead of 104 and made the backend read return garbage.
         /// </summary>
-        public IntPtr callbacks;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 13)]
+        public IntPtr[] callbacks;
 
         /// <summary>
         /// Field representing MaBackend.
