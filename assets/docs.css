@@ -131,6 +131,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
 }
 .topnav-logo svg { flex-shrink: 0; color: var(--accent); }
 .topnav-logo span { color: var(--accent); }
+.topnav-logo img { height: 24px; width: auto; display: block; }
 
 .topnav-links {
   display: flex; align-items: center; gap: .1rem;
@@ -481,6 +482,12 @@ h2:hover .anchor-link, h3:hover .anchor-link { opacity: .5; }
   margin: 0 auto;
   text-align: center;
   z-index: 1;
+}
+.hero-logo {
+  display: block;
+  width: clamp(180px, 26vw, 260px);
+  height: auto;
+  margin: 0 auto 1.75rem;
 }
 .hero-eyebrow {
   font-size: .78rem;
