@@ -92,6 +92,7 @@ Built-in decoders cover **MP3, WAV, and FLAC** out of the box. When **FFmpeg 8+*
 - **Live performance apps** — network-synchronized multi-room or multi-device setups
 - **Games and interactive audio** — low-latency output, real-time effect chains
 
+
 ## Installation
 
 Three packages are available depending on your platform and feature needs:
