@@ -23,13 +23,13 @@ namespace Ownaudio.Decoders;
 public static class AudioDecoderFactory
 {
     /// <summary>
-    /// AOT-safe factory delegate registered by Ownaudio.Native via [ModuleInitializer].
-    /// Null when the native assembly is not loaded (falls back to managed decoders).
+    /// AOT-safe factory delegate registered by the OwnaudioNET engine layer via [ModuleInitializer].
+    /// Null when the native engine assembly is not loaded (falls back to managed decoders / FFmpeg).
     /// </summary>
     private static Func<string, int, int, IAudioDecoder>? _nativeDecoderFactory;
 
     /// <summary>
-    /// Registers a native decoder factory. Called from Ownaudio.Native at module init time.
+    /// Registers a native decoder factory. Called from the OwnaudioNET engine layer at module init time.
     /// </summary>
     public static void RegisterNativeDecoder(Func<string, int, int, IAudioDecoder> factory)
         => _nativeDecoderFactory = factory;
@@ -58,8 +58,6 @@ public static class AudioDecoderFactory
         if (!File.Exists(filePath))
             throw new AudioException("AudioDecoderFactory ERROR: ", new FileNotFoundException($"Audio file not found: {filePath}", filePath));
 
-        FFmpegLoader.Initialize();
-
         var format = DetectFormatFromExtension(filePath);
         if (format == AudioFormat.Unknown)
         {
@@ -67,53 +65,57 @@ public static class AudioDecoderFactory
             format = DetectFormat(stream);
         }
 
-        if (format == AudioFormat.Unknown)
+        if (format == AudioFormat.Unknown && !NativeAvailable && !FFmpegConfig.IsAvailable)
             throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException($"Unable to detect audio format for file: {filePath}"));
 
-        if (format == AudioFormat.FFmpeg)
-        {
-            if (!FFmpegConfig.IsAvailable)
-                throw new AudioException("AudioDecoderFactory ERROR: ",
-                    new AudioException($"Format '{Path.GetExtension(filePath)}' requires FFmpeg, but FFmpeg libraries were not found."));
-
-            return new FFmpegDecoder(filePath, targetSampleRate, targetChannels);
-        }
-
-        if (FFmpegConfig.IsAvailable)
-        {
-            try
-            {
-                var decoder = new FFmpegDecoder(filePath, targetSampleRate, targetChannels);
-                Log.Info($"Using FFmpeg decoder for {format} format");
-                return decoder;
-            }
-            catch (Exception ex)
-            {
-                Log.Error($"FFmpeg decoder failed for {filePath}: {ex.Message}");
-                Log.Info("Falling back to MiniAudio or managed decoder...");
-            }
-        }
+        string formatName = format == AudioFormat.Unknown ? "auto-detected" : format.ToString();
+        bool managedSupported = format is AudioFormat.Wav or AudioFormat.Mp3 or AudioFormat.Flac;
 
         if (NativeAvailable)
         {
             try
             {
-                var decoder = _nativeDecoderFactory!(filePath, targetSampleRate, targetChannels);
-                Log.Info($"Using MiniAudio decoder for {format} format (native)");
+                var native = _nativeDecoderFactory!(filePath, targetSampleRate, targetChannels);
+                Log.Info($"Using Rust native decoder for {formatName} format");
+                return native;
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Rust native decoder failed for {filePath}: {ex.Message}");
+                Log.Info("Falling back to the built-in managed or FFmpeg decoder...");
+            }
+        }
+
+        if (managedSupported)
+        {
+            try
+            {
+                if (format == AudioFormat.Mp3)
+                    return CreateMp3DecoderFromFile(filePath, targetSampleRate, targetChannels);
+
+                var fileStream = File.OpenRead(filePath);
+                var decoder = CreateDecoderInternal(fileStream, format, true, targetSampleRate, targetChannels);
+                Log.Info($"Using built-in managed decoder for {format} format");
                 return decoder;
             }
             catch (Exception ex)
             {
-                Log.Error($"MiniAudio decoder instantiation failed: {ex.Message}");
-                Log.Info("Falling back to managed decoder...");
+                if (!FFmpegConfig.IsAvailable)
+                    throw;
+
+                Log.Error($"Built-in decoder failed for {filePath}: {ex.Message}");
+                Log.Info($"Falling back to FFmpeg decoder for {format} format...");
             }
         }
 
-        if (format == AudioFormat.Mp3)
-            return CreateMp3DecoderFromFile(filePath, targetSampleRate, targetChannels);
+        if (FFmpegConfig.IsAvailable)
+        {
+            Log.Info($"Using FFmpeg decoder for {formatName} format");
+            return new FFmpegDecoder(filePath, targetSampleRate, targetChannels);
+        }
 
-        var fileStream = File.OpenRead(filePath);
-        return CreateDecoderInternal(fileStream, format, true, targetSampleRate, targetChannels);
+        throw new AudioException("AudioDecoderFactory ERROR: ",
+            new AudioException($"Format '{Path.GetExtension(filePath)}' could not be decoded: no native or managed decoder handled it and FFmpeg libraries were not found."));
     }
 
     /// <summary>
@@ -265,32 +267,17 @@ public static class AudioDecoderFactory
     }
 
     /// <summary>
-    /// Creates platform-specific MP3 decoder from file path.
-    /// Strategy:
-    /// 1. Try MiniAudio decoder first (preferred cross-platform solution)
-    /// 2. Fallback to platform-specific decoders if MiniAudio fails
-    /// 3. Fallback to managed Mp3Decoder as last resort
+    /// Creates the built-in managed MP3 decoder from a file path.
+    /// The Rust native decoder is attempted earlier by <see cref="Create(string, int, int)"/>;
+    /// this helper is the managed decode path and is followed by the FFmpeg fallback on failure.
     /// </summary>
     private static IAudioDecoder CreateMp3DecoderFromFile(string filePath, int targetSampleRate, int targetChannels)
     {
-        if (NativeAvailable)
-        {
-            try
-            {
-                var decoder = _nativeDecoderFactory!(filePath, targetSampleRate, targetChannels);
-                Log.Info("Using MiniAudio decoder (native)");
-                return decoder;
-            }
-            catch (Exception ex)
-            {
-                Log.Error($"MiniAudio MP3 decoder instantiation failed: {ex.Message}");
-                Log.Info("Falling back to managed Mp3Decoder...");
-            }
-        }
-
         try
         {
-            return new Mp3Decoder(filePath, targetSampleRate, targetChannels);
+            var decoder = new Mp3Decoder(filePath, targetSampleRate, targetChannels);
+            Log.Info("Using built-in managed decoder for Mp3 format");
+            return decoder;
         }
         catch (Exception ex) when (ex is not AudioException)
         {
