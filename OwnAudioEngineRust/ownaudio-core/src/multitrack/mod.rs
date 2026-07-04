@@ -10,9 +10,18 @@ pub use command::{command_channel, CommandReceiver, MixerCommand, MixerControlle
 pub use file_source::{FileSourceControl, FileTrackSource};
 pub use track::{Track, TrackShared, TrackSource, TrackState};
 
-use crate::effects::EffectEntry;
+use crate::effects::{EffectChain, EffectEntry};
 use rtrb::Producer;
 use std::sync::Arc;
+
+use self::track::MAX_EFFECTS_PER_TRACK;
+
+/// Sentinel `track_id` addressing the mixer's **master** effect chain rather than
+/// any single track. Effect commands (add / remove / set-param / set-enabled)
+/// carrying this id are routed to [`MultiTrackMixer::master_effects`], which runs
+/// once over the summed mix. `u64::MAX` can never collide with a real track id
+/// (those start at 0 and increment).
+pub const MASTER_EFFECT_TARGET: u64 = u64::MAX;
 
 /// Default per-track scratch size in samples, used when the mixer is created
 /// without an explicit block size.  Covers a 4096-frame stereo callback; larger
@@ -58,6 +67,10 @@ pub struct MultiTrackMixer {
     /// track, source, effects, effect params) arrive through it instead of via
     /// direct `&mut` mutation, so they never race the audio thread.
     commands: Option<CommandReceiver>,
+    /// Master effect chain applied once over the fully summed mix, after every
+    /// track has been rendered. Addressed from the control thread via the
+    /// [`MASTER_EFFECT_TARGET`] sentinel track id.
+    master_effects: EffectChain,
 }
 
 impl MultiTrackMixer {
@@ -78,6 +91,7 @@ impl MultiTrackMixer {
             next_effect_id: 0,
             max_buffer_size: max_buffer_size.max(1),
             commands: None,
+            master_effects: EffectChain::with_capacity(MAX_EFFECTS_PER_TRACK),
         }
     }
 
@@ -229,7 +243,26 @@ impl MultiTrackMixer {
             }
         }
 
+        // Apply the master effect chain once over the fully summed mix.
+        self.master_effects.process_all(output, channels);
+
         self.clock.advance(frames);
+    }
+
+    /// Returns the effect chain addressed by `track_id`: the master chain when
+    /// `track_id` is [`MASTER_EFFECT_TARGET`], otherwise the owning track's chain
+    /// (or `None` when no such track exists).
+    fn effect_chain_mut(&mut self, track_id: u64) -> Option<&mut EffectChain> {
+        if track_id == MASTER_EFFECT_TARGET {
+            Some(&mut self.master_effects)
+        } else {
+            self.track_mut(track_id).map(|t| &mut t.effects)
+        }
+    }
+
+    /// Number of effects currently in the master chain (test/control helper).
+    pub fn master_effect_count(&self) -> usize {
+        self.master_effects.len()
     }
 
     /// Applies one drained [`MixerCommand`] to the mixer's owned data.
@@ -271,7 +304,7 @@ impl MultiTrackMixer {
                 effect_id,
                 effect,
             } => {
-                let chain = self.track_mut(track_id).map(|t| &mut t.effects);
+                let chain = self.effect_chain_mut(track_id);
                 match chain {
                     Some(chain) if chain.len() < chain.capacity() => {
                         chain.add_with_id(effect_id, effect);
@@ -289,8 +322,8 @@ impl MultiTrackMixer {
                 track_id,
                 effect_id,
             } => {
-                if let Some(t) = self.track_mut(track_id) {
-                    if let Some(entry) = t.effects.remove_by_id(effect_id) {
+                if let Some(chain) = self.effect_chain_mut(track_id) {
+                    if let Some(entry) = chain.remove_by_id(effect_id) {
                         let _ = retire.push(Retired::Effect(entry));
                     }
                 }
@@ -301,8 +334,8 @@ impl MultiTrackMixer {
                 param_id,
                 value,
             } => {
-                if let Some(t) = self.track_mut(track_id) {
-                    if let Some(effect) = t.effects.effect_mut_by_id(effect_id) {
+                if let Some(chain) = self.effect_chain_mut(track_id) {
+                    if let Some(effect) = chain.effect_mut_by_id(effect_id) {
                         effect.set_param(param_id, value);
                     }
                 }
@@ -312,8 +345,8 @@ impl MultiTrackMixer {
                 effect_id,
                 enabled,
             } => {
-                if let Some(t) = self.track_mut(track_id) {
-                    if let Some(effect) = t.effects.effect_mut_by_id(effect_id) {
+                if let Some(chain) = self.effect_chain_mut(track_id) {
+                    if let Some(effect) = chain.effect_mut_by_id(effect_id) {
                         effect.set_enabled(enabled);
                     }
                 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Ownaudio.Audio.Tracks;
 using Ownaudio.Safe;
@@ -52,6 +53,13 @@ public sealed partial class AudioMixer
     /// file source is added. <see langword="null"/> in legacy mode or before the first source.
     /// </summary>
     private MultiTrackSession? _rustSession;
+
+    /// <summary>
+    /// Managed master effect → paired native master effect, for the Rust-native chain. The managed
+    /// effect is the parameter model; the native effect does the audio on the master bus. Guarded by
+    /// <see cref="_rustSessionLock"/>.
+    /// </summary>
+    private readonly List<(IEffectProcessor Managed, object Native)> _rustMasterEffects = new();
 
     /// <summary>
     /// The control-rate sync tick thread; runs while the Rust-native mixer is started.
@@ -174,6 +182,116 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
+    /// Routes a managed master effect onto the shared session's native master bus in Rust-native
+    /// mode (plan E.3). A paired native effect is created and the managed effect's parameters are
+    /// mirrored onto it; the managed effect's own DSP does not run. No-op in legacy mode or when the
+    /// effect type has no native adapter yet (E.4).
+    /// </summary>
+    /// <param name="effect">The managed master effect being added.</param>
+    internal void AttachMasterEffectToRust(IEffectProcessor effect)
+    {
+        if (!_rustNative || effect is null)
+        {
+            return;
+        }
+
+        if (!RustEffectAdapters.TryGetEffectType(effect, out var effectType))
+        {
+            return;
+        }
+
+        lock (_rustSessionLock)
+        {
+            _rustSession ??= new MultiTrackSession(
+                (float)_config.SampleRate,
+                (ushort)_config.Channels);
+
+            object native = _rustSession.MasterEffects.Add(effectType, _config.SampleRate);
+            _rustMasterEffects.Add((effect, native));
+            MirrorMasterEffectLocked(effect, native);
+        }
+    }
+
+    /// <summary>
+    /// Removes the native master effect paired with <paramref name="effect"/> (the inverse of
+    /// <see cref="AttachMasterEffectToRust"/>). No-op when not paired.
+    /// </summary>
+    /// <param name="effect">The managed master effect being removed.</param>
+    internal void DetachMasterEffectFromRust(IEffectProcessor effect)
+    {
+        if (!_rustNative || effect is null)
+        {
+            return;
+        }
+
+        lock (_rustSessionLock)
+        {
+            int index = _rustMasterEffects.FindIndex(p => ReferenceEquals(p.Managed, effect));
+            if (index < 0)
+            {
+                return;
+            }
+
+            _rustSession?.MasterEffects.Remove(_rustMasterEffects[index].Native);
+            _rustMasterEffects.RemoveAt(index);
+        }
+    }
+
+    /// <summary>
+    /// Removes every native master effect (the inverse of clearing the managed master chain).
+    /// </summary>
+    internal void ClearRustMasterEffects()
+    {
+        if (!_rustNative)
+        {
+            return;
+        }
+
+        lock (_rustSessionLock)
+        {
+            if (_rustSession is not null)
+            {
+                foreach (var pair in _rustMasterEffects)
+                {
+                    _rustSession.MasterEffects.Remove(pair.Native);
+                }
+            }
+
+            _rustMasterEffects.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Mirrors every paired master effect's current managed parameters onto its native effect once.
+    /// Called on the control-rate sync tick and available for deterministic tests.
+    /// </summary>
+    internal void MirrorRustMasterEffectsOnce()
+    {
+        lock (_rustSessionLock)
+        {
+            if (_rustSession is null)
+            {
+                return;
+            }
+
+            foreach (var pair in _rustMasterEffects)
+            {
+                MirrorMasterEffectLocked(pair.Managed, pair.Native);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Pushes one managed master effect's parameters onto its native effect. Must be called under
+    /// <see cref="_rustSessionLock"/>.
+    /// </summary>
+    private void MirrorMasterEffectLocked(IEffectProcessor managed, object native)
+    {
+        MasterEffectChain chain = _rustSession!.MasterEffects;
+        RustEffectAdapters.Mirror(managed, (paramId, value) => chain.SetParam(native, paramId, value));
+    }
+
+    /// <summary>
     /// Drives one network drift-correction pass over every attached file source, nudging each
     /// track's tempo (or hard-seeking) toward the network-controlled master clock. No-op for
     /// sources that are not playing under a network-controlled clock. Called on the sync tick and
@@ -243,6 +361,7 @@ public sealed partial class AudioMixer
             try
             {
                 SyncRustControlStateOnce();
+                MirrorRustMasterEffectsOnce();
                 DriveRustNativeSyncOnce();
                 AdvanceMasterClockFromRustTracks();
             }
@@ -407,6 +526,10 @@ public sealed partial class AudioMixer
 
         lock (_rustSessionLock)
         {
+            // The native master effects live on the session's mixer; disposing the session frees
+            // them, so just drop the managed pairings.
+            _rustMasterEffects.Clear();
+
             _rustSession?.Dispose();
             _rustSession = null;
             _rustOutputStream = null;

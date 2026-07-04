@@ -247,16 +247,22 @@ public class FileSourceSyncTests : IDisposable
     }
 
     /// <summary>
-    /// Verifies that Position advances by wall-clock time (framesRead / sampleRate),
-    /// NOT by (framesRead * tempo / sampleRate) which would be a double-tempo bug.
-    /// SoundTouch already performs the tempo conversion, so the output buffer contains
-    /// tempo-adjusted audio but the Position must reflect real (wall-clock) elapsed time.
+    /// Verifies that the standalone <see cref="FileSource.Position"/> advances by <b>content</b>
+    /// time (framesRead * tempo / sampleRate), i.e. how far into the file the playback has reached.
     /// </summary>
+    /// <remarks>
+    /// Reading N output frames at tempo T consumes N*T frames of file <em>content</em> (SoundTouch
+    /// produces N output frames from N*T input frames), so the reported position — "where in the
+    /// file are we" — advances tempo-scaled. This is the documented golden behavior characterized by
+    /// <c>FileSourceCharacterizationTests</c> (plan D.0a): Position tracks decoded content time, not
+    /// wall-clock elapsed time. The code advances it deliberately via
+    /// <c>exactSourceFrames = framesRead * _tempo</c> with a fractional-frame accumulator.
+    /// </remarks>
     [Theory]
     [InlineData(1.0f)]
     [InlineData(1.2f)]
     [InlineData(0.8f)]
-    public void Position_AfterReadSamples_ShouldAdvanceByWallClockTime_NotDoubleTemp(float tempo)
+    public void Position_AfterReadSamples_AdvancesByContentTime_TempoScaled(float tempo)
     {
         // Arrange
         _source = new FileSource(_mockDecoder.Object);
@@ -277,12 +283,14 @@ public class FileSourceSyncTests : IDisposable
         // Assert
         if (framesRead > 0)
         {
-            double expectedAdvance = framesRead / 48000.0;
+            // Reading framesRead output frames at tempo T consumes framesRead*T content frames; the
+            // integer fractional-frame accumulator keeps this within ~1 frame per call.
+            double expectedAdvance = framesRead * tempo / 48000.0;
             double actualAdvance = _source.Position - positionBefore;
 
             actualAdvance.Should().BeApproximately(expectedAdvance, 0.002,
-                because: $"Position should advance by wall-clock time ({expectedAdvance:F5}s), " +
-                         $"not by file-time * tempo ({expectedAdvance * tempo:F5}s). " +
+                because: $"Position should advance by content time ({expectedAdvance:F5}s = " +
+                         $"framesRead * tempo / sampleRate), tracking file playback position. " +
                          $"Tempo={tempo}, framesRead={framesRead}");
         }
     }

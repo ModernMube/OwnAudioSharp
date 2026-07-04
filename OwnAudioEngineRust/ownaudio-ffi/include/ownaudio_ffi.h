@@ -509,6 +509,41 @@ int32_t ownaudio_v1_track_add_effect(struct OwnAudioMixerHandle *mixer,
                                      struct OwnAudioEffectHandle **out_effect);
 
 /**
+ * Adds a new effect of the given type to the mixer's **master** effect chain,
+ * which runs once over the fully summed mix after every track is rendered.
+ *
+ * - `mixer` — valid mixer handle.
+ * - `effect_type` — numeric effect type identifier (`EffectType` enum value).
+ * - `sample_rate` — sample rate in Hz; used to size internal buffers.
+ * - `out_effect` — receives the new effect handle on success.
+ *
+ * The returned handle is controlled with the same
+ * `ownaudio_v1_effect_set_param` / `_get_param` / `_remove` / `_destroy` calls as
+ * track effects — it simply targets the master chain instead of a track.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ * Returns `OwnAudioErrorCode::InvalidHandle` (7) for an unknown `effect_type`.
+ */
+int32_t ownaudio_v1_mixer_add_master_effect(struct OwnAudioMixerHandle *mixer,
+                                            uint32_t effect_type,
+                                            float sample_rate,
+                                            struct OwnAudioEffectHandle **out_effect);
+
+/**
+ * Removes a master effect from the mixer's master chain and destroys the handle.
+ *
+ * The master counterpart of [`ownaudio_v1_effect_remove`]: it takes no track
+ * handle because master effects are not owned by any track.
+ *
+ * - `mixer` — valid mixer handle.
+ * - `effect` — valid master effect handle from `ownaudio_v1_mixer_add_master_effect`.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_mixer_remove_master_effect(struct OwnAudioMixerHandle *mixer,
+                                               struct OwnAudioEffectHandle *effect);
+
+/**
  * Destroys an effect handle.
  *
  * Passing `null` is safe and has no effect.

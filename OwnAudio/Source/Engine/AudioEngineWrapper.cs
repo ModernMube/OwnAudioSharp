@@ -30,6 +30,14 @@ namespace OwnaudioNET.Engine;
 public sealed class AudioEngineWrapper : IDisposable
 {
     // External engine instance
+    /// <summary>
+    /// Serializes concurrent producers on the <see cref="Send(ReadOnlySpan{float})"/> path. The
+    /// underlying buffer is single-producer/single-consumer, so this lock upholds the documented
+    /// "safe to call from any thread" contract by admitting one writer at a time; the pump thread
+    /// remains the sole consumer and never contends for it.
+    /// </summary>
+    private readonly object _sendLock = new();
+
     private readonly IAudioEngine _engine;
 
     // Component instances
@@ -257,7 +265,12 @@ public sealed class AudioEngineWrapper : IDisposable
         if (!IsRunning)
             throw new InvalidOperationException("Cannot send audio when engine is not running. Call Start() first.");
 
-        _bufferController.Send(samples);
+        // Serialize concurrent producers: the buffer is single-producer, so honor the documented
+        // any-thread contract by admitting one writer at a time (the pump is the sole consumer).
+        lock (_sendLock)
+        {
+            _bufferController.Send(samples);
+        }
     }
 
     /// <summary>

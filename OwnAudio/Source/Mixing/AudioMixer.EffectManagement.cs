@@ -34,6 +34,10 @@ public sealed partial class AudioMixer
             _masterEffects.Add(effect);
             PublishEffectsCache();
         }
+
+        // In the Rust-native chain the managed effect's DSP is inert (no MixThread); route it onto
+        // the native master bus so it actually processes the mix.
+        AttachMasterEffectToRust(effect);
     }
 
     /// <summary>
@@ -55,15 +59,22 @@ public sealed partial class AudioMixer
         if (effect == null)
             throw new ArgumentNullException(nameof(effect));
 
+        bool removed;
         lock (_effectsLock)
         {
-            bool removed = _masterEffects.Remove(effect);
+            removed = _masterEffects.Remove(effect);
             if (removed)
             {
                 PublishEffectsCache();
             }
-            return removed;
         }
+
+        if (removed)
+        {
+            DetachMasterEffectFromRust(effect);
+        }
+
+        return removed;
     }
 
     /// <summary>
@@ -81,6 +92,8 @@ public sealed partial class AudioMixer
             _masterEffects.Clear();
             PublishEffectsCache();
         }
+
+        ClearRustMasterEffects();
     }
 
     /// <summary>

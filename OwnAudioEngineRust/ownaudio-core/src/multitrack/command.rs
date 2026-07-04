@@ -460,7 +460,7 @@ impl Drop for MixerController {
 mod tests {
     use super::*;
     use crate::effects::{EffectType, PARAM_ENABLED, PARAM_MIX};
-    use crate::multitrack::{MultiTrackMixer, TrackState};
+    use crate::multitrack::{MultiTrackMixer, TrackState, MASTER_EFFECT_TARGET};
 
     /// In-memory source yielding a fixed buffer once, then silence.
     struct VecSource {
@@ -578,6 +578,78 @@ mod tests {
         let mut out = [0.0f32; 4];
         mixer.mix(&mut out);
         assert_eq!(out, [3.0, 3.0, 3.0, 3.0]);
+    }
+
+    /// Source that endlessly yields a constant sample (survives repeated mixes).
+    struct ConstSource(f32);
+    impl TrackSource for ConstSource {
+        fn read(&mut self, out: &mut [f32]) -> usize {
+            out.fill(self.0);
+            out.len()
+        }
+    }
+
+    #[test]
+    fn master_effect_processes_the_summed_mix() {
+        let (mut ctl, mut mixer) = wired();
+
+        // Two tracks each contributing 1.0 → summed mix is 2.0 before the master.
+        for _ in 0..2 {
+            let (id, shared) = ctl.add_track().unwrap();
+            ctl.set_track_source(id, Some(Box::new(ConstSource(1.0))))
+                .unwrap();
+            shared.set_state(TrackState::Playing);
+        }
+
+        // A master effect scaling by 3 applies once over the whole mix: 2.0 → 6.0.
+        let effect_id = ctl
+            .add_effect(
+                MASTER_EFFECT_TARGET,
+                Box::new(ScalarGain {
+                    enabled: true,
+                    gain: 3.0,
+                }),
+            )
+            .unwrap();
+
+        let mut out = [0.0f32; 4];
+        mixer.mix(&mut out);
+        assert_eq!(out, [6.0, 6.0, 6.0, 6.0]);
+        assert_eq!(mixer.master_effect_count(), 1);
+
+        // Removing the master effect restores the un-processed summed mix (2.0).
+        ctl.remove_effect(MASTER_EFFECT_TARGET, effect_id).unwrap();
+        let mut out2 = [0.0f32; 4];
+        mixer.mix(&mut out2);
+        assert_eq!(out2, [2.0, 2.0, 2.0, 2.0]);
+        assert_eq!(mixer.master_effect_count(), 0);
+    }
+
+    #[test]
+    fn master_effect_param_change_takes_effect() {
+        let (mut ctl, mut mixer) = wired();
+        let (id, shared) = ctl.add_track().unwrap();
+        ctl.set_track_source(id, Some(Box::new(VecSource::new(vec![1.0; 4]))))
+            .unwrap();
+        shared.set_state(TrackState::Playing);
+
+        let effect_id = ctl
+            .add_effect(
+                MASTER_EFFECT_TARGET,
+                Box::new(ScalarGain {
+                    enabled: true,
+                    gain: 1.0,
+                }),
+            )
+            .unwrap();
+
+        // Re-target the master gain to 5 through the command queue.
+        ctl.set_effect_param(MASTER_EFFECT_TARGET, effect_id, PARAM_GAIN, 5.0)
+            .unwrap();
+
+        let mut out = [0.0f32; 4];
+        mixer.mix(&mut out);
+        assert_eq!(out, [5.0, 5.0, 5.0, 5.0]);
     }
 
     #[test]

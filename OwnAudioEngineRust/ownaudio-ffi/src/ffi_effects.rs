@@ -4,6 +4,7 @@ use ownaudio_core::effects::{
     AutoGain, Chorus, Compressor, Delay, Distortion, DynamicAmp, Effect, EffectType, Enhancer,
     Equalizer, Equalizer30, Flanger, Gate, Limiter, Overdrive, Phaser, PitchShift, Reverb, Rotary,
 };
+use ownaudio_core::multitrack::MASTER_EFFECT_TARGET;
 
 use crate::error_code::{set_last_error, OwnAudioErrorCode};
 use crate::handles::{
@@ -108,6 +109,123 @@ pub extern "C" fn ownaudio_v1_track_add_effect(
 
         unsafe {
             *out_effect = Box::into_raw(effect_wrapper) as *mut OwnAudioEffectHandle;
+        }
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Adds a new effect of the given type to the mixer's **master** effect chain,
+/// which runs once over the fully summed mix after every track is rendered.
+///
+/// - `mixer` — valid mixer handle.
+/// - `effect_type` — numeric effect type identifier (`EffectType` enum value).
+/// - `sample_rate` — sample rate in Hz; used to size internal buffers.
+/// - `out_effect` — receives the new effect handle on success.
+///
+/// The returned handle is controlled with the same
+/// `ownaudio_v1_effect_set_param` / `_get_param` / `_remove` / `_destroy` calls as
+/// track effects — it simply targets the master chain instead of a track.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+/// Returns `OwnAudioErrorCode::InvalidHandle` (7) for an unknown `effect_type`.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_mixer_add_master_effect(
+    mixer: *mut OwnAudioMixerHandle,
+    effect_type: u32,
+    sample_rate: f32,
+    out_effect: *mut *mut OwnAudioEffectHandle,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if mixer.is_null() || out_effect.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let effect = match create_effect(effect_type, sample_rate) {
+            Some(e) => e,
+            None => {
+                set_last_error(format!("unknown effect_type: {}", effect_type));
+                return OwnAudioErrorCode::InvalidHandle as i32;
+            }
+        };
+
+        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        // The master chain is addressed by the sentinel track id; the controller
+        // assigns the stable effect id and seeds the parameter shadow exactly as
+        // for a track effect.
+        let effect_id = match mixer_wrapper
+            .controller
+            .add_effect(MASTER_EFFECT_TARGET, effect)
+        {
+            Ok(id) => id,
+            Err(_) => {
+                set_last_error("mixer command queue is full; master effect not added");
+                return OwnAudioErrorCode::InternalError as i32;
+            }
+        };
+
+        let effect_wrapper = Box::new(EffectWrapper {
+            mixer: mixer as *mut crate::handles::MixerWrapper,
+            track_id: MASTER_EFFECT_TARGET,
+            effect_id,
+        });
+
+        unsafe {
+            *out_effect = Box::into_raw(effect_wrapper) as *mut OwnAudioEffectHandle;
+        }
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Removes a master effect from the mixer's master chain and destroys the handle.
+///
+/// The master counterpart of [`ownaudio_v1_effect_remove`]: it takes no track
+/// handle because master effects are not owned by any track.
+///
+/// - `mixer` — valid mixer handle.
+/// - `effect` — valid master effect handle from `ownaudio_v1_mixer_add_master_effect`.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_mixer_remove_master_effect(
+    mixer: *mut OwnAudioMixerHandle,
+    effect: *mut OwnAudioEffectHandle,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if mixer.is_null() || effect.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let effect_wrapper = match unsafe { effect_from_ptr(effect) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        let remove = mixer_wrapper
+            .controller
+            .remove_effect(effect_wrapper.track_id, effect_wrapper.effect_id);
+
+        if remove.is_err() {
+            set_last_error("mixer command queue is full; master effect not removed");
+            return OwnAudioErrorCode::InternalError as i32;
+        }
+
+        unsafe {
+            drop(Box::from_raw(effect as *mut EffectWrapper));
         }
 
         OwnAudioErrorCode::Success as i32

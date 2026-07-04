@@ -48,6 +48,34 @@ internal static partial class OwnAudioNative
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial void ownaudio_v1_effect_destroy(IntPtr effect);
 
+    /// <summary>
+    /// Adds a new effect of the given type to the mixer's master effect chain (applied once over
+    /// the fully summed mix) and writes the resulting handle to <paramref name="outEffect"/>.
+    /// </summary>
+    /// <param name="mixer">Valid mixer handle.</param>
+    /// <param name="effectType">Numeric effect type identifier.</param>
+    /// <param name="sampleRate">Sample rate in Hz; used to size internal DSP buffers.</param>
+    /// <param name="outEffect">Receives the new master effect handle on success.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_add_master_effect(
+        IntPtr mixer,
+        uint effectType,
+        float sampleRate,
+        out IntPtr outEffect);
+
+    /// <summary>
+    /// Removes a master effect from the mixer's master chain and destroys the handle. The master
+    /// counterpart of <see cref="ownaudio_v1_effect_remove"/> (no track handle is required).
+    /// </summary>
+    /// <param name="mixer">Valid mixer handle.</param>
+    /// <param name="effect">Master effect handle to remove and destroy.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_remove_master_effect(
+        IntPtr mixer,
+        IntPtr effect);
+
     #endregion
 
     #region Effect parameters

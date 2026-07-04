@@ -33,6 +33,7 @@ public sealed class MultiTrackSession : IDisposable
     private readonly ushort _channels;
     private readonly List<AudioTrack> _tracks = new();
     private readonly List<FileTrack> _fileTracks = new();
+    private readonly MasterEffectChain _masterEffects;
     private AudioOutputStream? _outputStream;
     private bool _disposed;
 
@@ -58,6 +59,8 @@ public sealed class MultiTrackSession : IDisposable
 
         _mixerHandle = new MixerHandle();
         Marshal.InitHandle(_mixerHandle, rawMixer);
+
+        _masterEffects = new MasterEffectChain(_mixerHandle.DangerousGetHandle());
     }
 
     #endregion
@@ -68,6 +71,12 @@ public sealed class MultiTrackSession : IDisposable
     /// Gets the read-only list of tracks registered in this session.
     /// </summary>
     public IReadOnlyList<AudioTrack> Tracks => _tracks.AsReadOnly();
+
+    /// <summary>
+    /// Gets the native master effect chain applied once over the fully summed mix (after every
+    /// track is rendered). Effects added here process the master bus in native code.
+    /// </summary>
+    public MasterEffectChain MasterEffects => _masterEffects;
 
     #endregion
 
