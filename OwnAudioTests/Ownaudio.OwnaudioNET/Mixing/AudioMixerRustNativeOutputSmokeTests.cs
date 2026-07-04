@@ -59,6 +59,83 @@ public sealed class AudioMixerRustNativeOutputSmokeTests : IDisposable
     }
 
     /// <summary>
+    /// Adding master effects to a Rust-native mixer that is already running on a real engine (as the
+    /// player does) must not throw. Reproduction for the "add effects to master → crash" report.
+    /// </summary>
+    [Fact]
+    public void AddMasterEffects_OnRunningRealEngine_DoesNotThrow()
+    {
+        if (!AudioEngineFactory.IsNativeEngineAvailable())
+        {
+            return;
+        }
+
+        var config = new AudioConfig
+        {
+            SampleRate = SampleRate, Channels = Channels, BufferSize = 512,
+            EnableOutput = true, EnableInput = false,
+        };
+
+        IAudioEngine engine;
+        try { engine = AudioEngineFactory.CreateEngine(config); }
+        catch { return; }
+
+        try
+        {
+            using var mixer = new AudioMixer(engine, 512);
+            using var source = new FileSource(_wavPath);
+            mixer.AddSource(source);
+            mixer.Start();
+            Thread.Sleep(120);
+
+            // Add every built-in effect type to the master while running — find any that throws.
+            var factories = new (string Name, Func<global::OwnaudioNET.Interfaces.IEffectProcessor> Make)[]
+            {
+                ("Reverb", () => new global::OwnaudioNET.Effects.ReverbEffect()),
+                ("Equalizer", () => new global::OwnaudioNET.Effects.EqualizerEffect(sampleRate: SampleRate)),
+                ("Equalizer30", () => new global::OwnaudioNET.Effects.Equalizer30BandEffect(sampleRate: SampleRate)),
+                ("Compressor", () => new global::OwnaudioNET.Effects.CompressorEffect()),
+                ("Limiter", () => new global::OwnaudioNET.Effects.LimiterEffect(SampleRate)),
+                ("Delay", () => new global::OwnaudioNET.Effects.DelayEffect(sampleRate: SampleRate)),
+                ("Chorus", () => new global::OwnaudioNET.Effects.ChorusEffect(sampleRate: SampleRate)),
+                ("Distortion", () => new global::OwnaudioNET.Effects.DistortionEffect()),
+                ("Overdrive", () => new global::OwnaudioNET.Effects.OverdriveEffect()),
+                ("Flanger", () => new global::OwnaudioNET.Effects.FlangerEffect(sampleRate: SampleRate)),
+                ("Phaser", () => new global::OwnaudioNET.Effects.PhaserEffect(sampleRate: SampleRate)),
+                ("Rotary", () => new global::OwnaudioNET.Effects.RotaryEffect()),
+                ("AutoGain", () => new global::OwnaudioNET.Effects.AutoGainEffect()),
+                ("Enhancer", () => new global::OwnaudioNET.Effects.EnhancerEffect(sampleRate: SampleRate)),
+                ("DynamicAmp", () => new global::OwnaudioNET.Effects.DynamicAmpEffect()),
+            };
+
+            Action act = () =>
+            {
+                foreach (var (name, make) in factories)
+                {
+                    mixer.ClearMasterEffects();
+                    try
+                    {
+                        mixer.AddMasterEffect(make());
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new Exception($"AddMasterEffect threw for {name}: {ex.GetType().Name}: {ex.Message}", ex);
+                    }
+                    mixer.MirrorRustMasterEffectsOnce();
+                }
+            };
+
+            act.Should().NotThrow();
+            Thread.Sleep(150);
+            mixer.Stop();
+        }
+        finally
+        {
+            engine.Dispose();
+        }
+    }
+
+    /// <summary>
     /// Starting a Rust-native mixer on a real engine opens the shared session output and runs
     /// without error; stopping and disposing tear it down cleanly.
     /// </summary>

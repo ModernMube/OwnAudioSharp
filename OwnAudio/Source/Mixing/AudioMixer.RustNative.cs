@@ -60,7 +60,30 @@ public sealed partial class AudioMixer
     /// effect is the parameter model; the native effect does the audio on the master bus. Guarded by
     /// <see cref="_rustSessionLock"/>.
     /// </summary>
-    private readonly List<(IEffectProcessor Managed, object Native)> _rustMasterEffects = new();
+    private readonly List<RustEffectPair> _rustMasterEffects = new();
+
+    /// <summary>
+    /// Pairs a managed effect (the parameter model) with its native effect, and remembers the last
+    /// value pushed for each native parameter so the control-rate mirror only enqueues a command when
+    /// a value actually changes — otherwise the mixer command queue would flood every tick.
+    /// </summary>
+    private sealed class RustEffectPair
+    {
+        public RustEffectPair(IEffectProcessor managed, object native)
+        {
+            Managed = managed;
+            Native = native;
+        }
+
+        /// <summary>The managed effect acting as the parameter model.</summary>
+        public IEffectProcessor Managed { get; }
+
+        /// <summary>The paired native effect wrapper (from the master or track chain).</summary>
+        public object Native { get; }
+
+        /// <summary>Last value pushed per native parameter id, for change detection.</summary>
+        public Dictionary<uint, float> LastParams { get; } = new();
+    }
 
     /// <summary>
     /// Per-track effect routing state for sources wrapped in a <see cref="SourceWithEffects"/>: the
@@ -91,7 +114,7 @@ public sealed partial class AudioMixer
         public IEffectProcessor[] Cached { get; set; } = Array.Empty<IEffectProcessor>();
 
         /// <summary>Managed effect → paired native track effect, in chain order.</summary>
-        public List<(IEffectProcessor Managed, object Native)> Pairs { get; } = new();
+        public List<RustEffectPair> Pairs { get; } = new();
     }
 
     /// <summary>
@@ -267,8 +290,9 @@ public sealed partial class AudioMixer
                 (ushort)_config.Channels);
 
             object native = _rustSession.MasterEffects.Add(effectType, _config.SampleRate);
-            _rustMasterEffects.Add((effect, native));
-            MirrorMasterEffectLocked(effect, native);
+            var pair = new RustEffectPair(effect, native);
+            _rustMasterEffects.Add(pair);
+            MirrorMasterEffectLocked(pair);
         }
     }
 
@@ -292,8 +316,25 @@ public sealed partial class AudioMixer
                 return;
             }
 
-            _rustSession?.MasterEffects.Remove(_rustMasterEffects[index].Native);
+            TryRemoveNative(() => _rustSession?.MasterEffects.Remove(_rustMasterEffects[index].Native));
             _rustMasterEffects.RemoveAt(index);
+        }
+    }
+
+    /// <summary>
+    /// Runs a native effect-removal action, swallowing a transient failure (for example a momentarily
+    /// full command queue) so tearing down effects never crashes the app. A skipped removal only
+    /// leaves the native effect in place until the session is disposed.
+    /// </summary>
+    private static void TryRemoveNative(Action remove)
+    {
+        try
+        {
+            remove();
+        }
+        catch (Ownaudio.Safe.Exceptions.OwnAudioException)
+        {
+            // Best-effort: the native effect stays until the session is disposed.
         }
     }
 
@@ -313,7 +354,8 @@ public sealed partial class AudioMixer
             {
                 foreach (var pair in _rustMasterEffects)
                 {
-                    _rustSession.MasterEffects.Remove(pair.Native);
+                    RustEffectPair captured = pair;
+                    TryRemoveNative(() => _rustSession.MasterEffects.Remove(captured.Native));
                 }
             }
 
@@ -336,19 +378,39 @@ public sealed partial class AudioMixer
 
             foreach (var pair in _rustMasterEffects)
             {
-                MirrorMasterEffectLocked(pair.Managed, pair.Native);
+                MirrorMasterEffectLocked(pair);
             }
         }
     }
 
     /// <summary>
-    /// Pushes one managed master effect's parameters onto its native effect. Must be called under
-    /// <see cref="_rustSessionLock"/>.
+    /// Pushes one managed master effect's changed parameters onto its native effect. Must be called
+    /// under <see cref="_rustSessionLock"/>.
     /// </summary>
-    private void MirrorMasterEffectLocked(IEffectProcessor managed, object native)
+    private void MirrorMasterEffectLocked(RustEffectPair pair)
     {
         MasterEffectChain chain = _rustSession!.MasterEffects;
-        RustEffectAdapters.Mirror(managed, (paramId, value) => chain.SetParam(native, paramId, value));
+        MirrorPairLocked(pair, (native, paramId, value) => chain.SetParam(native, paramId, value));
+    }
+
+    /// <summary>
+    /// Mirrors a managed effect's parameters onto its native effect, enqueuing a native
+    /// <c>set_param</c> only for values that changed since the last mirror. This is essential: the
+    /// mirror runs every control-rate tick, and pushing every parameter unconditionally would flood
+    /// the lock-free mixer command queue (eventually overflowing it and failing later operations).
+    /// </summary>
+    private static void MirrorPairLocked(RustEffectPair pair, Func<object, uint, float, bool> setParam)
+    {
+        RustEffectAdapters.Mirror(pair.Managed, (paramId, value) =>
+        {
+            if (pair.LastParams.TryGetValue(paramId, out float last) && last.Equals(value))
+            {
+                return;
+            }
+
+            pair.LastParams[paramId] = value;
+            setParam(pair.Native, paramId, value);
+        });
     }
 
     /// <summary>
@@ -380,9 +442,11 @@ public sealed partial class AudioMixer
                 {
                     // Rebuild the native chain in order: drop the current pairings, then re-add every
                     // adaptable managed effect. This preserves chain order across add/remove/reorder.
+                    AudioTrack rebuildTrack = track;
                     foreach (var pair in routing.Pairs)
                     {
-                        track.Effects.Remove(pair.Native);
+                        RustEffectPair captured = pair;
+                        TryRemoveNative(() => rebuildTrack.Effects.Remove(captured.Native));
                     }
 
                     routing.Pairs.Clear();
@@ -392,18 +456,17 @@ public sealed partial class AudioMixer
                         if (RustEffectAdapters.TryGetEffectType(effect, out var effectType))
                         {
                             object native = track.Effects.Add(effectType, (float)_config.SampleRate);
-                            routing.Pairs.Add((effect, native));
+                            routing.Pairs.Add(new RustEffectPair(effect, native));
                         }
                     }
 
                     routing.Cached = managed;
                 }
 
+                TrackEffectChain trackChain = track.Effects;
                 foreach (var pair in routing.Pairs)
                 {
-                    TrackEffectChain chain = track.Effects;
-                    object native = pair.Native;
-                    RustEffectAdapters.Mirror(pair.Managed, (paramId, value) => chain.SetParam(native, paramId, value));
+                    MirrorPairLocked(pair, (native, paramId, value) => trackChain.SetParam(native, paramId, value));
                 }
             }
         }

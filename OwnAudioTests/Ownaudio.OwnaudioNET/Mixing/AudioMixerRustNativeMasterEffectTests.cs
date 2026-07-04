@@ -149,6 +149,31 @@ public sealed class AudioMixerRustNativeMasterEffectTests : IDisposable
     }
 
     [Fact]
+    public void RepeatedMirror_DoesNotFloodCommandQueue()
+    {
+        // The mock engine never drains the mixer command queue, so if the mirror enqueued a
+        // set_param for every parameter on every tick, thousands of ticks would overflow the queue
+        // and the next add/remove would fail (the reported crash). Dirty tracking must keep the
+        // steady-state mirror at zero commands.
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+        mixer.AddMasterEffect(new CompressorEffect());
+
+        for (int i = 0; i < 5000; i++)
+        {
+            mixer.MirrorRustMasterEffectsOnce();
+        }
+
+        // Adding another effect enqueues a command; without dirty tracking the queue would be full
+        // and this would throw (OwnAudioException: command queue is full).
+        Action act = () =>
+        {
+            mixer.AddMasterEffect(new ReverbEffect());
+            mixer.ClearMasterEffects();
+        };
+        act.Should().NotThrow();
+    }
+
+    [Fact]
     public void RemoveMasterEffect_RemovesPairedNativeEffect()
     {
         using var mixer = new AudioMixer(_engine, MixerBufferFrames);

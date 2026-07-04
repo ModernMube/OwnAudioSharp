@@ -13,7 +13,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Midi</PackageId>
-    <Version>4.0.0-preview.4</Version>
+    <Version>4.0.0-preview.5</Version>
     <Authors>ModernMube</Authors>
     <Description>AOT-compatible MIDI I/O and file handling for OwnAudioSharp. Supports real-time MIDI input/output (WinMM / CoreMIDI / ALSA), Standard MIDI File read/write, and a hardware-accurate MIDI clock.</Description>
     <PackageTags>midi;audio;aot;cross-platform;windows;linux;macos</PackageTags>
