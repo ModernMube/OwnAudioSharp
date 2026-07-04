@@ -26,6 +26,7 @@ public sealed class TrackEffectChain
     private readonly IntPtr _mixerHandle;
     private readonly IntPtr _trackHandle;
     private readonly List<object> _effects = new();
+    private readonly List<EffectHandle> _handles = new();
 
     #endregion
 
@@ -71,6 +72,7 @@ public sealed class TrackEffectChain
 
         object effect = CreateWrapper(effectType, handle);
         _effects.Add(effect);
+        _handles.Add(handle);
         return effect;
     }
 
@@ -115,6 +117,7 @@ public sealed class TrackEffectChain
         }
 
         _effects.RemoveAt(index);
+        _handles.RemoveAt(index);
     }
 
     /// <summary>
@@ -123,6 +126,80 @@ public sealed class TrackEffectChain
     public void Clear()
     {
         _effects.Clear();
+        _handles.Clear();
+    }
+
+    /// <summary>
+    /// Sets a native parameter (by numeric id) on an effect previously returned by
+    /// <see cref="Add(EffectType,float)"/>. Used to mirror a managed effect's parameters onto its
+    /// paired native track effect.
+    /// </summary>
+    /// <param name="effect">The effect instance returned by <c>Add</c>.</param>
+    /// <param name="paramId">Native parameter identifier (effect-specific).</param>
+    /// <param name="value">New parameter value; clamped silently natively.</param>
+    /// <returns><see langword="true"/> when the effect is known and the parameter recognised.</returns>
+    public bool SetParam(object effect, uint paramId, float value)
+    {
+        int index = _effects.IndexOf(effect);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        int code = OwnAudioNative.ownaudio_v1_effect_set_param(
+            _mixerHandle,
+            _handles[index].DangerousGetHandle(),
+            paramId,
+            value);
+        return code == 0;
+    }
+
+    /// <summary>
+    /// Reads a native parameter (by numeric id) back from an effect (the control-side shadow value).
+    /// </summary>
+    /// <param name="effect">The effect instance returned by <c>Add</c>.</param>
+    /// <param name="paramId">Native parameter identifier.</param>
+    /// <returns>The current value, or <see langword="null"/> when the effect or parameter is unknown.</returns>
+    public float? GetParam(object effect, uint paramId)
+    {
+        int index = _effects.IndexOf(effect);
+        if (index < 0)
+        {
+            return null;
+        }
+
+        int code = OwnAudioNative.ownaudio_v1_effect_get_param(
+            _mixerHandle,
+            _handles[index].DangerousGetHandle(),
+            paramId,
+            out float value);
+        return code == 0 ? value : null;
+    }
+
+    /// <summary>
+    /// Removes a specific effect instance (returned by <see cref="Add(EffectType,float)"/>) from the
+    /// native track chain and invalidates its handle. No-op when the effect is not in this chain.
+    /// </summary>
+    /// <param name="effect">The effect instance to remove.</param>
+    public void Remove(object effect)
+    {
+        int index = _effects.IndexOf(effect);
+        if (index < 0)
+        {
+            return;
+        }
+
+        EffectHandle handle = _handles[index];
+        int code = OwnAudioNative.ownaudio_v1_effect_remove(
+            _mixerHandle,
+            _trackHandle,
+            handle.DangerousGetHandle());
+        ErrorCodeMapper.ThrowIfError(code, nameof(Remove));
+
+        // The native remove freed the effect box; stop the SafeHandle from destroying it again.
+        handle.SetHandleAsInvalid();
+        _effects.RemoveAt(index);
+        _handles.RemoveAt(index);
     }
 
     #endregion

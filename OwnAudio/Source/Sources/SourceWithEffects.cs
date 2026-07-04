@@ -75,6 +75,13 @@ public sealed class SourceWithEffects : IAudioSource
 
     #region IAudioSource Properties (delegated to inner source)
 
+    /// <summary>
+    /// Gets the wrapped inner source. Used by the Rust-native mixer facade to reach the underlying
+    /// <c>FileSource</c> (and its native track) so the wrapper's effects can be routed to the native
+    /// per-track effect chain instead of the managed <see cref="Process"/> path.
+    /// </summary>
+    internal IAudioSource InnerSource => _innerSource;
+
     /// <inheritdoc/>
     public Guid Id => _innerSource.Id;
 

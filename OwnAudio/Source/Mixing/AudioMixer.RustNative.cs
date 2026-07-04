@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using Ownaudio.Audio.Tracks;
 using Ownaudio.Safe;
@@ -62,6 +63,38 @@ public sealed partial class AudioMixer
     private readonly List<(IEffectProcessor Managed, object Native)> _rustMasterEffects = new();
 
     /// <summary>
+    /// Per-track effect routing state for sources wrapped in a <see cref="SourceWithEffects"/>: the
+    /// wrapper's effect list is reconciled onto the native track's effect chain on the control-rate
+    /// tick. Guarded by <see cref="_rustSessionLock"/>.
+    /// </summary>
+    private readonly List<RustTrackEffectRouting> _rustEffectSources = new();
+
+    /// <summary>
+    /// Tracks a <see cref="SourceWithEffects"/> and its underlying <see cref="FileSource"/> together
+    /// with the managed→native effect pairings currently installed on the native track.
+    /// </summary>
+    private sealed class RustTrackEffectRouting
+    {
+        public RustTrackEffectRouting(SourceWithEffects source, FileSource file)
+        {
+            Source = source;
+            File = file;
+        }
+
+        /// <summary>The wrapper whose effect list drives the native track chain.</summary>
+        public SourceWithEffects Source { get; }
+
+        /// <summary>The underlying file source that owns the native track.</summary>
+        public FileSource File { get; }
+
+        /// <summary>The last-seen managed effect list, to detect changes cheaply.</summary>
+        public IEffectProcessor[] Cached { get; set; } = Array.Empty<IEffectProcessor>();
+
+        /// <summary>Managed effect → paired native track effect, in chain order.</summary>
+        public List<(IEffectProcessor Managed, object Native)> Pairs { get; } = new();
+    }
+
+    /// <summary>
     /// The control-rate sync tick thread; runs while the Rust-native mixer is started.
     /// </summary>
     private Thread? _rustSyncThread;
@@ -106,13 +139,24 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Attaches a source to the shared session in Rust-native mode: opens a matching native
-    /// file track and binds it to the source. Non-file sources are ignored (they keep the legacy path).
+    /// Resolves the underlying <see cref="FileSource"/> behind a mixer source: the source itself, or
+    /// the inner source when it is wrapped in a <see cref="SourceWithEffects"/> (the per-track effect
+    /// path). Returns <see langword="null"/> for non-file sources.
+    /// </summary>
+    private static FileSource? ResolveFileSource(IAudioSource source) =>
+        source as FileSource ?? (source as SourceWithEffects)?.InnerSource as FileSource;
+
+    /// <summary>
+    /// Attaches a source to the shared session in Rust-native mode: opens a matching native file
+    /// track and binds it to the underlying <see cref="FileSource"/> (unwrapping a
+    /// <see cref="SourceWithEffects"/> when present, and registering it for native per-track effect
+    /// routing). Non-file sources are ignored (they keep the legacy path).
     /// </summary>
     /// <param name="source">The source being added to the mixer.</param>
     private void AttachSourceToRustSession(IAudioSource source)
     {
-        if (source is not FileSource fs || fs.FilePath is null)
+        FileSource? fs = ResolveFileSource(source);
+        if (fs?.FilePath is null)
         {
             return;
         }
@@ -125,6 +169,13 @@ public sealed partial class AudioMixer
 
             FileTrack fileTrack = _rustSession.AddFileTrack(fs.FilePath);
             fs.AttachRustTrack(fileTrack.Track, fileTrack);
+
+            // A source wrapped in SourceWithEffects carries per-track effects; route them onto the
+            // native track's effect chain (reconciled on the control-rate tick).
+            if (source is SourceWithEffects swe)
+            {
+                _rustEffectSources.Add(new RustTrackEffectRouting(swe, fs));
+            }
         }
     }
 
@@ -135,13 +186,16 @@ public sealed partial class AudioMixer
     /// <param name="source">The source being removed from the mixer.</param>
     private void DetachSourceFromRustSession(IAudioSource source)
     {
-        if (source is not FileSource fs)
+        FileSource? fs = ResolveFileSource(source);
+        if (fs is null)
         {
             return;
         }
 
         lock (_rustSessionLock)
         {
+            _rustEffectSources.RemoveAll(r => ReferenceEquals(r.Source, source));
+
             AudioTrack? track = fs.RustTrack;
             fs.DetachRustTrack();
 
@@ -197,6 +251,12 @@ public sealed partial class AudioMixer
 
         if (!RustEffectAdapters.TryGetEffectType(effect, out var effectType))
         {
+            // No native counterpart (VST3, or the composite SmartMaster): in the Rust-native chain
+            // its managed DSP does not run, so it produces no master processing. VST3 support lands
+            // in plan E.6 (native hosting via OwnVST3Juce).
+            System.Diagnostics.Debug.WriteLine(
+                $"[OwnAudio] Master effect '{effect.GetType().Name}' has no native adapter and is " +
+                "inactive in the Rust-native chain (VST3 → plan E.6; SmartMaster is a composite).");
             return;
         }
 
@@ -292,6 +352,64 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
+    /// Reconciles every <see cref="SourceWithEffects"/>-wrapped source's managed effect list onto its
+    /// native track effect chain, and mirrors each paired effect's parameters (plan E.2). Called on
+    /// the control-rate sync tick.
+    /// </summary>
+    /// <remarks>
+    /// The per-track effects are added directly to the wrapper (<c>SourceWithEffects.AddEffect</c>),
+    /// not through the mixer, so there is no explicit hook; the wrapper's effect list is polled here
+    /// and the native chain rebuilt in order whenever it changes (adaptable effects only — VST3 /
+    /// SmartMaster are skipped). Parameters are then mirrored every tick.
+    /// </remarks>
+    internal void ReconcileRustTrackEffectsOnce()
+    {
+        lock (_rustSessionLock)
+        {
+            foreach (RustTrackEffectRouting routing in _rustEffectSources)
+            {
+                AudioTrack? track = routing.File.RustTrack;
+                if (track is null)
+                {
+                    continue;
+                }
+
+                IEffectProcessor[] managed = routing.Source.GetEffects();
+
+                if (!managed.SequenceEqual(routing.Cached))
+                {
+                    // Rebuild the native chain in order: drop the current pairings, then re-add every
+                    // adaptable managed effect. This preserves chain order across add/remove/reorder.
+                    foreach (var pair in routing.Pairs)
+                    {
+                        track.Effects.Remove(pair.Native);
+                    }
+
+                    routing.Pairs.Clear();
+
+                    foreach (IEffectProcessor effect in managed)
+                    {
+                        if (RustEffectAdapters.TryGetEffectType(effect, out var effectType))
+                        {
+                            object native = track.Effects.Add(effectType, (float)_config.SampleRate);
+                            routing.Pairs.Add((effect, native));
+                        }
+                    }
+
+                    routing.Cached = managed;
+                }
+
+                foreach (var pair in routing.Pairs)
+                {
+                    TrackEffectChain chain = track.Effects;
+                    object native = pair.Native;
+                    RustEffectAdapters.Mirror(pair.Managed, (paramId, value) => chain.SetParam(native, paramId, value));
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Drives one network drift-correction pass over every attached file source, nudging each
     /// track's tempo (or hard-seeking) toward the network-controlled master clock. No-op for
     /// sources that are not playing under a network-controlled clock. Called on the sync tick and
@@ -362,6 +480,7 @@ public sealed partial class AudioMixer
             {
                 SyncRustControlStateOnce();
                 MirrorRustMasterEffectsOnce();
+                ReconcileRustTrackEffectsOnce();
                 DriveRustNativeSyncOnce();
                 AdvanceMasterClockFromRustTracks();
             }
@@ -526,9 +645,10 @@ public sealed partial class AudioMixer
 
         lock (_rustSessionLock)
         {
-            // The native master effects live on the session's mixer; disposing the session frees
-            // them, so just drop the managed pairings.
+            // The native master + track effects live on the session's mixer; disposing the session
+            // frees them, so just drop the managed pairings.
             _rustMasterEffects.Clear();
+            _rustEffectSources.Clear();
 
             _rustSession?.Dispose();
             _rustSession = null;

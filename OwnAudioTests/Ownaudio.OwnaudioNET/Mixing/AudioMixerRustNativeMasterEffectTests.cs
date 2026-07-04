@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using FluentAssertions;
 using Ownaudio.Core;
 using OwnaudioNET.Effects;
 using OwnaudioNET.Engine;
+using OwnaudioNET.Interfaces;
 using OwnaudioNET.Mixing;
 using Xunit;
 using AudioEngineFactory = OwnaudioNET.Engine.AudioEngineFactory;
@@ -67,6 +69,83 @@ public sealed class AudioMixerRustNativeMasterEffectTests : IDisposable
         chain.GetParam(2).Should().BeApproximately(20f * MathF.Log10(0.5f), 0.1f); // threshold dB
         chain.GetParam(3).Should().BeApproximately(4.0f, 0.01f);                   // ratio
         chain.GetParam(0).Should().BeApproximately(1.0f, 0.01f);                   // enabled
+    }
+
+    [Fact]
+    public void AllBuiltInEffects_RouteToNativeMasterBus()
+    {
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+
+        IEffectProcessor[] effects =
+        {
+            new ReverbEffect(),
+            new EqualizerEffect(sampleRate: SampleRate),
+            new Equalizer30BandEffect(sampleRate: SampleRate),
+            new CompressorEffect(),
+            new LimiterEffect(SampleRate),
+            new DelayEffect(sampleRate: SampleRate),
+            new ChorusEffect(sampleRate: SampleRate),
+            new DistortionEffect(),
+            new OverdriveEffect(),
+            new FlangerEffect(sampleRate: SampleRate),
+            new PhaserEffect(sampleRate: SampleRate),
+            new RotaryEffect(),
+            new AutoGainEffect(),
+            new EnhancerEffect(sampleRate: SampleRate),
+            new DynamicAmpEffect(),
+        };
+
+        foreach (IEffectProcessor effect in effects)
+        {
+            mixer.AddMasterEffect(effect);
+        }
+
+        // Every built-in effect has an adapter, so all of them are paired onto the native bus.
+        mixer.RustSession.Should().NotBeNull();
+        mixer.RustSession!.MasterEffects.Effects.Count.Should().Be(effects.Length,
+            "every built-in effect type has a native adapter and must route to the master bus");
+    }
+
+    [Theory]
+    [MemberData(nameof(ParamMirrorCases))]
+    public void BuiltInEffect_MirrorsRepresentativeParam(
+        Func<IEffectProcessor> factory, Action<IEffectProcessor> setParam, uint nativeParamId, float expected)
+    {
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+        IEffectProcessor effect = factory();
+        setParam(effect);
+
+        mixer.AddMasterEffect(effect);
+        mixer.MirrorRustMasterEffectsOnce();
+
+        var chain = mixer.RustSession!.MasterEffects;
+        object native = chain.Effects[0];
+        chain.GetParam(native, nativeParamId).Should().BeApproximately(expected, 0.01f);
+    }
+
+    public static IEnumerable<object[]> ParamMirrorCases()
+    {
+        // Reverb room size (native param 2, 0–1).
+        yield return new object[]
+        {
+            (Func<IEffectProcessor>)(() => new ReverbEffect()),
+            (Action<IEffectProcessor>)(e => ((ReverbEffect)e).RoomSize = 0.7f),
+            (uint)2, 0.7f,
+        };
+        // Equalizer band 0 gain (native param 2, dB).
+        yield return new object[]
+        {
+            (Func<IEffectProcessor>)(() => new EqualizerEffect(sampleRate: SampleRate)),
+            (Action<IEffectProcessor>)(e => ((EqualizerEffect)e).Band0Gain = 6.0f),
+            (uint)2, 6.0f,
+        };
+        // Delay time (native param 2, ms).
+        yield return new object[]
+        {
+            (Func<IEffectProcessor>)(() => new DelayEffect(sampleRate: SampleRate)),
+            (Action<IEffectProcessor>)(e => ((DelayEffect)e).Time = 250),
+            (uint)2, 250f,
+        };
     }
 
     [Fact]
