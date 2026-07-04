@@ -3,6 +3,7 @@
 pub mod clock;
 pub mod command;
 pub mod file_source;
+pub mod stretch;
 pub mod track;
 
 pub use clock::SampleClock;

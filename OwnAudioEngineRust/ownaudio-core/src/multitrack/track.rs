@@ -241,6 +241,15 @@ pub struct Track {
     /// Per-frame gain smoother; ramps the atomic [`TrackShared::gain`] toward its
     /// latest value to suppress zipper noise on abrupt changes.
     gain_smoother: SmoothedParam,
+    /// Per-track time-stretch / pitch-shift stage; applies the track's tempo and pitch to the
+    /// source audio via SoundTouch, or bypasses transparently at unity.
+    stretch: super::stretch::TrackStretch,
+    /// Sub-frame remainder of the tempo-scaled content-position advance, carried between
+    /// blocks so the integer [`TrackShared::rendered_frames`] does not drift. Mirrors the
+    /// legacy `FileSource._fractionalFrameAccumulator` so the reported position stays
+    /// content-time (a tempo of `r` advances the position by `r` content frames per output
+    /// frame), matching the pre-refactor behavior.
+    content_frame_accumulator: f64,
 }
 
 impl Track {
@@ -256,6 +265,8 @@ impl Track {
             source: None,
             scratch: vec![0.0f32; max_buffer_size],
             gain_smoother,
+            stretch: super::stretch::TrackStretch::new(sample_rate, max_buffer_size),
+            content_frame_accumulator: 0.0,
         }
     }
 
@@ -266,6 +277,7 @@ impl Track {
     pub fn set_source(&mut self, source: Option<Box<dyn TrackSource>>) {
         self.source = source;
         self.shared.reset_rendered_frames();
+        self.content_frame_accumulator = 0.0;
     }
 
     /// Replaces the track's audio source and returns the previous one without
@@ -280,6 +292,7 @@ impl Track {
         source: Option<Box<dyn TrackSource>>,
     ) -> Option<Box<dyn TrackSource>> {
         self.shared.reset_rendered_frames();
+        self.content_frame_accumulator = 0.0;
         std::mem::replace(&mut self.source, source)
     }
 
@@ -314,9 +327,19 @@ impl Track {
         }
         let buf = &mut self.scratch[..frame_len];
 
-        let read = match self.source.as_mut() {
-            Some(src) => src.read(buf),
-            None => 0,
+        // Apply the track's tempo/pitch via SoundTouch when either deviates from unity;
+        // otherwise read the source straight through (and clear any stale stretch latency).
+        let tempo = self.shared.tempo_ratio();
+        let pitch = self.shared.pitch_semitones();
+        let read = if self.stretch.is_active(tempo, pitch) {
+            self.stretch
+                .fill(&mut self.source, buf, channels, tempo, pitch)
+        } else {
+            self.stretch.deactivate();
+            match self.source.as_mut() {
+                Some(src) => src.read(buf),
+                None => 0,
+            }
         };
         for s in &mut buf[read..] {
             *s = 0.0;
@@ -335,10 +358,16 @@ impl Track {
             }
         }
 
-        // Advance the rendered position by the number of output frames produced
-        // this block; this is the authoritative playback position read from the
-        // control thread.
-        self.shared.add_rendered_frames((frame_len / ch) as u64);
+        // Advance the rendered position by the number of *content* frames this block
+        // represents: at tempo `r`, one output frame consumes `r` content frames, so the
+        // reported position stays content-time (matching the legacy SoundTouch path). A
+        // sub-frame accumulator carries the fractional remainder so the integer counter does
+        // not drift. At unity tempo this is exactly the output frame count.
+        let out_frames = (frame_len / ch) as f64;
+        self.content_frame_accumulator += out_frames * tempo.max(0.0) as f64;
+        let content_frames = self.content_frame_accumulator.floor();
+        self.content_frame_accumulator -= content_frames;
+        self.shared.add_rendered_frames(content_frames as u64);
     }
 }
 
@@ -400,6 +429,87 @@ mod tests {
 
         track.set_source(None);
         assert_eq!(track.shared.rendered_frames(), 0);
+    }
+
+    /// Source that reports how many interleaved samples it has been asked for, so a test can
+    /// prove tempo drives the source-consumption rate through the full render path.
+    struct CountingSource {
+        read_samples: Arc<AtomicU64>,
+    }
+
+    impl TrackSource for CountingSource {
+        fn read(&mut self, out: &mut [f32]) -> usize {
+            self.read_samples
+                .fetch_add(out.len() as u64, Ordering::Relaxed);
+            for (i, s) in out.iter_mut().enumerate() {
+                *s = ((i % 32) as f32 / 32.0) - 0.5;
+            }
+            out.len()
+        }
+    }
+
+    #[test]
+    fn tempo_change_alters_source_consumption_through_full_path() {
+        // Full-path proof that tempo is applied: at 2.0x tempo the render loop must pull
+        // roughly twice as much source audio per output block as at unity. Before the stretch
+        // stage was wired in, tempo was dead data and both counts were identical.
+        let block = 1024usize; // 512 stereo frames
+        let sr = 48_000.0;
+
+        let unity = Arc::new(AtomicU64::new(0));
+        let mut t_unity = Track::new(10, sr, block);
+        t_unity.set_source(Some(Box::new(CountingSource { read_samples: unity.clone() })));
+        t_unity.shared.set_state(TrackState::Playing);
+        t_unity.shared.set_tempo_ratio(1.0);
+
+        let fast = Arc::new(AtomicU64::new(0));
+        let mut t_fast = Track::new(11, sr, block);
+        t_fast.set_source(Some(Box::new(CountingSource { read_samples: fast.clone() })));
+        t_fast.shared.set_state(TrackState::Playing);
+        t_fast.shared.set_tempo_ratio(2.0);
+
+        let mut out = vec![0.0f32; block];
+        for _ in 0..16 {
+            out.iter_mut().for_each(|s| *s = 0.0);
+            t_unity.process_additive(&mut out, 2);
+            out.iter_mut().for_each(|s| *s = 0.0);
+            t_fast.process_additive(&mut out, 2);
+        }
+
+        // 2.0x tempo consumes markedly more input than unity for the same rendered output.
+        let fast_read = fast.load(Ordering::Relaxed);
+        let unity_read = unity.load(Ordering::Relaxed);
+        assert!(
+            fast_read as f64 > unity_read as f64 * 1.5,
+            "tempo 2.0 should pull far more source than unity (fast={fast_read}, unity={unity_read})"
+        );
+    }
+
+    #[test]
+    fn rendered_position_is_content_time_under_tempo() {
+        // At tempo 2.0 the reported position must advance at twice the output-frame rate
+        // (content time), matching the legacy `framesRead * _tempo` accounting.
+        let block = 1024usize; // 512 stereo frames per block
+        let mut track = Track::new(20, 48_000.0, block);
+        track.set_source(Some(Box::new(ConstSource(0.3))));
+        track.shared.set_state(TrackState::Playing);
+        track.shared.set_tempo_ratio(2.0);
+
+        let mut out = vec![0.0f32; block];
+        let blocks = 10u64;
+        for _ in 0..blocks {
+            out.iter_mut().for_each(|s| *s = 0.0);
+            track.process_additive(&mut out, 2);
+        }
+
+        let out_frames = (block as u64 / 2) * blocks;
+        let expected = out_frames * 2; // tempo 2.0
+        let actual = track.shared.rendered_frames();
+        // Allow at most one frame of accumulator rounding slack.
+        assert!(
+            actual.abs_diff(expected) <= 1,
+            "content position should be ~2x output frames (expected {expected}, got {actual})"
+        );
     }
 
     #[test]
