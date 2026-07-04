@@ -144,7 +144,9 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
     public override AudioStreamInfo StreamInfo => _streamInfo;
 
     /// <inheritdoc/>
-    public override double Position => Interlocked.CompareExchange(ref _currentPosition, 0, 0);
+    public override double Position => _rustNative
+        ? RustNativePosition
+        : Interlocked.CompareExchange(ref _currentPosition, 0, 0);
 
     /// <inheritdoc/>
     public override double Duration => _streamInfo.Duration.TotalSeconds;
@@ -246,6 +248,15 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
 
         _tempo = clamped;
 
+        if (_rustNative)
+        {
+            lock (_rustBackendLock)
+            {
+                if (_rustTrack is not null)
+                    _rustTrack.Tempo = _tempo;
+            }
+        }
+
         lock (_soundTouchLock)
         {
             // Convert multiplier to percentage for SoundTouch
@@ -305,6 +316,15 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
 
         _pitchShift = clamped;
 
+        if (_rustNative)
+        {
+            lock (_rustBackendLock)
+            {
+                if (_rustTrack is not null)
+                    _rustTrack.PitchSemitones = _pitchShift;
+            }
+        }
+
         lock (_soundTouchLock)
         {
             _soundTouch.PitchSemiTones = _pitchShift;
@@ -349,6 +369,8 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
 
         _filePath = filePath; // Store file path for data extraction
         _bufferSizeInFrames = bufferSizeInFrames;
+
+        _rustNative = OwnaudioNET.Engine.RustNativeChain.Enabled;
         
         _decoder = AudioDecoderFactory.Create(filePath, targetSampleRate, targetChannels);
         _streamInfo = _decoder.StreamInfo;
@@ -506,6 +528,11 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
             return false;
         }
 
+        if (_rustNative)
+        {
+            return RustNativeSeek(positionInSeconds);
+        }
+
         lock (_seekLock)
         {
             try
@@ -618,6 +645,12 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
     {
         ThrowIfDisposed();
 
+        if (_rustNative)
+        {
+            RustNativePlay();
+            return;
+        }
+
         _isPreBuffering = true;
         _pauseEvent.Set();
         
@@ -692,6 +725,13 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
     public override void Pause()
     {
         ThrowIfDisposed();
+
+        if (_rustNative)
+        {
+            RustNativePause();
+            return;
+        }
+
         base.Pause();
         _pauseEvent.Reset(); // Pause decoder thread
     }
@@ -700,6 +740,13 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
     public override void Stop()
     {
         ThrowIfDisposed();
+
+        if (_rustNative)
+        {
+            RustNativeStop();
+            return;
+        }
+
         base.Stop();
         _pauseEvent.Reset(); // Pause decoder thread
         _buffer.Clear();
@@ -735,6 +782,8 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
                     }
                 }
                 
+                DisposeRustBackend();
+
                 _pauseEvent?.Dispose();
                 _decoder?.Dispose();
                 _soundTouch?.Dispose();

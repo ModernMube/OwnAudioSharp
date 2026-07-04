@@ -1,7 +1,7 @@
 //! Single audio track: an audio source, a shared atomic parameter block, and
 //! an effect chain.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 
 use crate::effects::EffectChain;
@@ -92,6 +92,14 @@ pub struct TrackShared {
     tempo_ratio_bits: AtomicU32,
     /// Pitch shift in semitones, as `f32` bits.
     pitch_semitones_bits: AtomicU32,
+    /// Number of output frames this track has actually rendered into the mix
+    /// since the last position reset (seek or source swap).
+    ///
+    /// Advanced on the audio thread by [`Track::process_additive`] with the block's
+    /// output frame count; read from the control thread as the track's authoritative
+    /// playback position. This is the *rendered* position, which lags the *fed*
+    /// position by the ring-buffer depth — it is what an accurate `Position` must use.
+    rendered_frames: AtomicU64,
 }
 
 impl TrackShared {
@@ -104,6 +112,7 @@ impl TrackShared {
             soloed: AtomicBool::new(false),
             tempo_ratio_bits: AtomicU32::new(1.0f32.to_bits()),
             pitch_semitones_bits: AtomicU32::new(0.0f32.to_bits()),
+            rendered_frames: AtomicU64::new(0),
         }
     }
 
@@ -181,6 +190,24 @@ impl TrackShared {
         self.pitch_semitones_bits
             .store(semitones.clamp(-24.0, 24.0).to_bits(), Ordering::Relaxed);
     }
+
+    /// Returns the number of output frames rendered since the last position reset.
+    #[inline]
+    pub fn rendered_frames(&self) -> u64 {
+        self.rendered_frames.load(Ordering::Relaxed)
+    }
+
+    /// Adds `frames` to the rendered-frame counter (called on the audio thread).
+    #[inline]
+    pub fn add_rendered_frames(&self, frames: u64) {
+        self.rendered_frames.fetch_add(frames, Ordering::Relaxed);
+    }
+
+    /// Resets the rendered-frame counter to zero (on seek or source swap).
+    #[inline]
+    pub fn reset_rendered_frames(&self) {
+        self.rendered_frames.store(0, Ordering::Relaxed);
+    }
 }
 
 impl Default for TrackShared {
@@ -233,18 +260,26 @@ impl Track {
     }
 
     /// Replaces the track's audio source, dropping any previous one in place.
+    ///
+    /// Resets the rendered-frame position: a new source restarts playback from
+    /// its own frame zero.
     pub fn set_source(&mut self, source: Option<Box<dyn TrackSource>>) {
         self.source = source;
+        self.shared.reset_rendered_frames();
     }
 
     /// Replaces the track's audio source and returns the previous one without
     /// dropping it, so the caller (the audio thread, via a drained command) can
     /// hand the old source back to the control thread for deallocation instead
     /// of freeing heap memory on the real-time path.
+    ///
+    /// Resets the rendered-frame position: a new source restarts playback from
+    /// its own frame zero.
     pub fn replace_source(
         &mut self,
         source: Option<Box<dyn TrackSource>>,
     ) -> Option<Box<dyn TrackSource>> {
+        self.shared.reset_rendered_frames();
         std::mem::replace(&mut self.source, source)
     }
 
@@ -299,5 +334,80 @@ impl Track {
                 *o += s * gain;
             }
         }
+
+        // Advance the rendered position by the number of output frames produced
+        // this block; this is the authoritative playback position read from the
+        // control thread.
+        self.shared.add_rendered_frames((frame_len / ch) as u64);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Minimal source that always fills its output with a constant sample value.
+    struct ConstSource(f32);
+
+    impl TrackSource for ConstSource {
+        fn read(&mut self, out: &mut [f32]) -> usize {
+            for s in out.iter_mut() {
+                *s = self.0;
+            }
+            out.len()
+        }
+    }
+
+    #[test]
+    fn rendered_frames_advances_by_output_frame_count() {
+        let mut track = Track::new(1, 48_000.0, 64);
+        track.set_source(Some(Box::new(ConstSource(0.5))));
+        track.shared.set_state(TrackState::Playing);
+
+        let mut out = vec![0.0f32; 8]; // 4 stereo frames
+        track.process_additive(&mut out, 2);
+        assert_eq!(track.shared.rendered_frames(), 4);
+
+        track.process_additive(&mut out, 2);
+        assert_eq!(track.shared.rendered_frames(), 8);
+    }
+
+    #[test]
+    fn rendered_frames_advances_even_on_underrun_silence() {
+        // A playing track with no source still advances its rendered position
+        // (it renders silence), matching the legacy silence-fill behavior.
+        let mut track = Track::new(2, 48_000.0, 64);
+        track.shared.set_state(TrackState::Playing);
+
+        let mut out = vec![0.0f32; 8];
+        track.process_additive(&mut out, 2);
+        assert_eq!(track.shared.rendered_frames(), 4);
+    }
+
+    #[test]
+    fn source_swap_resets_rendered_frames() {
+        let mut track = Track::new(3, 48_000.0, 64);
+        track.set_source(Some(Box::new(ConstSource(0.5))));
+        track.shared.set_state(TrackState::Playing);
+
+        let mut out = vec![0.0f32; 8];
+        track.process_additive(&mut out, 2);
+        assert_eq!(track.shared.rendered_frames(), 4);
+
+        // Swapping the source restarts the rendered position at zero.
+        let _prev = track.replace_source(Some(Box::new(ConstSource(0.25))));
+        assert_eq!(track.shared.rendered_frames(), 0);
+
+        track.set_source(None);
+        assert_eq!(track.shared.rendered_frames(), 0);
+    }
+
+    #[test]
+    fn reset_rendered_frames_zeroes_the_counter() {
+        let shared = TrackShared::new();
+        shared.add_rendered_frames(100);
+        assert_eq!(shared.rendered_frames(), 100);
+        shared.reset_rendered_frames();
+        assert_eq!(shared.rendered_frames(), 0);
     }
 }

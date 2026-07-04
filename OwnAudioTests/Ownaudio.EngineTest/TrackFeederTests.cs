@@ -8,10 +8,10 @@ using Ownaudio.Safe;
 namespace Ownaudio.EngineTest;
 
 /// <summary>
-/// Integration tests for the decoder→track bridge (<see cref="TrackFeeder"/> and the
-/// <see cref="MultiTrackSession.AddFileTrack"/> convenience wiring).  These stream a
-/// temporary WAV file into a track's lock-free feed without opening an audio device,
-/// so the audio thread never drains the buffer.
+/// Integration tests for the managed decoder→track bridge (<see cref="TrackFeeder"/>) and the
+/// native <see cref="MultiTrackSession.AddFileTrack"/> wiring (which returns a
+/// <see cref="FileTrack"/>).  These stream a temporary WAV file into a track's lock-free feed
+/// without opening an audio device, so the audio thread never drains the buffer.
 /// </summary>
 [TestClass]
 public class TrackFeederTests
@@ -124,20 +124,21 @@ public class TrackFeederTests
     }
 
     [TestMethod]
-    public void AddFileTrack_WiresStartedFeeder_AndOwnsDecoder()
+    public void AddFileTrack_WiresNativeFileTrack_AndRegistersTrack()
     {
         using var wav = new TempWavFile(channels: Channels, SampleRate, frames: 8_000);
         using var session = new MultiTrackSession(SampleRate, Channels);
 
-        TrackFeeder feeder = session.AddFileTrack(wav.Path);
+        FileTrack fileTrack = session.AddFileTrack(wav.Path);
 
-        Assert.IsNotNull(feeder.Track, "feeder should expose the created track");
+        Assert.IsNotNull(fileTrack.Track, "file track should expose the created track");
         Assert.AreEqual(1, session.Tracks.Count, "the track should be registered in the session");
-        Assert.AreSame(feeder.Track, session.Tracks[0]);
+        Assert.AreSame(fileTrack.Track, session.Tracks[0]);
+        Assert.IsFalse(fileTrack.IsFinished, "a freshly opened file track is not finished");
 
-        // Disposing the session stops the feeder and decoder without throwing.
+        // Disposing the session tears down the file track (and its native source) without throwing.
         session.Dispose();
-        Assert.IsFalse(feeder.IsRunning, "session disposal should stop the feeder");
+        Assert.IsFalse(fileTrack.IsFinished, "a disposed file track reports not-finished");
     }
 
     [TestMethod]

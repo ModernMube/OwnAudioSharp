@@ -56,6 +56,24 @@ public sealed class TrackFeeder : IDisposable
     private volatile bool _running;
     private bool _disposed;
 
+    /// <summary>
+    /// When <see langword="true"/>, the pump seeks the decoder back to the start on
+    /// end-of-stream and keeps feeding, so playback loops seamlessly.
+    /// </summary>
+    private volatile bool _loop;
+
+    /// <summary>
+    /// Set by <see cref="Seek"/> to request a reposition; consumed on the pump thread
+    /// so the decoder is only ever touched by one thread. Guarded by <see cref="_sync"/>.
+    /// </summary>
+    private bool _seekRequested;
+
+    /// <summary>
+    /// The pending seek target in seconds, valid only while <see cref="_seekRequested"/>
+    /// is set. Guarded by <see cref="_sync"/>.
+    /// </summary>
+    private double _seekTargetSeconds;
+
     #endregion
 
     #region Construction
@@ -113,6 +131,40 @@ public sealed class TrackFeeder : IDisposable
     /// Gets a value indicating whether the pump thread is currently running.
     /// </summary>
     public bool IsRunning => _running;
+
+    /// <summary>
+    /// Gets or sets whether playback loops: on end-of-stream the decoder is rewound to
+    /// the start and feeding continues seamlessly (no gap), instead of completing.
+    /// </summary>
+    public bool Loop
+    {
+        get => _loop;
+        set => _loop = value;
+    }
+
+    #endregion
+
+    #region Seeking
+
+    /// <summary>
+    /// Requests a reposition of the underlying decoder to <paramref name="position"/>.
+    /// </summary>
+    /// <remarks>
+    /// The seek is performed on the pump thread (the only thread that touches the
+    /// decoder), which also clears the track's buffered look-ahead so the stale
+    /// pre-seek audio does not play first. When the pump is not running the request is
+    /// applied at its next start.
+    /// </remarks>
+    /// <param name="position">The target playback position from the start of the stream.</param>
+    public void Seek(TimeSpan position)
+    {
+        lock (_sync)
+        {
+            _seekTargetSeconds = Math.Max(0.0, position.TotalSeconds);
+            _seekRequested = true;
+            _wake.Set();
+        }
+    }
 
     #endregion
 
@@ -184,6 +236,21 @@ public sealed class TrackFeeder : IDisposable
 
             while (!_stopRequested)
             {
+                if (_seekRequested)
+                {
+                    double target;
+                    lock (_sync)
+                    {
+                        target = _seekTargetSeconds;
+                        _seekRequested = false;
+                    }
+
+                    _decoder.Seek(TimeSpan.FromSeconds(target));
+                    _track.ClearSource();
+                    pending = 0;
+                    offset = 0;
+                }
+
                 if (pending == 0)
                 {
                     int read = _decoder.Read(_chunk, 0, _chunk.Length);
@@ -191,6 +258,12 @@ public sealed class TrackFeeder : IDisposable
                     {
                         if (_decoder.IsEndOfStream)
                         {
+                            if (_loop)
+                            {
+                                _decoder.Seek(TimeSpan.Zero);
+                                continue;
+                            }
+
                             break;
                         }
 

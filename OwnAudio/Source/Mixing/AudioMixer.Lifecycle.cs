@@ -34,6 +34,13 @@ public sealed partial class AudioMixer
         _isRunning = true;
         _pauseEvent.Set();
 
+        if (_rustNative)
+        {
+            StartRustOutput();
+            StartRustSyncTick();
+            return;
+        }
+
         if (!_mixThread.IsAlive)
             _mixThread.Start();
     }
@@ -49,6 +56,9 @@ public sealed partial class AudioMixer
 
         if (!_isRunning)
             return;
+
+        if (_rustNative)
+            PauseRustOutput();
 
         _isRunning = false;
         _pauseEvent.Reset();
@@ -68,6 +78,12 @@ public sealed partial class AudioMixer
 
         _shouldStop = true;
         _pauseEvent.Reset();
+
+        if (_rustNative)
+        {
+            StopRustOutput();
+            StopRustSyncTick();
+        }
 
         // if (_mixThread.IsAlive)
         // {
@@ -113,6 +129,9 @@ public sealed partial class AudioMixer
 
         ClearSources();
 
+        if (_rustNative)
+            DisposeRustSession();
+
         lock (_effectsLock)
         {
             foreach (var effect in _masterEffects)
@@ -146,6 +165,15 @@ public sealed partial class AudioMixer
 
         if (positionInSeconds < 0)
             positionInSeconds = 0;
+
+        // In Rust-native mode the managed MixThread / soft-sync path (which legacy Playing sources
+        // rely on to self-correct toward the clock) does not run, so the seek must be applied to each
+        // native track explicitly.
+        if (_rustNative)
+        {
+            SeekRustNative(positionInSeconds);
+            return;
+        }
 
         // 1. Move the master clock — Playing sources self-correct via Three-Zone drift correction.
         _masterClock.SeekTo(positionInSeconds);

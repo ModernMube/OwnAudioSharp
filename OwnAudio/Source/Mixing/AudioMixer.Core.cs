@@ -360,6 +360,8 @@ public sealed partial class AudioMixer : IDisposable
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
 
+        _rustNative = RustNativeChain.Enabled;
+
         _mixerId = Guid.NewGuid();
 
         int sampleRate = OwnaudioNet.Engine?.Config.SampleRate ?? 48000;

@@ -47,6 +47,23 @@ public class GCPressureProfileTest
     [Timeout(120000)]
     public void MultitrackPlayback_22Tracks_SteadyState_HotPathIsAllocationFree()
     {
+        // This test characterizes the legacy managed pump (SampleSource → MixThread). As of 4.0 the
+        // Rust-native chain is the default and bypasses the MixThread, so pin legacy here; the
+        // Rust-native GC profile is covered by GCPressureRustNativeTest in the OwnaudioNET suite.
+        bool? priorOverride = global::OwnaudioNET.Engine.RustNativeChain.Override;
+        global::OwnaudioNET.Engine.RustNativeChain.Override = false;
+        try
+        {
+            RunLegacyPumpProfile();
+        }
+        finally
+        {
+            global::OwnaudioNET.Engine.RustNativeChain.Override = priorOverride;
+        }
+    }
+
+    private void RunLegacyPumpProfile()
+    {
         int durationSeconds = ResolveDurationSeconds();
 
         var config = new AudioConfig

@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use ownaudio_core::multitrack::MixerController;
 use ownaudio_core::{
-    AudioEngine, InputStream, MultiTrackMixer, OutputStream, RingBufferWriter, StreamingTrack,
-    TrackShared,
+    AudioEngine, FileSourceControl, InputStream, MultiTrackMixer, OutputStream, RingBufferWriter,
+    StreamingTrack, TrackShared,
 };
 
 /// Opaque handle to an [`AudioEngine`] instance.
@@ -170,6 +170,18 @@ pub struct OwnAudioTrackSourceHandle {
     _private: [u8; 0],
 }
 
+/// Opaque handle to the control side of a file-backed track source.
+///
+/// Create with `ownaudio_v1_track_open_file`; release with
+/// `ownaudio_v1_file_source_destroy`.  The decoded audio is produced entirely on
+/// the native prefetch thread, so — unlike [`OwnAudioTrackSourceHandle`] — the
+/// control thread never pushes samples; it only toggles looping, polls the
+/// end-of-stream latch and requests seeks.
+#[repr(C)]
+pub struct OwnAudioFileSourceHandle {
+    _private: [u8; 0],
+}
+
 // ---------------------------------------------------------------------------
 // Internal wrappers
 // ---------------------------------------------------------------------------
@@ -245,11 +257,26 @@ pub(crate) struct TrackSourceWrapper {
     pub writer: RingBufferWriter,
 }
 
+/// Owns the control side of a file-backed track source.
+///
+/// The matching [`FileTrackSource`] was installed as the track's source on the
+/// audio thread, where it decodes on its own prefetch thread. This handle keeps
+/// the shared [`FileSourceControl`] so the control thread can toggle looping,
+/// poll the finished latch and request seeks without touching the audio thread.
+///
+/// [`FileTrackSource`]: ownaudio_core::FileTrackSource
+pub(crate) struct FileSourceWrapper {
+    /// Shared control block for the audio-thread file source.
+    pub control: Arc<FileSourceControl>,
+}
+
 unsafe impl Send for MixerWrapper {}
 unsafe impl Sync for MixerWrapper {}
 unsafe impl Send for TrackWrapper {}
 unsafe impl Send for EffectWrapper {}
 unsafe impl Send for TrackSourceWrapper {}
+unsafe impl Send for FileSourceWrapper {}
+unsafe impl Sync for FileSourceWrapper {}
 
 // ---------------------------------------------------------------------------
 // Helper functions
@@ -296,5 +323,16 @@ pub(crate) unsafe fn track_source_from_ptr<'a>(
         None
     } else {
         Some(&mut *(ptr as *mut TrackSourceWrapper))
+    }
+}
+
+/// Casts a raw `*mut OwnAudioFileSourceHandle` back to `&mut FileSourceWrapper`.
+pub(crate) unsafe fn file_source_from_ptr<'a>(
+    ptr: *mut OwnAudioFileSourceHandle,
+) -> Option<&'a mut FileSourceWrapper> {
+    if ptr.is_null() {
+        None
+    } else {
+        Some(&mut *(ptr as *mut FileSourceWrapper))
     }
 }

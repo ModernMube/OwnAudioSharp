@@ -186,7 +186,8 @@ mod track_source {
     use ownaudio_ffi::ffi_track::{
         ownaudio_v1_mixer_create, ownaudio_v1_mixer_destroy, ownaudio_v1_mixer_pause_all,
         ownaudio_v1_mixer_play_all, ownaudio_v1_mixer_stop_all, ownaudio_v1_track_create,
-        ownaudio_v1_track_destroy,
+        ownaudio_v1_track_destroy, ownaudio_v1_track_get_rendered_frames,
+        ownaudio_v1_track_reset_position,
     };
     use ownaudio_ffi::handles::{
         OwnAudioMixerHandle, OwnAudioTrackHandle, OwnAudioTrackSourceHandle,
@@ -238,6 +239,58 @@ mod track_source {
 
         ownaudio_v1_track_destroy(track_a);
         ownaudio_v1_track_destroy(track_b);
+        ownaudio_v1_mixer_destroy(mixer);
+    }
+
+    #[test]
+    fn get_rendered_frames_contract_smoke() {
+        // Null handle → InvalidHandle; null out-pointer → NullPointer.
+        let mut frames: u64 = 999;
+        assert_eq!(
+            ownaudio_v1_track_get_rendered_frames(std::ptr::null_mut(), &mut frames),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        assert_eq!(
+            ownaudio_v1_track_reset_position(std::ptr::null_mut()),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+
+        let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_mixer_create(48_000.0, 2, &mut mixer),
+            OwnAudioErrorCode::Success as i32
+        );
+        let mut track: *mut OwnAudioTrackHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_track_create(mixer, &mut track),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        assert_eq!(
+            ownaudio_v1_track_get_rendered_frames(track, std::ptr::null_mut()),
+            OwnAudioErrorCode::NullPointer as i32
+        );
+
+        // A fresh track has rendered nothing yet; reset keeps it at zero.
+        let mut frames: u64 = 42;
+        assert_eq!(
+            ownaudio_v1_track_get_rendered_frames(track, &mut frames),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(frames, 0);
+
+        assert_eq!(
+            ownaudio_v1_track_reset_position(track),
+            OwnAudioErrorCode::Success as i32
+        );
+        let mut frames: u64 = 42;
+        assert_eq!(
+            ownaudio_v1_track_get_rendered_frames(track, &mut frames),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(frames, 0);
+
+        ownaudio_v1_track_destroy(track);
         ownaudio_v1_mixer_destroy(mixer);
     }
 
@@ -318,6 +371,186 @@ mod track_source {
         );
 
         ownaudio_v1_track_source_destroy(source);
+        ownaudio_v1_track_destroy(track);
+        ownaudio_v1_mixer_destroy(mixer);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// File-backed track source tests
+// ---------------------------------------------------------------------------
+
+mod file_source {
+    use ownaudio_ffi::error_code::OwnAudioErrorCode;
+    use ownaudio_ffi::ffi_file_source::{
+        ownaudio_v1_file_source_destroy, ownaudio_v1_file_source_is_finished,
+        ownaudio_v1_file_source_seek, ownaudio_v1_file_source_set_loop, ownaudio_v1_track_open_file,
+    };
+    use ownaudio_ffi::ffi_source::ownaudio_v1_track_clear_source;
+    use ownaudio_ffi::ffi_track::{
+        ownaudio_v1_mixer_create, ownaudio_v1_mixer_destroy, ownaudio_v1_track_create,
+        ownaudio_v1_track_destroy,
+    };
+    use ownaudio_ffi::handles::{
+        OwnAudioFileSourceHandle, OwnAudioMixerHandle, OwnAudioTrackHandle,
+    };
+    use std::ffi::CString;
+    use std::io::Write;
+    use std::path::PathBuf;
+
+    /// Writes a short stereo 16-bit PCM WAV to a unique temp path and returns it.
+    /// Removed on drop.
+    struct TempWav {
+        path: PathBuf,
+    }
+
+    impl TempWav {
+        fn new(frames: usize) -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir()
+                .join(format!("ownaudio_ffi_test_{}_{}.wav", std::process::id(), id));
+
+            let channels: u16 = 2;
+            let sample_rate: u32 = 44_100;
+            let interleaved: Vec<i16> = vec![1_000i16; frames * channels as usize];
+            let data_len = (interleaved.len() * 2) as u32;
+            let byte_rate = sample_rate * channels as u32 * 2;
+            let block_align = channels * 2;
+
+            let mut buf: Vec<u8> = Vec::with_capacity(44 + data_len as usize);
+            buf.extend_from_slice(b"RIFF");
+            buf.extend_from_slice(&(36 + data_len).to_le_bytes());
+            buf.extend_from_slice(b"WAVE");
+            buf.extend_from_slice(b"fmt ");
+            buf.extend_from_slice(&16u32.to_le_bytes());
+            buf.extend_from_slice(&1u16.to_le_bytes()); // PCM
+            buf.extend_from_slice(&channels.to_le_bytes());
+            buf.extend_from_slice(&sample_rate.to_le_bytes());
+            buf.extend_from_slice(&byte_rate.to_le_bytes());
+            buf.extend_from_slice(&block_align.to_le_bytes());
+            buf.extend_from_slice(&16u16.to_le_bytes());
+            buf.extend_from_slice(b"data");
+            buf.extend_from_slice(&data_len.to_le_bytes());
+            for &s in &interleaved {
+                buf.extend_from_slice(&s.to_le_bytes());
+            }
+
+            let mut file = std::fs::File::create(&path).expect("create temp wav");
+            file.write_all(&buf).expect("write temp wav");
+            file.flush().expect("flush temp wav");
+
+            TempWav { path }
+        }
+
+        fn c_path(&self) -> CString {
+            CString::new(self.path.to_str().unwrap()).unwrap()
+        }
+    }
+
+    impl Drop for TempWav {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.path);
+        }
+    }
+
+    #[test]
+    fn control_null_handles_are_invalid() {
+        assert_eq!(
+            ownaudio_v1_file_source_set_loop(std::ptr::null_mut(), 1),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        assert_eq!(
+            ownaudio_v1_file_source_seek(std::ptr::null_mut(), 0),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+
+        let mut finished: u8 = 9;
+        assert_eq!(
+            ownaudio_v1_file_source_is_finished(std::ptr::null_mut(), &mut finished),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+    }
+
+    #[test]
+    fn is_finished_null_out_is_null_pointer() {
+        // A null out-pointer is reported before the handle is even examined.
+        assert_eq!(
+            ownaudio_v1_file_source_is_finished(std::ptr::null_mut(), std::ptr::null_mut()),
+            OwnAudioErrorCode::NullPointer as i32
+        );
+    }
+
+    #[test]
+    fn destroy_null_is_safe() {
+        ownaudio_v1_file_source_destroy(std::ptr::null_mut());
+    }
+
+    #[test]
+    fn open_file_null_args_are_null_pointer() {
+        let mut source: *mut OwnAudioFileSourceHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_track_open_file(
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null(),
+                44_100,
+                2,
+                0,
+                &mut source,
+            ),
+            OwnAudioErrorCode::NullPointer as i32
+        );
+    }
+
+    #[test]
+    fn open_file_control_and_teardown_smoke() {
+        let wav = TempWav::new(4_000);
+        let path = wav.c_path();
+
+        let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_mixer_create(44_100.0, 2, &mut mixer),
+            OwnAudioErrorCode::Success as i32
+        );
+        let mut track: *mut OwnAudioTrackHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_track_create(mixer, &mut track),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        let mut source: *mut OwnAudioFileSourceHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_track_open_file(mixer, track, path.as_ptr(), 44_100, 2, 8_192, &mut source),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert!(!source.is_null());
+
+        // A freshly opened source is not finished, and the control calls succeed.
+        let mut finished: u8 = 9;
+        assert_eq!(
+            ownaudio_v1_file_source_is_finished(source, &mut finished),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(finished, 0);
+
+        assert_eq!(
+            ownaudio_v1_file_source_set_loop(source, 1),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(
+            ownaudio_v1_file_source_seek(source, 1_000),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        // Tear down in the documented order: clear the track's source (retires the
+        // decoding source off the audio thread), then destroy the control handle.
+        assert_eq!(
+            ownaudio_v1_track_clear_source(mixer, track),
+            OwnAudioErrorCode::Success as i32
+        );
+        ownaudio_v1_file_source_destroy(source);
         ownaudio_v1_track_destroy(track);
         ownaudio_v1_mixer_destroy(mixer);
     }

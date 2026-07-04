@@ -21,6 +21,50 @@ const DECODE_CHUNK_SAMPLES: usize = 8_192;
 /// Idle sleep when the ring buffer is full (avoids busy-spinning the CPU).
 const FULL_SLEEP: Duration = Duration::from_micros(500);
 
+/// Shared seek-request state between the control side and the prefetch thread.
+///
+/// The three atomics are grouped into a single allocation so a control-side
+/// owner can keep the ability to reposition the stream even after the
+/// [`StreamingTrack`] itself has been handed off (for example moved into a
+/// mixer track source owned by the audio thread). Obtain a handle with
+/// [`StreamingTrack::seek_state`].
+pub(crate) struct SeekState {
+    /// Set by [`request`](Self::request); consumed (swapped to `false`) by the
+    /// prefetch thread when it performs the seek.
+    requested: AtomicBool,
+    /// `true` from the moment a seek is requested until the prefetch thread has
+    /// repositioned the backend; suppresses stale reads in between.
+    pending: AtomicBool,
+    /// Target output frame for a pending seek.
+    frame: AtomicU64,
+}
+
+impl SeekState {
+    /// Creates an idle seek state (no seek requested).
+    fn new() -> Self {
+        Self {
+            requested: AtomicBool::new(false),
+            pending: AtomicBool::new(false),
+            frame: AtomicU64::new(0),
+        }
+    }
+
+    /// Requests a seek to `frame_position` (output frames). Non-blocking — the
+    /// prefetch thread performs the actual seek on its next iteration.
+    pub(crate) fn request(&self, frame_position: u64) {
+        self.frame.store(frame_position, Ordering::Release);
+        self.pending.store(true, Ordering::Release);
+        self.requested.store(true, Ordering::Release);
+    }
+
+    /// Returns `true` while a requested seek has not yet been applied by the
+    /// prefetch thread.
+    #[inline]
+    fn is_pending(&self) -> bool {
+        self.pending.load(Ordering::Acquire)
+    }
+}
+
 /// A streaming audio file reader with a dedicated prefetch thread.
 ///
 /// The decoded output is exposed through [`read`](Self::read), which is
@@ -30,13 +74,9 @@ pub struct StreamingTrack {
     /// Read side of the ring buffer, consumed by the audio callback.
     reader: RingBufferReader,
 
-    /// Shared seek request flag set by [`seek`](Self::seek).
-    seek_requested: Arc<AtomicBool>,
-    /// `true` from the moment a seek is requested until the prefetch thread has
-    /// repositioned the backend; suppresses stale reads in between.
-    seek_pending: Arc<AtomicBool>,
-    /// Target output frame for a pending seek.
-    seek_frame: Arc<AtomicU64>,
+    /// Shared seek-request state, driven by [`seek`](Self::seek) and consumed by
+    /// the prefetch thread.
+    seek: Arc<SeekState>,
     /// Signals the prefetch thread to exit.
     stop_signal: Arc<AtomicBool>,
     /// Set by the prefetch thread once the source is fully decoded.
@@ -71,9 +111,7 @@ impl StreamingTrack {
 
         let (writer, reader) = ring_buffer(capacity_samples);
 
-        let seek_requested = Arc::new(AtomicBool::new(false));
-        let seek_pending = Arc::new(AtomicBool::new(false));
-        let seek_frame = Arc::new(AtomicU64::new(0));
+        let seek = Arc::new(SeekState::new());
         let stop_signal = Arc::new(AtomicBool::new(false));
         let eof_reached = Arc::new(AtomicBool::new(false));
         let discard_samples = Arc::new(AtomicU64::new(0));
@@ -82,9 +120,7 @@ impl StreamingTrack {
             backend,
             writer,
             capacity_samples,
-            Arc::clone(&seek_requested),
-            Arc::clone(&seek_pending),
-            Arc::clone(&seek_frame),
+            Arc::clone(&seek),
             Arc::clone(&stop_signal),
             Arc::clone(&eof_reached),
             Arc::clone(&discard_samples),
@@ -92,9 +128,7 @@ impl StreamingTrack {
 
         Ok(Self {
             reader,
-            seek_requested,
-            seek_pending,
-            seek_frame,
+            seek,
             stop_signal,
             eof_reached,
             discard_samples,
@@ -112,7 +146,7 @@ impl StreamingTrack {
     pub fn read(&mut self, dst: &mut [f32]) -> usize {
         // While a seek is in flight, suppress reads so the consumer never sees
         // pre-seek samples still buffered in the ring.
-        if self.seek_pending.load(Ordering::Acquire) {
+        if self.seek.is_pending() {
             return 0;
         }
 
@@ -138,9 +172,14 @@ impl StreamingTrack {
     /// Requests a seek to `frame_position` (output frames).  Non-blocking — the
     /// prefetch thread performs the actual seek on its next iteration.
     pub fn seek(&self, frame_position: u64) {
-        self.seek_frame.store(frame_position, Ordering::Release);
-        self.seek_pending.store(true, Ordering::Release);
-        self.seek_requested.store(true, Ordering::Release);
+        self.seek.request(frame_position);
+    }
+
+    /// Returns a shared handle to this track's seek state, so a control-side
+    /// owner can keep repositioning the stream after the track has been moved
+    /// elsewhere (for example into a mixer track source on the audio thread).
+    pub(crate) fn seek_state(&self) -> Arc<SeekState> {
+        Arc::clone(&self.seek)
     }
 
     /// Decoded output format metadata.
@@ -170,9 +209,7 @@ fn spawn_prefetch_thread(
     mut backend: Box<dyn AudioDecoderBackend>,
     mut writer: RingBufferWriter,
     capacity_samples: usize,
-    seek_requested: Arc<AtomicBool>,
-    seek_pending: Arc<AtomicBool>,
-    seek_frame: Arc<AtomicU64>,
+    seek: Arc<SeekState>,
     stop_signal: Arc<AtomicBool>,
     eof_reached: Arc<AtomicBool>,
     discard_samples: Arc<AtomicU64>,
@@ -190,8 +227,8 @@ fn spawn_prefetch_thread(
                 }
 
                 // Pending seek takes priority and invalidates buffered data.
-                if seek_requested.swap(false, Ordering::AcqRel) {
-                    let frame = seek_frame.load(Ordering::Acquire);
+                if seek.requested.swap(false, Ordering::AcqRel) {
+                    let frame = seek.frame.load(Ordering::Acquire);
                     leftover.clear();
                     eof_reached.store(false, Ordering::Release);
                     if let Err(e) = backend.seek(frame) {
@@ -203,7 +240,7 @@ fn spawn_prefetch_thread(
                     let stale = (capacity_samples - writer.free()) as u64;
                     discard_samples.store(stale, Ordering::Release);
                     // Release the consumer now that the new position is in effect.
-                    seek_pending.store(false, Ordering::Release);
+                    seek.pending.store(false, Ordering::Release);
                     continue;
                 }
 
@@ -237,7 +274,7 @@ fn spawn_prefetch_thread(
                             eof_reached.store(true, Ordering::Release);
                             // Wait for either a stop or a seek request.
                             while !stop_signal.load(Ordering::Acquire)
-                                && !seek_requested.load(Ordering::Acquire)
+                                && !seek.requested.load(Ordering::Acquire)
                             {
                                 std::thread::sleep(Duration::from_millis(10));
                             }
@@ -247,7 +284,7 @@ fn spawn_prefetch_thread(
                         log::error!("prefetch: decode error: {e}");
                         eof_reached.store(true, Ordering::Release);
                         while !stop_signal.load(Ordering::Acquire)
-                            && !seek_requested.load(Ordering::Acquire)
+                            && !seek.requested.load(Ordering::Acquire)
                         {
                             std::thread::sleep(Duration::from_millis(10));
                         }

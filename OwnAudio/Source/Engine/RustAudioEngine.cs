@@ -70,6 +70,49 @@ internal sealed class RustAudioEngine : IAudioEngine
     /// <inheritdoc />
     public EngineStatus Status => _status;
 
+    /// <summary>
+    /// Gets the underlying native engine, or <see langword="null"/> before initialization or after
+    /// disposal. Used by the Rust-native <c>AudioMixer</c> facade to drive a shared
+    /// <c>MultiTrackSession</c> output directly on this engine's device.
+    /// </summary>
+    internal RustSafe.AudioEngine? NativeEngine
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _engine;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Pauses this engine's own push-based output stream so it does not compete with a
+    /// session-driven output opened on the same device (Rust-native mixer facade).
+    /// </summary>
+    internal void SuspendOutput()
+    {
+        lock (_stateLock)
+        {
+            _outputStream?.Pause();
+        }
+    }
+
+    /// <summary>
+    /// Resumes this engine's own push-based output stream previously paused by
+    /// <see cref="SuspendOutput"/>, if the engine is running.
+    /// </summary>
+    internal void ResumeOutput()
+    {
+        lock (_stateLock)
+        {
+            if (_running)
+            {
+                _outputStream?.Play();
+            }
+        }
+    }
+
     #endregion
 
     #region IAudioEngine — lifecycle

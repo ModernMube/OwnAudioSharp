@@ -142,6 +142,51 @@ public sealed class AudioTrack : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the number of output frames this track has actually rendered into the
+    /// mix since the last position reset (a seek or source swap).
+    /// </summary>
+    /// <remarks>
+    /// This is the <em>rendered</em> position, advanced on the audio thread as each
+    /// block is mixed. It lags the <em>fed</em> position by the native ring-buffer
+    /// depth, which is why it — not the amount written via <see cref="Write"/> — is
+    /// the authoritative source for <see cref="Position"/>. Returns zero when the
+    /// track is disposed.
+    /// </remarks>
+    public ulong RenderedFrames
+    {
+        get
+        {
+            if (_disposed)
+            {
+                return 0;
+            }
+
+            int code = OwnAudioNative.ownaudio_v1_track_get_rendered_frames(
+                _handle.DangerousGetHandle(),
+                out ulong frames);
+            ErrorCodeMapper.ThrowIfError(code, nameof(RenderedFrames));
+            return frames;
+        }
+    }
+
+    /// <summary>
+    /// Gets the track's current playback position, derived from <see cref="RenderedFrames"/>
+    /// and the session sample rate.
+    /// </summary>
+    public TimeSpan Position
+    {
+        get
+        {
+            if (_sampleRate <= 0f)
+            {
+                return TimeSpan.Zero;
+            }
+
+            return TimeSpan.FromSeconds(RenderedFrames / _sampleRate);
+        }
+    }
+
     #endregion
 
     #region Transport
@@ -182,6 +227,12 @@ public sealed class AudioTrack : IDisposable
     /// <summary>
     /// Seeks the track to the specified time position.
     /// </summary>
+    /// <remarks>
+    /// Also resets the rendered-frame counter so <see cref="Position"/> restarts from
+    /// the seek target. In the intermediate phase the decoder seek itself happens on
+    /// the managed side (via the track feeder); this call keeps the native rendered
+    /// position consistent with that reset.
+    /// </remarks>
     /// <param name="position">Target playback position.</param>
     /// <exception cref="ObjectDisposedException">Thrown when the track is disposed.</exception>
     public void Seek(TimeSpan position)
@@ -190,11 +241,31 @@ public sealed class AudioTrack : IDisposable
         ulong sample = (ulong)(position.TotalSeconds * _sampleRate);
         int code = OwnAudioNative.ownaudio_v1_track_seek(_handle.DangerousGetHandle(), sample);
         ErrorCodeMapper.ThrowIfError(code, nameof(Seek));
+
+        int resetCode = OwnAudioNative.ownaudio_v1_track_reset_position(_handle.DangerousGetHandle());
+        ErrorCodeMapper.ThrowIfError(resetCode, nameof(Seek));
     }
 
     #endregion
 
     #region Source feed
+
+    /// <summary>
+    /// Drops any samples currently buffered in the track's source ring, discarding
+    /// audio that was queued before a seek so the next reads start from fresh data.
+    /// </summary>
+    /// <remarks>
+    /// Used by the track feeder when seeking: after the decoder jumps to a new
+    /// position the stale look-ahead already pushed via <see cref="Write"/> must be
+    /// cleared, otherwise the pre-seek audio would still play out first.
+    /// </remarks>
+    /// <exception cref="ObjectDisposedException">Thrown when the track is disposed.</exception>
+    internal void ClearSource()
+    {
+        ThrowIfDisposed();
+        int code = OwnAudioNative.ownaudio_v1_track_clear_source(_mixerHandle, _handle.DangerousGetHandle());
+        ErrorCodeMapper.ThrowIfError(code, nameof(ClearSource));
+    }
 
     /// <summary>
     /// Pushes decoded interleaved <c>f32</c> samples into the track's lock-free

@@ -116,6 +116,28 @@ internal static partial class OwnAudioNative
 
     #endregion
 
+    #region Track position
+
+    /// <summary>
+    /// Writes the number of output frames the track has rendered since the last
+    /// position reset to <paramref name="outFrames"/>.
+    /// </summary>
+    /// <param name="track">Valid track handle.</param>
+    /// <param name="outFrames">Receives the rendered frame count on success.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_get_rendered_frames(IntPtr track, out ulong outFrames);
+
+    /// <summary>
+    /// Resets the track's rendered-frame position counter to zero.
+    /// </summary>
+    /// <param name="track">Valid track handle.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_reset_position(IntPtr track);
+
+    #endregion
+
     #region Track parameters
 
     /// <summary>Sets the track gain (linear amplitude; 1.0 = unity).</summary>
@@ -214,6 +236,67 @@ internal static partial class OwnAudioNative
     /// <param name="source">Source handle to destroy; passing <see cref="IntPtr.Zero"/> is safe.</param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial void ownaudio_v1_track_source_destroy(IntPtr source);
+
+    #endregion
+
+    #region File-backed track source
+
+    /// <summary>
+    /// Opens an audio file, installs a decoding source on the track, and writes the
+    /// control handle to <paramref name="outSource"/>.
+    /// </summary>
+    /// <remarks>
+    /// The file is decoded and resampled to <paramref name="targetSampleRate"/> /
+    /// <paramref name="targetChannels"/> on a native prefetch thread and fed straight into
+    /// the track on the audio thread — no managed pump is involved. Looping and
+    /// end-of-stream are handled natively; observe them through the returned handle.
+    /// </remarks>
+    /// <param name="mixer">Valid mixer handle that owns the track.</param>
+    /// <param name="track">Valid track handle whose source is installed.</param>
+    /// <param name="path">UTF-8 file path (marshaled as a null-terminated string).</param>
+    /// <param name="targetSampleRate">Desired output sample rate in Hz; 0 keeps source.</param>
+    /// <param name="targetChannels">Desired output channel count; 0 keeps source.</param>
+    /// <param name="prefetchFrames">Ring-buffer capacity in frames; 0 uses a default.</param>
+    /// <param name="outSource">Receives the file-source control handle on success.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int ownaudio_v1_track_open_file(
+        IntPtr mixer,
+        IntPtr track,
+        string path,
+        uint targetSampleRate,
+        uint targetChannels,
+        nuint prefetchFrames,
+        out IntPtr outSource);
+
+    /// <summary>Enables or disables seamless looping for a file source.</summary>
+    /// <param name="source">Valid file-source handle.</param>
+    /// <param name="enabled">Non-zero to loop; zero to stop at end-of-stream.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_file_source_set_loop(IntPtr source, byte enabled);
+
+    /// <summary>
+    /// Writes whether the file source has reached end-of-stream (without looping) to
+    /// <paramref name="outFinished"/> (1 = finished, 0 = still playing or looping).
+    /// </summary>
+    /// <param name="source">Valid file-source handle.</param>
+    /// <param name="outFinished">Receives the finished flag on success.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_file_source_is_finished(IntPtr source, out byte outFinished);
+
+    /// <summary>Requests a seek to an absolute output-frame position on a file source.</summary>
+    /// <param name="source">Valid file-source handle.</param>
+    /// <param name="framePosition">Target position in output sample frames.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_file_source_seek(IntPtr source, ulong framePosition);
+
+    /// <summary>Destroys a file-source control handle.</summary>
+    /// <param name="source">Handle to destroy; passing <see cref="IntPtr.Zero"/> is safe.</param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial void ownaudio_v1_file_source_destroy(IntPtr source);
 
     #endregion
 }

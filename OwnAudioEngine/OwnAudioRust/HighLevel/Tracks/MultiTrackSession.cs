@@ -32,7 +32,7 @@ public sealed class MultiTrackSession : IDisposable
     private readonly float _sampleRate;
     private readonly ushort _channels;
     private readonly List<AudioTrack> _tracks = new();
-    private readonly List<TrackFeeder> _feeders = new();
+    private readonly List<FileTrack> _fileTracks = new();
     private AudioOutputStream? _outputStream;
     private bool _disposed;
 
@@ -100,55 +100,66 @@ public sealed class MultiTrackSession : IDisposable
     }
 
     /// <summary>
-    /// Opens an audio file, adds a new track, and wires a started
-    /// <see cref="TrackFeeder"/> that streams the decoded samples into the track.
+    /// Opens an audio file, adds a new track, and installs a native file source that
+    /// decodes and feeds the track on a Rust prefetch thread.
     /// </summary>
     /// <remarks>
     /// <para>
     /// The file is decoded to the session's sample rate and channel count, so the
-    /// resulting audio is layout-matched to the mixer.  The feeder begins filling the
-    /// track's buffer immediately, but playback does not start until transport is
-    /// driven (for example <see cref="PlayAll"/>).
+    /// resulting audio is layout-matched to the mixer.  The native prefetch thread
+    /// begins filling the track's buffer immediately, but playback does not start
+    /// until transport is driven (for example <see cref="PlayAll"/>).
     /// </para>
     /// <para>
-    /// The returned feeder, its decoder, and the track are all owned by the session
-    /// and released when the session is disposed (or the track is removed via
-    /// <see cref="RemoveTrack"/>).  Use <see cref="TrackFeeder.Track"/> to reach the
-    /// created track and <see cref="TrackFeeder.Completed"/> to observe end-of-stream.
+    /// Unlike the general-purpose <see cref="TrackFeeder"/> (which pumps samples from
+    /// managed code into a ring source), the returned <see cref="FileTrack"/> keeps
+    /// the entire audio path in native code: no managed pump, decoder, or sample copy
+    /// is involved (plan 14 / D.3).  The file track and its track are owned by the
+    /// session and released when the session is disposed (or the track is removed via
+    /// <see cref="RemoveTrack"/>).  Use <see cref="FileTrack.Track"/> to reach the
+    /// created track and <see cref="FileTrack.Completed"/> to observe end-of-stream.
     /// </para>
     /// </remarks>
     /// <param name="filePath">Path to the audio file to stream.</param>
-    /// <returns>The started <see cref="TrackFeeder"/> driving the new track.</returns>
+    /// <returns>The <see cref="FileTrack"/> driving the new track.</returns>
     /// <exception cref="ObjectDisposedException">Thrown when the session is disposed.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="filePath"/> is null/blank.</exception>
     /// <exception cref="Ownaudio.Safe.Exceptions.OwnAudioException">
     /// Thrown when the file cannot be opened or the native track cannot be created.
     /// </exception>
-    public TrackFeeder AddFileTrack(string filePath)
+    public FileTrack AddFileTrack(string filePath)
     {
         ThrowIfDisposed();
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
 
-        var decoder = new StreamingAudioDecoder(
-            filePath,
-            targetSampleRate: (int)_sampleRate,
-            targetChannels: _channels);
+        AudioTrack track = AddTrack();
 
-        AudioTrack track;
         try
         {
-            track = AddTrack();
+            int code = OwnAudioNative.ownaudio_v1_track_open_file(
+                _mixerHandle.DangerousGetHandle(),
+                track.GetNativeHandle(),
+                filePath,
+                (uint)_sampleRate,
+                _channels,
+                prefetchFrames: 0,
+                out IntPtr rawSource);
+            ErrorCodeMapper.ThrowIfError(code, nameof(AddFileTrack));
+
+            var sourceHandle = new FileSourceHandle();
+            Marshal.InitHandle(sourceHandle, rawSource);
+
+            var fileTrack = new FileTrack(track, sourceHandle, _sampleRate);
+            _fileTracks.Add(fileTrack);
+            return fileTrack;
         }
         catch
         {
-            decoder.Dispose();
+            // The file source could not be installed; drop the just-added track so
+            // the session does not keep a silent, orphaned track around.
+            RemoveTrack(track);
             throw;
         }
-
-        var feeder = new TrackFeeder(decoder, track);
-        _feeders.Add(feeder);
-        feeder.Start();
-        return feeder;
     }
 
     /// <summary>
@@ -166,14 +177,15 @@ public sealed class MultiTrackSession : IDisposable
 
         if (_tracks.Remove(track))
         {
-            // Stop and dispose any feeder targeting this track before the track is
-            // removed, so the pump thread cannot write into a destroyed track.
-            for (int i = _feeders.Count - 1; i >= 0; i--)
+            // Dispose any file track targeting this track first, so its finished-poll
+            // timer stops touching the source before the track (and its native source)
+            // is removed from the mixer.
+            for (int i = _fileTracks.Count - 1; i >= 0; i--)
             {
-                if (_feeders[i].Track == track)
+                if (_fileTracks[i].Track == track)
                 {
-                    _feeders[i].Dispose();
-                    _feeders.RemoveAt(i);
+                    _fileTracks[i].Dispose();
+                    _fileTracks.RemoveAt(i);
                 }
             }
 
@@ -310,14 +322,14 @@ public sealed class MultiTrackSession : IDisposable
         _outputStream?.Dispose();
         _outputStream = null;
 
-        // Stop the feeder pump threads (and their decoders) before disposing the
-        // tracks they write into, so no pump can touch a destroyed track.
-        foreach (TrackFeeder feeder in _feeders)
+        // Dispose the file tracks (stopping their finished-poll timers and releasing
+        // the native file-source handles) before disposing the tracks they render.
+        foreach (FileTrack fileTrack in _fileTracks)
         {
-            feeder.Dispose();
+            fileTrack.Dispose();
         }
 
-        _feeders.Clear();
+        _fileTracks.Clear();
 
         foreach (AudioTrack track in _tracks)
         {

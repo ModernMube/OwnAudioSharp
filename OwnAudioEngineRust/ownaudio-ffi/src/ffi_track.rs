@@ -332,6 +332,70 @@ pub extern "C" fn ownaudio_v1_track_seek(
 }
 
 // ---------------------------------------------------------------------------
+// Track position
+// ---------------------------------------------------------------------------
+
+/// Writes the number of output frames the track has rendered since the last
+/// position reset to `*out_frames`.
+///
+/// This is the track's authoritative *rendered* playback position: it is
+/// advanced on the audio thread by the mixer as each block is produced, and lags
+/// the *fed* position by the ring-buffer depth. Divide by the sample rate to get
+/// the position in seconds.
+///
+/// - `track` — valid track handle.
+/// - `out_frames` — receives the rendered frame count on success.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_track_get_rendered_frames(
+    track: *mut OwnAudioTrackHandle,
+    out_frames: *mut u64,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_frames.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let wrapper = match unsafe { track_from_ptr(track) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        unsafe {
+            *out_frames = wrapper.shared.rendered_frames();
+        }
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Resets the track's rendered-frame position counter to zero.
+///
+/// Call this from the control thread after seeking the track's source (in the
+/// intermediate phase the decoder seek happens on the C# side), so the rendered
+/// position restarts from the seek target.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_track_reset_position(track: *mut OwnAudioTrackHandle) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { track_from_ptr(track) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        wrapper.shared.reset_rendered_frames();
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+// ---------------------------------------------------------------------------
 // Track parameters
 // ---------------------------------------------------------------------------
 

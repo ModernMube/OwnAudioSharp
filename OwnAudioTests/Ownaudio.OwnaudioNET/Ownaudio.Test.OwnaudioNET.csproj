@@ -27,6 +27,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\OwnAudio\Source\OwnaudioNET.csproj" />
     <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" />
+    <ProjectReference Include="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj" />
   </ItemGroup>
 
   <ItemGroup>

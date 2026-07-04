@@ -2,10 +2,12 @@
 
 pub mod clock;
 pub mod command;
+pub mod file_source;
 pub mod track;
 
 pub use clock::SampleClock;
 pub use command::{command_channel, CommandReceiver, MixerCommand, MixerController, Retired};
+pub use file_source::{FileSourceControl, FileTrackSource};
 pub use track::{Track, TrackShared, TrackSource, TrackState};
 
 use crate::effects::EffectEntry;

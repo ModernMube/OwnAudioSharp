@@ -46,6 +46,9 @@ public sealed partial class AudioMixer
             if (source is IMasterClockSource clockSource)
                 clockSource.AttachToClock(_masterClock);
 
+            if (_rustNative)
+                AttachSourceToRustSession(source);
+
             source.Error += OnSourceError;
             RebuildSourcesCache();
             _playbackEndedFired = false;
@@ -93,6 +96,9 @@ public sealed partial class AudioMixer
         {
             if (source is IMasterClockSource clockSource)
                 clockSource.AttachToClock(_masterClock);
+
+            if (_rustNative)
+                AttachSourceToRustSession(source);
 
             source.Error += OnSourceError;
             RebuildSourcesCache();
@@ -154,6 +160,9 @@ public sealed partial class AudioMixer
             }
             catch {}
 
+            if (_rustNative)
+                DetachSourceFromRustSession(source);
+
             return true;
         }
 
@@ -179,6 +188,9 @@ public sealed partial class AudioMixer
 
                 source.Error -= OnSourceError;
                 source.Stop();
+
+                if (_rustNative)
+                    DetachSourceFromRustSession(source);
             }
             catch {}
         }

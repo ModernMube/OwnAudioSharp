@@ -22,6 +22,7 @@ pub mod ffi_config;
 pub mod ffi_decoder;
 pub mod ffi_device;
 pub mod ffi_effects;
+pub mod ffi_file_source;
 pub mod ffi_source;
 pub mod ffi_stream;
 pub mod ffi_track;
@@ -36,7 +37,7 @@ pub use ffi_config::{OwnAudioSampleFormat, OwnAudioStreamConfig};
 pub use ffi_decoder::OwnAudioStreamInfo;
 pub use ffi_device::OwnAudioDeviceInfo;
 pub use handles::{
-    OwnAudioDecoderHandle, OwnAudioEffectHandle, OwnAudioEngineHandle,
+    OwnAudioDecoderHandle, OwnAudioEffectHandle, OwnAudioEngineHandle, OwnAudioFileSourceHandle,
     OwnAudioInputStreamHandle, OwnAudioMixerHandle, OwnAudioOutputStreamHandle,
     OwnAudioTrackHandle, OwnAudioTrackSourceHandle,
 };

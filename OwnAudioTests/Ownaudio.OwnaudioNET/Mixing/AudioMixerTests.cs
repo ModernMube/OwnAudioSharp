@@ -6,11 +6,15 @@ using AudioEngineFactory = OwnaudioNET.Engine.AudioEngineFactory;
 namespace Ownaudio.OwnaudioNET.Tests.Mixing;
 
 /// <summary>
-/// Tests for the AudioMixer class.
+/// Tests for the AudioMixer class. These exercise the legacy managed mix path (the mock engine
+/// and the <c>MixThread</c> peak metering), so the class pins the chain to legacy mode; the
+/// Rust-native facade has its own coverage in <c>AudioMixerRustNativeFacadeTests</c>.
 /// </summary>
+[Collection("RustNativeChain")]
 public class AudioMixerTests : IDisposable
 {
     private readonly AudioConfig _testConfig;
+    private readonly bool? _priorRustNativeOverride;
     private IAudioEngine? _engine;
     private AudioMixer? _mixer;
 
@@ -22,12 +26,18 @@ public class AudioMixerTests : IDisposable
             Channels = 2,
             BufferSize = 512
         };
+
+        // Pin the legacy managed mix path: these tests assert MixThread peak metering, which the
+        // Rust-native chain (default as of 4.0) bypasses.
+        _priorRustNativeOverride = global::OwnaudioNET.Engine.RustNativeChain.Override;
+        global::OwnaudioNET.Engine.RustNativeChain.Override = false;
     }
 
     public void Dispose()
     {
         _mixer?.Dispose();
         _engine?.Dispose();
+        global::OwnaudioNET.Engine.RustNativeChain.Override = _priorRustNativeOverride;
     }
 
     [Fact]

@@ -250,6 +250,19 @@ typedef struct OwnAudioEffectHandle {
 } OwnAudioEffectHandle;
 
 /**
+ * Opaque handle to the control side of a file-backed track source.
+ *
+ * Create with `ownaudio_v1_track_open_file`; release with
+ * `ownaudio_v1_file_source_destroy`.  The decoded audio is produced entirely on
+ * the native prefetch thread, so — unlike [`OwnAudioTrackSourceHandle`] — the
+ * control thread never pushes samples; it only toggles looping, polls the
+ * end-of-stream latch and requests seeks.
+ */
+typedef struct OwnAudioFileSourceHandle {
+    uint8_t _private[0];
+} OwnAudioFileSourceHandle;
+
+/**
  * Opaque handle to the write side of a track's audio-feed ring buffer.
  *
  * Create with `ownaudio_v1_track_set_ring_source`; release with
@@ -545,6 +558,96 @@ int32_t ownaudio_v1_effect_get_param(struct OwnAudioMixerHandle *mixer,
                                      struct OwnAudioEffectHandle *effect,
                                      uint32_t param_id,
                                      float *out_value);
+
+/**
+ * Opens `path`, installs a decoding source on `track`, and writes the control
+ * handle to `*out_source`.
+ *
+ * The file is decoded (and resampled/remixed) to `target_sample_rate` /
+ * `target_channels` on a dedicated native prefetch thread, then fed straight
+ * into the track on the audio thread — no managed pump is involved.  Looping
+ * and end-of-stream are handled natively; observe them through the returned
+ * handle.
+ *
+ * - `mixer` — valid mixer handle that owns the track.
+ * - `track` — valid track handle whose source is to be installed.
+ * - `path` — null-terminated UTF-8 file path.
+ * - `target_sample_rate` — desired output sample rate in Hz; `0` keeps source.
+ * - `target_channels` — desired output channel count; `0` keeps source.
+ * - `prefetch_frames` — ring-buffer capacity in sample frames; `0` uses a
+ *   sensible default (about two seconds at 44.1 kHz).
+ * - `out_source` — receives the control handle on success.
+ *
+ * The source is installed through the mixer's lock-free command queue, so it
+ * becomes the track's source on the next render block; any previous source is
+ * retired off the audio thread.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.  Destroy the returned
+ * handle with `ownaudio_v1_file_source_destroy` after the track's source has
+ * been cleared or the track removed.
+ */
+int32_t ownaudio_v1_track_open_file(struct OwnAudioMixerHandle *mixer,
+                                    struct OwnAudioTrackHandle *track,
+                                    const char *path,
+                                    uint32_t target_sample_rate,
+                                    uint32_t target_channels,
+                                    size_t prefetch_frames,
+                                    struct OwnAudioFileSourceHandle **out_source);
+
+/**
+ * Enables or disables seamless looping for a file source.
+ *
+ * When enabled, reaching end-of-stream rewinds the decoder to the start and
+ * keeps playing; when disabled, end-of-stream latches the finished flag.
+ *
+ * - `source` — valid handle from `ownaudio_v1_track_open_file`.
+ * - `enabled` — non-zero to loop, zero to stop at end-of-stream.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_file_source_set_loop(struct OwnAudioFileSourceHandle *source, uint8_t enabled);
+
+/**
+ * Writes whether the file source has reached end-of-stream (without looping) to
+ * `*out_finished` (`1` = finished, `0` = still playing or looping).
+ *
+ * The flag latches at end-of-stream and clears as soon as audio flows again
+ * after a seek.  Poll it from the control thread to raise a completion event.
+ *
+ * - `source` — valid handle from `ownaudio_v1_track_open_file`.
+ * - `out_finished` — receives the finished flag on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_file_source_is_finished(struct OwnAudioFileSourceHandle *source,
+                                            uint8_t *out_finished);
+
+/**
+ * Requests a seek to `frame_position` (output frames) on a file source.
+ *
+ * Non-blocking: the native prefetch thread repositions the decoder on its next
+ * iteration and the finished latch clears once audio flows from the new
+ * position.  Divide a time in seconds by nothing — pass the target expressed in
+ * output frames (`seconds * sample_rate`).
+ *
+ * - `source` — valid handle from `ownaudio_v1_track_open_file`.
+ * - `frame_position` — target position in output sample frames.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_file_source_seek(struct OwnAudioFileSourceHandle *source,
+                                     uint64_t frame_position);
+
+/**
+ * Destroys a file-source control handle.
+ *
+ * Passing `null` is safe and has no effect.  Dropping this handle only releases
+ * the control block; the decoding source itself lives on the audio thread until
+ * the track's source is cleared (`ownaudio_v1_track_clear_source`) or the track
+ * is removed, at which point the source and its prefetch thread are retired off
+ * the real-time path.
+ */
+void ownaudio_v1_file_source_destroy(struct OwnAudioFileSourceHandle *source);
 
 /**
  * Creates a lock-free ring buffer feeding the track and writes the write-side
@@ -901,6 +1004,34 @@ int32_t ownaudio_v1_track_stop(struct OwnAudioTrackHandle *track);
  * Returns `OwnAudioErrorCode::Success` (0) on success.
  */
 int32_t ownaudio_v1_track_seek(struct OwnAudioTrackHandle *track, uint64_t _sample_position);
+
+/**
+ * Writes the number of output frames the track has rendered since the last
+ * position reset to `*out_frames`.
+ *
+ * This is the track's authoritative *rendered* playback position: it is
+ * advanced on the audio thread by the mixer as each block is produced, and lags
+ * the *fed* position by the ring-buffer depth. Divide by the sample rate to get
+ * the position in seconds.
+ *
+ * - `track` — valid track handle.
+ * - `out_frames` — receives the rendered frame count on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_get_rendered_frames(struct OwnAudioTrackHandle *track,
+                                              uint64_t *out_frames);
+
+/**
+ * Resets the track's rendered-frame position counter to zero.
+ *
+ * Call this from the control thread after seeking the track's source (in the
+ * intermediate phase the decoder seek happens on the C# side), so the rendered
+ * position restarts from the seek target.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_reset_position(struct OwnAudioTrackHandle *track);
 
 /**
  * Sets the track gain (linear amplitude multiplier; 1.0 = unity).
