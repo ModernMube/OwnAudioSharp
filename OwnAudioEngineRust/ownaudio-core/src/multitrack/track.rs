@@ -111,6 +111,14 @@ pub struct TrackShared {
     /// playback position. This is the *rendered* position, which lags the *fed*
     /// position by the ring-buffer depth — it is what an accurate `Position` must use.
     rendered_frames: AtomicU64,
+    /// Most recent left-channel output peak of this track's own contribution
+    /// (post effect-chain and post-gain) as `f32` bits. Written by the audio
+    /// thread every rendered block; read from the control thread for per-track
+    /// metering / level indicators.
+    peak_l_bits: AtomicU32,
+    /// Most recent right-channel output peak of this track's own contribution as
+    /// `f32` bits (equals the left peak on a mono track).
+    peak_r_bits: AtomicU32,
 }
 
 impl TrackShared {
@@ -126,6 +134,8 @@ impl TrackShared {
             stretch_flush_pending: AtomicBool::new(false),
             stretch_always_on: AtomicBool::new(false),
             rendered_frames: AtomicU64::new(0),
+            peak_l_bits: AtomicU32::new(0.0f32.to_bits()),
+            peak_r_bits: AtomicU32::new(0.0f32.to_bits()),
         }
     }
 
@@ -262,6 +272,25 @@ impl TrackShared {
     #[inline]
     pub fn reset_rendered_frames(&self) {
         self.rendered_frames.store(0, Ordering::Relaxed);
+    }
+
+    /// Returns the most recent left-channel output peak of this track.
+    #[inline]
+    pub fn peak_l(&self) -> f32 {
+        f32::from_bits(self.peak_l_bits.load(Ordering::Relaxed))
+    }
+
+    /// Returns the most recent right-channel output peak of this track.
+    #[inline]
+    pub fn peak_r(&self) -> f32 {
+        f32::from_bits(self.peak_r_bits.load(Ordering::Relaxed))
+    }
+
+    /// Stores this block's measured left/right output peaks (audio thread).
+    #[inline]
+    pub fn store_peaks(&self, left: f32, right: f32) {
+        self.peak_l_bits.store(left.to_bits(), Ordering::Relaxed);
+        self.peak_r_bits.store(right.to_bits(), Ordering::Relaxed);
     }
 }
 
@@ -504,14 +533,32 @@ impl Track {
 
         self.gain_smoother.set_target(self.shared.gain());
         let ch = channels.max(1) as usize;
+        // Peak of this track's own (post-gain) contribution, per channel, for
+        // per-track metering. Measured on the scaled sample, not the raw source,
+        // so a muted-down track reads a low level as a user would expect.
+        let mut peak_l = 0.0f32;
+        let mut peak_r = 0.0f32;
         // Advance the gain once per frame so both channels of a stereo frame
         // share the same (smoothed) gain.
         for (out_frame, in_frame) in output.chunks_mut(ch).zip(buf.chunks(ch)) {
             let gain = self.gain_smoother.advance();
-            for (o, &s) in out_frame.iter_mut().zip(in_frame.iter()) {
-                *o += s * gain;
+            for (i, (o, &s)) in out_frame.iter_mut().zip(in_frame.iter()).enumerate() {
+                let scaled = s * gain;
+                *o += scaled;
+                let abs = scaled.abs();
+                if i == 0 {
+                    if abs > peak_l {
+                        peak_l = abs;
+                    }
+                } else if i == 1 && abs > peak_r {
+                    peak_r = abs;
+                }
             }
         }
+        if ch == 1 {
+            peak_r = peak_l;
+        }
+        self.shared.store_peaks(peak_l, peak_r);
 
         // Advance the rendered position by the number of *output* frames produced this block
         // (wall-clock time). The multi-track master clock is driven from this position and must
@@ -716,6 +763,30 @@ mod tests {
             s.stretch_always_on(),
             "always-on must persist once latched so later changes stay warm"
         );
+    }
+
+    #[test]
+    fn per_track_peak_reflects_post_gain_contribution() {
+        // A full-scale constant source at unity gain reports a peak near 1.0;
+        // halving the gain halves the reported peak (post-gain metering).
+        let block = 1024usize;
+        let mut track = Track::new(40, 48_000.0, block);
+        track.set_source(Some(Box::new(ConstSource(1.0))));
+        track.shared.set_state(TrackState::Playing);
+
+        let mut out = vec![0.0f32; block];
+        track.process_additive(&mut out, 2);
+        assert!((track.shared.peak_l() - 1.0).abs() < 1e-3, "peak_l {}", track.shared.peak_l());
+        assert!((track.shared.peak_r() - 1.0).abs() < 1e-3, "peak_r {}", track.shared.peak_r());
+
+        // Settle the gain smoother at 0.5 over several blocks, then the peak
+        // tracks the post-gain level.
+        track.shared.set_gain(0.5);
+        for _ in 0..8 {
+            out.iter_mut().for_each(|s| *s = 0.0);
+            track.process_additive(&mut out, 2);
+        }
+        assert!((track.shared.peak_l() - 0.5).abs() < 1e-2, "peak_l {}", track.shared.peak_l());
     }
 
     #[test]

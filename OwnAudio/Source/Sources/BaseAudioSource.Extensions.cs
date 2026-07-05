@@ -20,6 +20,18 @@ public partial class BaseAudioSource
     public (float left, float right) OutputLevels => _outputLevels;
 
     /// <summary>
+    /// Sets the current output levels directly, bypassing <see cref="CalculateOutputLevels"/>.
+    /// Used by the Rust-native mixer path, where the source's audio is rendered on the
+    /// native audio thread (so <see cref="OnSamplesRead"/> never runs) and the levels are
+    /// instead polled from the native track's metering on the mixer's control-rate tick.
+    /// </summary>
+    /// <param name="levels">The measured left/right peak levels (0.0–1.0).</param>
+    internal void SetOutputLevels((float left, float right) levels)
+    {
+        _outputLevels = levels;
+    }
+
+    /// <summary>
     /// Event that fires when the playback position changes significantly.
     /// Throttled to prevent excessive event firing.
     /// </summary>

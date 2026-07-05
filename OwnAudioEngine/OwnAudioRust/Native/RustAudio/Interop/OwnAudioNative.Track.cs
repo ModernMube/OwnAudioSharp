@@ -54,6 +54,31 @@ internal static partial class OwnAudioNative
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_mixer_stop_all(IntPtr mixer);
 
+    /// <summary>
+    /// Sets the mixer's master output gain (linear amplitude applied once over the
+    /// fully summed mix; 1.0 = unity, 0.0 = silence). Ramped on the audio thread.
+    /// </summary>
+    /// <param name="mixer">Valid mixer handle.</param>
+    /// <param name="gain">Master gain (≥ 0).</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_set_master_gain(IntPtr mixer, float gain);
+
+    /// <summary>
+    /// Writes the mixer's most recently measured master output peak levels
+    /// (absolute, post master gain) to <paramref name="outLeft"/> and
+    /// <paramref name="outRight"/>. A mono mixer reports the same value on both.
+    /// </summary>
+    /// <param name="mixer">Valid mixer handle.</param>
+    /// <param name="outLeft">Receives the left-channel peak on success.</param>
+    /// <param name="outRight">Receives the right-channel peak on success.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_get_master_peaks(
+        IntPtr mixer,
+        out float outLeft,
+        out float outRight);
+
     #endregion
 
     #region Track lifecycle
@@ -127,6 +152,22 @@ internal static partial class OwnAudioNative
     /// <returns>Zero on success; non-zero error code otherwise.</returns>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_track_get_rendered_frames(IntPtr track, out ulong outFrames);
+
+    /// <summary>
+    /// Writes the track's most recently measured output peak levels (absolute, of
+    /// the track's own post-effect, post-gain contribution) to
+    /// <paramref name="outLeft"/> and <paramref name="outRight"/>. A mono track
+    /// reports the same value on both channels.
+    /// </summary>
+    /// <param name="track">Valid track handle.</param>
+    /// <param name="outLeft">Receives the left-channel peak on success.</param>
+    /// <param name="outRight">Receives the right-channel peak on success.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_get_peaks(
+        IntPtr track,
+        out float outLeft,
+        out float outRight);
 
     /// <summary>
     /// Resets the track's rendered-frame position counter to zero.

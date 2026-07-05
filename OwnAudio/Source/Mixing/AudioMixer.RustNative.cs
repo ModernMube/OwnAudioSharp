@@ -256,7 +256,40 @@ public sealed partial class AudioMixer
             {
                 fileTrack.Loop = fs.Loop;
             }
+
+            // The managed OnSamplesRead path (which fed OutputLevels in legacy mode)
+            // does not run here — the native track renders the audio — so mirror the
+            // native track's own metering peaks onto the source. A track that is not
+            // playing reports silence so the meter decays.
+            fs.SetOutputLevels(fs.State == AudioState.Playing ? track.Peaks : (0f, 0f));
         }
+    }
+
+    /// <summary>
+    /// Mirrors the mixer's master volume onto the shared session's native master gain and reads
+    /// back the session's master output peaks into <c>_leftPeak</c>/<c>_rightPeak</c>. Called on
+    /// the control-rate sync tick, so a live master-volume change propagates promptly and the
+    /// mixer's <c>LeftPeak</c>/<c>RightPeak</c> metering stays current even though the managed
+    /// <c>MixThread</c> (which computed them in legacy mode) does not run here.
+    /// </summary>
+    internal void SyncRustMasterOnce()
+    {
+        MultiTrackSession? session;
+        lock (_rustSessionLock)
+        {
+            session = _rustSession;
+        }
+
+        if (session is null)
+        {
+            return;
+        }
+
+        session.MasterGain = _masterVolume;
+
+        (float left, float right) = session.GetMasterPeaks();
+        _leftPeak = left;
+        _rightPeak = right;
     }
 
     /// <summary>
@@ -609,6 +642,7 @@ public sealed partial class AudioMixer
             try
             {
                 SyncRustControlStateOnce();
+                SyncRustMasterOnce();
                 MirrorRustMasterEffectsOnce();
                 ReconcileRustTrackEffectsOnce();
                 DriveRustNativeSyncOnce();

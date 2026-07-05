@@ -145,6 +145,16 @@ public partial class FileSource
     {
         ThrowIfDisposed();
 
+        // Rust-native chain: the file is decoded and rendered on the native audio
+        // thread, so the managed streaming buffer this method used to peek is not
+        // fed. Read the native track's own metering peaks instead (kept current by
+        // the mixer's control-rate tick), gated on the transport state so a stopped
+        // track reports silence.
+        if (RustTrack is not null)
+        {
+            return State == AudioState.Playing ? OutputLevels : (0f, 0f);
+        }
+
         if (State != AudioState.Playing || _buffer.IsEmpty)
         {
             return (0f, 0f);

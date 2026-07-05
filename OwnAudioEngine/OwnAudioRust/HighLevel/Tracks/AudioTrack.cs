@@ -187,6 +187,36 @@ public sealed class AudioTrack : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the track's most recently measured output peak levels — the absolute
+    /// peak of the track's own contribution to the mix, after its effect chain and
+    /// gain, for the last rendered block.
+    /// </summary>
+    /// <remarks>
+    /// Values range from <c>0.0</c> (silence) upward, reaching <c>1.0</c> at full
+    /// scale. A mono track reports the same value on both channels. The peak is
+    /// updated on the audio thread only while the track is actually rendering, so a
+    /// stopped or paused track keeps its last value; gate the read on the transport
+    /// state if a decaying meter is desired. Returns <c>(0, 0)</c> when disposed.
+    /// </remarks>
+    public (float Left, float Right) Peaks
+    {
+        get
+        {
+            if (_disposed)
+            {
+                return (0f, 0f);
+            }
+
+            int code = OwnAudioNative.ownaudio_v1_track_get_peaks(
+                _handle.DangerousGetHandle(),
+                out float left,
+                out float right);
+            ErrorCodeMapper.ThrowIfError(code, nameof(Peaks));
+            return (left, right);
+        }
+    }
+
     #endregion
 
     #region Transport

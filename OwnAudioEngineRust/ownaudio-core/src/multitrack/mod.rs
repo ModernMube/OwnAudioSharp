@@ -12,10 +12,86 @@ pub use file_source::{FileSourceControl, FileTrackSource};
 pub use track::{Track, TrackShared, TrackSource, TrackState};
 
 use crate::effects::{EffectChain, EffectEntry};
+use crate::smoothing::{SmoothedParam, DEFAULT_SMOOTH_MS};
 use rtrb::Producer;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 use self::track::MAX_EFFECTS_PER_TRACK;
+
+/// Lock-free, atomically-mutable master-bus block shared between the control
+/// thread (FFI / C#) and the audio thread that owns the [`MultiTrackMixer`].
+///
+/// Holds the two pieces of master-bus state that must cross the thread boundary
+/// without a lock: the master output gain (written by the control thread, read
+/// by the audio thread once per block) and the most recently measured output
+/// peak levels (written by the audio thread every block, read by the control
+/// thread for metering / clip indicators).
+///
+/// `f32` values are stored as their raw bit pattern in an [`AtomicU32`]. All
+/// accesses use [`Ordering::Relaxed`]: these values do not publish audio data
+/// (the mix buffer itself is not shared through here), so no happens-before
+/// relationship is required — a metering read that lands one block early or late
+/// is inconsequential.
+pub struct MixerShared {
+    /// Master output gain as `f32` bits (linear amplitude, 1.0 = unity).
+    master_gain_bits: AtomicU32,
+    /// Most recent left-channel output peak as `f32` bits (absolute, 0.0–…).
+    master_peak_l_bits: AtomicU32,
+    /// Most recent right-channel output peak as `f32` bits (absolute, 0.0–…).
+    master_peak_r_bits: AtomicU32,
+}
+
+impl MixerShared {
+    /// Creates a master-bus block resting at unity gain with zero peaks.
+    pub fn new() -> Self {
+        Self {
+            master_gain_bits: AtomicU32::new(1.0f32.to_bits()),
+            master_peak_l_bits: AtomicU32::new(0.0f32.to_bits()),
+            master_peak_r_bits: AtomicU32::new(0.0f32.to_bits()),
+        }
+    }
+
+    /// Returns the linear master gain.
+    #[inline]
+    pub fn master_gain(&self) -> f32 {
+        f32::from_bits(self.master_gain_bits.load(Ordering::Relaxed))
+    }
+
+    /// Sets the linear master gain (clamped to be non-negative).
+    #[inline]
+    pub fn set_master_gain(&self, gain: f32) {
+        self.master_gain_bits
+            .store(gain.max(0.0).to_bits(), Ordering::Relaxed);
+    }
+
+    /// Returns the most recently measured left-channel output peak.
+    #[inline]
+    pub fn master_peak_l(&self) -> f32 {
+        f32::from_bits(self.master_peak_l_bits.load(Ordering::Relaxed))
+    }
+
+    /// Returns the most recently measured right-channel output peak.
+    #[inline]
+    pub fn master_peak_r(&self) -> f32 {
+        f32::from_bits(self.master_peak_r_bits.load(Ordering::Relaxed))
+    }
+
+    /// Stores the block's measured left/right output peaks (audio thread).
+    #[inline]
+    pub fn store_master_peaks(&self, left: f32, right: f32) {
+        self.master_peak_l_bits
+            .store(left.to_bits(), Ordering::Relaxed);
+        self.master_peak_r_bits
+            .store(right.to_bits(), Ordering::Relaxed);
+    }
+}
+
+impl Default for MixerShared {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Sentinel `track_id` addressing the mixer's **master** effect chain rather than
 /// any single track. Effect commands (add / remove / set-param / set-enabled)
@@ -72,6 +148,13 @@ pub struct MultiTrackMixer {
     /// track has been rendered. Addressed from the control thread via the
     /// [`MASTER_EFFECT_TARGET`] sentinel track id.
     master_effects: EffectChain,
+    /// Lock-free master-bus block: the control thread sets the master gain here
+    /// and reads back the metering peaks the audio thread writes every block.
+    master_shared: Arc<MixerShared>,
+    /// Per-frame smoother for the master gain, ramping toward
+    /// [`MixerShared::master_gain`] so a live master-volume change fades in over
+    /// a few milliseconds instead of clicking.
+    master_gain_smoother: SmoothedParam,
 }
 
 impl MultiTrackMixer {
@@ -93,7 +176,16 @@ impl MultiTrackMixer {
             max_buffer_size: max_buffer_size.max(1),
             commands: None,
             master_effects: EffectChain::with_capacity(MAX_EFFECTS_PER_TRACK),
+            master_shared: Arc::new(MixerShared::new()),
+            master_gain_smoother: SmoothedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
         }
+    }
+
+    /// Returns a clone of the shared master-bus block, so the control thread can
+    /// set the master gain and read the metering peaks lock-free without holding
+    /// a reference into the mixer (which the audio thread owns).
+    pub fn master_shared(&self) -> Arc<MixerShared> {
+        self.master_shared.clone()
     }
 
     /// Sample rate the mixer was created with (Hz).
@@ -246,6 +338,35 @@ impl MultiTrackMixer {
 
         // Apply the master effect chain once over the fully summed mix.
         self.master_effects.process_all(output, channels);
+
+        // Apply the master output gain over the processed mix and measure the
+        // output peak levels for metering. The gain is ramped per frame (like a
+        // track's gain) so a live master-volume change fades rather than clicks;
+        // at unity the smoother rests at 1.0 and the multiply is a no-op, so a
+        // mixer whose master gain is never touched stays bit-exact.
+        self.master_gain_smoother
+            .set_target(self.master_shared.master_gain());
+        let ch = channels.max(1) as usize;
+        let mut peak_l = 0.0f32;
+        let mut peak_r = 0.0f32;
+        for frame in output.chunks_mut(ch) {
+            let gain = self.master_gain_smoother.advance();
+            for (i, sample) in frame.iter_mut().enumerate() {
+                *sample *= gain;
+                let abs = sample.abs();
+                if i == 0 {
+                    if abs > peak_l {
+                        peak_l = abs;
+                    }
+                } else if i == 1 && abs > peak_r {
+                    peak_r = abs;
+                }
+            }
+        }
+        if ch == 1 {
+            peak_r = peak_l;
+        }
+        self.master_shared.store_master_peaks(peak_l, peak_r);
 
         self.clock.advance(frames);
     }
@@ -590,6 +711,54 @@ mod tests {
         for &s in &out {
             assert!((s - 3.0).abs() < 1e-6, "out={out:?}");
         }
+    }
+
+    #[test]
+    fn master_gain_scales_the_summed_mix() {
+        // A master gain of 0.5 must halve the whole mix. The gain is ramped, so
+        // the tail (well past the 5 ms ramp) settles at the target.
+        let mut mixer = MultiTrackMixer::new(48_000.0, 1);
+        let (a, _) = mixer.add_track();
+        mixer.set_track_source(a, Some(Box::new(VecSource::new(vec![1.0; 4096]))));
+        play(&mut mixer, a);
+        mixer.master_shared().set_master_gain(0.5);
+
+        let mut out = vec![0.0f32; 4096];
+        mixer.mix(&mut out);
+        for &s in &out[3800..] {
+            assert!((s - 0.5).abs() < 1e-3, "tail sample {s} not at master target 0.5");
+        }
+    }
+
+    #[test]
+    fn unity_master_gain_is_bit_exact_passthrough() {
+        // The default (untouched) master gain must not perturb the mix at all.
+        let mut mixer = MultiTrackMixer::new(48_000.0, 1);
+        let (a, _) = mixer.add_track();
+        let (b, _) = mixer.add_track();
+        mixer.set_track_source(a, Some(Box::new(VecSource::new(vec![1.0, 2.0, 3.0, 4.0]))));
+        mixer.set_track_source(b, Some(Box::new(VecSource::new(vec![0.5, 0.5, 0.5, 0.5]))));
+        play(&mut mixer, a);
+        play(&mut mixer, b);
+
+        let mut out = [0.0f32; 4];
+        mixer.mix(&mut out);
+        assert_eq!(out, [1.5, 2.5, 3.5, 4.5]);
+    }
+
+    #[test]
+    fn master_peaks_reflect_the_output_level() {
+        // A full-scale stereo mix must report a peak near 1.0 on both channels.
+        let mut mixer = MultiTrackMixer::new(48_000.0, 2);
+        let (a, _) = mixer.add_track();
+        mixer.set_track_source(a, Some(Box::new(VecSource::new(vec![1.0f32; 1024]))));
+        play(&mut mixer, a);
+
+        let shared = mixer.master_shared();
+        let mut out = vec![0.0f32; 1024];
+        mixer.mix(&mut out);
+        assert!((shared.master_peak_l() - 1.0).abs() < 1e-6, "left peak {}", shared.master_peak_l());
+        assert!((shared.master_peak_r() - 1.0).abs() < 1e-6, "right peak {}", shared.master_peak_r());
     }
 
     #[test]

@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use ownaudio_core::multitrack::MixerController;
 use ownaudio_core::{
-    AudioEngine, FileSourceControl, InputStream, MultiTrackMixer, OutputStream, RingBufferWriter,
-    StreamingTrack, TrackShared,
+    AudioEngine, FileSourceControl, InputStream, MixerShared, MultiTrackMixer, OutputStream,
+    RingBufferWriter, StreamingTrack, TrackShared,
 };
 
 /// Opaque handle to an [`AudioEngine`] instance.
@@ -203,6 +203,10 @@ pub(crate) struct MixerWrapper {
     pub controller: MixerController,
     /// The mixer itself, until an output stream moves it onto the audio thread.
     pub mixer: Option<MultiTrackMixer>,
+    /// Shared master-bus block, cloned from the mixer at creation so master gain
+    /// can be set and metering peaks read lock-free even after the mixer has been
+    /// moved onto the audio thread by an output stream.
+    pub master_shared: Arc<MixerShared>,
     /// Output sample rate the mixer was created with (Hz).
     pub sample_rate: f32,
     /// Output channel count the mixer was created with.

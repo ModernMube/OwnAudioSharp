@@ -35,6 +35,7 @@ public sealed class MultiTrackSession : IDisposable
     private readonly List<FileTrack> _fileTracks = new();
     private readonly MasterEffectChain _masterEffects;
     private AudioOutputStream? _outputStream;
+    private float _masterGain = 1.0f;
     private bool _disposed;
 
     #endregion
@@ -77,6 +78,29 @@ public sealed class MultiTrackSession : IDisposable
     /// track is rendered). Effects added here process the master bus in native code.
     /// </summary>
     public MasterEffectChain MasterEffects => _masterEffects;
+
+    /// <summary>
+    /// Gets or sets the master output gain applied once over the fully summed mix
+    /// (linear amplitude; 1.0 = unity, 0.0 = silence). Values are clamped to be
+    /// non-negative. The change is ramped on the audio thread, so it fades in
+    /// without a click. Keeps working after <see cref="OpenOutput"/> has moved the
+    /// mixer onto the audio thread.
+    /// </summary>
+    public float MasterGain
+    {
+        get => _masterGain;
+        set
+        {
+            _masterGain = MathF.Max(0f, value);
+            if (!_disposed)
+            {
+                int code = OwnAudioNative.ownaudio_v1_mixer_set_master_gain(
+                    _mixerHandle.DangerousGetHandle(),
+                    _masterGain);
+                ErrorCodeMapper.ThrowIfError(code, nameof(MasterGain));
+            }
+        }
+    }
 
     #endregion
 
@@ -312,6 +336,31 @@ public sealed class MultiTrackSession : IDisposable
 
         int code = OwnAudioNative.ownaudio_v1_mixer_stop_all(_mixerHandle.DangerousGetHandle());
         ErrorCodeMapper.ThrowIfError(code, nameof(StopAll));
+    }
+
+    /// <summary>
+    /// Gets the mixer's most recently measured master output peak levels — the
+    /// absolute peak of the summed mix after master effects and the master gain,
+    /// for the last rendered block.
+    /// </summary>
+    /// <remarks>
+    /// Values range from <c>0.0</c> (silence) upward, reaching <c>1.0</c> at full
+    /// scale (or above when the mix clips). A mono session reports the same value
+    /// on both channels. Updated by the audio thread every block; safe to poll from
+    /// any thread for metering displays.
+    /// </remarks>
+    /// <returns>The left and right output peak levels.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the session is disposed.</exception>
+    public (float Left, float Right) GetMasterPeaks()
+    {
+        ThrowIfDisposed();
+
+        int code = OwnAudioNative.ownaudio_v1_mixer_get_master_peaks(
+            _mixerHandle.DangerousGetHandle(),
+            out float left,
+            out float right);
+        ErrorCodeMapper.ThrowIfError(code, nameof(GetMasterPeaks));
+        return (left, right);
     }
 
     #endregion

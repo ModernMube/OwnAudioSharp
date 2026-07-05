@@ -1076,6 +1076,35 @@ int32_t ownaudio_v1_mixer_pause_all(struct OwnAudioMixerHandle *mixer);
 int32_t ownaudio_v1_mixer_stop_all(struct OwnAudioMixerHandle *mixer);
 
 /**
+ * Sets the mixer's master output gain (linear amplitude multiplier applied once
+ * over the fully summed mix; 1.0 = unity, 0.0 = silence).
+ *
+ * The gain is ramped on the audio thread, so a live change fades in over a few
+ * milliseconds instead of clicking. Keeps working after the mixer has been moved
+ * onto the audio thread by an output stream (the master block is shared).
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_mixer_set_master_gain(struct OwnAudioMixerHandle *mixer, float gain);
+
+/**
+ * Writes the mixer's most recently measured master output peak levels (absolute,
+ * post master gain) to `*out_left` and `*out_right`.
+ *
+ * The peaks are updated by the audio thread every rendered block; a mono mixer
+ * reports the same value on both channels. Values are `0.0` for silence and near
+ * `1.0` at full scale (or above when the mix clips).
+ *
+ * - `mixer` — valid mixer handle.
+ * - `out_left` / `out_right` — receive the channel peaks on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_mixer_get_master_peaks(struct OwnAudioMixerHandle *mixer,
+                                           float *out_left,
+                                           float *out_right);
+
+/**
  * Adds a new track to the mixer and writes its handle to `*out_track`.
  *
  * - `mixer` — valid mixer handle.
@@ -1161,6 +1190,24 @@ int32_t ownaudio_v1_track_get_rendered_frames(struct OwnAudioTrackHandle *track,
  * Returns `OwnAudioErrorCode::Success` (0) on success.
  */
 int32_t ownaudio_v1_track_reset_position(struct OwnAudioTrackHandle *track);
+
+/**
+ * Writes the track's most recently measured output peak levels (absolute, of the
+ * track's own post-effect, post-gain contribution) to `*out_left` and `*out_right`.
+ *
+ * Updated by the audio thread every block the track is rendered; a mono track
+ * reports the same value on both channels. A track that is not currently playing
+ * keeps its last measured value, so callers that want a decaying meter should
+ * gate the read on the track's transport state.
+ *
+ * - `track` — valid track handle.
+ * - `out_left` / `out_right` — receive the channel peaks on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_get_peaks(struct OwnAudioTrackHandle *track,
+                                    float *out_left,
+                                    float *out_right);
 
 /**
  * Sets the track gain (linear amplitude multiplier; 1.0 = unity).

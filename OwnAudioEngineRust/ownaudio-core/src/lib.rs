@@ -53,8 +53,8 @@ pub use engine::AudioEngine;
 pub use error::{AudioError, Result};
 pub use mixer::Mixer;
 pub use multitrack::{
-    FileSourceControl, FileTrackSource, MultiTrackMixer, SampleClock, Track, TrackShared,
-    TrackSource, TrackState,
+    FileSourceControl, FileTrackSource, MixerShared, MultiTrackMixer, SampleClock, Track,
+    TrackShared, TrackSource, TrackState,
 };
 pub use resampler::Resampler;
 pub use ringbuffer::{ring_buffer, RingBufferReader, RingBufferWriter};

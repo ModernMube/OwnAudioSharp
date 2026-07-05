@@ -41,10 +41,12 @@ pub extern "C" fn ownaudio_v1_mixer_create(
         let (controller, receiver) =
             command_channel(COMMAND_QUEUE_CAPACITY, mixer.sample_rate(), mixer.max_buffer_size());
         mixer.attach_command_receiver(receiver);
+        let master_shared = mixer.master_shared();
 
         let boxed = Box::new(MixerWrapper {
             controller,
             mixer: Some(mixer),
+            master_shared,
             sample_rate,
             channels,
         });
@@ -140,6 +142,71 @@ pub extern "C" fn ownaudio_v1_mixer_stop_all(mixer: *mut OwnAudioMixerHandle) ->
         };
 
         wrapper.controller.stop_all();
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Sets the mixer's master output gain (linear amplitude multiplier applied once
+/// over the fully summed mix; 1.0 = unity, 0.0 = silence).
+///
+/// The gain is ramped on the audio thread, so a live change fades in over a few
+/// milliseconds instead of clicking. Keeps working after the mixer has been moved
+/// onto the audio thread by an output stream (the master block is shared).
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_mixer_set_master_gain(
+    mixer: *mut OwnAudioMixerHandle,
+    gain: f32,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        wrapper.master_shared.set_master_gain(gain);
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Writes the mixer's most recently measured master output peak levels (absolute,
+/// post master gain) to `*out_left` and `*out_right`.
+///
+/// The peaks are updated by the audio thread every rendered block; a mono mixer
+/// reports the same value on both channels. Values are `0.0` for silence and near
+/// `1.0` at full scale (or above when the mix clips).
+///
+/// - `mixer` — valid mixer handle.
+/// - `out_left` / `out_right` — receive the channel peaks on success.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_mixer_get_master_peaks(
+    mixer: *mut OwnAudioMixerHandle,
+    out_left: *mut f32,
+    out_right: *mut f32,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_left.is_null() || out_right.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        unsafe {
+            *out_left = wrapper.master_shared.master_peak_l();
+            *out_right = wrapper.master_shared.master_peak_r();
+        }
 
         OwnAudioErrorCode::Success as i32
     }));
@@ -392,6 +459,45 @@ pub extern "C" fn ownaudio_v1_track_reset_position(track: *mut OwnAudioTrackHand
 
         wrapper.shared.reset_rendered_frames();
         wrapper.shared.request_stretch_flush();
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Writes the track's most recently measured output peak levels (absolute, of the
+/// track's own post-effect, post-gain contribution) to `*out_left` and `*out_right`.
+///
+/// Updated by the audio thread every block the track is rendered; a mono track
+/// reports the same value on both channels. A track that is not currently playing
+/// keeps its last measured value, so callers that want a decaying meter should
+/// gate the read on the track's transport state.
+///
+/// - `track` — valid track handle.
+/// - `out_left` / `out_right` — receive the channel peaks on success.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_track_get_peaks(
+    track: *mut OwnAudioTrackHandle,
+    out_left: *mut f32,
+    out_right: *mut f32,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_left.is_null() || out_right.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let wrapper = match unsafe { track_from_ptr(track) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        unsafe {
+            *out_left = wrapper.shared.peak_l();
+            *out_right = wrapper.shared.peak_r();
+        }
 
         OwnAudioErrorCode::Success as i32
     }));

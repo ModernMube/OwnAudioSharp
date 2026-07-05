@@ -184,9 +184,10 @@ mod track_source {
         ownaudio_v1_track_source_write,
     };
     use ownaudio_ffi::ffi_track::{
-        ownaudio_v1_mixer_create, ownaudio_v1_mixer_destroy, ownaudio_v1_mixer_pause_all,
-        ownaudio_v1_mixer_play_all, ownaudio_v1_mixer_stop_all, ownaudio_v1_track_create,
-        ownaudio_v1_track_destroy, ownaudio_v1_track_get_rendered_frames,
+        ownaudio_v1_mixer_create, ownaudio_v1_mixer_destroy, ownaudio_v1_mixer_get_master_peaks,
+        ownaudio_v1_mixer_pause_all, ownaudio_v1_mixer_play_all, ownaudio_v1_mixer_set_master_gain,
+        ownaudio_v1_mixer_stop_all, ownaudio_v1_track_create, ownaudio_v1_track_destroy,
+        ownaudio_v1_track_get_peaks, ownaudio_v1_track_get_rendered_frames,
         ownaudio_v1_track_reset_position,
     };
     use ownaudio_ffi::handles::{
@@ -239,6 +240,66 @@ mod track_source {
 
         ownaudio_v1_track_destroy(track_a);
         ownaudio_v1_track_destroy(track_b);
+        ownaudio_v1_mixer_destroy(mixer);
+    }
+
+    #[test]
+    fn master_gain_and_metering_contract_smoke() {
+        // Null handle → InvalidHandle; null out-pointers → NullPointer.
+        assert_eq!(
+            ownaudio_v1_mixer_set_master_gain(std::ptr::null_mut(), 0.5),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        let mut l = 9.0f32;
+        let mut r = 9.0f32;
+        assert_eq!(
+            ownaudio_v1_mixer_get_master_peaks(std::ptr::null_mut(), &mut l, &mut r),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        assert_eq!(
+            ownaudio_v1_track_get_peaks(std::ptr::null_mut(), &mut l, &mut r),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+
+        let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_mixer_create(48_000.0, 2, &mut mixer),
+            OwnAudioErrorCode::Success as i32
+        );
+        let mut track: *mut OwnAudioTrackHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_track_create(mixer, &mut track),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        assert_eq!(
+            ownaudio_v1_mixer_get_master_peaks(mixer, std::ptr::null_mut(), &mut r),
+            OwnAudioErrorCode::NullPointer as i32
+        );
+        assert_eq!(
+            ownaudio_v1_track_get_peaks(track, &mut l, std::ptr::null_mut()),
+            OwnAudioErrorCode::NullPointer as i32
+        );
+
+        // Setting the master gain succeeds; a fresh mixer/track reports zero peaks.
+        assert_eq!(
+            ownaudio_v1_mixer_set_master_gain(mixer, 0.5),
+            OwnAudioErrorCode::Success as i32
+        );
+        let (mut ml, mut mr) = (9.0f32, 9.0f32);
+        assert_eq!(
+            ownaudio_v1_mixer_get_master_peaks(mixer, &mut ml, &mut mr),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!((ml, mr), (0.0, 0.0));
+        let (mut tl, mut tr) = (9.0f32, 9.0f32);
+        assert_eq!(
+            ownaudio_v1_track_get_peaks(track, &mut tl, &mut tr),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!((tl, tr), (0.0, 0.0));
+
+        ownaudio_v1_track_destroy(track);
         ownaudio_v1_mixer_destroy(mixer);
     }
 
