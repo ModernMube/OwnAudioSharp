@@ -98,9 +98,10 @@ pub struct TrackShared {
     stretch_flush_pending: AtomicBool,
     /// When `true`, the track routes through the SoundTouch stretch stage on every block even
     /// at unity tempo/pitch, keeping the FIFO continuously primed so a live tempo/pitch change
-    /// does not click from a cold start (matching the legacy file-playback chain). File-backed
-    /// tracks enable this; generic mixer tracks leave it off and stay bit-exact passthrough at
-    /// unity.
+    /// does not click from a cold start. Latched on the first non-unity tempo/pitch (see
+    /// [`TrackShared::set_tempo_ratio`]) and never cleared, so a track that is never stretched
+    /// (e.g. a metronome, whose tempo is baked into its audio) stays a clean bypass — no added
+    /// latency, no stale FIFO across stop/restart — while a stretched track never re-cold-starts.
     stretch_always_on: AtomicBool,
     /// Number of output frames this track has actually rendered into the mix
     /// since the last position reset (seek or source swap).
@@ -184,10 +185,19 @@ impl TrackShared {
     }
 
     /// Sets the tempo ratio (clamped to `0.25..=4.0`).
+    ///
+    /// The first time the ratio departs from unity the track latches into always-on
+    /// stretching (see `stretch_always_on`), so once a track has been time-stretched every
+    /// later change lands on a warm SoundTouch FIFO and cannot click — while a track that is
+    /// never stretched (e.g. a metronome click, whose tempo is baked into its audio) stays a
+    /// clean bypass.
     #[inline]
     pub fn set_tempo_ratio(&self, ratio: f32) {
-        self.tempo_ratio_bits
-            .store(ratio.clamp(0.25, 4.0).to_bits(), Ordering::Relaxed);
+        let clamped = ratio.clamp(0.25, 4.0);
+        self.tempo_ratio_bits.store(clamped.to_bits(), Ordering::Relaxed);
+        if (clamped - 1.0).abs() > 1e-4 {
+            self.stretch_always_on.store(true, Ordering::Relaxed);
+        }
     }
 
     /// Returns the pitch shift in semitones.
@@ -197,10 +207,16 @@ impl TrackShared {
     }
 
     /// Sets the pitch shift in semitones (clamped to `-24.0..=24.0`).
+    ///
+    /// Latches always-on stretching the first time the shift departs from zero, for the same
+    /// warm-FIFO reason as [`set_tempo_ratio`].
     #[inline]
     pub fn set_pitch_semitones(&self, semitones: f32) {
-        self.pitch_semitones_bits
-            .store(semitones.clamp(-24.0, 24.0).to_bits(), Ordering::Relaxed);
+        let clamped = semitones.clamp(-24.0, 24.0);
+        self.pitch_semitones_bits.store(clamped.to_bits(), Ordering::Relaxed);
+        if clamped.abs() > 1e-4 {
+            self.stretch_always_on.store(true, Ordering::Relaxed);
+        }
     }
 
     /// Requests that the audio thread clear the per-track stretch FIFO before the next block
@@ -223,8 +239,8 @@ impl TrackShared {
         self.stretch_always_on.load(Ordering::Relaxed)
     }
 
-    /// Enables/disables always-on stretching (file-backed tracks enable it so a live
-    /// tempo/pitch change never cold-starts the SoundTouch FIFO).
+    /// Forces always-on stretching on or off. Normally latched automatically by the first
+    /// non-unity tempo/pitch; exposed for explicit control and testing.
     #[inline]
     pub fn set_stretch_always_on(&self, on: bool) {
         self.stretch_always_on.store(on, Ordering::Relaxed);
@@ -590,6 +606,33 @@ mod tests {
         assert!(
             actual.abs_diff(expected) <= 1,
             "content position should be ~2x output frames (expected {expected}, got {actual})"
+        );
+    }
+
+    #[test]
+    fn tempo_pitch_latch_always_on_but_unity_stays_bypass() {
+        let s = TrackShared::new();
+        assert!(!s.stretch_always_on());
+
+        // Unity tempo/pitch (e.g. a metronome whose tempo is baked into its audio) must never
+        // latch always-on, so the track stays a clean bypass.
+        s.set_tempo_ratio(1.0);
+        s.set_pitch_semitones(0.0);
+        assert!(
+            !s.stretch_always_on(),
+            "unity tempo/pitch must not latch always-on (metronome stays bypass)"
+        );
+
+        // The first non-unity value latches always-on...
+        s.set_pitch_semitones(3.0);
+        assert!(s.stretch_always_on());
+
+        // ...and it stays latched even after returning to unity, so a later change lands on a
+        // warm FIFO instead of cold-starting.
+        s.set_pitch_semitones(0.0);
+        assert!(
+            s.stretch_always_on(),
+            "always-on must persist once latched so later changes stay warm"
         );
     }
 

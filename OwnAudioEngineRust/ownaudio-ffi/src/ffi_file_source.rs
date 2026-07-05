@@ -81,11 +81,6 @@ pub extern "C" fn ownaudio_v1_track_open_file(
         };
 
         let track_id = track_wrapper.id;
-
-        // File-backed tracks keep the SoundTouch stretch stage continuously primed so a live
-        // tempo/pitch change never cold-starts the FIFO (matching the legacy file chain).
-        track_wrapper.shared.set_stretch_always_on(true);
-
         let frames = if prefetch_frames == 0 {
             DEFAULT_PREFETCH_FRAMES
         } else {

@@ -306,6 +306,9 @@ pub extern "C" fn ownaudio_v1_track_stop(track: *mut OwnAudioTrackHandle) -> i32
         };
 
         wrapper.shared.set_state(ownaudio_core::TrackState::Stopped);
+        // Drop any audio buffered in the stretch FIFO so a later restart begins cleanly
+        // instead of replaying the pre-stop tail (consumed on the next rendered block).
+        wrapper.shared.request_stretch_flush();
 
         OwnAudioErrorCode::Success as i32
     }));
