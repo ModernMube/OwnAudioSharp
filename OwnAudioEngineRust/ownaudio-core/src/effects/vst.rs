@@ -59,7 +59,10 @@ pub struct VstEffect {
     handle: *mut c_void,
     /// C ABI process entry point of the native host (non-null once constructed).
     process_fn: unsafe extern "C" fn(handle: *mut c_void, buffer: *mut VstAudioBuffer) -> bool,
-    /// Bypass flag (`false` skips the plugin entirely, leaving audio untouched).
+    /// Active (wet) flag. When `false` the effect is *soft-bypassed*: the plugin
+    /// is still driven every block (so it never goes cold), but its output is
+    /// discarded and the dry signal passes through. See [`VstEffect::process`]
+    /// and [`Effect::is_enabled`] for why bypass is not a chain-level skip.
     enabled: bool,
     /// Dry/wet mix in `[0, 1]` (`1.0` = fully wet, the natural insert default).
     mix: f32,
@@ -147,7 +150,10 @@ impl Effect for VstEffect {
         }
 
         let wet = self.mix.clamp(0.0, 1.0);
-        if wet < 1.0 {
+        // A dry copy is only needed for an active partial mix; when soft-bypassed
+        // the chain buffer already is the dry signal and is left untouched.
+        let need_dry = self.enabled && wet < 1.0;
+        if need_dry {
             let len = frames * ch;
             self.dry[..len].copy_from_slice(&buffer[..len]);
         }
@@ -171,13 +177,22 @@ impl Effect for VstEffect {
             num_samples: frames as i32,
         };
 
+        // Drive the plugin on EVERY block, even while soft-bypassed, so it never
+        // goes cold. A plugin that has not been called for a while often does
+        // non-RT-safe work (allocation, locking, worker-thread wake) on its first
+        // resumed block; skipping it while disabled and resuming on re-enable
+        // would stall the audio thread on every toggle. Keeping it warm makes the
+        // per-block cost constant and the enable/disable transition glitch-free.
+        //
         // SAFETY: `handle` and `process_fn` are valid for this effect's lifetime
         // (control-plane contract); the planar pointer arrays and their backing
         // scratch outlive the call. A panic can only originate inside foreign C
         // code, which aborts at its own ABI boundary, so no unwind crosses here.
         let ok = unsafe { (self.process_fn)(self.handle, &mut abc) };
-        if !ok {
-            // Leave the buffer holding the untouched input on plugin failure.
+
+        // Soft-bypassed (or the plugin failed): keep the dry input that the chain
+        // buffer already holds — the plugin still ran, so it stays warm.
+        if !self.enabled || !ok {
             return;
         }
 
@@ -231,7 +246,12 @@ impl Effect for VstEffect {
     }
 
     fn is_enabled(&self) -> bool {
-        self.enabled
+        // Intentionally always active from the chain's perspective, so
+        // [`EffectChain::process_all`] drives the plugin on every block and it
+        // never goes cold. Bypass is handled inside [`VstEffect::process`] by
+        // emitting the dry signal — turning it into a chain-level skip would
+        // reintroduce the cold-resume stall on every enable/disable toggle.
+        true
     }
 
     fn set_enabled(&mut self, enabled: bool) {
@@ -299,12 +319,27 @@ mod tests {
     }
 
     #[test]
-    fn bypassed_effect_reports_disabled() {
+    fn soft_bypass_passes_dry_but_keeps_the_plugin_warm() {
         let mut fx = VstEffect::new(std::ptr::null_mut(), doubling_process, 2, 64);
-        assert!(fx.is_enabled());
+        // Bypass via the shared enabled parameter.
         assert!(fx.set_param(PARAM_ENABLED, 0.0));
-        assert!(!fx.is_enabled());
         assert_eq!(fx.get_param(PARAM_ENABLED), Some(0.0));
+
+        // From the chain's perspective the effect stays active, so the plugin is
+        // driven every block and never goes cold — the whole point of soft bypass.
+        assert!(fx.is_enabled());
+
+        // Yet the audible output is the untouched dry signal, not 2x.
+        let mut buf = [1.0f32, -2.0];
+        fx.process(&mut buf, 2);
+        assert_eq!(buf, [1.0, -2.0]);
+
+        // Re-enabling resumes the wet output with no cold-start gap.
+        assert!(fx.set_param(PARAM_ENABLED, 1.0));
+        let mut buf2 = [1.0f32, -2.0];
+        fx.process(&mut buf2, 2);
+        assert_eq!(buf2, [2.0, -4.0]);
+
         assert_eq!(fx.effect_type(), EffectType::Vst);
     }
 }
