@@ -55,7 +55,7 @@
   <ItemGroup>
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.300" PrivateAssets="All" />
-    <PackageReference Include="OwnAudioVst" Version="1.6.4" />
+    <PackageReference Include="OwnAudioVst" Version="1.6.5" />
   </ItemGroup>
 
   <!-- No ONNX models or basesample.bin embedded -->
