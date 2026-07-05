@@ -217,6 +217,31 @@ public sealed class AudioTrack : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sets the track's start-offset silence: the number of output frames the track
+    /// emits as silence (without reading its source) before it begins contributing.
+    /// </summary>
+    /// <remarks>
+    /// Delays the track's entry against the mixer's shared clock sample-accurately,
+    /// realising a positive per-track start offset without moving the source position.
+    /// Pass <c>0</c> to clear any pending delay (the track enters immediately). No-op
+    /// when the track is disposed.
+    /// </remarks>
+    /// <param name="frames">Start-offset silence length in output frames (≥ 0).</param>
+    public void SetStartDelayFrames(long frames)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        ulong value = frames <= 0 ? 0UL : (ulong)frames;
+        int code = OwnAudioNative.ownaudio_v1_track_set_start_delay_frames(
+            _handle.DangerousGetHandle(),
+            value);
+        ErrorCodeMapper.ThrowIfError(code, nameof(SetStartDelayFrames));
+    }
+
     #endregion
 
     #region Transport

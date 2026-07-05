@@ -119,6 +119,15 @@ pub struct TrackShared {
     /// Most recent right-channel output peak of this track's own contribution as
     /// `f32` bits (equals the left peak on a mono track).
     peak_r_bits: AtomicU32,
+    /// Number of output frames the track must emit as silence — without reading
+    /// its source — before it begins contributing, so a track can be delayed
+    /// against the shared clock to realise a positive per-track start offset.
+    /// Set by the control thread; consumed once by the audio thread via the
+    /// [`TrackShared::start_silence_pending`] latch.
+    pending_start_silence: AtomicU64,
+    /// Latch: `true` when the control thread has written a new
+    /// [`TrackShared::pending_start_silence`] the audio thread has not yet taken.
+    start_silence_pending: AtomicBool,
 }
 
 impl TrackShared {
@@ -136,6 +145,8 @@ impl TrackShared {
             rendered_frames: AtomicU64::new(0),
             peak_l_bits: AtomicU32::new(0.0f32.to_bits()),
             peak_r_bits: AtomicU32::new(0.0f32.to_bits()),
+            pending_start_silence: AtomicU64::new(0),
+            start_silence_pending: AtomicBool::new(false),
         }
     }
 
@@ -292,6 +303,27 @@ impl TrackShared {
         self.peak_l_bits.store(left.to_bits(), Ordering::Relaxed);
         self.peak_r_bits.store(right.to_bits(), Ordering::Relaxed);
     }
+
+    /// Requests that the track emit `frames` output frames of silence — not reading
+    /// its source — before it begins contributing (control thread). Realises a
+    /// positive per-track start offset: the track is held silent against the shared
+    /// clock, then enters from its source's current position.
+    #[inline]
+    pub fn request_start_silence(&self, frames: u64) {
+        self.pending_start_silence.store(frames, Ordering::Relaxed);
+        self.start_silence_pending.store(true, Ordering::Relaxed);
+    }
+
+    /// Atomically consumes a pending start-silence request, returning the requested
+    /// frame count when one was set (audio thread, at the top of a render block).
+    #[inline]
+    pub fn take_start_silence(&self) -> Option<u64> {
+        if self.start_silence_pending.swap(false, Ordering::Relaxed) {
+            Some(self.pending_start_silence.load(Ordering::Relaxed))
+        } else {
+            None
+        }
+    }
 }
 
 impl Default for TrackShared {
@@ -410,6 +442,11 @@ pub struct Track {
     /// Plugin delay compensation applied to this track's output so it aligns
     /// sample-accurately with the highest-latency track in the mixer.
     pdc: PdcDelay,
+    /// Remaining output frames of start-offset silence to emit before the track
+    /// begins reading its source (audio-thread-owned). Loaded from
+    /// [`TrackShared::take_start_silence`] and counted down per block; zero once the
+    /// track has entered.
+    start_silence_remaining: u64,
 }
 
 impl Track {
@@ -427,6 +464,7 @@ impl Track {
             gain_smoother,
             stretch: super::stretch::TrackStretch::new(sample_rate, max_buffer_size),
             pdc: PdcDelay::new(),
+            start_silence_remaining: 0,
         }
     }
 
@@ -491,7 +529,35 @@ impl Track {
         if self.scratch.len() < frame_len {
             self.scratch.resize(frame_len, 0.0);
         }
-        let buf = &mut self.scratch[..frame_len];
+
+        let ch = channels.max(1) as usize;
+        let total_frames = frame_len / ch;
+
+        // Consume a pending start-offset silence request (control thread) once, then
+        // emit that many output frames of silence at the head of the block WITHOUT
+        // reading the source. This delays the track against the shared clock to
+        // realise a positive per-track start offset (the managed engine's
+        // "masterTimestamp − startOffset < 0 ⇒ silence" behaviour), sample-accurately:
+        // the silent frames get no contribution (other tracks' sums are preserved) and
+        // the source is not advanced, so the track enters from its current position.
+        if let Some(n) = self.shared.take_start_silence() {
+            self.start_silence_remaining = n;
+        }
+        let sil = self.start_silence_remaining.min(total_frames as u64) as usize;
+        if sil > 0 {
+            self.start_silence_remaining -= sil as u64;
+        }
+        let active_frames = total_frames - sil;
+        if active_frames == 0 {
+            // The whole block is start-offset silence: nothing is rendered and the
+            // rendered position stays frozen until the track enters.
+            self.shared.store_peaks(0.0, 0.0);
+            return;
+        }
+
+        let active_samples = active_frames * ch;
+        let out_off = sil * ch;
+        let buf = &mut self.scratch[..active_samples];
 
         // Honor a pending seek: drop the stretch FIFO's pre-seek tail before rendering so the
         // jump is clean.
@@ -532,15 +598,16 @@ impl Track {
         self.pdc.process(buf, channels);
 
         self.gain_smoother.set_target(self.shared.gain());
-        let ch = channels.max(1) as usize;
         // Peak of this track's own (post-gain) contribution, per channel, for
         // per-track metering. Measured on the scaled sample, not the raw source,
         // so a muted-down track reads a low level as a user would expect.
         let mut peak_l = 0.0f32;
         let mut peak_r = 0.0f32;
         // Advance the gain once per frame so both channels of a stereo frame
-        // share the same (smoothed) gain.
-        for (out_frame, in_frame) in output.chunks_mut(ch).zip(buf.chunks(ch)) {
+        // share the same (smoothed) gain. The active region is written starting at
+        // `out_off` so any start-offset silence prefix is left untouched.
+        let out_active = &mut output[out_off..out_off + active_samples];
+        for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(ch)) {
             let gain = self.gain_smoother.advance();
             for (i, (o, &s)) in out_frame.iter_mut().zip(in_frame.iter()).enumerate() {
                 let scaled = s * gain;
@@ -560,12 +627,12 @@ impl Track {
         }
         self.shared.store_peaks(peak_l, peak_r);
 
-        // Advance the rendered position by the number of *output* frames produced this block
-        // (wall-clock time). The multi-track master clock is driven from this position and must
-        // advance at the real playback rate regardless of per-track tempo — otherwise a stretched
-        // track would run the shared clock at its content rate and desync every other track
-        // (e.g. a unity metronome) against it.
-        self.shared.add_rendered_frames((frame_len / ch) as u64);
+        // Advance the rendered position by the number of *output* frames actually produced
+        // this block (wall-clock time), excluding any start-offset silence prefix. The
+        // multi-track master clock is driven from this position and must advance at the real
+        // playback rate regardless of per-track tempo — otherwise a stretched track would run
+        // the shared clock at its content rate and desync every other track against it.
+        self.shared.add_rendered_frames(active_frames as u64);
     }
 }
 
@@ -787,6 +854,52 @@ mod tests {
             track.process_additive(&mut out, 2);
         }
         assert!((track.shared.peak_l() - 0.5).abs() < 1e-2, "peak_l {}", track.shared.peak_l());
+    }
+
+    #[test]
+    fn start_silence_delays_entry_then_plays_from_source_start() {
+        // Request 4 frames of start-offset silence on a mono track rendering an
+        // 8-frame block: the first 4 frames are silent, then the source plays from
+        // its start, and only the non-silent frames advance the rendered position.
+        let mut track = Track::new(50, 48_000.0, 64);
+        track.set_source(Some(Box::new(ConstSource(0.5))));
+        track.shared.set_state(TrackState::Playing);
+        track.shared.request_start_silence(4);
+
+        let mut out = vec![0.0f32; 8];
+        track.process_additive(&mut out, 1);
+        assert_eq!(&out[..4], &[0.0, 0.0, 0.0, 0.0], "first 4 frames must be silent");
+        for &s in &out[4..] {
+            assert!((s - 0.5).abs() < 1e-6, "content must play after the silence, got {s}");
+        }
+        assert_eq!(track.shared.rendered_frames(), 4);
+    }
+
+    #[test]
+    fn start_silence_spanning_blocks_freezes_position_until_entry() {
+        // 8 frames of start silence across two 4-frame blocks: both blocks are fully
+        // silent and the rendered position stays frozen, then the third block enters.
+        let mut track = Track::new(51, 48_000.0, 64);
+        track.set_source(Some(Box::new(ConstSource(1.0))));
+        track.shared.set_state(TrackState::Playing);
+        track.shared.request_start_silence(8);
+
+        let mut out = vec![0.0f32; 4];
+        track.process_additive(&mut out, 1);
+        assert_eq!(out, [0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(track.shared.rendered_frames(), 0);
+
+        out.iter_mut().for_each(|s| *s = 0.0);
+        track.process_additive(&mut out, 1);
+        assert_eq!(out, [0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(track.shared.rendered_frames(), 0);
+
+        out.iter_mut().for_each(|s| *s = 0.0);
+        track.process_additive(&mut out, 1);
+        for &s in &out {
+            assert!((s - 1.0).abs() < 1e-6, "content must play once the silence is consumed");
+        }
+        assert_eq!(track.shared.rendered_frames(), 4);
     }
 
     #[test]

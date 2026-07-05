@@ -94,6 +94,14 @@ public sealed partial class AudioMixer
     private readonly List<RustTrackEffectRouting> _rustEffectSources = new();
 
     /// <summary>
+    /// Last per-source <see cref="FileSource.StartOffset"/> applied to the native track (keyed by
+    /// source id), so the control-rate tick can detect a changed offset and realign the track. An
+    /// entry exists once the offset has been applied at least once. Guarded by
+    /// <see cref="_rustSessionLock"/>.
+    /// </summary>
+    private readonly Dictionary<Guid, double> _rustAppliedStartOffsets = new();
+
+    /// <summary>
     /// Tracks a <see cref="SourceWithEffects"/> and its underlying <see cref="FileSource"/> together
     /// with the managed→native effect pairings currently installed on the native track.
     /// </summary>
@@ -219,6 +227,7 @@ public sealed partial class AudioMixer
         lock (_rustSessionLock)
         {
             _rustEffectSources.RemoveAll(r => ReferenceEquals(r.Source, source));
+            _rustAppliedStartOffsets.Remove(fs.Id);
 
             AudioTrack? track = fs.RustTrack;
             fs.DetachRustTrack();
@@ -290,6 +299,80 @@ public sealed partial class AudioMixer
         (float left, float right) = session.GetMasterPeaks();
         _leftPeak = left;
         _rightPeak = right;
+    }
+
+    /// <summary>
+    /// Applies a source's <see cref="FileSource.StartOffset"/> to its native track relative to the
+    /// given project-timeline position, reproducing the managed engine's per-track offset:
+    /// <c>content = projectPosition − StartOffset</c>. When the content position is non-negative the
+    /// track's decoder is seeked there; when it is negative the track is held silent for the
+    /// remaining <c>(StartOffset − projectPosition)</c> frames (native start-delay) and its content
+    /// starts from zero — so a positive offset delays the track's entry and a negative offset
+    /// pre-advances it, sample-accurately against the shared clock. Must be called under
+    /// <see cref="_rustSessionLock"/>.
+    /// </summary>
+    /// <param name="fs">The file source whose offset is applied.</param>
+    /// <param name="projectPosition">Current project-timeline position, in seconds.</param>
+    private void ApplyRustStartOffsetLocked(FileSource fs, double projectPosition)
+    {
+        AudioTrack? track = fs.RustTrack;
+        if (track is null)
+        {
+            return;
+        }
+
+        double offset = fs.StartOffset;
+        double content = projectPosition - offset;
+
+        if (content >= 0.0)
+        {
+            fs.Seek(Math.Clamp(content, 0.0, fs.Duration));
+            track.SetStartDelayFrames(0);
+        }
+        else
+        {
+            fs.Seek(0.0);
+            track.SetStartDelayFrames((long)Math.Round(-content * _config.SampleRate));
+        }
+
+        _rustAppliedStartOffsets[fs.Id] = offset;
+    }
+
+    /// <summary>
+    /// Realigns any source whose <see cref="FileSource.StartOffset"/> changed since it was last
+    /// applied, relative to the current project-clock position. Called on the control-rate tick so a
+    /// live offset edit (aligning a drifted track, or shifting one against the sync position) takes
+    /// effect promptly without an explicit seek. A track whose offset is unchanged is left untouched.
+    /// </summary>
+    internal void SyncRustStartOffsetsOnce()
+    {
+        double project = _masterClock.CurrentTimestamp;
+
+        lock (_rustSessionLock)
+        {
+            foreach (IAudioSource source in _sources.Values)
+            {
+                if (source is not FileSource fs || fs.RustTrack is null)
+                {
+                    continue;
+                }
+
+                bool known = _rustAppliedStartOffsets.TryGetValue(fs.Id, out double applied);
+                if (known && applied == fs.StartOffset)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    ApplyRustStartOffsetLocked(fs, project);
+                }
+                catch
+                {
+                    // best-effort realign; never let one source abort the tick
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -643,6 +726,7 @@ public sealed partial class AudioMixer
             {
                 SyncRustControlStateOnce();
                 SyncRustMasterOnce();
+                SyncRustStartOffsetsOnce();
                 MirrorRustMasterEffectsOnce();
                 ReconcileRustTrackEffectsOnce();
                 DriveRustNativeSyncOnce();
@@ -681,6 +765,14 @@ public sealed partial class AudioMixer
         {
             if (source is FileSource fs && fs.State == AudioState.Playing)
             {
+                // A track still in its start-offset silence (positive offset, not yet entered) has
+                // not begun advancing content; excluding it keeps it from dragging the project clock
+                // forward to its offset before it actually enters.
+                if (fs.StartOffset > 0.0 && (fs.RustTrack?.RenderedFrames ?? 0UL) == 0UL)
+                {
+                    continue;
+                }
+
                 double p = fs.StartOffset + fs.Position;
                 if (p > projectPos)
                 {
@@ -711,21 +803,26 @@ public sealed partial class AudioMixer
 
         _masterClock.SeekTo(projectSeconds);
 
-        foreach (IAudioSource source in _sources.Values)
+        lock (_rustSessionLock)
         {
-            if (source is not FileSource fs)
+            foreach (IAudioSource source in _sources.Values)
             {
-                continue;
-            }
+                if (source is not FileSource fs)
+                {
+                    continue;
+                }
 
-            double content = Math.Clamp(projectSeconds - fs.StartOffset, 0.0, fs.Duration);
-            try
-            {
-                fs.Seek(content);
-            }
-            catch
-            {
-                // best-effort per-source seek; never let one source abort the whole seek
+                try
+                {
+                    // Reposition each track to the seek target adjusted for its start offset,
+                    // holding a not-yet-entered track silent (positive offset) exactly as the
+                    // managed engine did with content = masterTimestamp − startOffset.
+                    ApplyRustStartOffsetLocked(fs, projectSeconds);
+                }
+                catch
+                {
+                    // best-effort per-source seek; never let one source abort the whole seek
+                }
             }
         }
     }
@@ -766,6 +863,36 @@ public sealed partial class AudioMixer
 
             if (_rustOutputStream is not null)
             {
+                // Position every source for its start offset BEFORE PlayAll, so the first
+                // rendered block already reflects each track's offset — a sample-accurate start.
+                // A zero-offset source is left at its current content position (untouched, as
+                // before) but still recorded so the control-rate tick does not re-seek it.
+                double project = _masterClock.CurrentTimestamp;
+                foreach (IAudioSource source in _sources.Values)
+                {
+                    if (source is not FileSource fs || fs.RustTrack is null)
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        if (fs.StartOffset != 0.0)
+                        {
+                            ApplyRustStartOffsetLocked(fs, project);
+                        }
+                        else
+                        {
+                            fs.RustTrack.SetStartDelayFrames(0);
+                            _rustAppliedStartOffsets[fs.Id] = 0.0;
+                        }
+                    }
+                    catch
+                    {
+                        // best-effort per-source offset; never let one source block the start
+                    }
+                }
+
                 _rustSession?.PlayAll();
             }
         }

@@ -1210,6 +1210,20 @@ int32_t ownaudio_v1_track_get_peaks(struct OwnAudioTrackHandle *track,
                                     float *out_right);
 
 /**
+ * Sets the track's start-offset silence: the number of output frames the track
+ * emits as silence — without reading its source — before it begins contributing.
+ *
+ * Realises a positive per-track start offset (the track enters later on the shared
+ * clock, sample-accurately) without touching the source position. Pass `0` to clear
+ * any pending delay. The control side pairs this with a source seek to place the
+ * content, matching the managed `content = clock − start_offset` behaviour.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_set_start_delay_frames(struct OwnAudioTrackHandle *track,
+                                                 uint64_t frames);
+
+/**
  * Sets the track gain (linear amplitude multiplier; 1.0 = unity).
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.

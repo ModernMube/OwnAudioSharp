@@ -209,6 +209,17 @@ internal static partial class OwnAudioNative
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_track_set_mute(IntPtr track, float muted);
 
+    /// <summary>
+    /// Sets the track's start-offset silence: the number of output frames the track
+    /// emits as silence (without reading its source) before it begins contributing,
+    /// delaying its entry against the shared clock sample-accurately. Pass 0 to clear.
+    /// </summary>
+    /// <param name="track">Valid track handle.</param>
+    /// <param name="frames">Start-offset silence length in output frames.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_set_start_delay_frames(IntPtr track, ulong frames);
+
     #endregion
 
     #region Track source feed

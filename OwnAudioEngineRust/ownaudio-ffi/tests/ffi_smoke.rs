@@ -188,7 +188,7 @@ mod track_source {
         ownaudio_v1_mixer_pause_all, ownaudio_v1_mixer_play_all, ownaudio_v1_mixer_set_master_gain,
         ownaudio_v1_mixer_stop_all, ownaudio_v1_track_create, ownaudio_v1_track_destroy,
         ownaudio_v1_track_get_peaks, ownaudio_v1_track_get_rendered_frames,
-        ownaudio_v1_track_reset_position,
+        ownaudio_v1_track_reset_position, ownaudio_v1_track_set_start_delay_frames,
     };
     use ownaudio_ffi::handles::{
         OwnAudioMixerHandle, OwnAudioTrackHandle, OwnAudioTrackSourceHandle,
@@ -298,6 +298,16 @@ mod track_source {
             OwnAudioErrorCode::Success as i32
         );
         assert_eq!((tl, tr), (0.0, 0.0));
+
+        // Start-delay: null handle → InvalidHandle; a real track accepts the request.
+        assert_eq!(
+            ownaudio_v1_track_set_start_delay_frames(std::ptr::null_mut(), 100),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        assert_eq!(
+            ownaudio_v1_track_set_start_delay_frames(track, 4096),
+            OwnAudioErrorCode::Success as i32
+        );
 
         ownaudio_v1_track_destroy(track);
         ownaudio_v1_mixer_destroy(mixer);

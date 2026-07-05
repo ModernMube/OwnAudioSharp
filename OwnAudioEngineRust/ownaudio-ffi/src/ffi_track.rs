@@ -505,6 +505,34 @@ pub extern "C" fn ownaudio_v1_track_get_peaks(
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
 }
 
+/// Sets the track's start-offset silence: the number of output frames the track
+/// emits as silence — without reading its source — before it begins contributing.
+///
+/// Realises a positive per-track start offset (the track enters later on the shared
+/// clock, sample-accurately) without touching the source position. Pass `0` to clear
+/// any pending delay. The control side pairs this with a source seek to place the
+/// content, matching the managed `content = clock − start_offset` behaviour.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_track_set_start_delay_frames(
+    track: *mut OwnAudioTrackHandle,
+    frames: u64,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { track_from_ptr(track) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        wrapper.shared.request_start_silence(frames);
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
 // ---------------------------------------------------------------------------
 // Track parameters
 // ---------------------------------------------------------------------------
