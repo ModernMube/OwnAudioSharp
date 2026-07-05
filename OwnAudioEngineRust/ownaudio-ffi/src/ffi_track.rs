@@ -388,6 +388,7 @@ pub extern "C" fn ownaudio_v1_track_reset_position(track: *mut OwnAudioTrackHand
         };
 
         wrapper.shared.reset_rendered_frames();
+        wrapper.shared.request_stretch_flush();
 
         OwnAudioErrorCode::Success as i32
     }));

@@ -92,6 +92,16 @@ pub struct TrackShared {
     tempo_ratio_bits: AtomicU32,
     /// Pitch shift in semitones, as `f32` bits.
     pitch_semitones_bits: AtomicU32,
+    /// Set by the control thread (on a seek) to ask the audio thread to clear the per-track
+    /// SoundTouch FIFO before the next block, so no pre-seek audio buffered in the stretch
+    /// latency leaks out after the jump. The audio thread consumes (clears) the flag.
+    stretch_flush_pending: AtomicBool,
+    /// When `true`, the track routes through the SoundTouch stretch stage on every block even
+    /// at unity tempo/pitch, keeping the FIFO continuously primed so a live tempo/pitch change
+    /// does not click from a cold start (matching the legacy file-playback chain). File-backed
+    /// tracks enable this; generic mixer tracks leave it off and stay bit-exact passthrough at
+    /// unity.
+    stretch_always_on: AtomicBool,
     /// Number of output frames this track has actually rendered into the mix
     /// since the last position reset (seek or source swap).
     ///
@@ -112,6 +122,8 @@ impl TrackShared {
             soloed: AtomicBool::new(false),
             tempo_ratio_bits: AtomicU32::new(1.0f32.to_bits()),
             pitch_semitones_bits: AtomicU32::new(0.0f32.to_bits()),
+            stretch_flush_pending: AtomicBool::new(false),
+            stretch_always_on: AtomicBool::new(false),
             rendered_frames: AtomicU64::new(0),
         }
     }
@@ -189,6 +201,33 @@ impl TrackShared {
     pub fn set_pitch_semitones(&self, semitones: f32) {
         self.pitch_semitones_bits
             .store(semitones.clamp(-24.0, 24.0).to_bits(), Ordering::Relaxed);
+    }
+
+    /// Requests that the audio thread clear the per-track stretch FIFO before the next block
+    /// (called from the control thread on a seek).
+    #[inline]
+    pub fn request_stretch_flush(&self) {
+        self.stretch_flush_pending.store(true, Ordering::Relaxed);
+    }
+
+    /// Atomically consumes a pending stretch-flush request, returning whether one was set.
+    /// Called on the audio thread at the top of the render block.
+    #[inline]
+    pub fn take_stretch_flush(&self) -> bool {
+        self.stretch_flush_pending.swap(false, Ordering::Relaxed)
+    }
+
+    /// Returns whether the stretch stage runs unconditionally (see `stretch_always_on`).
+    #[inline]
+    pub fn stretch_always_on(&self) -> bool {
+        self.stretch_always_on.load(Ordering::Relaxed)
+    }
+
+    /// Enables/disables always-on stretching (file-backed tracks enable it so a live
+    /// tempo/pitch change never cold-starts the SoundTouch FIFO).
+    #[inline]
+    pub fn set_stretch_always_on(&self, on: bool) {
+        self.stretch_always_on.store(on, Ordering::Relaxed);
     }
 
     /// Returns the number of output frames rendered since the last position reset.
@@ -278,6 +317,7 @@ impl Track {
         self.source = source;
         self.shared.reset_rendered_frames();
         self.content_frame_accumulator = 0.0;
+        self.stretch.clear();
     }
 
     /// Replaces the track's audio source and returns the previous one without
@@ -293,6 +333,7 @@ impl Track {
     ) -> Option<Box<dyn TrackSource>> {
         self.shared.reset_rendered_frames();
         self.content_frame_accumulator = 0.0;
+        self.stretch.clear();
         std::mem::replace(&mut self.source, source)
     }
 
@@ -327,19 +368,30 @@ impl Track {
         }
         let buf = &mut self.scratch[..frame_len];
 
-        // Apply the track's tempo/pitch via SoundTouch when either deviates from unity;
-        // otherwise read the source straight through (and clear any stale stretch latency).
+        // Honor a pending seek: drop the stretch FIFO's pre-seek tail before rendering so the
+        // jump is clean, and reset the content-position remainder.
+        if self.shared.take_stretch_flush() {
+            self.stretch.clear();
+            self.content_frame_accumulator = 0.0;
+        }
+
+        // Route a live source through the SoundTouch stage when the tempo/pitch is engaged, or
+        // whenever the track is marked always-on (file-backed tracks): keeping the FIFO warm
+        // means a mid-playback tempo/pitch change lands on a primed processor instead of a cold
+        // one, so it does not click from the latency refill a cold start would incur. Generic
+        // mixer tracks at unity bypass the stage and stay bit-exact passthrough.
         let tempo = self.shared.tempo_ratio();
         let pitch = self.shared.pitch_semitones();
-        let read = if self.stretch.is_active(tempo, pitch) {
+        let needs_stretch = self.shared.stretch_always_on()
+            || (tempo - 1.0).abs() > 1e-4
+            || pitch.abs() > 1e-4;
+        let read = if self.source.is_none() {
+            0
+        } else if needs_stretch {
             self.stretch
                 .fill(&mut self.source, buf, channels, tempo, pitch)
         } else {
-            self.stretch.deactivate();
-            match self.source.as_mut() {
-                Some(src) => src.read(buf),
-                None => 0,
-            }
+            self.source.as_mut().unwrap().read(buf)
         };
         for s in &mut buf[read..] {
             *s = 0.0;
@@ -482,6 +534,35 @@ mod tests {
         assert!(
             fast_read as f64 > unity_read as f64 * 1.5,
             "tempo 2.0 should pull far more source than unity (fast={fast_read}, unity={unity_read})"
+        );
+    }
+
+    #[test]
+    fn always_on_routes_unity_through_stretch_but_default_bypasses() {
+        let block = 1024usize;
+
+        // Default (always-on off) at unity: bit-exact passthrough of the source.
+        let mut bypass = Track::new(30, 48_000.0, block);
+        bypass.set_source(Some(Box::new(ConstSource(0.5))));
+        bypass.shared.set_state(TrackState::Playing);
+        let mut out = vec![0.0f32; block];
+        bypass.process_additive(&mut out, 2);
+        assert!(
+            out.iter().all(|&v| (v - 0.5).abs() < 1e-6),
+            "generic unity track must stay bit-exact passthrough"
+        );
+
+        // always-on at unity: routes through the (warming) SoundTouch FIFO, so the first block
+        // is not the flat passthrough a bypass would produce.
+        let mut always = Track::new(31, 48_000.0, block);
+        always.set_source(Some(Box::new(ConstSource(0.5))));
+        always.shared.set_state(TrackState::Playing);
+        always.shared.set_stretch_always_on(true);
+        let mut out2 = vec![0.0f32; block];
+        always.process_additive(&mut out2, 2);
+        assert!(
+            !out2.iter().all(|&v| (v - 0.5).abs() < 1e-6),
+            "always-on unity track must route through the stretch, not passthrough"
         );
     }
 

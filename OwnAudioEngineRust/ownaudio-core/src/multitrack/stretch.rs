@@ -16,19 +16,15 @@
 //! receiving exactly that block. Only when the source is exhausted (returns zero) is the
 //! processor flushed and the remainder silence-padded by the caller.
 //!
-//! When both tempo and pitch are at unity the stage is a transparent bypass: the caller reads
-//! the source directly and [`TrackStretch::deactivate`] clears the processor once so no stale
-//! FIFO latency leaks in when stretching resumes.
+//! The stage runs unconditionally while a source is attached — even at unity tempo and pitch —
+//! mirroring the legacy managed chain, where SoundTouch always processed. Keeping the FIFO
+//! continuously primed means a mid-playback tempo or pitch change lands on a warm processor,
+//! so it does not click/crackle from the latency refill a cold start would incur. On a seek the
+//! owning track clears the FIFO (via [`TrackStretch::clear`]) so no pre-seek audio leaks out.
 
 use ownaudio_soundtouch::{SettingId, SoundTouchProcessor};
 
 use super::track::TrackSource;
-
-/// Below this absolute deviation from `1.0` the tempo ratio is treated as unity.
-const TEMPO_EPSILON: f32 = 0.001;
-
-/// Below this absolute semitone amount the pitch shift is treated as none.
-const PITCH_EPSILON: f32 = 0.001;
 
 /// Safety cap on the number of source pulls per output block, so a pathological source (one
 /// that returns a positive but tiny count every call) can never spin the audio thread. In
@@ -46,9 +42,6 @@ pub(crate) struct TrackStretch {
     processor: Option<SoundTouchProcessor>,
     /// Reusable interleaved input scratch, pulled from the source while filling the FIFO.
     input: Vec<f32>,
-    /// Whether the processor produced stretched output on the previous block, so a transition
-    /// back to unity can clear the stale FIFO latency exactly once.
-    active: bool,
     /// Last tempo pushed to the processor, to avoid redundant re-configuration each block.
     last_tempo: f32,
     /// Last pitch (semitones) pushed to the processor.
@@ -68,32 +61,21 @@ impl TrackStretch {
             channels: 0,
             processor: None,
             input: vec![0.0f32; max_buffer_size.max(1)],
-            active: false,
             last_tempo: 1.0,
             last_pitch: 0.0,
             eof_flushed: false,
         }
     }
 
-    /// Returns whether the given tempo/pitch require stretching (i.e. either deviates from
-    /// unity by more than its epsilon).
+    /// Clears the processor's FIFO, dropping any buffered (pre-seek) audio and the EOF latch.
+    /// Called by the owning track on a seek or source swap so the stage restarts cleanly from
+    /// the new position. No-op before the processor has been built.
     #[inline]
-    pub(crate) fn is_active(&self, tempo: f32, pitch: f32) -> bool {
-        (tempo - 1.0).abs() > TEMPO_EPSILON || pitch.abs() > PITCH_EPSILON
-    }
-
-    /// Clears the processor's FIFO once when the stage transitions from stretching back to
-    /// unity, so no old-tempo audio leaks out the next time stretching resumes. No-op while
-    /// already inactive.
-    #[inline]
-    pub(crate) fn deactivate(&mut self) {
-        if self.active {
-            if let Some(proc) = self.processor.as_mut() {
-                proc.clear();
-            }
-            self.active = false;
-            self.eof_flushed = false;
+    pub(crate) fn clear(&mut self) {
+        if let Some(proc) = self.processor.as_mut() {
+            proc.clear();
         }
+        self.eof_flushed = false;
     }
 
     /// Lazily (re)builds the processor for `channels`, applying the mandatory settings that
@@ -164,7 +146,6 @@ impl TrackStretch {
         }
 
         self.apply_params(tempo, pitch);
-        self.active = true;
 
         let ch = channels as usize;
         let want_frames = out.len() / ch;
@@ -267,11 +248,19 @@ mod tests {
     }
 
     #[test]
-    fn unity_is_reported_inactive() {
-        let s = TrackStretch::new(48000.0, 2048);
-        assert!(!s.is_active(1.0, 0.0));
-        assert!(s.is_active(1.2, 0.0));
-        assert!(s.is_active(1.0, 3.0));
+    fn unity_still_produces_full_block() {
+        // The stage runs even at unity tempo/pitch; after warm-up it returns a full block.
+        let mut s = TrackStretch::new(48000.0, 4096);
+        let mut source: Option<Box<dyn TrackSource>> =
+            Some(Box::new(SineSource { phase: 0.0, channels: 2 }));
+        let mut out = vec![0.0f32; 1024];
+
+        let mut last = 0usize;
+        for _ in 0..8 {
+            last = s.fill(&mut source, &mut out, 2, 1.0, 0.0);
+            assert!(out.iter().all(|v| v.is_finite()));
+        }
+        assert_eq!(last, out.len(), "unity steady-state block must be fully produced");
     }
 
     #[test]
@@ -328,18 +317,20 @@ mod tests {
     }
 
     #[test]
-    fn deactivate_clears_only_once() {
+    fn clear_is_safe_before_and_after_use() {
         let mut s = TrackStretch::new(48000.0, 2048);
+        // Clearing before the processor is built must not panic.
+        s.clear();
+
         let mut source: Option<Box<dyn TrackSource>> =
             Some(Box::new(SineSource { phase: 0.0, channels: 2 }));
         let mut out = vec![0.0f32; 512];
-
         s.fill(&mut source, &mut out, 2, 1.3, 0.0);
-        assert!(s.active);
-        s.deactivate();
-        assert!(!s.active);
-        // Second deactivate is a no-op and must not panic.
-        s.deactivate();
-        assert!(!s.active);
+
+        // Clearing after use drops the FIFO tail; the stage keeps producing afterwards.
+        s.clear();
+        let n = s.fill(&mut source, &mut out, 2, 1.3, 0.0);
+        assert!(n <= out.len());
+        assert!(out.iter().all(|v| v.is_finite()));
     }
 }
