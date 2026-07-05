@@ -299,12 +299,6 @@ pub struct Track {
     /// Per-track time-stretch / pitch-shift stage; applies the track's tempo and pitch to the
     /// source audio via SoundTouch, or bypasses transparently at unity.
     stretch: super::stretch::TrackStretch,
-    /// Sub-frame remainder of the tempo-scaled content-position advance, carried between
-    /// blocks so the integer [`TrackShared::rendered_frames`] does not drift. Mirrors the
-    /// legacy `FileSource._fractionalFrameAccumulator` so the reported position stays
-    /// content-time (a tempo of `r` advances the position by `r` content frames per output
-    /// frame), matching the pre-refactor behavior.
-    content_frame_accumulator: f64,
 }
 
 impl Track {
@@ -321,7 +315,6 @@ impl Track {
             scratch: vec![0.0f32; max_buffer_size],
             gain_smoother,
             stretch: super::stretch::TrackStretch::new(sample_rate, max_buffer_size),
-            content_frame_accumulator: 0.0,
         }
     }
 
@@ -332,7 +325,6 @@ impl Track {
     pub fn set_source(&mut self, source: Option<Box<dyn TrackSource>>) {
         self.source = source;
         self.shared.reset_rendered_frames();
-        self.content_frame_accumulator = 0.0;
         self.stretch.clear();
     }
 
@@ -348,7 +340,6 @@ impl Track {
         source: Option<Box<dyn TrackSource>>,
     ) -> Option<Box<dyn TrackSource>> {
         self.shared.reset_rendered_frames();
-        self.content_frame_accumulator = 0.0;
         self.stretch.clear();
         std::mem::replace(&mut self.source, source)
     }
@@ -385,10 +376,9 @@ impl Track {
         let buf = &mut self.scratch[..frame_len];
 
         // Honor a pending seek: drop the stretch FIFO's pre-seek tail before rendering so the
-        // jump is clean, and reset the content-position remainder.
+        // jump is clean.
         if self.shared.take_stretch_flush() {
             self.stretch.clear();
-            self.content_frame_accumulator = 0.0;
         }
 
         // Route a live source through the SoundTouch stage when the tempo/pitch is engaged, or
@@ -426,16 +416,12 @@ impl Track {
             }
         }
 
-        // Advance the rendered position by the number of *content* frames this block
-        // represents: at tempo `r`, one output frame consumes `r` content frames, so the
-        // reported position stays content-time (matching the legacy SoundTouch path). A
-        // sub-frame accumulator carries the fractional remainder so the integer counter does
-        // not drift. At unity tempo this is exactly the output frame count.
-        let out_frames = (frame_len / ch) as f64;
-        self.content_frame_accumulator += out_frames * tempo.max(0.0) as f64;
-        let content_frames = self.content_frame_accumulator.floor();
-        self.content_frame_accumulator -= content_frames;
-        self.shared.add_rendered_frames(content_frames as u64);
+        // Advance the rendered position by the number of *output* frames produced this block
+        // (wall-clock time). The multi-track master clock is driven from this position and must
+        // advance at the real playback rate regardless of per-track tempo — otherwise a stretched
+        // track would run the shared clock at its content rate and desync every other track
+        // (e.g. a unity metronome) against it.
+        self.shared.add_rendered_frames((frame_len / ch) as u64);
     }
 }
 
@@ -583,9 +569,10 @@ mod tests {
     }
 
     #[test]
-    fn rendered_position_is_content_time_under_tempo() {
-        // At tempo 2.0 the reported position must advance at twice the output-frame rate
-        // (content time), matching the legacy `framesRead * _tempo` accounting.
+    fn rendered_position_is_wall_clock_regardless_of_tempo() {
+        // The rendered position must advance by the OUTPUT frame count (wall-clock), not the
+        // content rate, so a stretched track cannot drag the shared master clock off the real
+        // playback rate and desync every other track (e.g. a unity metronome) against it.
         let block = 1024usize; // 512 stereo frames per block
         let mut track = Track::new(20, 48_000.0, block);
         track.set_source(Some(Box::new(ConstSource(0.3))));
@@ -599,13 +586,11 @@ mod tests {
             track.process_additive(&mut out, 2);
         }
 
-        let out_frames = (block as u64 / 2) * blocks;
-        let expected = out_frames * 2; // tempo 2.0
-        let actual = track.shared.rendered_frames();
-        // Allow at most one frame of accumulator rounding slack.
-        assert!(
-            actual.abs_diff(expected) <= 1,
-            "content position should be ~2x output frames (expected {expected}, got {actual})"
+        let expected = (block as u64 / 2) * blocks; // output frames, independent of tempo
+        assert_eq!(
+            track.shared.rendered_frames(),
+            expected,
+            "rendered position must be wall-clock (output frames), not tempo-scaled"
         );
     }
 

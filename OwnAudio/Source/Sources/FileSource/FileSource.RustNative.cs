@@ -196,16 +196,31 @@ public partial class FileSource
 
         lock (_rustBackendLock)
         {
+            // If the source was played standalone before being added to a mixer (a valid
+            // Play()-then-AddSource ordering), it lazily built a private single-track session.
+            // Tear that transient backend down and re-home the source onto the mixer's shared
+            // track instead of failing — leaving it standalone would orphan a session whose
+            // track keeps running outside the mixer's transport control.
             if (_ownedRustSession is not null)
             {
-                throw new InvalidOperationException(
-                    "This source already owns a standalone backend; detach it before attaching to a session.");
+                _ownedRustSession.Dispose();
+                _ownedRustSession = null;
+                _rustFileTrack = null;
+                _rustTrack = null;
             }
 
             _rustTrack = track;
             _rustFileTrack = fileTrack;
             _rustBackendAttached = true;
             ApplyControlStateToTrackLocked();
+
+            // Preserve the transport state captured before attachment: if the source was already
+            // playing (Play() ran before AddSource), start the freshly attached track so it is
+            // audible through the mixer rather than silently stopped.
+            if (State == AudioState.Playing)
+            {
+                _rustTrack.Play();
+            }
         }
     }
 
