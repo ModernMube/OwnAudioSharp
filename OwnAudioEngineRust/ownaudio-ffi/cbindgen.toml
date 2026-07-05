@@ -8,6 +8,15 @@ tab_width = 4
 documentation = true
 usize_is_size_t = true
 
+[parse]
+# Follow into ownaudio-core so the VST bridge types (VstAudioBuffer, the
+# VstProcessFn function pointer) that cross the FFI boundary resolve to real C
+# declarations instead of opaque forward-declared structs. Output stays
+# reachability-driven, so only types referenced by an `extern "C"` export are
+# emitted.
+parse_deps = true
+include = ["ownaudio-core"]
+
 [export]
 include = [
     "OwnAudioErrorCode",
@@ -20,6 +29,8 @@ include = [
     "OwnAudioOutputCallback",
     "OwnAudioInputCallback",
     "OwnHostApi",
+    "VstAudioBuffer",
+    "VstProcessFn",
 ]
 
 [fn]

@@ -19,7 +19,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use ownaudio_core::effects::{
     AutoGain, Chorus, Compressor, Delay, Distortion, DynamicAmp, Effect, Enhancer, Equalizer,
-    Equalizer30, Flanger, Gate, Limiter, Overdrive, Phaser, Reverb, Rotary,
+    Equalizer30, Flanger, Gate, Limiter, Overdrive, Phaser, Reverb, Rotary, VstAudioBuffer,
+    VstEffect,
 };
 use ownaudio_core::multitrack::{MultiTrackMixer, TrackSource, TrackState};
 
@@ -132,6 +133,56 @@ fn effect_process_is_allocation_free_in_steady_state() {
             "{name}::process allocated {allocs} time(s) across {MEASURED_BLOCKS} steady-state blocks"
         );
     }
+}
+
+/// A plugin stub that copies input planes to output planes without allocating,
+/// standing in for a real `VST3Plugin_ProcessAudio` callback.
+unsafe extern "C" fn vst_passthrough(
+    _handle: *mut std::os::raw::c_void,
+    buffer: *mut VstAudioBuffer,
+) -> bool {
+    let b = &*buffer;
+    for c in 0..b.num_channels as usize {
+        let inp = *b.inputs.add(c);
+        let outp = *b.outputs.add(c);
+        for f in 0..b.num_samples as usize {
+            *outp.add(f) = *inp.add(f);
+        }
+    }
+    true
+}
+
+#[test]
+fn vst_effect_process_is_allocation_free_in_steady_state() {
+    // The VST bridge deinterleaves into pre-allocated planar scratch, calls the
+    // (non-allocating) plugin stub, and reinterleaves — none of which may touch
+    // the allocator on the audio thread once the scratch is sized in `new`.
+    const CHANNELS: u16 = 2;
+    const FRAMES: usize = 512;
+
+    let mut effect = VstEffect::new(std::ptr::null_mut(), vst_passthrough, CHANNELS, FRAMES);
+    // Exercise the dry/wet path too, which uses the pre-allocated dry buffer.
+    effect.set_param(1, 0.5);
+
+    let mut buffer = vec![0.0f32; FRAMES * CHANNELS as usize];
+    for (i, s) in buffer.iter_mut().enumerate() {
+        *s = 0.3 * ((i as f32) * 0.05).sin();
+    }
+
+    for _ in 0..8 {
+        effect.process(&mut buffer, CHANNELS);
+    }
+
+    let allocs = count_allocs(|| {
+        for _ in 0..64 {
+            effect.process(&mut buffer, CHANNELS);
+        }
+    });
+
+    assert_eq!(
+        allocs, 0,
+        "VstEffect::process allocated {allocs} time(s) across 64 steady-state blocks"
+    );
 }
 
 /// A [`TrackSource`] that always fills the requested block with silence.

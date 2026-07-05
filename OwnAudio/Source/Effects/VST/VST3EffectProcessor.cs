@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Ownaudio.Core;
 using OwnaudioNET.Interfaces;
 using OwnVST3Host;
@@ -101,6 +102,42 @@ namespace OwnaudioNET.Effects.VST
         /// <summary>Gets whether the loaded plugin is an instrument.</summary>
         public bool IsInstrument => _threaded.InnerWrapper?.IsInstrument ?? false;
         
+        #endregion
+
+        #region Rust-native hosting (plan E.6)
+
+        /// <summary>
+        /// Gets whether this processor can be hosted directly inside the native Rust effect chain:
+        /// the plugin is loaded, audio-initialized and not disposed, and both the opaque plugin handle
+        /// and the native process entry point are resolvable. When <see langword="true"/>, the mixer
+        /// forwards audio straight to the plugin on the Rust audio thread instead of running the
+        /// managed <see cref="Process(Span{float},int)"/> path.
+        /// </summary>
+        internal bool CanHostNatively =>
+            !_disposed
+            && _threaded.IsReady
+            && _threaded.PluginHandle != IntPtr.Zero
+            && NativeProcessAudioPointer != IntPtr.Zero;
+
+        /// <summary>
+        /// Gets the opaque native plugin instance handle passed to the Rust VST bridge. The handle is
+        /// owned by the underlying <c>OwnAudioVst</c> wrapper and stays valid until this processor is
+        /// disposed.
+        /// </summary>
+        internal IntPtr NativePluginHandle => _threaded.PluginHandle;
+
+        /// <summary>
+        /// Resolves the native <c>VST3Plugin_ProcessAudio</c> entry point from the plugin's own loaded
+        /// library, so the Rust audio thread can call it without loading the library a second time.
+        /// Returns <see cref="IntPtr.Zero"/> when the library handle is unavailable or the export is
+        /// missing.
+        /// </summary>
+        internal IntPtr NativeProcessAudioPointer =>
+            _threaded.LibraryHandle != IntPtr.Zero
+            && NativeLibrary.TryGetExport(_threaded.LibraryHandle, "VST3Plugin_ProcessAudio", out IntPtr fn)
+                ? fn
+                : IntPtr.Zero;
+
         #endregion
 
         internal VST3EffectProcessor(ThreadedVst3Wrapper threaded)

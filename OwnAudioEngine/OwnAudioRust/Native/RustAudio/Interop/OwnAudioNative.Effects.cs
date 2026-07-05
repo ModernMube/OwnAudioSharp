@@ -76,6 +76,50 @@ internal static partial class OwnAudioNative
         IntPtr mixer,
         IntPtr effect);
 
+    /// <summary>
+    /// Adds an external VST3 plugin to a track's effect chain as a native effect. The plugin is
+    /// created, loaded and parameter-controlled on the managed control plane; the audio thread only
+    /// forwards each block to <paramref name="processFn"/> with the opaque <paramref name="pluginHandle"/>.
+    /// </summary>
+    /// <param name="mixer">Valid mixer handle.</param>
+    /// <param name="track">Valid track handle.</param>
+    /// <param name="pluginHandle">Opaque plugin instance handle; must outlive the effect.</param>
+    /// <param name="processFn">The host's <c>VST3Plugin_ProcessAudio</c> function pointer.</param>
+    /// <param name="maxChannels">Largest channel count the chain will present.</param>
+    /// <param name="maxBlockSize">Largest block size in samples per channel.</param>
+    /// <param name="outEffect">Receives the new effect handle on success.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_add_vst_effect(
+        IntPtr mixer,
+        IntPtr track,
+        IntPtr pluginHandle,
+        IntPtr processFn,
+        ushort maxChannels,
+        uint maxBlockSize,
+        out IntPtr outEffect);
+
+    /// <summary>
+    /// Adds an external VST3 plugin to the mixer's master effect chain (applied once over the fully
+    /// summed mix). The master counterpart of <see cref="ownaudio_v1_track_add_vst_effect"/>; the
+    /// returned handle is removed with <see cref="ownaudio_v1_mixer_remove_master_effect"/>.
+    /// </summary>
+    /// <param name="mixer">Valid mixer handle.</param>
+    /// <param name="pluginHandle">Opaque plugin instance handle; must outlive the effect.</param>
+    /// <param name="processFn">The host's <c>VST3Plugin_ProcessAudio</c> function pointer.</param>
+    /// <param name="maxChannels">Largest channel count the chain will present.</param>
+    /// <param name="maxBlockSize">Largest block size in samples per channel.</param>
+    /// <param name="outEffect">Receives the new master effect handle on success.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_add_master_vst_effect(
+        IntPtr mixer,
+        IntPtr pluginHandle,
+        IntPtr processFn,
+        ushort maxChannels,
+        uint maxBlockSize,
+        out IntPtr outEffect);
+
     #endregion
 
     #region Effect parameters

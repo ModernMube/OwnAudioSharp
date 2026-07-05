@@ -21,10 +21,31 @@ use ownaudio_ffi::{
     ffi_decoder::OwnAudioStreamInfo,
     ffi_device::OwnAudioDeviceInfo,
     host_api::OwnHostApi,
+    VstAudioBuffer,
 };
 
 /// Native pointer width in bytes on the current target (8 on 64-bit, 4 on 32-bit).
 const PTR: usize = size_of::<*const c_char>();
+
+// ---------------------------------------------------------------------------
+// VstAudioBuffer — mirrors the OwnAudioVst native `AudioBufferC` (planar buffer)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn vst_audio_buffer_size_and_align() {
+    // inputs(ptr) + outputs(ptr) + i32 + i32, rounded up to ptr align.
+    let expected_size = if PTR == 8 { 24 } else { 16 };
+    assert_eq!(size_of::<VstAudioBuffer>(), expected_size, "VstAudioBuffer size");
+    assert_eq!(align_of::<VstAudioBuffer>(), PTR, "VstAudioBuffer align");
+}
+
+#[test]
+fn vst_audio_buffer_field_offsets() {
+    assert_eq!(offset_of!(VstAudioBuffer, inputs), 0, "inputs");
+    assert_eq!(offset_of!(VstAudioBuffer, outputs), PTR, "outputs");
+    assert_eq!(offset_of!(VstAudioBuffer, num_channels), 2 * PTR, "num_channels");
+    assert_eq!(offset_of!(VstAudioBuffer, num_samples), 2 * PTR + 4, "num_samples");
+}
 
 // ---------------------------------------------------------------------------
 // OwnAudioStreamConfig — fixed 16-byte layout on every target

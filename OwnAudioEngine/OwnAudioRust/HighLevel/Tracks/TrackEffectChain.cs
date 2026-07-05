@@ -77,6 +77,39 @@ public sealed class TrackEffectChain
     }
 
     /// <summary>
+    /// Adds an external VST3 plugin to the end of the track chain as a native effect. The plugin is
+    /// created and controlled by the managed control plane; the audio thread only forwards each block
+    /// to <paramref name="processFn"/> with the opaque <paramref name="pluginHandle"/>.
+    /// </summary>
+    /// <param name="pluginHandle">Opaque plugin instance handle; must outlive the effect.</param>
+    /// <param name="processFn">The host's <c>VST3Plugin_ProcessAudio</c> function pointer.</param>
+    /// <param name="maxChannels">Largest channel count the track will present.</param>
+    /// <param name="maxBlockSize">Largest block size in samples per channel.</param>
+    /// <returns>An opaque token identifying the native effect (for <see cref="Remove(object)"/>).</returns>
+    /// <exception cref="Ownaudio.Safe.Exceptions.OwnAudioException">Thrown when the native call fails.</exception>
+    public object AddVst(IntPtr pluginHandle, IntPtr processFn, ushort maxChannels, uint maxBlockSize)
+    {
+        int code = OwnAudioNative.ownaudio_v1_track_add_vst_effect(
+            _mixerHandle,
+            _trackHandle,
+            pluginHandle,
+            processFn,
+            maxChannels,
+            maxBlockSize,
+            out IntPtr rawEffect);
+
+        ErrorCodeMapper.ThrowIfError(code, nameof(AddVst));
+
+        var handle = new EffectHandle();
+        System.Runtime.InteropServices.Marshal.InitHandle(handle, rawEffect);
+
+        object token = new NativeVstEffect();
+        _effects.Add(token);
+        _handles.Add(handle);
+        return token;
+    }
+
+    /// <summary>
     /// Adds a new effect to the end of the chain, inferring its type from the
     /// requested wrapper type and returning the strongly-typed instance.
     /// </summary>

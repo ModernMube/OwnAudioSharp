@@ -5,6 +5,7 @@ using System.Threading;
 using Ownaudio.Audio.Tracks;
 using Ownaudio.Safe;
 using OwnaudioNET.Core;
+using OwnaudioNET.Effects.VST;
 using OwnaudioNET.Engine;
 using OwnaudioNET.Interfaces;
 using OwnaudioNET.Sources;
@@ -272,14 +273,47 @@ public sealed partial class AudioMixer
             return;
         }
 
+        // VST3 plugins are hosted natively (plan E.6): the managed control plane owns the plugin and
+        // the Rust master bus calls its process entry point directly. The managed Enabled/Mix are
+        // mirrored onto the native bridge like any other paired effect; plugin-specific parameters go
+        // straight to the plugin through its own SetParameter, not through this mirror.
+        if (effect is VST3EffectProcessor vst)
+        {
+            if (!vst.CanHostNatively)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[OwnAudio] Master VST3 effect '{effect.Name}' is not audio-initialized " +
+                    "(call and await VST3PluginHost.InitializeAudioAsync before adding it); it is " +
+                    "inactive in the Rust-native chain.");
+                return;
+            }
+
+            lock (_rustSessionLock)
+            {
+                _rustSession ??= new MultiTrackSession(
+                    (float)_config.SampleRate,
+                    (ushort)_config.Channels);
+
+                object native = _rustSession.MasterEffects.AddVst(
+                    vst.NativePluginHandle,
+                    vst.NativeProcessAudioPointer,
+                    (ushort)_config.Channels,
+                    (uint)_config.BufferSize);
+                var pair = new RustEffectPair(effect, native);
+                _rustMasterEffects.Add(pair);
+                MirrorMasterEffectLocked(pair);
+            }
+
+            return;
+        }
+
         if (!RustEffectAdapters.TryGetEffectType(effect, out var effectType))
         {
-            // No native counterpart (VST3, or the composite SmartMaster): in the Rust-native chain
-            // its managed DSP does not run, so it produces no master processing. VST3 support lands
-            // in plan E.6 (native hosting via OwnVST3Juce).
+            // No native counterpart (the composite SmartMaster): in the Rust-native chain its managed
+            // DSP does not run, so it produces no master processing.
             System.Diagnostics.Debug.WriteLine(
                 $"[OwnAudio] Master effect '{effect.GetType().Name}' has no native adapter and is " +
-                "inactive in the Rust-native chain (VST3 → plan E.6; SmartMaster is a composite).");
+                "inactive in the Rust-native chain (SmartMaster is a composite).");
             return;
         }
 
@@ -453,7 +487,19 @@ public sealed partial class AudioMixer
 
                     foreach (IEffectProcessor effect in managed)
                     {
-                        if (RustEffectAdapters.TryGetEffectType(effect, out var effectType))
+                        // VST3 plugins are hosted natively on the track (plan E.6); other adaptable
+                        // built-ins go through their native DSP counterpart. Non-adaptable effects
+                        // (SmartMaster, or a VST not yet audio-initialized) are skipped this pass.
+                        if (effect is VST3EffectProcessor vst && vst.CanHostNatively)
+                        {
+                            object native = track.Effects.AddVst(
+                                vst.NativePluginHandle,
+                                vst.NativeProcessAudioPointer,
+                                (ushort)_config.Channels,
+                                (uint)_config.BufferSize);
+                            routing.Pairs.Add(new RustEffectPair(effect, native));
+                        }
+                        else if (RustEffectAdapters.TryGetEffectType(effect, out var effectType))
                         {
                             object native = track.Effects.Add(effectType, (float)_config.SampleRate);
                             routing.Pairs.Add(new RustEffectPair(effect, native));

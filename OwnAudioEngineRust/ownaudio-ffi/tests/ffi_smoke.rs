@@ -637,3 +637,171 @@ mod master_effect {
         ownaudio_v1_mixer_destroy(mixer);
     }
 }
+
+// ---------------------------------------------------------------------------
+// VST3 plugin effect tests
+// ---------------------------------------------------------------------------
+
+mod vst_effect {
+    use std::os::raw::c_void;
+
+    use ownaudio_ffi::error_code::OwnAudioErrorCode;
+    use ownaudio_ffi::ffi_effects::{
+        ownaudio_v1_effect_get_param, ownaudio_v1_effect_set_param,
+        ownaudio_v1_mixer_add_master_vst_effect, ownaudio_v1_mixer_remove_master_effect,
+        ownaudio_v1_track_add_vst_effect,
+    };
+    use ownaudio_ffi::ffi_track::{
+        ownaudio_v1_mixer_create, ownaudio_v1_mixer_destroy, ownaudio_v1_track_create,
+    };
+    use ownaudio_ffi::handles::{
+        OwnAudioEffectHandle, OwnAudioMixerHandle, OwnAudioTrackHandle,
+    };
+    use ownaudio_ffi::VstAudioBuffer;
+
+    /// Common param ids shared by every effect (mirrors `PARAM_ENABLED` / `PARAM_MIX`).
+    const PARAM_ENABLED: u32 = 0;
+    const PARAM_MIX: u32 = 1;
+
+    /// Plugin stub that copies input planes straight to output planes.
+    unsafe extern "C" fn passthrough(_handle: *mut c_void, buffer: *mut VstAudioBuffer) -> bool {
+        let b = &*buffer;
+        for c in 0..b.num_channels as usize {
+            let inp = *b.inputs.add(c);
+            let outp = *b.outputs.add(c);
+            for f in 0..b.num_samples as usize {
+                *outp.add(f) = *inp.add(f);
+            }
+        }
+        true
+    }
+
+    #[test]
+    fn add_track_vst_effect_null_mixer_is_null_pointer() {
+        let mut effect: *mut OwnAudioEffectHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_track_add_vst_effect(
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                Some(passthrough),
+                2,
+                512,
+                &mut effect,
+            ),
+            OwnAudioErrorCode::NullPointer as i32
+        );
+    }
+
+    #[test]
+    fn add_master_vst_effect_null_process_fn_is_null_pointer() {
+        let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_mixer_create(48_000.0, 2, &mut mixer),
+            OwnAudioErrorCode::Success as i32
+        );
+        let mut effect: *mut OwnAudioEffectHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_mixer_add_master_vst_effect(
+                mixer,
+                std::ptr::null_mut(),
+                None,
+                2,
+                512,
+                &mut effect,
+            ),
+            OwnAudioErrorCode::NullPointer as i32
+        );
+        ownaudio_v1_mixer_destroy(mixer);
+    }
+
+    #[test]
+    fn add_master_vst_effect_param_roundtrip_and_remove() {
+        let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_mixer_create(48_000.0, 2, &mut mixer),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        // A distinct non-null sentinel stands in for the opaque plugin handle;
+        // the passthrough stub never dereferences it.
+        let fake_handle = 0x1234usize as *mut c_void;
+        let mut effect: *mut OwnAudioEffectHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_mixer_add_master_vst_effect(
+                mixer,
+                fake_handle,
+                Some(passthrough),
+                2,
+                512,
+                &mut effect,
+            ),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert!(!effect.is_null());
+
+        // The bridge exposes only the shared enabled/mix params; mix roundtrips.
+        assert_eq!(
+            ownaudio_v1_effect_set_param(mixer, effect, PARAM_MIX, 0.25),
+            OwnAudioErrorCode::Success as i32
+        );
+        let mut value: f32 = 0.0;
+        assert_eq!(
+            ownaudio_v1_effect_get_param(mixer, effect, PARAM_MIX, &mut value),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(value, 0.25);
+
+        // A plugin-specific param id is unknown to the bridge shadow.
+        assert_eq!(
+            ownaudio_v1_effect_set_param(mixer, effect, 42, 1.0),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+
+        assert_eq!(
+            ownaudio_v1_mixer_remove_master_effect(mixer, effect),
+            OwnAudioErrorCode::Success as i32
+        );
+        ownaudio_v1_mixer_destroy(mixer);
+    }
+
+    #[test]
+    fn add_track_vst_effect_smoke() {
+        let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_mixer_create(48_000.0, 2, &mut mixer),
+            OwnAudioErrorCode::Success as i32
+        );
+        let mut track: *mut OwnAudioTrackHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_track_create(mixer, &mut track),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        let fake_handle = 0xBEEFusize as *mut c_void;
+        let mut effect: *mut OwnAudioEffectHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_track_add_vst_effect(
+                mixer,
+                track,
+                fake_handle,
+                Some(passthrough),
+                2,
+                512,
+                &mut effect,
+            ),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert!(!effect.is_null());
+
+        // Enabled defaults to 1.0 (active) and is readable through the shadow.
+        let mut value: f32 = -1.0;
+        assert_eq!(
+            ownaudio_v1_effect_get_param(mixer, effect, PARAM_ENABLED, &mut value),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(value, 1.0);
+
+        ownaudio_v1_mixer_destroy(mixer);
+    }
+}

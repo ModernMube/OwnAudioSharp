@@ -1,8 +1,11 @@
 //! FFI exports for audio effect management on tracks.
 
+use std::os::raw::c_void;
+
 use ownaudio_core::effects::{
     AutoGain, Chorus, Compressor, Delay, Distortion, DynamicAmp, Effect, EffectType, Enhancer,
     Equalizer, Equalizer30, Flanger, Gate, Limiter, Overdrive, Phaser, PitchShift, Reverb, Rotary,
+    VstEffect, VstProcessFn,
 };
 use ownaudio_core::multitrack::MASTER_EFFECT_TARGET;
 
@@ -37,6 +40,10 @@ fn create_effect(effect_type_raw: u32, sample_rate: f32) -> Option<Box<dyn Effec
         EffectType::PitchShift => Box::new(PitchShift::new(sample_rate)),
         EffectType::DynamicAmp  => Box::new(DynamicAmp::new(sample_rate)),
         EffectType::Equalizer30 => Box::new(Equalizer30::new(sample_rate)),
+        // A VST bridge needs a plugin handle + process pointer, so it cannot be
+        // built from a type tag alone — it is created via the dedicated
+        // `ownaudio_v1_track_add_vst_effect` / master entry points instead.
+        EffectType::Vst => return None,
     };
 
     Some(effect)
@@ -229,6 +236,156 @@ pub extern "C" fn ownaudio_v1_mixer_remove_master_effect(
         }
 
         OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+// ---------------------------------------------------------------------------
+// VST3 plugin effects (hosted through the OwnAudioVst C ABI)
+// ---------------------------------------------------------------------------
+
+/// Builds a [`VstEffect`] and enqueues it on `target_track`'s chain, returning a
+/// ready effect handle on success.
+///
+/// Shared by the track and master VST entry points, which differ only in the
+/// target track id (the master chain uses [`MASTER_EFFECT_TARGET`]).
+fn add_vst_effect_to(
+    mixer: *mut OwnAudioMixerHandle,
+    target_track: u64,
+    plugin_handle: *mut c_void,
+    process_fn: VstProcessFn,
+    max_channels: u16,
+    max_block_size: u32,
+    out_effect: *mut *mut OwnAudioEffectHandle,
+) -> i32 {
+    if mixer.is_null() || out_effect.is_null() {
+        return OwnAudioErrorCode::NullPointer as i32;
+    }
+
+    // A null process callback would make the plugin unusable on the audio thread.
+    let process_fn = match process_fn {
+        Some(f) => f,
+        None => {
+            set_last_error("VST process function pointer is null");
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+    };
+
+    let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        Some(w) => w,
+        None => return OwnAudioErrorCode::InvalidHandle as i32,
+    };
+
+    let effect: Box<dyn Effect> = Box::new(VstEffect::new(
+        plugin_handle,
+        process_fn,
+        max_channels,
+        max_block_size as usize,
+    ));
+
+    let effect_id = match mixer_wrapper.controller.add_effect(target_track, effect) {
+        Ok(id) => id,
+        Err(_) => {
+            set_last_error("mixer command queue is full; VST effect not added");
+            return OwnAudioErrorCode::InternalError as i32;
+        }
+    };
+
+    let effect_wrapper = Box::new(EffectWrapper {
+        mixer: mixer as *mut crate::handles::MixerWrapper,
+        track_id: target_track,
+        effect_id,
+    });
+
+    unsafe {
+        *out_effect = Box::into_raw(effect_wrapper) as *mut OwnAudioEffectHandle;
+    }
+
+    OwnAudioErrorCode::Success as i32
+}
+
+/// Adds an external VST3 plugin to a track's effect chain as a native effect.
+///
+/// The plugin is created, loaded and parameter-controlled entirely on the C#
+/// control plane (the `OwnAudioVst` host); this only receives the opaque plugin
+/// handle and the host's `VST3Plugin_ProcessAudio` function pointer, and calls
+/// it on the audio thread for every block — no linking against the host and no
+/// managed audio processing.
+///
+/// - `mixer` — valid mixer handle (required to reach the track).
+/// - `track` — valid track handle.
+/// - `plugin_handle` — opaque plugin instance handle owned by the caller. It
+///   MUST outlive this effect (remove/destroy the effect before freeing it).
+/// - `process_fn` — the host's `VST3Plugin_ProcessAudio` pointer; must not be null.
+/// - `max_channels` — largest channel count the chain will present (planar
+///   scratch is sized for this).
+/// - `max_block_size` — largest block size in samples per channel.
+/// - `out_effect` — receives the new effect handle on success.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_track_add_vst_effect(
+    mixer: *mut OwnAudioMixerHandle,
+    track: *mut OwnAudioTrackHandle,
+    plugin_handle: *mut c_void,
+    process_fn: VstProcessFn,
+    max_channels: u16,
+    max_block_size: u32,
+    out_effect: *mut *mut OwnAudioEffectHandle,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if track.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let track_id = match unsafe { track_from_ptr(track) } {
+            Some(w) => w.id,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        add_vst_effect_to(
+            mixer,
+            track_id,
+            plugin_handle,
+            process_fn,
+            max_channels,
+            max_block_size,
+            out_effect,
+        )
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Adds an external VST3 plugin to the mixer's **master** effect chain, which
+/// runs once over the fully summed mix after every track is rendered.
+///
+/// The master counterpart of [`ownaudio_v1_track_add_vst_effect`]; the returned
+/// handle is controlled with the same `ownaudio_v1_effect_set_param` /
+/// `_get_param` / `ownaudio_v1_mixer_remove_master_effect` calls as any master
+/// effect. See that function for the argument contract.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_mixer_add_master_vst_effect(
+    mixer: *mut OwnAudioMixerHandle,
+    plugin_handle: *mut c_void,
+    process_fn: VstProcessFn,
+    max_channels: u16,
+    max_block_size: u32,
+    out_effect: *mut *mut OwnAudioEffectHandle,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        add_vst_effect_to(
+            mixer,
+            MASTER_EFFECT_TARGET,
+            plugin_handle,
+            process_fn,
+            max_channels,
+            max_block_size,
+            out_effect,
+        )
     }));
 
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)

@@ -250,6 +250,49 @@ typedef struct OwnAudioEffectHandle {
 } OwnAudioEffectHandle;
 
 /**
+ * Planar audio buffer passed to the plugin's process callback.
+ *
+ * Binary-compatible with the `AudioBufferC` struct in the `OwnAudioVst` native
+ * host (`ownvst3_exports.h`): two arrays of channel pointers plus the channel
+ * and sample counts. `inputs` and `outputs` point at arrays of `num_channels`
+ * `f32*` planes, each holding `num_samples` samples.
+ */
+typedef struct VstAudioBuffer {
+    /**
+     * Array of `num_channels` input channel pointers (planar `f32`).
+     */
+    float **inputs;
+    /**
+     * Array of `num_channels` output channel pointers (planar `f32`).
+     */
+    float **outputs;
+    /**
+     * Number of channels addressed by `inputs` / `outputs`.
+     */
+    int32_t num_channels;
+    /**
+     * Number of samples per channel plane.
+     */
+    int32_t num_samples;
+} VstAudioBuffer;
+
+/**
+ * Nullable C ABI process callback exported by the `OwnAudioVst` native host
+ * (`VST3Plugin_ProcessAudio`), as it crosses the FFI boundary.
+ *
+ * Receives the opaque plugin handle and a pointer to a [`VstAudioBuffer`],
+ * processes one block in place into `outputs`, and returns `true` on success.
+ * Modelled as an `Option` so the C# side can (in principle) pass a null pointer;
+ * the FFI layer rejects that before an effect is ever built.
+ *
+ * # Safety
+ * Invoked on the audio thread. The callee must be real-time safe (no heap
+ * allocation, no blocking) and the `handle` must remain valid for the entire
+ * lifetime of the owning [`VstEffect`].
+ */
+typedef bool (*VstProcessFn)(void *handle, struct VstAudioBuffer *buffer);
+
+/**
  * Opaque handle to the control side of a file-backed track source.
  *
  * Create with `ownaudio_v1_track_open_file`; release with
@@ -542,6 +585,53 @@ int32_t ownaudio_v1_mixer_add_master_effect(struct OwnAudioMixerHandle *mixer,
  */
 int32_t ownaudio_v1_mixer_remove_master_effect(struct OwnAudioMixerHandle *mixer,
                                                struct OwnAudioEffectHandle *effect);
+
+/**
+ * Adds an external VST3 plugin to a track's effect chain as a native effect.
+ *
+ * The plugin is created, loaded and parameter-controlled entirely on the C#
+ * control plane (the `OwnAudioVst` host); this only receives the opaque plugin
+ * handle and the host's `VST3Plugin_ProcessAudio` function pointer, and calls
+ * it on the audio thread for every block — no linking against the host and no
+ * managed audio processing.
+ *
+ * - `mixer` — valid mixer handle (required to reach the track).
+ * - `track` — valid track handle.
+ * - `plugin_handle` — opaque plugin instance handle owned by the caller. It
+ *   MUST outlive this effect (remove/destroy the effect before freeing it).
+ * - `process_fn` — the host's `VST3Plugin_ProcessAudio` pointer; must not be null.
+ * - `max_channels` — largest channel count the chain will present (planar
+ *   scratch is sized for this).
+ * - `max_block_size` — largest block size in samples per channel.
+ * - `out_effect` — receives the new effect handle on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_add_vst_effect(struct OwnAudioMixerHandle *mixer,
+                                         struct OwnAudioTrackHandle *track,
+                                         void *plugin_handle,
+                                         VstProcessFn process_fn,
+                                         uint16_t max_channels,
+                                         uint32_t max_block_size,
+                                         struct OwnAudioEffectHandle **out_effect);
+
+/**
+ * Adds an external VST3 plugin to the mixer's **master** effect chain, which
+ * runs once over the fully summed mix after every track is rendered.
+ *
+ * The master counterpart of [`ownaudio_v1_track_add_vst_effect`]; the returned
+ * handle is controlled with the same `ownaudio_v1_effect_set_param` /
+ * `_get_param` / `ownaudio_v1_mixer_remove_master_effect` calls as any master
+ * effect. See that function for the argument contract.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_mixer_add_master_vst_effect(struct OwnAudioMixerHandle *mixer,
+                                                void *plugin_handle,
+                                                VstProcessFn process_fn,
+                                                uint16_t max_channels,
+                                                uint32_t max_block_size,
+                                                struct OwnAudioEffectHandle **out_effect);
 
 /**
  * Destroys an effect handle.

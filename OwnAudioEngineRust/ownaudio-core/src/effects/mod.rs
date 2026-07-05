@@ -17,6 +17,7 @@ pub mod dynamic_amp;
 pub mod pitch_shift;
 pub mod reverb;
 pub mod rotary;
+pub mod vst;
 
 pub use autogain::AutoGain;
 pub use chorus::Chorus;
@@ -35,6 +36,7 @@ pub use dynamic_amp::DynamicAmp;
 pub use pitch_shift::PitchShift;
 pub use reverb::Reverb;
 pub use rotary::Rotary;
+pub use vst::{VstAudioBuffer, VstEffect, VstProcessFn};
 
 // ---------------------------------------------------------------------------
 // Effect type identifier
@@ -81,6 +83,12 @@ pub enum EffectType {
     DynamicAmp = 15,
     /// 30-band 1/3-octave parametric equalizer.
     Equalizer30 = 16,
+    /// External VST3 plugin hosted through a C ABI process callback.
+    ///
+    /// Unlike the built-in effects, a `Vst` entry does not own any DSP state of
+    /// its own — it forwards each audio block to a plugin handle that lives on
+    /// the C# control plane (see [`vst::VstEffect`]).
+    Vst = 17,
 }
 
 impl TryFrom<u32> for EffectType {
@@ -105,6 +113,7 @@ impl TryFrom<u32> for EffectType {
             14 => Ok(Self::PitchShift),
             15 => Ok(Self::DynamicAmp),
             16 => Ok(Self::Equalizer30),
+            17 => Ok(Self::Vst),
             _ => Err(()),
         }
     }
