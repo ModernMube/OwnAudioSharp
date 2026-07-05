@@ -280,6 +280,85 @@ impl Default for TrackShared {
 ///
 /// Parameters live in [`Track::shared`] (`Arc<TrackShared>`) so the control
 /// thread can mutate them lock-free while the audio thread reads them.
+/// Per-track plugin delay compensation (PDC): a delay line applied to the track's
+/// output so tracks with lower-latency effect chains line up sample-accurately with
+/// the track that has the highest latency.
+///
+/// The mixer computes each track's compensation as `max_chain_latency − this_chain_latency`
+/// and pushes it here via [`Track::set_pdc_delay`]. A zero delay is a pure passthrough and
+/// touches no memory. On a delay change the ring is resized (once, like the render scratch)
+/// and cleared — this happens only when an effect is added or removed, never per block.
+struct PdcDelay {
+    /// Interleaved ring buffer, `capacity_frames * channels` samples; empty at zero delay.
+    ring: Vec<f32>,
+    /// Ring capacity in frames (`delay_frames + 1`).
+    capacity_frames: usize,
+    /// Channel count the ring is currently laid out for.
+    channels: usize,
+    /// Next frame slot to write.
+    write_frame: usize,
+    /// Active delay in frames.
+    delay_frames: usize,
+}
+
+impl PdcDelay {
+    fn new() -> Self {
+        Self {
+            ring: Vec::new(),
+            capacity_frames: 0,
+            channels: 0,
+            write_frame: 0,
+            delay_frames: 0,
+        }
+    }
+
+    /// Sets the compensation delay in frames. Clears the delay line on a change,
+    /// since the buffered history belongs to the old delay length.
+    fn set_delay(&mut self, frames: usize) {
+        if frames != self.delay_frames {
+            self.delay_frames = frames;
+            self.write_frame = 0;
+            self.ring.iter_mut().for_each(|s| *s = 0.0);
+        }
+    }
+
+    /// Clears the buffered history without changing the delay length.
+    fn reset(&mut self) {
+        self.write_frame = 0;
+        self.ring.iter_mut().for_each(|s| *s = 0.0);
+    }
+
+    /// Delays `buf` in place by `delay_frames`. Zero delay is a passthrough.
+    fn process(&mut self, buf: &mut [f32], channels: u16) {
+        let d = self.delay_frames;
+        if d == 0 {
+            return;
+        }
+        let ch = (channels as usize).max(1);
+        let cap = d + 1;
+        // Size the ring the first time (or when the delay/channel layout changes).
+        // This is the same one-time, off-the-steady-path growth the render scratch
+        // uses — it only happens when an effect is added or removed.
+        if self.ring.len() != cap * ch || self.channels != ch || self.capacity_frames != cap {
+            self.ring = vec![0.0f32; cap * ch];
+            self.capacity_frames = cap;
+            self.channels = ch;
+            self.write_frame = 0;
+        }
+
+        let frames = buf.len() / ch;
+        for f in 0..frames {
+            let read_frame = (self.write_frame + cap - d) % cap;
+            for c in 0..ch {
+                let delayed = self.ring[read_frame * ch + c];
+                self.ring[self.write_frame * ch + c] = buf[f * ch + c];
+                buf[f * ch + c] = delayed;
+            }
+            self.write_frame = (self.write_frame + 1) % cap;
+        }
+    }
+}
+
 pub struct Track {
     /// Stable identifier, unique within the owning mixer for its lifetime.
     pub id: u64,
@@ -299,6 +378,9 @@ pub struct Track {
     /// Per-track time-stretch / pitch-shift stage; applies the track's tempo and pitch to the
     /// source audio via SoundTouch, or bypasses transparently at unity.
     stretch: super::stretch::TrackStretch,
+    /// Plugin delay compensation applied to this track's output so it aligns
+    /// sample-accurately with the highest-latency track in the mixer.
+    pdc: PdcDelay,
 }
 
 impl Track {
@@ -315,7 +397,14 @@ impl Track {
             scratch: vec![0.0f32; max_buffer_size],
             gain_smoother,
             stretch: super::stretch::TrackStretch::new(sample_rate, max_buffer_size),
+            pdc: PdcDelay::new(),
         }
+    }
+
+    /// Sets this track's plugin delay compensation in frames (the mixer computes
+    /// `max_chain_latency − this_chain_latency`). Zero disables compensation.
+    pub(crate) fn set_pdc_delay(&mut self, frames: u32) {
+        self.pdc.set_delay(frames as usize);
     }
 
     /// Replaces the track's audio source, dropping any previous one in place.
@@ -379,6 +468,9 @@ impl Track {
         // jump is clean.
         if self.shared.take_stretch_flush() {
             self.stretch.clear();
+            // Drop the compensation delay's pre-seek tail too, so the jump is clean
+            // and no stale audio leaks out after a seek.
+            self.pdc.reset();
         }
 
         // Route a live source through the SoundTouch stage when the tempo/pitch is engaged, or
@@ -404,6 +496,11 @@ impl Track {
         }
 
         self.effects.process_all(buf, channels);
+
+        // Plugin delay compensation: delay this track's output so it lines up
+        // sample-accurately with the highest-latency track. A zero delay (the
+        // common case) is a passthrough.
+        self.pdc.process(buf, channels);
 
         self.gain_smoother.set_target(self.shared.gain());
         let ch = channels.max(1) as usize;

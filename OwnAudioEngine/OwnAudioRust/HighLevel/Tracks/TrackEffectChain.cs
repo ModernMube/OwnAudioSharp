@@ -85,9 +85,10 @@ public sealed class TrackEffectChain
     /// <param name="processFn">The host's <c>VST3Plugin_ProcessAudio</c> function pointer.</param>
     /// <param name="maxChannels">Largest channel count the track will present.</param>
     /// <param name="maxBlockSize">Largest block size in samples per channel.</param>
+    /// <param name="latencySamples">Plugin processing latency in frames, for delay compensation.</param>
     /// <returns>An opaque token identifying the native effect (for <see cref="Remove(object)"/>).</returns>
     /// <exception cref="Ownaudio.Safe.Exceptions.OwnAudioException">Thrown when the native call fails.</exception>
-    public object AddVst(IntPtr pluginHandle, IntPtr processFn, ushort maxChannels, uint maxBlockSize)
+    public object AddVst(IntPtr pluginHandle, IntPtr processFn, ushort maxChannels, uint maxBlockSize, uint latencySamples)
     {
         int code = OwnAudioNative.ownaudio_v1_track_add_vst_effect(
             _mixerHandle,
@@ -96,6 +97,7 @@ public sealed class TrackEffectChain
             processFn,
             maxChannels,
             maxBlockSize,
+            latencySamples,
             out IntPtr rawEffect);
 
         ErrorCodeMapper.ThrowIfError(code, nameof(AddVst));

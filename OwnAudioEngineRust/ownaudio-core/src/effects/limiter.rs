@@ -431,6 +431,12 @@ impl Effect for Limiter {
     fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
     }
+
+    fn latency_samples(&self) -> u32 {
+        // The look-ahead delay line stores whole interleaved frames, so its length
+        // in frames is the latency the limiter adds — independent of channel count.
+        self.lookahead_frames as u32
+    }
 }
 
 #[cfg(test)]

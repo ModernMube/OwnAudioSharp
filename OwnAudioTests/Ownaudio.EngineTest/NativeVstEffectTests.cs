@@ -29,7 +29,7 @@ public class NativeVstEffectTests
 
         Assert.AreEqual(0, session.MasterEffects.Effects.Count);
 
-        object token = session.MasterEffects.AddVst(FakePluginHandle, FakeProcessFn, Channels, BlockSize);
+        object token = session.MasterEffects.AddVst(FakePluginHandle, FakeProcessFn, Channels, BlockSize, 0);
 
         Assert.IsInstanceOfType(token, typeof(NativeVstEffect));
         Assert.AreEqual(1, session.MasterEffects.Effects.Count);
@@ -41,7 +41,7 @@ public class NativeVstEffectTests
     {
         using var session = new MultiTrackSession(SampleRate, Channels);
 
-        object token = session.MasterEffects.AddVst(FakePluginHandle, FakeProcessFn, Channels, BlockSize);
+        object token = session.MasterEffects.AddVst(FakePluginHandle, FakeProcessFn, Channels, BlockSize, 0);
 
         // The bridge exposes only the shared enable (0) and mix (1) parameters; both round-trip
         // through the control-side shadow. Effect-specific plugin parameters are not exposed here.
@@ -57,7 +57,7 @@ public class NativeVstEffectTests
     {
         using var session = new MultiTrackSession(SampleRate, Channels);
 
-        object token = session.MasterEffects.AddVst(FakePluginHandle, FakeProcessFn, Channels, BlockSize);
+        object token = session.MasterEffects.AddVst(FakePluginHandle, FakeProcessFn, Channels, BlockSize, 0);
         Assert.AreEqual(1, session.MasterEffects.Effects.Count);
 
         session.MasterEffects.Remove(token);
@@ -70,7 +70,7 @@ public class NativeVstEffectTests
         using var session = new MultiTrackSession(SampleRate, Channels);
         AudioTrack track = session.AddTrack();
 
-        object token = track.Effects.AddVst(FakePluginHandle, FakeProcessFn, Channels, BlockSize);
+        object token = track.Effects.AddVst(FakePluginHandle, FakeProcessFn, Channels, BlockSize, 0);
 
         Assert.IsInstanceOfType(token, typeof(NativeVstEffect));
         Assert.AreEqual(1, track.Effects.Effects.Count);

@@ -94,6 +94,13 @@ pub enum MixerCommand {
         /// `true` to enable, `false` to bypass.
         enabled: bool,
     },
+    /// Set a track's plugin delay compensation, in frames.
+    SetTrackDelay {
+        /// Target track id.
+        track_id: u64,
+        /// Compensation delay in frames (`max_chain_latency − this_chain_latency`).
+        delay_frames: u32,
+    },
 }
 
 /// A resource removed by the audio thread and handed back to the control thread
@@ -131,6 +138,10 @@ struct EffectShadow {
     /// Cached `(param_id, value)` pairs.  A small linear vector: the parameter
     /// count per effect is tiny (≤ 32) and lookups happen off the audio thread.
     params: Vec<(u32, f32)>,
+    /// Processing latency this effect introduces, in frames, cached so the
+    /// controller can recompute plugin delay compensation when effects change
+    /// without reaching into the audio thread.
+    latency: u32,
 }
 
 impl EffectShadow {
@@ -186,6 +197,11 @@ pub struct MixerController {
     /// [`EffectShadow`]), so `get_param` is answerable while the effect lives on
     /// the audio thread.
     effect_shadows: Vec<EffectShadow>,
+    /// Last plugin-delay-compensation value (in frames) sent to each track, so a
+    /// recompute only enqueues a [`MixerCommand::SetTrackDelay`] when a track's
+    /// compensation actually changes — otherwise the command queue would take a
+    /// write for every track on every effect edit.
+    pdc_sent: Vec<(u64, u32)>,
 }
 
 /// Creates a paired [`MixerController`] / [`CommandReceiver`].
@@ -212,6 +228,7 @@ pub fn command_channel(
         max_buffer_size: max_buffer_size.max(1),
         track_registry: Vec::with_capacity(super::MAX_TRACKS),
         effect_shadows: Vec::new(),
+        pdc_sent: Vec::with_capacity(super::MAX_TRACKS),
     };
     let receiver = CommandReceiver {
         commands: cmd_rx,
@@ -249,6 +266,9 @@ impl MixerController {
 
         self.next_track_id += 1;
         self.track_registry.push((id, shared.clone()));
+        // A fresh track has zero effect latency; recompute so it is delayed to
+        // match any existing higher-latency track (and seeds its pdc_sent entry).
+        self.recompute_pdc();
         Ok((id, shared))
     }
 
@@ -262,6 +282,10 @@ impl MixerController {
         self.track_registry.retain(|(tid, _)| *tid != id);
         // Drop the shadows of every effect that lived on the removed track.
         self.effect_shadows.retain(|s| s.track_id != id);
+        self.pdc_sent.retain(|(tid, _)| *tid != id);
+        // Removing the highest-latency track can lower the max, so re-slacken the
+        // others' compensation.
+        self.recompute_pdc();
         Ok(true)
     }
 
@@ -329,6 +353,7 @@ impl MixerController {
                 params.push((param_id, value));
             }
         }
+        let latency = effect.latency_samples();
 
         self.enqueue(MixerCommand::AddEffect {
             track_id,
@@ -340,7 +365,9 @@ impl MixerController {
             effect_id,
             track_id,
             params,
+            latency,
         });
+        self.recompute_pdc();
         Ok(effect_id)
     }
 
@@ -351,7 +378,70 @@ impl MixerController {
             effect_id,
         })?;
         self.effect_shadows.retain(|s| s.effect_id != effect_id);
+        self.recompute_pdc();
         Ok(())
+    }
+
+    /// Total effect-chain latency for a track, in frames (sum of its effects'
+    /// reported latencies). The master chain is not a track, so its latency never
+    /// participates — it delays the summed mix uniformly and needs no per-track
+    /// compensation.
+    fn track_latency(&self, track_id: u64) -> u32 {
+        self.effect_shadows
+            .iter()
+            .filter(|s| s.track_id == track_id)
+            .map(|s| s.latency)
+            .sum()
+    }
+
+    /// Recomputes plugin delay compensation across all registered tracks and
+    /// enqueues a [`MixerCommand::SetTrackDelay`] for each track whose
+    /// compensation changed. Each track is delayed by `max_latency − its_latency`
+    /// so every track lines up sample-accurately with the highest-latency one.
+    ///
+    /// Best-effort: if the command queue is momentarily full a track's `pdc_sent`
+    /// entry is left unchanged, so the next effect edit retries it.
+    fn recompute_pdc(&mut self) {
+        let max_latency = self
+            .track_registry
+            .iter()
+            .map(|(tid, _)| self.track_latency(*tid))
+            .max()
+            .unwrap_or(0);
+
+        // Collect first so the immutable registry borrow ends before enqueuing.
+        let updates: Vec<(u64, u32)> = self
+            .track_registry
+            .iter()
+            .filter_map(|(tid, _)| {
+                let comp = max_latency - self.track_latency(*tid);
+                // A track with no recorded entry is already at zero delay, so a
+                // zero compensation needs no command (avoids a redundant write for
+                // every freshly added track).
+                let already = self
+                    .pdc_sent
+                    .iter()
+                    .find(|(t, _)| t == tid)
+                    .map(|(_, c)| *c)
+                    .unwrap_or(0);
+                (already != comp).then_some((*tid, comp))
+            })
+            .collect();
+
+        for (tid, comp) in updates {
+            if self
+                .enqueue(MixerCommand::SetTrackDelay {
+                    track_id: tid,
+                    delay_frames: comp,
+                })
+                .is_ok()
+            {
+                match self.pdc_sent.iter_mut().find(|(t, _)| *t == tid) {
+                    Some(slot) => slot.1 = comp,
+                    None => self.pdc_sent.push((tid, comp)),
+                }
+            }
+        }
     }
 
     /// Enqueues a parameter change on an effect, updating the control-side
@@ -523,6 +613,88 @@ mod tests {
         fn set_enabled(&mut self, enabled: bool) {
             self.enabled = enabled;
         }
+    }
+
+    /// Test effect that delays its output by `latency` frames (mono) and reports
+    /// exactly that latency — a stand-in for a look-ahead effect or a hosted plugin.
+    struct LatencyDelayEffect {
+        buf: Vec<f32>,
+        idx: usize,
+        latency: u32,
+    }
+    impl LatencyDelayEffect {
+        fn new(latency: usize) -> Self {
+            Self {
+                buf: vec![0.0; latency.max(1)],
+                idx: 0,
+                latency: latency as u32,
+            }
+        }
+    }
+    impl Effect for LatencyDelayEffect {
+        fn effect_type(&self) -> EffectType {
+            EffectType::Distortion
+        }
+        fn process(&mut self, buffer: &mut [f32], _channels: u16) {
+            let len = self.buf.len();
+            for s in buffer.iter_mut() {
+                let out = self.buf[self.idx];
+                self.buf[self.idx] = *s;
+                self.idx = (self.idx + 1) % len;
+                *s = out;
+            }
+        }
+        fn set_param(&mut self, _param_id: u32, _value: f32) -> bool {
+            false
+        }
+        fn get_param(&self, _param_id: u32) -> Option<f32> {
+            None
+        }
+        fn reset(&mut self) {}
+        fn is_enabled(&self) -> bool {
+            true
+        }
+        fn set_enabled(&mut self, _enabled: bool) {}
+        fn latency_samples(&self) -> u32 {
+            self.latency
+        }
+    }
+
+    #[test]
+    fn pdc_aligns_a_latency_track_with_a_compensated_one() {
+        // Mono mixer so one sample equals one frame.
+        let mut mixer = MultiTrackMixer::new(48_000.0, 1);
+        let (mut ctl, rx) = command_channel(64, mixer.sample_rate(), mixer.max_buffer_size());
+        mixer.attach_command_receiver(rx);
+
+        const L: usize = 3;
+        let mut impulse = vec![0.0f32; 16];
+        impulse[0] = 1.0;
+
+        // Track A: an impulse routed through a latency-L delay effect.
+        let (a, sa) = ctl.add_track().unwrap();
+        ctl.set_track_source(a, Some(Box::new(VecSource::new(impulse.clone()))))
+            .unwrap();
+        ctl.add_effect(a, Box::new(LatencyDelayEffect::new(L))).unwrap();
+
+        // Track B: the same impulse with no effect — the mixer must delay it by L
+        // (plugin delay compensation) so it lines up with A's delayed output.
+        let (b, sb) = ctl.add_track().unwrap();
+        ctl.set_track_source(b, Some(Box::new(VecSource::new(impulse))))
+            .unwrap();
+
+        sa.set_state(TrackState::Playing);
+        sb.set_state(TrackState::Playing);
+
+        // One render drains every command (add track/source/effect + the recomputed
+        // SetTrackDelay for B) and then renders with them applied.
+        let mut out = vec![0.0f32; 16];
+        mixer.mix(&mut out);
+
+        // Both impulses land aligned at frame L (summed), and nothing leaks out at
+        // frame 0 — B was not left un-delayed.
+        assert_eq!(out[0], 0.0, "no un-compensated impulse at frame 0");
+        assert_eq!(out[L], 2.0, "both tracks' impulses align at frame L");
     }
 
     /// Builds a mono mixer wired to a fresh command channel.

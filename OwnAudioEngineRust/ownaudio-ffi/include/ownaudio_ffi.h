@@ -603,6 +603,8 @@ int32_t ownaudio_v1_mixer_remove_master_effect(struct OwnAudioMixerHandle *mixer
  * - `max_channels` — largest channel count the chain will present (planar
  *   scratch is sized for this).
  * - `max_block_size` — largest block size in samples per channel.
+ * - `latency_samples` — the plugin's processing latency in frames, reported to
+ *   the mixer for plugin delay compensation (0 when the plugin is zero-latency).
  * - `out_effect` — receives the new effect handle on success.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
@@ -613,6 +615,7 @@ int32_t ownaudio_v1_track_add_vst_effect(struct OwnAudioMixerHandle *mixer,
                                          VstProcessFn process_fn,
                                          uint16_t max_channels,
                                          uint32_t max_block_size,
+                                         uint32_t latency_samples,
                                          struct OwnAudioEffectHandle **out_effect);
 
 /**
@@ -631,6 +634,7 @@ int32_t ownaudio_v1_mixer_add_master_vst_effect(struct OwnAudioMixerHandle *mixe
                                                 VstProcessFn process_fn,
                                                 uint16_t max_channels,
                                                 uint32_t max_block_size,
+                                                uint32_t latency_samples,
                                                 struct OwnAudioEffectHandle **out_effect);
 
 /**

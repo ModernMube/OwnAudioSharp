@@ -687,6 +687,7 @@ mod vst_effect {
                 Some(passthrough),
                 2,
                 512,
+                0,
                 &mut effect,
             ),
             OwnAudioErrorCode::NullPointer as i32
@@ -708,6 +709,7 @@ mod vst_effect {
                 None,
                 2,
                 512,
+                0,
                 &mut effect,
             ),
             OwnAudioErrorCode::NullPointer as i32
@@ -734,6 +736,7 @@ mod vst_effect {
                 Some(passthrough),
                 2,
                 512,
+                0,
                 &mut effect,
             ),
             OwnAudioErrorCode::Success as i32
@@ -788,6 +791,7 @@ mod vst_effect {
                 Some(passthrough),
                 2,
                 512,
+                0,
                 &mut effect,
             ),
             OwnAudioErrorCode::Success as i32

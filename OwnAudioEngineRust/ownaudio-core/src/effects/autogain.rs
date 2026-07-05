@@ -221,6 +221,14 @@ impl Effect for AutoGain {
     fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
     }
+
+    fn latency_samples(&self) -> u32 {
+        // The look-ahead ring delays the interleaved stream by its whole length in
+        // samples; per channel that is length / channels frames. The buffer is not
+        // channel-aware, so this assumes stereo (the engine's default) — a small,
+        // fixed ~5 ms line where a half-frame rounding is inaudible.
+        (self.lookahead_buffer.len() / 2).max(1) as u32
+    }
 }
 
 #[cfg(test)]

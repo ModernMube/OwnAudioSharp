@@ -87,6 +87,7 @@ internal static partial class OwnAudioNative
     /// <param name="processFn">The host's <c>VST3Plugin_ProcessAudio</c> function pointer.</param>
     /// <param name="maxChannels">Largest channel count the chain will present.</param>
     /// <param name="maxBlockSize">Largest block size in samples per channel.</param>
+    /// <param name="latencySamples">Plugin processing latency in frames, for delay compensation.</param>
     /// <param name="outEffect">Receives the new effect handle on success.</param>
     /// <returns>Zero on success; non-zero error code otherwise.</returns>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
@@ -97,6 +98,7 @@ internal static partial class OwnAudioNative
         IntPtr processFn,
         ushort maxChannels,
         uint maxBlockSize,
+        uint latencySamples,
         out IntPtr outEffect);
 
     /// <summary>
@@ -109,6 +111,7 @@ internal static partial class OwnAudioNative
     /// <param name="processFn">The host's <c>VST3Plugin_ProcessAudio</c> function pointer.</param>
     /// <param name="maxChannels">Largest channel count the chain will present.</param>
     /// <param name="maxBlockSize">Largest block size in samples per channel.</param>
+    /// <param name="latencySamples">Plugin processing latency in frames, for delay compensation.</param>
     /// <param name="outEffect">Receives the new master effect handle on success.</param>
     /// <returns>Zero on success; non-zero error code otherwise.</returns>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
@@ -118,6 +121,7 @@ internal static partial class OwnAudioNative
         IntPtr processFn,
         ushort maxChannels,
         uint maxBlockSize,
+        uint latencySamples,
         out IntPtr outEffect);
 
     #endregion

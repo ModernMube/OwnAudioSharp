@@ -66,6 +66,11 @@ pub struct VstEffect {
     enabled: bool,
     /// Dry/wet mix in `[0, 1]` (`1.0` = fully wet, the natural insert default).
     mix: f32,
+    /// Plugin processing latency in frames, reported to the mixer for plugin
+    /// delay compensation. Constant for the effect's lifetime (set at construction
+    /// from the host); stays reported while bypassed, since native bypass keeps the
+    /// same latency.
+    latency: u32,
     /// Maximum channel count the planar scratch was sized for.
     max_channels: usize,
     /// Maximum block size (samples per channel) the planar scratch was sized for.
@@ -105,6 +110,7 @@ impl VstEffect {
         process_fn: unsafe extern "C" fn(handle: *mut c_void, buffer: *mut VstAudioBuffer) -> bool,
         max_channels: u16,
         max_block: usize,
+        latency: u32,
     ) -> Self {
         let channels = (max_channels as usize).max(1);
         let block = max_block.max(1);
@@ -121,6 +127,7 @@ impl VstEffect {
             process_fn,
             enabled: true,
             mix: 1.0,
+            latency,
             max_channels: channels,
             max_block: block,
             in_planar,
@@ -257,6 +264,10 @@ impl Effect for VstEffect {
     fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
     }
+
+    fn latency_samples(&self) -> u32 {
+        self.latency
+    }
 }
 
 #[cfg(test)]
@@ -284,7 +295,7 @@ mod tests {
 
     #[test]
     fn processes_interleaved_stereo_through_the_plugin() {
-        let mut fx = VstEffect::new(std::ptr::null_mut(), doubling_process, 2, 512);
+        let mut fx = VstEffect::new(std::ptr::null_mut(), doubling_process, 2, 512, 0);
         // Two stereo frames: L0 R0 L1 R1.
         let mut buf = [1.0f32, -2.0, 0.5, 0.25];
         fx.process(&mut buf, 2);
@@ -293,7 +304,7 @@ mod tests {
 
     #[test]
     fn dry_wet_mix_blends_input_and_output() {
-        let mut fx = VstEffect::new(std::ptr::null_mut(), doubling_process, 2, 512);
+        let mut fx = VstEffect::new(std::ptr::null_mut(), doubling_process, 2, 512, 0);
         assert!(fx.set_param(PARAM_MIX, 0.5));
         let mut buf = [1.0f32, 1.0];
         fx.process(&mut buf, 2);
@@ -303,7 +314,7 @@ mod tests {
 
     #[test]
     fn failed_plugin_call_leaves_buffer_untouched() {
-        let mut fx = VstEffect::new(std::ptr::null_mut(), failing_process, 2, 512);
+        let mut fx = VstEffect::new(std::ptr::null_mut(), failing_process, 2, 512, 0);
         let mut buf = [0.3f32, -0.7];
         fx.process(&mut buf, 2);
         assert_eq!(buf, [0.3, -0.7]);
@@ -311,7 +322,7 @@ mod tests {
 
     #[test]
     fn oversized_block_is_skipped_without_allocating() {
-        let mut fx = VstEffect::new(std::ptr::null_mut(), doubling_process, 2, 2);
+        let mut fx = VstEffect::new(std::ptr::null_mut(), doubling_process, 2, 2, 0);
         // 3 stereo frames exceeds the 2-sample scratch → left untouched.
         let mut buf = [1.0f32, 1.0, 1.0, 1.0, 1.0, 1.0];
         fx.process(&mut buf, 2);
@@ -320,7 +331,7 @@ mod tests {
 
     #[test]
     fn soft_bypass_passes_dry_but_keeps_the_plugin_warm() {
-        let mut fx = VstEffect::new(std::ptr::null_mut(), doubling_process, 2, 64);
+        let mut fx = VstEffect::new(std::ptr::null_mut(), doubling_process, 2, 64, 0);
         // Bypass via the shared enabled parameter.
         assert!(fx.set_param(PARAM_ENABLED, 0.0));
         assert_eq!(fx.get_param(PARAM_ENABLED), Some(0.0));

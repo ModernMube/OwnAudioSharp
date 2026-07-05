@@ -160,6 +160,19 @@ pub trait Effect: Send {
 
     /// Enables or disables the effect bypass.
     fn set_enabled(&mut self, enabled: bool);
+
+    /// Reports the processing latency this effect introduces, in **frames**
+    /// (samples per channel).
+    ///
+    /// Look-ahead effects (limiter, auto-gain) and hosted plugins delay their
+    /// output by a fixed number of frames; the mixer uses this to delay the other
+    /// tracks by the same amount so every track stays sample-accurately aligned at
+    /// the output (plugin delay compensation). The value must stay constant while
+    /// the effect is in a chain — including while bypassed, so a bypass toggle
+    /// never changes the alignment. Zero-latency effects use the default.
+    fn latency_samples(&self) -> u32 {
+        0
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -261,6 +274,18 @@ impl EffectChain {
                 entry.effect.process(buffer, channels);
             }
         }
+    }
+
+    /// Sums the processing latency of every effect in the chain, in frames.
+    ///
+    /// Includes bypassed effects — a look-ahead limiter or a hosted plugin keeps
+    /// its latency whether or not it is currently active, so the alignment the
+    /// mixer computes from this value stays stable across bypass toggles.
+    pub fn total_latency(&self) -> u32 {
+        self.effects
+            .iter()
+            .map(|e| e.effect.latency_samples())
+            .sum()
     }
 
     /// Returns a mutable reference to the effect with the given id, or `None`.

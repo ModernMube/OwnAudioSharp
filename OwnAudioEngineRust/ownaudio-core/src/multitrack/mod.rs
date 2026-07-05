@@ -352,6 +352,14 @@ impl MultiTrackMixer {
                     }
                 }
             }
+            MixerCommand::SetTrackDelay {
+                track_id,
+                delay_frames,
+            } => {
+                if let Some(track) = self.track_mut(track_id) {
+                    track.set_pdc_delay(delay_frames);
+                }
+            }
         }
     }
 }

@@ -298,7 +298,8 @@ public sealed partial class AudioMixer
                     vst.NativePluginHandle,
                     vst.NativeProcessAudioPointer,
                     (ushort)_config.Channels,
-                    (uint)_config.BufferSize);
+                    (uint)_config.BufferSize,
+                    (uint)Math.Max(0, vst.LatencySamples));
                 var pair = new RustEffectPair(effect, native);
                 _rustMasterEffects.Add(pair);
                 MirrorMasterEffectLocked(pair);
@@ -435,6 +436,25 @@ public sealed partial class AudioMixer
     /// </summary>
     private static void MirrorPairLocked(RustEffectPair pair, Func<object, uint, float, bool> setParam)
     {
+        // A hosted VST3 plugin is enabled/disabled through native bypass, not the Rust effect's
+        // enabled parameter: JUCE's processBlockBypassed keeps the output time-aligned with the
+        // processed path (a Rust dry/wet switch would jump by the plugin's latency on every toggle).
+        // Plugin-specific parameters flow through the plugin's own SetParameter, so they are not
+        // mirrored here — only the on/off state is, and only when it actually changes.
+        if (pair.Managed is VST3EffectProcessor vst)
+        {
+            const uint enabledParamId = 0;
+            float enabledValue = vst.Enabled ? 1f : 0f;
+            if (pair.LastParams.TryGetValue(enabledParamId, out float lastEnabled) && lastEnabled.Equals(enabledValue))
+            {
+                return;
+            }
+
+            pair.LastParams[enabledParamId] = enabledValue;
+            vst.SetNativeBypass(!vst.Enabled);
+            return;
+        }
+
         RustEffectAdapters.Mirror(pair.Managed, (paramId, value) =>
         {
             if (pair.LastParams.TryGetValue(paramId, out float last) && last.Equals(value))
@@ -496,7 +516,8 @@ public sealed partial class AudioMixer
                                 vst.NativePluginHandle,
                                 vst.NativeProcessAudioPointer,
                                 (ushort)_config.Channels,
-                                (uint)_config.BufferSize);
+                                (uint)_config.BufferSize,
+                                (uint)Math.Max(0, vst.LatencySamples));
                             routing.Pairs.Add(new RustEffectPair(effect, native));
                         }
                         else if (RustEffectAdapters.TryGetEffectType(effect, out var effectType))

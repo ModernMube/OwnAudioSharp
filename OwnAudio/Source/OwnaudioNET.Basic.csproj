@@ -40,7 +40,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Basic</PackageId>
-    <Version>4.0.0-preview.11</Version>
+    <Version>4.0.0-preview.13</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for desktop (Windows, Linux, macOS) and mobile (Android, iOS) - Basic edition without AI/ML features (no VocalRemover, ChordDetect, Matchering)</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;android;ios;desktop;mobile;sound;multitrack</PackageTags>
@@ -55,7 +55,7 @@
   <ItemGroup>
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.300" PrivateAssets="All" />
-    <PackageReference Include="OwnAudioVst" Version="1.6.5" />
+    <PackageReference Include="OwnAudioVst" Version="1.6.7" />
   </ItemGroup>
 
   <!-- No ONNX models or basesample.bin embedded -->

@@ -78,16 +78,15 @@ namespace OwnaudioNET.Effects.VST
         public bool IsReady => !_disposed && _threaded.IsReady;
 
         /// <summary>
-        /// Gets the processing latency introduced by the loaded VST3 plugin in samples.
+        /// Gets the processing latency introduced by the loaded VST3 plugin in samples (per channel).
         /// </summary>
         /// <remarks>
-        /// Returns 0 until the native <c>OwnVst3Wrapper</c> exposes
-        /// <c>IAudioProcessor::getLatencySamples()</c> through its managed wrapper.
-        /// Once the native layer is updated, this property will read the value from
-        /// <c>_threaded.InnerWrapper.LatencySamples</c> after <c>setupProcessing()</c>
-        /// completes. The property is safe to read from any thread.
+        /// Read from the native host's <c>VST3Plugin_GetLatencySamples</c> via the managed wrapper;
+        /// valid once the plugin has been audio-initialized. The mixer uses this to delay-compensate
+        /// other tracks so this plugin's output stays sample-accurately aligned. Zero for a
+        /// zero-latency plugin (or before initialization). Safe to read from any thread.
         /// </remarks>
-        public int LatencySamples => 0;
+        public int LatencySamples => _threaded.InnerWrapper?.LatencySamples ?? 0;
 
         #endregion
 
@@ -137,6 +136,15 @@ namespace OwnaudioNET.Effects.VST
             && NativeLibrary.TryGetExport(_threaded.LibraryHandle, "VST3Plugin_ProcessAudio", out IntPtr fn)
                 ? fn
                 : IntPtr.Zero;
+
+        /// <summary>
+        /// Bypasses or un-bypasses the plugin at the native host level. When bypassed, the host runs
+        /// the plugin through JUCE's <c>processBlockBypassed</c>, which passes the input through
+        /// delayed by the plugin's own latency — so toggling introduces no time shift against the
+        /// processed output (a host-side dry/wet switch would jump in time because the dry path has no
+        /// latency). Used by the Rust-native mixer to honour <see cref="Enabled"/> without a glitch.
+        /// </summary>
+        internal void SetNativeBypass(bool bypassed) => _threaded.SetBypass(bypassed);
 
         #endregion
 

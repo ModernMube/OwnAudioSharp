@@ -250,6 +250,7 @@ pub extern "C" fn ownaudio_v1_mixer_remove_master_effect(
 ///
 /// Shared by the track and master VST entry points, which differ only in the
 /// target track id (the master chain uses [`MASTER_EFFECT_TARGET`]).
+#[allow(clippy::too_many_arguments)]
 fn add_vst_effect_to(
     mixer: *mut OwnAudioMixerHandle,
     target_track: u64,
@@ -257,6 +258,7 @@ fn add_vst_effect_to(
     process_fn: VstProcessFn,
     max_channels: u16,
     max_block_size: u32,
+    latency_samples: u32,
     out_effect: *mut *mut OwnAudioEffectHandle,
 ) -> i32 {
     if mixer.is_null() || out_effect.is_null() {
@@ -282,6 +284,7 @@ fn add_vst_effect_to(
         process_fn,
         max_channels,
         max_block_size as usize,
+        latency_samples,
     ));
 
     let effect_id = match mixer_wrapper.controller.add_effect(target_track, effect) {
@@ -321,10 +324,13 @@ fn add_vst_effect_to(
 /// - `max_channels` — largest channel count the chain will present (planar
 ///   scratch is sized for this).
 /// - `max_block_size` — largest block size in samples per channel.
+/// - `latency_samples` — the plugin's processing latency in frames, reported to
+///   the mixer for plugin delay compensation (0 when the plugin is zero-latency).
 /// - `out_effect` — receives the new effect handle on success.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
 #[no_mangle]
+#[allow(clippy::too_many_arguments)]
 pub extern "C" fn ownaudio_v1_track_add_vst_effect(
     mixer: *mut OwnAudioMixerHandle,
     track: *mut OwnAudioTrackHandle,
@@ -332,6 +338,7 @@ pub extern "C" fn ownaudio_v1_track_add_vst_effect(
     process_fn: VstProcessFn,
     max_channels: u16,
     max_block_size: u32,
+    latency_samples: u32,
     out_effect: *mut *mut OwnAudioEffectHandle,
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -351,6 +358,7 @@ pub extern "C" fn ownaudio_v1_track_add_vst_effect(
             process_fn,
             max_channels,
             max_block_size,
+            latency_samples,
             out_effect,
         )
     }));
@@ -374,6 +382,7 @@ pub extern "C" fn ownaudio_v1_mixer_add_master_vst_effect(
     process_fn: VstProcessFn,
     max_channels: u16,
     max_block_size: u32,
+    latency_samples: u32,
     out_effect: *mut *mut OwnAudioEffectHandle,
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -384,6 +393,7 @@ pub extern "C" fn ownaudio_v1_mixer_add_master_vst_effect(
             process_fn,
             max_channels,
             max_block_size,
+            latency_samples,
             out_effect,
         )
     }));

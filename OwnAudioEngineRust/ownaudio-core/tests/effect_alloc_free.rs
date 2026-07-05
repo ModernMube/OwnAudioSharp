@@ -160,7 +160,7 @@ fn vst_effect_process_is_allocation_free_in_steady_state() {
     const CHANNELS: u16 = 2;
     const FRAMES: usize = 512;
 
-    let mut effect = VstEffect::new(std::ptr::null_mut(), vst_passthrough, CHANNELS, FRAMES);
+    let mut effect = VstEffect::new(std::ptr::null_mut(), vst_passthrough, CHANNELS, FRAMES, 0);
     // Exercise the dry/wet path too, which uses the pre-allocated dry buffer.
     effect.set_param(1, 0.5);
 
