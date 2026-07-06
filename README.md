@@ -34,38 +34,25 @@ Built-in decoders cover **MP3, WAV, and FLAC** out of the box. When **FFmpeg 8+*
 
 ---
 
-> ## 🚧 Major Architecture Evolution in Progress
+> ## 🚧 New Rust Audio Engine — Testing Has Started
 >
-> **A new branch is under active development that fundamentally reimagines the OwnAudioSharp engine.**
+> **Testing of OwnAudioSharp running on the new Rust audio engine is now underway, and the new version will be available soon.**
 >
-> Despite every effort to keep the managed API allocation-free, one hard truth remains: if the code *calling* the API allocates — and virtually all real-world C# code does — the .NET garbage collector will eventually pause it. Even a single GC pause of a few milliseconds is enough to produce an audible dropout in a real-time audio stream. No amount of API-level discipline can fully shield the audio thread from the GC that owns the entire process.
+> ### What stays the same
+> - **Code written for OwnAudioSharp 3.x will work with the new version without any modification** — the public API is unchanged.
 >
-> **The decision has been made to rewrite the entire audio engine in Rust.**
+> ### What changes
+> - The **entire real-time audio pipeline** — playback, recording, decoders, effects, and everything in between — has moved to native processing.
+> - It is all handled by brand-new **Rust** code, written specifically for this API.
+> - The **GC has zero impact on audio processing** — not even under extreme GC pressure. The audio stream is always continuous.
+> - The **VocalRemover** (AI stem separation) feature is removed from the core `OwnAudioSharp` package and released as a dedicated external package, keeping the core lean and focused on audio I/O. Migration requires only a package reference change — the API surface stays the same.
 >
-> Rust delivers deterministic, GC-free execution with the same memory and thread-safety guarantees as managed code — enforced at compile time, not at runtime. A thin, audio-agnostic C# layer will remain as the public surface, bridging your application code to the native engine with zero overhead and zero managed allocations on the hot path.
+> ### The core design goals behind the new engine
+> - **Rock-solid stability**, even across sessions running for many hours.
+> - **Consistently low latency.**
+> - **Low CPU usage.**
 >
-> ### Core design principle: managed code never touches audio data
-> Every operation that processes, transforms, or moves audio samples is implemented exclusively in Rust. The managed C# layer handles configuration, control flow, and application logic — but **no audio data ever passes through managed code**. This is the fundamental guarantee that makes GC-pause-free real-time audio possible on .NET.
->
-> Our primary goal is to give C# developers a genuinely usable, efficient, and cross-platform audio API — one that does not require native audio expertise and does not compromise on real-time performance.
->
-> ### What changes under the hood
-> - The audio engine runs as native Rust code, completely outside the .NET runtime and its GC
-> - **All audio data processing happens in Rust** — managed code is never involved in the audio path
-> - Memory safety and data-race freedom are guaranteed by the Rust compiler — no runtime checks, no overhead
-> - The **MiniAudio** and **PortAudio** third-party dependencies are removed; the engine ships everything it needs
-> - Startup, latency, and stability characteristics will improve across all platforms
->
-> ### What stays exactly the same
-> - **The OwnAudioSharp public API is unchanged** — your existing code will continue to compile and run without modification
-> - Distribution remains a single NuGet package — one `dotnet add package` and you're done
-> - All supported platforms (Windows, macOS, Linux, Android, iOS) remain fully supported
->
-> ### One important API change: VocalRemover moves to a separate package
-> 
-> The **VocalRemover** (AI stem separation) feature will be removed from the core `OwnAudioSharp` package and released as a dedicated external package. This keeps the core package lean and focused on audio I/O, while giving users who need AI separation an opt-in dependency. Migration will require only a package reference change — the API surface stays the same.
->
-> *Follow the development branch for updates. Contributions and early feedback are welcome.*
+> *The ongoing work happens on the **`develop_rust_audio`** branch. If you want to see where development and testing stand, take a look at the code on that branch.*
 
 ---
 
