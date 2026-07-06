@@ -61,6 +61,17 @@ public sealed partial class AudioMixer : IDisposable
     private volatile bool _sourcesArrayNeedsUpdate = true;
 
     /// <summary>
+    /// Reusable point-in-time snapshot of the sources, consumed by the Rust-native control-rate sync
+    /// tick. Rebuilt on the main/control thread only when the source set actually changes (in
+    /// <c>RebuildSourcesCache</c>), so the tick — which runs 67×/s for hours — iterates it without
+    /// allocating a fresh <c>ConcurrentDictionary.Values</c> snapshot every call. Distinct from
+    /// <c>_pendingSourcesArray</c> (which the mix thread nulls after adopting), so the two consumers
+    /// never interfere. Published via <see cref="Volatile.Write"/>; read on the sync thread via
+    /// <see cref="Volatile.Read"/>. The array is an immutable snapshot, safe to share by reference.
+    /// </summary>
+    private IAudioSource[] _rustSourceSnapshot = Array.Empty<IAudioSource>();
+
+    /// <summary>
     /// Master clock used for timeline-based synchronisation across all attached sources.
     /// Introduced in v2.4.0 as part of the Master Clock System.
     /// </summary>
@@ -102,6 +113,25 @@ public sealed partial class AudioMixer : IDisposable
     /// Declared <see langword="volatile"/> so both the main and mix threads observe changes immediately.
     /// </summary>
     private volatile bool _isRunning;
+
+    /// <summary>
+    /// How often (in consecutive occurrences) a repeating background-loop error is re-reported:
+    /// on the first occurrence and every multiple of this thereafter, so a persistent fault is
+    /// visible without flooding subscribers.
+    /// </summary>
+    private const int LoopErrorReportInterval = 1000;
+
+    /// <summary>
+    /// Consecutive background-loop errors after which the loop is treated as persistently faulted
+    /// and stops, rather than spinning on a deterministic failure indefinitely.
+    /// </summary>
+    private const int LoopErrorFaultThreshold = 500;
+
+    /// <summary>Consecutive-error counter for the mix thread loop (see <c>HandleLoopError</c>).</summary>
+    private int _mixThreadConsecutiveErrors;
+
+    /// <summary>Consecutive-error counter for the Rust-native control-rate sync tick.</summary>
+    private int _rustSyncConsecutiveErrors;
 
     /// <summary>
     /// Immutable audio configuration (sample rate, channel count, buffer size) set at construction time.
@@ -309,6 +339,17 @@ public sealed partial class AudioMixer : IDisposable
     /// when a new source is added via <see cref="AddSource"/> or <see cref="AddSourcePrepared"/>.
     /// </summary>
     public event EventHandler? PlaybackEnded;
+
+    /// <summary>
+    /// Raised when the native output stream reports a device-loss or backend fault
+    /// (device unplugged, disabled, or lost on sleep/wake or a sample-rate change).
+    /// The Rust-native output renders on the audio thread and previously died
+    /// unobserved on such a fault; this event lets a long-running host detect the
+    /// "audio went silent" condition and recover (e.g. reopen the output).
+    /// The event is dispatched from the control-rate sync tick; handlers must be
+    /// thread-safe. Only fires while the Rust-native chain drives output.
+    /// </summary>
+    public event EventHandler<AudioStreamFaultEventArgs>? StreamFaulted;
 
     /// <summary>
     /// Creates a new <see cref="AudioMixer"/> instance routed through an <see cref="AudioEngineWrapper"/>

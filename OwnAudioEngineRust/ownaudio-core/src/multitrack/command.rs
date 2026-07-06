@@ -189,6 +189,9 @@ pub struct MixerController {
     next_track_id: u64,
     next_effect_id: u64,
     sample_rate: f32,
+    /// Mixer output channel count, used to pre-build each new track's stretch
+    /// stage on this (control) thread.
+    channels: u16,
     max_buffer_size: usize,
     /// Live tracks' shared parameter blocks, kept so the control thread can
     /// answer parameter queries without reaching into the mixer.
@@ -208,11 +211,12 @@ pub struct MixerController {
 ///
 /// `capacity` is the maximum number of in-flight commands (and the size of the
 /// retirement queue, so retirement can never overflow while the control thread
-/// keeps up).  `sample_rate` and `max_buffer_size` are used to build new tracks
-/// on the control thread.
+/// keeps up).  `sample_rate`, `channels` and `max_buffer_size` are used to build
+/// new tracks on the control thread.
 pub fn command_channel(
     capacity: usize,
     sample_rate: f32,
+    channels: u16,
     max_buffer_size: usize,
 ) -> (MixerController, CommandReceiver) {
     let capacity = capacity.max(1);
@@ -225,6 +229,7 @@ pub fn command_channel(
         next_track_id: 0,
         next_effect_id: 0,
         sample_rate,
+        channels,
         max_buffer_size: max_buffer_size.max(1),
         track_registry: Vec::with_capacity(super::MAX_TRACKS),
         effect_shadows: Vec::new(),
@@ -259,7 +264,7 @@ impl MixerController {
     /// audio thread has even drained the insert command).
     pub fn add_track(&mut self) -> Result<(u64, Arc<TrackShared>), CommandError> {
         let id = self.next_track_id;
-        let track = Track::new(id, self.sample_rate, self.max_buffer_size);
+        let track = Track::new(id, self.sample_rate, self.channels, self.max_buffer_size);
         let shared = track.shared.clone();
 
         self.enqueue(MixerCommand::AddTrack(track))?;
@@ -664,7 +669,7 @@ mod tests {
     fn pdc_aligns_a_latency_track_with_a_compensated_one() {
         // Mono mixer so one sample equals one frame.
         let mut mixer = MultiTrackMixer::new(48_000.0, 1);
-        let (mut ctl, rx) = command_channel(64, mixer.sample_rate(), mixer.max_buffer_size());
+        let (mut ctl, rx) = command_channel(64, mixer.sample_rate(), mixer.channels(), mixer.max_buffer_size());
         mixer.attach_command_receiver(rx);
 
         const L: usize = 3;
@@ -700,7 +705,7 @@ mod tests {
     /// Builds a mono mixer wired to a fresh command channel.
     fn wired() -> (MixerController, MultiTrackMixer) {
         let mixer = MultiTrackMixer::new(48_000.0, 1);
-        let (ctl, rx) = command_channel(64, mixer.sample_rate(), mixer.max_buffer_size());
+        let (ctl, rx) = command_channel(64, mixer.sample_rate(), mixer.channels(), mixer.max_buffer_size());
         let mut mixer = mixer;
         mixer.attach_command_receiver(rx);
         (ctl, mixer)

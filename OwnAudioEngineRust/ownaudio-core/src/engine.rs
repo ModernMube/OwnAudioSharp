@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use cpal::traits::DeviceTrait;
 
 use crate::{
@@ -5,6 +7,7 @@ use crate::{
     device::{resolve_input_device, resolve_output_device, AudioDeviceInfo},
     error::{AudioError, Result},
     stream::{InputStream, OutputStream},
+    stream_error::StreamErrorState,
 };
 
 /// Entry point for all audio I/O operations.
@@ -54,7 +57,19 @@ impl AudioEngine {
         let cpal_device = resolve_output_device(&self.host, device.map(|d| d.name.as_str()))?;
         let (stream_config, sample_format) = validate_output_config(&cpal_device, config)?;
 
-        let err_fn = |e| eprintln!("[ownaudio-core] output stream error: {e}");
+        // Shared error state: the cpal error callback records device-lost /
+        // backend failures here, and the returned stream hands the same Arc to
+        // the control side so it can poll and surface the fault instead of it
+        // being lost to an eprintln. The closure is moved into exactly one of the
+        // mutually-exclusive sample-format arms below.
+        let error_state = Arc::new(StreamErrorState::new());
+        let err_fn = {
+            let error_state = Arc::clone(&error_state);
+            move |e: cpal::Error| {
+                error_state.record(&e);
+                eprintln!("[ownaudio-core] output stream error: {e}");
+            }
+        };
 
         // Pre-allocate the f32 conversion buffer once, at stream-init time.  If
         // buffer_size_frames is known we size it exactly; otherwise we use a
@@ -127,7 +142,7 @@ impl AudioEngine {
             }
         };
 
-        Ok(OutputStream { stream })
+        Ok(OutputStream { stream, error_state })
     }
 
     /// Opens an input stream on the given device (or the system default if
@@ -147,7 +162,15 @@ impl AudioEngine {
         let cpal_device = resolve_input_device(&self.host, device.map(|d| d.name.as_str()))?;
         let (stream_config, sample_format) = validate_input_config(&cpal_device, config)?;
 
-        let err_fn = |e| eprintln!("[ownaudio-core] input stream error: {e}");
+        // See `open_output_stream` for the rationale; the input path mirrors it.
+        let error_state = Arc::new(StreamErrorState::new());
+        let err_fn = {
+            let error_state = Arc::clone(&error_state);
+            move |e: cpal::Error| {
+                error_state.record(&e);
+                eprintln!("[ownaudio-core] input stream error: {e}");
+            }
+        };
 
         let pre_alloc = config
             .buffer_size_frames
@@ -209,7 +232,7 @@ impl AudioEngine {
             }
         };
 
-        Ok(InputStream { stream })
+        Ok(InputStream { stream, error_state })
     }
 }
 

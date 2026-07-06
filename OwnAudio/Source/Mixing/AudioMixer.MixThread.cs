@@ -125,12 +125,55 @@ public sealed partial class AudioMixer
 
                     Thread.Sleep(_mixIntervalMs * 2);
                 }
+
+                // A full iteration completed without throwing: clear the consecutive-error run so
+                // only a genuinely persistent failure accumulates toward the fault threshold.
+                _mixThreadConsecutiveErrors = 0;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                if (HandleLoopError("Mix thread iteration", ex, ref _mixThreadConsecutiveErrors))
+                {
+                    // The same error has repeated past the fault threshold — a deterministic
+                    // failure (corrupt source, dropped handle) the loop cannot recover from.
+                    // Stop rather than spin silently hundreds of times a second for hours.
+                    _shouldStop = true;
+                    break;
+                }
                 Thread.Sleep(_mixIntervalMs * 2);
             }
         }
+    }
+
+    /// <summary>
+    /// Reports a background-loop exception with throttling and decides whether the loop should abort.
+    /// </summary>
+    /// <remarks>
+    /// The mixer's background loops (mix thread, Rust-native control tick) previously swallowed every
+    /// exception and slept, so a deterministically-repeating fault — a corrupt source, a dropped
+    /// handle — would throw hundreds of times a second for hours with the user seeing only "no audio"
+    /// and no diagnostic. This surfaces the failure on the mixer's <see cref="SourceError"/> channel
+    /// (on the first occurrence and every <see cref="LoopErrorReportInterval"/> thereafter, dispatched
+    /// off the loop thread so a handler can't stall audio) and reports when the consecutive-error run
+    /// has crossed <see cref="LoopErrorFaultThreshold"/>, at which point the caller stops the loop.
+    /// </remarks>
+    /// <param name="context">Short description of the failing loop, for the error message.</param>
+    /// <param name="ex">The caught exception.</param>
+    /// <param name="consecutive">Consecutive-error counter for that loop; incremented here.</param>
+    /// <returns><see langword="true"/> when the loop should abort due to a persistent fault.</returns>
+    private bool HandleLoopError(string context, Exception ex, ref int consecutive)
+    {
+        int count = ++consecutive;
+        if (count == 1 || count % LoopErrorReportInterval == 0)
+        {
+            var args = new AudioErrorEventArgs($"{context} failed (occurrence #{count}): {ex.Message}", ex);
+            ThreadPool.UnsafeQueueUserWorkItem(static state =>
+            {
+                var (mixer, e) = ((AudioMixer, AudioErrorEventArgs))state!;
+                try { mixer.SourceError?.Invoke(mixer, e); } catch { /* handler must not kill the reporter */ }
+            }, (this, args));
+        }
+        return count >= LoopErrorFaultThreshold;
     }
 
     /// <summary>
@@ -212,13 +255,20 @@ public sealed partial class AudioMixer
                     {
                         dropoutDetected = true;
 
-                        OnTrackDropout(new TrackDropoutEventArgs(
-                            source.Id,
-                            source.GetType().Name,
-                            timestamp,
-                            _masterClock.CurrentSamplePosition,
-                            _bufferSizeInFrames - result.FramesRead,
-                            result.ErrorMessage ?? "Buffer underrun"));
+                        // Only build the (allocating) event args when a subscriber is actually
+                        // present. Under sustained load with no listener this keeps the mix thread
+                        // free of a per-dropout allocation and string work exactly when it is most
+                        // stressed; a subscriber still gets the full details as before.
+                        if (TrackDropout != null)
+                        {
+                            OnTrackDropout(new TrackDropoutEventArgs(
+                                source.Id,
+                                source.GetType().Name,
+                                timestamp,
+                                _masterClock.CurrentSamplePosition,
+                                _bufferSizeInFrames - result.FramesRead,
+                                result.ErrorMessage ?? "Buffer underrun"));
+                        }
 
                         lock (_metricsLock)
                         {

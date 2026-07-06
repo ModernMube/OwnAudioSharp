@@ -357,6 +357,49 @@ pub extern "C" fn ownaudio_v1_output_stream_pause(
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
 }
 
+/// Polls the output stream's error state, writing the most recent error kind to
+/// `*out_kind` and the total error count to `*out_count`.
+///
+/// The audio backend delivers device-lost / backend errors on an internal
+/// callback that the core records into a lock-free shared state; this call reads
+/// it without disturbing the audio thread. The control side polls it (e.g. on its
+/// periodic tick) and, when `*out_count` increases, raises a device-lost / fault
+/// event.
+///
+/// `*out_kind` maps to the `OwnAudioStreamErrorKind` enum:
+/// `0` = None, `1` = DeviceNotAvailable, `2` = BackendSpecific.
+///
+/// Either out-pointer may be null to skip that field. Returns
+/// `OwnAudioErrorCode::Success` (0) on success, or `InvalidHandle` if `stream`
+/// is null / invalid.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_output_stream_get_error_state(
+    stream: *mut OwnAudioOutputStreamHandle,
+    out_kind: *mut u32,
+    out_count: *mut u64,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { output_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        let state = wrapper.inner.error_state();
+        if !out_kind.is_null() {
+            unsafe {
+                *out_kind = state.kind() as u32;
+            }
+        }
+        if !out_count.is_null() {
+            unsafe {
+                *out_count = state.count();
+            }
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
 /// Destroys an output stream and releases all associated resources.
 ///
 /// Passing `null` is safe and has no effect.
@@ -483,6 +526,37 @@ pub extern "C" fn ownaudio_v1_input_stream_pause(stream: *mut OwnAudioInputStrea
                 OwnAudioErrorCode::from(e) as i32
             }
         }
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Polls the input stream's error state. See
+/// `ownaudio_v1_output_stream_get_error_state` for semantics; the input path is
+/// identical.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_input_stream_get_error_state(
+    stream: *mut OwnAudioInputStreamHandle,
+    out_kind: *mut u32,
+    out_count: *mut u64,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { input_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        let state = wrapper.inner.error_state();
+        if !out_kind.is_null() {
+            unsafe {
+                *out_kind = state.kind() as u32;
+            }
+        }
+        if !out_count.is_null() {
+            unsafe {
+                *out_count = state.count();
+            }
+        }
+        OwnAudioErrorCode::Success as i32
     }));
 
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)

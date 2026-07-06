@@ -39,7 +39,7 @@ pub extern "C" fn ownaudio_v1_mixer_create(
 
         let mut mixer = MultiTrackMixer::new(sample_rate, channels);
         let (controller, receiver) =
-            command_channel(COMMAND_QUEUE_CAPACITY, mixer.sample_rate(), mixer.max_buffer_size());
+            command_channel(COMMAND_QUEUE_CAPACITY, mixer.sample_rate(), mixer.channels(), mixer.max_buffer_size());
         mixer.attach_command_receiver(receiver);
         let master_shared = mixer.master_shared();
 

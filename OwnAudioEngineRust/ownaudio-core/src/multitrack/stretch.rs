@@ -13,8 +13,10 @@
 //! output frame, and it introduces an initial latency before it yields any output. The mixer,
 //! however, needs exactly one block of output per render call. This stage bridges the two by
 //! pulling input blocks from the source until the processor can emit a full output block, then
-//! receiving exactly that block. Only when the source is exhausted (returns zero) is the
-//! processor flushed and the remainder silence-padded by the caller.
+//! receiving exactly that block. Only when the source reports a *real* end-of-stream
+//! ([`TrackSource::is_eof`]) is the processor flushed; a merely transient zero read (prefetch
+//! underrun or in-flight seek) leaves the FIFO primed and the remainder is silence-padded by the
+//! caller.
 //!
 //! The stage runs unconditionally while a source is attached — even at unity tempo and pitch —
 //! mirroring the legacy managed chain, where SoundTouch always processed. Keeping the FIFO
@@ -32,7 +34,8 @@ use super::track::TrackSource;
 /// far above that and only bounds the worst case.
 const MAX_PULL_ITERS: usize = 128;
 
-/// Per-track time-stretch / pitch-shift stage backed by a lazily-built SoundTouch processor.
+/// Per-track time-stretch / pitch-shift stage backed by a SoundTouch processor built and warmed
+/// up on the control thread at track construction (see [`TrackStretch::new`]).
 pub(crate) struct TrackStretch {
     /// Sample rate the processor is configured for.
     sample_rate: u32,
@@ -53,18 +56,60 @@ pub(crate) struct TrackStretch {
 }
 
 impl TrackStretch {
-    /// Creates an idle stage for the given sample rate, pre-sizing the input scratch to the
-    /// mixer's maximum block size so the steady-state pull path is allocation-free.
-    pub(crate) fn new(sample_rate: f32, max_buffer_size: usize) -> Self {
-        Self {
+    /// Creates a stage for the given sample rate and channel count, pre-sizing the input scratch
+    /// to the mixer's maximum block size so the steady-state pull path is allocation-free.
+    ///
+    /// The SoundTouch processor is built and warmed up **here**, on the control thread that
+    /// constructs the track (tracks are built off the audio thread and moved into the mixer via
+    /// the command queue). This keeps the processor's heap allocations and the anti-alias FIR
+    /// computation off the audio thread entirely: the mixer always calls [`TrackStretch::fill`]
+    /// with this same `channels`, so [`TrackStretch::ensure_configured`] hits its fast path on the
+    /// audio thread and never rebuilds. A `channels` of 0 leaves the stage idle (the processor is
+    /// built lazily on first `fill`, as before), which only the degenerate zero-channel path hits.
+    pub(crate) fn new(sample_rate: f32, channels: u16, max_buffer_size: usize) -> Self {
+        let block = max_buffer_size.max(1);
+        let mut stage = Self {
             sample_rate: sample_rate as u32,
             channels: 0,
             processor: None,
-            input: vec![0.0f32; max_buffer_size.max(1)],
+            input: vec![0.0f32; block],
             last_tempo: 1.0,
             last_pitch: 0.0,
             eof_flushed: false,
+        };
+        if channels >= 1 && stage.ensure_configured(channels) {
+            stage.prime(channels, block);
         }
+        stage
+    }
+
+    /// Warms up the freshly-built processor on the control thread by pumping a few unity-tempo
+    /// blank blocks through it and draining the output, then clearing. This grows the internal
+    /// FIFOs to their steady-state working set before the track ever renders; because
+    /// `FifoSampleBuffer::clear` keeps the backing allocation, that capacity survives, so the audio
+    /// thread reuses it instead of reallocating mid-render on the first blocks or on a live
+    /// tempo/pitch nudge. Runs off the audio thread, so the scratch allocation here is harmless.
+    fn prime(&mut self, channels: u16, block: usize) {
+        let ch = channels as usize;
+        if ch == 0 || block == 0 {
+            return;
+        }
+        let Some(proc) = self.processor.as_mut() else {
+            return;
+        };
+        let mut scratch = vec![0.0f32; block * ch];
+        for _ in 0..8 {
+            let _ = proc.put_samples(&scratch, block);
+            let avail = proc.available_samples();
+            if avail > 0 {
+                let _ = proc.receive_samples(&mut scratch, avail.min(block));
+            }
+        }
+        proc.clear();
+        // The warm-up left no residual audio, but force the first real block to re-push the
+        // tempo/pitch so the processor state is unambiguous.
+        self.last_tempo = f32::NAN;
+        self.last_pitch = f32::NAN;
     }
 
     /// Clears the processor's FIFO, dropping any buffered (pre-seek) audio and the EOF latch.
@@ -170,9 +215,17 @@ impl TrackStretch {
             };
 
             if read == 0 {
-                // Source exhausted: flush the FIFO tail out exactly once. Re-flushing every
-                // block would pad an endless zero tail, so guard it and just drain thereafter.
-                if !self.eof_flushed {
+                // A zero read is ambiguous: it happens at a real end-of-stream, but also on a
+                // transient prefetch underrun and while a seek is in flight. Only a *true* EOF
+                // should flush the FIFO tail — flushing on a momentary dry spell pumps blank
+                // frames into the middle of the stream (audible garbage/silence tail) and, worse,
+                // does heavy WSOLA work on the audio thread exactly when it is already starved.
+                // On a transient zero we simply stop pulling and let the caller silence-pad; the
+                // FIFO stays primed for when audio resumes.
+                let at_eof = source.as_ref().map(|s| s.is_eof()).unwrap_or(false);
+                if at_eof && !self.eof_flushed {
+                    // Flush the FIFO tail out exactly once. Re-flushing every block would pad an
+                    // endless zero tail, so guard it and just drain thereafter.
                     if let Some(proc) = self.processor.as_mut() {
                         proc.flush();
                     }
@@ -245,12 +298,41 @@ mod tests {
             self.remaining_frames -= give;
             give * ch
         }
+
+        fn is_eof(&self) -> bool {
+            self.remaining_frames == 0
+        }
+    }
+
+    /// Source that returns zero for a stretch of reads *without* reporting EOF, then resumes —
+    /// modelling a transient prefetch underrun or an in-flight seek. The stretch stage must not
+    /// flush the FIFO on these, only on a genuine EOF.
+    struct UnderrunSource {
+        channels: usize,
+        /// Number of leading reads that return zero (underrun) before audio resumes.
+        underruns_left: usize,
+    }
+
+    impl TrackSource for UnderrunSource {
+        fn read(&mut self, out: &mut [f32]) -> usize {
+            if self.underruns_left > 0 {
+                self.underruns_left -= 1;
+                return 0;
+            }
+            let ch = self.channels;
+            let frames = out.len() / ch;
+            for s in out[..frames * ch].iter_mut() {
+                *s = 0.2;
+            }
+            frames * ch
+        }
+        // is_eof() stays the default `false`: an underrun is not end-of-stream.
     }
 
     #[test]
     fn unity_still_produces_full_block() {
         // The stage runs even at unity tempo/pitch; after warm-up it returns a full block.
-        let mut s = TrackStretch::new(48000.0, 4096);
+        let mut s = TrackStretch::new(48000.0, 2, 4096);
         let mut source: Option<Box<dyn TrackSource>> =
             Some(Box::new(SineSource { phase: 0.0, channels: 2 }));
         let mut out = vec![0.0f32; 1024];
@@ -265,7 +347,7 @@ mod tests {
 
     #[test]
     fn faster_tempo_fills_full_block_and_is_finite() {
-        let mut s = TrackStretch::new(48000.0, 4096);
+        let mut s = TrackStretch::new(48000.0, 2, 4096);
         let mut source: Option<Box<dyn TrackSource>> =
             Some(Box::new(SineSource { phase: 0.0, channels: 2 }));
         let mut out = vec![0.0f32; 1024];
@@ -281,7 +363,7 @@ mod tests {
 
     #[test]
     fn pitch_only_produces_output() {
-        let mut s = TrackStretch::new(44100.0, 4096);
+        let mut s = TrackStretch::new(44100.0, 2, 4096);
         let mut source: Option<Box<dyn TrackSource>> =
             Some(Box::new(SineSource { phase: 0.0, channels: 2 }));
         let mut out = vec![0.0f32; 1024];
@@ -296,7 +378,7 @@ mod tests {
 
     #[test]
     fn eof_drains_without_spinning() {
-        let mut s = TrackStretch::new(48000.0, 4096);
+        let mut s = TrackStretch::new(48000.0, 2, 4096);
         let mut source: Option<Box<dyn TrackSource>> = Some(Box::new(FiniteSource {
             remaining_frames: 500,
             channels: 2,
@@ -317,8 +399,34 @@ mod tests {
     }
 
     #[test]
+    fn transient_underrun_does_not_flush_and_resumes() {
+        // A source that underruns (zero read, not EOF) for several blocks then resumes must
+        // keep producing finite audio afterwards, with the FIFO left primed (no flush, no spin).
+        let mut s = TrackStretch::new(48000.0, 2, 4096);
+        let mut source: Option<Box<dyn TrackSource>> = Some(Box::new(UnderrunSource {
+            channels: 2,
+            underruns_left: 4,
+        }));
+        let mut out = vec![0.0f32; 1024];
+
+        // Drive through the underrun window and past it.
+        let mut produced_energy = 0.0f64;
+        for _ in 0..24 {
+            s.fill(&mut source, &mut out, 2, 1.25, 0.0);
+            assert!(out.iter().all(|v| v.is_finite()));
+            produced_energy += out.iter().map(|&v| (v as f64) * (v as f64)).sum::<f64>();
+        }
+        // The stage must not have latched EOF on the transient zeros.
+        assert!(!s.eof_flushed, "transient underrun must not flush/latch EOF");
+        assert!(
+            produced_energy > 1.0,
+            "stage must resume producing audio after a transient underrun"
+        );
+    }
+
+    #[test]
     fn clear_is_safe_before_and_after_use() {
-        let mut s = TrackStretch::new(48000.0, 2048);
+        let mut s = TrackStretch::new(48000.0, 2, 2048);
         // Clearing before the processor is built must not panic.
         s.clear();
 

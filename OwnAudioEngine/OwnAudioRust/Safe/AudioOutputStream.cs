@@ -190,6 +190,36 @@ public sealed class AudioOutputStream : IDisposable
 
     #endregion
 
+    #region Error state
+
+    /// <summary>
+    /// Polls the native backend's error state for this stream. The backend reports
+    /// device-lost / backend failures on an internal callback that the core records
+    /// into a lock-free shared state; this reads it without disturbing the audio
+    /// thread.
+    /// </summary>
+    /// <param name="errorCount">
+    /// Receives the monotonic total number of errors reported since the stream
+    /// opened. A caller comparing this against a previously-seen value can detect a
+    /// fresh error even when <see cref="AudioStreamErrorKind"/> repeats.
+    /// </param>
+    /// <returns>The most recently reported error kind.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when this stream has been disposed.</exception>
+    public AudioStreamErrorKind PollErrorState(out ulong errorCount)
+    {
+        Guard.NotDisposed(_disposed, nameof(AudioOutputStream));
+
+        int code = OwnAudioNative.ownaudio_v1_output_stream_get_error_state(
+            _handle.DangerousGetHandle(),
+            out uint kind,
+            out errorCount);
+        ErrorCodeMapper.ThrowIfError(code, nameof(PollErrorState));
+
+        return (AudioStreamErrorKind)kind;
+    }
+
+    #endregion
+
     #region IDisposable
 
     /// <summary>

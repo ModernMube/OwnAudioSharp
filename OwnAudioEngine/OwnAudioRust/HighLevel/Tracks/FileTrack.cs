@@ -112,6 +112,12 @@ public sealed class FileTrack : IDisposable
         {
             lock (_sync)
             {
+                // Skip the native call when unchanged: the control-rate sync tick assigns this every
+                // tick from the source, and the mirror starts at the native default (false).
+                if (value == _loop)
+                {
+                    return;
+                }
                 _loop = value;
                 if (_disposed)
                 {

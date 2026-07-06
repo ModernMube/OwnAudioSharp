@@ -72,6 +72,11 @@ pub struct SoundTouchProcessor {
 
     effective_rate: f64,
     effective_tempo: f64,
+
+    /// Reusable blank scratch used by [`Self::flush`] so end-of-stream flushing
+    /// allocates nothing on the audio thread. Sized to `128 * channels` whenever
+    /// the channel count is set; a flush that never runs leaves it empty.
+    flush_scratch: Vec<f32>,
 }
 
 impl SoundTouchProcessor {
@@ -91,6 +96,7 @@ impl SoundTouchProcessor {
             channels: 0,
             effective_rate: 0.0,
             effective_tempo: 0.0,
+            flush_scratch: Vec::new(),
         };
         p.calc_effective_rate_and_tempo();
         p.samples_expected_out = 0.0;
@@ -108,6 +114,12 @@ impl SoundTouchProcessor {
         self.channels = channels;
         self.rate_transposer.set_channels(channels);
         self.stretch.set_channels(channels);
+        // Pre-size the flush scratch on the (control-thread) configuration path so
+        // end-of-stream flushing never allocates on the audio thread.
+        let scratch_len = 128 * channels;
+        if self.flush_scratch.len() != scratch_len {
+            self.flush_scratch.resize(scratch_len, 0.0);
+        }
         Ok(())
     }
 
@@ -272,13 +284,18 @@ impl SoundTouchProcessor {
 
     /// Flushes the last samples out of the pipeline (end-of-stream).
     ///
-    /// Not part of the real-time hot path: it pumps blank frames and may
-    /// allocate a small scratch buffer.
+    /// Allocation-free: it pumps blank frames through the pipeline using the
+    /// pre-sized [`Self::flush_scratch`] buffer, so it is safe to call from the
+    /// audio thread at end-of-stream without touching the allocator.
     pub fn flush(&mut self) {
         if self.channels == 0 {
             return;
         }
-        let buff = vec![0.0f32; 128 * self.channels];
+
+        let scratch_len = 128 * self.channels;
+        if self.flush_scratch.len() != scratch_len {
+            self.flush_scratch.resize(scratch_len, 0.0);
+        }
 
         let mut num_still_expected =
             (self.samples_expected_out + 0.5) as i64 - self.samples_output;
@@ -287,11 +304,15 @@ impl SoundTouchProcessor {
         }
         let num_still_expected = num_still_expected as usize;
 
+        // Move the scratch out so the blank frames can be fed while `self` is
+        // borrowed mutably by `put_samples`; it is restored afterwards.
+        let scratch = std::mem::take(&mut self.flush_scratch);
         let mut i = 0;
         while num_still_expected > self.available_samples() && i < 200 {
-            let _ = self.put_samples(&buff, 128);
+            let _ = self.put_samples(&scratch, 128);
             i += 1;
         }
+        self.flush_scratch = scratch;
 
         self.output_mut().adjust_amount_of_samples(num_still_expected);
         self.stretch.clear_input();

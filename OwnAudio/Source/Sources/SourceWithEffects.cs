@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Threading;
 using Ownaudio;
 using Ownaudio.Core;
 using OwnaudioNET.Core;
@@ -33,6 +34,15 @@ public sealed class SourceWithEffects : IAudioSource
     private bool _disposed;
     private IEffectProcessor[] _cachedEffects = Array.Empty<IEffectProcessor>();
     private volatile bool _effectsChanged = false;
+
+    /// <summary>
+    /// Monotonic version bumped whenever the effect chain changes (add / remove / clear).
+    /// The Rust-native control tick compares this against the version it last reconciled, so it
+    /// only re-snapshots the effect list (a heap allocation) when the chain actually changed,
+    /// instead of allocating and comparing an array on every tick. Incremented under
+    /// <c>_effectsLock</c>; read lock-free via <see cref="EffectsVersion"/>.
+    /// </summary>
+    private int _effectsVersion;
 
     #region Plugin Delay Compensation Fields
 
@@ -159,6 +169,7 @@ public sealed class SourceWithEffects : IAudioSource
             effect.Initialize(Config);
             _effects.Add(effect);
             _effectsChanged = true;
+            _effectsVersion++;
         }
     }
 
@@ -180,7 +191,10 @@ public sealed class SourceWithEffects : IAudioSource
         {
             bool removed = _effects.Remove(effect);
             if (removed)
+            {
                 _effectsChanged = true;
+                _effectsVersion++;
+            }
             return removed;
         }
     }
@@ -197,6 +211,7 @@ public sealed class SourceWithEffects : IAudioSource
         {
             _effects.Clear();
             _effectsChanged = true;
+            _effectsVersion++;
         }
     }
 
@@ -211,6 +226,13 @@ public sealed class SourceWithEffects : IAudioSource
             return _effects.ToArray();
         }
     }
+
+    /// <summary>
+    /// Monotonic version of the effect chain, bumped on every add / remove / clear. A consumer that
+    /// caches the last version it processed can detect a change with a single integer comparison,
+    /// avoiding an allocation-and-compare of the whole effect list on every poll. Read lock-free.
+    /// </summary>
+    internal int EffectsVersion => Volatile.Read(ref _effectsVersion);
 
     /// <summary>
     /// Gets the number of effects in this source's chain.

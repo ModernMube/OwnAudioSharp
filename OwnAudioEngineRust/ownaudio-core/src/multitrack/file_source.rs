@@ -133,6 +133,14 @@ impl TrackSource for FileTrackSource {
 
         read
     }
+
+    #[inline]
+    fn is_eof(&self) -> bool {
+        // Real end-of-stream only: the decoder has finished and the prefetch ring
+        // is drained. False during a transient underrun or an in-flight seek, so
+        // the stretch stage does not flush its FIFO tail on those.
+        self.streaming.is_eof()
+    }
 }
 
 #[cfg(test)]

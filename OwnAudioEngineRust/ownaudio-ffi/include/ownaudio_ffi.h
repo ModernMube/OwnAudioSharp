@@ -973,6 +973,27 @@ int32_t ownaudio_v1_output_stream_play(struct OwnAudioOutputStreamHandle *stream
 int32_t ownaudio_v1_output_stream_pause(struct OwnAudioOutputStreamHandle *stream);
 
 /**
+ * Polls the output stream's error state, writing the most recent error kind to
+ * `*out_kind` and the total error count to `*out_count`.
+ *
+ * The audio backend delivers device-lost / backend errors on an internal
+ * callback that the core records into a lock-free shared state; this call reads
+ * it without disturbing the audio thread. The control side polls it (e.g. on its
+ * periodic tick) and, when `*out_count` increases, raises a device-lost / fault
+ * event.
+ *
+ * `*out_kind` maps to the `OwnAudioStreamErrorKind` enum:
+ * `0` = None, `1` = DeviceNotAvailable, `2` = BackendSpecific.
+ *
+ * Either out-pointer may be null to skip that field. Returns
+ * `OwnAudioErrorCode::Success` (0) on success, or `InvalidHandle` if `stream`
+ * is null / invalid.
+ */
+int32_t ownaudio_v1_output_stream_get_error_state(struct OwnAudioOutputStreamHandle *stream,
+                                                  uint32_t *out_kind,
+                                                  uint64_t *out_count);
+
+/**
  * Destroys an output stream and releases all associated resources.
  *
  * Passing `null` is safe and has no effect.
@@ -1011,6 +1032,15 @@ int32_t ownaudio_v1_input_stream_play(struct OwnAudioInputStreamHandle *stream);
  * Returns `OwnAudioErrorCode::Success` (0) on success.
  */
 int32_t ownaudio_v1_input_stream_pause(struct OwnAudioInputStreamHandle *stream);
+
+/**
+ * Polls the input stream's error state. See
+ * `ownaudio_v1_output_stream_get_error_state` for semantics; the input path is
+ * identical.
+ */
+int32_t ownaudio_v1_input_stream_get_error_state(struct OwnAudioInputStreamHandle *stream,
+                                                 uint32_t *out_kind,
+                                                 uint64_t *out_count);
 
 /**
  * Destroys an input stream and releases all associated resources.

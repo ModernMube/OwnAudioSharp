@@ -233,6 +233,12 @@ public sealed partial class AudioMixer
         var newArray = _sources.Values.ToArray();
         Volatile.Write(ref _pendingSourcesArray, newArray);
         _sourcesArrayNeedsUpdate = true;
+
+        // Publish the same immutable snapshot to the Rust-native control tick so it can iterate
+        // without allocating a fresh dictionary snapshot on every tick. Reuses the array already
+        // built above; the mix thread nulls _pendingSourcesArray after adopting it, so the tick
+        // needs its own stable reference.
+        Volatile.Write(ref _rustSourceSnapshot, newArray);
     }
 
     /// <summary>

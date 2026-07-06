@@ -40,6 +40,7 @@ pub mod ringbuffer;
 pub(crate) mod rt_guard;
 pub mod smoothing;
 pub mod stream;
+pub mod stream_error;
 
 // Flat re-exports for convenient use without module paths.
 pub use config::{SampleFormat, StreamConfig};
@@ -60,3 +61,4 @@ pub use resampler::Resampler;
 pub use ringbuffer::{ring_buffer, RingBufferReader, RingBufferWriter};
 pub use smoothing::SmoothedParam;
 pub use stream::{InputStream, OutputStream};
+pub use stream_error::{StreamErrorKind, StreamErrorState};

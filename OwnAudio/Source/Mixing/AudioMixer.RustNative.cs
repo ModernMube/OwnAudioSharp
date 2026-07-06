@@ -7,6 +7,7 @@ using Ownaudio.Safe;
 using OwnaudioNET.Core;
 using OwnaudioNET.Effects.VST;
 using OwnaudioNET.Engine;
+using OwnaudioNET.Events;
 using OwnaudioNET.Interfaces;
 using OwnaudioNET.Sources;
 
@@ -119,8 +120,12 @@ public sealed partial class AudioMixer
         /// <summary>The underlying file source that owns the native track.</summary>
         public FileSource File { get; }
 
-        /// <summary>The last-seen managed effect list, to detect changes cheaply.</summary>
-        public IEffectProcessor[] Cached { get; set; } = Array.Empty<IEffectProcessor>();
+        /// <summary>
+        /// Last <see cref="SourceWithEffects.EffectsVersion"/> reconciled onto the native chain.
+        /// A mismatch against the current version is the (allocation-free) signal that the chain
+        /// changed and must be rebuilt. <c>-1</c> forces the first reconcile.
+        /// </summary>
+        public int CachedVersion { get; set; } = -1;
 
         /// <summary>Managed effect → paired native track effect, in chain order.</summary>
         public List<RustEffectPair> Pairs { get; } = new();
@@ -143,6 +148,13 @@ public sealed partial class AudioMixer
     /// engine is not the native Rust engine, e.g. under a mock engine in tests).
     /// </summary>
     private AudioOutputStream? _rustOutputStream;
+
+    /// <summary>
+    /// Last observed native stream error count, so the control-rate tick can tell a fresh backend
+    /// fault (device lost etc.) from a previously-reported one and raise <see cref="StreamFaulted"/>
+    /// exactly once per new fault. Reset to zero when a fresh output stream is opened.
+    /// </summary>
+    private ulong _rustLastStreamErrorCount;
 
     /// <summary>
     /// The native engine whose own push-based output was suspended while the session drives the
@@ -245,7 +257,8 @@ public sealed partial class AudioMixer
     /// </summary>
     internal void SyncRustControlStateOnce()
     {
-        foreach (IAudioSource source in _sources.Values)
+        IAudioSource[] sources = Volatile.Read(ref _rustSourceSnapshot);
+        foreach (IAudioSource source in sources)
         {
             if (source is not FileSource fs)
             {
@@ -348,9 +361,10 @@ public sealed partial class AudioMixer
     {
         double project = _masterClock.CurrentTimestamp;
 
+        IAudioSource[] sources = Volatile.Read(ref _rustSourceSnapshot);
         lock (_rustSessionLock)
         {
-            foreach (IAudioSource source in _sources.Values)
+            foreach (IAudioSource source in sources)
             {
                 if (source is not FileSource fs || fs.RustTrack is null)
                 {
@@ -606,10 +620,15 @@ public sealed partial class AudioMixer
                     continue;
                 }
 
-                IEffectProcessor[] managed = routing.Source.GetEffects();
-
-                if (!managed.SequenceEqual(routing.Cached))
+                // Cheap change-detection: only re-snapshot the managed effect list (a heap
+                // allocation) and rebuild the native chain when the wrapper's effect version has
+                // actually moved since the last reconcile. In steady state this is a single integer
+                // comparison per track per tick, with no allocation and no LINQ.
+                int version = routing.Source.EffectsVersion;
+                if (version != routing.CachedVersion)
                 {
+                    IEffectProcessor[] managed = routing.Source.GetEffects();
+
                     // Rebuild the native chain in order: drop the current pairings, then re-add every
                     // adaptable managed effect. This preserves chain order across add/remove/reorder.
                     AudioTrack rebuildTrack = track;
@@ -643,7 +662,7 @@ public sealed partial class AudioMixer
                         }
                     }
 
-                    routing.Cached = managed;
+                    routing.CachedVersion = version;
                 }
 
                 TrackEffectChain trackChain = track.Effects;
@@ -663,7 +682,8 @@ public sealed partial class AudioMixer
     /// </summary>
     internal void DriveRustNativeSyncOnce()
     {
-        foreach (IAudioSource source in _sources.Values)
+        IAudioSource[] sources = Volatile.Read(ref _rustSourceSnapshot);
+        foreach (IAudioSource source in sources)
         {
             if (source is FileSource fs)
             {
@@ -731,10 +751,21 @@ public sealed partial class AudioMixer
                 ReconcileRustTrackEffectsOnce();
                 DriveRustNativeSyncOnce();
                 AdvanceMasterClockFromRustTracks();
+                PollRustStreamFaultOnce();
+
+                // A clean pass clears the consecutive-error run so only a persistent fault
+                // accumulates toward the threshold.
+                _rustSyncConsecutiveErrors = 0;
             }
-            catch
+            catch (Exception ex)
             {
-                // best-effort control sync; never let a transient error kill the tick
+                // A transient error must not kill the tick, but a deterministically-repeating one
+                // (dropped handle, corrupt source) is surfaced instead of silently swallowed, and
+                // the tick stops once it has clearly faulted rather than spinning for hours.
+                if (HandleLoopError("Rust-native control sync tick", ex, ref _rustSyncConsecutiveErrors))
+                {
+                    break;
+                }
             }
 
             Thread.Sleep(RustControlSyncIntervalMs);
@@ -761,7 +792,8 @@ public sealed partial class AudioMixer
         }
 
         double projectPos = -1.0;
-        foreach (IAudioSource source in _sources.Values)
+        IAudioSource[] sources = Volatile.Read(ref _rustSourceSnapshot);
+        foreach (IAudioSource source in sources)
         {
             if (source is FileSource fs && fs.State == AudioState.Playing)
             {
@@ -785,6 +817,53 @@ public sealed partial class AudioMixer
         {
             _masterClock.SeekTo(projectPos);
         }
+    }
+
+    /// <summary>
+    /// Polls the native output stream's backend error state and raises <see cref="StreamFaulted"/>
+    /// once whenever a new fault (device lost, backend error) has been reported since the last poll.
+    /// </summary>
+    /// <remarks>
+    /// The native mixer renders on the audio thread, so a device that disappears mid-playback would
+    /// otherwise stop the stream silently with nothing on the managed side ever learning of it. The
+    /// error count is monotonic; comparing it against the last-seen value detects a fresh fault even
+    /// when the same kind repeats. The stream handle is read under the session lock to avoid racing a
+    /// concurrent stop/dispose, but the event is raised outside the lock so a handler can safely call
+    /// back into the mixer.
+    /// </remarks>
+    internal void PollRustStreamFaultOnce()
+    {
+        AudioStreamErrorKind kind;
+        ulong count;
+
+        lock (_rustSessionLock)
+        {
+            AudioOutputStream? stream = _rustOutputStream;
+            if (stream is null)
+            {
+                return;
+            }
+
+            kind = stream.PollErrorState(out count);
+        }
+
+        if (count == _rustLastStreamErrorCount)
+        {
+            return;
+        }
+
+        _rustLastStreamErrorCount = count;
+
+        if (kind == AudioStreamErrorKind.None)
+        {
+            return;
+        }
+
+        AudioStreamFaultKind faultKind = kind == AudioStreamErrorKind.DeviceNotAvailable
+            ? AudioStreamFaultKind.DeviceNotAvailable
+            : AudioStreamFaultKind.BackendSpecific;
+
+        StreamFaulted?.Invoke(this, new AudioStreamFaultEventArgs(faultKind, count));
     }
 
     /// <summary>
@@ -847,6 +926,8 @@ public sealed partial class AudioMixer
         }
 
         _rustOutputStream = _rustSession.OpenOutput(nativeEngine);
+        // A fresh stream starts with a clean error count; baseline the fault poller to it.
+        _rustLastStreamErrorCount = 0;
         rustEngine.SuspendOutput();
         _rustSuspendedEngine = rustEngine;
     }

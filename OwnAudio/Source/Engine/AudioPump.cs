@@ -123,15 +123,21 @@ internal sealed class AudioPump : IDisposable
 
       _stopRequested = true;
 
-      // if (_pumpThread != null && _pumpThread.IsAlive)
-      // {
-      //    if (!_pumpThread.Join(TimeSpan.FromMilliseconds(timeoutMs)))
-      //    {
-      //       // Thread didn't exit gracefully - log warning but continue
-      //       // Don't abort - it's unsafe in modern .NET
-      //    }
-      // }
+      // Wait for the pump loop to actually exit before returning. The caller
+      // typically disposes the engine and buffer controller right after Stop();
+      // a still-running loop calling _engine.Send(...) into those disposed
+      // resources is a use-after-dispose race (the sporadic exception the loop's
+      // catch silently swallows). Joining here closes that window. The bounded
+      // wait never blocks the UI because StopAsync() runs Stop() on a background
+      // thread. Never Abort() — it is unsafe in modern .NET; on timeout we fall
+      // through and let the background thread finish on its own.
+      Thread? thread = _pumpThread;
+      if (thread is not null && thread != Thread.CurrentThread && thread.IsAlive)
+      {
+         thread.Join(TimeSpan.FromMilliseconds(timeoutMs));
+      }
 
+      _pumpThread = null;
       _isRunning = false;
    }
 
@@ -159,6 +165,7 @@ internal sealed class AudioPump : IDisposable
    private void PumpThreadLoop()
    {
       float[] tempBuffer = new float[_engineBufferSize];
+      int consecutiveErrors = 0;
 
       while (!_stopRequested)
       {
@@ -187,13 +194,47 @@ internal sealed class AudioPump : IDisposable
             {
                Thread.Sleep(_sleepIntervalMs);
             }
+
+            // A clean iteration clears the consecutive-error run.
+            consecutiveErrors = 0;
          }
-         catch
+         catch (Exception ex)
          {
+            consecutiveErrors++;
+
+            // Surface the failure instead of swallowing it silently: on the first occurrence and
+            // every PumpErrorReportInterval thereafter. A deterministic, repeating fault (e.g. the
+            // engine was disposed under the pump) would otherwise throw hundreds of times a second
+            // with no diagnostic.
+            if (consecutiveErrors == 1 || consecutiveErrors % PumpErrorReportInterval == 0)
+            {
+               Console.Error.WriteLine(
+                  $"[AudioPump] Send loop error (occurrence #{consecutiveErrors}): {ex.Message}");
+            }
+
+            // Past the fault threshold the failure is clearly persistent, not transient; stop
+            // pumping rather than spin on it indefinitely.
+            if (consecutiveErrors >= PumpErrorFaultThreshold)
+            {
+               _stopRequested = true;
+               _isRunning = false;
+               break;
+            }
+
             Thread.Sleep(_sleepIntervalMs * 2);
          }
       }
    }
+
+   /// <summary>
+   /// How often (in consecutive occurrences) a repeating pump-loop error is re-logged.
+   /// </summary>
+   private const int PumpErrorReportInterval = 1000;
+
+   /// <summary>
+   /// Consecutive pump-loop errors after which the pump treats the fault as persistent and stops.
+   /// </summary>
+   private const int PumpErrorFaultThreshold = 500;
 
    /// <summary>
    /// Throws ObjectDisposedException if the pump has been disposed.

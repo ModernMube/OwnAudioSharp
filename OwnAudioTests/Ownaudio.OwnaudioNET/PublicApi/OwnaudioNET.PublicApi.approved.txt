@@ -858,6 +858,19 @@ namespace OwnaudioNET.Events
         public System.DateTime Timestamp { get; }
         public override string ToString() { }
     }
+    public class AudioStreamFaultEventArgs : System.EventArgs
+    {
+        public AudioStreamFaultEventArgs(OwnaudioNET.Events.AudioStreamFaultKind kind, ulong errorCount) { }
+        public ulong ErrorCount { get; }
+        public System.DateTime EventTimestamp { get; }
+        public OwnaudioNET.Events.AudioStreamFaultKind Kind { get; }
+        public override string ToString() { }
+    }
+    public enum AudioStreamFaultKind
+    {
+        DeviceNotAvailable = 1,
+        BackendSpecific = 2,
+    }
     public sealed class BufferUnderrunEventArgs : System.EventArgs
     {
         public BufferUnderrunEventArgs(int missedFrames, long position) { }
@@ -1590,6 +1603,7 @@ namespace OwnaudioNET.Mixing
         public event System.EventHandler<OwnaudioNET.Events.BufferUnderrunEventArgs>? BufferUnderrun;
         public event System.EventHandler? PlaybackEnded;
         public event System.EventHandler<OwnaudioNET.Events.AudioErrorEventArgs>? SourceError;
+        public event System.EventHandler<OwnaudioNET.Events.AudioStreamFaultEventArgs>? StreamFaulted;
         public event System.EventHandler<OwnaudioNET.Events.TrackDropoutEventArgs>? TrackDropout;
         public void AddMasterEffect(OwnaudioNET.Interfaces.IEffectProcessor effect) { }
         public bool AddSource(OwnaudioNET.Interfaces.IAudioSource source) { }

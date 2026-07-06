@@ -60,6 +60,20 @@ pub trait TrackSource: Send {
     /// the remainder of `out` when fewer than `out.len()` samples are returned,
     /// so implementations need not zero the tail themselves.
     fn read(&mut self, out: &mut [f32]) -> usize;
+
+    /// Returns `true` only when the source has permanently reached end-of-stream
+    /// (fully decoded and drained), as opposed to a transient underrun or an
+    /// in-flight seek that also make [`TrackSource::read`] return zero.
+    ///
+    /// The stretch stage uses this to decide whether a zero read is a real EOF
+    /// that should flush the SoundTouch FIFO tail, or a momentary dry spell that
+    /// must not. The default returns `false`, so sources without a meaningful
+    /// end-of-stream (e.g. a live ring-buffer feed) are never auto-flushed on an
+    /// underrun.
+    #[inline]
+    fn is_eof(&self) -> bool {
+        false
+    }
 }
 
 impl TrackSource for RingBufferReader {
@@ -447,12 +461,38 @@ pub struct Track {
     /// [`TrackShared::take_start_silence`] and counted down per block; zero once the
     /// track has entered.
     start_silence_remaining: u64,
+    /// Consecutive rendered frames the track has spent at unity tempo/pitch while
+    /// `stretch_always_on` was latched (audio-thread-owned). Once this exceeds
+    /// [`Track::unlatch_after_frames`] and the output is quiet, the latch is released so
+    /// the track drops back to a cheaper, lower-latency bypass — see [`Track::process_additive`].
+    unity_run_frames: u64,
+    /// Frame count of sustained unity after which the always-on latch becomes eligible for
+    /// release. Derived from the sample rate at construction (~1 second).
+    unlatch_after_frames: u64,
 }
+
+/// Output peak below which a block counts as effectively silent, so releasing the always-on
+/// stretch latch there drops only inaudible FIFO tail (no click). ≈ −80 dBFS.
+const UNLATCH_SILENCE_EPS: f32 = 1.0e-4;
+
+/// Tempo/pitch deadband within which the stretch is considered to be at unity, matching the
+/// engage threshold used for `needs_stretch`.
+const UNITY_EPS: f32 = 1.0e-4;
+
+/// Tolerance within which the gain smoother is treated as settled at its target, enabling the
+/// unity-gain fast path in the per-track mix loop.
+const GAIN_SETTLE_EPS: f32 = 1.0e-6;
 
 impl Track {
     /// Creates a new idle track with the given id, sample rate (for gain
-    /// smoothing), and pre-sized scratch buffer.
-    pub fn new(id: u64, sample_rate: f32, max_buffer_size: usize) -> Self {
+    /// smoothing), interleaved channel count, and pre-sized scratch buffer.
+    ///
+    /// `channels` is the mixer's output channel count — the same count the mixer
+    /// passes to [`Track::process_additive`] every block. Passing it here lets the
+    /// per-track SoundTouch stretch stage build and warm up its processor on this
+    /// (control) thread, so the audio thread never pays the FIR-build / allocation
+    /// cost on the first tempo/pitch change.
+    pub fn new(id: u64, sample_rate: f32, channels: u16, max_buffer_size: usize) -> Self {
         let shared = Arc::new(TrackShared::new());
         let gain_smoother = SmoothedParam::new(shared.gain(), sample_rate, GAIN_SMOOTH_MS);
         Self {
@@ -462,9 +502,11 @@ impl Track {
             source: None,
             scratch: vec![0.0f32; max_buffer_size],
             gain_smoother,
-            stretch: super::stretch::TrackStretch::new(sample_rate, max_buffer_size),
+            stretch: super::stretch::TrackStretch::new(sample_rate, channels, max_buffer_size),
             pdc: PdcDelay::new(),
             start_silence_remaining: 0,
+            unity_run_frames: 0,
+            unlatch_after_frames: (sample_rate as u64).max(1),
         }
     }
 
@@ -575,9 +617,9 @@ impl Track {
         // mixer tracks at unity bypass the stage and stay bit-exact passthrough.
         let tempo = self.shared.tempo_ratio();
         let pitch = self.shared.pitch_semitones();
-        let needs_stretch = self.shared.stretch_always_on()
-            || (tempo - 1.0).abs() > 1e-4
-            || pitch.abs() > 1e-4;
+        let always_on = self.shared.stretch_always_on();
+        let at_unity = (tempo - 1.0).abs() <= UNITY_EPS && pitch.abs() <= UNITY_EPS;
+        let needs_stretch = always_on || !at_unity;
         let read = if self.source.is_none() {
             0
         } else if needs_stretch {
@@ -607,18 +649,41 @@ impl Track {
         // share the same (smoothed) gain. The active region is written starting at
         // `out_off` so any start-offset silence prefix is left untouched.
         let out_active = &mut output[out_off..out_off + active_samples];
-        for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(ch)) {
-            let gain = self.gain_smoother.advance();
-            for (i, (o, &s)) in out_frame.iter_mut().zip(in_frame.iter()).enumerate() {
-                let scaled = s * gain;
-                *o += scaled;
-                let abs = scaled.abs();
-                if i == 0 {
-                    if abs > peak_l {
-                        peak_l = abs;
+        // Fast path: once the gain smoother has settled at unity, every frame would multiply by
+        // 1.0 and re-advance a no-op ramp. Skip both with a flat additive copy the compiler can
+        // vectorise cleanly, and measure the per-channel peak in a separate branch-light pass.
+        if self.gain_smoother.is_settled(GAIN_SETTLE_EPS)
+            && (self.gain_smoother.target() - 1.0).abs() <= GAIN_SETTLE_EPS
+        {
+            for (o, &s) in out_active.iter_mut().zip(buf.iter()) {
+                *o += s;
+            }
+            for frame in buf.chunks(ch) {
+                let l = frame[0].abs();
+                if l > peak_l {
+                    peak_l = l;
+                }
+                if ch > 1 {
+                    let r = frame[1].abs();
+                    if r > peak_r {
+                        peak_r = r;
                     }
-                } else if i == 1 && abs > peak_r {
-                    peak_r = abs;
+                }
+            }
+        } else {
+            for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(ch)) {
+                let gain = self.gain_smoother.advance();
+                for (i, (o, &s)) in out_frame.iter_mut().zip(in_frame.iter()).enumerate() {
+                    let scaled = s * gain;
+                    *o += scaled;
+                    let abs = scaled.abs();
+                    if i == 0 {
+                        if abs > peak_l {
+                            peak_l = abs;
+                        }
+                    } else if i == 1 && abs > peak_r {
+                        peak_r = abs;
+                    }
                 }
             }
         }
@@ -626,6 +691,28 @@ impl Track {
             peak_r = peak_l;
         }
         self.shared.store_peaks(peak_l, peak_r);
+
+        // Opportunistically release the always-on stretch latch once the track has run at unity
+        // tempo/pitch for a sustained period AND the current output is effectively silent. The
+        // latch exists so a live tempo/pitch change lands on a warm FIFO without clicking; but a
+        // track that latched on a one-off change (or a transient network-sync tempo nudge) and
+        // then sat at unity would otherwise run the full WSOLA path forever — added latency and
+        // CPU for no benefit. Releasing only during a quiet moment means the dropped FIFO tail is
+        // inaudible, so the return to the cheaper bypass path is click-free. A later non-unity
+        // tempo/pitch simply re-latches it.
+        if always_on && at_unity {
+            self.unity_run_frames = self.unity_run_frames.saturating_add(active_frames as u64);
+            if self.unity_run_frames >= self.unlatch_after_frames
+                && peak_l < UNLATCH_SILENCE_EPS
+                && peak_r < UNLATCH_SILENCE_EPS
+            {
+                self.shared.set_stretch_always_on(false);
+                self.stretch.clear();
+                self.unity_run_frames = 0;
+            }
+        } else {
+            self.unity_run_frames = 0;
+        }
 
         // Advance the rendered position by the number of *output* frames actually produced
         // this block (wall-clock time), excluding any start-offset silence prefix. The
@@ -654,7 +741,7 @@ mod tests {
 
     #[test]
     fn rendered_frames_advances_by_output_frame_count() {
-        let mut track = Track::new(1, 48_000.0, 64);
+        let mut track = Track::new(1, 48_000.0, 2, 64);
         track.set_source(Some(Box::new(ConstSource(0.5))));
         track.shared.set_state(TrackState::Playing);
 
@@ -670,7 +757,7 @@ mod tests {
     fn rendered_frames_advances_even_on_underrun_silence() {
         // A playing track with no source still advances its rendered position
         // (it renders silence), matching the legacy silence-fill behavior.
-        let mut track = Track::new(2, 48_000.0, 64);
+        let mut track = Track::new(2, 48_000.0, 2, 64);
         track.shared.set_state(TrackState::Playing);
 
         let mut out = vec![0.0f32; 8];
@@ -680,7 +767,7 @@ mod tests {
 
     #[test]
     fn source_swap_resets_rendered_frames() {
-        let mut track = Track::new(3, 48_000.0, 64);
+        let mut track = Track::new(3, 48_000.0, 2, 64);
         track.set_source(Some(Box::new(ConstSource(0.5))));
         track.shared.set_state(TrackState::Playing);
 
@@ -722,13 +809,13 @@ mod tests {
         let sr = 48_000.0;
 
         let unity = Arc::new(AtomicU64::new(0));
-        let mut t_unity = Track::new(10, sr, block);
+        let mut t_unity = Track::new(10, sr, 2, block);
         t_unity.set_source(Some(Box::new(CountingSource { read_samples: unity.clone() })));
         t_unity.shared.set_state(TrackState::Playing);
         t_unity.shared.set_tempo_ratio(1.0);
 
         let fast = Arc::new(AtomicU64::new(0));
-        let mut t_fast = Track::new(11, sr, block);
+        let mut t_fast = Track::new(11, sr, 2, block);
         t_fast.set_source(Some(Box::new(CountingSource { read_samples: fast.clone() })));
         t_fast.shared.set_state(TrackState::Playing);
         t_fast.shared.set_tempo_ratio(2.0);
@@ -755,7 +842,7 @@ mod tests {
         let block = 1024usize;
 
         // Default (always-on off) at unity: bit-exact passthrough of the source.
-        let mut bypass = Track::new(30, 48_000.0, block);
+        let mut bypass = Track::new(30, 48_000.0, 2, block);
         bypass.set_source(Some(Box::new(ConstSource(0.5))));
         bypass.shared.set_state(TrackState::Playing);
         let mut out = vec![0.0f32; block];
@@ -767,7 +854,7 @@ mod tests {
 
         // always-on at unity: routes through the (warming) SoundTouch FIFO, so the first block
         // is not the flat passthrough a bypass would produce.
-        let mut always = Track::new(31, 48_000.0, block);
+        let mut always = Track::new(31, 48_000.0, 2, block);
         always.set_source(Some(Box::new(ConstSource(0.5))));
         always.shared.set_state(TrackState::Playing);
         always.shared.set_stretch_always_on(true);
@@ -780,12 +867,57 @@ mod tests {
     }
 
     #[test]
+    fn always_on_unlatches_after_sustained_quiet_unity() {
+        // A track that latched always-on (e.g. a one-off tempo change or a transient network-sync
+        // nudge) but then sits at unity over a quiet passage must drop the latch, returning to the
+        // cheaper bypass path. Releasing during silence keeps it click-free.
+        let block = 1024usize; // 512 stereo frames per block
+        let mut track = Track::new(60, 48_000.0, 2, block);
+        track.set_source(Some(Box::new(ConstSource(0.0)))); // silent source
+        track.shared.set_state(TrackState::Playing);
+        track.shared.set_stretch_always_on(true);
+        assert!(track.shared.stretch_always_on());
+
+        let mut out = vec![0.0f32; block];
+        // ~1.05 s of audio (48k / 512 ≈ 94 blocks); run more to clear the threshold with margin.
+        for _ in 0..120 {
+            out.iter_mut().for_each(|s| *s = 0.0);
+            track.process_additive(&mut out, 2);
+        }
+        assert!(
+            !track.shared.stretch_always_on(),
+            "sustained quiet unity must release the always-on latch"
+        );
+    }
+
+    #[test]
+    fn always_on_stays_latched_while_output_is_audible() {
+        // The latch must NOT release while the track is producing audible output, since dropping
+        // the stretch FIFO tail there would click.
+        let block = 1024usize;
+        let mut track = Track::new(61, 48_000.0, 2, block);
+        track.set_source(Some(Box::new(ConstSource(0.5)))); // audible source
+        track.shared.set_state(TrackState::Playing);
+        track.shared.set_stretch_always_on(true);
+
+        let mut out = vec![0.0f32; block];
+        for _ in 0..120 {
+            out.iter_mut().for_each(|s| *s = 0.0);
+            track.process_additive(&mut out, 2);
+        }
+        assert!(
+            track.shared.stretch_always_on(),
+            "an audible unity track must keep the latch (releasing would click)"
+        );
+    }
+
+    #[test]
     fn rendered_position_is_wall_clock_regardless_of_tempo() {
         // The rendered position must advance by the OUTPUT frame count (wall-clock), not the
         // content rate, so a stretched track cannot drag the shared master clock off the real
         // playback rate and desync every other track (e.g. a unity metronome) against it.
         let block = 1024usize; // 512 stereo frames per block
-        let mut track = Track::new(20, 48_000.0, block);
+        let mut track = Track::new(20, 48_000.0, 2, block);
         track.set_source(Some(Box::new(ConstSource(0.3))));
         track.shared.set_state(TrackState::Playing);
         track.shared.set_tempo_ratio(2.0);
@@ -837,7 +969,7 @@ mod tests {
         // A full-scale constant source at unity gain reports a peak near 1.0;
         // halving the gain halves the reported peak (post-gain metering).
         let block = 1024usize;
-        let mut track = Track::new(40, 48_000.0, block);
+        let mut track = Track::new(40, 48_000.0, 2, block);
         track.set_source(Some(Box::new(ConstSource(1.0))));
         track.shared.set_state(TrackState::Playing);
 
@@ -861,7 +993,7 @@ mod tests {
         // Request 4 frames of start-offset silence on a mono track rendering an
         // 8-frame block: the first 4 frames are silent, then the source plays from
         // its start, and only the non-silent frames advance the rendered position.
-        let mut track = Track::new(50, 48_000.0, 64);
+        let mut track = Track::new(50, 48_000.0, 1, 64);
         track.set_source(Some(Box::new(ConstSource(0.5))));
         track.shared.set_state(TrackState::Playing);
         track.shared.request_start_silence(4);
@@ -879,7 +1011,7 @@ mod tests {
     fn start_silence_spanning_blocks_freezes_position_until_entry() {
         // 8 frames of start silence across two 4-frame blocks: both blocks are fully
         // silent and the rendered position stays frozen, then the third block enters.
-        let mut track = Track::new(51, 48_000.0, 64);
+        let mut track = Track::new(51, 48_000.0, 1, 64);
         track.set_source(Some(Box::new(ConstSource(1.0))));
         track.shared.set_state(TrackState::Playing);
         track.shared.request_start_silence(8);

@@ -231,7 +231,7 @@ impl MultiTrackMixer {
     pub fn add_track(&mut self) -> (u64, Arc<TrackShared>) {
         let id = self.next_id;
         self.next_id += 1;
-        let track = Track::new(id, self.sample_rate, self.max_buffer_size);
+        let track = Track::new(id, self.sample_rate, self.channels, self.max_buffer_size);
         let shared = track.shared.clone();
         self.tracks.push(track);
         (id, shared)
@@ -349,17 +349,37 @@ impl MultiTrackMixer {
         let ch = channels.max(1) as usize;
         let mut peak_l = 0.0f32;
         let mut peak_r = 0.0f32;
-        for frame in output.chunks_mut(ch) {
-            let gain = self.master_gain_smoother.advance();
-            for (i, sample) in frame.iter_mut().enumerate() {
-                *sample *= gain;
-                let abs = sample.abs();
-                if i == 0 {
-                    if abs > peak_l {
-                        peak_l = abs;
+        // Fast path: a master gain resting at unity would multiply every sample by 1.0 and advance
+        // a no-op ramp. Skip both and only measure the output peaks over a branch-light pass.
+        const MASTER_GAIN_SETTLE_EPS: f32 = 1.0e-6;
+        if self.master_gain_smoother.is_settled(MASTER_GAIN_SETTLE_EPS)
+            && (self.master_gain_smoother.target() - 1.0).abs() <= MASTER_GAIN_SETTLE_EPS
+        {
+            for frame in output.chunks(ch) {
+                let l = frame[0].abs();
+                if l > peak_l {
+                    peak_l = l;
+                }
+                if ch > 1 {
+                    let r = frame[1].abs();
+                    if r > peak_r {
+                        peak_r = r;
                     }
-                } else if i == 1 && abs > peak_r {
-                    peak_r = abs;
+                }
+            }
+        } else {
+            for frame in output.chunks_mut(ch) {
+                let gain = self.master_gain_smoother.advance();
+                for (i, sample) in frame.iter_mut().enumerate() {
+                    *sample *= gain;
+                    let abs = sample.abs();
+                    if i == 0 {
+                        if abs > peak_l {
+                            peak_l = abs;
+                        }
+                    } else if i == 1 && abs > peak_r {
+                        peak_r = abs;
+                    }
                 }
             }
         }
@@ -776,7 +796,7 @@ mod tests {
         let mut mixer = MultiTrackMixer::new(48_000.0, 1);
         assert_eq!(mixer.tracks.capacity(), MAX_TRACKS);
 
-        let (mut ctl, rx) = command_channel(64, mixer.sample_rate(), mixer.max_buffer_size());
+        let (mut ctl, rx) = command_channel(64, mixer.sample_rate(), mixer.channels(), mixer.max_buffer_size());
         mixer.attach_command_receiver(rx);
         for _ in 0..8 {
             ctl.add_track().unwrap();

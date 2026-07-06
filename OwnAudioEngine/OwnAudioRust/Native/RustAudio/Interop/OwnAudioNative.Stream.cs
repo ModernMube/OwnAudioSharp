@@ -99,6 +99,24 @@ internal static unsafe partial class OwnAudioNative
     internal static partial int ownaudio_v1_output_stream_pause(IntPtr stream);
 
     /// <summary>
+    /// Polls the output stream's error state: the most recent error kind
+    /// (<see cref="NativeStreamErrorKind"/>) and the monotonic total error count.
+    /// </summary>
+    /// <param name="stream">Valid handle from <see cref="ownaudio_v1_open_output_stream"/>.</param>
+    /// <param name="outKind">Receives the latest error kind discriminant; may be null to skip.</param>
+    /// <param name="outCount">
+    /// Receives the total error count since the stream opened. An increase between
+    /// two polls signals a fresh error.
+    /// </param>
+    /// <returns><see cref="NativeErrorCode.Success"/> (0) on success.</returns>
+    /// <remarks>Mirrors: <c>ownaudio_v1_output_stream_get_error_state(stream, out_kind, out_count) → i32</c></remarks>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_output_stream_get_error_state(
+        IntPtr stream,
+        out uint outKind,
+        out ulong outCount);
+
+    /// <summary>
     /// Destroys an output stream and releases all associated resources.
     /// </summary>
     /// <param name="stream">The handle to destroy.  Passing <see cref="IntPtr.Zero"/> is safe.</param>
@@ -161,6 +179,21 @@ internal static unsafe partial class OwnAudioNative
     /// <remarks>Mirrors: <c>ownaudio_v1_input_stream_pause(OwnAudioInputStreamHandle*) → i32</c></remarks>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_input_stream_pause(IntPtr stream);
+
+    /// <summary>
+    /// Polls the input stream's error state. See
+    /// <see cref="ownaudio_v1_output_stream_get_error_state"/> for semantics.
+    /// </summary>
+    /// <param name="stream">Valid handle from <see cref="ownaudio_v1_open_input_stream"/>.</param>
+    /// <param name="outKind">Receives the latest error kind discriminant; may be null to skip.</param>
+    /// <param name="outCount">Receives the total error count since the stream opened.</param>
+    /// <returns><see cref="NativeErrorCode.Success"/> (0) on success.</returns>
+    /// <remarks>Mirrors: <c>ownaudio_v1_input_stream_get_error_state(stream, out_kind, out_count) → i32</c></remarks>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_input_stream_get_error_state(
+        IntPtr stream,
+        out uint outKind,
+        out ulong outCount);
 
     /// <summary>
     /// Destroys an input stream and releases all associated resources.

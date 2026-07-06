@@ -86,7 +86,16 @@ public sealed class AudioTrack : IDisposable
         get => _gain;
         set
         {
-            _gain = MathF.Max(0f, value);
+            float clamped = MathF.Max(0f, value);
+            // Skip the native call when the value is unchanged. The mirror starts at the native
+            // default (1.0 = unity), so the two never drift. The control-rate sync tick re-assigns
+            // this every tick from the source volume; without this guard that is an unconditional
+            // P/Invoke per track per tick even when nothing changed.
+            if (clamped == _gain)
+            {
+                return;
+            }
+            _gain = clamped;
             if (!_disposed)
             {
                 OwnAudioNative.ownaudio_v1_track_set_gain(_handle.DangerousGetHandle(), _gain);
@@ -102,7 +111,12 @@ public sealed class AudioTrack : IDisposable
         get => _tempo;
         set
         {
-            _tempo = Math.Clamp(value, 0.25f, 4.0f);
+            float clamped = Math.Clamp(value, 0.25f, 4.0f);
+            if (clamped == _tempo)
+            {
+                return;
+            }
+            _tempo = clamped;
             if (!_disposed)
             {
                 OwnAudioNative.ownaudio_v1_track_set_tempo(_handle.DangerousGetHandle(), _tempo);
@@ -118,7 +132,12 @@ public sealed class AudioTrack : IDisposable
         get => _pitchSemitones;
         set
         {
-            _pitchSemitones = Math.Clamp(value, -24f, 24f);
+            float clamped = Math.Clamp(value, -24f, 24f);
+            if (clamped == _pitchSemitones)
+            {
+                return;
+            }
+            _pitchSemitones = clamped;
             if (!_disposed)
             {
                 OwnAudioNative.ownaudio_v1_track_set_pitch(_handle.DangerousGetHandle(), _pitchSemitones);
@@ -134,6 +153,10 @@ public sealed class AudioTrack : IDisposable
         get => _muted;
         set
         {
+            if (value == _muted)
+            {
+                return;
+            }
             _muted = value;
             if (!_disposed)
             {
