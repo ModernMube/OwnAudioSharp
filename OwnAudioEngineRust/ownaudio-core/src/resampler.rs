@@ -201,7 +201,10 @@ mod tests {
         let input = vec![sine_channel(440.0, 48_000, frames_in)];
         let mut out = vec![vec![0.0f32; rs.output_frames_max()]];
         let written = rs.process(&input, &mut out).unwrap();
-        assert!(written < frames_in, "downsampling should produce fewer frames");
+        assert!(
+            written < frames_in,
+            "downsampling should produce fewer frames"
+        );
         assert!(
             out[0][..written].iter().all(|&s| s.is_finite()),
             "output must not contain NaN or inf"
@@ -248,8 +251,16 @@ mod tests {
             let input = vec![ch.clone(), ch];
             let written = rs.process(&input, &mut out).unwrap();
             assert!(written <= max);
-            assert_eq!(out[0].len(), max, "out length must stay at output_frames_max");
-            assert_eq!(out[1].len(), max, "out length must stay at output_frames_max");
+            assert_eq!(
+                out[0].len(),
+                max,
+                "out length must stay at output_frames_max"
+            );
+            assert_eq!(
+                out[1].len(),
+                max,
+                "out length must stay at output_frames_max"
+            );
         }
     }
 

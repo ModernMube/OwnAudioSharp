@@ -59,8 +59,7 @@ pub(crate) struct SymphoniaBackend {
 
 impl SymphoniaBackend {
     pub(crate) fn open(path: &str, target_sample_rate: u32, target_channels: u32) -> Result<Self> {
-        let file = File::open(path)
-            .map_err(|e| AudioError::DecoderOpen(format!("{path}: {e}")))?;
+        let file = File::open(path).map_err(|e| AudioError::DecoderOpen(format!("{path}: {e}")))?;
         let mss = MediaSourceStream::new(Box::new(file), Default::default());
 
         let mut hint = Hint::new();
@@ -116,7 +115,11 @@ impl SymphoniaBackend {
             .map_err(map_sym_err_open)?;
 
         let resampler = if output_rate != source_rate {
-            Some(StreamResampler::new(source_rate, output_rate, output_channels)?)
+            Some(StreamResampler::new(
+                source_rate,
+                output_rate,
+                output_channels,
+            )?)
         } else {
             None
         };
@@ -156,9 +159,7 @@ impl SymphoniaBackend {
 
             let packet = match self.format.next_packet() {
                 Ok(p) => p,
-                Err(SymError::IoError(e))
-                    if e.kind() == std::io::ErrorKind::UnexpectedEof =>
-                {
+                Err(SymError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                     // Drain any tail held inside the resampler before reporting EOF.
                     if let Some(rs) = self.resampler.as_mut() {
                         rs.flush(&mut self.residual);
@@ -180,9 +181,7 @@ impl SymphoniaBackend {
                 Ok(d) => d,
                 // Decode errors on a single packet are recoverable: skip it.
                 Err(SymError::DecodeError(_)) => continue,
-                Err(SymError::IoError(e))
-                    if e.kind() == std::io::ErrorKind::UnexpectedEof =>
-                {
+                Err(SymError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                     if let Some(rs) = self.resampler.as_mut() {
                         rs.flush(&mut self.residual);
                     }
@@ -213,9 +212,8 @@ impl SymphoniaBackend {
             }
 
             // 1) Channel conversion into a scratch buffer.
-            let mut converted: Vec<f32> = Vec::with_capacity(
-                interleaved.len() / self.source_channels * self.output_channels,
-            );
+            let mut converted: Vec<f32> =
+                Vec::with_capacity(interleaved.len() / self.source_channels * self.output_channels);
             convert_channels(
                 interleaved,
                 self.source_channels,

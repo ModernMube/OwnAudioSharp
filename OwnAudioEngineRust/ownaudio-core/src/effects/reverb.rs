@@ -299,7 +299,9 @@ impl Effect for Reverb {
                 self.comb_filter_store[ch][i] = 0.0;
             }
             for i in 0..NUM_ALLPASSES {
-                self.allpass_buffers[ch][i].iter_mut().for_each(|s| *s = 0.0);
+                self.allpass_buffers[ch][i]
+                    .iter_mut()
+                    .for_each(|s| *s = 0.0);
                 self.allpass_indices[ch][i] = 0;
             }
         }
@@ -342,7 +344,15 @@ mod tests {
     }
 
     impl Reference {
-        fn new(sample_rate: f64, room_size: f64, damping: f64, width: f64, wet: f64, dry: f64, mix: f64) -> Self {
+        fn new(
+            sample_rate: f64,
+            room_size: f64,
+            damping: f64,
+            width: f64,
+            wet: f64,
+            dry: f64,
+            mix: f64,
+        ) -> Self {
             let scale = sample_rate / 44_100.0;
             let line = |tuning: i32| vec![0.0f64; (((tuning as f64) * scale) as usize).max(1)];
             Self {
@@ -390,7 +400,8 @@ mod tests {
                     for i in 0..NUM_COMBS {
                         let b_idx = self.comb_indices[ch][i];
                         let output = self.comb_buffers[ch][i][b_idx];
-                        let store = output * (1.0 - self.damp) + self.comb_filter_store[ch][i] * self.damp;
+                        let store =
+                            output * (1.0 - self.damp) + self.comb_filter_store[ch][i] * self.damp;
                         self.comb_filter_store[ch][i] = store;
                         self.comb_buffers[ch][i][b_idx] = input_mono + store * self.room;
                         let len = self.comb_buffers[ch][i].len();

@@ -39,7 +39,10 @@ impl RingBufferWriter {
             return 0;
         }
         // SAFETY: we checked `to_write <= slots()` above.
-        let mut chunk = self.producer.write_chunk_uninit(to_write).expect("slots checked");
+        let mut chunk = self
+            .producer
+            .write_chunk_uninit(to_write)
+            .expect("slots checked");
         let (first, second) = chunk.as_mut_slices();
         let first_len = first.len().min(to_write);
         for (dst, &src) in first[..first_len].iter_mut().zip(samples) {
@@ -47,7 +50,10 @@ impl RingBufferWriter {
         }
         let written_in_first = first_len;
         let remaining = to_write - written_in_first;
-        for (dst, &src) in second[..remaining].iter_mut().zip(&samples[written_in_first..]) {
+        for (dst, &src) in second[..remaining]
+            .iter_mut()
+            .zip(&samples[written_in_first..])
+        {
             dst.write(src);
         }
         // SAFETY: we initialised exactly `to_write` elements above.

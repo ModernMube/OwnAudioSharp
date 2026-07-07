@@ -507,7 +507,10 @@ impl MixerController {
             .iter_mut()
             .find(|s| s.effect_id == effect_id)
         {
-            shadow.set(crate::effects::PARAM_ENABLED, if enabled { 1.0 } else { 0.0 });
+            shadow.set(
+                crate::effects::PARAM_ENABLED,
+                if enabled { 1.0 } else { 0.0 },
+            );
         }
         self.enqueue(MixerCommand::SetEffectEnabled {
             track_id,
@@ -669,7 +672,12 @@ mod tests {
     fn pdc_aligns_a_latency_track_with_a_compensated_one() {
         // Mono mixer so one sample equals one frame.
         let mut mixer = MultiTrackMixer::new(48_000.0, 1);
-        let (mut ctl, rx) = command_channel(64, mixer.sample_rate(), mixer.channels(), mixer.max_buffer_size());
+        let (mut ctl, rx) = command_channel(
+            64,
+            mixer.sample_rate(),
+            mixer.channels(),
+            mixer.max_buffer_size(),
+        );
         mixer.attach_command_receiver(rx);
 
         const L: usize = 3;
@@ -680,7 +688,8 @@ mod tests {
         let (a, sa) = ctl.add_track().unwrap();
         ctl.set_track_source(a, Some(Box::new(VecSource::new(impulse.clone()))))
             .unwrap();
-        ctl.add_effect(a, Box::new(LatencyDelayEffect::new(L))).unwrap();
+        ctl.add_effect(a, Box::new(LatencyDelayEffect::new(L)))
+            .unwrap();
 
         // Track B: the same impulse with no effect — the mixer must delay it by L
         // (plugin delay compensation) so it lines up with A's delayed output.
@@ -705,7 +714,12 @@ mod tests {
     /// Builds a mono mixer wired to a fresh command channel.
     fn wired() -> (MixerController, MultiTrackMixer) {
         let mixer = MultiTrackMixer::new(48_000.0, 1);
-        let (ctl, rx) = command_channel(64, mixer.sample_rate(), mixer.channels(), mixer.max_buffer_size());
+        let (ctl, rx) = command_channel(
+            64,
+            mixer.sample_rate(),
+            mixer.channels(),
+            mixer.max_buffer_size(),
+        );
         let mut mixer = mixer;
         mixer.attach_command_receiver(rx);
         (ctl, mixer)

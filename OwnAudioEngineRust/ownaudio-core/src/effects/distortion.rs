@@ -239,7 +239,10 @@ mod tests {
         let mut buf = vec![5.0f32, -5.0, 100.0, -100.0];
         d.process(&mut buf, 1);
         for &s in &buf {
-            assert!(s.abs() <= 2.0, "sample {s} exceeded the soft-clip asymptote");
+            assert!(
+                s.abs() <= 2.0,
+                "sample {s} exceeded the soft-clip asymptote"
+            );
         }
     }
 
@@ -273,8 +276,7 @@ mod tests {
             let mut produced = input.clone();
             d.process(&mut produced, 2);
 
-            let reference =
-                reference_process(&input, drive as f64, mix as f64, gain as f64);
+            let reference = reference_process(&input, drive as f64, mix as f64, gain as f64);
             let err = rms_error_db(&produced, &reference);
             assert!(
                 err < -60.0,
@@ -326,7 +328,10 @@ mod tests {
             dry
         );
         // And the block must trend monotonically from wet toward dry.
-        assert!(block[255] > block[0], "mix ramp must move toward dry across the block");
+        assert!(
+            block[255] > block[0],
+            "mix ramp must move toward dry across the block"
+        );
 
         // After a long fade the output settles at the dry input.
         for _ in 0..16 {

@@ -53,7 +53,11 @@ fn stream_info_reports_unknown_duration_helpers() {
     let info = backend.stream_info();
     assert!(!info.has_unknown_duration());
     // ~2000 frames / 44100 Hz ≈ 45 ms
-    assert!(info.duration_ms >= 40 && info.duration_ms <= 50, "duration_ms={}", info.duration_ms);
+    assert!(
+        info.duration_ms >= 40 && info.duration_ms <= 50,
+        "duration_ms={}",
+        info.duration_ms
+    );
 }
 
 #[test]
@@ -92,7 +96,10 @@ fn seek_is_sample_accurate() {
     // Recover the landed frame from the first decoded sample.
     let landed = (buf[0] * 32768.0).round() as i64;
     let delta = (landed - target as i64).abs();
-    assert!(delta <= 2, "seek landed at frame {landed}, expected {target} (±2)");
+    assert!(
+        delta <= 2,
+        "seek landed at frame {landed}, expected {target} (±2)"
+    );
 }
 
 #[test]
@@ -105,7 +112,11 @@ fn channel_upmix_mono_to_stereo() {
     assert_eq!(backend.stream_info().channels, 2);
 
     let decoded = drain_backend(&mut backend);
-    assert_eq!(decoded.len(), frames * 2, "stereo output is double the frames");
+    assert_eq!(
+        decoded.len(),
+        frames * 2,
+        "stereo output is double the frames"
+    );
     // Left and right must be identical for a duplicated mono source.
     for f in 0..frames {
         assert!((decoded[f * 2] - decoded[f * 2 + 1]).abs() < 1e-6);
@@ -178,7 +189,10 @@ fn streaming_track_reads_full_stream() {
     }
 
     assert!(track.is_eof(), "track should reach EOF");
-    assert_eq!(total, frames, "streamed sample count should equal source frames");
+    assert_eq!(
+        total, frames,
+        "streamed sample count should equal source frames"
+    );
 }
 
 #[test]
@@ -207,7 +221,10 @@ fn streaming_track_seek_then_read() {
     let landed = (first * 32768.0).round() as i64;
     let delta = (landed - target as i64).abs();
     // A few frames of slack: the ring may briefly hold pre-seek samples.
-    assert!(delta <= 64, "post-seek landed at frame {landed}, expected {target}");
+    assert!(
+        delta <= 64,
+        "post-seek landed at frame {landed}, expected {target}"
+    );
 }
 
 #[test]

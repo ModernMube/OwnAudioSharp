@@ -174,7 +174,8 @@ mod tests {
     #[test]
     fn finishes_at_end_of_stream() {
         let wav = stereo_wav(4_000);
-        let (mut source, control) = FileTrackSource::open(wav.path_str(), 44_100, 2, 8_192).unwrap();
+        let (mut source, control) =
+            FileTrackSource::open(wav.path_str(), 44_100, 2, 8_192).unwrap();
 
         assert!(!control.is_finished());
         let total = drain_to_eof(&mut source, &control);
@@ -185,7 +186,8 @@ mod tests {
     #[test]
     fn loop_never_finishes() {
         let wav = stereo_wav(4_000);
-        let (mut source, control) = FileTrackSource::open(wav.path_str(), 44_100, 2, 8_192).unwrap();
+        let (mut source, control) =
+            FileTrackSource::open(wav.path_str(), 44_100, 2, 8_192).unwrap();
         control.set_loop(true);
 
         let mut buf = vec![0.0f32; 4096];
@@ -202,7 +204,8 @@ mod tests {
     #[test]
     fn seek_clears_finished_latch() {
         let wav = stereo_wav(4_000);
-        let (mut source, control) = FileTrackSource::open(wav.path_str(), 44_100, 2, 8_192).unwrap();
+        let (mut source, control) =
+            FileTrackSource::open(wav.path_str(), 44_100, 2, 8_192).unwrap();
 
         drain_to_eof(&mut source, &control);
         assert!(control.is_finished());
@@ -219,6 +222,9 @@ mod tests {
             }
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
-        assert!(cleared, "seek should let the source play again and clear finished");
+        assert!(
+            cleared,
+            "seek should let the source play again and clear finished"
+        );
     }
 }

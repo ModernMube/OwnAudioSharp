@@ -163,7 +163,11 @@ impl Effect for DynamicAmp {
         // 5. Attack / release smoothing with a per-block change limit.
         let max_change_this_block = self.max_gain_change_db_s * block_time;
         let gain_change_db = desired_gain_db - self.last_gain_db;
-        let time_const = if gain_change_db < 0.0 { self.attack_time } else { self.release_time };
+        let time_const = if gain_change_db < 0.0 {
+            self.attack_time
+        } else {
+            self.release_time
+        };
         let alpha = (-block_time / time_const).exp();
         let smoothed_change_db =
             ((1.0 - alpha) * gain_change_db).clamp(-max_change_this_block, max_change_this_block);
@@ -370,14 +374,20 @@ mod tests {
             let mut desired_gain_db = self.last_gain_db;
             if self.is_above_noise_gate {
                 let current_level_db = Self::linear_to_db(rms_slow.max(1e-6));
-                let gain_error_db = (self.target_rms_db - current_level_db)
-                    .clamp(-self.max_gain_reduction_db, Self::linear_to_db(self.max_gain));
+                let gain_error_db = (self.target_rms_db - current_level_db).clamp(
+                    -self.max_gain_reduction_db,
+                    Self::linear_to_db(self.max_gain),
+                );
                 desired_gain_db = gain_error_db;
             }
 
             let max_change_this_block = self.max_gain_change_db_s * block_time;
             let gain_change_db = desired_gain_db - self.last_gain_db;
-            let time_const = if gain_change_db < 0.0 { self.attack_time } else { self.release_time };
+            let time_const = if gain_change_db < 0.0 {
+                self.attack_time
+            } else {
+                self.release_time
+            };
             let alpha = (-block_time / time_const).exp();
             let smoothed_change_db = ((1.0 - alpha) * gain_change_db)
                 .clamp(-max_change_this_block, max_change_this_block);
@@ -499,7 +509,9 @@ mod tests {
         const BLOCK_FRAMES: usize = 1024;
         let full = stereo_tone(BLOCK_FRAMES * 24);
         for &(target, attack, release, gate, max_g, max_red, window, max_change) in &[
-            (-12.0f64, 0.5f64, 2.0f64, -50.0f64, 6.0f64, 12.0f64, 0.5f64, 12.0f64),
+            (
+                -12.0f64, 0.5f64, 2.0f64, -50.0f64, 6.0f64, 12.0f64, 0.5f64, 12.0f64,
+            ),
             (-15.0, 0.18, 0.80, -45.0, 8.0, 15.0, 0.5, 20.0),
             (-10.0, 2.00, 5.00, -60.0, 3.0, 6.0, 0.5, 3.0),
         ] {

@@ -263,11 +263,7 @@ impl MultiTrackMixer {
     /// Sets (or clears) the audio source for the track with the given id.
     ///
     /// Returns `false` when no track has that id.
-    pub fn set_track_source(
-        &mut self,
-        id: u64,
-        source: Option<Box<dyn TrackSource>>,
-    ) -> bool {
+    pub fn set_track_source(&mut self, id: u64, source: Option<Box<dyn TrackSource>>) -> bool {
         match self.track_mut(id) {
             Some(t) => {
                 t.set_source(source);
@@ -533,7 +529,10 @@ mod tests {
     }
 
     fn play(mixer: &mut MultiTrackMixer, id: u64) {
-        mixer.track_shared(id).unwrap().set_state(TrackState::Playing);
+        mixer
+            .track_shared(id)
+            .unwrap()
+            .set_state(TrackState::Playing);
     }
 
     #[test]
@@ -605,7 +604,10 @@ mod tests {
         // The tail (well past ~8 time constants of the 5 ms ramp) sits at the
         // target gain.
         for &s in &out[1800..] {
-            assert!((s - 0.25).abs() < 1e-3, "tail sample {s} not at target 0.25");
+            assert!(
+                (s - 0.25).abs() < 1e-3,
+                "tail sample {s} not at target 0.25"
+            );
         }
     }
 
@@ -628,11 +630,20 @@ mod tests {
         shared.set_gain(0.0);
         let mut out2 = vec![0.0f32; 2048];
         mixer.mix(&mut out2);
-        assert!(out2[0] > 0.9, "first sample {} jumped instead of ramping", out2[0]);
+        assert!(
+            out2[0] > 0.9,
+            "first sample {} jumped instead of ramping",
+            out2[0]
+        );
         assert!(out2[0] < 1.0, "gain did not begin ramping down");
         // Monotonically non-increasing as it fades toward 0.0.
         for w in out2.windows(2) {
-            assert!(w[1] <= w[0] + 1e-6, "ramp not monotonic: {} -> {}", w[0], w[1]);
+            assert!(
+                w[1] <= w[0] + 1e-6,
+                "ramp not monotonic: {} -> {}",
+                w[0],
+                w[1]
+            );
         }
         assert!(out2[out2.len() - 1] < 1e-3, "did not reach target 0.0");
     }
@@ -746,7 +757,10 @@ mod tests {
         let mut out = vec![0.0f32; 4096];
         mixer.mix(&mut out);
         for &s in &out[3800..] {
-            assert!((s - 0.5).abs() < 1e-3, "tail sample {s} not at master target 0.5");
+            assert!(
+                (s - 0.5).abs() < 1e-3,
+                "tail sample {s} not at master target 0.5"
+            );
         }
     }
 
@@ -777,8 +791,16 @@ mod tests {
         let shared = mixer.master_shared();
         let mut out = vec![0.0f32; 1024];
         mixer.mix(&mut out);
-        assert!((shared.master_peak_l() - 1.0).abs() < 1e-6, "left peak {}", shared.master_peak_l());
-        assert!((shared.master_peak_r() - 1.0).abs() < 1e-6, "right peak {}", shared.master_peak_r());
+        assert!(
+            (shared.master_peak_l() - 1.0).abs() < 1e-6,
+            "left peak {}",
+            shared.master_peak_l()
+        );
+        assert!(
+            (shared.master_peak_r() - 1.0).abs() < 1e-6,
+            "right peak {}",
+            shared.master_peak_r()
+        );
     }
 
     #[test]
@@ -796,7 +818,12 @@ mod tests {
         let mut mixer = MultiTrackMixer::new(48_000.0, 1);
         assert_eq!(mixer.tracks.capacity(), MAX_TRACKS);
 
-        let (mut ctl, rx) = command_channel(64, mixer.sample_rate(), mixer.channels(), mixer.max_buffer_size());
+        let (mut ctl, rx) = command_channel(
+            64,
+            mixer.sample_rate(),
+            mixer.channels(),
+            mixer.max_buffer_size(),
+        );
         mixer.attach_command_receiver(rx);
         for _ in 0..8 {
             ctl.add_track().unwrap();
@@ -821,7 +848,10 @@ mod tests {
 
     impl RampSource {
         fn new(read_total: Arc<AtomicU64>) -> Self {
-            Self { next: 0, read_total }
+            Self {
+                next: 0,
+                read_total,
+            }
         }
     }
 
@@ -831,7 +861,8 @@ mod tests {
                 *s = self.next as f32;
                 self.next += 1;
             }
-            self.read_total.fetch_add(out.len() as u64, Ordering::Relaxed);
+            self.read_total
+                .fetch_add(out.len() as u64, Ordering::Relaxed);
             out.len()
         }
     }

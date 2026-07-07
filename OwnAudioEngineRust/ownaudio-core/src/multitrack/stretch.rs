@@ -333,8 +333,10 @@ mod tests {
     fn unity_still_produces_full_block() {
         // The stage runs even at unity tempo/pitch; after warm-up it returns a full block.
         let mut s = TrackStretch::new(48000.0, 2, 4096);
-        let mut source: Option<Box<dyn TrackSource>> =
-            Some(Box::new(SineSource { phase: 0.0, channels: 2 }));
+        let mut source: Option<Box<dyn TrackSource>> = Some(Box::new(SineSource {
+            phase: 0.0,
+            channels: 2,
+        }));
         let mut out = vec![0.0f32; 1024];
 
         let mut last = 0usize;
@@ -342,14 +344,20 @@ mod tests {
             last = s.fill(&mut source, &mut out, 2, 1.0, 0.0);
             assert!(out.iter().all(|v| v.is_finite()));
         }
-        assert_eq!(last, out.len(), "unity steady-state block must be fully produced");
+        assert_eq!(
+            last,
+            out.len(),
+            "unity steady-state block must be fully produced"
+        );
     }
 
     #[test]
     fn faster_tempo_fills_full_block_and_is_finite() {
         let mut s = TrackStretch::new(48000.0, 2, 4096);
-        let mut source: Option<Box<dyn TrackSource>> =
-            Some(Box::new(SineSource { phase: 0.0, channels: 2 }));
+        let mut source: Option<Box<dyn TrackSource>> = Some(Box::new(SineSource {
+            phase: 0.0,
+            channels: 2,
+        }));
         let mut out = vec![0.0f32; 1024];
 
         // Warm-up plus a few steady-state blocks at 1.5x tempo.
@@ -364,8 +372,10 @@ mod tests {
     #[test]
     fn pitch_only_produces_output() {
         let mut s = TrackStretch::new(44100.0, 2, 4096);
-        let mut source: Option<Box<dyn TrackSource>> =
-            Some(Box::new(SineSource { phase: 0.0, channels: 2 }));
+        let mut source: Option<Box<dyn TrackSource>> = Some(Box::new(SineSource {
+            phase: 0.0,
+            channels: 2,
+        }));
         let mut out = vec![0.0f32; 1024];
 
         let mut produced_energy = 0.0f64;
@@ -373,7 +383,10 @@ mod tests {
             s.fill(&mut source, &mut out, 2, 1.0, 4.0);
             produced_energy += out.iter().map(|&v| (v as f64) * (v as f64)).sum::<f64>();
         }
-        assert!(produced_energy > 1.0, "pitch-shifted output unexpectedly silent");
+        assert!(
+            produced_energy > 1.0,
+            "pitch-shifted output unexpectedly silent"
+        );
     }
 
     #[test]
@@ -395,7 +408,10 @@ mod tests {
                 break;
             }
         }
-        assert!(saw_zero, "stretch must report EOF after the finite source drains");
+        assert!(
+            saw_zero,
+            "stretch must report EOF after the finite source drains"
+        );
     }
 
     #[test]
@@ -417,7 +433,10 @@ mod tests {
             produced_energy += out.iter().map(|&v| (v as f64) * (v as f64)).sum::<f64>();
         }
         // The stage must not have latched EOF on the transient zeros.
-        assert!(!s.eof_flushed, "transient underrun must not flush/latch EOF");
+        assert!(
+            !s.eof_flushed,
+            "transient underrun must not flush/latch EOF"
+        );
         assert!(
             produced_energy > 1.0,
             "stage must resume producing audio after a transient underrun"
@@ -430,8 +449,10 @@ mod tests {
         // Clearing before the processor is built must not panic.
         s.clear();
 
-        let mut source: Option<Box<dyn TrackSource>> =
-            Some(Box::new(SineSource { phase: 0.0, channels: 2 }));
+        let mut source: Option<Box<dyn TrackSource>> = Some(Box::new(SineSource {
+            phase: 0.0,
+            channels: 2,
+        }));
         let mut out = vec![0.0f32; 512];
         s.fill(&mut source, &mut out, 2, 1.3, 0.0);
 

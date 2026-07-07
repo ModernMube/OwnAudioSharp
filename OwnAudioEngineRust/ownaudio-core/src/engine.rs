@@ -25,7 +25,9 @@ impl AudioEngine {
     ///
     /// This call is cheap and does not open any audio device.
     pub fn new() -> Result<Self> {
-        Ok(AudioEngine { host: cpal::default_host() })
+        Ok(AudioEngine {
+            host: cpal::default_host(),
+        })
     }
 
     /// Creates a new engine instance using an explicitly provided `cpal::Host`.
@@ -78,10 +80,8 @@ impl AudioEngine {
         // sub-slice (`tmp[..data.len()]`); the buffer is grown solely if the OS
         // hands us a larger buffer than anticipated — a one-time amortized cost,
         // never a per-callback allocation in steady state.
-        let pre_alloc = config
-            .buffer_size_frames
-            .unwrap_or(4096) as usize
-            * config.channels as usize;
+        let pre_alloc =
+            config.buffer_size_frames.unwrap_or(4096) as usize * config.channels as usize;
 
         // cpal 0.18: build_*_stream takes StreamConfig by value (it is Copy).
         //
@@ -142,7 +142,10 @@ impl AudioEngine {
             }
         };
 
-        Ok(OutputStream { stream, error_state })
+        Ok(OutputStream {
+            stream,
+            error_state,
+        })
     }
 
     /// Opens an input stream on the given device (or the system default if
@@ -172,10 +175,8 @@ impl AudioEngine {
             }
         };
 
-        let pre_alloc = config
-            .buffer_size_frames
-            .unwrap_or(4096) as usize
-            * config.channels as usize;
+        let pre_alloc =
+            config.buffer_size_frames.unwrap_or(4096) as usize * config.channels as usize;
 
         // Each input callback body is wrapped in `rt_guard::guard_input` so a
         // panic cannot unwind across the cpal/C audio-thread frame (UB).  Input
@@ -232,12 +233,17 @@ impl AudioEngine {
             }
         };
 
-        Ok(InputStream { stream, error_state })
+        Ok(InputStream {
+            stream,
+            error_state,
+        })
     }
 }
 
 impl Default for AudioEngine {
     fn default() -> Self {
-        AudioEngine { host: cpal::default_host() }
+        AudioEngine {
+            host: cpal::default_host(),
+        }
     }
 }

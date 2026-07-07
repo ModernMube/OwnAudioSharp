@@ -229,7 +229,8 @@ impl TrackShared {
     #[inline]
     pub fn set_tempo_ratio(&self, ratio: f32) {
         let clamped = ratio.clamp(0.25, 4.0);
-        self.tempo_ratio_bits.store(clamped.to_bits(), Ordering::Relaxed);
+        self.tempo_ratio_bits
+            .store(clamped.to_bits(), Ordering::Relaxed);
         if (clamped - 1.0).abs() > 1e-4 {
             self.stretch_always_on.store(true, Ordering::Relaxed);
         }
@@ -248,7 +249,8 @@ impl TrackShared {
     #[inline]
     pub fn set_pitch_semitones(&self, semitones: f32) {
         let clamped = semitones.clamp(-24.0, 24.0);
-        self.pitch_semitones_bits.store(clamped.to_bits(), Ordering::Relaxed);
+        self.pitch_semitones_bits
+            .store(clamped.to_bits(), Ordering::Relaxed);
         if clamped.abs() > 1e-4 {
             self.stretch_always_on.store(true, Ordering::Relaxed);
         }
@@ -810,13 +812,17 @@ mod tests {
 
         let unity = Arc::new(AtomicU64::new(0));
         let mut t_unity = Track::new(10, sr, 2, block);
-        t_unity.set_source(Some(Box::new(CountingSource { read_samples: unity.clone() })));
+        t_unity.set_source(Some(Box::new(CountingSource {
+            read_samples: unity.clone(),
+        })));
         t_unity.shared.set_state(TrackState::Playing);
         t_unity.shared.set_tempo_ratio(1.0);
 
         let fast = Arc::new(AtomicU64::new(0));
         let mut t_fast = Track::new(11, sr, 2, block);
-        t_fast.set_source(Some(Box::new(CountingSource { read_samples: fast.clone() })));
+        t_fast.set_source(Some(Box::new(CountingSource {
+            read_samples: fast.clone(),
+        })));
         t_fast.shared.set_state(TrackState::Playing);
         t_fast.shared.set_tempo_ratio(2.0);
 
@@ -975,8 +981,16 @@ mod tests {
 
         let mut out = vec![0.0f32; block];
         track.process_additive(&mut out, 2);
-        assert!((track.shared.peak_l() - 1.0).abs() < 1e-3, "peak_l {}", track.shared.peak_l());
-        assert!((track.shared.peak_r() - 1.0).abs() < 1e-3, "peak_r {}", track.shared.peak_r());
+        assert!(
+            (track.shared.peak_l() - 1.0).abs() < 1e-3,
+            "peak_l {}",
+            track.shared.peak_l()
+        );
+        assert!(
+            (track.shared.peak_r() - 1.0).abs() < 1e-3,
+            "peak_r {}",
+            track.shared.peak_r()
+        );
 
         // Settle the gain smoother at 0.5 over several blocks, then the peak
         // tracks the post-gain level.
@@ -985,7 +999,11 @@ mod tests {
             out.iter_mut().for_each(|s| *s = 0.0);
             track.process_additive(&mut out, 2);
         }
-        assert!((track.shared.peak_l() - 0.5).abs() < 1e-2, "peak_l {}", track.shared.peak_l());
+        assert!(
+            (track.shared.peak_l() - 0.5).abs() < 1e-2,
+            "peak_l {}",
+            track.shared.peak_l()
+        );
     }
 
     #[test]
@@ -1000,9 +1018,16 @@ mod tests {
 
         let mut out = vec![0.0f32; 8];
         track.process_additive(&mut out, 1);
-        assert_eq!(&out[..4], &[0.0, 0.0, 0.0, 0.0], "first 4 frames must be silent");
+        assert_eq!(
+            &out[..4],
+            &[0.0, 0.0, 0.0, 0.0],
+            "first 4 frames must be silent"
+        );
         for &s in &out[4..] {
-            assert!((s - 0.5).abs() < 1e-6, "content must play after the silence, got {s}");
+            assert!(
+                (s - 0.5).abs() < 1e-6,
+                "content must play after the silence, got {s}"
+            );
         }
         assert_eq!(track.shared.rendered_frames(), 4);
     }
@@ -1029,7 +1054,10 @@ mod tests {
         out.iter_mut().for_each(|s| *s = 0.0);
         track.process_additive(&mut out, 1);
         for &s in &out {
-            assert!((s - 1.0).abs() < 1e-6, "content must play once the silence is consumed");
+            assert!(
+                (s - 1.0).abs() < 1e-6,
+                "content must play once the silence is consumed"
+            );
         }
         assert_eq!(track.shared.rendered_frames(), 4);
     }

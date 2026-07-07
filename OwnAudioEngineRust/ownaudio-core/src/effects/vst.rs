@@ -275,7 +275,10 @@ mod tests {
     use super::*;
 
     /// A plugin stub that doubles every input sample into the output planes.
-    unsafe extern "C" fn doubling_process(_handle: *mut c_void, buffer: *mut VstAudioBuffer) -> bool {
+    unsafe extern "C" fn doubling_process(
+        _handle: *mut c_void,
+        buffer: *mut VstAudioBuffer,
+    ) -> bool {
         let b = &*buffer;
         let ch = b.num_channels as usize;
         let n = b.num_samples as usize;
@@ -289,7 +292,10 @@ mod tests {
         true
     }
 
-    unsafe extern "C" fn failing_process(_handle: *mut c_void, _buffer: *mut VstAudioBuffer) -> bool {
+    unsafe extern "C" fn failing_process(
+        _handle: *mut c_void,
+        _buffer: *mut VstAudioBuffer,
+    ) -> bool {
         false
     }
 
