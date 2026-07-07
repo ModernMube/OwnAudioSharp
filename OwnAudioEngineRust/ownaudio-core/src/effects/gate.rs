@@ -5,16 +5,21 @@
 //! parameter model already declared on the native side: a threshold in dB, plus
 //! attack / hold / release times in milliseconds.
 //!
-//! The detector takes the per-frame peak across all channels and compares it to
-//! the linear threshold.  A one-pole gain envelope opens toward unity with the
-//! attack time constant while the signal is above the threshold, stays open for
-//! the hold time after it drops below, then closes toward zero with the release
-//! time constant.  The same gain is applied to every channel of the frame so the
-//! stereo image is preserved, and the gated (wet) signal is blended with the dry
-//! signal by `mix`.
+//! The detector takes the per-frame peak across all channels, smooths it with a
+//! short peak-follower (instant attack, ~1 ms release) so a low tone's
+//! zero-crossings do not momentarily dip the level below the threshold, and
+//! compares it to the linear threshold with **hysteresis** (B.7): the gate opens
+//! at the threshold but does not close until the level falls a few dB below it,
+//! preventing chatter around the threshold.  A one-pole gain envelope opens
+//! toward unity with the attack time constant while the signal is present, stays
+//! open for the hold time after it drops below, then closes toward zero with the
+//! release time constant.  The same gain is applied to every channel of the frame
+//! so the stereo image is preserved, and the gated (wet) signal is blended with
+//! the dry signal by `mix`.
 //!
-//! **Denormal protection (2.12):** the recursive gain envelope is flushed every
-//! frame so a closing gate never parks its envelope in the subnormal range.
+//! **Denormal protection (2.12):** the recursive gain envelope and the detector
+//! follower are flushed every frame so a closing gate never parks either in the
+//! subnormal range.
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
@@ -32,6 +37,16 @@ pub const PARAM_HOLD: u32 = 5;
 /// Mix values below this bypass processing entirely.
 const MIX_BYPASS_THRESHOLD: f32 = 0.001;
 
+/// Hysteresis (dB): the close threshold sits this far below the open threshold,
+/// so a signal hovering around the threshold cannot chatter the gate open/closed
+/// (internal constant — the parameter surface is unchanged). Mirrors the
+/// `DynamicAmp` hysteresis idiom.
+const HYSTERESIS_DB: f32 = 3.0;
+
+/// Detector peak-follower release time (ms): short enough to track transients,
+/// long enough to bridge the zero-crossings of low-frequency material.
+const DETECTOR_SMOOTH_MS: f32 = 1.0;
+
 /// Noise gate effect.
 pub struct Gate {
     enabled: bool,
@@ -44,6 +59,8 @@ pub struct Gate {
 
     // Derived from the parameters / sample rate (recomputed on change).
     threshold_lin: f32,
+    close_threshold_lin: f32,
+    detector_coeff: f32,
     attack_coeff: f32,
     release_coeff: f32,
     hold_frames: u32,
@@ -51,6 +68,11 @@ pub struct Gate {
     // Envelope state.
     gain: f32,
     hold_counter: u32,
+    /// Smoothed detector level (peak-follower).
+    detector_env: f32,
+    /// Hysteretic open/closed latch: `true` once the level crosses the open
+    /// threshold, `false` once it falls below the close threshold.
+    gate_open: bool,
     mix_ramp: RampedParam,
 }
 
@@ -72,11 +94,15 @@ impl Gate {
             release_ms: 100.0,
             hold_ms: 50.0,
             threshold_lin: 0.0,
+            close_threshold_lin: 0.0,
+            detector_coeff: 0.0,
             attack_coeff: 0.0,
             release_coeff: 0.0,
             hold_frames: 0,
             gain: 0.0,
             hold_counter: 0,
+            detector_env: 0.0,
+            gate_open: false,
             mix_ramp: RampedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
         };
         g.recompute();
@@ -92,6 +118,8 @@ impl Gate {
     /// Recomputes the cached threshold / coefficients from the parameters.
     fn recompute(&mut self) {
         self.threshold_lin = 10.0f32.powf(self.threshold_db / 20.0);
+        self.close_threshold_lin = 10.0f32.powf((self.threshold_db - HYSTERESIS_DB) / 20.0);
+        self.detector_coeff = self.time_coeff(DETECTOR_SMOOTH_MS);
         self.attack_coeff = self.time_coeff(self.attack_ms);
         self.release_coeff = self.time_coeff(self.release_ms);
         self.hold_frames = (self.hold_ms * 0.001 * self.sample_rate).round() as u32;
@@ -120,7 +148,9 @@ impl Effect for Gate {
             let mix = self.mix_ramp.advance();
             let dry = 1.0 - mix;
 
-            // Detector: peak magnitude across the channels of this frame.
+            // Detector: peak magnitude across the channels of this frame,
+            // smoothed by a peak-follower (instant attack, short release) so a
+            // low tone's zero-crossings do not momentarily read below threshold.
             let mut level = 0.0f32;
             for ch in 0..channels {
                 let m = buffer[base + ch].abs();
@@ -128,9 +158,24 @@ impl Effect for Gate {
                     level = m;
                 }
             }
+            if level > self.detector_env {
+                self.detector_env = level;
+            } else {
+                self.detector_env += (level - self.detector_env) * self.detector_coeff;
+            }
+            self.detector_env = denormal::flush(self.detector_env);
 
-            if level >= self.threshold_lin {
-                // Above threshold: open toward unity and refresh the hold window.
+            // Hysteretic presence test: open at the threshold, stay open until the
+            // level falls below the (lower) close threshold.
+            let present = if self.gate_open {
+                self.detector_env >= self.close_threshold_lin
+            } else {
+                self.detector_env >= self.threshold_lin
+            };
+            self.gate_open = present;
+
+            if present {
+                // Signal present: open toward unity and refresh the hold window.
                 self.gain += (1.0 - self.gain) * self.attack_coeff;
                 self.hold_counter = self.hold_frames;
             } else if self.hold_counter > 0 {
@@ -201,6 +246,8 @@ impl Effect for Gate {
     fn reset(&mut self) {
         self.gain = 0.0;
         self.hold_counter = 0;
+        self.detector_env = 0.0;
+        self.gate_open = false;
         self.mix_ramp.reset(self.mix);
     }
 
@@ -222,11 +269,15 @@ mod tests {
     struct Reference {
         mix: f64,
         threshold_lin: f64,
+        close_threshold_lin: f64,
+        detector_coeff: f64,
         attack_coeff: f64,
         release_coeff: f64,
         hold_frames: u32,
         gain: f64,
         hold_counter: u32,
+        detector_env: f64,
+        gate_open: bool,
         channels: usize,
     }
 
@@ -247,11 +298,15 @@ mod tests {
             Self {
                 mix,
                 threshold_lin: 10.0f64.powf(threshold_db / 20.0),
+                close_threshold_lin: 10.0f64.powf((threshold_db - HYSTERESIS_DB as f64) / 20.0),
+                detector_coeff: coeff(DETECTOR_SMOOTH_MS as f64),
                 attack_coeff: coeff(attack_ms),
                 release_coeff: coeff(release_ms),
                 hold_frames: (hold_ms * 0.001 * sample_rate).round() as u32,
                 gain: 0.0,
                 hold_counter: 0,
+                detector_env: 0.0,
+                gate_open: false,
                 channels,
             }
         }
@@ -269,7 +324,18 @@ mod tests {
                         level = m;
                     }
                 }
-                if level >= self.threshold_lin {
+                if level > self.detector_env {
+                    self.detector_env = level;
+                } else {
+                    self.detector_env += (level - self.detector_env) * self.detector_coeff;
+                }
+                let present = if self.gate_open {
+                    self.detector_env >= self.close_threshold_lin
+                } else {
+                    self.detector_env >= self.threshold_lin
+                };
+                self.gate_open = present;
+                if present {
                     self.gain += (1.0 - self.gain) * self.attack_coeff;
                     self.hold_counter = self.hold_frames;
                 } else if self.hold_counter > 0 {
@@ -392,6 +458,37 @@ mod tests {
     }
 
     #[test]
+    fn hysteresis_holds_gate_open_between_thresholds() {
+        // B.7: a level between the close (-43 dB) and open (-40 dB) thresholds
+        // keeps an already-open gate open, but is not enough to open a closed one.
+        let mut open = Gate::new(48_000.0);
+        open.set_param(PARAM_THRESHOLD, -40.0);
+        open.set_param(PARAM_HOLD, 0.0);
+        open.set_param(PARAM_ATTACK, 0.1);
+        let mut loud = vec![0.5f32; 4_800];
+        open.process(&mut loud, 1);
+        assert!(open.gain > 0.9, "gate did not open: {}", open.gain);
+        let mut mid = vec![0.008f32; 48_000]; // between close and open thresholds
+        open.process(&mut mid, 1);
+        assert!(
+            open.gain > 0.9,
+            "hysteresis must hold the gate open: {}",
+            open.gain
+        );
+
+        let mut closed = Gate::new(48_000.0);
+        closed.set_param(PARAM_THRESHOLD, -40.0);
+        closed.set_param(PARAM_HOLD, 0.0);
+        let mut mid2 = vec![0.008f32; 48_000];
+        closed.process(&mut mid2, 1);
+        assert!(
+            closed.gain < 0.1,
+            "below the open threshold the gate must stay shut: {}",
+            closed.gain
+        );
+    }
+
+    #[test]
     fn output_is_finite_and_length_preserved() {
         let mut g = Gate::new(48_000.0);
         g.set_param(PARAM_THRESHOLD, -25.0);
@@ -450,7 +547,13 @@ mod tests {
             g.set_param(PARAM_MIX, mix);
 
             let mut reference = Reference::new(
-                48_000.0, 2, mix as f64, thr as f64, atk as f64, rel as f64, hold as f64,
+                48_000.0,
+                2,
+                mix as f64,
+                thr as f64,
+                atk as f64,
+                rel as f64,
+                hold as f64,
             );
 
             let mut produced = input.clone();
