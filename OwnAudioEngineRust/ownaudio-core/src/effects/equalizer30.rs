@@ -17,6 +17,11 @@
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
+use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
+
+/// Below this dB delta a smoothed band gain is considered unchanged, so its
+/// coefficients are not recomputed for the block.
+const GAIN_RECALC_EPS_DB: f32 = 1.0e-4;
 
 /// First band gain parameter ID; bands occupy `PARAM_BAND_0 ..= PARAM_BAND_0 + 29`.
 ///
@@ -40,8 +45,18 @@ const GAIN_MAX_DB: f32 = 18.0;
 /// exceeds this threshold, mirroring the reference active-band optimization.
 const ACTIVE_GAIN_THRESHOLD_DB: f32 = 0.01;
 
-/// Output hard-clip ceiling applied after the filter chain (reference parity).
+/// Output hard-clip ceiling applied after the filter chain.
+///
+/// **Note (B.6.1):** this is a hidden nonlinearity — an EQ is expected to be
+/// linear, but a very hot signal (peaks above ±1.5 after boosting several bands)
+/// is hard-clipped here, adding level-dependent distortion that shows up in a
+/// null test.  It is retained for parity with the shipped behaviour; removing it
+/// (leaving head-room to the master limiter) is a deliberate sound change best
+/// gated behind an engine-level quality option.
 const HARD_CLIP: f32 = 1.5;
+
+/// Mix values below this bypass processing entirely.
+const MIX_BYPASS_THRESHOLD: f32 = 0.01;
 
 /// Channels the per-channel state is pre-allocated for; the library's working
 /// format is stereo.  A larger channel count grows the state once (amortized,
@@ -82,6 +97,16 @@ pub struct Equalizer30 {
     // Per-channel Transposed-Direct-Form-II state, flattened as `channel * BANDS + band`.
     z1: Vec<f32>,
     z2: Vec<f32>,
+    // Per-band dB-gain smoother; a gain change during playback glides at the
+    // per-sample time constant while its biquad coefficients are recomputed once
+    // per block (block-rate coefficient update — no zipper on a live band drag).
+    // Before the first block a change snaps, keeping the steady-state output
+    // bit-identical to an un-smoothed EQ.
+    gain_ramps: [RampedParam; BANDS],
+    // Dry/wet mix smoother (B.6.2): the 30-band `mix` parameter used to be inert
+    // (stored but never applied), unlike the 10-band EQ.  It now blends the wet
+    // filter output with the dry signal exactly like the 10-band effect.
+    mix_ramp: RampedParam,
 }
 
 impl Equalizer30 {
@@ -106,11 +131,34 @@ impl Equalizer30 {
             active_count: 0,
             z1: vec![0.0; PREALLOC_CHANNELS * BANDS],
             z2: vec![0.0; PREALLOC_CHANNELS * BANDS],
+            gain_ramps: [RampedParam::new(0.0, sample_rate, DEFAULT_SMOOTH_MS); BANDS],
+            mix_ramp: RampedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
         };
         for band in 0..BANDS {
             eq.update_filter(band);
         }
         eq
+    }
+
+    /// Advances every band's dB-gain smoother by one block and recomputes the
+    /// biquad coefficients of any band whose gain moved, rebuilding the active
+    /// list if needed.  Call once at the top of `process`; before the first block
+    /// a `set_param` snaps the smoother, so this reconciles the deferred gain into
+    /// the coefficients on the first block (steady-state parity preserved).
+    fn advance_gain_ramps(&mut self, frame_count: usize) {
+        let mut dirty = false;
+        for band in 0..BANDS {
+            self.gain_ramps[band].begin_block();
+            let g = self.gain_ramps[band].advance_block(frame_count);
+            if (g - self.gains_db[band]).abs() > GAIN_RECALC_EPS_DB {
+                self.gains_db[band] = g;
+                self.update_filter(band);
+                dirty = true;
+            }
+        }
+        if dirty {
+            self.rebuild_active();
+        }
     }
 
     /// Recomputes the normalized RBJ peaking-biquad coefficients for one band
@@ -172,32 +220,47 @@ impl Effect for Equalizer30 {
     }
 
     fn process(&mut self, buffer: &mut [f32], channels: u16) {
-        if !self.enabled || channels == 0 || self.active_count == 0 {
+        self.mix_ramp.begin_block();
+        if !self.enabled
+            || channels == 0
+            || (self.mix < MIX_BYPASS_THRESHOLD && self.mix_ramp.current() < MIX_BYPASS_THRESHOLD)
+        {
             return;
         }
 
         let channels = channels as usize;
-        self.ensure_channel_state(channels);
-
         let frame_count = buffer.len() / channels;
+
+        // Glide any band gains changed during playback and refresh their
+        // coefficients once per block before deciding which bands are active.
+        self.advance_gain_ramps(frame_count);
+        if self.active_count == 0 {
+            return;
+        }
+
+        self.ensure_channel_state(channels);
         // Frame-outer / channel-inner traversal keeps the interleaved buffer
         // access sequential (cache-friendly, auto-vectorizable); each channel's
         // recursive state still evolves in frame order, so the output is bit
         // identical to a channel-outer traversal.
         for frame in 0..frame_count {
             let frame_base = frame * channels;
+            let mix = self.mix_ramp.advance();
+            let dry = 1.0 - mix;
             for ch in 0..channels {
                 let state_base = ch * BANDS;
                 let i = frame_base + ch;
-                let mut input = buffer[i];
+                let dry_in = buffer[i];
+                let mut input = dry_in;
 
                 for a in 0..self.active_count {
                     let band = self.active[a];
                     let s = state_base + band;
 
                     let output = self.b0[band] * input + self.z1[s];
-                    self.z1[s] =
-                        denormal::flush(self.b1[band] * input - self.a1[band] * output + self.z2[s]);
+                    self.z1[s] = denormal::flush(
+                        self.b1[band] * input - self.a1[band] * output + self.z2[s],
+                    );
                     self.z2[s] = denormal::flush(self.b2[band] * input - self.a2[band] * output);
                     input = output;
                 }
@@ -205,7 +268,9 @@ impl Effect for Equalizer30 {
                 if input.abs() > HARD_CLIP {
                     input = input.signum() * HARD_CLIP;
                 }
-                buffer[i] = input;
+                // B.6.2: blend the wet filter output with the dry signal by `mix`
+                // (previously the parameter was inert and always ran fully wet).
+                buffer[i] = dry_in * dry + input * mix;
             }
         }
     }
@@ -218,13 +283,14 @@ impl Effect for Equalizer30 {
             }
             PARAM_MIX => {
                 self.mix = value.clamp(0.0, 1.0);
+                self.mix_ramp.set(self.mix);
                 true
             }
             PARAM_BAND_0..=PARAM_BAND_29 => {
                 let idx = (param_id - PARAM_BAND_0) as usize;
-                self.gains_db[idx] = value.clamp(GAIN_MIN_DB, GAIN_MAX_DB);
-                self.update_filter(idx);
-                self.rebuild_active();
+                // Snaps before the first block (steady-state parity), glides after
+                // playback starts; the coefficients are refreshed in `process`.
+                self.gain_ramps[idx].set(value.clamp(GAIN_MIN_DB, GAIN_MAX_DB));
                 true
             }
             _ => false,
@@ -236,7 +302,9 @@ impl Effect for Equalizer30 {
             PARAM_ENABLED => Some(if self.enabled { 1.0 } else { 0.0 }),
             PARAM_MIX => Some(self.mix),
             PARAM_BAND_0..=PARAM_BAND_29 => {
-                Some(self.gains_db[(param_id - PARAM_BAND_0) as usize])
+                // Report the value the user set (the ramp target), not the point
+                // the glide currently sits at.
+                Some(self.gain_ramps[(param_id - PARAM_BAND_0) as usize].target())
             }
             _ => None,
         }
@@ -245,6 +313,10 @@ impl Effect for Equalizer30 {
     fn reset(&mut self) {
         self.z1.iter_mut().for_each(|s| *s = 0.0);
         self.z2.iter_mut().for_each(|s| *s = 0.0);
+        for band in 0..BANDS {
+            self.gain_ramps[band].reset(self.gains_db[band]);
+        }
+        self.mix_ramp.reset(self.mix);
     }
 
     fn is_enabled(&self) -> bool {
@@ -417,12 +489,24 @@ mod tests {
 
     #[test]
     fn active_band_tracking_follows_gain() {
+        // Band gains now take effect through a block-rate smoother, so the active
+        // list is refreshed inside `process`.  A gain set before the first block
+        // snaps (one block applies it); a change during playback glides, and a
+        // band stays active until its gain has drifted below the threshold.
         let mut eq = Equalizer30::new(48_000.0);
         eq.set_param(PARAM_BAND_0 + 5, 6.0);
         eq.set_param(PARAM_BAND_0 + 20, -4.0);
+        let mut buf = sine_sweep_stereo(256);
+        eq.process(&mut buf, 2);
         assert_eq!(eq.active_count, 2);
-        // Returning a band to flat removes it from the active set.
+
+        // Returning a band to flat removes it from the active set once the glide
+        // has settled.
         eq.set_param(PARAM_BAND_0 + 5, 0.0);
+        for _ in 0..64 {
+            let mut b = sine_sweep_stereo(256);
+            eq.process(&mut b, 2);
+        }
         assert_eq!(eq.active_count, 1);
         assert_eq!(&eq.active[..eq.active_count], &[20]);
     }
@@ -460,8 +544,7 @@ mod tests {
                 0.25 * (2.0 * std::f32::consts::PI * 500.0 * t).sin()
             })
             .collect();
-        let input_rms: f32 =
-            (buf.iter().map(|s| s * s).sum::<f32>() / buf.len() as f32).sqrt();
+        let input_rms: f32 = (buf.iter().map(|s| s * s).sum::<f32>() / buf.len() as f32).sqrt();
 
         eq.process(&mut buf, 1);
         // Skip the filter warm-up transient before measuring steady-state gain.
@@ -514,6 +597,47 @@ mod tests {
         let mut second = input.clone();
         eq.process(&mut second, 2);
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn mix_zero_leaves_signal_dry() {
+        // B.6.2: with a band boosted but mix = 0 the effect now passes the dry
+        // signal through (it used to ignore mix and run fully wet).
+        let mut eq = Equalizer30::new(48_000.0);
+        eq.set_param(PARAM_BAND_0 + 10, 12.0);
+        eq.set_param(PARAM_MIX, 0.0);
+        let input = sine_sweep_stereo(512);
+        let mut buf = input.clone();
+        eq.process(&mut buf, 2);
+        assert_eq!(buf, input, "mix=0 must pass the dry signal through");
+    }
+
+    #[test]
+    fn mix_blends_wet_and_dry() {
+        // B.6.2: at mix = 0.5 the output is the average of the dry input and the
+        // fully-wet filter output.
+        let input = sine_sweep_stereo(1_024);
+
+        let mut wet_eq = Equalizer30::new(48_000.0);
+        wet_eq.set_param(PARAM_BAND_0 + 12, 10.0);
+        wet_eq.set_param(PARAM_MIX, 1.0);
+        let mut wet = input.clone();
+        wet_eq.process(&mut wet, 2);
+
+        let mut mid_eq = Equalizer30::new(48_000.0);
+        mid_eq.set_param(PARAM_BAND_0 + 12, 10.0);
+        mid_eq.set_param(PARAM_MIX, 0.5);
+        let mut mid = input.clone();
+        mid_eq.process(&mut mid, 2);
+
+        for i in 0..input.len() {
+            let expected = 0.5 * input[i] + 0.5 * wet[i];
+            assert!(
+                (mid[i] - expected).abs() < 1.0e-5,
+                "sample {i}: {} != blend {expected}",
+                mid[i]
+            );
+        }
     }
 
     #[test]

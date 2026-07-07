@@ -56,7 +56,14 @@ const GAIN_MAX_DB: f32 = 12.0;
 /// exceeds this threshold, mirroring the reference active-band optimization.
 const ACTIVE_GAIN_THRESHOLD_DB: f32 = 0.01;
 
-/// Above this magnitude the wet sample is soft-limited (reference parity).
+/// Above this magnitude the wet sample is soft-limited with `0.95·tanh`.
+///
+/// **Note (B.6.1):** this is a hidden nonlinearity — a user expects an EQ to be
+/// linear, but a hot signal (peaks above 0.95 after boosting bands) is softly
+/// saturated here, adding level-dependent distortion visible in a null test.  It
+/// is kept for parity with the shipped behaviour; removing it (leaving head-room
+/// to the master limiter) is a deliberate sound change best gated behind an
+/// engine-level quality option.
 const SOFT_LIMIT_THRESHOLD: f32 = 0.95;
 
 /// Mix values below this bypass processing entirely (mirrors C#).
@@ -99,7 +106,17 @@ pub struct Equalizer {
     z1: Vec<f32>,
     z2: Vec<f32>,
     mix_ramp: RampedParam,
+    // Per-band dB-gain smoother; a gain change during playback glides at the
+    // per-sample time constant while its biquad coefficients are recomputed once
+    // per block (block-rate coefficient update — no zipper on a live band drag).
+    // Before the first block a change snaps, keeping the steady-state output
+    // bit-identical to an un-smoothed EQ.
+    gain_ramps: [RampedParam; BANDS],
 }
+
+/// Below this dB delta a smoothed band gain is considered unchanged, so its
+/// coefficients are not recomputed for the block.
+const GAIN_RECALC_EPS_DB: f32 = 1.0e-4;
 
 impl Equalizer {
     /// Creates a new flat (0 dB) [`Equalizer`] at the given sample rate.
@@ -124,11 +141,35 @@ impl Equalizer {
             z1: vec![0.0; PREALLOC_CHANNELS * TOTAL_FILTERS],
             z2: vec![0.0; PREALLOC_CHANNELS * TOTAL_FILTERS],
             mix_ramp: RampedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
+            gain_ramps: [RampedParam::new(0.0, sample_rate, DEFAULT_SMOOTH_MS); BANDS],
         };
         for band in 0..BANDS {
             eq.update_filter(band);
         }
         eq
+    }
+
+    /// Advances every band's dB-gain smoother by one block and recomputes the
+    /// biquad coefficients of any band whose gain moved, rebuilding the active
+    /// list if needed.  Returns nothing; call once at the top of `process`.
+    ///
+    /// Before the first block a `set_param` snaps the smoother, so this reconciles
+    /// the deferred gain into the coefficients on the first block and the output
+    /// stays bit-identical to an un-smoothed EQ.
+    fn advance_gain_ramps(&mut self, frame_count: usize) {
+        let mut dirty = false;
+        for band in 0..BANDS {
+            self.gain_ramps[band].begin_block();
+            let g = self.gain_ramps[band].advance_block(frame_count);
+            if (g - self.gains_db[band]).abs() > GAIN_RECALC_EPS_DB {
+                self.gains_db[band] = g;
+                self.update_filter(band);
+                dirty = true;
+            }
+        }
+        if dirty {
+            self.rebuild_active();
+        }
     }
 
     /// Recomputes the normalized RBJ peaking-biquad coefficients for one band
@@ -194,18 +235,24 @@ impl Effect for Equalizer {
 
     fn process(&mut self, buffer: &mut [f32], channels: u16) {
         self.mix_ramp.begin_block();
-        if !self.enabled
-            || channels == 0
-            || self.active_count == 0
+        if !self.enabled || channels == 0 {
+            return;
+        }
+
+        let channels = channels as usize;
+        let frame_count = buffer.len() / channels;
+
+        // Glide any band gains changed during playback and refresh their
+        // coefficients once per block before deciding which bands are active.
+        self.advance_gain_ramps(frame_count);
+
+        if self.active_count == 0
             || (self.mix < MIX_BYPASS_THRESHOLD && self.mix_ramp.current() < MIX_BYPASS_THRESHOLD)
         {
             return;
         }
 
-        let channels = channels as usize;
         self.ensure_channel_state(channels);
-
-        let frame_count = buffer.len() / channels;
         // Frame-outer / channel-inner traversal keeps the interleaved buffer
         // access sequential (cache-friendly, auto-vectorizable); each channel's
         // recursive state still evolves in frame order, so the output is bit
@@ -225,9 +272,8 @@ impl Effect for Equalizer {
                     for f in [base, base + 1] {
                         let s = state_base + f;
                         let output = self.b0[f] * sample + self.z1[s];
-                        self.z1[s] = denormal::flush(
-                            self.b1[f] * sample - self.a1[f] * output + self.z2[s],
-                        );
+                        self.z1[s] =
+                            denormal::flush(self.b1[f] * sample - self.a1[f] * output + self.z2[s]);
                         self.z2[s] = denormal::flush(self.b2[f] * sample - self.a2[f] * output);
                         sample = output;
                     }
@@ -255,9 +301,9 @@ impl Effect for Equalizer {
             }
             PARAM_BAND_0..=PARAM_BAND_9 => {
                 let idx = (param_id - PARAM_BAND_0) as usize;
-                self.gains_db[idx] = value.clamp(GAIN_MIN_DB, GAIN_MAX_DB);
-                self.update_filter(idx);
-                self.rebuild_active();
+                // Snaps before the first block (steady-state parity), glides after
+                // playback starts; the coefficients are refreshed in `process`.
+                self.gain_ramps[idx].set(value.clamp(GAIN_MIN_DB, GAIN_MAX_DB));
                 true
             }
             _ => false,
@@ -269,7 +315,9 @@ impl Effect for Equalizer {
             PARAM_ENABLED => Some(if self.enabled { 1.0 } else { 0.0 }),
             PARAM_MIX => Some(self.mix),
             PARAM_BAND_0..=PARAM_BAND_9 => {
-                Some(self.gains_db[(param_id - PARAM_BAND_0) as usize])
+                // Report the value the user set (the ramp target), not the point
+                // the glide currently sits at.
+                Some(self.gain_ramps[(param_id - PARAM_BAND_0) as usize].target())
             }
             _ => None,
         }
@@ -279,6 +327,9 @@ impl Effect for Equalizer {
         self.z1.iter_mut().for_each(|s| *s = 0.0);
         self.z2.iter_mut().for_each(|s| *s = 0.0);
         self.mix_ramp.reset(self.mix);
+        for band in 0..BANDS {
+            self.gain_ramps[band].reset(self.gains_db[band]);
+        }
     }
 
     fn is_enabled(&self) -> bool {
@@ -458,13 +509,56 @@ mod tests {
 
     #[test]
     fn active_band_tracking_follows_gain() {
+        // Band gains now take effect through a block-rate smoother, so the active
+        // list is refreshed inside `process`.  A gain set before the first block
+        // snaps (so one block applies it); a change during playback glides, and a
+        // band stays active until its gain has drifted below the threshold.
         let mut eq = Equalizer::new(48_000.0);
         eq.set_param(PARAM_BAND_2, 6.0);
         eq.set_param(PARAM_BAND_7, -4.0);
+        let mut buf = sine_sweep_stereo(256);
+        eq.process(&mut buf, 2);
         assert_eq!(eq.active_count, 2);
+
+        // Drag band 2 back to flat; drive audio until the glide settles.
         eq.set_param(PARAM_BAND_2, 0.0);
+        for _ in 0..64 {
+            let mut b = sine_sweep_stereo(256);
+            eq.process(&mut b, 2);
+        }
         assert_eq!(eq.active_count, 1);
         assert_eq!(&eq.active[..eq.active_count], &[7]);
+    }
+
+    #[test]
+    fn live_band_change_glides_without_jump() {
+        // A band gain changed during playback glides at the smoothing time
+        // constant (block-rate coefficient refresh) rather than jumping, while
+        // get_param immediately reports the requested target.
+        let mut eq = Equalizer::new(48_000.0);
+        let mut warm = sine_sweep_stereo(512);
+        eq.process(&mut warm, 2);
+
+        eq.set_param(PARAM_BAND_5, 12.0);
+        assert_eq!(eq.get_param(PARAM_BAND_5), Some(12.0));
+
+        let mut b = sine_sweep_stereo(256);
+        eq.process(&mut b, 2);
+        assert!(
+            eq.gains_db[5] > 0.0 && eq.gains_db[5] < 12.0,
+            "applied gain must glide, not jump: {}",
+            eq.gains_db[5]
+        );
+
+        for _ in 0..64 {
+            let mut bb = sine_sweep_stereo(256);
+            eq.process(&mut bb, 2);
+        }
+        assert!(
+            (eq.gains_db[5] - 12.0).abs() < 0.05,
+            "must settle: {}",
+            eq.gains_db[5]
+        );
     }
 
     #[test]
