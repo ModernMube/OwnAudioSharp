@@ -1,17 +1,21 @@
 //! Harmonic exciter / spectral enhancer.
 //!
-//! Faithful Rust port of the reference C# `OwnaudioNET.Effects.EnhancerEffect`: a
+//! Rust DSP derived from the reference C# `OwnaudioNET.Effects.EnhancerEffect`: a
 //! one-pole high-pass (`y = alpha·(y_prev + x − x_prev)`, `alpha = RC/(RC+dt)`)
 //! isolates the upper band, which is amplified, softly saturated through a
-//! `tanh` curve and added back to the dry signal scaled by the mix.  A single
-//! filter state is shared across the interleaved samples exactly as the C#
-//! effect walks them.  Parameter identifiers, ranges, defaults and the
-//! per-sample DSP mirror the C# effect so the two are numerically equivalent
-//! (the basis of the 2.2 reference comparison).
+//! `tanh` curve and added back to the dry signal scaled by the mix.  Parameter
+//! identifiers, ranges and defaults mirror the C# effect.
 //!
-//! The high-pass output `y_prev` is recursive, so it is denormal-flushed (2.12):
-//! a decaying tail would otherwise park in the subnormal range and stall the CPU
-//! on the audio thread.
+//! **Channel-aware processing (intentional divergence from the C# reference):**
+//! the C# effect runs a single high-pass across the interleaved samples, so on
+//! stereo material the filter state alternates between the two channels every
+//! sample — a comb-like coloration.  This port keeps an independent high-pass
+//! state per channel; mono input stays bit identical to the per-sample reference,
+//! stereo is compared against a channel-aware f64 ground truth.
+//!
+//! Each channel's high-pass output `y_prev` is recursive, so it is
+//! denormal-flushed (2.12): a decaying tail would otherwise park in the subnormal
+//! range and stall the CPU on the audio thread.
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
@@ -25,6 +29,10 @@ pub const PARAM_CUTOFF: u32 = 3;
 /// Mix values below this threshold bypass processing entirely (mirrors C#).
 const MIX_BYPASS_THRESHOLD: f32 = 0.001;
 
+/// Highest interleaved channel count with a dedicated high-pass state (the
+/// engine is stereo; any extra channels pass through unprocessed).
+const MAX_CHANNELS: usize = 2;
+
 /// Harmonic enhancer effect.
 pub struct Enhancer {
     enabled: bool,
@@ -33,8 +41,8 @@ pub struct Enhancer {
     cut_freq: f32,
     sample_rate: f32,
     alpha: f32,
-    x_prev: f32,
-    y_prev: f32,
+    x_prev: [f32; MAX_CHANNELS],
+    y_prev: [f32; MAX_CHANNELS],
     mix_ramp: RampedParam,
 }
 
@@ -50,8 +58,8 @@ impl Enhancer {
             cut_freq: 4000.0,
             sample_rate,
             alpha: 0.0,
-            x_prev: 0.0,
-            y_prev: 0.0,
+            x_prev: [0.0; MAX_CHANNELS],
+            y_prev: [0.0; MAX_CHANNELS],
             mix_ramp: RampedParam::new(0.2, sample_rate, DEFAULT_SMOOTH_MS),
         };
         enhancer.update_filter_coefficient();
@@ -74,7 +82,8 @@ impl Effect for Enhancer {
         EffectType::Enhancer
     }
 
-    fn process(&mut self, buffer: &mut [f32], _channels: u16) {
+    #[allow(clippy::needless_range_loop)]
+    fn process(&mut self, buffer: &mut [f32], channels: u16) {
         self.mix_ramp.begin_block();
         if !self.enabled
             || (self.mix < MIX_BYPASS_THRESHOLD && self.mix_ramp.current() < MIX_BYPASS_THRESHOLD)
@@ -85,24 +94,24 @@ impl Effect for Enhancer {
         let alpha = self.alpha;
         let gain = self.gain;
 
-        let mut x_prev = self.x_prev;
-        let mut y_prev = self.y_prev;
+        let stride = (channels.max(1)) as usize;
+        let ch = stride.min(MAX_CHANNELS);
 
-        for sample in buffer.iter_mut() {
+        for frame in buffer.chunks_mut(stride) {
             let mix = self.mix_ramp.advance();
-            let original = *sample;
+            for c in 0..ch {
+                let original = frame[c];
 
-            let high_freq = denormal::flush(alpha * (y_prev + original - x_prev));
-            x_prev = original;
-            y_prev = high_freq;
+                let high_freq =
+                    denormal::flush(alpha * (self.y_prev[c] + original - self.x_prev[c]));
+                self.x_prev[c] = original;
+                self.y_prev[c] = high_freq;
 
-            let processed = (high_freq * gain * 0.5).tanh() * 2.0;
+                let processed = (high_freq * gain * 0.5).tanh() * 2.0;
 
-            *sample = original + processed * mix;
+                frame[c] = original + processed * mix;
+            }
         }
-
-        self.x_prev = x_prev;
-        self.y_prev = y_prev;
     }
 
     fn set_param(&mut self, param_id: u32, value: f32) -> bool {
@@ -140,8 +149,8 @@ impl Effect for Enhancer {
     }
 
     fn reset(&mut self) {
-        self.x_prev = 0.0;
-        self.y_prev = 0.0;
+        self.x_prev = [0.0; MAX_CHANNELS];
+        self.y_prev = [0.0; MAX_CHANNELS];
         self.mix_ramp.reset(self.mix);
     }
 
@@ -158,41 +167,46 @@ impl Effect for Enhancer {
 mod tests {
     use super::*;
 
-    /// f64 ground-truth transcription of the reference C# enhancer, carrying the
-    /// full high-pass state, used to measure the production f32 implementation's
-    /// numerical fidelity.  The DSP is smooth (one-pole high-pass + `tanh`), so a
-    /// straight f64 transcription tracks the f32 production to well within the
-    /// -60 dB bound.
+    /// f64 ground-truth transcription of the channel-aware reference enhancer,
+    /// carrying an independent high-pass state per channel, used to measure the
+    /// production f32 implementation's numerical fidelity.  The DSP is smooth
+    /// (one-pole high-pass + `tanh`), so a straight f64 transcription tracks the
+    /// f32 production to well within the -60 dB bound.
     struct Reference {
         alpha: f64,
         gain: f64,
         mix: f64,
-        x_prev: f64,
-        y_prev: f64,
+        channels: usize,
+        x_prev: [f64; MAX_CHANNELS],
+        y_prev: [f64; MAX_CHANNELS],
     }
 
     impl Reference {
-        fn new(sample_rate: f64, cut_freq: f64, gain: f64, mix: f64) -> Self {
+        fn new(sample_rate: f64, cut_freq: f64, gain: f64, mix: f64, channels: usize) -> Self {
             let rc = 1.0 / (2.0 * std::f64::consts::PI * cut_freq);
             let dt = 1.0 / sample_rate;
             Self {
                 alpha: rc / (rc + dt),
                 gain,
                 mix,
-                x_prev: 0.0,
-                y_prev: 0.0,
+                channels,
+                x_prev: [0.0; MAX_CHANNELS],
+                y_prev: [0.0; MAX_CHANNELS],
             }
         }
 
         fn process(&mut self, buffer: &[f32]) -> Vec<f32> {
+            let ch = self.channels;
             let mut out = vec![0.0f32; buffer.len()];
-            for (o, &x) in out.iter_mut().zip(buffer.iter()) {
-                let original = x as f64;
-                let high_freq = self.alpha * (self.y_prev + original - self.x_prev);
-                self.x_prev = original;
-                self.y_prev = high_freq;
-                let processed = (high_freq * self.gain * 0.5).tanh() * 2.0;
-                *o = (original + processed * self.mix) as f32;
+            for (out_frame, in_frame) in out.chunks_mut(ch).zip(buffer.chunks(ch)) {
+                for c in 0..ch {
+                    let original = in_frame[c] as f64;
+                    let high_freq = self.alpha * (self.y_prev[c] + original - self.x_prev[c]);
+                    self.x_prev[c] = original;
+                    self.y_prev[c] = high_freq;
+                    let processed = (high_freq * self.gain * 0.5).tanh() * 2.0;
+                    out_frame[c] = (original + processed * self.mix) as f32;
+                }
             }
             out
         }
@@ -309,7 +323,7 @@ mod tests {
             let mut produced = input.clone();
             e.process(&mut produced, 2);
 
-            let mut reference = Reference::new(48_000.0, cutoff, gain, mix);
+            let mut reference = Reference::new(48_000.0, cutoff, gain, mix, 2);
             let expected = reference.process(&input);
             let err = rms_error_db(&produced, &expected);
             assert!(
@@ -317,6 +331,23 @@ mod tests {
                 "mix={mix} cutoff={cutoff} gain={gain}: RMS error {err:.1} dB exceeds -60 dB"
             );
         }
+    }
+
+    #[test]
+    fn mono_matches_reference() {
+        let mut mono = vec![0.0f32; 4_096];
+        for (i, s) in mono.iter_mut().enumerate() {
+            let t = i as f32 / 48_000.0;
+            *s = 0.5 * (-1.5 * t).exp() * (2.0 * std::f32::consts::PI * 1200.0 * t).sin();
+        }
+        let mut e = Enhancer::new(48_000.0);
+        let mut produced = mono.clone();
+        e.process(&mut produced, 1);
+
+        let mut reference = Reference::new(48_000.0, 4000.0, 2.5, 0.2, 1);
+        let expected = reference.process(&mono);
+        let err = rms_error_db(&produced, &expected);
+        assert!(err < -60.0, "mono RMS error {err:.1} dB exceeds -60 dB");
     }
 
     #[test]
@@ -345,10 +376,11 @@ mod tests {
         e.process(&mut impulse, 2);
         let mut silence = vec![0.0f32; 2 * 200_000];
         e.process(&mut silence, 2);
-        assert!(
-            e.y_prev == 0.0 || e.y_prev.abs() >= f32::MIN_POSITIVE,
-            "subnormal in high-pass state: {:e}",
-            e.y_prev
-        );
+        for &y in &e.y_prev {
+            assert!(
+                y == 0.0 || y.abs() >= f32::MIN_POSITIVE,
+                "subnormal in high-pass state: {y:e}"
+            );
+        }
     }
 }

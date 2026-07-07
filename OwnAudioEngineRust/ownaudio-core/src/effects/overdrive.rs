@@ -1,14 +1,29 @@
 //! Asymmetric tube-style overdrive.
 //!
-//! Faithful Rust port of the reference C# `OwnaudioNET.Effects.OverdriveEffect`
-//! DSP: every sample is driven, passed through an asymmetric tanh tube
-//! saturation, shaped by a stateful tone control (a one-pole low-pass minus a
-//! scaled one-pole high-pass), attenuated by the output level, then blended
-//! back with the dry signal.  Parameter identifiers, ranges and defaults mirror
-//! the C# effect so the two implementations are numerically equivalent (the
-//! basis of the 2.2 reference comparison).
+//! Rust DSP derived from the reference C# `OwnaudioNET.Effects.OverdriveEffect`:
+//! every sample is driven, passed through an asymmetric tanh tube saturation,
+//! shaped by a stateful tone control (a one-pole low-pass minus a scaled one-pole
+//! high-pass), attenuated by the output level, then blended back with the dry
+//! signal.  Parameter identifiers, ranges and defaults mirror the C# effect.
+//!
+//! **Channel-aware processing (intentional divergence from the C# reference):**
+//! the C# effect runs a single tone-filter pair across the interleaved samples,
+//! so on stereo material the low-/high-pass states alternate between the two
+//! channels every sample — a comb-like coloration and inter-channel bleed.  This
+//! port keeps an independent tone-filter pair per channel; mono input stays bit
+//! identical to the per-sample reference, stereo is compared against a
+//! channel-aware f64 ground truth.
+//!
+//! **DC blocker (A.4):** the tube saturation is deliberately asymmetric (the two
+//! half-waves use different curves), which by construction injects a DC offset.
+//! Left in, that DC flows down the chain — biasing a downstream compressor's
+//! detector, eating head-room and clicking under the mix ramp on silent passages.
+//! A one-pole DC blocker (`y = x − x₁ + R·y₁`, ~10 Hz) sits on each channel's wet
+//! path right before the dry/wet blend to remove it.  It is essentially
+//! sound-neutral above a few Hz.
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
+use crate::denormal;
 use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
 
 /// Param ID 2 — input gain (1.0 … 5.0). Controls the amount of overdrive.
@@ -21,6 +36,24 @@ pub const PARAM_OUTPUT_LEVEL: u32 = 4;
 /// Mix values below this threshold bypass processing entirely (mirrors C#).
 const MIX_BYPASS_THRESHOLD: f32 = 0.001;
 
+/// Highest interleaved channel count with a dedicated tone-filter pair (the
+/// engine is stereo; any extra channels pass through unprocessed).
+const MAX_CHANNELS: usize = 2;
+
+/// DC-blocker corner frequency (Hz).
+const DC_BLOCK_HZ: f32 = 10.0;
+
+/// One-pole DC-blocker coefficient `R` for the corner frequency at `sample_rate`.
+#[inline]
+fn dc_block_coeff(sample_rate: f32) -> f32 {
+    let sr = if sample_rate > 0.0 {
+        sample_rate
+    } else {
+        44_100.0
+    };
+    (1.0 - 2.0 * std::f32::consts::PI * DC_BLOCK_HZ / sr).clamp(0.0, 0.9999)
+}
+
 /// Asymmetric tube overdrive effect.
 pub struct Overdrive {
     enabled: bool,
@@ -28,8 +61,12 @@ pub struct Overdrive {
     gain: f32,
     tone: f32,
     output_level: f32,
-    low_pass_state: f32,
-    high_pass_state: f32,
+    low_pass_state: [f32; MAX_CHANNELS],
+    high_pass_state: [f32; MAX_CHANNELS],
+    // Per-channel one-pole DC-blocker state (A.4).
+    dc_r: f32,
+    dc_x1: [f32; MAX_CHANNELS],
+    dc_y1: [f32; MAX_CHANNELS],
     mix_ramp: RampedParam,
 }
 
@@ -43,10 +80,22 @@ impl Overdrive {
             gain: 2.0,
             tone: 0.5,
             output_level: 0.7,
-            low_pass_state: 0.0,
-            high_pass_state: 0.0,
+            low_pass_state: [0.0; MAX_CHANNELS],
+            high_pass_state: [0.0; MAX_CHANNELS],
+            dc_r: dc_block_coeff(sample_rate),
+            dc_x1: [0.0; MAX_CHANNELS],
+            dc_y1: [0.0; MAX_CHANNELS],
             mix_ramp: RampedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
         }
+    }
+
+    /// One-pole DC blocker for `channel`: `y = x − x₁ + R·y₁` (A.4).
+    #[inline]
+    fn dc_block(&mut self, channel: usize, input: f32) -> f32 {
+        let y = input - self.dc_x1[channel] + self.dc_r * self.dc_y1[channel];
+        self.dc_x1[channel] = input;
+        self.dc_y1[channel] = denormal::flush(y);
+        self.dc_y1[channel]
     }
 
     /// Asymmetric tube saturation.
@@ -66,17 +115,17 @@ impl Overdrive {
     }
 
     /// Stateful tone control: a one-pole low-pass minus a tone-scaled one-pole
-    /// high-pass.  Advances the two filter states; matches the reference C#
-    /// `ApplyToneControl`.
+    /// high-pass.  Advances the given channel's filter states; matches the
+    /// reference C# `ApplyToneControl`.
     #[inline]
-    fn apply_tone_control(&mut self, input: f32) -> f32 {
+    fn apply_tone_control(&mut self, channel: usize, input: f32) -> f32 {
         let low_pass_cutoff = 0.1 + self.tone * 0.4;
         let high_pass_cutoff = 0.05 + (1.0 - self.tone) * 0.2;
 
-        self.low_pass_state += low_pass_cutoff * (input - self.low_pass_state);
-        self.high_pass_state += high_pass_cutoff * (input - self.high_pass_state);
+        self.low_pass_state[channel] += low_pass_cutoff * (input - self.low_pass_state[channel]);
+        self.high_pass_state[channel] += high_pass_cutoff * (input - self.high_pass_state[channel]);
 
-        self.low_pass_state - self.high_pass_state * (1.0 - self.tone)
+        self.low_pass_state[channel] - self.high_pass_state[channel] * (1.0 - self.tone)
     }
 }
 
@@ -85,7 +134,8 @@ impl Effect for Overdrive {
         EffectType::Overdrive
     }
 
-    fn process(&mut self, buffer: &mut [f32], _channels: u16) {
+    #[allow(clippy::needless_range_loop)]
+    fn process(&mut self, buffer: &mut [f32], channels: u16) {
         self.mix_ramp.begin_block();
         if !self.enabled
             || (self.mix < MIX_BYPASS_THRESHOLD && self.mix_ramp.current() < MIX_BYPASS_THRESHOLD)
@@ -93,14 +143,21 @@ impl Effect for Overdrive {
             return;
         }
 
-        for sample in buffer.iter_mut() {
+        let stride = (channels.max(1)) as usize;
+        let ch = stride.min(MAX_CHANNELS);
+
+        for frame in buffer.chunks_mut(stride) {
             let mix = self.mix_ramp.advance();
-            let input = *sample;
-            let gained = input * self.gain;
-            let mut overdriven = Self::tube_saturation(gained);
-            overdriven = self.apply_tone_control(overdriven);
-            overdriven *= self.output_level;
-            *sample = input * (1.0 - mix) + overdriven * mix;
+            for c in 0..ch {
+                let input = frame[c];
+                let gained = input * self.gain;
+                let mut overdriven = Self::tube_saturation(gained);
+                overdriven = self.apply_tone_control(c, overdriven);
+                overdriven *= self.output_level;
+                // Remove the DC produced by the asymmetric saturation (A.4).
+                overdriven = self.dc_block(c, overdriven);
+                frame[c] = input * (1.0 - mix) + overdriven * mix;
+            }
         }
     }
 
@@ -143,8 +200,10 @@ impl Effect for Overdrive {
     }
 
     fn reset(&mut self) {
-        self.low_pass_state = 0.0;
-        self.high_pass_state = 0.0;
+        self.low_pass_state = [0.0; MAX_CHANNELS];
+        self.high_pass_state = [0.0; MAX_CHANNELS];
+        self.dc_x1 = [0.0; MAX_CHANNELS];
+        self.dc_y1 = [0.0; MAX_CHANNELS];
         self.mix_ramp.reset(self.mix);
     }
 
@@ -161,19 +220,38 @@ impl Effect for Overdrive {
 mod tests {
     use super::*;
 
-    /// f64 ground-truth transcription of the reference C# DSP, carrying the same
-    /// two filter states, used to measure the production f32 implementation's
-    /// numerical fidelity.
+    /// f64 ground-truth transcription of the channel-aware reference DSP, carrying
+    /// an independent tone-filter pair per channel, used to measure the production
+    /// f32 implementation's numerical fidelity.
     struct Reference {
         gain: f64,
         tone: f64,
         mix: f64,
         output_level: f64,
-        low_pass_state: f64,
-        high_pass_state: f64,
+        channels: usize,
+        low_pass_state: [f64; MAX_CHANNELS],
+        high_pass_state: [f64; MAX_CHANNELS],
+        dc_r: f64,
+        dc_x1: [f64; MAX_CHANNELS],
+        dc_y1: [f64; MAX_CHANNELS],
     }
 
     impl Reference {
+        fn new(gain: f64, tone: f64, mix: f64, output_level: f64, channels: usize) -> Self {
+            Self {
+                gain,
+                tone,
+                mix,
+                output_level,
+                channels,
+                low_pass_state: [0.0; MAX_CHANNELS],
+                high_pass_state: [0.0; MAX_CHANNELS],
+                dc_r: 1.0 - 2.0 * std::f64::consts::PI * DC_BLOCK_HZ as f64 / 48_000.0,
+                dc_x1: [0.0; MAX_CHANNELS],
+                dc_y1: [0.0; MAX_CHANNELS],
+            }
+        }
+
         fn tube_saturation(input: f64) -> f64 {
             if input >= 0.0 {
                 (input * 0.7).tanh() * 1.2
@@ -182,26 +260,38 @@ mod tests {
             }
         }
 
-        fn apply_tone_control(&mut self, input: f64) -> f64 {
+        fn apply_tone_control(&mut self, channel: usize, input: f64) -> f64 {
             let low_pass_cutoff = 0.1 + self.tone * 0.4;
             let high_pass_cutoff = 0.05 + (1.0 - self.tone) * 0.2;
-            self.low_pass_state += low_pass_cutoff * (input - self.low_pass_state);
-            self.high_pass_state += high_pass_cutoff * (input - self.high_pass_state);
-            self.low_pass_state - self.high_pass_state * (1.0 - self.tone)
+            self.low_pass_state[channel] +=
+                low_pass_cutoff * (input - self.low_pass_state[channel]);
+            self.high_pass_state[channel] +=
+                high_pass_cutoff * (input - self.high_pass_state[channel]);
+            self.low_pass_state[channel] - self.high_pass_state[channel] * (1.0 - self.tone)
+        }
+
+        fn dc_block(&mut self, channel: usize, input: f64) -> f64 {
+            let y = input - self.dc_x1[channel] + self.dc_r * self.dc_y1[channel];
+            self.dc_x1[channel] = input;
+            self.dc_y1[channel] = y;
+            y
         }
 
         fn process(&mut self, input: &[f32]) -> Vec<f32> {
-            input
-                .iter()
-                .map(|&x| {
-                    let x = x as f64;
+            let ch = self.channels;
+            let mut out = vec![0.0f32; input.len()];
+            for (out_frame, in_frame) in out.chunks_mut(ch).zip(input.chunks(ch)) {
+                for c in 0..ch {
+                    let x = in_frame[c] as f64;
                     let gained = x * self.gain;
                     let mut overdriven = Self::tube_saturation(gained);
-                    overdriven = self.apply_tone_control(overdriven);
+                    overdriven = self.apply_tone_control(c, overdriven);
                     overdriven *= self.output_level;
-                    (x * (1.0 - self.mix) + overdriven * self.mix) as f32
-                })
-                .collect()
+                    overdriven = self.dc_block(c, overdriven);
+                    out_frame[c] = (x * (1.0 - self.mix) + overdriven * self.mix) as f32;
+                }
+            }
+            out
         }
     }
 
@@ -335,14 +425,8 @@ mod tests {
             let mut produced = input.clone();
             o.process(&mut produced, 2);
 
-            let mut reference = Reference {
-                gain: gain as f64,
-                tone: tone as f64,
-                mix: mix as f64,
-                output_level: level as f64,
-                low_pass_state: 0.0,
-                high_pass_state: 0.0,
-            };
+            let mut reference =
+                Reference::new(gain as f64, tone as f64, mix as f64, level as f64, 2);
             let expected = reference.process(&input);
             let err = rms_error_db(&produced, &expected);
             assert!(
@@ -350,6 +434,23 @@ mod tests {
                 "gain={gain} tone={tone} mix={mix} level={level}: RMS error {err:.1} dB exceeds -60 dB"
             );
         }
+    }
+
+    #[test]
+    fn dc_blocker_removes_saturation_bias() {
+        // A.4: the asymmetric saturation would bias the mean of a symmetric input
+        // away from zero; the DC blocker must pull the wet mean back to ~0.
+        let mut o = Overdrive::new(48_000.0);
+        o.set_param(PARAM_GAIN, 5.0);
+        o.set_param(PARAM_MIX, 1.0);
+        o.set_param(PARAM_OUTPUT_LEVEL, 1.0);
+        let mut buf: Vec<f32> = (0..48_000)
+            .map(|i| 0.5 * (2.0 * std::f32::consts::PI * 100.0 * i as f32 / 48_000.0).sin())
+            .collect();
+        o.process(&mut buf, 1);
+        let tail = &buf[24_000..];
+        let mean = tail.iter().sum::<f32>() / tail.len() as f32;
+        assert!(mean.abs() < 0.01, "DC not removed: mean={mean}");
     }
 
     #[test]

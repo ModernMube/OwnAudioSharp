@@ -1,14 +1,19 @@
 //! Phaser with cascaded all-pass filter stages.
 //!
-//! Faithful Rust port of the reference C# `OwnaudioNET.Effects.PhaserEffect`: a
+//! Rust DSP derived from the reference C# `OwnaudioNET.Effects.PhaserEffect`: a
 //! chain of up to eight first-order all-pass filters whose shared coefficient is
 //! derived from a notch frequency swept between 200 Hz and 2 kHz by one global
 //! LFO scaled by the depth; the cascade output is mixed with a scaled copy of
-//! the input (the feedback term) and blended with the dry signal.  A single
-//! filter chain is shared across the interleaved samples exactly as the C#
-//! effect walks them.  Parameter identifiers, ranges, defaults and the
-//! per-sample DSP mirror the C# effect so the two are numerically equivalent
-//! (the basis of the 2.2 reference comparison).
+//! the input (the feedback term) and blended with the dry signal.  Parameter
+//! identifiers, ranges and defaults mirror the C# effect.
+//!
+//! **Channel-aware processing (intentional divergence from the C# reference):**
+//! the C# effect runs a single all-pass chain across the interleaved samples, so
+//! on stereo material each stage sees alternating L/R samples — the filter
+//! response distorts and the channels bleed into one another.  This port keeps an
+//! independent all-pass chain per channel and advances the shared LFO once per
+//! frame; mono input stays bit identical to the per-sample reference, stereo is
+//! compared against a channel-aware f64 ground truth.
 //!
 //! Each all-pass stage carries a recursive `y1` state, so its output is
 //! denormal-flushed (2.12): a decaying tail would otherwise park in the
@@ -29,6 +34,10 @@ pub const PARAM_STAGES: u32 = 5;
 
 /// Maximum number of cascaded all-pass stages (mirrors the C# reference).
 const MAX_STAGES: usize = 8;
+
+/// Highest interleaved channel count with a dedicated all-pass chain (the engine
+/// is stereo; any extra channels pass through unprocessed).
+const MAX_CHANNELS: usize = 2;
 
 /// First-order all-pass filter stage.
 #[derive(Clone, Copy, Default)]
@@ -57,7 +66,7 @@ pub struct Phaser {
     stages: usize,
     sample_rate: f32,
 
-    filters: [AllPass; MAX_STAGES],
+    filters: [[AllPass; MAX_STAGES]; MAX_CHANNELS],
     lfo_phase: f32,
     mix_ramp: RampedParam,
 }
@@ -67,7 +76,11 @@ impl Phaser {
     /// default parameters (rate 0.5 Hz, depth 0.7, feedback 0.5, mix 0.5,
     /// 4 stages).
     pub fn new(sample_rate: f32) -> Self {
-        let sample_rate = if sample_rate > 0.0 { sample_rate } else { 44_100.0 };
+        let sample_rate = if sample_rate > 0.0 {
+            sample_rate
+        } else {
+            44_100.0
+        };
         Self {
             enabled: true,
             mix: 0.5,
@@ -76,7 +89,7 @@ impl Phaser {
             feedback: 0.5,
             stages: 4,
             sample_rate,
-            filters: [AllPass::default(); MAX_STAGES],
+            filters: [[AllPass::default(); MAX_STAGES]; MAX_CHANNELS],
             lfo_phase: 0.0,
             mix_ramp: RampedParam::new(0.5, sample_rate, DEFAULT_SMOOTH_MS),
         }
@@ -97,7 +110,8 @@ impl Effect for Phaser {
         EffectType::Phaser
     }
 
-    fn process(&mut self, buffer: &mut [f32], _channels: u16) {
+    #[allow(clippy::needless_range_loop)]
+    fn process(&mut self, buffer: &mut [f32], channels: u16) {
         self.mix_ramp.begin_block();
         if !self.enabled {
             return;
@@ -112,24 +126,28 @@ impl Effect for Phaser {
         const MIN_FREQ: f32 = 200.0;
         const MAX_FREQ: f32 = 2000.0;
 
+        let stride = (channels.max(1)) as usize;
+        let ch = stride.min(MAX_CHANNELS);
         let mut lfo_phase = self.lfo_phase;
 
-        for sample in buffer.iter_mut() {
+        for frame in buffer.chunks_mut(stride) {
             let mix = self.mix_ramp.advance();
-            let input = *sample;
 
             let lfo_value = lfo_phase.sin();
             let frequency = MIN_FREQ + (MAX_FREQ - MIN_FREQ) * (0.5 + 0.5 * lfo_value * depth);
             let coefficient = self.all_pass_coefficient(frequency);
 
-            let mut processed = input;
-            for filter in self.filters.iter_mut().take(stages) {
-                processed = filter.process(processed, coefficient);
+            for c in 0..ch {
+                let input = frame[c];
+                let mut processed = input;
+                for filter in self.filters[c].iter_mut().take(stages) {
+                    processed = filter.process(processed, coefficient);
+                }
+
+                processed += input * feedback;
+
+                frame[c] = input * (1.0 - mix) + processed * mix;
             }
-
-            processed += input * feedback;
-
-            *sample = input * (1.0 - mix) + processed * mix;
 
             lfo_phase += lfo_increment;
             if lfo_phase >= two_pi {
@@ -184,7 +202,7 @@ impl Effect for Phaser {
     }
 
     fn reset(&mut self) {
-        self.filters = [AllPass::default(); MAX_STAGES];
+        self.filters = [[AllPass::default(); MAX_STAGES]; MAX_CHANNELS];
         self.lfo_phase = 0.0;
         self.mix_ramp.reset(self.mix);
     }
@@ -202,11 +220,12 @@ impl Effect for Phaser {
 mod tests {
     use super::*;
 
-    /// f64 ground-truth transcription of the reference C# phaser, carrying the
-    /// full all-pass and LFO state, used to measure the production f32
-    /// implementation's numerical fidelity.  The all-pass cascade is a smooth
-    /// IIR (no integer quantization), so a straight f64 transcription tracks the
-    /// f32 production to well within the -60 dB bound.
+    /// f64 ground-truth transcription of the channel-aware phaser, carrying an
+    /// independent all-pass chain per channel and a shared LFO advanced once per
+    /// frame, used to measure the production f32 implementation's numerical
+    /// fidelity.  The all-pass cascade is a smooth IIR (no integer quantization),
+    /// so a straight f64 transcription tracks the f32 production to well within
+    /// the -60 dB bound.
     struct Reference {
         sample_rate: f64,
         depth: f64,
@@ -214,13 +233,22 @@ mod tests {
         feedback: f64,
         stages: usize,
         rate: f64,
-        x1: [f64; MAX_STAGES],
-        y1: [f64; MAX_STAGES],
+        channels: usize,
+        x1: [[f64; MAX_STAGES]; MAX_CHANNELS],
+        y1: [[f64; MAX_STAGES]; MAX_CHANNELS],
         lfo_phase: f64,
     }
 
     impl Reference {
-        fn new(sample_rate: f64, rate: f64, depth: f64, feedback: f64, mix: f64, stages: usize) -> Self {
+        fn new(
+            sample_rate: f64,
+            rate: f64,
+            depth: f64,
+            feedback: f64,
+            mix: f64,
+            stages: usize,
+            channels: usize,
+        ) -> Self {
             Self {
                 sample_rate,
                 depth,
@@ -228,8 +256,9 @@ mod tests {
                 feedback,
                 stages,
                 rate,
-                x1: [0.0; MAX_STAGES],
-                y1: [0.0; MAX_STAGES],
+                channels,
+                x1: [[0.0; MAX_STAGES]; MAX_CHANNELS],
+                y1: [[0.0; MAX_STAGES]; MAX_CHANNELS],
                 lfo_phase: 0.0,
             }
         }
@@ -246,25 +275,29 @@ mod tests {
             let lfo_increment = two_pi * self.rate / self.sample_rate;
             let min_freq = 200.0f64;
             let max_freq = 2000.0f64;
+            let ch = self.channels;
 
-            for (o, &x) in out.iter_mut().zip(buffer.iter()) {
-                let input = x as f64;
-
+            for (out_frame, in_frame) in out.chunks_mut(ch).zip(buffer.chunks(ch)) {
                 let lfo_value = self.lfo_phase.sin();
-                let frequency = min_freq + (max_freq - min_freq) * (0.5 + 0.5 * lfo_value * self.depth);
+                let frequency =
+                    min_freq + (max_freq - min_freq) * (0.5 + 0.5 * lfo_value * self.depth);
                 let coefficient = self.coefficient(frequency);
 
-                let mut processed = input;
-                for s in 0..self.stages {
-                    let output = -coefficient * processed + self.x1[s] + coefficient * self.y1[s];
-                    self.x1[s] = processed;
-                    self.y1[s] = output;
-                    processed = output;
+                for c in 0..ch {
+                    let input = in_frame[c] as f64;
+                    let mut processed = input;
+                    for s in 0..self.stages {
+                        let output =
+                            -coefficient * processed + self.x1[c][s] + coefficient * self.y1[c][s];
+                        self.x1[c][s] = processed;
+                        self.y1[c][s] = output;
+                        processed = output;
+                    }
+
+                    processed += input * self.feedback;
+
+                    out_frame[c] = (input * (1.0 - self.mix) + processed * self.mix) as f32;
                 }
-
-                processed += input * self.feedback;
-
-                *o = (input * (1.0 - self.mix) + processed * self.mix) as f32;
 
                 self.lfo_phase += lfo_increment;
                 if self.lfo_phase >= two_pi {
@@ -394,7 +427,7 @@ mod tests {
             let mut produced = input.clone();
             p.process(&mut produced, 2);
 
-            let mut reference = Reference::new(48_000.0, rate, depth, feedback, mix, stages);
+            let mut reference = Reference::new(48_000.0, rate, depth, feedback, mix, stages, 2);
             let expected = reference.process(&input);
             let err = rms_error_db(&produced, &expected);
             assert!(
@@ -402,6 +435,23 @@ mod tests {
                 "rate={rate} depth={depth} feedback={feedback} mix={mix} stages={stages}: RMS error {err:.1} dB exceeds -60 dB"
             );
         }
+    }
+
+    #[test]
+    fn mono_matches_reference() {
+        let mut mono = vec![0.0f32; 4_096];
+        for (i, s) in mono.iter_mut().enumerate() {
+            let t = i as f32 / 48_000.0;
+            *s = 0.5 * (-1.5 * t).exp() * (2.0 * std::f32::consts::PI * 330.0 * t).sin();
+        }
+        let mut p = Phaser::new(48_000.0);
+        let mut produced = mono.clone();
+        p.process(&mut produced, 1);
+
+        let mut reference = Reference::new(48_000.0, 0.5, 0.7, 0.5, 0.5, 4, 1);
+        let expected = reference.process(&mono);
+        let err = rms_error_db(&produced, &expected);
+        assert!(err < -60.0, "mono RMS error {err:.1} dB exceeds -60 dB");
     }
 
     #[test]
@@ -431,12 +481,14 @@ mod tests {
         p.process(&mut impulse, 2);
         let mut silence = vec![0.0f32; 2 * 200_000];
         p.process(&mut silence, 2);
-        for f in &p.filters {
-            assert!(
-                f.y1 == 0.0 || f.y1.abs() >= f32::MIN_POSITIVE,
-                "subnormal in all-pass state: {:e}",
-                f.y1
-            );
+        for chain in &p.filters {
+            for f in chain {
+                assert!(
+                    f.y1 == 0.0 || f.y1.abs() >= f32::MIN_POSITIVE,
+                    "subnormal in all-pass state: {:e}",
+                    f.y1
+                );
+            }
         }
     }
 }

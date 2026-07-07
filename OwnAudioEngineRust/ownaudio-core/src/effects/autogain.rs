@@ -1,21 +1,31 @@
 //! Automatic gain control (RMS-based AGC).
 //!
-//! Faithful Rust port of the reference C# `OwnaudioNET.Effects.AutoGainEffect`: a
-//! 64-sample block RMS detector is smoothed with separate attack / release
-//! coefficients; the smoothed level drives a target gain (`target / level`,
-//! clamped between the min and max gain) that is applied to a 5 ms look-ahead
-//! delayed copy of the signal through a slew-rate limiter, followed by a soft
-//! knee near ±0.95 and a hard clamp at ±0.99.  A noise gate freezes the gain
-//! while the level sits below the threshold.  A single detector/gain state is
-//! shared across the interleaved samples exactly as the C# effect walks them.
-//! Parameter identifiers, ranges, defaults and the per-sample DSP mirror the C#
-//! effect so the two are numerically equivalent (the basis of the 2.2 reference
-//! comparison).  The effect has no wet/dry mix (it always runs fully wet).
+//! Rust DSP derived from the reference C# `OwnaudioNET.Effects.AutoGainEffect`: a
+//! block RMS detector is smoothed with separate attack / release coefficients;
+//! the smoothed level drives a target gain (`target / level`, clamped between the
+//! min and max gain) that is applied to a 5 ms look-ahead delayed copy of the
+//! signal through a slew-rate limiter, followed by a soft knee near ±0.95 and a
+//! hard clamp at ±0.99.  A noise gate freezes the gain while the level sits below
+//! the threshold.  Parameter identifiers, ranges and defaults mirror the C#
+//! effect.  The effect has no wet/dry mix (it always runs fully wet).
+//!
+//! **Channel-aware, frame-linked processing (intentional divergence from the C#
+//! reference):** the C# effect walks a single detector, gain and look-ahead line
+//! across the interleaved samples, so on stereo material the effective look-ahead
+//! halves, the 64-sample RMS window is not frame aligned and the two channels
+//! receive gains one detector step apart.  This port measures the RMS over a
+//! 64-*frame* window from the linked channel energy, drives one gain that is
+//! applied identically to every channel of a frame, and delays each channel
+//! through its own 5 ms (frame-counted) look-ahead line — so the look-ahead is a
+//! full 5 ms per channel, the window is frame aligned and the stereo image never
+//! drifts.  Mono input stays bit identical to the per-sample reference; the
+//! reported latency is now channel-independent (fixing the plugin delay
+//! compensation for mono chains).
 //!
 //! The smoothed RMS level is recursive, so it is denormal-flushed (2.12): a
 //! decaying tail would otherwise park in the subnormal range and stall the CPU
-//! on the audio thread.  The look-ahead line is pre-allocated during
-//! construction and never reallocated on the audio thread.
+//! on the audio thread.  The per-channel look-ahead lines are pre-allocated
+//! during construction and never reallocated on the audio thread.
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
@@ -33,10 +43,14 @@ pub const PARAM_MIN_GAIN: u32 = 6;
 /// Param ID 7 — noise gate threshold (0.0001 … 0.01).
 pub const PARAM_GATE_THRESHOLD: u32 = 7;
 
-/// Block size (samples) over which the instantaneous RMS is measured.
+/// Block size (frames) over which the instantaneous RMS is measured.
 const RMS_WINDOW_SIZE: usize = 64;
-/// Maximum per-sample change in the applied gain (slew limiter).
+/// Maximum per-frame change in the applied gain (slew limiter).
 const GAIN_SLEW_RATE: f32 = 0.001;
+
+/// Highest interleaved channel count with a dedicated look-ahead line (the engine
+/// is stereo; any extra channels pass through unprocessed).
+const MAX_CHANNELS: usize = 2;
 
 /// Automatic gain control effect.
 pub struct AutoGain {
@@ -51,8 +65,8 @@ pub struct AutoGain {
     current_gain: f32,
     rms_level: f32,
     rms_accumulator: f32,
-    rms_sample_count: usize,
-    lookahead_buffer: Vec<f32>,
+    rms_frame_count: usize,
+    lookahead_buffers: [Vec<f32>; MAX_CHANNELS],
     lookahead_index: usize,
 }
 
@@ -61,8 +75,12 @@ impl AutoGain {
     /// default parameters (target 0.25, attack 0.99, release 0.999, gate 0.001,
     /// max gain 4.0, min gain 0.25).
     pub fn new(sample_rate: f32) -> Self {
-        let sample_rate = if sample_rate > 0.0 { sample_rate } else { 44_100.0 };
-        // 5 ms look-ahead ring buffer.
+        let sample_rate = if sample_rate > 0.0 {
+            sample_rate
+        } else {
+            44_100.0
+        };
+        // 5 ms look-ahead ring buffer per channel (length counted in frames).
         let lookahead_length = (0.005 * sample_rate) as usize;
         Self {
             enabled: true,
@@ -75,8 +93,11 @@ impl AutoGain {
             current_gain: 1.0,
             rms_level: 0.0,
             rms_accumulator: 0.0,
-            rms_sample_count: 0,
-            lookahead_buffer: vec![0.0; lookahead_length.max(1)],
+            rms_frame_count: 0,
+            lookahead_buffers: [
+                vec![0.0; lookahead_length.max(1)],
+                vec![0.0; lookahead_length.max(1)],
+            ],
             lookahead_index: 0,
         }
     }
@@ -87,7 +108,8 @@ impl Effect for AutoGain {
         EffectType::AutoGain
     }
 
-    fn process(&mut self, buffer: &mut [f32], _channels: u16) {
+    #[allow(clippy::needless_range_loop)]
+    fn process(&mut self, buffer: &mut [f32], channels: u16) {
         if !self.enabled {
             return;
         }
@@ -101,21 +123,30 @@ impl Effect for AutoGain {
         let inv_att = 1.0 - att;
         let inv_rel = 1.0 - rel;
 
-        let lookahead_length = self.lookahead_buffer.len();
+        let stride = (channels.max(1)) as usize;
+        let ch = stride.min(MAX_CHANNELS);
+        let lookahead_length = self.lookahead_buffers[0].len();
+        // Mean square is taken over every sample in the window, so mono stays bit
+        // identical (window = 64 samples) while stereo averages the linked energy
+        // of both channels across 64 frames.
+        let window_samples = (RMS_WINDOW_SIZE * ch) as f32;
 
         let mut rms_level = self.rms_level;
         let mut gain = self.current_gain;
         let mut rms_acc = self.rms_accumulator;
-        let mut rms_count = self.rms_sample_count;
+        let mut rms_count = self.rms_frame_count;
+        let mut index = self.lookahead_index;
 
-        for sample in buffer.iter_mut() {
-            let input = *sample;
-
-            rms_acc += input * input;
+        for frame in buffer.chunks_mut(stride) {
+            // 1. Accumulate the linked energy of the whole frame; the window is
+            //    counted in frames so it is frame aligned.
+            for &s in frame.iter().take(ch) {
+                rms_acc += s * s;
+            }
             rms_count += 1;
 
             if rms_count >= RMS_WINDOW_SIZE {
-                let current_rms = (rms_acc / RMS_WINDOW_SIZE as f32).sqrt();
+                let current_rms = (rms_acc / window_samples).sqrt();
                 if current_rms > rms_level {
                     rms_level = att * rms_level + inv_att * current_rms;
                 } else {
@@ -126,13 +157,8 @@ impl Effect for AutoGain {
                 rms_count = 0;
             }
 
-            let delayed_sample = self.lookahead_buffer[self.lookahead_index];
-            self.lookahead_buffer[self.lookahead_index] = input;
-            self.lookahead_index += 1;
-            if self.lookahead_index >= lookahead_length {
-                self.lookahead_index = 0;
-            }
-
+            // 2. One gain step per frame, applied identically to every channel so
+            //    the stereo balance is preserved.
             if rms_level >= gate {
                 let effective_level = rms_level.max(0.0001);
                 let target_gain = (target / effective_level).clamp(min_g, max_g);
@@ -140,19 +166,32 @@ impl Effect for AutoGain {
                 gain += gain_diff.clamp(-GAIN_SLEW_RATE, GAIN_SLEW_RATE);
             }
 
-            let mut output = delayed_sample * gain;
-            if output > 0.95 {
-                output = 0.95 + (output - 0.95) * 0.1;
-            } else if output < -0.95 {
-                output = -0.95 + (output + 0.95) * 0.1;
+            // 3. Per-channel look-ahead delay, then the shared gain, soft knee and
+            //    safety clamp.
+            for c in 0..ch {
+                let delayed_sample = self.lookahead_buffers[c][index];
+                self.lookahead_buffers[c][index] = frame[c];
+
+                let mut output = delayed_sample * gain;
+                if output > 0.95 {
+                    output = 0.95 + (output - 0.95) * 0.1;
+                } else if output < -0.95 {
+                    output = -0.95 + (output + 0.95) * 0.1;
+                }
+                frame[c] = output.clamp(-0.99, 0.99);
             }
-            *sample = output.clamp(-0.99, 0.99);
+
+            index += 1;
+            if index >= lookahead_length {
+                index = 0;
+            }
         }
 
         self.rms_level = rms_level;
         self.current_gain = gain;
         self.rms_accumulator = rms_acc;
-        self.rms_sample_count = rms_count;
+        self.rms_frame_count = rms_count;
+        self.lookahead_index = index;
     }
 
     fn set_param(&mut self, param_id: u32, value: f32) -> bool {
@@ -209,8 +248,10 @@ impl Effect for AutoGain {
         self.current_gain = 1.0;
         self.rms_level = 0.0;
         self.rms_accumulator = 0.0;
-        self.rms_sample_count = 0;
-        self.lookahead_buffer.iter_mut().for_each(|s| *s = 0.0);
+        self.rms_frame_count = 0;
+        for line in self.lookahead_buffers.iter_mut() {
+            line.iter_mut().for_each(|s| *s = 0.0);
+        }
         self.lookahead_index = 0;
     }
 
@@ -223,11 +264,11 @@ impl Effect for AutoGain {
     }
 
     fn latency_samples(&self) -> u32 {
-        // The look-ahead ring delays the interleaved stream by its whole length in
-        // samples; per channel that is length / channels frames. The buffer is not
-        // channel-aware, so this assumes stereo (the engine's default) — a small,
-        // fixed ~5 ms line where a half-frame rounding is inaudible.
-        (self.lookahead_buffer.len() / 2).max(1) as u32
+        // Each per-channel look-ahead line delays its channel by its whole length
+        // in frames, so the reported latency is the line length and is independent
+        // of the channel count — the plugin delay compensation stays correct for
+        // both mono and stereo chains.
+        self.lookahead_buffers[0].len().max(1) as u32
     }
 }
 
@@ -235,11 +276,11 @@ impl Effect for AutoGain {
 mod tests {
     use super::*;
 
-    /// f64 ground-truth transcription of the reference C# AGC, carrying the full
-    /// detector, gain and look-ahead state, used to measure the production f32
-    /// implementation's numerical fidelity.  The look-ahead is a fixed integer
-    /// delay (not modulated), so a straight f64 transcription tracks the f32
-    /// production to well within the -60 dB bound.
+    /// f64 ground-truth transcription of the channel-aware, frame-linked AGC,
+    /// carrying the detector, one shared gain and a per-channel look-ahead line,
+    /// used to measure the production f32 implementation's numerical fidelity.
+    /// The look-ahead is a fixed integer delay (not modulated), so a straight f64
+    /// transcription tracks the f32 production to well within the -60 dB bound.
     struct Reference {
         target: f64,
         att: f64,
@@ -247,16 +288,26 @@ mod tests {
         gate: f64,
         max_g: f64,
         min_g: f64,
+        channels: usize,
         current_gain: f64,
         rms_level: f64,
         rms_acc: f64,
         rms_count: usize,
-        lookahead: Vec<f64>,
+        lookahead: Vec<Vec<f64>>,
         lookahead_index: usize,
     }
 
     impl Reference {
-        fn new(sample_rate: f64, target: f64, att: f64, rel: f64, gate: f64, max_g: f64, min_g: f64) -> Self {
+        fn new(
+            sample_rate: f64,
+            target: f64,
+            att: f64,
+            rel: f64,
+            gate: f64,
+            max_g: f64,
+            min_g: f64,
+            channels: usize,
+        ) -> Self {
             let lookahead_length = (0.005 * sample_rate) as usize;
             Self {
                 target,
@@ -265,11 +316,12 @@ mod tests {
                 gate,
                 max_g,
                 min_g,
+                channels,
                 current_gain: 1.0,
                 rms_level: 0.0,
                 rms_acc: 0.0,
                 rms_count: 0,
-                lookahead: vec![0.0; lookahead_length.max(1)],
+                lookahead: vec![vec![0.0; lookahead_length.max(1)]; channels],
                 lookahead_index: 0,
             }
         }
@@ -278,16 +330,19 @@ mod tests {
             let mut out = vec![0.0f32; buffer.len()];
             let inv_att = 1.0 - self.att;
             let inv_rel = 1.0 - self.rel;
-            let lookahead_length = self.lookahead.len();
+            let lookahead_length = self.lookahead[0].len();
             let slew = GAIN_SLEW_RATE as f64;
+            let ch = self.channels;
+            let window_samples = (RMS_WINDOW_SIZE * ch) as f64;
 
-            for (o, &x) in out.iter_mut().zip(buffer.iter()) {
-                let input = x as f64;
-
-                self.rms_acc += input * input;
+            for (out_frame, in_frame) in out.chunks_mut(ch).zip(buffer.chunks(ch)) {
+                for &s in in_frame.iter().take(ch) {
+                    let x = s as f64;
+                    self.rms_acc += x * x;
+                }
                 self.rms_count += 1;
                 if self.rms_count >= RMS_WINDOW_SIZE {
-                    let current_rms = (self.rms_acc / RMS_WINDOW_SIZE as f64).sqrt();
+                    let current_rms = (self.rms_acc / window_samples).sqrt();
                     if current_rms > self.rms_level {
                         self.rms_level = self.att * self.rms_level + inv_att * current_rms;
                     } else {
@@ -297,10 +352,6 @@ mod tests {
                     self.rms_count = 0;
                 }
 
-                let delayed_sample = self.lookahead[self.lookahead_index];
-                self.lookahead[self.lookahead_index] = input;
-                self.lookahead_index = (self.lookahead_index + 1) % lookahead_length;
-
                 if self.rms_level >= self.gate {
                     let effective_level = self.rms_level.max(0.0001);
                     let target_gain = (self.target / effective_level).clamp(self.min_g, self.max_g);
@@ -308,13 +359,20 @@ mod tests {
                     self.current_gain += gain_diff.clamp(-slew, slew);
                 }
 
-                let mut output = delayed_sample * self.current_gain;
-                if output > 0.95 {
-                    output = 0.95 + (output - 0.95) * 0.1;
-                } else if output < -0.95 {
-                    output = -0.95 + (output + 0.95) * 0.1;
+                for c in 0..ch {
+                    let delayed_sample = self.lookahead[c][self.lookahead_index];
+                    self.lookahead[c][self.lookahead_index] = in_frame[c] as f64;
+
+                    let mut output = delayed_sample * self.current_gain;
+                    if output > 0.95 {
+                        output = 0.95 + (output - 0.95) * 0.1;
+                    } else if output < -0.95 {
+                        output = -0.95 + (output + 0.95) * 0.1;
+                    }
+                    out_frame[c] = output.clamp(-0.99, 0.99) as f32;
                 }
-                *o = output.clamp(-0.99, 0.99) as f32;
+
+                self.lookahead_index = (self.lookahead_index + 1) % lookahead_length;
             }
             out
         }
@@ -431,7 +489,7 @@ mod tests {
             let mut produced = input.clone();
             a.process(&mut produced, 2);
 
-            let mut reference = Reference::new(48_000.0, target, att, rel, gate, max_g, min_g);
+            let mut reference = Reference::new(48_000.0, target, att, rel, gate, max_g, min_g, 2);
             let expected = reference.process(&input);
             let err = rms_error_db(&produced, &expected);
             assert!(
@@ -439,6 +497,31 @@ mod tests {
                 "target={target} att={att} rel={rel} gate={gate} max={max_g} min={min_g}: RMS error {err:.1} dB exceeds -60 dB"
             );
         }
+    }
+
+    #[test]
+    fn mono_matches_reference() {
+        let mut mono = vec![0.0f32; 16_384];
+        for (i, s) in mono.iter_mut().enumerate() {
+            let t = i as f32 / 48_000.0;
+            let env = 0.05 + 0.1 * (1.0 - (-3.0 * t).exp());
+            *s = env * (2.0 * std::f32::consts::PI * 220.0 * t).sin();
+        }
+        let mut a = AutoGain::new(48_000.0);
+        let mut produced = mono.clone();
+        a.process(&mut produced, 1);
+
+        let mut reference = Reference::new(48_000.0, 0.25, 0.99, 0.999, 0.001, 4.0, 0.25, 1);
+        let expected = reference.process(&mono);
+        let err = rms_error_db(&produced, &expected);
+        assert!(err < -60.0, "mono RMS error {err:.1} dB exceeds -60 dB");
+    }
+
+    #[test]
+    fn latency_is_channel_independent() {
+        let a = AutoGain::new(48_000.0);
+        // 5 ms at 48 kHz = 240 frames, reported regardless of the channel count.
+        assert_eq!(a.latency_samples(), 240);
     }
 
     #[test]

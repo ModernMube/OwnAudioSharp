@@ -1,20 +1,26 @@
 //! Rotary / Leslie-cabinet speaker simulator.
 //!
-//! Faithful Rust port of the reference C# `OwnaudioNET.Effects.RotaryEffect`: the
+//! Rust DSP derived from the reference C# `OwnaudioNET.Effects.RotaryEffect`: the
 //! input is split by an 800 Hz one-pole crossover; the high band feeds a horn
 //! delay line and the low band a rotor delay line, each read back at an integer
 //! tap swept by its own LFO (horn ≈ 6 Hz, rotor ≈ 1 Hz) and amplitude-modulated
 //! in sympathy to fake the rotating-speaker Doppler and tremolo.  A fast/slow
-//! switch multiplies the horn speed by 3 and the rotor speed by 2.  A single set
-//! of state is shared across the interleaved samples exactly as the C# effect
-//! walks them.  Parameter identifiers, ranges, defaults and the per-sample DSP
-//! mirror the C# effect so the two are numerically equivalent (the basis of the
-//! 2.2 reference comparison).
+//! switch multiplies the horn speed by 3 and the rotor speed by 2.  Parameter
+//! identifiers, ranges and defaults mirror the C# effect.
 //!
-//! The crossover low-pass states are recursive, so they are denormal-flushed
-//! (2.12): a decaying tail would otherwise park in the subnormal range and stall
-//! the CPU on the audio thread.  The delay lines are pre-allocated during
-//! construction and never reallocated on the audio thread.
+//! **Channel-aware processing (intentional divergence from the C# reference):**
+//! the C# effect steps a single crossover, pair of delay lines and set of LFOs
+//! across the interleaved samples, so on stereo material the delay times halve,
+//! the LFOs run at twice the intended rate and the crossover mixes the two
+//! channels.  This port keeps an independent crossover and delay-line pair per
+//! channel with the LFOs advanced once per frame; mono input stays bit identical
+//! to the per-sample reference, stereo is compared against a channel-aware f64
+//! ground truth.
+//!
+//! Each channel's crossover low-pass states are recursive, so they are
+//! denormal-flushed (2.12): a decaying tail would otherwise park in the subnormal
+//! range and stall the CPU on the audio thread.  The delay lines are
+//! pre-allocated during construction and never reallocated on the audio thread.
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
@@ -34,6 +40,10 @@ const CROSSOVER_HZ: f32 = 800.0;
 
 /// Mix values below this threshold bypass processing entirely (mirrors C#).
 const MIX_BYPASS_THRESHOLD: f32 = 0.001;
+
+/// Highest interleaved channel count with a dedicated cabinet state (the engine
+/// is stereo; any extra channels pass through unprocessed).
+const MAX_CHANNELS: usize = 2;
 
 /// One-pole low-pass with a leaky-integrator topology, matching the reference
 /// `LowPassFilter` (`state += cutoff·(input − state)`); denormal-flushed.
@@ -62,6 +72,39 @@ impl OnePoleLowPass {
     }
 }
 
+/// Per-channel cabinet state: the horn/rotor delay lines, their write indices and
+/// the crossover filter pair.
+struct RotaryChannel {
+    horn_delay_buffer: Vec<f32>,
+    rotor_delay_buffer: Vec<f32>,
+    horn_buffer_index: usize,
+    rotor_buffer_index: usize,
+    low_pass: OnePoleLowPass,
+    high_pass_low: OnePoleLowPass,
+}
+
+impl RotaryChannel {
+    fn new(max_delay: usize, sample_rate: f32) -> Self {
+        Self {
+            horn_delay_buffer: vec![0.0; max_delay.max(2)],
+            rotor_delay_buffer: vec![0.0; max_delay.max(2)],
+            horn_buffer_index: 0,
+            rotor_buffer_index: 0,
+            low_pass: OnePoleLowPass::new(CROSSOVER_HZ, sample_rate),
+            high_pass_low: OnePoleLowPass::new(CROSSOVER_HZ, sample_rate),
+        }
+    }
+
+    fn reset(&mut self) {
+        self.horn_delay_buffer.iter_mut().for_each(|s| *s = 0.0);
+        self.rotor_delay_buffer.iter_mut().for_each(|s| *s = 0.0);
+        self.horn_buffer_index = 0;
+        self.rotor_buffer_index = 0;
+        self.low_pass.reset();
+        self.high_pass_low.reset();
+    }
+}
+
 /// Rotary/Leslie cabinet simulator.
 pub struct Rotary {
     enabled: bool,
@@ -72,15 +115,9 @@ pub struct Rotary {
     is_fast: bool,
     sample_rate: f32,
 
-    horn_delay_buffer: Vec<f32>,
-    rotor_delay_buffer: Vec<f32>,
-    horn_buffer_index: usize,
-    rotor_buffer_index: usize,
+    channels_state: [RotaryChannel; MAX_CHANNELS],
     horn_phase: f32,
     rotor_phase: f32,
-
-    low_pass: OnePoleLowPass,
-    high_pass_low: OnePoleLowPass,
     mix_ramp: RampedParam,
 }
 
@@ -88,7 +125,11 @@ impl Rotary {
     /// Creates a new [`Rotary`] sized for `sample_rate`, with the reference
     /// default parameters (horn 6 Hz, rotor 1 Hz, intensity 0.7, mix 1.0, slow).
     pub fn new(sample_rate: f32) -> Self {
-        let sample_rate = if sample_rate > 0.0 { sample_rate } else { 44_100.0 };
+        let sample_rate = if sample_rate > 0.0 {
+            sample_rate
+        } else {
+            44_100.0
+        };
         // 10 ms delay line per rotor, covering the modulated taps.
         let max_delay = (0.01 * sample_rate) as usize;
         Self {
@@ -99,14 +140,12 @@ impl Rotary {
             intensity: 0.7,
             is_fast: false,
             sample_rate,
-            horn_delay_buffer: vec![0.0; max_delay.max(2)],
-            rotor_delay_buffer: vec![0.0; max_delay.max(2)],
-            horn_buffer_index: 0,
-            rotor_buffer_index: 0,
+            channels_state: [
+                RotaryChannel::new(max_delay, sample_rate),
+                RotaryChannel::new(max_delay, sample_rate),
+            ],
             horn_phase: 0.0,
             rotor_phase: 0.0,
-            low_pass: OnePoleLowPass::new(CROSSOVER_HZ, sample_rate),
-            high_pass_low: OnePoleLowPass::new(CROSSOVER_HZ, sample_rate),
             mix_ramp: RampedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
         }
     }
@@ -117,7 +156,8 @@ impl Effect for Rotary {
         EffectType::Rotary
     }
 
-    fn process(&mut self, buffer: &mut [f32], _channels: u16) {
+    #[allow(clippy::needless_range_loop)]
+    fn process(&mut self, buffer: &mut [f32], channels: u16) {
         self.mix_ramp.begin_block();
         if !self.enabled
             || (self.mix < MIX_BYPASS_THRESHOLD && self.mix_ramp.current() < MIX_BYPASS_THRESHOLD)
@@ -128,45 +168,68 @@ impl Effect for Rotary {
         let two_pi = std::f32::consts::PI * 2.0;
         let intensity = self.intensity;
 
-        let current_horn_speed = if self.is_fast { self.horn_speed * 3.0 } else { self.horn_speed };
-        let current_rotor_speed = if self.is_fast { self.rotor_speed * 2.0 } else { self.rotor_speed };
+        let current_horn_speed = if self.is_fast {
+            self.horn_speed * 3.0
+        } else {
+            self.horn_speed
+        };
+        let current_rotor_speed = if self.is_fast {
+            self.rotor_speed * 2.0
+        } else {
+            self.rotor_speed
+        };
         let horn_increment = two_pi * current_horn_speed / self.sample_rate;
         let rotor_increment = two_pi * current_rotor_speed / self.sample_rate;
 
-        let horn_len = self.horn_delay_buffer.len();
-        let rotor_len = self.rotor_delay_buffer.len();
+        let horn_len = self.channels_state[0].horn_delay_buffer.len();
+        let rotor_len = self.channels_state[0].rotor_delay_buffer.len();
+
+        let stride = (channels.max(1)) as usize;
+        let ch = stride.min(MAX_CHANNELS);
 
         let mut horn_phase = self.horn_phase;
         let mut rotor_phase = self.rotor_phase;
 
-        for sample in buffer.iter_mut() {
+        for frame in buffer.chunks_mut(stride) {
             let mix = self.mix_ramp.advance();
-            let input = *sample;
 
-            let low_freq = self.low_pass.process(input);
-            let high_freq = input - self.high_pass_low.process(input);
-
+            // The LFO-driven tap lengths and amplitude modulation are shared across
+            // channels; only the filter and delay-line state is per channel.
             let horn_lfo = horn_phase.sin();
             let horn_delay = 0.001 + 0.003 * horn_lfo * intensity;
             let horn_delay_samples =
                 ((horn_delay * self.sample_rate) as i64).clamp(1, horn_len as i64 - 1) as usize;
-            let horn_read_index = (self.horn_buffer_index + horn_len - horn_delay_samples) % horn_len;
-            let horn_output = self.horn_delay_buffer[horn_read_index] * (0.8 + 0.2 * horn_lfo * intensity);
-            self.horn_delay_buffer[self.horn_buffer_index] = high_freq;
+            let horn_gain = 0.8 + 0.2 * horn_lfo * intensity;
 
             let rotor_lfo = rotor_phase.sin();
             let rotor_delay = 0.002 + 0.004 * rotor_lfo * intensity;
             let rotor_delay_samples =
                 ((rotor_delay * self.sample_rate) as i64).clamp(1, rotor_len as i64 - 1) as usize;
-            let rotor_read_index = (self.rotor_buffer_index + rotor_len - rotor_delay_samples) % rotor_len;
-            let rotor_output = self.rotor_delay_buffer[rotor_read_index] * (0.9 + 0.1 * rotor_lfo * intensity);
-            self.rotor_delay_buffer[self.rotor_buffer_index] = low_freq;
+            let rotor_gain = 0.9 + 0.1 * rotor_lfo * intensity;
 
-            let processed = horn_output + rotor_output;
-            *sample = input * (1.0 - mix) + processed * mix;
+            for c in 0..ch {
+                let st = &mut self.channels_state[c];
+                let input = frame[c];
 
-            self.horn_buffer_index = (self.horn_buffer_index + 1) % horn_len;
-            self.rotor_buffer_index = (self.rotor_buffer_index + 1) % rotor_len;
+                let low_freq = st.low_pass.process(input);
+                let high_freq = input - st.high_pass_low.process(input);
+
+                let horn_read_index =
+                    (st.horn_buffer_index + horn_len - horn_delay_samples) % horn_len;
+                let horn_output = st.horn_delay_buffer[horn_read_index] * horn_gain;
+                st.horn_delay_buffer[st.horn_buffer_index] = high_freq;
+
+                let rotor_read_index =
+                    (st.rotor_buffer_index + rotor_len - rotor_delay_samples) % rotor_len;
+                let rotor_output = st.rotor_delay_buffer[rotor_read_index] * rotor_gain;
+                st.rotor_delay_buffer[st.rotor_buffer_index] = low_freq;
+
+                let processed = horn_output + rotor_output;
+                frame[c] = input * (1.0 - mix) + processed * mix;
+
+                st.horn_buffer_index = (st.horn_buffer_index + 1) % horn_len;
+                st.rotor_buffer_index = (st.rotor_buffer_index + 1) % rotor_len;
+            }
 
             horn_phase += horn_increment;
             rotor_phase += rotor_increment;
@@ -226,14 +289,11 @@ impl Effect for Rotary {
     }
 
     fn reset(&mut self) {
-        self.horn_delay_buffer.iter_mut().for_each(|s| *s = 0.0);
-        self.rotor_delay_buffer.iter_mut().for_each(|s| *s = 0.0);
-        self.horn_buffer_index = 0;
-        self.rotor_buffer_index = 0;
+        for st in self.channels_state.iter_mut() {
+            st.reset();
+        }
         self.horn_phase = 0.0;
         self.rotor_phase = 0.0;
-        self.low_pass.reset();
-        self.high_pass_low.reset();
         self.mix_ramp.reset(self.mix);
     }
 
@@ -250,13 +310,24 @@ impl Effect for Rotary {
 mod tests {
     use super::*;
 
-    /// Ground-truth transcription of the reference C# rotary.
+    /// Per-channel f64 ground-truth state for the reference rotary.
+    struct RefChannel {
+        horn_buf: Vec<f64>,
+        rotor_buf: Vec<f64>,
+        horn_index: usize,
+        rotor_index: usize,
+        lp_state: f64,
+        hp_lp_state: f64,
+    }
+
+    /// f64 ground-truth transcription of the channel-aware rotary.
     ///
     /// As in the `Flanger`, the two delay taps are *discrete* integer decisions
     /// (`(delay·sample_rate) as usize`), so the LFO phases that select them are
     /// carried in f32 bit-identically to production; the crossover filtering,
     /// amplitude modulation and mix — the smooth quantities the -60 dB bound
-    /// measures — are elevated to f64.
+    /// measures — are elevated to f64.  Each channel carries its own delay lines
+    /// and crossover state; the LFOs advance once per frame.
     struct Reference {
         sample_rate: f32,
         intensity: f32,
@@ -264,22 +335,35 @@ mod tests {
         horn_speed: f32,
         rotor_speed: f32,
         is_fast: bool,
-        horn_buf: Vec<f64>,
-        rotor_buf: Vec<f64>,
-        horn_index: usize,
-        rotor_index: usize,
+        channels: usize,
+        lp_cutoff: f64,
         horn_phase: f32,
         rotor_phase: f32,
-        lp_cutoff: f64,
-        lp_state: f64,
-        hp_lp_cutoff: f64,
-        hp_lp_state: f64,
+        chans: Vec<RefChannel>,
     }
 
     impl Reference {
-        fn new(sample_rate: f32, horn_speed: f32, rotor_speed: f32, intensity: f32, mix: f64, is_fast: bool) -> Self {
+        fn new(
+            sample_rate: f32,
+            horn_speed: f32,
+            rotor_speed: f32,
+            intensity: f32,
+            mix: f64,
+            is_fast: bool,
+            channels: usize,
+        ) -> Self {
             let max_delay = (0.01 * sample_rate) as usize;
             let cutoff = 2.0 * std::f64::consts::PI * CROSSOVER_HZ as f64 / sample_rate as f64;
+            let chans = (0..channels)
+                .map(|_| RefChannel {
+                    horn_buf: vec![0.0; max_delay.max(2)],
+                    rotor_buf: vec![0.0; max_delay.max(2)],
+                    horn_index: 0,
+                    rotor_index: 0,
+                    lp_state: 0.0,
+                    hp_lp_state: 0.0,
+                })
+                .collect();
             Self {
                 sample_rate,
                 intensity,
@@ -287,16 +371,11 @@ mod tests {
                 horn_speed,
                 rotor_speed,
                 is_fast,
-                horn_buf: vec![0.0; max_delay.max(2)],
-                rotor_buf: vec![0.0; max_delay.max(2)],
-                horn_index: 0,
-                rotor_index: 0,
+                channels,
+                lp_cutoff: cutoff,
                 horn_phase: 0.0,
                 rotor_phase: 0.0,
-                lp_cutoff: cutoff,
-                lp_state: 0.0,
-                hp_lp_cutoff: cutoff,
-                hp_lp_state: 0.0,
+                chans,
             }
         }
 
@@ -304,46 +383,65 @@ mod tests {
             let mut out = vec![0.0f32; buffer.len()];
             let two_pi_f32 = std::f32::consts::PI * 2.0;
             let intensity = self.intensity as f64;
+            let ch = self.channels;
 
-            let horn_speed = if self.is_fast { self.horn_speed * 3.0 } else { self.horn_speed };
-            let rotor_speed = if self.is_fast { self.rotor_speed * 2.0 } else { self.rotor_speed };
+            let horn_speed = if self.is_fast {
+                self.horn_speed * 3.0
+            } else {
+                self.horn_speed
+            };
+            let rotor_speed = if self.is_fast {
+                self.rotor_speed * 2.0
+            } else {
+                self.rotor_speed
+            };
             let horn_increment = two_pi_f32 * horn_speed / self.sample_rate;
             let rotor_increment = two_pi_f32 * rotor_speed / self.sample_rate;
 
-            let horn_len = self.horn_buf.len();
-            let rotor_len = self.rotor_buf.len();
+            let horn_len = self.chans[0].horn_buf.len();
+            let rotor_len = self.chans[0].rotor_buf.len();
 
-            for (o, &x) in out.iter_mut().zip(buffer.iter()) {
-                let input = x as f64;
-
-                self.lp_state += self.lp_cutoff * (input - self.lp_state);
-                let low_freq = self.lp_state;
-                self.hp_lp_state += self.hp_lp_cutoff * (input - self.hp_lp_state);
-                let high_freq = input - self.hp_lp_state;
-
-                // Discrete tap decisions — identical f32 path to production.
+            for (out_frame, in_frame) in out.chunks_mut(ch).zip(buffer.chunks(ch)) {
+                // Discrete tap decisions — identical f32 path to production, shared
+                // across channels.
                 let horn_lfo_f32 = self.horn_phase.sin();
                 let horn_delay_f32 = 0.001 + 0.003 * horn_lfo_f32 * self.intensity;
-                let horn_delay_samples =
-                    ((horn_delay_f32 * self.sample_rate) as i64).clamp(1, horn_len as i64 - 1) as usize;
+                let horn_delay_samples = ((horn_delay_f32 * self.sample_rate) as i64)
+                    .clamp(1, horn_len as i64 - 1)
+                    as usize;
+                let horn_gain = 0.8 + 0.2 * horn_lfo_f32 as f64 * intensity;
+
                 let rotor_lfo_f32 = self.rotor_phase.sin();
                 let rotor_delay_f32 = 0.002 + 0.004 * rotor_lfo_f32 * self.intensity;
-                let rotor_delay_samples =
-                    ((rotor_delay_f32 * self.sample_rate) as i64).clamp(1, rotor_len as i64 - 1) as usize;
+                let rotor_delay_samples = ((rotor_delay_f32 * self.sample_rate) as i64)
+                    .clamp(1, rotor_len as i64 - 1)
+                    as usize;
+                let rotor_gain = 0.9 + 0.1 * rotor_lfo_f32 as f64 * intensity;
 
-                let horn_read = (self.horn_index + horn_len - horn_delay_samples) % horn_len;
-                let horn_output = self.horn_buf[horn_read] * (0.8 + 0.2 * horn_lfo_f32 as f64 * intensity);
-                self.horn_buf[self.horn_index] = high_freq;
+                for c in 0..ch {
+                    let st = &mut self.chans[c];
+                    let input = in_frame[c] as f64;
 
-                let rotor_read = (self.rotor_index + rotor_len - rotor_delay_samples) % rotor_len;
-                let rotor_output = self.rotor_buf[rotor_read] * (0.9 + 0.1 * rotor_lfo_f32 as f64 * intensity);
-                self.rotor_buf[self.rotor_index] = low_freq;
+                    st.lp_state += self.lp_cutoff * (input - st.lp_state);
+                    let low_freq = st.lp_state;
+                    st.hp_lp_state += self.lp_cutoff * (input - st.hp_lp_state);
+                    let high_freq = input - st.hp_lp_state;
 
-                let processed = horn_output + rotor_output;
-                *o = (input * (1.0 - self.mix) + processed * self.mix) as f32;
+                    let horn_read = (st.horn_index + horn_len - horn_delay_samples) % horn_len;
+                    let horn_output = st.horn_buf[horn_read] * horn_gain;
+                    st.horn_buf[st.horn_index] = high_freq;
 
-                self.horn_index = (self.horn_index + 1) % horn_len;
-                self.rotor_index = (self.rotor_index + 1) % rotor_len;
+                    let rotor_read = (st.rotor_index + rotor_len - rotor_delay_samples) % rotor_len;
+                    let rotor_output = st.rotor_buf[rotor_read] * rotor_gain;
+                    st.rotor_buf[st.rotor_index] = low_freq;
+
+                    let processed = horn_output + rotor_output;
+                    out_frame[c] = (input * (1.0 - self.mix) + processed * self.mix) as f32;
+
+                    st.horn_index = (st.horn_index + 1) % horn_len;
+                    st.rotor_index = (st.rotor_index + 1) % rotor_len;
+                }
+
                 self.horn_phase += horn_increment;
                 self.rotor_phase += rotor_increment;
                 if self.horn_phase >= two_pi_f32 {
@@ -452,12 +550,12 @@ mod tests {
     #[test]
     fn matches_reference_dsp_within_minus_60_db() {
         // 2.2 acceptance: the production f32 rotary must reproduce the ground
-        // truth (transcribed from the C# algorithm, carrying the full delay lines
-        // and crossover state) to better than -60 dB RMS error across the
-        // parameter space.  The discrete integer taps are selected by an
-        // f32-identical path; production also flushes the crossover state out of
-        // the subnormal range, which differs from the reference only at subnormal
-        // magnitudes, far below the -60 dB bound.
+        // truth (the channel-aware algorithm carrying per-channel delay lines and
+        // crossover state, LFOs advanced per frame) to better than -60 dB RMS
+        // error across the parameter space.  The discrete integer taps are
+        // selected by an f32-identical path; production also flushes the crossover
+        // state out of the subnormal range, which differs from the reference only
+        // at subnormal magnitudes, far below the -60 dB bound.
         let input = stereo_pluck(8_192);
         for &(horn, rotor, intensity, mix, fast) in &[
             (6.0f64, 1.0f64, 0.7f64, 1.0f64, false),
@@ -475,8 +573,15 @@ mod tests {
             let mut produced = input.clone();
             r.process(&mut produced, 2);
 
-            let mut reference =
-                Reference::new(48_000.0, horn as f32, rotor as f32, intensity as f32, mix, fast);
+            let mut reference = Reference::new(
+                48_000.0,
+                horn as f32,
+                rotor as f32,
+                intensity as f32,
+                mix,
+                fast,
+                2,
+            );
             let expected = reference.process(&input);
             let err = rms_error_db(&produced, &expected);
             assert!(
@@ -484,6 +589,23 @@ mod tests {
                 "horn={horn} rotor={rotor} intensity={intensity} mix={mix} fast={fast}: RMS error {err:.1} dB exceeds -60 dB"
             );
         }
+    }
+
+    #[test]
+    fn mono_matches_reference() {
+        let mut mono = vec![0.0f32; 8_192];
+        for (i, s) in mono.iter_mut().enumerate() {
+            let t = i as f32 / 48_000.0;
+            *s = 0.5 * (-1.5 * t).exp() * (2.0 * std::f32::consts::PI * 330.0 * t).sin();
+        }
+        let mut r = Rotary::new(48_000.0);
+        let mut produced = mono.clone();
+        r.process(&mut produced, 1);
+
+        let mut reference = Reference::new(48_000.0, 6.0, 1.0, 0.7, 1.0, false, 1);
+        let expected = reference.process(&mono);
+        let err = rms_error_db(&produced, &expected);
+        assert!(err < -60.0, "mono RMS error {err:.1} dB exceeds -60 dB");
     }
 
     #[test]
@@ -511,15 +633,17 @@ mod tests {
         r.process(&mut impulse, 2);
         let mut silence = vec![0.0f32; 2 * 200_000];
         r.process(&mut silence, 2);
-        assert!(
-            r.low_pass.state == 0.0 || r.low_pass.state.abs() >= f32::MIN_POSITIVE,
-            "subnormal in low-pass state: {:e}",
-            r.low_pass.state
-        );
-        assert!(
-            r.high_pass_low.state == 0.0 || r.high_pass_low.state.abs() >= f32::MIN_POSITIVE,
-            "subnormal in high-pass state: {:e}",
-            r.high_pass_low.state
-        );
+        for st in &r.channels_state {
+            assert!(
+                st.low_pass.state == 0.0 || st.low_pass.state.abs() >= f32::MIN_POSITIVE,
+                "subnormal in low-pass state: {:e}",
+                st.low_pass.state
+            );
+            assert!(
+                st.high_pass_low.state == 0.0 || st.high_pass_low.state.abs() >= f32::MIN_POSITIVE,
+                "subnormal in high-pass state: {:e}",
+                st.high_pass_low.state
+            );
+        }
     }
 }
