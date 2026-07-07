@@ -4,8 +4,8 @@
 //! a look-ahead delay line feeds a sliding-window-maximum peak detector (an
 //! array-based monotonic deque, O(1) amortized, zero-allocation); the required
 //! gain reduction feeds a second, sliding-window-**minimum** monotonic deque,
-//! and the applied gain is that window minimum, smoothed with an adaptive
-//! release toward unity (instant attack).  A final hard ceiling clamps the
+//! and the applied gain is that window minimum, smoothed with a look-ahead attack
+//! ramp (B.1.2) and an adaptive release toward unity.  A final hard ceiling clamps the
 //! output.  All buffers are pre-allocated at construction (the max look-ahead in
 //! frames × up to [`PREALLOC_CHANNELS`]), so parameter changes never reallocate
 //! on the audio thread; a wider-than-expected channel count grows the delay line
@@ -70,6 +70,18 @@ fn release_coeff(time_ms: f32, sample_rate: f32) -> f32 {
     1.0 - (-1.0 / (time_ms * sample_rate / 1000.0)).exp()
 }
 
+/// Attack coefficient (B.1.2): a one-pole whose time constant is a fraction of
+/// the look-ahead, so a peak is essentially fully attenuated by the time it
+/// reaches the delayed output.  Replaces the reference's instantaneous downward
+/// gain step, whose abrupt gain change modulated low-frequency material; the hard
+/// ceiling still guarantees the brick-wall limit for the small residual during
+/// the ramp.
+#[inline]
+fn attack_coeff(lookahead_ms: f32, sample_rate: f32) -> f32 {
+    let att_ms = (lookahead_ms / 3.0).max(0.05);
+    release_coeff(att_ms, sample_rate)
+}
+
 /// Look-ahead brick-wall limiter.
 pub struct Limiter {
     enabled: bool,
@@ -83,6 +95,8 @@ pub struct Limiter {
     threshold_lin: f32,
     ceiling_lin: f32,
     release: f32,
+    /// Attack coefficient — a one-pole that completes within the look-ahead.
+    attack: f32,
     /// Maximum look-ahead window, in frames (the deque capacity).
     max_buffer_size: usize,
     /// Current look-ahead, in frames.
@@ -145,6 +159,7 @@ impl Limiter {
             threshold_lin: db_to_linear(-3.0),
             ceiling_lin: db_to_linear(-0.1),
             release: release_coeff(50.0, sample_rate),
+            attack: attack_coeff(lookahead_ms, sample_rate),
             max_buffer_size,
             lookahead_frames,
             active_buffer_size: lookahead_frames,
@@ -279,13 +294,19 @@ impl Limiter {
         (target_level / peak_level).max(MIN_GAIN)
     }
 
-    /// Smoothed gain from the window-minimum required gain, with instant attack
-    /// and an adaptive release toward unity (reference parity).
+    /// Smoothed gain from the window-minimum required gain, with a look-ahead
+    /// attack ramp (B.1.2) and an adaptive release toward unity.
     fn smoothed_gain(&mut self, min_gain: f32) -> f32 {
         self.target_gain = min_gain;
 
         if self.target_gain < self.current_gain {
-            self.current_gain = self.target_gain;
+            // Attack: ramp down over the look-ahead window instead of stepping,
+            // so the gain change does not modulate the signal; the hard ceiling
+            // covers any residual overshoot during the ramp.
+            self.current_gain += (self.target_gain - self.current_gain) * self.attack;
+            if (self.target_gain - self.current_gain).abs() < 0.0001 {
+                self.current_gain = self.target_gain;
+            }
         } else {
             let gain_diff = 1.0 - self.current_gain;
             let mut adaptive_release = self.release;
@@ -401,6 +422,7 @@ impl Effect for Limiter {
             }
             PARAM_LOOKAHEAD => {
                 self.lookahead_ms = value.clamp(MIN_LOOKAHEAD_MS, MAX_LOOKAHEAD_MS);
+                self.attack = attack_coeff(self.lookahead_ms, self.sample_rate);
                 self.update_lookahead();
                 true
             }
@@ -450,6 +472,7 @@ mod tests {
         threshold_lin: f64,
         ceiling_lin: f64,
         release: f64,
+        attack: f64,
         max_buffer_size: usize,
         lookahead_frames: usize,
         active_buffer_size: usize,
@@ -477,13 +500,18 @@ mod tests {
             lookahead_ms: f64,
             channels: usize,
         ) -> Self {
-            let max_buffer_size = ((MAX_LOOKAHEAD_MS as f64 * sample_rate / 1000.0) as usize).max(1);
+            let max_buffer_size =
+                ((MAX_LOOKAHEAD_MS as f64 * sample_rate / 1000.0) as usize).max(1);
             let lookahead_frames =
                 ((lookahead_ms * sample_rate / 1000.0) as usize).clamp(1, max_buffer_size);
             Self {
                 threshold_lin: 10.0f64.powf(threshold_db / 20.0),
                 ceiling_lin: 10.0f64.powf(ceiling_db / 20.0),
                 release: 1.0 - (-1.0 / (release_ms * sample_rate / 1000.0)).exp(),
+                attack: {
+                    let att_ms = (lookahead_ms / 3.0).max(0.05);
+                    1.0 - (-1.0 / (att_ms * sample_rate / 1000.0)).exp()
+                },
                 max_buffer_size,
                 lookahead_frames,
                 active_buffer_size: lookahead_frames,
@@ -542,7 +570,10 @@ mod tests {
             }
             self.target_gain = min_gain;
             if self.target_gain < self.current_gain {
-                self.current_gain = self.target_gain;
+                self.current_gain += (self.target_gain - self.current_gain) * self.attack;
+                if (self.target_gain - self.current_gain).abs() < 0.0001 {
+                    self.current_gain = self.target_gain;
+                }
             } else {
                 let gain_diff = 1.0 - self.current_gain;
                 let mut ar = self.release;
@@ -703,6 +734,26 @@ mod tests {
     }
 
     #[test]
+    fn attack_ramps_instead_of_stepping() {
+        // B.1.2: a sudden loud frame must not collapse the gain to the full
+        // reduction in a single step — the look-ahead attack ramps it down over
+        // several frames (the hard ceiling still holds the brick-wall limit).
+        let mut l = Limiter::new(48_000.0);
+        let mut one_frame = vec![0.9f32, 0.9];
+        l.process(&mut one_frame, 2);
+        assert!(
+            l.current_gain < 1.0,
+            "gain must start reducing: {}",
+            l.current_gain
+        );
+        assert!(
+            l.current_gain > 0.9,
+            "gain must not jump to the full reduction in one frame: {}",
+            l.current_gain
+        );
+    }
+
+    #[test]
     fn loud_signal_is_attenuated() {
         let mut l = Limiter::new(48_000.0);
         l.set_param(PARAM_THRESHOLD, -12.0);
@@ -777,7 +828,12 @@ mod tests {
             l.set_param(PARAM_LOOKAHEAD, look);
 
             let mut reference = Reference::new(
-                48_000.0, thr as f64, ceil as f64, rel as f64, look as f64, 2,
+                48_000.0,
+                thr as f64,
+                ceil as f64,
+                rel as f64,
+                look as f64,
+                2,
             );
 
             let mut produced = input.clone();
