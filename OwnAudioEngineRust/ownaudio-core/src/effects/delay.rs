@@ -20,7 +20,15 @@ use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
 pub const PARAM_TIME_MS: u32 = 2;
 /// Param ID 3 — feedback / repeat amount (0.0 … 1.0).
 pub const PARAM_FEEDBACK: u32 = 3;
-/// Param ID 4 — feedback damping (0.0 … 1.0). Higher = darker repeats.
+/// Param ID 4 — feedback damping (0.0 … 1.0).
+///
+/// The value is the one-pole tracking coefficient of the low-pass in the feedback
+/// path (`damped = last + damp·(delayed − last)`), so contrary to a naive reading
+/// of the name **higher = brighter** repeats (the filter tracks the full signal)
+/// and **lower = darker** (more smoothing); at `0.0` the wet feedback path
+/// collapses to silence.  The identifier, range and default are unchanged, so
+/// existing presets sound identical — only this documentation was corrected to
+/// match the shipped behaviour (B.3.1).
 pub const PARAM_DAMPING: u32 = 4;
 /// Param ID 5 — ping-pong mode (0.0 = off, 1.0 = on).
 pub const PARAM_PING_PONG: u32 = 5;
@@ -45,6 +53,9 @@ pub struct Delay {
     last_output_r: f32,
     delay_samples: f32,
     mix_ramp: RampedParam,
+    // Feedback smoother: a feedback change during playback glides to avoid a step
+    // in the echo tail; snaps before the first block (steady-state parity).
+    feedback_ramp: RampedParam,
 }
 
 impl Delay {
@@ -68,6 +79,7 @@ impl Delay {
             last_output_r: 0.0,
             delay_samples: 0.0,
             mix_ramp: RampedParam::new(0.30, sample_rate, DEFAULT_SMOOTH_MS),
+            feedback_ramp: RampedParam::new(0.35, sample_rate, DEFAULT_SMOOTH_MS),
         };
         delay.update_delay_samples();
         delay
@@ -86,21 +98,60 @@ impl Effect for Delay {
     }
 
     fn process(&mut self, buffer: &mut [f32], channels: u16) {
-        // The reference effect only processes stereo material.
         self.mix_ramp.begin_block();
+        self.feedback_ramp.begin_block();
+        // Mono and stereo are supported; other channel layouts are bypassed.
         if !self.enabled
             || (self.mix < MIX_BYPASS_THRESHOLD && self.mix_ramp.current() < MIX_BYPASS_THRESHOLD)
-            || channels != 2
+            || (channels != 1 && channels != 2)
         {
             return;
         }
 
         let buf_len = self.delay_buffer_l.len();
-        let frame_count = buffer.len() / 2;
-
-        let rep = self.feedback;
         let damp = self.damping;
         let ds = self.delay_samples;
+
+        // Mono path (B.3.2): a single delay line, no ping-pong cross-feed — the
+        // effect is audible on mono tracks instead of silently bypassing.
+        if channels == 1 {
+            let mut last_l = self.last_output_l;
+            for sample in buffer.iter_mut() {
+                let mx = self.mix_ramp.advance();
+                let rep = self.feedback_ramp.advance();
+                let input = *sample;
+
+                let mut read_pos = self.write_index as f32 - ds;
+                if read_pos < 0.0 {
+                    read_pos += buf_len as f32;
+                }
+                let read_idx_a = read_pos as usize;
+                let mut read_idx_b = read_idx_a + 1;
+                if read_idx_b >= buf_len {
+                    read_idx_b = 0;
+                }
+                let frac = read_pos - read_idx_a as f32;
+
+                let delayed = self.delay_buffer_l[read_idx_a]
+                    + frac * (self.delay_buffer_l[read_idx_b] - self.delay_buffer_l[read_idx_a]);
+                let damped = denormal::flush(last_l + damp * (delayed - last_l));
+                last_l = damped;
+
+                let feedback = (damped * rep).clamp(-1.0, 1.0);
+                self.delay_buffer_l[self.write_index] = input + feedback;
+
+                *sample = input * (1.0 - mx) + damped * mx;
+
+                self.write_index += 1;
+                if self.write_index >= buf_len {
+                    self.write_index = 0;
+                }
+            }
+            self.last_output_l = last_l;
+            return;
+        }
+
+        let frame_count = buffer.len() / 2;
         let pp = self.ping_pong;
 
         let mut last_l = self.last_output_l;
@@ -108,6 +159,7 @@ impl Effect for Delay {
 
         for frame in 0..frame_count {
             let mx = self.mix_ramp.advance();
+            let rep = self.feedback_ramp.advance();
             let idx_l = frame * 2;
             let idx_r = frame * 2 + 1;
 
@@ -181,6 +233,7 @@ impl Effect for Delay {
             }
             PARAM_FEEDBACK => {
                 self.feedback = value.clamp(0.0, 1.0);
+                self.feedback_ramp.set(self.feedback);
                 true
             }
             PARAM_DAMPING => {
@@ -214,6 +267,7 @@ impl Effect for Delay {
         self.last_output_l = 0.0;
         self.last_output_r = 0.0;
         self.mix_ramp.reset(self.mix);
+        self.feedback_ramp.reset(self.feedback);
     }
 
     fn is_enabled(&self) -> bool {
@@ -246,7 +300,14 @@ mod tests {
     }
 
     impl Reference {
-        fn new(sample_rate: f64, time_ms: f64, rep: f64, mix: f64, damp: f64, ping_pong: bool) -> Self {
+        fn new(
+            sample_rate: f64,
+            time_ms: f64,
+            rep: f64,
+            mix: f64,
+            damp: f64,
+            ping_pong: bool,
+        ) -> Self {
             let capacity = (5.0 * sample_rate) as usize;
             Self {
                 rep,
@@ -277,11 +338,17 @@ mod tests {
                     read_pos += buf_len as f64;
                 }
                 let read_idx_a = read_pos as usize;
-                let read_idx_b = if read_idx_a + 1 >= buf_len { 0 } else { read_idx_a + 1 };
+                let read_idx_b = if read_idx_a + 1 >= buf_len {
+                    0
+                } else {
+                    read_idx_a + 1
+                };
                 let frac = read_pos - read_idx_a as f64;
 
-                let delayed_l = self.buf_l[read_idx_a] + frac * (self.buf_l[read_idx_b] - self.buf_l[read_idx_a]);
-                let delayed_r = self.buf_r[read_idx_a] + frac * (self.buf_r[read_idx_b] - self.buf_r[read_idx_a]);
+                let delayed_l = self.buf_l[read_idx_a]
+                    + frac * (self.buf_l[read_idx_b] - self.buf_l[read_idx_a]);
+                let delayed_r = self.buf_r[read_idx_a]
+                    + frac * (self.buf_r[read_idx_b] - self.buf_r[read_idx_a]);
 
                 let damped_l = self.last_l + self.damp * (delayed_l - self.last_l);
                 let damped_r = self.last_r + self.damp * (delayed_r - self.last_r);
@@ -390,11 +457,12 @@ mod tests {
     }
 
     #[test]
-    fn non_stereo_is_left_untouched() {
+    fn unsupported_channel_count_is_left_untouched() {
+        // Mono and stereo are handled; other layouts (e.g. 3 channels) bypass.
         let mut d = Delay::new(48_000.0);
-        let input = vec![0.5f32; 256];
+        let input = vec![0.5f32; 258];
         let mut buf = input.clone();
-        d.process(&mut buf, 1);
+        d.process(&mut buf, 3);
         assert_eq!(buf, input);
     }
 
@@ -451,6 +519,45 @@ mod tests {
         let mut second = input.clone();
         d.process(&mut second, 2);
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn mono_delay_is_audible() {
+        // B.3.2: a mono track used to be a silent bypass; now it echoes through a
+        // single delay line.
+        let mut d = Delay::new(48_000.0);
+        d.set_param(PARAM_TIME_MS, 100.0);
+        d.set_param(PARAM_FEEDBACK, 0.5);
+        d.set_param(PARAM_MIX, 1.0);
+        let mut buf = vec![0.0f32; 48_000];
+        buf[0] = 1.0;
+        d.process(&mut buf, 1);
+        assert!(buf.iter().all(|s| s.is_finite()));
+        // Beyond the first 100 ms (4800 samples) the delayed impulse must appear.
+        let tail = &buf[5_000..];
+        let energy: f32 = tail.iter().map(|s| s * s).sum();
+        assert!(energy > 0.0, "mono delay produced no echo");
+    }
+
+    #[test]
+    fn damping_zero_collapses_wet_to_silence() {
+        // Documents the corrected damping direction (B.3.1): at damp = 0 the
+        // feedback low-pass output stays at zero, so a fully-wet mono delay is
+        // silent — higher damping is brighter, lower is darker, 0 is silent.
+        let mut d = Delay::new(48_000.0);
+        d.set_param(PARAM_TIME_MS, 50.0);
+        d.set_param(PARAM_FEEDBACK, 0.7);
+        d.set_param(PARAM_DAMPING, 0.0);
+        d.set_param(PARAM_MIX, 1.0);
+        let mut buf = vec![0.0f32; 8_000];
+        for (i, s) in buf.iter_mut().enumerate() {
+            *s = ((i as f32) * 0.05).sin() * 0.5;
+        }
+        d.process(&mut buf, 1);
+        assert!(
+            buf.iter().all(|&s| s == 0.0),
+            "damp=0 must silence the wet path"
+        );
     }
 
     #[test]

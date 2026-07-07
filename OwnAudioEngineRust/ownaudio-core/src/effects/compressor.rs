@@ -25,6 +25,7 @@
 
 use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
+use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
 
 /// Param ID 2 — threshold in dB (-60 … 0).
 pub const PARAM_THRESHOLD: u32 = 2;
@@ -65,6 +66,11 @@ pub struct Compressor {
 
     // Detector state.
     envelope: f32,
+
+    // Makeup gain smoother (linear): a makeup change during playback glides to
+    // avoid a level step; it snaps before the first block so the steady-state
+    // output stays bit-identical to the un-smoothed reference.
+    makeup_ramp: RampedParam,
 }
 
 impl Compressor {
@@ -87,6 +93,7 @@ impl Compressor {
             knee_lower_db: 0.0,
             knee_upper_db: 0.0,
             envelope: 0.0,
+            makeup_ramp: RampedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
         };
         c.recompute();
         c
@@ -111,6 +118,7 @@ impl Effect for Compressor {
     }
 
     fn process(&mut self, buffer: &mut [f32], channels: u16) {
+        self.makeup_ramp.begin_block();
         if !self.enabled {
             return;
         }
@@ -118,7 +126,6 @@ impl Effect for Compressor {
         let ch = channels.max(1) as usize;
         let att = self.attack_coeff;
         let rel = self.release_coeff;
-        let mkp = self.makeup_lin;
         let slope = self.slope;
         let t_db = self.threshold_db;
         let k_lower = self.knee_lower_db;
@@ -126,6 +133,7 @@ impl Effect for Compressor {
         let mut env = self.envelope;
 
         for frame in buffer.chunks_mut(ch) {
+            let mkp = self.makeup_ramp.advance();
             // 1. Stereo-linked detection: the loudest channel of the frame
             //    drives the shared envelope, so every channel is compressed by
             //    the identical gain and the stereo image never drifts.
@@ -204,6 +212,7 @@ impl Effect for Compressor {
             PARAM_MAKEUP => {
                 self.makeup_db = value.clamp(-20.0, 20.0);
                 self.recompute();
+                self.makeup_ramp.set(self.makeup_lin);
                 true
             }
             _ => false,
@@ -225,6 +234,7 @@ impl Effect for Compressor {
 
     fn reset(&mut self) {
         self.envelope = 0.0;
+        self.makeup_ramp.reset(self.makeup_lin);
     }
 
     fn is_enabled(&self) -> bool {
@@ -467,7 +477,12 @@ mod tests {
             c.set_param(PARAM_MAKEUP, makeup);
 
             let mut reference = Reference::new(
-                48_000.0, thr as f64, ratio as f64, atk as f64, rel as f64, makeup as f64,
+                48_000.0,
+                thr as f64,
+                ratio as f64,
+                atk as f64,
+                rel as f64,
+                makeup as f64,
             );
 
             let mut produced = input.clone();
