@@ -16,6 +16,7 @@
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Mutex;
 
 use ownaudio_core::effects::{
     AutoGain, Chorus, Compressor, Delay, Distortion, DynamicAmp, Effect, Enhancer, Equalizer,
@@ -71,8 +72,23 @@ fn count_allocs(f: impl FnOnce()) -> usize {
     ALLOC_COUNT.load(Ordering::Relaxed)
 }
 
+/// Serialises the three tests in this binary.  The `ARMED`/`ALLOC_COUNT` state and
+/// the process-wide allocator are global, so if these tests ran concurrently (the
+/// default under `cargo test`) one test's setup allocations would be counted while
+/// another test has the allocator armed — a cross-test race that misattributed
+/// those allocations (e.g. to whichever effect happened to be measured at the
+/// time).  Holding this lock for each test's whole body guarantees only one test
+/// arms/measures at a time.  `into_inner` ignores poisoning so one failing test
+/// does not cascade into the others.
+static SERIAL: Mutex<()> = Mutex::new(());
+
+fn serial_guard() -> std::sync::MutexGuard<'static, ()> {
+    SERIAL.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 #[test]
 fn effect_process_is_allocation_free_in_steady_state() {
+    let _serial = serial_guard();
     const SAMPLE_RATE: f32 = 48_000.0;
     const CHANNELS: u16 = 2;
     const FRAMES: usize = 512;
@@ -154,6 +170,7 @@ unsafe extern "C" fn vst_passthrough(
 
 #[test]
 fn vst_effect_process_is_allocation_free_in_steady_state() {
+    let _serial = serial_guard();
     // The VST bridge deinterleaves into pre-allocated planar scratch, calls the
     // (non-allocating) plugin stub, and reinterleaves — none of which may touch
     // the allocator on the audio thread once the scratch is sized in `new`.
@@ -197,6 +214,7 @@ impl TrackSource for SilenceSource {
 
 #[test]
 fn mixer_mix_is_allocation_free_in_steady_state() {
+    let _serial = serial_guard();
     // The top-level real-time render call: draining the (empty) command queue,
     // clearing the output, and additively mixing every active track must not touch
     // the allocator once the per-track scratch has been sized on the first blocks.
