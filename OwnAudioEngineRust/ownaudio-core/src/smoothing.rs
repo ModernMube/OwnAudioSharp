@@ -80,6 +80,21 @@ impl SmoothedParam {
         self.current
     }
 
+    /// Advances `n` frames at once (closed form) and returns the new smoothed
+    /// value, equivalent to calling [`advance`](Self::advance) `n` times but with
+    /// a single `powi`.  Used for block-rate smoothing where a parameter glides at
+    /// the per-sample time constant but only the block-boundary value is needed
+    /// (e.g. recomputing filter coefficients once per block).
+    #[inline]
+    pub fn advance_block(&mut self, n: usize) -> f32 {
+        if n == 0 {
+            return self.current;
+        }
+        let decay = (1.0 - self.coeff).powi(n as i32);
+        self.current = self.target + (self.current - self.target) * decay;
+        self.current
+    }
+
     /// Returns the current smoothed value without advancing.
     #[inline]
     pub fn current(&self) -> f32 {
@@ -150,10 +165,32 @@ impl RampedParam {
         self.inner.advance()
     }
 
+    /// Advances `n` frames at once (closed form); see
+    /// [`SmoothedParam::advance_block`].  Used for block-rate parameter glides
+    /// (e.g. EQ band gains recomputed once per block).
+    #[inline]
+    pub fn advance_block(&mut self, n: usize) -> f32 {
+        self.inner.advance_block(n)
+    }
+
     /// Returns the current value without advancing.
     #[inline]
     pub fn current(&self) -> f32 {
         self.inner.current()
+    }
+
+    /// Returns the target the parameter is ramping toward — i.e. the most recent
+    /// value passed to [`set`](Self::set), which is what a `get_param` should
+    /// report back regardless of where the glide currently sits.
+    #[inline]
+    pub fn target(&self) -> f32 {
+        self.inner.target()
+    }
+
+    /// Returns `true` when the current value is within `eps` of the target.
+    #[inline]
+    pub fn is_settled(&self, eps: f32) -> bool {
+        self.inner.is_settled(eps)
     }
 
     /// Resets to the pre-playback state and snaps to `value`, so the next block
@@ -215,6 +252,26 @@ mod tests {
     }
 
     #[test]
+    fn advance_block_matches_repeated_advance() {
+        // The closed-form block advance must equal stepping one sample at a time.
+        let mut a = SmoothedParam::new(0.0, 48_000.0, 5.0);
+        a.set_target(1.0);
+        let mut b = SmoothedParam::new(0.0, 48_000.0, 5.0);
+        b.set_target(1.0);
+        let n = 512;
+        for _ in 0..n {
+            a.advance();
+        }
+        b.advance_block(n);
+        assert!(
+            (a.current() - b.current()).abs() < 1e-5,
+            "{} vs {}",
+            a.current(),
+            b.current()
+        );
+    }
+
+    #[test]
     fn snap_jumps_without_ramp() {
         let mut s = SmoothedParam::new(1.0, 48_000.0, 5.0);
         s.snap(0.25);
@@ -250,11 +307,18 @@ mod tests {
         p.begin_block();
         p.set(1.0);
         let first = p.advance();
-        assert!(first > 0.0 && first < 1.0, "first step must move but not jump: {first}");
+        assert!(
+            first > 0.0 && first < 1.0,
+            "first step must move but not jump: {first}"
+        );
         for _ in 0..2000 {
             p.advance();
         }
-        assert!((p.current() - 1.0).abs() < 1e-3, "must converge: {}", p.current());
+        assert!(
+            (p.current() - 1.0).abs() < 1e-3,
+            "must converge: {}",
+            p.current()
+        );
     }
 
     #[test]
