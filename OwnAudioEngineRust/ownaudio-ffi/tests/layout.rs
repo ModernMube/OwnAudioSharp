@@ -35,7 +35,11 @@ const PTR: usize = size_of::<*const c_char>();
 fn vst_audio_buffer_size_and_align() {
     // inputs(ptr) + outputs(ptr) + i32 + i32, rounded up to ptr align.
     let expected_size = if PTR == 8 { 24 } else { 16 };
-    assert_eq!(size_of::<VstAudioBuffer>(), expected_size, "VstAudioBuffer size");
+    assert_eq!(
+        size_of::<VstAudioBuffer>(),
+        expected_size,
+        "VstAudioBuffer size"
+    );
     assert_eq!(align_of::<VstAudioBuffer>(), PTR, "VstAudioBuffer align");
 }
 
@@ -43,8 +47,16 @@ fn vst_audio_buffer_size_and_align() {
 fn vst_audio_buffer_field_offsets() {
     assert_eq!(offset_of!(VstAudioBuffer, inputs), 0, "inputs");
     assert_eq!(offset_of!(VstAudioBuffer, outputs), PTR, "outputs");
-    assert_eq!(offset_of!(VstAudioBuffer, num_channels), 2 * PTR, "num_channels");
-    assert_eq!(offset_of!(VstAudioBuffer, num_samples), 2 * PTR + 4, "num_samples");
+    assert_eq!(
+        offset_of!(VstAudioBuffer, num_channels),
+        2 * PTR,
+        "num_channels"
+    );
+    assert_eq!(
+        offset_of!(VstAudioBuffer, num_samples),
+        2 * PTR + 4,
+        "num_samples"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -53,17 +65,37 @@ fn vst_audio_buffer_field_offsets() {
 
 #[test]
 fn stream_config_size_and_align() {
-    assert_eq!(size_of::<OwnAudioStreamConfig>(), 16, "OwnAudioStreamConfig size");
-    assert_eq!(align_of::<OwnAudioStreamConfig>(), 4, "OwnAudioStreamConfig align");
+    assert_eq!(
+        size_of::<OwnAudioStreamConfig>(),
+        16,
+        "OwnAudioStreamConfig size"
+    );
+    assert_eq!(
+        align_of::<OwnAudioStreamConfig>(),
+        4,
+        "OwnAudioStreamConfig align"
+    );
 }
 
 #[test]
 fn stream_config_field_offsets() {
-    assert_eq!(offset_of!(OwnAudioStreamConfig, sample_rate), 0, "sample_rate");
+    assert_eq!(
+        offset_of!(OwnAudioStreamConfig, sample_rate),
+        0,
+        "sample_rate"
+    );
     assert_eq!(offset_of!(OwnAudioStreamConfig, channels), 4, "channels");
     // 2 bytes implicit padding at offset 6 to align the i32 enum on a 4-byte boundary.
-    assert_eq!(offset_of!(OwnAudioStreamConfig, sample_format), 8, "sample_format");
-    assert_eq!(offset_of!(OwnAudioStreamConfig, buffer_size_frames), 12, "buffer_size_frames");
+    assert_eq!(
+        offset_of!(OwnAudioStreamConfig, sample_format),
+        8,
+        "sample_format"
+    );
+    assert_eq!(
+        offset_of!(OwnAudioStreamConfig, buffer_size_frames),
+        12,
+        "buffer_size_frames"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -74,19 +106,47 @@ fn stream_config_field_offsets() {
 fn device_info_size_and_align() {
     // name(ptr) + bool + bool + u16 + u16 + pad(2) + u32, rounded up to ptr align.
     let expected_size = if PTR == 8 { 24 } else { 16 };
-    assert_eq!(size_of::<OwnAudioDeviceInfo>(), expected_size, "OwnAudioDeviceInfo size");
-    assert_eq!(align_of::<OwnAudioDeviceInfo>(), PTR, "OwnAudioDeviceInfo align");
+    assert_eq!(
+        size_of::<OwnAudioDeviceInfo>(),
+        expected_size,
+        "OwnAudioDeviceInfo size"
+    );
+    assert_eq!(
+        align_of::<OwnAudioDeviceInfo>(),
+        PTR,
+        "OwnAudioDeviceInfo align"
+    );
 }
 
 #[test]
 fn device_info_field_offsets() {
     assert_eq!(offset_of!(OwnAudioDeviceInfo, name), 0, "name");
-    assert_eq!(offset_of!(OwnAudioDeviceInfo, is_default_input), PTR, "is_default_input");
-    assert_eq!(offset_of!(OwnAudioDeviceInfo, is_default_output), PTR + 1, "is_default_output");
-    assert_eq!(offset_of!(OwnAudioDeviceInfo, max_input_channels), PTR + 2, "max_input_channels");
-    assert_eq!(offset_of!(OwnAudioDeviceInfo, max_output_channels), PTR + 4, "max_output_channels");
+    assert_eq!(
+        offset_of!(OwnAudioDeviceInfo, is_default_input),
+        PTR,
+        "is_default_input"
+    );
+    assert_eq!(
+        offset_of!(OwnAudioDeviceInfo, is_default_output),
+        PTR + 1,
+        "is_default_output"
+    );
+    assert_eq!(
+        offset_of!(OwnAudioDeviceInfo, max_input_channels),
+        PTR + 2,
+        "max_input_channels"
+    );
+    assert_eq!(
+        offset_of!(OwnAudioDeviceInfo, max_output_channels),
+        PTR + 4,
+        "max_output_channels"
+    );
     // 2 bytes implicit padding at PTR + 6 to align the u32 on a 4-byte boundary.
-    assert_eq!(offset_of!(OwnAudioDeviceInfo, default_sample_rate), PTR + 8, "default_sample_rate");
+    assert_eq!(
+        offset_of!(OwnAudioDeviceInfo, default_sample_rate),
+        PTR + 8,
+        "default_sample_rate"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -95,14 +155,26 @@ fn device_info_field_offsets() {
 
 #[test]
 fn sample_format_is_c_int_wide() {
-    assert_eq!(size_of::<OwnAudioSampleFormat>(), 4, "OwnAudioSampleFormat size");
-    assert_eq!(align_of::<OwnAudioSampleFormat>(), 4, "OwnAudioSampleFormat align");
+    assert_eq!(
+        size_of::<OwnAudioSampleFormat>(),
+        4,
+        "OwnAudioSampleFormat size"
+    );
+    assert_eq!(
+        align_of::<OwnAudioSampleFormat>(),
+        4,
+        "OwnAudioSampleFormat align"
+    );
 }
 
 #[test]
 fn error_code_is_c_int_wide() {
     assert_eq!(size_of::<OwnAudioErrorCode>(), 4, "OwnAudioErrorCode size");
-    assert_eq!(align_of::<OwnAudioErrorCode>(), 4, "OwnAudioErrorCode align");
+    assert_eq!(
+        align_of::<OwnAudioErrorCode>(),
+        4,
+        "OwnAudioErrorCode align"
+    );
 }
 
 #[test]
@@ -156,15 +228,31 @@ fn host_api_discriminants() {
 
 #[test]
 fn stream_info_size_and_align() {
-    assert_eq!(size_of::<OwnAudioStreamInfo>(), 24, "OwnAudioStreamInfo size");
-    assert_eq!(align_of::<OwnAudioStreamInfo>(), 8, "OwnAudioStreamInfo align");
+    assert_eq!(
+        size_of::<OwnAudioStreamInfo>(),
+        24,
+        "OwnAudioStreamInfo size"
+    );
+    assert_eq!(
+        align_of::<OwnAudioStreamInfo>(),
+        8,
+        "OwnAudioStreamInfo align"
+    );
 }
 
 #[test]
 fn stream_info_field_offsets() {
     assert_eq!(offset_of!(OwnAudioStreamInfo, channels), 0, "channels");
-    assert_eq!(offset_of!(OwnAudioStreamInfo, sample_rate), 4, "sample_rate");
-    assert_eq!(offset_of!(OwnAudioStreamInfo, duration_ms), 8, "duration_ms");
+    assert_eq!(
+        offset_of!(OwnAudioStreamInfo, sample_rate),
+        4,
+        "sample_rate"
+    );
+    assert_eq!(
+        offset_of!(OwnAudioStreamInfo, duration_ms),
+        8,
+        "duration_ms"
+    );
     assert_eq!(offset_of!(OwnAudioStreamInfo, bit_depth), 16, "bit_depth");
     // 4 bytes tail padding at offset 20 to round the struct up to 8-byte align.
 }

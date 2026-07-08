@@ -9,7 +9,12 @@ namespace OwnaudioNET.Sources;
 /// Audio source that plays audio samples from memory.
 /// Provides fast, low-latency playback of pre-loaded or dynamically generated audio.
 /// </summary>
-public sealed class SampleSource : BaseAudioSource
+/// <remarks>
+/// In the Rust-native chain the buffer is served by a native <see cref="Ownaudio.Audio.Tracks.MemoryTrack"/>
+/// (see the <c>SampleSource.RustNative</c> partial): the managed side only hands the buffer to native
+/// code once and then acts as a controller, so no audio data flows through managed code.
+/// </remarks>
+public sealed partial class SampleSource : BaseAudioSource
 {
     private readonly AudioConfig _config;
     private float[] _sampleData;
@@ -29,6 +34,9 @@ public sealed class SampleSource : BaseAudioSource
     {
         get
         {
+            if (_rustNative)
+                return RustNativePosition;
+
             lock (_dataLock)
             {
                 if (_sampleData == null || _sampleData.Length == 0)
@@ -65,6 +73,8 @@ public sealed class SampleSource : BaseAudioSource
 
         int totalFrames = samples.Length / config.Channels;
         _duration = (double)totalFrames / config.SampleRate;
+
+        _rustNative = OwnaudioNET.Engine.RustNativeChain.Enabled;
     }
 
     public SampleSource(int bufferSizeInFrames, AudioConfig config)
@@ -78,6 +88,8 @@ public sealed class SampleSource : BaseAudioSource
         _readPosition = 0;
         _duration = 0.0;
         AllowDynamicUpdate = true;
+
+        _rustNative = OwnaudioNET.Engine.RustNativeChain.Enabled;
     }
 
     public void SubmitSamples(ReadOnlySpan<float> samples)
@@ -100,21 +112,32 @@ public sealed class SampleSource : BaseAudioSource
             int totalFrames = samples.Length / _config.Channels;
             _duration = (double)totalFrames / _config.SampleRate;
         }
+
+        // In the Rust-native chain the native memory source owns the audio, so push the new buffer to
+        // it (a one-shot control-thread copy, never on the audio path).
+        if (_rustNative)
+            RustNativeSubmit(samples);
     }
 
     public void Clear()
     {
         ThrowIfDisposed();
 
+        float[]? cleared = null;
         lock (_dataLock)
         {
             if (_sampleData != null)
             {
                 Array.Clear(_sampleData, 0, _sampleData.Length);
+                cleared = _sampleData;
             }
             _readPosition = 0;
             _duration = 0.0;
         }
+
+        // Mirror the cleared (silent) buffer onto the native memory source.
+        if (_rustNative && cleared is not null)
+            RustNativeSubmit(cleared);
     }
 
     public override int ReadSamples(Span<float> buffer, int frameCount)
@@ -200,6 +223,9 @@ public sealed class SampleSource : BaseAudioSource
         if (positionInSeconds < 0 || positionInSeconds > Duration)
             return false;
 
+        if (_rustNative)
+            return RustNativeSeek(positionInSeconds);
+
         lock (_dataLock)
         {
             try
@@ -218,12 +244,57 @@ public sealed class SampleSource : BaseAudioSource
         }
     }
 
+    /// <inheritdoc/>
+    public override void Play()
+    {
+        ThrowIfDisposed();
+
+        if (_rustNative)
+        {
+            RustNativePlay();
+            return;
+        }
+
+        base.Play();
+    }
+
+    /// <inheritdoc/>
+    public override void Pause()
+    {
+        ThrowIfDisposed();
+
+        if (_rustNative)
+        {
+            RustNativePause();
+            return;
+        }
+
+        base.Pause();
+    }
+
+    /// <inheritdoc/>
+    public override void Stop()
+    {
+        ThrowIfDisposed();
+
+        if (_rustNative)
+        {
+            RustNativeStop();
+            return;
+        }
+
+        base.Stop();
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (!_disposed)
         {
             if (disposing)
             {
+                if (_rustNative)
+                    DisposeRustBackend();
+
                 lock (_dataLock)
                 {
                     _sampleData = null!;

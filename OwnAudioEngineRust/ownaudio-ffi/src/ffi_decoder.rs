@@ -89,7 +89,12 @@ pub extern "C" fn ownaudio_v1_decoder_open(
         };
         let prefetch_frames = (sizing_rate * secs) as usize;
 
-        match open_streaming(path_str, target_sample_rate, target_channels, prefetch_frames) {
+        match open_streaming(
+            path_str,
+            target_sample_rate,
+            target_channels,
+            prefetch_frames,
+        ) {
             Ok(track) => {
                 let boxed = Box::new(DecoderWrapper { inner: track });
                 unsafe {

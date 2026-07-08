@@ -33,6 +33,8 @@ public sealed class MultiTrackSession : IDisposable
     private readonly ushort _channels;
     private readonly List<AudioTrack> _tracks = new();
     private readonly List<FileTrack> _fileTracks = new();
+    private readonly List<MemoryTrack> _memoryTracks = new();
+    private readonly List<InputTrack> _inputTracks = new();
     private readonly MasterEffectChain _masterEffects;
     private AudioOutputStream? _outputStream;
     private float _masterGain = 1.0f;
@@ -196,6 +198,123 @@ public sealed class MultiTrackSession : IDisposable
     }
 
     /// <summary>
+    /// Adds a new track and installs a native memory source that serves the given
+    /// interleaved buffer directly on the audio thread.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The samples must already be at the session's sample rate and channel count.
+    /// They are copied into native memory once (a control-thread copy, never on the
+    /// audio path); the returned <see cref="MemoryTrack"/> keeps the entire audio
+    /// path in native code — no managed pump or per-block copy is involved, so the
+    /// GC can never stall it. The memory track and its track are owned by the session
+    /// and released when the session is disposed (or the track is removed via
+    /// <see cref="RemoveTrack"/>).
+    /// </para>
+    /// </remarks>
+    /// <param name="samples">Interleaved samples to serve (session rate/channels).</param>
+    /// <param name="loop">Whether to loop seamlessly at end-of-buffer.</param>
+    /// <returns>The <see cref="MemoryTrack"/> driving the new track.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the session is disposed.</exception>
+    /// <exception cref="Ownaudio.Safe.Exceptions.OwnAudioException">
+    /// Thrown when the native track or memory source cannot be created.
+    /// </exception>
+    public MemoryTrack AddMemoryTrack(ReadOnlySpan<float> samples, bool loop = false)
+    {
+        ThrowIfDisposed();
+
+        AudioTrack track = AddTrack();
+
+        try
+        {
+            ref readonly float first = ref samples.IsEmpty
+                ? ref System.Runtime.CompilerServices.Unsafe.NullRef<float>()
+                : ref MemoryMarshal.GetReference(samples);
+
+            int code = OwnAudioNative.ownaudio_v1_track_open_memory(
+                _mixerHandle.DangerousGetHandle(),
+                track.GetNativeHandle(),
+                in first,
+                (nuint)samples.Length,
+                _channels,
+                (byte)(loop ? 1 : 0),
+                out IntPtr rawSource);
+            ErrorCodeMapper.ThrowIfError(code, nameof(AddMemoryTrack));
+
+            var sourceHandle = new MemorySourceHandle();
+            Marshal.InitHandle(sourceHandle, rawSource);
+
+            var memoryTrack = new MemoryTrack(
+                track, sourceHandle, _mixerHandle.DangerousGetHandle(), _sampleRate, _channels);
+            _memoryTracks.Add(memoryTrack);
+            return memoryTrack;
+        }
+        catch
+        {
+            // The memory source could not be installed; drop the just-added track so
+            // the session does not keep a silent, orphaned track around.
+            RemoveTrack(track);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Adds a new track and opens a native input-capture source that feeds it directly from a
+    /// device, with the capture callback writing into the track's ring buffer on the native side.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The device is opened at the session's sample rate and channel count. No managed callback is
+    /// involved, so no audio data ever crosses into managed code and the GC can never stall capture
+    /// or render. Capture starts paused; call <see cref="InputTrack.Play"/> to begin. The input track
+    /// and its track are owned by the session and released when the session is disposed (or the track
+    /// is removed via <see cref="RemoveTrack"/>).
+    /// </para>
+    /// </remarks>
+    /// <param name="engine">The native engine that owns the input device.</param>
+    /// <param name="device">The input device, or <see langword="null"/> for the system default.</param>
+    /// <param name="bufferFrames">Device buffer size in frames; 0 lets the engine choose.</param>
+    /// <returns>The <see cref="InputTrack"/> driving the new track.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the session is disposed.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="engine"/> is null.</exception>
+    /// <exception cref="Ownaudio.Safe.Exceptions.OwnAudioException">
+    /// Thrown when the native track or input stream cannot be created.
+    /// </exception>
+    public InputTrack AddInputTrack(Safe.AudioEngine engine, Safe.AudioDevice? device = null, uint bufferFrames = 0)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(engine);
+
+        AudioTrack track = AddTrack();
+
+        try
+        {
+            int code = OwnAudioNative.ownaudio_v1_track_open_input(
+                engine.NativeHandle,
+                _mixerHandle.DangerousGetHandle(),
+                track.GetNativeHandle(),
+                device?.Name,
+                (uint)_sampleRate,
+                _channels,
+                bufferFrames,
+                out IntPtr rawSource);
+            ErrorCodeMapper.ThrowIfError(code, nameof(AddInputTrack));
+
+            var sourceHandle = new InputSourceHandle();
+            Marshal.InitHandle(sourceHandle, rawSource);
+
+            var inputTrack = new InputTrack(track, sourceHandle);
+            _inputTracks.Add(inputTrack);
+            return inputTrack;
+        }
+        catch
+        {
+            RemoveTrack(track);
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Removes and disposes the specified track.
     /// </summary>
     /// <param name="track">Track to remove.</param>
@@ -219,6 +338,27 @@ public sealed class MultiTrackSession : IDisposable
                 {
                     _fileTracks[i].Dispose();
                     _fileTracks.RemoveAt(i);
+                }
+            }
+
+            // Likewise dispose any memory track targeting this track before it is
+            // removed from the mixer (its finished-poll timer stops touching the source).
+            for (int i = _memoryTracks.Count - 1; i >= 0; i--)
+            {
+                if (_memoryTracks[i].Track == track)
+                {
+                    _memoryTracks[i].Dispose();
+                    _memoryTracks.RemoveAt(i);
+                }
+            }
+
+            // Dispose any input track targeting this track (stops capture) before removal.
+            for (int i = _inputTracks.Count - 1; i >= 0; i--)
+            {
+                if (_inputTracks[i].Track == track)
+                {
+                    _inputTracks[i].Dispose();
+                    _inputTracks.RemoveAt(i);
                 }
             }
 
@@ -388,6 +528,20 @@ public sealed class MultiTrackSession : IDisposable
         }
 
         _fileTracks.Clear();
+
+        foreach (MemoryTrack memoryTrack in _memoryTracks)
+        {
+            memoryTrack.Dispose();
+        }
+
+        _memoryTracks.Clear();
+
+        foreach (InputTrack inputTrack in _inputTracks)
+        {
+            inputTrack.Dispose();
+        }
+
+        _inputTracks.Clear();
 
         foreach (AudioTrack track in _tracks)
         {

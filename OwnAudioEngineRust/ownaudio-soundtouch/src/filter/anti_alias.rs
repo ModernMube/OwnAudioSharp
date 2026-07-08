@@ -96,11 +96,7 @@ impl AntiAliasFilter {
         for (i, w_slot) in work.iter_mut().enumerate() {
             let cnt_temp = i as f64 - (length as f64 / 2.0);
             let temp = cnt_temp * wc;
-            let h = if temp != 0.0 {
-                temp.sin() / temp
-            } else {
-                1.0
-            };
+            let h = if temp != 0.0 { temp.sin() / temp } else { 1.0 };
             let win = 0.54 + (0.46 * (temp_coefficient * cnt_temp).cos());
             let v = win * h;
             *w_slot = v;

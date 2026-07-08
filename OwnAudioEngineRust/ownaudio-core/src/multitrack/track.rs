@@ -1,7 +1,7 @@
 //! Single audio track: an audio source, a shared atomic parameter block, and
 //! an effect chain.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::effects::EffectChain;
@@ -16,6 +16,13 @@ const GAIN_SMOOTH_MS: f32 = 5.0;
 /// effects (even via a drained command on the audio thread) never reallocates
 /// the chain up to this many effects.
 pub const MAX_EFFECTS_PER_TRACK: usize = 32;
+
+/// Maximum number of source channels a per-track output-channel routing map can
+/// cover. A map assigns each source channel `i` (`i < route_len`) to a physical
+/// output channel; source channels beyond this cap are dropped. Sixteen is far
+/// above any realistic per-track source width while keeping [`TrackShared`] a
+/// fixed, allocation-free size.
+pub const MAX_ROUTE_CHANNELS: usize = 16;
 
 /// Playback state of a single track.
 ///
@@ -142,6 +149,19 @@ pub struct TrackShared {
     /// Latch: `true` when the control thread has written a new
     /// [`TrackShared::pending_start_silence`] the audio thread has not yet taken.
     start_silence_pending: AtomicBool,
+    /// Number of active entries in [`TrackShared::route_map`], i.e. how many
+    /// source channels the per-track output routing covers. `0` means no routing:
+    /// the track sums straight through, source channel `i` → output channel `i`
+    /// (the identity fast path, bit-for-bit as before). A non-zero value routes
+    /// source channel `i` (`i < route_len`) to output channel `route_map[i]`, and
+    /// any output channel not named by the map receives no contribution from this
+    /// track (silence), matching the managed mixer's selective channel routing.
+    route_len: AtomicUsize,
+    /// Per-source-channel destination output-channel indices, valid for the first
+    /// [`TrackShared::route_len`] entries. Written by the control thread (map first,
+    /// `route_len` last with `Release`) and read by the audio thread (`route_len`
+    /// first with `Acquire`), so the audio thread never observes a half-written map.
+    route_map: [AtomicU32; MAX_ROUTE_CHANNELS],
 }
 
 impl TrackShared {
@@ -161,7 +181,47 @@ impl TrackShared {
             peak_r_bits: AtomicU32::new(0.0f32.to_bits()),
             pending_start_silence: AtomicU64::new(0),
             start_silence_pending: AtomicBool::new(false),
+            route_len: AtomicUsize::new(0),
+            route_map: std::array::from_fn(|_| AtomicU32::new(0)),
         }
+    }
+
+    /// Installs a per-track output-channel routing map: source channel `i` is
+    /// summed into output channel `map[i]` (for `i < map.len()`), and any output
+    /// channel not named receives no contribution from this track. Passing an
+    /// empty slice is equivalent to [`TrackShared::clear_output_channel_map`].
+    ///
+    /// Entries beyond [`MAX_ROUTE_CHANNELS`] are ignored. The map is disabled for
+    /// the instant it is being rewritten (`route_len` dropped to `0` first, then
+    /// restored last) so the audio thread only ever sees a fully-written map or
+    /// none — never a torn one.
+    pub fn set_output_channel_map(&self, map: &[u32]) {
+        self.route_len.store(0, Ordering::Release);
+        let n = map.len().min(MAX_ROUTE_CHANNELS);
+        for (i, &v) in map.iter().take(n).enumerate() {
+            self.route_map[i].store(v, Ordering::Relaxed);
+        }
+        self.route_len.store(n, Ordering::Release);
+    }
+
+    /// Clears any per-track output-channel routing, returning the track to the
+    /// straight-through identity mix (source channel `i` → output channel `i`).
+    pub fn clear_output_channel_map(&self) {
+        self.route_len.store(0, Ordering::Release);
+    }
+
+    /// Copies the active routing map into `out` and returns its length (`0` when
+    /// no routing is set). Called on the audio thread once per block.
+    #[inline]
+    pub fn load_output_channel_map(&self, out: &mut [u32; MAX_ROUTE_CHANNELS]) -> usize {
+        let n = self
+            .route_len
+            .load(Ordering::Acquire)
+            .min(MAX_ROUTE_CHANNELS);
+        for (i, slot) in out.iter_mut().enumerate().take(n) {
+            *slot = self.route_map[i].load(Ordering::Relaxed);
+        }
+        n
     }
 
     /// Returns the current playback state.
@@ -651,40 +711,98 @@ impl Track {
         // share the same (smoothed) gain. The active region is written starting at
         // `out_off` so any start-offset silence prefix is left untouched.
         let out_active = &mut output[out_off..out_off + active_samples];
-        // Fast path: once the gain smoother has settled at unity, every frame would multiply by
-        // 1.0 and re-advance a no-op ramp. Skip both with a flat additive copy the compiler can
-        // vectorise cleanly, and measure the per-channel peak in a separate branch-light pass.
-        if self.gain_smoother.is_settled(GAIN_SETTLE_EPS)
-            && (self.gain_smoother.target() - 1.0).abs() <= GAIN_SETTLE_EPS
-        {
-            for (o, &s) in out_active.iter_mut().zip(buf.iter()) {
-                *o += s;
-            }
-            for frame in buf.chunks(ch) {
-                let l = frame[0].abs();
-                if l > peak_l {
-                    peak_l = l;
+
+        // Per-track output-channel routing: an empty map (the common case) sums the
+        // track straight through (source channel i → output channel i); a non-empty
+        // map routes source channel `c` to output channel `route_buf[c]` and leaves
+        // every unmapped output channel silent for this track — the native port of
+        // the managed mixer's selective channel routing. The map is snapshotted once
+        // per block onto the stack (allocation-free).
+        let mut route_buf = [0u32; MAX_ROUTE_CHANNELS];
+        let route_len = self.shared.load_output_channel_map(&mut route_buf);
+
+        let settled_unity = self.gain_smoother.is_settled(GAIN_SETTLE_EPS)
+            && (self.gain_smoother.target() - 1.0).abs() <= GAIN_SETTLE_EPS;
+
+        if route_len == 0 {
+            // Fast path: once the gain smoother has settled at unity, every frame would multiply by
+            // 1.0 and re-advance a no-op ramp. Skip both with a flat additive copy the compiler can
+            // vectorise cleanly, and measure the per-channel peak in a separate branch-light pass.
+            if settled_unity {
+                for (o, &s) in out_active.iter_mut().zip(buf.iter()) {
+                    *o += s;
                 }
-                if ch > 1 {
-                    let r = frame[1].abs();
-                    if r > peak_r {
-                        peak_r = r;
+                for frame in buf.chunks(ch) {
+                    let l = frame[0].abs();
+                    if l > peak_l {
+                        peak_l = l;
+                    }
+                    if ch > 1 {
+                        let r = frame[1].abs();
+                        if r > peak_r {
+                            peak_r = r;
+                        }
+                    }
+                }
+            } else {
+                for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(ch)) {
+                    let gain = self.gain_smoother.advance();
+                    for (i, (o, &s)) in out_frame.iter_mut().zip(in_frame.iter()).enumerate() {
+                        let scaled = s * gain;
+                        *o += scaled;
+                        let abs = scaled.abs();
+                        if i == 0 {
+                            if abs > peak_l {
+                                peak_l = abs;
+                            }
+                        } else if i == 1 && abs > peak_r {
+                            peak_r = abs;
+                        }
                     }
                 }
             }
         } else {
-            for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(ch)) {
-                let gain = self.gain_smoother.advance();
-                for (i, (o, &s)) in out_frame.iter_mut().zip(in_frame.iter()).enumerate() {
-                    let scaled = s * gain;
-                    *o += scaled;
-                    let abs = scaled.abs();
-                    if i == 0 {
-                        if abs > peak_l {
-                            peak_l = abs;
+            // Selective routing. Only source channels the map covers are placed, and
+            // only onto in-range output channels; the source width is `ch` (the track
+            // decodes at the mixer's channel count), so cap the map at `ch`.
+            let n = route_len.min(ch);
+            if settled_unity {
+                for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(ch)) {
+                    for c in 0..n {
+                        let dst = route_buf[c] as usize;
+                        if dst < ch {
+                            out_frame[dst] += in_frame[c];
                         }
-                    } else if i == 1 && abs > peak_r {
-                        peak_r = abs;
+                    }
+                    let l = in_frame[0].abs();
+                    if l > peak_l {
+                        peak_l = l;
+                    }
+                    if ch > 1 {
+                        let r = in_frame[1].abs();
+                        if r > peak_r {
+                            peak_r = r;
+                        }
+                    }
+                }
+            } else {
+                for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(ch)) {
+                    let gain = self.gain_smoother.advance();
+                    for c in 0..n {
+                        let dst = route_buf[c] as usize;
+                        if dst < ch {
+                            out_frame[dst] += in_frame[c] * gain;
+                        }
+                    }
+                    let l = (in_frame[0] * gain).abs();
+                    if l > peak_l {
+                        peak_l = l;
+                    }
+                    if ch > 1 {
+                        let r = (in_frame[1] * gain).abs();
+                        if r > peak_r {
+                            peak_r = r;
+                        }
                     }
                 }
             }
@@ -783,6 +901,61 @@ mod tests {
 
         track.set_source(None);
         assert_eq!(track.shared.rendered_frames(), 0);
+    }
+
+    #[test]
+    fn output_channel_map_routes_and_silences_unmapped() {
+        // 4-channel output bus; route the source onto physical output channels 2 and 3.
+        let mut track = Track::new(20, 48_000.0, 4, 64);
+        track.set_source(Some(Box::new(ConstSource(0.5))));
+        track.shared.set_state(TrackState::Playing);
+        track.shared.set_output_channel_map(&[2, 3]);
+
+        let mut out = vec![0.0f32; 8]; // 2 quad frames
+        track.process_additive(&mut out, 4);
+
+        // Unmapped channels (0, 1) receive nothing; mapped channels (2, 3) get the source.
+        for frame in out.chunks(4) {
+            assert_eq!(frame[0], 0.0);
+            assert_eq!(frame[1], 0.0);
+            assert_eq!(frame[2], 0.5);
+            assert_eq!(frame[3], 0.5);
+        }
+    }
+
+    #[test]
+    fn output_channel_map_is_additive_across_tracks() {
+        // Two tracks routed to disjoint output channels must not overwrite each other's
+        // contribution — the additive-mix contract must hold through the routing path.
+        let mut a = Track::new(22, 48_000.0, 4, 64);
+        a.set_source(Some(Box::new(ConstSource(0.25))));
+        a.shared.set_state(TrackState::Playing);
+        a.shared.set_output_channel_map(&[0, 1]);
+
+        let mut b = Track::new(23, 48_000.0, 4, 64);
+        b.set_source(Some(Box::new(ConstSource(0.75))));
+        b.shared.set_state(TrackState::Playing);
+        b.shared.set_output_channel_map(&[2, 3]);
+
+        let mut out = vec![0.0f32; 4]; // 1 quad frame
+        a.process_additive(&mut out, 4);
+        b.process_additive(&mut out, 4);
+
+        assert_eq!(out, vec![0.25, 0.25, 0.75, 0.75]);
+    }
+
+    #[test]
+    fn cleared_output_channel_map_restores_identity() {
+        let mut track = Track::new(21, 48_000.0, 2, 64);
+        track.set_source(Some(Box::new(ConstSource(0.5))));
+        track.shared.set_state(TrackState::Playing);
+        track.shared.set_output_channel_map(&[1, 0]);
+        track.shared.clear_output_channel_map();
+
+        let mut out = vec![0.0f32; 4];
+        track.process_additive(&mut out, 2);
+        // With routing cleared the track sums straight through: every channel gets the source.
+        assert!(out.iter().all(|&s| (s - 0.5).abs() < 1e-6));
     }
 
     /// Source that reports how many interleaved samples it has been asked for, so a test can

@@ -129,7 +129,11 @@ pub(crate) fn make_output_trampoline(
     user_data: *mut std::os::raw::c_void,
     channels: u16,
 ) -> impl FnMut(&mut [f32]) + Send + 'static {
-    let state = OutputTrampolineState { callback, user_data, channels };
+    let state = OutputTrampolineState {
+        callback,
+        user_data,
+        channels,
+    };
     // The closure captures `state` as a whole (method call, not field access),
     // so `OutputTrampolineState: Send` makes the closure `Send` too.
     move |buf: &mut [f32]| unsafe { state.call(buf) }
@@ -141,6 +145,10 @@ pub(crate) fn make_input_trampoline(
     user_data: *mut std::os::raw::c_void,
     channels: u16,
 ) -> impl FnMut(&[f32]) + Send + 'static {
-    let state = InputTrampolineState { callback, user_data, channels };
+    let state = InputTrampolineState {
+        callback,
+        user_data,
+        channels,
+    };
     move |buf: &[f32]| unsafe { state.call(buf) }
 }

@@ -72,8 +72,15 @@ fn output_stream_destroy_null_is_safe() {
 fn engine_create_and_destroy_smoke() {
     let mut handle: *mut OwnAudioEngineHandle = std::ptr::null_mut();
     let code = ownaudio_v1_engine_create(&mut handle);
-    assert_eq!(code, OwnAudioErrorCode::Success as i32, "engine_create failed");
-    assert!(!handle.is_null(), "engine handle must not be null on success");
+    assert_eq!(
+        code,
+        OwnAudioErrorCode::Success as i32,
+        "engine_create failed"
+    );
+    assert!(
+        !handle.is_null(),
+        "engine handle must not be null on success"
+    );
     ownaudio_v1_engine_destroy(handle);
 }
 
@@ -86,7 +93,11 @@ fn list_output_devices_smoke() {
     let mut devices: *mut OwnAudioDeviceInfo = std::ptr::null_mut();
     let mut count: usize = 0;
     let code = ownaudio_v1_list_output_devices(&mut devices, &mut count);
-    assert_eq!(code, OwnAudioErrorCode::Success as i32, "list_output_devices failed");
+    assert_eq!(
+        code,
+        OwnAudioErrorCode::Success as i32,
+        "list_output_devices failed"
+    );
     // count == 0 is valid on headless CI; just ensure no crash.
     ownaudio_v1_free_device_list(devices, count);
 }
@@ -96,7 +107,11 @@ fn list_input_devices_smoke() {
     let mut devices: *mut OwnAudioDeviceInfo = std::ptr::null_mut();
     let mut count: usize = 0;
     let code = ownaudio_v1_list_input_devices(&mut devices, &mut count);
-    assert_eq!(code, OwnAudioErrorCode::Success as i32, "list_input_devices failed");
+    assert_eq!(
+        code,
+        OwnAudioErrorCode::Success as i32,
+        "list_input_devices failed"
+    );
     ownaudio_v1_free_device_list(devices, count);
 }
 
@@ -186,9 +201,10 @@ mod track_source {
     use ownaudio_ffi::ffi_track::{
         ownaudio_v1_mixer_create, ownaudio_v1_mixer_destroy, ownaudio_v1_mixer_get_master_peaks,
         ownaudio_v1_mixer_pause_all, ownaudio_v1_mixer_play_all, ownaudio_v1_mixer_set_master_gain,
-        ownaudio_v1_mixer_stop_all, ownaudio_v1_track_create, ownaudio_v1_track_destroy,
-        ownaudio_v1_track_get_peaks, ownaudio_v1_track_get_rendered_frames,
-        ownaudio_v1_track_reset_position, ownaudio_v1_track_set_start_delay_frames,
+        ownaudio_v1_mixer_stop_all, ownaudio_v1_track_clear_output_channel_map,
+        ownaudio_v1_track_create, ownaudio_v1_track_destroy, ownaudio_v1_track_get_peaks,
+        ownaudio_v1_track_get_rendered_frames, ownaudio_v1_track_reset_position,
+        ownaudio_v1_track_set_output_channel_map, ownaudio_v1_track_set_start_delay_frames,
     };
     use ownaudio_ffi::handles::{
         OwnAudioMixerHandle, OwnAudioTrackHandle, OwnAudioTrackSourceHandle,
@@ -240,6 +256,56 @@ mod track_source {
 
         ownaudio_v1_track_destroy(track_a);
         ownaudio_v1_track_destroy(track_b);
+        ownaudio_v1_mixer_destroy(mixer);
+    }
+
+    #[test]
+    fn output_channel_map_set_and_clear_smoke() {
+        // A null track handle is rejected by both routing entry points.
+        assert_eq!(
+            ownaudio_v1_track_clear_output_channel_map(std::ptr::null_mut()),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        let empty: [u32; 0] = [];
+        assert_eq!(
+            ownaudio_v1_track_set_output_channel_map(std::ptr::null_mut(), empty.as_ptr(), 0),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+
+        let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_mixer_create(48_000.0, 4, &mut mixer),
+            OwnAudioErrorCode::Success as i32
+        );
+        let mut track: *mut OwnAudioTrackHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_track_create(mixer, &mut track),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        // Install, then clear via both len==0 and the dedicated clear entry point.
+        let map: [u32; 2] = [2, 3];
+        assert_eq!(
+            ownaudio_v1_track_set_output_channel_map(track, map.as_ptr(), map.len()),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(
+            ownaudio_v1_track_set_output_channel_map(track, std::ptr::null(), 0),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(
+            ownaudio_v1_track_clear_output_channel_map(track),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        // A non-null map pointer with a positive length that is out of range is still accepted
+        // (entries beyond the mixer's channel count are simply ignored at render time).
+        assert_eq!(
+            ownaudio_v1_track_set_output_channel_map(track, map.as_ptr(), map.len()),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        ownaudio_v1_track_destroy(track);
         ownaudio_v1_mixer_destroy(mixer);
     }
 
@@ -455,7 +521,8 @@ mod file_source {
     use ownaudio_ffi::error_code::OwnAudioErrorCode;
     use ownaudio_ffi::ffi_file_source::{
         ownaudio_v1_file_source_destroy, ownaudio_v1_file_source_is_finished,
-        ownaudio_v1_file_source_seek, ownaudio_v1_file_source_set_loop, ownaudio_v1_track_open_file,
+        ownaudio_v1_file_source_seek, ownaudio_v1_file_source_set_loop,
+        ownaudio_v1_track_open_file,
     };
     use ownaudio_ffi::ffi_source::ownaudio_v1_track_clear_source;
     use ownaudio_ffi::ffi_track::{
@@ -480,8 +547,11 @@ mod file_source {
             use std::sync::atomic::{AtomicU64, Ordering};
             static COUNTER: AtomicU64 = AtomicU64::new(0);
             let id = COUNTER.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir()
-                .join(format!("ownaudio_ffi_test_{}_{}.wav", std::process::id(), id));
+            let path = std::env::temp_dir().join(format!(
+                "ownaudio_ffi_test_{}_{}.wav",
+                std::process::id(),
+                id
+            ));
 
             let channels: u16 = 2;
             let sample_rate: u32 = 44_100;
@@ -628,6 +698,183 @@ mod file_source {
 }
 
 // ---------------------------------------------------------------------------
+// Memory-backed track source tests
+// ---------------------------------------------------------------------------
+
+mod memory_source {
+    use ownaudio_ffi::error_code::OwnAudioErrorCode;
+    use ownaudio_ffi::ffi_memory_source::{
+        ownaudio_v1_memory_source_destroy, ownaudio_v1_memory_source_is_finished,
+        ownaudio_v1_memory_source_seek, ownaudio_v1_memory_source_set_loop,
+        ownaudio_v1_track_open_memory,
+    };
+    use ownaudio_ffi::ffi_source::ownaudio_v1_track_clear_source;
+    use ownaudio_ffi::ffi_track::{
+        ownaudio_v1_mixer_create, ownaudio_v1_mixer_destroy, ownaudio_v1_track_create,
+        ownaudio_v1_track_destroy,
+    };
+    use ownaudio_ffi::handles::{
+        OwnAudioMemorySourceHandle, OwnAudioMixerHandle, OwnAudioTrackHandle,
+    };
+
+    #[test]
+    fn control_null_handles_are_invalid() {
+        assert_eq!(
+            ownaudio_v1_memory_source_set_loop(std::ptr::null_mut(), 1),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        assert_eq!(
+            ownaudio_v1_memory_source_seek(std::ptr::null_mut(), 0),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        let mut finished: u8 = 9;
+        assert_eq!(
+            ownaudio_v1_memory_source_is_finished(std::ptr::null_mut(), &mut finished),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+    }
+
+    #[test]
+    fn open_memory_null_args_are_null_pointer() {
+        let mut source: *mut OwnAudioMemorySourceHandle = std::ptr::null_mut();
+        // Null mixer/track/out.
+        assert_eq!(
+            ownaudio_v1_track_open_memory(
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null(),
+                0,
+                2,
+                0,
+                &mut source,
+            ),
+            OwnAudioErrorCode::NullPointer as i32
+        );
+        ownaudio_v1_memory_source_destroy(std::ptr::null_mut());
+    }
+
+    #[test]
+    fn open_memory_control_and_teardown_smoke() {
+        let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_mixer_create(48_000.0, 2, &mut mixer),
+            OwnAudioErrorCode::Success as i32
+        );
+        let mut track: *mut OwnAudioTrackHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_track_create(mixer, &mut track),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        // A one-second stereo buffer of constant samples.
+        let samples = vec![0.25f32; 48_000 * 2];
+        let mut source: *mut OwnAudioMemorySourceHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_track_open_memory(
+                mixer,
+                track,
+                samples.as_ptr(),
+                samples.len(),
+                2,
+                0,
+                &mut source,
+            ),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert!(!source.is_null());
+
+        let mut finished: u8 = 9;
+        assert_eq!(
+            ownaudio_v1_memory_source_is_finished(source, &mut finished),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(finished, 0);
+
+        assert_eq!(
+            ownaudio_v1_memory_source_set_loop(source, 1),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(
+            ownaudio_v1_memory_source_seek(source, 1_000),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        // Documented teardown order: clear the track's source, then destroy the handle.
+        assert_eq!(
+            ownaudio_v1_track_clear_source(mixer, track),
+            OwnAudioErrorCode::Success as i32
+        );
+        ownaudio_v1_memory_source_destroy(source);
+        ownaudio_v1_track_destroy(track);
+        ownaudio_v1_mixer_destroy(mixer);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Input-capture track source tests (null-handle contracts; opening a real
+// device needs hardware and is covered by the C# integration path)
+// ---------------------------------------------------------------------------
+
+mod input_source {
+    use ownaudio_ffi::error_code::OwnAudioErrorCode;
+    use ownaudio_ffi::ffi_input_source::{
+        ownaudio_v1_input_source_destroy, ownaudio_v1_input_source_get_peaks,
+        ownaudio_v1_input_source_pause, ownaudio_v1_input_source_play,
+        ownaudio_v1_track_open_input,
+    };
+    use ownaudio_ffi::handles::OwnAudioInputSourceHandle;
+
+    #[test]
+    fn control_null_handles_are_invalid() {
+        assert_eq!(
+            ownaudio_v1_input_source_play(std::ptr::null_mut()),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        assert_eq!(
+            ownaudio_v1_input_source_pause(std::ptr::null_mut()),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        let mut l = 9.0f32;
+        let mut r = 9.0f32;
+        assert_eq!(
+            ownaudio_v1_input_source_get_peaks(std::ptr::null_mut(), &mut l, &mut r),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+    }
+
+    #[test]
+    fn get_peaks_null_out_is_null_pointer() {
+        assert_eq!(
+            ownaudio_v1_input_source_get_peaks(
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut()
+            ),
+            OwnAudioErrorCode::NullPointer as i32
+        );
+    }
+
+    #[test]
+    fn open_input_null_args_are_null_pointer() {
+        let mut input: *mut OwnAudioInputSourceHandle = std::ptr::null_mut();
+        assert_eq!(
+            ownaudio_v1_track_open_input(
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null(),
+                48_000,
+                2,
+                0,
+                &mut input,
+            ),
+            OwnAudioErrorCode::NullPointer as i32
+        );
+        ownaudio_v1_input_source_destroy(std::ptr::null_mut());
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Master effect bus tests
 // ---------------------------------------------------------------------------
 
@@ -725,9 +972,7 @@ mod vst_effect {
     use ownaudio_ffi::ffi_track::{
         ownaudio_v1_mixer_create, ownaudio_v1_mixer_destroy, ownaudio_v1_track_create,
     };
-    use ownaudio_ffi::handles::{
-        OwnAudioEffectHandle, OwnAudioMixerHandle, OwnAudioTrackHandle,
-    };
+    use ownaudio_ffi::handles::{OwnAudioEffectHandle, OwnAudioMixerHandle, OwnAudioTrackHandle};
     use ownaudio_ffi::VstAudioBuffer;
 
     /// Common param ids shared by every effect (mirrors `PARAM_ENABLED` / `PARAM_MIX`).

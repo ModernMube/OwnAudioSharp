@@ -16,7 +16,7 @@ namespace OwnaudioNET.Sources;
 /// The captured audio is buffered in a circular buffer for smooth playback.
 /// Input must be enabled in AudioConfig for this source to work.
 /// </remarks>
-public sealed class InputSource : BaseAudioSource
+public sealed partial class InputSource : BaseAudioSource
 {
     private readonly AudioEngineWrapper _engine;
     private readonly CircularBuffer _captureBuffer;
@@ -72,13 +72,22 @@ public sealed class InputSource : BaseAudioSource
         _shouldStop = false;
         _currentPosition = 0.0;
 
+        _rustNative = OwnaudioNET.Engine.RustNativeChain.Enabled;
+
         _captureThread = new Thread(CaptureThreadProc)
         {
             Name = $"InputSource-Capture-{Id}",
             IsBackground = true,
             Priority = ThreadPriority.AboveNormal
         };
-        _captureThread.Start();
+
+        // In the Rust-native chain the device is captured natively straight into the track ring, so
+        // the managed capture thread (which would move audio through managed memory and pressure the
+        // GC) is not started; the mixer opens the native input capture on attach.
+        if (!_rustNative)
+        {
+            _captureThread.Start();
+        }
     }
 
     /// <inheritdoc/>
@@ -134,6 +143,13 @@ public sealed class InputSource : BaseAudioSource
     public override void Play()
     {
         ThrowIfDisposed();
+
+        if (_rustNative)
+        {
+            RustNativePlay();
+            return;
+        }
+
         base.Play();
         _pauseEvent.Set(); // Resume capture thread
     }
@@ -142,6 +158,13 @@ public sealed class InputSource : BaseAudioSource
     public override void Pause()
     {
         ThrowIfDisposed();
+
+        if (_rustNative)
+        {
+            RustNativePause();
+            return;
+        }
+
         base.Pause();
         _pauseEvent.Reset(); // Pause capture thread
     }
@@ -150,6 +173,13 @@ public sealed class InputSource : BaseAudioSource
     public override void Stop()
     {
         ThrowIfDisposed();
+
+        if (_rustNative)
+        {
+            RustNativeStop();
+            return;
+        }
+
         base.Stop();
         _pauseEvent.Reset(); // Pause capture thread
         _captureBuffer.Clear();
@@ -215,6 +245,11 @@ public sealed class InputSource : BaseAudioSource
     {
         ThrowIfDisposed();
 
+        if (_rustNative)
+        {
+            return State == AudioState.Playing ? RustNativeInputLevels() : (0f, 0f);
+        }
+
         if (State != AudioState.Playing || _captureBuffer.IsEmpty)
         {
             return (0f, 0f);
@@ -277,6 +312,9 @@ public sealed class InputSource : BaseAudioSource
         {
             if (disposing)
             {
+                if (_rustNative)
+                    DisposeRustBackend();
+
                 _shouldStop = true;
                 _pauseEvent.Set(); // Wake up thread if waiting
 

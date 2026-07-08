@@ -265,6 +265,68 @@ public sealed class AudioTrack : IDisposable
         ErrorCodeMapper.ThrowIfError(code, nameof(SetStartDelayFrames));
     }
 
+    /// <summary>
+    /// Installs a per-track output-channel routing map: source channel <c>i</c> is
+    /// summed into physical output channel <c>mapping[i]</c>, and every output channel
+    /// not named by the map receives no contribution from this track (silence). This
+    /// places the track onto a chosen subset of a multi-channel output bus.
+    /// </summary>
+    /// <remarks>
+    /// Passing an empty span clears any routing (equivalent to
+    /// <see cref="ClearOutputChannelMap"/>). Negative indices are invalid; out-of-range
+    /// destinations are ignored at render time. No-op when the track is disposed.
+    /// </remarks>
+    /// <param name="mapping">Zero-based output-channel index per source channel.</param>
+    /// <exception cref="ArgumentException">Thrown when any index is negative.</exception>
+    public void SetOutputChannelMap(ReadOnlySpan<int> mapping)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (mapping.IsEmpty)
+        {
+            ClearOutputChannelMap();
+            return;
+        }
+
+        Span<uint> map = stackalloc uint[mapping.Length];
+        for (int i = 0; i < mapping.Length; i++)
+        {
+            if (mapping[i] < 0)
+            {
+                throw new ArgumentException(
+                    $"Output channel index at position {i} is negative ({mapping[i]}).",
+                    nameof(mapping));
+            }
+            map[i] = (uint)mapping[i];
+        }
+
+        int code = OwnAudioNative.ownaudio_v1_track_set_output_channel_map(
+            _handle.DangerousGetHandle(),
+            in map[0],
+            (nuint)map.Length);
+        ErrorCodeMapper.ThrowIfError(code, nameof(SetOutputChannelMap));
+    }
+
+    /// <summary>
+    /// Clears any per-track output-channel routing, returning the track to the
+    /// straight identity mix (source channel <c>i</c> → output channel <c>i</c>).
+    /// No-op when the track is disposed.
+    /// </summary>
+    public void ClearOutputChannelMap()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        int code = OwnAudioNative.ownaudio_v1_track_clear_output_channel_map(
+            _handle.DangerousGetHandle());
+        ErrorCodeMapper.ThrowIfError(code, nameof(ClearOutputChannelMap));
+    }
+
     #endregion
 
     #region Transport

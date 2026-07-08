@@ -134,9 +134,7 @@ pub extern "C" fn ownaudio_v1_free_device_list(devices: *mut OwnAudioDeviceInfo,
 // Internal helper
 // ---------------------------------------------------------------------------
 
-fn devices_to_c(
-    devices: Vec<ownaudio_core::AudioDeviceInfo>,
-) -> (*mut OwnAudioDeviceInfo, usize) {
+fn devices_to_c(devices: Vec<ownaudio_core::AudioDeviceInfo>) -> (*mut OwnAudioDeviceInfo, usize) {
     let c_vec: Vec<OwnAudioDeviceInfo> = devices
         .into_iter()
         .map(|d| {

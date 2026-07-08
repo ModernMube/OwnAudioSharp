@@ -188,6 +188,71 @@ public sealed class AudioMixerRustNativeOutputSmokeTests : IDisposable
     }
 
     /// <summary>
+    /// A <see cref="global::OwnaudioNET.Sources.SampleSource"/> played through a Rust-native mixer on
+    /// a real engine actually renders natively: its native memory track advances
+    /// <see cref="Ownaudio.Audio.Tracks.AudioTrack.RenderedFrames"/> as the device consumes the
+    /// buffer — proving the in-memory audio reaches the output with no managed audio path.
+    /// </summary>
+    [Fact]
+    public void SampleSource_OnRealEngine_RendersNatively()
+    {
+        if (!AudioEngineFactory.IsNativeEngineAvailable())
+        {
+            return;
+        }
+
+        var config = new AudioConfig
+        {
+            SampleRate = SampleRate,
+            Channels = Channels,
+            BufferSize = 512,
+            EnableOutput = true,
+            EnableInput = false,
+        };
+
+        IAudioEngine engine;
+        try
+        {
+            engine = AudioEngineFactory.CreateEngine(config);
+        }
+        catch
+        {
+            return;
+        }
+
+        try
+        {
+            // One second of quiet stereo tone in memory.
+            var samples = new float[SampleRate * Channels];
+            for (int i = 0; i < samples.Length; i++)
+            {
+                samples[i] = 0.1f * MathF.Sin(i * 0.01f);
+            }
+            var sourceConfig = new AudioConfig { SampleRate = SampleRate, Channels = Channels, BufferSize = 512 };
+
+            using var mixer = new AudioMixer(engine, 512);
+            using var source = new global::OwnaudioNET.Sources.SampleSource(samples, sourceConfig);
+            mixer.AddSource(source).Should().BeTrue();
+            source.RustTrack.Should().NotBeNull();
+
+            mixer.Start();
+            source.Play();
+
+            Thread.Sleep(200);
+
+            // The native memory source has been read and mixed to the device.
+            source.RustTrack!.RenderedFrames.Should().BeGreaterThan(0UL,
+                "the native memory track must render the in-memory buffer to the device");
+
+            mixer.Stop();
+        }
+        finally
+        {
+            engine.Dispose();
+        }
+    }
+
+    /// <summary>
     /// During Rust-native playback the master clock is advanced from the native track position by the
     /// control-rate sync tick (the managed MixThread that legacy uses for this does not run), so the
     /// reported position tracks the audio instead of freezing.

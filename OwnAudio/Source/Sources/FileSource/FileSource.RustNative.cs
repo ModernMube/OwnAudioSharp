@@ -24,8 +24,11 @@ namespace OwnaudioNET.Sources;
 /// is instead <b>attached</b> to the mixer's shared session and does not own it.
 /// </para>
 /// </remarks>
-public partial class FileSource
+public partial class FileSource : IRustNativeChainSource
 {
+    /// <inheritdoc/>
+    AudioTrack? IRustNativeChainSource.RustTrack => RustTrack;
+
     /// <summary>
     /// Whether this source runs on the Rust-native chain. Assigned once in the constructor from
     /// <see cref="Engine.RustNativeChain.Enabled"/> so the mode is stable for the source's lifetime.

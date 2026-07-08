@@ -23,6 +23,8 @@ pub mod ffi_decoder;
 pub mod ffi_device;
 pub mod ffi_effects;
 pub mod ffi_file_source;
+pub mod ffi_input_source;
+pub mod ffi_memory_source;
 pub mod ffi_source;
 pub mod ffi_stream;
 pub mod ffi_track;
@@ -35,7 +37,6 @@ pub use error_code::OwnAudioErrorCode;
 // The VST bridge types cross the FFI boundary, so surface them at the crate
 // root alongside the other ABI types (cbindgen and the C# layout mirror both
 // resolve them here).
-pub use ownaudio_core::effects::{VstAudioBuffer, VstProcessFn};
 pub use ffi_abi::ABI_VERSION;
 pub use ffi_config::{OwnAudioSampleFormat, OwnAudioStreamConfig};
 pub use ffi_decoder::OwnAudioStreamInfo;
@@ -46,3 +47,4 @@ pub use handles::{
     OwnAudioTrackHandle, OwnAudioTrackSourceHandle,
 };
 pub use host_api::OwnHostApi;
+pub use ownaudio_core::effects::{VstAudioBuffer, VstProcessFn};

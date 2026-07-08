@@ -306,6 +306,43 @@ typedef struct OwnAudioFileSourceHandle {
 } OwnAudioFileSourceHandle;
 
 /**
+ * Opaque handle to an [`AudioEngine`] instance.
+ *
+ * The C# side holds this as `IntPtr`.  Create with
+ * `ownaudio_v1_engine_create`; release with `ownaudio_v1_engine_destroy`.
+ */
+typedef struct OwnAudioEngineHandle {
+    uint8_t _private[0];
+} OwnAudioEngineHandle;
+
+/**
+ * Opaque handle to the control side of an input-capture track source.
+ *
+ * Create with `ownaudio_v1_track_open_input`; release with
+ * `ownaudio_v1_input_source_destroy`.  A native input stream captures on its own
+ * audio thread and writes straight into the track's ring buffer (read by the
+ * mixer audio thread) — no managed callback is involved, so no audio data ever
+ * crosses into managed code.  The control thread only starts/stops capture and
+ * reads metering peaks.
+ */
+typedef struct OwnAudioInputSourceHandle {
+    uint8_t _private[0];
+} OwnAudioInputSourceHandle;
+
+/**
+ * Opaque handle to the control side of a memory-backed track source.
+ *
+ * Create with `ownaudio_v1_track_open_memory`; release with
+ * `ownaudio_v1_memory_source_destroy`.  The interleaved buffer is owned by the
+ * audio thread after installation, so — like [`OwnAudioFileSourceHandle`] — the
+ * control thread never pushes samples; it only toggles looping, polls the
+ * end-of-stream latch and requests seeks.
+ */
+typedef struct OwnAudioMemorySourceHandle {
+    uint8_t _private[0];
+} OwnAudioMemorySourceHandle;
+
+/**
  * Opaque handle to the write side of a track's audio-feed ring buffer.
  *
  * Create with `ownaudio_v1_track_set_ring_source`; release with
@@ -316,16 +353,6 @@ typedef struct OwnAudioFileSourceHandle {
 typedef struct OwnAudioTrackSourceHandle {
     uint8_t _private[0];
 } OwnAudioTrackSourceHandle;
-
-/**
- * Opaque handle to an [`AudioEngine`] instance.
- *
- * The C# side holds this as `IntPtr`.  Create with
- * `ownaudio_v1_engine_create`; release with `ownaudio_v1_engine_destroy`.
- */
-typedef struct OwnAudioEngineHandle {
-    uint8_t _private[0];
-} OwnAudioEngineHandle;
 
 /**
  * Parameters for opening an audio stream, passed across the FFI boundary.
@@ -777,6 +804,155 @@ int32_t ownaudio_v1_file_source_seek(struct OwnAudioFileSourceHandle *source,
  * the real-time path.
  */
 void ownaudio_v1_file_source_destroy(struct OwnAudioFileSourceHandle *source);
+
+/**
+ * Opens an input stream on `track`, wiring device capture straight into the
+ * track's ring buffer, and writes the control handle to `*out_input`.
+ *
+ * The stream is created paused; start capture with
+ * `ownaudio_v1_input_source_play`. The device is opened at `sample_rate` /
+ * `channels` (matching the session), so captured samples are layout-matched to
+ * the track.
+ *
+ * - `engine` — valid engine handle owning the input device.
+ * - `mixer` — valid mixer handle that owns the track.
+ * - `track` — valid track handle whose source is installed.
+ * - `device_name` — null-terminated UTF-8 device name, or null for the default.
+ * - `sample_rate` — capture sample rate in Hz.
+ * - `channels` — capture (and track) channel count.
+ * - `buffer_frames` — device buffer size in frames; `0` lets the engine choose.
+ * - `out_input` — receives the input-source control handle on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success. Destroy the returned
+ * handle with `ownaudio_v1_input_source_destroy` after the track's source has
+ * been cleared or the track removed.
+ */
+int32_t ownaudio_v1_track_open_input(struct OwnAudioEngineHandle *engine,
+                                     struct OwnAudioMixerHandle *mixer,
+                                     struct OwnAudioTrackHandle *track,
+                                     const char *device_name,
+                                     uint32_t sample_rate,
+                                     uint16_t channels,
+                                     uint32_t buffer_frames,
+                                     struct OwnAudioInputSourceHandle **out_input);
+
+/**
+ * Starts (or resumes) device capture feeding the track.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_input_source_play(struct OwnAudioInputSourceHandle *input);
+
+/**
+ * Pauses device capture. Buffered samples already in the ring keep playing out.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_input_source_pause(struct OwnAudioInputSourceHandle *input);
+
+/**
+ * Writes the most recent capture peak levels (0.0..) to `*out_left` / `*out_right`.
+ *
+ * - `input` — valid handle from `ownaudio_v1_track_open_input`.
+ * - `out_left` / `out_right` — receive the peaks on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_input_source_get_peaks(struct OwnAudioInputSourceHandle *input,
+                                           float *out_left,
+                                           float *out_right);
+
+/**
+ * Destroys an input-source control handle, stopping capture and releasing the
+ * input stream.
+ *
+ * Passing `null` is safe and has no effect. The track's ring-buffer reader lives
+ * on the audio thread until the track's source is cleared or the track is
+ * removed; after this call it simply underruns (renders silence).
+ */
+void ownaudio_v1_input_source_destroy(struct OwnAudioInputSourceHandle *input);
+
+/**
+ * Copies `sample_count` interleaved `f32` samples, installs a memory-serving
+ * source on `track`, and writes the control handle to `*out_source`.
+ *
+ * The samples must already be at the session's sample rate and interleaved with
+ * `channels` channels; they are copied once into native memory (a control-thread
+ * copy, never on the audio path), after which the audio thread owns them and the
+ * managed side is only a controller.  Looping and end-of-stream are handled
+ * natively; observe and steer them through the returned handle.
+ *
+ * - `mixer` — valid mixer handle that owns the track.
+ * - `track` — valid track handle whose source is to be installed.
+ * - `samples` — pointer to the first of `sample_count` interleaved `f32` samples.
+ * - `sample_count` — number of samples at `samples` (frames × channels).
+ * - `channels` — interleaved channel count of the buffer.
+ * - `loop_enabled` — non-zero to loop seamlessly at end-of-buffer.
+ * - `out_source` — receives the control handle on success.
+ *
+ * The source is installed through the mixer's lock-free command queue, so it
+ * becomes the track's source on the next render block; any previous source is
+ * retired off the audio thread.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.  Destroy the returned
+ * handle with `ownaudio_v1_memory_source_destroy` after the track's source has
+ * been cleared or the track removed.
+ */
+int32_t ownaudio_v1_track_open_memory(struct OwnAudioMixerHandle *mixer,
+                                      struct OwnAudioTrackHandle *track,
+                                      const float *samples,
+                                      size_t sample_count,
+                                      uint32_t channels,
+                                      uint8_t loop_enabled,
+                                      struct OwnAudioMemorySourceHandle **out_source);
+
+/**
+ * Enables or disables seamless looping for a memory source.
+ *
+ * - `source` — valid handle from `ownaudio_v1_track_open_memory`.
+ * - `enabled` — non-zero to loop, zero to stop at end-of-buffer.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_memory_source_set_loop(struct OwnAudioMemorySourceHandle *source,
+                                           uint8_t enabled);
+
+/**
+ * Writes whether the memory source has reached end-of-buffer (without looping) to
+ * `*out_finished` (`1` = finished, `0` = still playing or looping).
+ *
+ * - `source` — valid handle from `ownaudio_v1_track_open_memory`.
+ * - `out_finished` — receives the finished flag on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_memory_source_is_finished(struct OwnAudioMemorySourceHandle *source,
+                                              uint8_t *out_finished);
+
+/**
+ * Requests a seek to `frame_position` (output frames) on a memory source.
+ *
+ * Non-blocking: the audio thread applies the reposition on its next read and the
+ * finished latch clears once audio flows from the new position.
+ *
+ * - `source` — valid handle from `ownaudio_v1_track_open_memory`.
+ * - `frame_position` — target position in output sample frames.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_memory_source_seek(struct OwnAudioMemorySourceHandle *source,
+                                       uint64_t frame_position);
+
+/**
+ * Destroys a memory-source control handle.
+ *
+ * Passing `null` is safe and has no effect.  Dropping this handle only releases
+ * the control block; the serving source itself lives on the audio thread until
+ * the track's source is cleared (`ownaudio_v1_track_clear_source`) or the track
+ * is removed, at which point the source (and its buffer) is retired off the
+ * real-time path.
+ */
+void ownaudio_v1_memory_source_destroy(struct OwnAudioMemorySourceHandle *source);
 
 /**
  * Creates a lock-free ring buffer feeding the track and writes the write-side
@@ -1252,6 +1428,35 @@ int32_t ownaudio_v1_track_get_peaks(struct OwnAudioTrackHandle *track,
  */
 int32_t ownaudio_v1_track_set_start_delay_frames(struct OwnAudioTrackHandle *track,
                                                  uint64_t frames);
+
+/**
+ * Installs a per-track output-channel routing map: source channel `i` is summed
+ * into physical output channel `map[i]` (for `i < len`), and every output channel
+ * not named by the map receives no contribution from this track (silence). This is
+ * the native counterpart of the managed mixer's selective channel routing, letting
+ * a track be placed onto a chosen subset of a multi-channel output bus.
+ *
+ * - `track` — valid track handle.
+ * - `map` — pointer to `len` zero-based output-channel indices, or null when
+ *   `len` is 0 (which clears any routing).
+ * - `len` — number of source channels the map covers. Entries beyond the mixer's
+ *   channel count are ignored at render time.
+ *
+ * Passing `len == 0` clears any routing, returning the track to the straight
+ * identity mix. Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_set_output_channel_map(struct OwnAudioTrackHandle *track,
+                                                 const uint32_t *map,
+                                                 size_t len);
+
+/**
+ * Clears any per-track output-channel routing installed by
+ * `ownaudio_v1_track_set_output_channel_map`, returning the track to the straight
+ * identity mix (source channel `i` → output channel `i`).
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_clear_output_channel_map(struct OwnAudioTrackHandle *track);
 
 /**
  * Sets the track gain (linear amplitude multiplier; 1.0 = unity).

@@ -23,22 +23,22 @@ fn create_effect(effect_type_raw: u32, sample_rate: f32) -> Option<Box<dyn Effec
     let effect_type = EffectType::try_from(effect_type_raw).ok()?;
 
     let effect: Box<dyn Effect> = match effect_type {
-        EffectType::Reverb     => Box::new(Reverb::new(sample_rate)),
-        EffectType::Equalizer  => Box::new(Equalizer::new(sample_rate)),
+        EffectType::Reverb => Box::new(Reverb::new(sample_rate)),
+        EffectType::Equalizer => Box::new(Equalizer::new(sample_rate)),
         EffectType::Compressor => Box::new(Compressor::new(sample_rate)),
-        EffectType::Limiter    => Box::new(Limiter::new(sample_rate)),
-        EffectType::Delay      => Box::new(Delay::new(sample_rate)),
-        EffectType::Chorus     => Box::new(Chorus::new(sample_rate)),
+        EffectType::Limiter => Box::new(Limiter::new(sample_rate)),
+        EffectType::Delay => Box::new(Delay::new(sample_rate)),
+        EffectType::Chorus => Box::new(Chorus::new(sample_rate)),
         EffectType::Distortion => Box::new(Distortion::new(sample_rate)),
-        EffectType::Overdrive  => Box::new(Overdrive::new(sample_rate)),
-        EffectType::Flanger    => Box::new(Flanger::new(sample_rate)),
-        EffectType::Phaser     => Box::new(Phaser::new(sample_rate)),
-        EffectType::Rotary     => Box::new(Rotary::new(sample_rate)),
-        EffectType::AutoGain   => Box::new(AutoGain::new(sample_rate)),
-        EffectType::Enhancer   => Box::new(Enhancer::new(sample_rate)),
-        EffectType::Gate       => Box::new(Gate::new(sample_rate)),
+        EffectType::Overdrive => Box::new(Overdrive::new(sample_rate)),
+        EffectType::Flanger => Box::new(Flanger::new(sample_rate)),
+        EffectType::Phaser => Box::new(Phaser::new(sample_rate)),
+        EffectType::Rotary => Box::new(Rotary::new(sample_rate)),
+        EffectType::AutoGain => Box::new(AutoGain::new(sample_rate)),
+        EffectType::Enhancer => Box::new(Enhancer::new(sample_rate)),
+        EffectType::Gate => Box::new(Gate::new(sample_rate)),
         EffectType::PitchShift => Box::new(PitchShift::new(sample_rate)),
-        EffectType::DynamicAmp  => Box::new(DynamicAmp::new(sample_rate)),
+        EffectType::DynamicAmp => Box::new(DynamicAmp::new(sample_rate)),
         EffectType::Equalizer30 => Box::new(Equalizer30::new(sample_rate)),
         // A VST bridge needs a plugin handle + process pointer, so it cannot be
         // built from a type tag alone — it is created via the dedicated
@@ -568,7 +568,9 @@ pub extern "C" fn ownaudio_v1_effect_get_param(
             .get_effect_param(effect_wrapper.effect_id, param_id)
         {
             Some(v) => {
-                unsafe { *out_value = v; }
+                unsafe {
+                    *out_value = v;
+                }
                 OwnAudioErrorCode::Success as i32
             }
             None => {

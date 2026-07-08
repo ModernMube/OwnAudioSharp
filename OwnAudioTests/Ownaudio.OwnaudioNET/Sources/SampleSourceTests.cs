@@ -1,19 +1,28 @@
 using Ownaudio.Core;
 using OwnaudioNET.Core;
+using OwnaudioNET.Engine;
 using OwnaudioNET.Sources;
 
 namespace Ownaudio.OwnaudioNET.Tests.Sources;
 
 /// <summary>
-/// Tests for the SampleSource class.
+/// Tests for the SampleSource class. These exercise the managed implementation directly
+/// (ReadSamples / _readPosition / SubmitSamples buffer behavior), so they are pinned to the legacy
+/// chain; the Rust-native memory-source backing is covered by
+/// <see cref="Ownaudio.OwnaudioNET.Tests.Mixing.AudioMixerRustNativeSampleSourceTests"/>.
 /// </summary>
+[Collection("RustNativeChain")]
 public class SampleSourceTests : IDisposable
 {
+    private readonly bool? _priorOverride;
     private readonly AudioConfig _testConfig;
     private SampleSource? _source;
 
     public SampleSourceTests()
     {
+        _priorOverride = RustNativeChain.Override;
+        RustNativeChain.Override = false;
+
         _testConfig = new AudioConfig
         {
             SampleRate = 48000,
@@ -25,6 +34,7 @@ public class SampleSourceTests : IDisposable
     public void Dispose()
     {
         _source?.Dispose();
+        RustNativeChain.Override = _priorOverride;
     }
 
     [Fact]

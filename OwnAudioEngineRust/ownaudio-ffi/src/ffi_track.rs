@@ -38,8 +38,12 @@ pub extern "C" fn ownaudio_v1_mixer_create(
         }
 
         let mut mixer = MultiTrackMixer::new(sample_rate, channels);
-        let (controller, receiver) =
-            command_channel(COMMAND_QUEUE_CAPACITY, mixer.sample_rate(), mixer.channels(), mixer.max_buffer_size());
+        let (controller, receiver) = command_channel(
+            COMMAND_QUEUE_CAPACITY,
+            mixer.sample_rate(),
+            mixer.channels(),
+            mixer.max_buffer_size(),
+        );
         mixer.attach_command_receiver(receiver);
         let master_shared = mixer.master_shared();
 
@@ -533,6 +537,73 @@ pub extern "C" fn ownaudio_v1_track_set_start_delay_frames(
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
 }
 
+/// Installs a per-track output-channel routing map: source channel `i` is summed
+/// into physical output channel `map[i]` (for `i < len`), and every output channel
+/// not named by the map receives no contribution from this track (silence). This is
+/// the native counterpart of the managed mixer's selective channel routing, letting
+/// a track be placed onto a chosen subset of a multi-channel output bus.
+///
+/// - `track` — valid track handle.
+/// - `map` — pointer to `len` zero-based output-channel indices, or null when
+///   `len` is 0 (which clears any routing).
+/// - `len` — number of source channels the map covers. Entries beyond the mixer's
+///   channel count are ignored at render time.
+///
+/// Passing `len == 0` clears any routing, returning the track to the straight
+/// identity mix. Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_track_set_output_channel_map(
+    track: *mut OwnAudioTrackHandle,
+    map: *const u32,
+    len: usize,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { track_from_ptr(track) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        if len == 0 {
+            wrapper.shared.clear_output_channel_map();
+            return OwnAudioErrorCode::Success as i32;
+        }
+
+        if map.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let slice = unsafe { std::slice::from_raw_parts(map, len) };
+        wrapper.shared.set_output_channel_map(slice);
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Clears any per-track output-channel routing installed by
+/// `ownaudio_v1_track_set_output_channel_map`, returning the track to the straight
+/// identity mix (source channel `i` → output channel `i`).
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_track_clear_output_channel_map(
+    track: *mut OwnAudioTrackHandle,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { track_from_ptr(track) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        wrapper.shared.clear_output_channel_map();
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
 // ---------------------------------------------------------------------------
 // Track parameters
 // ---------------------------------------------------------------------------
@@ -541,10 +612,7 @@ pub extern "C" fn ownaudio_v1_track_set_start_delay_frames(
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_set_gain(
-    track: *mut OwnAudioTrackHandle,
-    gain: f32,
-) -> i32 {
+pub extern "C" fn ownaudio_v1_track_set_gain(track: *mut OwnAudioTrackHandle, gain: f32) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { track_from_ptr(track) } {
             Some(w) => w,
@@ -563,10 +631,7 @@ pub extern "C" fn ownaudio_v1_track_set_gain(
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_set_tempo(
-    track: *mut OwnAudioTrackHandle,
-    ratio: f32,
-) -> i32 {
+pub extern "C" fn ownaudio_v1_track_set_tempo(track: *mut OwnAudioTrackHandle, ratio: f32) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { track_from_ptr(track) } {
             Some(w) => w,
@@ -607,10 +672,7 @@ pub extern "C" fn ownaudio_v1_track_set_pitch(
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_set_mute(
-    track: *mut OwnAudioTrackHandle,
-    muted: f32,
-) -> i32 {
+pub extern "C" fn ownaudio_v1_track_set_mute(track: *mut OwnAudioTrackHandle, muted: f32) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { track_from_ptr(track) } {
             Some(w) => w,

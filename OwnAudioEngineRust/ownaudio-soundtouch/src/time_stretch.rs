@@ -319,8 +319,12 @@ impl TimeStretch {
         best_corr = (best_corr + 0.1) * 0.75;
 
         for i in 1..self.seek_length {
-            let mut corr =
-                self.calc_cross_corr_accumulate(ref_pos, self.channels * i, &self.mid_buffer, &mut norm);
+            let mut corr = self.calc_cross_corr_accumulate(
+                ref_pos,
+                self.channels * i,
+                &self.mid_buffer,
+                &mut norm,
+            );
             let tmp = ((2 * i) as f64 - self.seek_length as f64) / self.seek_length as f64;
             corr = (corr + 0.1) * (1.0 - (0.25 * tmp * tmp));
             if corr > best_corr {
@@ -345,11 +349,9 @@ impl TimeStretch {
 
         let mut i = SCANSTEP;
         while (i as isize) < seek_length - SCANWIND as isize - 1 {
-            let mut corr = self.calc_cross_corr(
-                &ref_pos[self.channels * i..],
-                &self.mid_buffer,
-                &mut norm,
-            ) as f32;
+            let mut corr =
+                self.calc_cross_corr(&ref_pos[self.channels * i..], &self.mid_buffer, &mut norm)
+                    as f32;
             let tmp = ((2 * i) as f32 - seek_length as f32 - 1.0) / seek_length as f32;
             corr = (corr + 0.1) * (1.0 - (0.25 * tmp * tmp));
             if corr > best_corr {
@@ -419,7 +421,13 @@ impl TimeStretch {
         match channels {
             1 => Self::overlap_mono(output, &input[ovl_pos..], mid, overlap_length),
             2 => Self::overlap_stereo(output, &input[2 * ovl_pos..], mid, overlap_length),
-            _ => Self::overlap_multi(output, &input[channels * ovl_pos..], mid, overlap_length, channels),
+            _ => Self::overlap_multi(
+                output,
+                &input[channels * ovl_pos..],
+                mid,
+                overlap_length,
+                channels,
+            ),
         }
     }
 
@@ -530,14 +538,7 @@ impl TimeStretch {
                 {
                     let out = self.output_buffer.ptr_end(overlap_length);
                     let inp = self.input_buffer.ptr_begin();
-                    Self::overlap(
-                        out,
-                        inp,
-                        offset,
-                        &self.mid_buffer,
-                        overlap_length,
-                        channels,
-                    );
+                    Self::overlap(out, inp, offset, &self.mid_buffer, overlap_length, channels);
                 }
                 self.output_buffer.commit_put(overlap_length);
                 offset += overlap_length;

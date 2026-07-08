@@ -3,13 +3,15 @@ use std::os::raw::c_char;
 
 use ownaudio_core::AudioDeviceInfo;
 
-use crate::callback::{make_input_trampoline, make_output_trampoline, OwnAudioInputCallback, OwnAudioOutputCallback};
+use crate::callback::{
+    make_input_trampoline, make_output_trampoline, OwnAudioInputCallback, OwnAudioOutputCallback,
+};
 use crate::error_code::{set_last_error, OwnAudioErrorCode};
 use crate::ffi_config::OwnAudioStreamConfig;
 use crate::handles::{
     engine_from_ptr, input_stream_from_ptr, mixer_from_ptr, output_stream_from_ptr, EngineWrapper,
-    InputStreamWrapper, OwnAudioEngineHandle, OwnAudioInputStreamHandle, OwnAudioMixerHandle,
-    OwnAudioOutputStreamHandle, OutputStreamWrapper,
+    InputStreamWrapper, OutputStreamWrapper, OwnAudioEngineHandle, OwnAudioInputStreamHandle,
+    OwnAudioMixerHandle, OwnAudioOutputStreamHandle,
 };
 use crate::host_api::{resolve_host, OwnHostApi};
 
@@ -24,9 +26,7 @@ use crate::host_api::{resolve_host, OwnHostApi};
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_engine_create(
-    out_handle: *mut *mut OwnAudioEngineHandle,
-) -> i32 {
+pub extern "C" fn ownaudio_v1_engine_create(out_handle: *mut *mut OwnAudioEngineHandle) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if out_handle.is_null() {
             return OwnAudioErrorCode::NullPointer as i32;
@@ -169,10 +169,11 @@ pub extern "C" fn ownaudio_v1_open_output_stream(
 
         let trampoline = make_output_trampoline(cb, user_data, channels);
 
-        match engine_wrapper
-            .inner
-            .open_output_stream(device_info.as_ref(), &core_config, trampoline)
-        {
+        match engine_wrapper.inner.open_output_stream(
+            device_info.as_ref(),
+            &core_config,
+            trampoline,
+        ) {
             Ok(stream) => {
                 let boxed = Box::new(OutputStreamWrapper { inner: stream });
                 unsafe {
@@ -311,9 +312,7 @@ pub extern "C" fn ownaudio_v1_mixer_open_output_stream(
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_output_stream_play(
-    stream: *mut OwnAudioOutputStreamHandle,
-) -> i32 {
+pub extern "C" fn ownaudio_v1_output_stream_play(stream: *mut OwnAudioOutputStreamHandle) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { output_stream_from_ptr(stream) } {
             Some(w) => w,
@@ -336,9 +335,7 @@ pub extern "C" fn ownaudio_v1_output_stream_play(
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_output_stream_pause(
-    stream: *mut OwnAudioOutputStreamHandle,
-) -> i32 {
+pub extern "C" fn ownaudio_v1_output_stream_pause(stream: *mut OwnAudioOutputStreamHandle) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { output_stream_from_ptr(stream) } {
             Some(w) => w,
@@ -586,7 +583,7 @@ pub extern "C" fn ownaudio_v1_input_stream_destroy(stream: *mut OwnAudioInputStr
 ///
 /// Only the `name` field is populated; the engine uses it only for device
 /// lookup and ignores the other fields when they are zero/false.
-fn parse_device_name(device_name: *const c_char) -> Option<AudioDeviceInfo> {
+pub(crate) fn parse_device_name(device_name: *const c_char) -> Option<AudioDeviceInfo> {
     if device_name.is_null() {
         return None;
     }

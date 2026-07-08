@@ -1,9 +1,10 @@
+use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 
 use ownaudio_core::multitrack::MixerController;
 use ownaudio_core::{
-    AudioEngine, FileSourceControl, InputStream, MixerShared, MultiTrackMixer, OutputStream,
-    RingBufferWriter, StreamingTrack, TrackShared,
+    AudioEngine, FileSourceControl, InputStream, MemorySourceControl, MixerShared, MultiTrackMixer,
+    OutputStream, RingBufferWriter, StreamingTrack, TrackShared,
 };
 
 /// Opaque handle to an [`AudioEngine`] instance.
@@ -182,6 +183,31 @@ pub struct OwnAudioFileSourceHandle {
     _private: [u8; 0],
 }
 
+/// Opaque handle to the control side of a memory-backed track source.
+///
+/// Create with `ownaudio_v1_track_open_memory`; release with
+/// `ownaudio_v1_memory_source_destroy`.  The interleaved buffer is owned by the
+/// audio thread after installation, so — like [`OwnAudioFileSourceHandle`] — the
+/// control thread never pushes samples; it only toggles looping, polls the
+/// end-of-stream latch and requests seeks.
+#[repr(C)]
+pub struct OwnAudioMemorySourceHandle {
+    _private: [u8; 0],
+}
+
+/// Opaque handle to the control side of an input-capture track source.
+///
+/// Create with `ownaudio_v1_track_open_input`; release with
+/// `ownaudio_v1_input_source_destroy`.  A native input stream captures on its own
+/// audio thread and writes straight into the track's ring buffer (read by the
+/// mixer audio thread) — no managed callback is involved, so no audio data ever
+/// crosses into managed code.  The control thread only starts/stops capture and
+/// reads metering peaks.
+#[repr(C)]
+pub struct OwnAudioInputSourceHandle {
+    _private: [u8; 0],
+}
+
 // ---------------------------------------------------------------------------
 // Internal wrappers
 // ---------------------------------------------------------------------------
@@ -274,6 +300,44 @@ pub(crate) struct FileSourceWrapper {
     pub control: Arc<FileSourceControl>,
 }
 
+/// Owns the control side of a memory-backed track source.
+///
+/// The matching [`MemoryTrackSource`] was installed as the track's source on the
+/// audio thread, where it serves its interleaved buffer directly. This handle
+/// keeps the shared [`MemorySourceControl`] so the control thread can toggle
+/// looping, poll the finished latch and request seeks without touching the audio
+/// thread.
+///
+/// [`MemoryTrackSource`]: ownaudio_core::MemoryTrackSource
+pub(crate) struct MemorySourceWrapper {
+    /// Shared control block for the audio-thread memory source.
+    pub control: Arc<MemorySourceControl>,
+}
+
+/// Lock-free peak metering for a native input capture, shared between the cpal
+/// capture callback (writer) and the control thread (reader). Values are stored as
+/// `f32` bits in an [`AtomicU32`].
+pub(crate) struct InputPeaks {
+    /// Most recent left-channel capture peak, as `f32` bits.
+    pub left: AtomicU32,
+    /// Most recent right-channel capture peak, as `f32` bits (equals left on mono).
+    pub right: AtomicU32,
+}
+
+/// Owns the control side of an input-capture track source.
+///
+/// The native [`InputStream`] captures on its own audio thread and writes straight
+/// into the track's ring buffer (whose reader was installed as the track's source
+/// on the mixer audio thread). This handle keeps the stream alive and the shared
+/// [`InputPeaks`] so the control thread can start/stop capture and read metering,
+/// without ever touching audio data.
+pub(crate) struct InputSourceWrapper {
+    /// The native input stream feeding the track's ring buffer.
+    pub stream: InputStream,
+    /// Shared capture peak metering.
+    pub peaks: Arc<InputPeaks>,
+}
+
 unsafe impl Send for MixerWrapper {}
 unsafe impl Sync for MixerWrapper {}
 unsafe impl Send for TrackWrapper {}
@@ -281,6 +345,10 @@ unsafe impl Send for EffectWrapper {}
 unsafe impl Send for TrackSourceWrapper {}
 unsafe impl Send for FileSourceWrapper {}
 unsafe impl Sync for FileSourceWrapper {}
+unsafe impl Send for MemorySourceWrapper {}
+unsafe impl Sync for MemorySourceWrapper {}
+unsafe impl Send for InputSourceWrapper {}
+unsafe impl Sync for InputSourceWrapper {}
 
 // ---------------------------------------------------------------------------
 // Helper functions
@@ -338,5 +406,27 @@ pub(crate) unsafe fn file_source_from_ptr<'a>(
         None
     } else {
         Some(&mut *(ptr as *mut FileSourceWrapper))
+    }
+}
+
+/// Casts a raw `*mut OwnAudioMemorySourceHandle` back to `&mut MemorySourceWrapper`.
+pub(crate) unsafe fn memory_source_from_ptr<'a>(
+    ptr: *mut OwnAudioMemorySourceHandle,
+) -> Option<&'a mut MemorySourceWrapper> {
+    if ptr.is_null() {
+        None
+    } else {
+        Some(&mut *(ptr as *mut MemorySourceWrapper))
+    }
+}
+
+/// Casts a raw `*mut OwnAudioInputSourceHandle` back to `&mut InputSourceWrapper`.
+pub(crate) unsafe fn input_source_from_ptr<'a>(
+    ptr: *mut OwnAudioInputSourceHandle,
+) -> Option<&'a mut InputSourceWrapper> {
+    if ptr.is_null() {
+        None
+    } else {
+        Some(&mut *(ptr as *mut InputSourceWrapper))
     }
 }

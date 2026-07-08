@@ -309,7 +309,11 @@ mod tests {
             let mut out = vec![0.0f32; 256 * 2];
             fifo.receive_samples_into(&mut out, 256);
         }
-        assert_eq!(fifo.capacity_frames(), cap, "buffer must not grow in steady state");
+        assert_eq!(
+            fifo.capacity_frames(),
+            cap,
+            "buffer must not grow in steady state"
+        );
     }
 
     #[test]

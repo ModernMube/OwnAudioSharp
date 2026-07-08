@@ -134,8 +134,7 @@ impl SoundTouchProcessor {
         if sample_rate == 0 || sample_rate > 192_000 {
             return Err(ErrorCode::NotInitialized);
         }
-        self.stretch
-            .set_parameters(sample_rate as i64, -1, -1, -1);
+        self.stretch.set_parameters(sample_rate as i64, -1, -1, -1);
         self.is_sample_rate_set = true;
         Ok(())
     }
@@ -297,8 +296,7 @@ impl SoundTouchProcessor {
             self.flush_scratch.resize(scratch_len, 0.0);
         }
 
-        let mut num_still_expected =
-            (self.samples_expected_out + 0.5) as i64 - self.samples_output;
+        let mut num_still_expected = (self.samples_expected_out + 0.5) as i64 - self.samples_output;
         if num_still_expected < 0 {
             num_still_expected = 0;
         }
@@ -314,7 +312,8 @@ impl SoundTouchProcessor {
         }
         self.flush_scratch = scratch;
 
-        self.output_mut().adjust_amount_of_samples(num_still_expected);
+        self.output_mut()
+            .adjust_amount_of_samples(num_still_expected);
         self.stretch.clear_input();
     }
 
@@ -337,7 +336,8 @@ impl SoundTouchProcessor {
                 true
             }
             SettingId::AntiAliasFilterLength => {
-                self.rate_transposer.set_aa_filter_length(value.max(0) as usize);
+                self.rate_transposer
+                    .set_aa_filter_length(value.max(0) as usize);
                 true
             }
             SettingId::UseQuickSeek => {
@@ -378,9 +378,7 @@ impl SoundTouchProcessor {
     /// Reads a processing setting.
     pub fn get_setting(&self, setting: SettingId) -> i32 {
         match setting {
-            SettingId::UseAntiAliasFilter => {
-                i32::from(self.rate_transposer.is_aa_filter_enabled())
-            }
+            SettingId::UseAntiAliasFilter => i32::from(self.rate_transposer.is_aa_filter_enabled()),
             SettingId::AntiAliasFilterLength => self.rate_transposer.aa_filter_length() as i32,
             SettingId::UseQuickSeek => i32::from(self.stretch.is_quick_seek_enabled()),
             SettingId::SequenceDurationMs => self.stretch.get_parameters().1 as i32,

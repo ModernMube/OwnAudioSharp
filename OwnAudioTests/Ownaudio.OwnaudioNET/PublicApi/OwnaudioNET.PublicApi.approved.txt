@@ -2003,8 +2003,11 @@ namespace OwnaudioNET.Sources
         public override Ownaudio.AudioStreamInfo StreamInfo { get; }
         public void Clear() { }
         protected override void Dispose(bool disposing) { }
+        public override void Pause() { }
+        public override void Play() { }
         public override int ReadSamples(System.Span<float> buffer, int frameCount) { }
         public override bool Seek(double positionInSeconds) { }
+        public override void Stop() { }
         public void SubmitSamples(System.ReadOnlySpan<float> samples) { }
     }
     public sealed class SourceWithEffects : OwnaudioNET.Interfaces.IAudioSource, System.IDisposable

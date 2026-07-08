@@ -45,6 +45,12 @@ public sealed class AudioEngine : IDisposable
 
     #endregion
 
+    /// <summary>
+    /// Gets the raw native engine handle, for opening a native input-capture track source
+    /// (<see cref="Ownaudio.Audio.Tracks.MultiTrackSession.AddInputTrack"/>).
+    /// </summary>
+    internal IntPtr NativeHandle => _handle.DangerousGetHandle();
+
     #region Construction
 
     private AudioEngine(AudioEngineHandle handle)

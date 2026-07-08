@@ -65,7 +65,9 @@ mod tests {
         let aa = AntiAliasFilter::new(64);
         let mut aa2 = AntiAliasFilter::new(64);
         aa2.set_cutoff_freq(0.25);
-        let src: Vec<f32> = (0..256).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
+        let src: Vec<f32> = (0..256)
+            .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+            .collect();
         let mut dest = vec![0.0f32; 256];
         let n = aa2.evaluate(&mut dest, &src, 256, 1);
         let peak = dest[..n].iter().fold(0.0f32, |a, &b| a.max(b.abs()));

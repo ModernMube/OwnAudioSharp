@@ -127,7 +127,8 @@ impl BpmDetect {
 
         let mut window = vec![0.0f32; FFT_SIZE];
         for (i, w) in window.iter_mut().enumerate() {
-            *w = 0.54 - 0.46 * (2.0 * std::f32::consts::PI * i as f32 / (FFT_SIZE as f32 - 1.0)).cos();
+            *w = 0.54
+                - 0.46 * (2.0 * std::f32::consts::PI * i as f32 / (FFT_SIZE as f32 - 1.0)).cos();
         }
 
         BpmDetect {

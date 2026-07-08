@@ -220,6 +220,31 @@ internal static partial class OwnAudioNative
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_track_set_start_delay_frames(IntPtr track, ulong frames);
 
+    /// <summary>
+    /// Installs a per-track output-channel routing map: source channel <c>i</c> is
+    /// summed into physical output channel <c>map[i]</c> (for <c>i &lt; len</c>), and
+    /// every output channel not named by the map receives no contribution from this
+    /// track. Pass <paramref name="len"/> = 0 to clear any routing.
+    /// </summary>
+    /// <param name="track">Valid track handle.</param>
+    /// <param name="map">Reference to the first zero-based output-channel index.</param>
+    /// <param name="len">Number of source channels the map covers.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_set_output_channel_map(
+        IntPtr track,
+        in uint map,
+        nuint len);
+
+    /// <summary>
+    /// Clears any per-track output-channel routing, returning the track to the
+    /// straight identity mix (source channel <c>i</c> → output channel <c>i</c>).
+    /// </summary>
+    /// <param name="track">Valid track handle.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_clear_output_channel_map(IntPtr track);
+
     #endregion
 
     #region Track source feed
@@ -349,6 +374,118 @@ internal static partial class OwnAudioNative
     /// <param name="source">Handle to destroy; passing <see cref="IntPtr.Zero"/> is safe.</param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial void ownaudio_v1_file_source_destroy(IntPtr source);
+
+    /// <summary>
+    /// Copies an interleaved <c>f32</c> buffer, installs a memory-serving source on the track,
+    /// and writes the control handle to <paramref name="outSource"/>.
+    /// </summary>
+    /// <remarks>
+    /// The samples are copied once into native memory (a control-thread copy, never on the
+    /// audio path), after which the audio thread owns them and the managed side is only a
+    /// controller. Looping and end-of-stream are handled natively.
+    /// </remarks>
+    /// <param name="mixer">Valid mixer handle that owns the track.</param>
+    /// <param name="track">Valid track handle whose source is installed.</param>
+    /// <param name="samples">Reference to the first interleaved <c>f32</c> sample.</param>
+    /// <param name="sampleCount">Number of samples (frames × channels).</param>
+    /// <param name="channels">Interleaved channel count of the buffer.</param>
+    /// <param name="loopEnabled">Non-zero to loop seamlessly at end-of-buffer.</param>
+    /// <param name="outSource">Receives the memory-source control handle on success.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_open_memory(
+        IntPtr mixer,
+        IntPtr track,
+        in float samples,
+        nuint sampleCount,
+        uint channels,
+        byte loopEnabled,
+        out IntPtr outSource);
+
+    /// <summary>Enables or disables seamless looping for a memory source.</summary>
+    /// <param name="source">Valid memory-source handle.</param>
+    /// <param name="enabled">Non-zero to loop; zero to stop at end-of-buffer.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_memory_source_set_loop(IntPtr source, byte enabled);
+
+    /// <summary>
+    /// Writes whether the memory source has reached end-of-buffer (without looping) to
+    /// <paramref name="outFinished"/> (1 = finished, 0 = still playing or looping).
+    /// </summary>
+    /// <param name="source">Valid memory-source handle.</param>
+    /// <param name="outFinished">Receives the finished flag on success.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_memory_source_is_finished(IntPtr source, out byte outFinished);
+
+    /// <summary>Requests a seek to an absolute output-frame position on a memory source.</summary>
+    /// <param name="source">Valid memory-source handle.</param>
+    /// <param name="framePosition">Target position in output sample frames.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_memory_source_seek(IntPtr source, ulong framePosition);
+
+    /// <summary>Destroys a memory-source control handle.</summary>
+    /// <param name="source">Handle to destroy; passing <see cref="IntPtr.Zero"/> is safe.</param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial void ownaudio_v1_memory_source_destroy(IntPtr source);
+
+    /// <summary>
+    /// Opens a device input stream on the track, wiring native capture straight into the track's
+    /// ring buffer (no managed callback), and writes the control handle to <paramref name="outInput"/>.
+    /// </summary>
+    /// <remarks>
+    /// The capture callback runs on the native audio thread and pushes samples into the track's ring
+    /// directly, so no audio data ever crosses into managed code. The stream starts paused.
+    /// </remarks>
+    /// <param name="engine">Valid engine handle owning the input device.</param>
+    /// <param name="mixer">Valid mixer handle that owns the track.</param>
+    /// <param name="track">Valid track handle whose source is installed.</param>
+    /// <param name="deviceName">UTF-8 device name, or <see langword="null"/> for the default device.</param>
+    /// <param name="sampleRate">Capture sample rate in Hz.</param>
+    /// <param name="channels">Capture (and track) channel count.</param>
+    /// <param name="bufferFrames">Device buffer size in frames; 0 lets the engine choose.</param>
+    /// <param name="outInput">Receives the input-source control handle on success.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int ownaudio_v1_track_open_input(
+        IntPtr engine,
+        IntPtr mixer,
+        IntPtr track,
+        string? deviceName,
+        uint sampleRate,
+        ushort channels,
+        uint bufferFrames,
+        out IntPtr outInput);
+
+    /// <summary>Starts (or resumes) device capture feeding the track.</summary>
+    /// <param name="input">Valid input-source handle.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_input_source_play(IntPtr input);
+
+    /// <summary>Pauses device capture.</summary>
+    /// <param name="input">Valid input-source handle.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_input_source_pause(IntPtr input);
+
+    /// <summary>Writes the most recent capture peak levels to the out parameters.</summary>
+    /// <param name="input">Valid input-source handle.</param>
+    /// <param name="outLeft">Receives the left-channel capture peak.</param>
+    /// <param name="outRight">Receives the right-channel capture peak.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_input_source_get_peaks(
+        IntPtr input,
+        out float outLeft,
+        out float outRight);
+
+    /// <summary>Destroys an input-source control handle, stopping capture.</summary>
+    /// <param name="input">Handle to destroy; passing <see cref="IntPtr.Zero"/> is safe.</param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial void ownaudio_v1_input_source_destroy(IntPtr input);
 
     #endregion
 }

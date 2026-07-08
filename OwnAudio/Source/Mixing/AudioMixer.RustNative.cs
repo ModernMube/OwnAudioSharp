@@ -103,22 +103,31 @@ public sealed partial class AudioMixer
     private readonly Dictionary<Guid, double> _rustAppliedStartOffsets = new();
 
     /// <summary>
-    /// Tracks a <see cref="SourceWithEffects"/> and its underlying <see cref="FileSource"/> together
+    /// Last per-source <c>OutputChannelMapping</c> applied to the native track (keyed by the
+    /// track-owning file source's id), stored as an independent clone so a later in-place edit of
+    /// the same array is still detected. <see langword="null"/> value means routing is cleared.
+    /// The control-rate tick re-applies the map only when it differs from this. Guarded by
+    /// <see cref="_rustSessionLock"/>.
+    /// </summary>
+    private readonly Dictionary<Guid, int[]?> _rustAppliedChannelMaps = new();
+
+    /// <summary>
+    /// Tracks a <see cref="SourceWithEffects"/> and its underlying native-backed source together
     /// with the managed→native effect pairings currently installed on the native track.
     /// </summary>
     private sealed class RustTrackEffectRouting
     {
-        public RustTrackEffectRouting(SourceWithEffects source, FileSource file)
+        public RustTrackEffectRouting(SourceWithEffects source, IRustNativeChainSource backing)
         {
             Source = source;
-            File = file;
+            Backing = backing;
         }
 
         /// <summary>The wrapper whose effect list drives the native track chain.</summary>
         public SourceWithEffects Source { get; }
 
-        /// <summary>The underlying file source that owns the native track.</summary>
-        public FileSource File { get; }
+        /// <summary>The underlying native-backed source that owns the native track.</summary>
+        public IRustNativeChainSource Backing { get; }
 
         /// <summary>
         /// Last <see cref="SourceWithEffects.EffectsVersion"/> reconciled onto the native chain.
@@ -191,28 +200,69 @@ public sealed partial class AudioMixer
         source as FileSource ?? (source as SourceWithEffects)?.InnerSource as FileSource;
 
     /// <summary>
-    /// Attaches a source to the shared session in Rust-native mode: opens a matching native file
-    /// track and binds it to the underlying <see cref="FileSource"/> (unwrapping a
-    /// <see cref="SourceWithEffects"/> when present, and registering it for native per-track effect
-    /// routing). Non-file sources are ignored (they keep the legacy path).
+    /// Resolves the underlying <see cref="SampleSource"/> behind a mixer source: the source itself, or
+    /// the inner source when it is wrapped in a <see cref="SourceWithEffects"/>. Returns
+    /// <see langword="null"/> for non-sample sources.
+    /// </summary>
+    private static SampleSource? ResolveSampleSource(IAudioSource source) =>
+        source as SampleSource ?? (source as SourceWithEffects)?.InnerSource as SampleSource;
+
+    /// <summary>
+    /// Resolves the underlying <see cref="InputSource"/> behind a mixer source: the source itself, or
+    /// the inner source when it is wrapped in a <see cref="SourceWithEffects"/>. Returns
+    /// <see langword="null"/> for non-input sources.
+    /// </summary>
+    private static InputSource? ResolveInputSource(IAudioSource source) =>
+        source as InputSource ?? (source as SourceWithEffects)?.InnerSource as InputSource;
+
+    /// <summary>
+    /// Attaches a source to the shared session in Rust-native mode. A <see cref="FileSource"/> is
+    /// backed by a natively-decoded file track; a <see cref="SampleSource"/> is backed by a native
+    /// memory track serving its buffer. In both cases a <see cref="SourceWithEffects"/> is unwrapped,
+    /// the source is registered for native per-track effect routing, and the audio path stays entirely
+    /// native. Other sources are ignored.
     /// </summary>
     /// <param name="source">The source being added to the mixer.</param>
     private void AttachSourceToRustSession(IAudioSource source)
     {
         FileSource? fs = ResolveFileSource(source);
-        if (fs?.FilePath is null)
+        if (fs?.FilePath is not null)
         {
+            AttachFileSourceToRustSession(source, fs);
             return;
         }
 
+        SampleSource? ss = ResolveSampleSource(source);
+        if (ss is not null)
+        {
+            AttachSampleSourceToRustSession(source, ss);
+            return;
+        }
+
+        InputSource? ins = ResolveInputSource(source);
+        if (ins is not null)
+        {
+            AttachInputSourceToRustSession(source, ins);
+        }
+    }
+
+    /// <summary>Attaches a natively-decoded <see cref="FileSource"/> to the shared session.</summary>
+    /// <param name="source">The mixer source (the file source or its effect wrapper).</param>
+    /// <param name="fs">The resolved underlying file source.</param>
+    private void AttachFileSourceToRustSession(IAudioSource source, FileSource fs)
+    {
         lock (_rustSessionLock)
         {
             _rustSession ??= new MultiTrackSession(
                 (float)_config.SampleRate,
                 (ushort)_config.Channels);
 
-            FileTrack fileTrack = _rustSession.AddFileTrack(fs.FilePath);
+            FileTrack fileTrack = _rustSession.AddFileTrack(fs.FilePath!);
             fs.AttachRustTrack(fileTrack.Track, fileTrack);
+
+            // Apply any output-channel routing configured before the source was added, so the very
+            // first rendered block already lands on the requested output channels.
+            ApplyChannelMapLocked(source, fs.Id, fs.RustTrack);
 
             // A source wrapped in SourceWithEffects carries per-track effects; route them onto the
             // native track's effect chain (reconciled on the control-rate tick).
@@ -224,25 +274,114 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
+    /// Attaches a <see cref="SampleSource"/> to the shared session, backing it with a native memory
+    /// track that serves the source's buffer directly on the audio thread (no managed audio path).
+    /// </summary>
+    /// <param name="source">The mixer source (the sample source or its effect wrapper).</param>
+    /// <param name="ss">The resolved underlying sample source.</param>
+    private void AttachSampleSourceToRustSession(IAudioSource source, SampleSource ss)
+    {
+        lock (_rustSessionLock)
+        {
+            _rustSession ??= new MultiTrackSession(
+                (float)_config.SampleRate,
+                (ushort)_config.Channels);
+
+            MemoryTrack memoryTrack = _rustSession.AddMemoryTrack(ss.GetRustSampleSnapshot(), ss.Loop);
+            ss.AttachRustTrack(memoryTrack.Track, memoryTrack);
+
+            ApplyChannelMapLocked(source, ss.Id, ss.RustTrack);
+
+            if (source is SourceWithEffects swe)
+            {
+                _rustEffectSources.Add(new RustTrackEffectRouting(swe, ss));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Attaches an <see cref="InputSource"/> to the shared session, backing it with a native input
+    /// capture that writes device audio straight into the track's ring buffer (no managed audio
+    /// path). Degrades to a no-op when the mixer's engine is not the native Rust engine (for example
+    /// a mock engine in tests), so the source stays silent rather than crashing.
+    /// </summary>
+    /// <param name="source">The mixer source (the input source or its effect wrapper).</param>
+    /// <param name="ins">The resolved underlying input source.</param>
+    private void AttachInputSourceToRustSession(IAudioSource source, InputSource ins)
+    {
+        lock (_rustSessionLock)
+        {
+            RustAudioEngine? rustEngine = _engine as RustAudioEngine;
+            AudioEngine? nativeEngine = rustEngine?.NativeEngine;
+            if (nativeEngine is null)
+            {
+                return;
+            }
+
+            _rustSession ??= new MultiTrackSession(
+                (float)_config.SampleRate,
+                (ushort)_config.Channels);
+
+            InputTrack inputTrack = _rustSession.AddInputTrack(
+                nativeEngine, device: null, bufferFrames: (uint)_config.BufferSize);
+            ins.AttachRustTrack(inputTrack.Track, inputTrack);
+
+            ApplyChannelMapLocked(source, ins.Id, ins.RustTrack);
+
+            if (source is SourceWithEffects swe)
+            {
+                _rustEffectSources.Add(new RustTrackEffectRouting(swe, ins));
+            }
+        }
+    }
+
+    /// <summary>
     /// Detaches a source from the shared session and removes (and disposes) its track. No-op for
-    /// non-file sources or sources with no attached track.
+    /// sources with no native backend.
     /// </summary>
     /// <param name="source">The source being removed from the mixer.</param>
     private void DetachSourceFromRustSession(IAudioSource source)
     {
         FileSource? fs = ResolveFileSource(source);
-        if (fs is null)
+        if (fs is not null)
         {
+            DetachBackedSourceFromRustSession(source, fs, fs.Id, fs.RustTrack, fs.DetachRustTrack);
             return;
         }
 
+        SampleSource? ss = ResolveSampleSource(source);
+        if (ss is not null)
+        {
+            DetachBackedSourceFromRustSession(source, ss, ss.Id, ss.RustTrack, ss.DetachRustTrack);
+            return;
+        }
+
+        InputSource? ins = ResolveInputSource(source);
+        if (ins is not null)
+        {
+            DetachBackedSourceFromRustSession(source, ins, ins.Id, ins.RustTrack, ins.DetachRustTrack);
+        }
+    }
+
+    /// <summary>
+    /// Shared detach path: drops the source's effect routing and applied-state bookkeeping, unbinds
+    /// its native track, and removes (disposes) that track from the shared session.
+    /// </summary>
+    /// <param name="source">The mixer source being removed.</param>
+    /// <param name="backing">The resolved native-backed source.</param>
+    /// <param name="id">The backed source's id (bookkeeping key).</param>
+    /// <param name="track">The native track before detaching, or <see langword="null"/>.</param>
+    /// <param name="detach">The backed source's detach action.</param>
+    private void DetachBackedSourceFromRustSession(
+        IAudioSource source, IRustNativeChainSource backing, Guid id, AudioTrack? track, Action detach)
+    {
         lock (_rustSessionLock)
         {
             _rustEffectSources.RemoveAll(r => ReferenceEquals(r.Source, source));
-            _rustAppliedStartOffsets.Remove(fs.Id);
+            _rustAppliedStartOffsets.Remove(id);
+            _rustAppliedChannelMaps.Remove(id);
 
-            AudioTrack? track = fs.RustTrack;
-            fs.DetachRustTrack();
+            detach();
 
             if (track is not null && _rustSession is not null)
             {
@@ -260,30 +399,59 @@ public sealed partial class AudioMixer
         IAudioSource[] sources = Volatile.Read(ref _rustSourceSnapshot);
         foreach (IAudioSource source in sources)
         {
-            if (source is not FileSource fs)
+            if (source is FileSource fs)
             {
-                continue;
-            }
+                AudioTrack? track = fs.RustTrack;
+                if (track is null)
+                {
+                    continue;
+                }
 
-            AudioTrack? track = fs.RustTrack;
-            if (track is null)
+                track.Gain = fs.Volume;
+
+                FileTrack? fileTrack = fs.RustFileTrack;
+                if (fileTrack is not null)
+                {
+                    fileTrack.Loop = fs.Loop;
+                }
+
+                // The managed OnSamplesRead path (which fed OutputLevels in legacy mode)
+                // does not run here — the native track renders the audio — so mirror the
+                // native track's own metering peaks onto the source. A track that is not
+                // playing reports silence so the meter decays.
+                fs.SetOutputLevels(fs.State == AudioState.Playing ? track.Peaks : (0f, 0f));
+            }
+            else if (source is SampleSource ss)
             {
-                continue;
+                AudioTrack? track = ss.RustTrack;
+                if (track is null)
+                {
+                    continue;
+                }
+
+                track.Gain = ss.Volume;
+
+                MemoryTrack? memoryTrack = ss.RustMemoryTrack;
+                if (memoryTrack is not null)
+                {
+                    memoryTrack.Loop = ss.Loop;
+                }
+
+                ss.SetOutputLevels(ss.State == AudioState.Playing ? track.Peaks : (0f, 0f));
             }
-
-            track.Gain = fs.Volume;
-
-            FileTrack? fileTrack = fs.RustFileTrack;
-            if (fileTrack is not null)
+            else if (source is InputSource ins)
             {
-                fileTrack.Loop = fs.Loop;
-            }
+                AudioTrack? track = ins.RustTrack;
+                if (track is null)
+                {
+                    continue;
+                }
 
-            // The managed OnSamplesRead path (which fed OutputLevels in legacy mode)
-            // does not run here — the native track renders the audio — so mirror the
-            // native track's own metering peaks onto the source. A track that is not
-            // playing reports silence so the meter decays.
-            fs.SetOutputLevels(fs.State == AudioState.Playing ? track.Peaks : (0f, 0f));
+                track.Gain = ins.Volume;
+
+                // Live capture has no loop; mirror the native track's metering peaks onto the source.
+                ins.SetOutputLevels(ins.State == AudioState.Playing ? track.Peaks : (0f, 0f));
+            }
         }
     }
 
@@ -387,6 +555,126 @@ public sealed partial class AudioMixer
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Mirrors a source's <c>OutputChannelMapping</c> onto its native track, reproducing the managed
+    /// mixer's selective channel routing: source channel <c>i</c> is summed into output channel
+    /// <c>mapping[i]</c> and every unmapped output channel receives silence from this track. The map
+    /// is read from the outermost mixer source (a <see cref="SourceWithEffects"/> forwards its inner
+    /// source's config) and applied to the track owned by the resolved <see cref="FileSource"/>.
+    /// Only re-applies when the mapping changed since the last call. Must be called under
+    /// <see cref="_rustSessionLock"/>.
+    /// </summary>
+    /// <param name="source">The mixer source carrying the mapping (plain or effect-wrapped).</param>
+    /// <param name="key">The backed source's id (change-detection / bookkeeping key).</param>
+    /// <param name="track">The native track that owns the routing, or <see langword="null"/>.</param>
+    private void ApplyChannelMapLocked(IAudioSource source, Guid key, AudioTrack? track)
+    {
+        if (track is null)
+        {
+            return;
+        }
+
+        int[]? current = (source as BaseAudioSource)?.OutputChannelMapping;
+
+        // A source that has never been routed and is not routed now needs no native call.
+        if (current is null && !_rustAppliedChannelMaps.ContainsKey(key))
+        {
+            return;
+        }
+
+        if (_rustAppliedChannelMaps.TryGetValue(key, out int[]? applied)
+            && ChannelMapsEqual(applied, current))
+        {
+            return;
+        }
+
+        if (current is null || current.Length == 0)
+        {
+            track.ClearOutputChannelMap();
+        }
+        else
+        {
+            track.SetOutputChannelMap(current);
+        }
+
+        // Store an independent clone so a later in-place edit of the same array is detected.
+        _rustAppliedChannelMaps[key] = current is null ? null : (int[])current.Clone();
+    }
+
+    /// <summary>
+    /// Value-compares two output-channel maps (either may be <see langword="null"/>).
+    /// </summary>
+    private static bool ChannelMapsEqual(int[]? a, int[]? b)
+    {
+        if (ReferenceEquals(a, b))
+        {
+            return true;
+        }
+        if (a is null || b is null || a.Length != b.Length)
+        {
+            return false;
+        }
+        return a.AsSpan().SequenceEqual(b);
+    }
+
+    /// <summary>
+    /// Re-applies every attached source's <c>OutputChannelMapping</c> onto its native track when it
+    /// has changed since the last tick, so a live re-route (or an initial mapping set after the
+    /// source was added) takes effect promptly. Called on the control-rate sync tick.
+    /// </summary>
+    internal void SyncRustChannelMapsOnce()
+    {
+        IAudioSource[] sources = Volatile.Read(ref _rustSourceSnapshot);
+        lock (_rustSessionLock)
+        {
+            foreach (IAudioSource source in sources)
+            {
+                (Guid id, AudioTrack? track) = ResolveRustBacked(source);
+                if (track is null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    ApplyChannelMapLocked(source, id, track);
+                }
+                catch
+                {
+                    // best-effort re-route; never let one source abort the tick
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resolves the native-backed source behind a mixer source (file or sample, plain or
+    /// effect-wrapped) to its bookkeeping id and current native track. Returns a null track when the
+    /// source has no native backend.
+    /// </summary>
+    private static (Guid Id, AudioTrack? Track) ResolveRustBacked(IAudioSource source)
+    {
+        FileSource? fs = ResolveFileSource(source);
+        if (fs is not null)
+        {
+            return (fs.Id, fs.RustTrack);
+        }
+
+        SampleSource? ss = ResolveSampleSource(source);
+        if (ss is not null)
+        {
+            return (ss.Id, ss.RustTrack);
+        }
+
+        InputSource? ins = ResolveInputSource(source);
+        if (ins is not null)
+        {
+            return (ins.Id, ins.RustTrack);
+        }
+
+        return (Guid.Empty, null);
     }
 
     /// <summary>
@@ -614,7 +902,7 @@ public sealed partial class AudioMixer
         {
             foreach (RustTrackEffectRouting routing in _rustEffectSources)
             {
-                AudioTrack? track = routing.File.RustTrack;
+                AudioTrack? track = routing.Backing.RustTrack;
                 if (track is null)
                 {
                     continue;
@@ -747,6 +1035,7 @@ public sealed partial class AudioMixer
                 SyncRustControlStateOnce();
                 SyncRustMasterOnce();
                 SyncRustStartOffsetsOnce();
+                SyncRustChannelMapsOnce();
                 MirrorRustMasterEffectsOnce();
                 ReconcileRustTrackEffectsOnce();
                 DriveRustNativeSyncOnce();

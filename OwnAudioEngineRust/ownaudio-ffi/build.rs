@@ -35,15 +35,12 @@ fn main() {
         validate_asio_sdk();
     }
 
-    let crate_dir =
-        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+    let crate_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
     let output_dir = PathBuf::from(&crate_dir).join("include");
     std::fs::create_dir_all(&output_dir).expect("Failed to create include/ directory");
 
-    let config = cbindgen::Config::from_file(
-        PathBuf::from(&crate_dir).join("cbindgen.toml"),
-    )
-    .expect("Unable to read cbindgen.toml");
+    let config = cbindgen::Config::from_file(PathBuf::from(&crate_dir).join("cbindgen.toml"))
+        .expect("Unable to read cbindgen.toml");
 
     // Regenerate the header whenever any FFI source changes, otherwise cargo
     // would cache the build-script output (it only re-runs on the explicitly
@@ -103,8 +100,7 @@ fn validate_asio_sdk() {
         }
     };
 
-    let header_path =
-        std::path::Path::new(&sdk_dir).join("common").join("asio.h");
+    let header_path = std::path::Path::new(&sdk_dir).join("common").join("asio.h");
     if !header_path.exists() {
         println!(
             "cargo:warning=ASIO SDK header not found at: {}. \
