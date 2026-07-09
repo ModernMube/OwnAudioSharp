@@ -273,6 +273,13 @@ public partial class FileSource : IRustNativeChainSource
         }
 
         _rustTrack.Gain = Volume;
+        // A file source is always tempo/pitch-capable, so pin its native track's SoundTouch stage
+        // on for the track's lifetime. This keeps the stage engaged (and its FIFO warm) from the
+        // first block even at unity tempo/pitch, so the first tempo/pitch change lands on a warm
+        // FIFO with constant, PDC-aligned latency instead of switching in from the zero-latency
+        // bypass path — which clicks, comb-filters against the bypass tail, and drifts the track
+        // out of sync with the others. Set before Tempo/Pitch so the stage is primed as they apply.
+        _rustTrack.SetStretchAlwaysOn(true);
         _rustTrack.Tempo = _tempo;
         _rustTrack.PitchSemitones = _pitchShift;
 

@@ -146,6 +146,33 @@ public sealed class AudioTrack : IDisposable
     }
 
     /// <summary>
+    /// Pins the track's SoundTouch time-stretch stage on for its whole lifetime.
+    /// </summary>
+    /// <remarks>
+    /// A pinned track routes through the stretch stage from its first rendered block — even at
+    /// unity tempo/pitch — and is never released back to the zero-latency bypass path. Call this
+    /// once from a tempo/pitch-capable source (a file source) when it binds the track, so the very
+    /// first tempo or pitch change lands on an already-warm FIFO with a constant, plugin-delay-
+    /// compensated latency. Without it the first change switches the stage in from bypass, which
+    /// clicks, comb-filters against the bypass tail, and desyncs the track from the others. A
+    /// bypass-only source (e.g. a metronome whose tempo is baked into its audio) leaves it off.
+    /// No-op when the track is disposed.
+    /// </remarks>
+    /// <param name="enabled"><see langword="true"/> to pin the stretch stage on.</param>
+    public void SetStretchAlwaysOn(bool enabled)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        int code = OwnAudioNative.ownaudio_v1_track_set_stretch_always_on(
+            _handle.DangerousGetHandle(),
+            enabled ? 1 : 0);
+        ErrorCodeMapper.ThrowIfError(code, nameof(SetStretchAlwaysOn));
+    }
+
+    /// <summary>
     /// Gets or sets a value indicating whether the track output is silenced.
     /// </summary>
     public bool Muted

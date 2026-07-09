@@ -124,6 +124,16 @@ pub struct TrackShared {
     /// (e.g. a metronome, whose tempo is baked into its audio) stays a clean bypass — no added
     /// latency, no stale FIFO across stop/restart — while a stretched track never re-cold-starts.
     stretch_always_on: AtomicBool,
+    /// When `true`, the stretch stage is *pinned* on for this track's whole lifetime: it routes
+    /// through SoundTouch from the first block and the opportunistic unity-silence release (see
+    /// [`Track::process_additive`]) never drops it back to bypass. Set once by the owning source
+    /// when it binds a tempo/pitch-capable track (a file source), so every tempo/pitch change —
+    /// including the very first departure from unity — lands on a warm FIFO with a constant,
+    /// PDC-aligned latency, instead of switching in from the zero-latency bypass path (which
+    /// clicks, comb-filters against the bypass tail, and desyncs the track from the others).
+    /// Distinct from [`TrackShared::stretch_always_on`], which auto-latches on a live change and
+    /// may be released during silence.
+    stretch_pinned: AtomicBool,
     /// Number of output frames this track has actually rendered into the mix
     /// since the last position reset (seek or source swap).
     ///
@@ -189,6 +199,7 @@ impl TrackShared {
             pitch_semitones_bits: AtomicU32::new(0.0f32.to_bits()),
             stretch_flush_pending: AtomicBool::new(false),
             stretch_always_on: AtomicBool::new(false),
+            stretch_pinned: AtomicBool::new(false),
             rendered_frames: AtomicU64::new(0),
             content_frames_bits: AtomicU64::new(0.0f64.to_bits()),
             peak_l_bits: AtomicU32::new(0.0f32.to_bits()),
@@ -355,6 +366,25 @@ impl TrackShared {
     #[inline]
     pub fn set_stretch_always_on(&self, on: bool) {
         self.stretch_always_on.store(on, Ordering::Relaxed);
+    }
+
+    /// Returns whether the stretch stage is pinned on for the track's lifetime (see
+    /// `stretch_pinned`), i.e. it always routes through SoundTouch and is never released to bypass.
+    #[inline]
+    pub fn stretch_pinned(&self) -> bool {
+        self.stretch_pinned.load(Ordering::Relaxed)
+    }
+
+    /// Pins the stretch stage on (or off) for the track's whole lifetime. Called by a
+    /// tempo/pitch-capable source when it binds the track, so the first tempo/pitch change lands
+    /// on a warm FIFO with constant latency instead of switching in from the zero-latency bypass
+    /// path. Pinning also latches `stretch_always_on` so the stage is engaged from the first block.
+    #[inline]
+    pub fn set_stretch_pinned(&self, on: bool) {
+        self.stretch_pinned.store(on, Ordering::Relaxed);
+        if on {
+            self.stretch_always_on.store(true, Ordering::Relaxed);
+        }
     }
 
     /// Returns the number of output frames rendered since the last position reset.
@@ -722,8 +752,9 @@ impl Track {
         let tempo = self.shared.tempo_ratio();
         let pitch = self.shared.pitch_semitones();
         let always_on = self.shared.stretch_always_on();
+        let pinned = self.shared.stretch_pinned();
         let at_unity = (tempo - 1.0).abs() <= UNITY_EPS && pitch.abs() <= UNITY_EPS;
-        let needs_stretch = always_on || !at_unity;
+        let needs_stretch = pinned || always_on || !at_unity;
         let read = if self.source.is_none() {
             0
         } else if needs_stretch {
@@ -862,7 +893,7 @@ impl Track {
         // CPU for no benefit. Releasing only during a quiet moment means the dropped FIFO tail is
         // inaudible, so the return to the cheaper bypass path is click-free. A later non-unity
         // tempo/pitch simply re-latches it.
-        if always_on && at_unity {
+        if always_on && at_unity && !pinned {
             self.unity_run_frames = self.unity_run_frames.saturating_add(active_frames as u64);
             if self.unity_run_frames >= self.unlatch_after_frames
                 && peak_l < UNLATCH_SILENCE_EPS
@@ -1198,6 +1229,40 @@ mod tests {
         assert!(
             track.shared.stretch_always_on(),
             "an audible unity track must keep the latch (releasing would click)"
+        );
+    }
+
+    #[test]
+    fn pinned_stretch_survives_sustained_quiet_unity() {
+        // A pinned track (a file source that binds the stretch stage for its lifetime) must keep
+        // routing through SoundTouch even after a long quiet passage at unity — unlike the
+        // auto-latch, the pin is never released. This is what stops the first tempo change from
+        // switching in from the zero-latency bypass path and clicking/desyncing.
+        let block = 1024usize;
+        let mut track = Track::new(62, 48_000.0, 2, block);
+        track.set_source(Some(Box::new(ConstSource(0.0)))); // silent source
+        track.shared.set_state(TrackState::Playing);
+
+        // Pinning latches always-on immediately so the stage is engaged from the first block.
+        track.shared.set_stretch_pinned(true);
+        assert!(track.shared.stretch_pinned());
+        assert!(
+            track.shared.stretch_always_on(),
+            "pinning must latch always-on so the stage engages from block zero"
+        );
+
+        let mut out = vec![0.0f32; block];
+        for _ in 0..120 {
+            out.iter_mut().for_each(|s| *s = 0.0);
+            track.process_additive(&mut out, 2);
+        }
+        assert!(
+            track.shared.stretch_pinned(),
+            "the pin must never be released"
+        );
+        assert!(
+            track.shared.stretch_always_on(),
+            "a pinned track must stay stretch-routed through sustained quiet unity"
         );
     }
 

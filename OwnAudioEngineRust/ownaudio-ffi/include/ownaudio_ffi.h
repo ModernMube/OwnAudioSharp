@@ -1500,6 +1500,20 @@ int32_t ownaudio_v1_track_set_tempo(struct OwnAudioTrackHandle *track, float rat
 int32_t ownaudio_v1_track_set_pitch(struct OwnAudioTrackHandle *track, float semitones);
 
 /**
+ * Pins the track's SoundTouch time-stretch stage on for its whole lifetime (nonzero = on,
+ * zero = off). A pinned track routes through the stretch stage from the first block — even at
+ * unity tempo/pitch — and is never released back to the zero-latency bypass path, so the very
+ * first tempo/pitch change lands on a warm FIFO with a constant, plugin-delay-compensated
+ * latency instead of switching in from bypass (which clicks, comb-filters against the bypass
+ * tail, and desyncs the track from the others). A tempo/pitch-capable source (a file source)
+ * sets this once when it binds the track; a bypass-only source (e.g. a metronome whose tempo is
+ * baked into its audio) leaves it off.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_set_stretch_always_on(struct OwnAudioTrackHandle *track, int32_t enabled);
+
+/**
  * Sets the track mute state (0.0 = unmuted, 1.0 = muted).
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.

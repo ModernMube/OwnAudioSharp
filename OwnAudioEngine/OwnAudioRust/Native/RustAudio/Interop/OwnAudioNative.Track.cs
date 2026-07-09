@@ -215,6 +215,19 @@ internal static partial class OwnAudioNative
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_track_set_pitch(IntPtr track, float semitones);
 
+    /// <summary>
+    /// Pins the track's SoundTouch time-stretch stage on for its whole lifetime, so it routes
+    /// through the stage from the first block (even at unity) and is never released back to the
+    /// zero-latency bypass path. Set once by a tempo/pitch-capable source when it binds the track,
+    /// so the first tempo/pitch change lands on a warm FIFO with constant, PDC-aligned latency
+    /// instead of switching in from bypass (which clicks, comb-filters, and desyncs the track).
+    /// </summary>
+    /// <param name="track">Valid track handle.</param>
+    /// <param name="enabled">Nonzero to pin the stretch stage on; zero to leave it off.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_set_stretch_always_on(IntPtr track, int enabled);
+
     /// <summary>Sets the track mute state.</summary>
     /// <param name="track">Valid track handle.</param>
     /// <param name="muted">0.0 = unmuted; 1.0 = muted.</param>

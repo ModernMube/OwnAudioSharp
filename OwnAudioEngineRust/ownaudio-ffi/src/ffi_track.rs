@@ -709,6 +709,35 @@ pub extern "C" fn ownaudio_v1_track_set_pitch(
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
 }
 
+/// Pins the track's SoundTouch time-stretch stage on for its whole lifetime (nonzero = on,
+/// zero = off). A pinned track routes through the stretch stage from the first block — even at
+/// unity tempo/pitch — and is never released back to the zero-latency bypass path, so the very
+/// first tempo/pitch change lands on a warm FIFO with a constant, plugin-delay-compensated
+/// latency instead of switching in from bypass (which clicks, comb-filters against the bypass
+/// tail, and desyncs the track from the others). A tempo/pitch-capable source (a file source)
+/// sets this once when it binds the track; a bypass-only source (e.g. a metronome whose tempo is
+/// baked into its audio) leaves it off.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_track_set_stretch_always_on(
+    track: *mut OwnAudioTrackHandle,
+    enabled: i32,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { track_from_ptr(track) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        wrapper.shared.set_stretch_pinned(enabled != 0);
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
 /// Sets the track mute state (0.0 = unmuted, 1.0 = muted).
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
