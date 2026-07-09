@@ -145,67 +145,7 @@ public partial class FileSource
     {
         ThrowIfDisposed();
 
-        // Rust-native chain: the file is decoded and rendered on the native audio
-        // thread, so the managed streaming buffer this method used to peek is not
-        // fed. Read the native track's own metering peaks instead (kept current by
-        // the mixer's control-rate tick), gated on the transport state so a stopped
-        // track reports silence.
-        if (RustTrack is not null)
-        {
-            return State == AudioState.Playing ? OutputLevels : (0f, 0f);
-        }
-
-        if (State != AudioState.Playing || _buffer.IsEmpty)
-        {
-            return (0f, 0f);
-        }
-
-        try
-        {
-            int peekSamples = Math.Min(512 * _streamInfo.Channels, _buffer.Available);
-            if (peekSamples == 0)
-            {
-                return (0f, 0f);
-            }
-
-            Span<float> peekBuffer = stackalloc float[peekSamples];
-            int actualSamples = _buffer.Peek(peekBuffer);
-
-            if (actualSamples == 0)
-            {
-                return (0f, 0f);
-            }
-
-            float leftPeak = 0f;
-            float rightPeak = 0f;
-            int channels = _streamInfo.Channels;
-
-            for (int i = 0; i < actualSamples; i += channels)
-            {
-                float leftSample = Math.Abs(peekBuffer[i]);
-                leftPeak = Math.Max(leftPeak, leftSample);
-
-                if (channels > 1)
-                {
-                    float rightSample = Math.Abs(peekBuffer[i + 1]);
-                    rightPeak = Math.Max(rightPeak, rightSample);
-                }
-            }
-
-            if (channels == 1)
-            {
-                rightPeak = leftPeak;
-            }
-
-            leftPeak *= Volume;
-            rightPeak *= Volume;
-
-            return (leftPeak, rightPeak);
-        }
-        catch
-        {
-            return (0f, 0f);
-        }
+        return State == AudioState.Playing && RustTrack is not null ? OutputLevels : (0f, 0f);
     }
 
     #endregion

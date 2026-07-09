@@ -194,23 +194,20 @@ public sealed class FileSourceCharacterizationTests : IDisposable
     }
 
     /// <summary>
-    /// In standalone mode <c>Position</c> tracks decoded <em>content</em> time: over a run of full
-    /// output reads the accumulated position delta equals output-frames-read * tempo / sample-rate.
-    /// Reading N output frames at tempo T consumes N*T source frames, so the content position
-    /// advances accordingly. This is the golden behavior the Rust-native chain must reproduce.
+    /// For a source without a native backend the analysis cursor exposed by <c>Position</c> advances
+    /// by the raw number of decoded frames, independent of <c>Tempo</c>. As of 4.0 (plan L) tempo is
+    /// applied natively on playback while <see cref="FileSource.ReadSamples"/> decodes raw PCM on
+    /// demand, so the reported advance is <c>frames / sample-rate</c> regardless of the tempo setting.
     /// </summary>
     [Theory]
     [InlineData(1.0f)]
     [InlineData(0.8f)]
     [InlineData(1.2f)]
-    public void Position_AdvancesByDecodedContentTime_AcrossTempos(float tempo)
+    public void Position_AdvancesByRawDecodedFrames_AcrossTempos(float tempo)
     {
         var source = CreatePlayingSource(durationSeconds: 10.0);
         source.Play();
-        Thread.Sleep(100);
-
         source.Tempo = tempo;
-        Thread.Sleep(60); // let SoundTouch stabilize and refill at the new tempo
 
         const int chunk = 512;
         var buffer = new float[chunk * Channels];
@@ -231,14 +228,13 @@ public sealed class FileSourceCharacterizationTests : IDisposable
                 totalPositionDelta += after - before;
                 fullReads++;
             }
-            Thread.Sleep(2);
         }
 
-        fullReads.Should().BeGreaterThan(0, "the source should produce full reads at a stable tempo");
+        fullReads.Should().BeGreaterThan(0, "the source should produce full reads");
 
-        double expected = (double)totalFullFramesRead * tempo / SampleRate;
+        double expected = (double)totalFullFramesRead / SampleRate;
         totalPositionDelta.Should().BeApproximately(expected, 0.01,
-            because: $"position tracks decoded content time = frames*tempo/SR (tempo={tempo})");
+            because: $"the analysis cursor advances by raw decoded frames regardless of Tempo={tempo}");
     }
 
     /// <summary>

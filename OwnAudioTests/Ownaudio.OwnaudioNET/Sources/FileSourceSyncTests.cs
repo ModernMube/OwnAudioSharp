@@ -92,47 +92,6 @@ public class FileSourceSyncTests : IDisposable
     }
 
     [Fact]
-    public void TempoChange_ShouldTriggerGracePeriod()
-    {
-        // Arrange
-        _source = new FileSource(_mockDecoder.Object);
-        _source.AttachToClock(_masterClock!);
-        _source.Play();
-
-        // Act
-        _source.Tempo = 1.5f;
-
-        var fieldInfo = typeof(FileSource).GetField("_gracePeriodEndTime",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-        double gracePeriodEndTime = (double)fieldInfo!.GetValue(_source)!;
-
-        // Assert
-        gracePeriodEndTime.Should().BeGreaterThan(0);
-        gracePeriodEndTime.Should().BeApproximately(1.0, 0.1); // ~1.0s
-    }
-
-    [Fact]
-    public void PitchChange_ShouldTriggerGracePeriod()
-    {
-        // Arrange
-        _source = new FileSource(_mockDecoder.Object);
-        _source.AttachToClock(_masterClock!);
-        _source.Play();
-
-        // Act
-        _source.PitchShift = 2;
-
-        var fieldInfo = typeof(FileSource).GetField("_gracePeriodEndTime",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-        double gracePeriodEndTime = (double)fieldInfo!.GetValue(_source)!;
-
-        // Assert
-        gracePeriodEndTime.Should().BeGreaterThan(0);
-    }
-
-    [Fact]
     public void ReadSamples_WhenAttachedToClock_ShouldUseReadSamplesAtTime()
     {
         // Arrange
@@ -152,55 +111,6 @@ public class FileSourceSyncTests : IDisposable
     }
 
     [Fact]
-    public void GracePeriod_ShouldPreventDriftCorrection()
-    {
-
-        // Arrange
-        _source = new FileSource(_mockDecoder.Object);
-        _source.AttachToClock(_masterClock!);
-        _source.Play();
-
-        _mockDecoder.Invocations.Clear();
-
-        _source.Tempo = 1.0f; // Triggers grace period for ~0.5s (24000 frames)
-
-        var trackTimeField = typeof(FileSource).GetField("_trackLocalTime",
-           System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        trackTimeField!.SetValue(_source, 0.0);
-
-        var ignoreField = typeof(FileSource).GetField("_gracePeriodEndTime",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        ignoreField!.SetValue(_source, double.MaxValue);
-
-        var buffer = new float[1024];
-
-        // Act
-        bool success = _source.ReadSamplesAtTime(5.0, buffer, 512, out var result);
-
-        // Assert
-        success.Should().BeTrue();
-
-        _mockDecoder.Verify(d => d.TrySeek(It.IsAny<TimeSpan>(), out It.Ref<string>.IsAny), Times.Never());
-    }
-
-    [Fact]
-    public void AfterGracePeriod_DriftShouldTriggerCorrection()
-    {
-        // Arrange
-        _source = new FileSource(_mockDecoder.Object);
-        _source.AttachToClock(_masterClock!);
-        _source.Play();
-
-        var ignoreField = typeof(FileSource).GetField("_gracePeriodEndTime",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        ignoreField!.SetValue(_source, 0.0);
-
-        // Act
-        var buffer = new float[1024];
-        _source.ReadSamplesAtTime(5.0, buffer, 512, out var result);
-    }
-
-    [Fact]
     public void SyncTolerance_ShouldBeConfigurable()
     {
         // Arrange
@@ -213,64 +123,27 @@ public class FileSourceSyncTests : IDisposable
         _source.SyncTolerance.Should().Be(0.050);
     }
 
-    [Fact]
-    public void DriftCorrection_ShouldUseRelativeSeek()
-    {
-        // Arrange
-        _source = new FileSource(_mockDecoder.Object);
-        _source.AttachToClock(_masterClock!);
-        _source.Play();
-
-        // Disable grace period
-        var ignoreField = typeof(FileSource).GetField("_gracePeriodEndTime",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        ignoreField!.SetValue(_source, 0.0);
-
-        // Set Tempo to 2.0x
-        _source.Tempo = 2.0f;
-        ignoreField!.SetValue(_source, 0.0);
-
-        var positionField = typeof(FileSource).GetField("_currentPosition",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        positionField!.SetValue(_source, 10.0); // File position = 10s
-        
-        var trackTimeField = typeof(FileSource).GetField("_trackLocalTime",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        trackTimeField!.SetValue(_source, 5.0); // Track Time = 5s
-        
-        positionField!.SetValue(_source, 20.0);
-        
-        var buffer = new float[1024];
-        _source.ReadSamplesAtTime(5.1, buffer, 512, out var result);
-
-        Thread.Sleep(100);
-    }
-
     /// <summary>
-    /// Verifies that the standalone <see cref="FileSource.Position"/> advances by <b>content</b>
-    /// time (framesRead * tempo / sampleRate), i.e. how far into the file the playback has reached.
+    /// Verifies that for a source without a native backend (mock decoder), the analysis cursor
+    /// exposed by <see cref="FileSource.Position"/> advances by the raw number of decoded frames,
+    /// independent of <see cref="FileSource.Tempo"/>.
     /// </summary>
     /// <remarks>
-    /// Reading N output frames at tempo T consumes N*T frames of file <em>content</em> (SoundTouch
-    /// produces N output frames from N*T input frames), so the reported position — "where in the
-    /// file are we" — advances tempo-scaled. This is the documented golden behavior characterized by
-    /// <c>FileSourceCharacterizationTests</c> (plan D.0a): Position tracks decoded content time, not
-    /// wall-clock elapsed time. The code advances it deliberately via
-    /// <c>exactSourceFrames = framesRead * _tempo</c> with a fractional-frame accumulator.
+    /// As of 4.0 (plan L) tempo/pitch are applied natively on playback; <see cref="FileSource.ReadSamples"/>
+    /// decodes raw PCM on demand for analysis and advances the position by the frames actually
+    /// produced, so the advance is tempo-independent (a stretched playback rate does not scale the
+    /// analysis cursor).
     /// </remarks>
     [Theory]
     [InlineData(1.0f)]
     [InlineData(1.2f)]
     [InlineData(0.8f)]
-    public void Position_AfterReadSamples_AdvancesByContentTime_TempoScaled(float tempo)
+    public void Position_AfterReadSamples_AdvancesByRawDecodedFrames(float tempo)
     {
         // Arrange
         _source = new FileSource(_mockDecoder.Object);
         _source.Play();
-        Thread.Sleep(100); // Allow buffer to fill
-
         _source.Tempo = tempo;
-        Thread.Sleep(20); // Allow SoundTouch to stabilize
 
         const int framesRequested = 512;
         var buffer = new float[framesRequested * 2]; // stereo
@@ -281,17 +154,12 @@ public class FileSourceSyncTests : IDisposable
         int framesRead = _source.ReadSamples(buffer, framesRequested);
 
         // Assert
-        if (framesRead > 0)
-        {
-            // Reading framesRead output frames at tempo T consumes framesRead*T content frames; the
-            // integer fractional-frame accumulator keeps this within ~1 frame per call.
-            double expectedAdvance = framesRead * tempo / 48000.0;
-            double actualAdvance = _source.Position - positionBefore;
+        framesRead.Should().Be(framesRequested);
 
-            actualAdvance.Should().BeApproximately(expectedAdvance, 0.002,
-                because: $"Position should advance by content time ({expectedAdvance:F5}s = " +
-                         $"framesRead * tempo / sampleRate), tracking file playback position. " +
-                         $"Tempo={tempo}, framesRead={framesRead}");
-        }
+        double expectedAdvance = framesRead / 48000.0;
+        double actualAdvance = _source.Position - positionBefore;
+
+        actualAdvance.Should().BeApproximately(expectedAdvance, 0.002,
+            because: $"the analysis cursor advances by raw decoded frames regardless of Tempo={tempo}");
     }
 }

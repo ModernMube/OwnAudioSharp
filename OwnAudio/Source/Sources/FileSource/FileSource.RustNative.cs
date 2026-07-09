@@ -294,11 +294,22 @@ public partial class FileSource : IRustNativeChainSource
     /// so transport calls have a track to drive. No-op when a backend already exists or the source
     /// is attached to a mixer's session.
     /// </summary>
+    /// <remarks>
+    /// Sources constructed from a <see cref="System.IO.Stream"/> or an
+    /// <see cref="Ownaudio.Decoders.IAudioDecoder"/> have no real file for the native file-track
+    /// path; they are driven by on-demand <see cref="ReadSamples"/> pulls on the caller's thread, so
+    /// no native backend is built and transport only updates managed state.
+    /// </remarks>
     private void EnsureRustBackendForTransport()
     {
         lock (_rustBackendLock)
         {
             if (_rustTrack is not null || _rustBackendAttached)
+            {
+                return;
+            }
+
+            if (string.IsNullOrEmpty(_filePath) || !System.IO.File.Exists(_filePath))
             {
                 return;
             }

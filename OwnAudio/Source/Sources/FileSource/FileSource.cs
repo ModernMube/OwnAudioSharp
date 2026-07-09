@@ -22,81 +22,106 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
 {
     #region Fields
 
-    // Core components
+    /// <summary>
+    /// Managed decoder retained only so external callers can pull raw samples for analysis through
+    /// <see cref="ReadSamples"/>. Playback, tempo/pitch and mixing all run natively.
+    /// </summary>
     private readonly IAudioDecoder _decoder;
-    private readonly CircularBuffer _buffer;
-    private Thread _decoderThread;
-    private readonly object _seekLock = new();
-    private readonly object _soundTouchLock = new();
-    private readonly ManualResetEventSlim _pauseEvent;
-    private readonly int _bufferSizeInFrames;
-    private readonly AudioConfig _config;
-    private readonly AudioStreamInfo _streamInfo;
-    private readonly SoundTouchProcessor _soundTouch;
-    private readonly float[] _soundTouchOutputBuffer;
-    private float[] _soundTouchInputBuffer;
-    private float[] _soundTouchAccumulationBuffer;
-    private int _soundTouchAccumulationCount;
-    private bool _wasSoundTouchProcessing = false;
-
-    // Lock-free soft sync communication (Mixer -> Decoder thread)
-    private volatile float _pendingSoftSyncTempoAdjustment = 0f;
-
-    // Playback state
-    private volatile bool _shouldStop;
-    private volatile bool _seekRequested;
-    private double _seekTargetSeconds;
-    private double _currentPosition;
-    private volatile bool _isEndOfStream;
-    private float _tempo = 1.0f;
-    private float _pitchShift = 0.0f;
-    private bool _disposed;
-    private volatile bool _isPreBuffering = false;
-
-    // Synchronization state
-    private double _gracePeriodEndTime = 0.0;
-    private int _seekCount = 0;
-    private double _lastSeekTime = 0.0;
-
-    // Buffers
-    private readonly byte[] _decodeBuffer = null!;
-
-
-    // Master clock synchronization
-    private MasterClock? _masterClock = null;
-    private double _startOffset = 0.0;
-    private double _trackLocalTime = 0.0;
-    private double _fractionalFrameAccumulator = 0.0;
-
-    // Input-driven timing tracking
-    private long _totalSamplesProcessedFromFile = 0;
 
     /// <summary>
-    /// Total number of audio frames actually emitted by SoundTouch since the last seek
-    /// or clock attachment. Used in <see cref="FileSource.Synchronization.cs"/> to derive
-    /// an accurate <c>_trackLocalTime</c> that accounts for SoundTouch's internal latency
-    /// and variable output batch size.
-    /// Updated exclusively from the decoder thread inside <c>_soundTouchLock</c>;
-    /// read from the mixer thread inside <c>_timingLock</c>.
+    /// Serializes access to the managed analysis decoder and its pending-seek/carry state.
     /// </summary>
-    private long _soundTouchOutputFramesTotal = 0;
+    private readonly object _seekLock = new();
 
-    private readonly object _timingLock = new();
-    private bool _isSoftSyncActive = false;  // Track if soft sync is currently active
+    /// <summary>
+    /// The requested buffer size in frames, used to size the decode and carry buffers.
+    /// </summary>
+    private readonly int _bufferSizeInFrames;
 
-    private readonly AutoResetEvent _bufferNeedsRefillEvent = new(false);
+    /// <summary>
+    /// The audio configuration (sample rate, channels, buffer size) derived from the source stream.
+    /// </summary>
+    private readonly AudioConfig _config;
 
-    // Adaptive drift correction tracking
-    private int _consecutiveUnderruns = 0;
-    private double _lastDrift = 0.0;
+    /// <summary>
+    /// Format and duration information reported by the decoder for this source.
+    /// </summary>
+    private readonly AudioStreamInfo _streamInfo;
 
-    // Adaptive tolerance scaling
-    private double _adaptiveScale = 1.0;
-    private int _redZoneHits = 0;
-    private double _redZoneWindowStart = 0.0;
-    private double _greenZoneStreak = 0.0;
+    /// <summary>
+    /// Scratch byte buffer that receives one decode call's worth of interleaved float samples.
+    /// </summary>
+    private readonly byte[] _decodeBuffer = null!;
 
-    private volatile bool _needsFadeIn = false;
+    /// <summary>
+    /// Carry buffer holding samples decoded but not yet consumed by the synchronous analysis cursor,
+    /// because the decoder's frame granularity rarely matches the requested frame count.
+    /// </summary>
+    private readonly float[] _pendingDecoded;
+
+    /// <summary>
+    /// Offset of the first unconsumed sample within <see cref="_pendingDecoded"/>.
+    /// </summary>
+    private int _pendingOffset;
+
+    /// <summary>
+    /// Number of unconsumed samples currently held in <see cref="_pendingDecoded"/>.
+    /// </summary>
+    private int _pendingCount;
+
+    /// <summary>
+    /// A pending analysis-decoder seek target in seconds, or a negative value when none is queued.
+    /// </summary>
+    /// <remarks>
+    /// Set by <see cref="Seek"/> and applied lazily on the next <see cref="ReadSamples"/> so a
+    /// transport seek (including the one issued from clock attachment during add-to-mixer) never runs
+    /// managed decode work on the control thread, which would starve the native output stream's first
+    /// buffer and click at playback start.
+    /// </remarks>
+    private double _analysisSeekTarget = -1.0;
+
+    /// <summary>
+    /// The analysis cursor position in seconds, advanced by <see cref="ReadSamples"/>. Reported by
+    /// <see cref="Position"/> only when there is no native backend.
+    /// </summary>
+    private double _currentPosition;
+
+    /// <summary>
+    /// Whether the managed analysis decoder has reached end of stream.
+    /// </summary>
+    private volatile bool _isEndOfStream;
+
+    /// <summary>
+    /// The current playback tempo multiplier, mirrored to the native track.
+    /// </summary>
+    private float _tempo = 1.0f;
+
+    /// <summary>
+    /// The current pitch shift in semitones, mirrored to the native track.
+    /// </summary>
+    private float _pitchShift = 0.0f;
+
+    /// <summary>
+    /// Whether this source has been disposed.
+    /// </summary>
+    private bool _disposed;
+
+    /// <summary>
+    /// The attached master clock, or <see langword="null"/> when detached. Retained for the
+    /// <see cref="OwnaudioNET.Interfaces.ISynchronizable"/> / <see cref="OwnaudioNET.Interfaces.IMasterClockSource"/>
+    /// API surface; native playback keeps its own timing.
+    /// </summary>
+    private MasterClock? _masterClock = null;
+
+    /// <summary>
+    /// The source's start offset in seconds relative to the master clock timeline.
+    /// </summary>
+    private double _startOffset = 0.0;
+
+    /// <summary>
+    /// The source-local time in seconds tracked while attached to a master clock.
+    /// </summary>
+    private double _trackLocalTime = 0.0;
 
     #endregion
     
@@ -131,10 +156,10 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
     /// </remarks>
     public SyncDiagnosticsSnapshot SyncDiagnostics => new SyncDiagnosticsSnapshot
     {
-        AdaptiveScale                = _adaptiveScale,
-        EffectiveSyncToleranceMs     = SyncTolerance * _adaptiveScale * 1000.0,
-        EffectiveSoftSyncToleranceMs = SoftSyncTolerance * _adaptiveScale * 1000.0,
-        RedZoneHitsInWindow          = _redZoneHits,
+        AdaptiveScale                = 1.0,
+        EffectiveSyncToleranceMs     = SyncTolerance * 1000.0,
+        EffectiveSoftSyncToleranceMs = SoftSyncTolerance * 1000.0,
+        RedZoneHitsInWindow          = 0,
     };
 
     /// <inheritdoc/>
@@ -144,7 +169,12 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
     public override AudioStreamInfo StreamInfo => _streamInfo;
 
     /// <inheritdoc/>
-    public override double Position => _rustNative
+    /// <remarks>
+    /// File-backed sources report the native playback position; sources without a native backend
+    /// (constructed from a Stream/decoder, or before attachment) report the managed analysis cursor
+    /// advanced by <see cref="ReadSamples"/>.
+    /// </remarks>
+    public override double Position => RustTrack is not null
         ? RustNativePosition
         : Interlocked.CompareExchange(ref _currentPosition, 0, 0);
 
@@ -243,10 +273,7 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
     /// <param name="setGracePeriod">Whether to set sync grace period (true for reset, false for smooth slider).</param>
     private void SetTempoInternal(float value, bool clearBuffer, bool setGracePeriod)
     {
-        float clamped = Math.Clamp(value, AudioConstants.MinTempo, AudioConstants.MaxTempo);
-        bool tempoChanged = Math.Abs(_tempo - clamped) >= 0.001f;
-
-        _tempo = clamped;
+        _tempo = Math.Clamp(value, AudioConstants.MinTempo, AudioConstants.MaxTempo);
 
         if (_rustNative)
         {
@@ -255,29 +282,6 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
                 if (_rustTrack is not null)
                     _rustTrack.Tempo = _tempo;
             }
-        }
-
-        lock (_soundTouchLock)
-        {
-            // Convert multiplier to percentage for SoundTouch
-            float tempoChangePercent = (_tempo - 1.0f) * 100.0f;
-            float currentTempoChange = _soundTouch.TempoChange;
-
-            // Always sync SoundTouch if its internal value drifted (e.g. via soft-sync),
-            // even when _tempo itself did not change.
-            if (tempoChanged || Math.Abs(currentTempoChange - tempoChangePercent) >= 0.001f)
-                _soundTouch.TempoChange = tempoChangePercent;
-
-            if (tempoChanged && clearBuffer)
-            {
-                _soundTouch.Clear();
-                _soundTouchAccumulationCount = 0;
-            }
-        }
-
-        if (tempoChanged && setGracePeriod)
-        {
-            _gracePeriodEndTime = _trackLocalTime + SyncConfig.GracePeriodSeconds;
         }
     }
 
@@ -325,21 +329,6 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
             }
         }
 
-        lock (_soundTouchLock)
-        {
-            _soundTouch.PitchSemiTones = _pitchShift;
-
-            if (clearBuffer)
-            {
-                _soundTouch.Clear();
-                _soundTouchAccumulationCount = 0; 
-            }
-        }
-
-        if (setGracePeriod)
-        {
-            _gracePeriodEndTime = _trackLocalTime + SyncConfig.GracePeriodSeconds;
-        }
     }
 
     #endregion
@@ -382,30 +371,11 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
             BufferSize = bufferSizeInFrames
         };
 
-        int bufferSizeInSamples = bufferSizeInFrames * _streamInfo.Channels * 4;
-        _buffer = new CircularBuffer(bufferSizeInSamples);
-        
-        _soundTouch = new SoundTouchProcessor(_streamInfo.SampleRate, _streamInfo.Channels);
-        _soundTouchOutputBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 4];
-        _soundTouchInputBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 8];
-
-        _soundTouchAccumulationBuffer = new float[bufferSizeInFrames * _streamInfo.Channels * 32];
-        _soundTouchAccumulationCount = 0;
-
         _decodeBuffer = new byte[bufferSizeInFrames * _streamInfo.Channels * sizeof(float)];
+        _pendingDecoded = new float[bufferSizeInFrames * _streamInfo.Channels];
 
-        _pauseEvent = new ManualResetEventSlim(false);
-        _shouldStop = false;
-        _seekRequested = false;
         _currentPosition = 0.0;
         _isEndOfStream = false;
-
-        _decoderThread = new Thread(DecoderThreadProc)
-        {
-            Name = $"FileSource-Decoder-{Id}",
-            IsBackground = true,
-            Priority = ThreadPriority.Normal  // FIXED: Changed from AboveNormal to prevent thread starvation with 22+ tracks
-        };
     }
 
     #endregion
@@ -431,91 +401,14 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
     }
 
     /// <summary>
-    /// Reads samples in standalone mode (no synchronization).
+    /// Reads samples in standalone mode (no MasterClock) by decoding on demand on the calling thread.
     /// </summary>
+    /// <param name="buffer">Destination span for interleaved samples.</param>
+    /// <param name="frameCount">Number of frames requested.</param>
+    /// <returns>The number of decoded frames produced (silence padding excluded).</returns>
     private int ReadSamplesStandalone(Span<float> buffer, int frameCount)
     {
-        int samplesToRead = frameCount * _streamInfo.Channels;
-        int samplesRead = _buffer.Read(buffer.Slice(0, samplesToRead));
-        int framesRead = samplesRead / _streamInfo.Channels;
-
-        if (_buffer.Available < _buffer.Capacity / 2)
-        {
-            _bufferNeedsRefillEvent.Set();
-        }
-
-        if (framesRead > 0)
-        {
-            double exactSourceFrames = framesRead * _tempo;
-            _fractionalFrameAccumulator += exactSourceFrames;
-            int sourceFramesAdvanced = (int)_fractionalFrameAccumulator;
-            _fractionalFrameAccumulator -= sourceFramesAdvanced;
-
-            UpdateSamplePosition(sourceFramesAdvanced);
-
-            double frameDuration = 1.0 / _streamInfo.SampleRate;
-            double newPosition;
-            double currentPosition;
-            do
-            {
-                currentPosition = Interlocked.CompareExchange(ref _currentPosition, 0, 0);
-                newPosition = currentPosition + (sourceFramesAdvanced * frameDuration);
-            } while (Math.Abs(Interlocked.CompareExchange(ref _currentPosition, newPosition, currentPosition) - currentPosition) > double.Epsilon);
-        }
-
-        if (framesRead < frameCount && !_isEndOfStream)
-        {
-            if (samplesRead > 0)
-            {
-                ApplyVolume(buffer.Slice(0, samplesRead), samplesRead);
-                FadeOutTail(buffer.Slice(0, samplesRead), Math.Min(64, samplesRead));
-            }
-
-            int remainingSamples = (frameCount - framesRead) * _streamInfo.Channels;
-            FillWithSilence(buffer.Slice(samplesRead), remainingSamples);
-
-            int silenceFrames = frameCount - framesRead;
-
-            double exactSilenceFrames = silenceFrames * _tempo;
-            _fractionalFrameAccumulator += exactSilenceFrames;
-            int silenceSourceFrames = (int)_fractionalFrameAccumulator;
-            _fractionalFrameAccumulator -= silenceSourceFrames;
-
-            UpdateSamplePosition(silenceSourceFrames);
-
-            double frameDuration = 1.0 / _streamInfo.SampleRate;
-            double silenceSeconds = silenceSourceFrames * frameDuration;
-            double newPos, curPos;
-            do
-            {
-                curPos = Interlocked.CompareExchange(ref _currentPosition, 0, 0);
-                newPos = curPos + silenceSeconds;
-            } while (Math.Abs(Interlocked.CompareExchange(ref _currentPosition, newPos, curPos) - curPos) > double.Epsilon);
-
-            long currentFramePosition = (long)(Position * _streamInfo.SampleRate);
-            OnBufferUnderrun(new BufferUnderrunEventArgs(
-                frameCount - framesRead,
-                currentFramePosition));
-
-            return frameCount;
-        }
-
-        ApplyVolume(buffer, frameCount * _streamInfo.Channels);
-
-        if (_isEndOfStream && _buffer.IsEmpty)
-        {
-            if (Loop)
-            {
-                Seek(0);
-            }
-            else
-            {
-                State = AudioState.EndOfStream;
-                return 0;
-            }
-        }
-
-        return framesRead;
+        return DecodeSynchronously(buffer, frameCount);
     }
 
     /// <inheritdoc/>
@@ -528,71 +421,16 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
             return false;
         }
 
-        if (_rustNative)
-        {
-            return RustNativeSeek(positionInSeconds);
-        }
-
         lock (_seekLock)
         {
-            try
-            {
-                if (!_decoderThread.IsAlive)
-                {
-                    var targetTimeSpan = TimeSpan.FromSeconds(positionInSeconds);
-                    if (_decoder.TrySeek(targetTimeSpan, out string error))
-                    {
-                        Interlocked.Exchange(ref _currentPosition, positionInSeconds);
-                        SetSamplePosition((long)(positionInSeconds * _streamInfo.SampleRate));
-                        _isEndOfStream = false;
+            _analysisSeekTarget = positionInSeconds;
+            _isEndOfStream = false;
 
-                        _buffer.Clear();
-
-                        lock (_soundTouchLock)
-                        {
-                            _soundTouch.Clear();
-                            _soundTouchAccumulationCount = 0;
-                        }
-
-                        lock (_timingLock)
-                        {
-                            _totalSamplesProcessedFromFile = (long)(positionInSeconds * _streamInfo.SampleRate);
-                        }
-
-                        return true;
-                    }
-                    else
-                    {
-                        OnError(new AudioErrorEventArgs($"Seek failed: {error}", null));
-                        return false;
-                    }
-                }
-
-                Interlocked.Exchange(ref _seekTargetSeconds, positionInSeconds);
-                _seekRequested = true;
-
-                _buffer.Clear();
-
-                lock (_soundTouchLock)
-                {
-                    _soundTouch.Clear();
-                    _soundTouchAccumulationCount = 0; 
-                }
-
-                lock (_timingLock)
-                {
-                    _totalSamplesProcessedFromFile = (long)(positionInSeconds * _streamInfo.SampleRate);
-                }
-                _isEndOfStream = false;
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                OnError(new AudioErrorEventArgs($"Seek failed: {ex.Message}", ex));
-                return false;
-            }
+            Interlocked.Exchange(ref _currentPosition, positionInSeconds);
+            SetSamplePosition((long)(positionInSeconds * _streamInfo.SampleRate));
         }
+
+        return RustNativeSeek(positionInSeconds);
     }
 
 
@@ -601,198 +439,54 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
     #region Playback Control
 
     /// <summary>
-    /// Starts the decoder thread and waits for the internal buffer to reach
-    /// the minimum playback level. Does NOT change State to Playing.
-    /// Call this before Play() to avoid blocking Play() in latency-sensitive paths.
+    /// Pre-buffering hook retained for API compatibility. Playback is decoded and buffered by the
+    /// native engine, so there is no managed buffer to prime and this is a no-op.
     /// </summary>
     public void PreBuffer()
     {
         ThrowIfDisposed();
-
-        if (!_decoderThread.IsAlive && _decoderThread.ThreadState != ThreadState.Unstarted)
-        {
-            _decoderThread = new Thread(DecoderThreadProc)
-            {
-                Name = $"FileSource-Decoder-{Id}",
-                IsBackground = true,
-                Priority = ThreadPriority.Normal
-            };
-            _shouldStop = false;
-            _isEndOfStream = false;
-        }
-
-        _pauseEvent.Set();
-
-        if (_decoderThread.ThreadState == ThreadState.Unstarted)
-            _decoderThread.Start();
-
-        int bufferSizeInSamples = _bufferSizeInFrames * _streamInfo.Channels * 4;
-        bool isSoundTouchActive = _soundTouch.IsProcessingNeeded();
-        int minBufferLevel = isSoundTouchActive
-            ? (bufferSizeInSamples * 3) / 4
-            : bufferSizeInSamples / 2;
-
-        int waitCount = 0;
-        while (_buffer.Available < minBufferLevel && waitCount < 500)
-        {
-            Thread.Sleep(1);
-            waitCount++;
-        }
     }
 
     /// <inheritdoc/>
     public override void Play()
     {
         ThrowIfDisposed();
-
-        if (_rustNative)
-        {
-            RustNativePlay();
-            return;
-        }
-
-        _isPreBuffering = true;
-        _pauseEvent.Set();
-        
-        if (!_decoderThread.IsAlive)
-        {
-            if (_decoderThread.ThreadState != ThreadState.Unstarted)
-            {
-                _decoderThread = new Thread(DecoderThreadProc)
-                {
-                    Name = $"FileSource-Decoder-{Id}",
-                    IsBackground = true,
-                    Priority = ThreadPriority.Normal
-                };
-
-                _shouldStop = false;
-                _isEndOfStream = false;
-
-                _seekCount = 0;
-                _lastSeekTime = 0.0;
-
-                if (Position >= Duration)
-                {
-                    _decoder.TrySeek(TimeSpan.Zero, out _);
-                    Interlocked.Exchange(ref _currentPosition, 0.0);
-                    SetSamplePosition(0);
-                    _trackLocalTime = 0.0;
-                    
-                    _buffer.Clear();
-                    lock (_soundTouchLock)
-                    {
-                        _soundTouch.Clear();
-                        _soundTouchAccumulationCount = 0;
-                    }
-                }
-                else
-                {
-                    _trackLocalTime = _currentPosition - _startOffset;
-                    _gracePeriodEndTime = _trackLocalTime + SyncConfig.GracePeriodSeconds;
-                }
-            }
-            else
-            {
-                _seekCount = 0;
-                _lastSeekTime = 0.0;
-            }
-
-            _decoderThread.Start();
-        }
-
-        int bufferSizeInSamples = _bufferSizeInFrames * _streamInfo.Channels * 4;
-        bool isSoundTouchActive = _soundTouch.IsProcessingNeeded();
-        int minBufferLevel = isSoundTouchActive
-            ? (bufferSizeInSamples * 3) / 4  // 75% for SoundTouch
-            : bufferSizeInSamples / 2;        // 50% for direct playback
-
-        if (_buffer.Available < minBufferLevel)
-        {
-            int waitCount = 0;
-            while (_buffer.Available < minBufferLevel && waitCount < 500)
-            {
-                Thread.Sleep(1);
-                waitCount++;
-            }
-        }
-
-        _isPreBuffering = false;
-
-        base.Play();
+        RustNativePlay();
     }
 
     /// <inheritdoc/>
     public override void Pause()
     {
         ThrowIfDisposed();
-
-        if (_rustNative)
-        {
-            RustNativePause();
-            return;
-        }
-
-        base.Pause();
-        _pauseEvent.Reset(); // Pause decoder thread
+        RustNativePause();
     }
 
     /// <inheritdoc/>
     public override void Stop()
     {
         ThrowIfDisposed();
-
-        if (_rustNative)
-        {
-            RustNativeStop();
-            return;
-        }
-
-        base.Stop();
-        _pauseEvent.Reset(); // Pause decoder thread
-        _buffer.Clear();
+        RustNativeStop();
     }
 
     #endregion
 
 
     /// <summary>
-    /// Releases the unmanaged resources used by the FileSource and optionally releases the managed resources.
+    /// Releases the resources used by the FileSource, detaching the native backend and disposing the
+    /// managed analysis decoder.
     /// </summary>
+    /// <param name="disposing"><see langword="true"/> to release managed resources.</param>
     protected override void Dispose(bool disposing)
     {
         if (!_disposed)
         {
+            _disposed = true;
+            base.Dispose(disposing);
+
             if (disposing)
             {
-                _disposed = true;
-                base.Dispose(disposing);
-
-                _shouldStop = true;
-                _pauseEvent.Set(); 
-                
-                if (_decoderThread.IsAlive)
-                {
-                    if (!_decoderThread.Join(TimeSpan.FromSeconds(2)))
-                    {
-                        try
-                        {
-                            _decoderThread.Interrupt();
-                        }
-                        catch {}
-                    }
-                }
-                
                 DisposeRustBackend();
-
-                _pauseEvent?.Dispose();
                 _decoder?.Dispose();
-                _soundTouch?.Dispose();
-                _bufferNeedsRefillEvent?.Dispose(); // OPTIMIZATION (Phase 2): Dispose event
-            }
-            else
-            {
-                _disposed = true;
-                base.Dispose(disposing);
             }
         }
     }
@@ -800,26 +494,9 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
     /// <inheritdoc/>
     public override void ResyncTo(long targetSamplePosition)
     {
-        long currentPosition = SamplePosition;
-        long driftFrames = targetSamplePosition - currentPosition; // Positive = we are behind (need to skip forward)
-
-        if (Math.Abs(driftFrames) < 512) return;
-        
-        if (driftFrames > 0)
-        {
-            int samplesToSkip = (int)(driftFrames * _streamInfo.Channels);
-
-            if (samplesToSkip < _buffer.Available)
-            {
-                _buffer.Skip(samplesToSkip);
-
-                SetSamplePosition(targetSamplePosition);
-                double newPositionSec = (double)targetSamplePosition / _streamInfo.SampleRate;
-                Interlocked.Exchange(ref _currentPosition, newPositionSec);
-
-                return; // Soft sync successful!
-            }
-        }
+        long driftFrames = targetSamplePosition - SamplePosition;
+        if (Math.Abs(driftFrames) < 512)
+            return;
 
         base.ResyncTo(targetSamplePosition);
     }

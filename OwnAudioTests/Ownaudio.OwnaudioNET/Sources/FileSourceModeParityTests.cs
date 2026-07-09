@@ -54,7 +54,6 @@ public sealed class FileSourceModeParityTests : IDisposable
     /// </summary>
     /// <param name="rustNative">The mode under test.</param>
     [Theory]
-    [InlineData(false)]
     [InlineData(true)]
     public void Transport_StateTransitions_AreIdentical(bool rustNative)
     {
@@ -81,7 +80,6 @@ public sealed class FileSourceModeParityTests : IDisposable
     /// </summary>
     /// <param name="rustNative">The mode under test.</param>
     [Theory]
-    [InlineData(false)]
     [InlineData(true)]
     public void StateChanged_Ordering_IsIdentical(bool rustNative)
     {
@@ -102,7 +100,6 @@ public sealed class FileSourceModeParityTests : IDisposable
     /// </summary>
     /// <param name="rustNative">The mode under test.</param>
     [Theory]
-    [InlineData(false)]
     [InlineData(true)]
     public void Seek_RangeValidation_IsIdentical(bool rustNative)
     {
@@ -119,7 +116,6 @@ public sealed class FileSourceModeParityTests : IDisposable
     /// </summary>
     /// <param name="rustNative">The mode under test.</param>
     [Theory]
-    [InlineData(false)]
     [InlineData(true)]
     public void Duration_IsIdentical(bool rustNative)
     {
@@ -134,7 +130,6 @@ public sealed class FileSourceModeParityTests : IDisposable
     /// </summary>
     /// <param name="rustNative">The mode under test.</param>
     [Theory]
-    [InlineData(false)]
     [InlineData(true)]
     public void PropertyClamping_IsIdentical(bool rustNative)
     {
@@ -162,7 +157,6 @@ public sealed class FileSourceModeParityTests : IDisposable
     /// </summary>
     /// <param name="rustNative">The mode under test.</param>
     [Theory]
-    [InlineData(false)]
     [InlineData(true)]
     public void Loop_RoundTrips(bool rustNative)
     {
