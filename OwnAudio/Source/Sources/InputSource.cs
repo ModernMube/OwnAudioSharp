@@ -9,23 +9,17 @@ namespace OwnaudioNET.Sources;
 
 /// <summary>
 /// Audio source that captures audio from an input device (microphone, line-in, etc.).
-/// Provides real-time audio capture with buffering to prevent dropouts.
 /// </summary>
 /// <remarks>
-/// This source continuously captures audio from the input device when playing.
-/// The captured audio is buffered in a circular buffer for smooth playback.
-/// Input must be enabled in AudioConfig for this source to work.
+/// Capture runs entirely on the native Rust side (plan L): a native input stream writes straight
+/// into the track ring and the mixer renders it natively, so no audio data flows through managed
+/// code and the GC never touches the capture path. The managed side is only a controller
+/// (start/stop, metering). Input must be enabled in AudioConfig for this source to work.
 /// </remarks>
 public sealed partial class InputSource : BaseAudioSource
 {
-    private readonly AudioEngineWrapper _engine;
-    private readonly CircularBuffer _captureBuffer;
-    private readonly Thread _captureThread;
-    private readonly ManualResetEventSlim _pauseEvent;
     private readonly AudioConfig _config;
-    private readonly int _bufferSizeInFrames;
 
-    private volatile bool _shouldStop;
     private double _currentPosition;
     private bool _disposed;
 
@@ -56,8 +50,7 @@ public sealed partial class InputSource : BaseAudioSource
     /// <exception cref="InvalidOperationException">Thrown when input is not enabled in the engine.</exception>
     public InputSource(AudioEngineWrapper engine, int bufferSizeInFrames = 8192)
     {
-        _engine = engine ?? throw new ArgumentNullException(nameof(engine));
-        _bufferSizeInFrames = bufferSizeInFrames;
+        ArgumentNullException.ThrowIfNull(engine);
 
         _config = engine.Config;
         if (!engine.IsRunning)
@@ -65,29 +58,12 @@ public sealed partial class InputSource : BaseAudioSource
             throw new InvalidOperationException("Audio engine must be running to create InputSource. Call OwnaudioNet.Start() first.");
         }
 
-        int bufferSizeInSamples = bufferSizeInFrames * _config.Channels;
-        _captureBuffer = new CircularBuffer(bufferSizeInSamples);
-
-        _pauseEvent = new ManualResetEventSlim(false);
-        _shouldStop = false;
         _currentPosition = 0.0;
 
+        // Device capture runs entirely on the native side: no managed capture thread is created and
+        // no audio data flows through managed memory. The mixer opens the native input capture and
+        // attaches the native track when this source is added to it.
         _rustNative = OwnaudioNET.Engine.RustNativeChain.Enabled;
-
-        _captureThread = new Thread(CaptureThreadProc)
-        {
-            Name = $"InputSource-Capture-{Id}",
-            IsBackground = true,
-            Priority = ThreadPriority.AboveNormal
-        };
-
-        // In the Rust-native chain the device is captured natively straight into the track ring, so
-        // the managed capture thread (which would move audio through managed memory and pressure the
-        // GC) is not started; the mixer opens the native input capture on attach.
-        if (!_rustNative)
-        {
-            _captureThread.Start();
-        }
     }
 
     /// <inheritdoc/>
@@ -95,42 +71,12 @@ public sealed partial class InputSource : BaseAudioSource
     {
         ThrowIfDisposed();
 
-        if (State != AudioState.Playing)
-        {
-            FillWithSilence(buffer, frameCount * _config.Channels);
-            return frameCount;
-        }
-
-        int samplesToRead = frameCount * _config.Channels;
-        int samplesRead = _captureBuffer.Read(buffer.Slice(0, samplesToRead));
-        int framesRead = samplesRead / _config.Channels;
-
-        if (framesRead > 0)
-        {
-            double frameDuration = 1.0 / _config.SampleRate;
-            double newPosition;
-            double currentPosition;
-            do
-            {
-                currentPosition = Interlocked.CompareExchange(ref _currentPosition, 0, 0);
-                newPosition = currentPosition + (framesRead * frameDuration);
-            } while (Math.Abs(Interlocked.CompareExchange(ref _currentPosition, newPosition, currentPosition) - currentPosition) > double.Epsilon);
-        }
-
-        if (framesRead < frameCount)
-        {
-            int remainingSamples = (frameCount - framesRead) * _config.Channels;
-            FillWithSilence(buffer.Slice(samplesRead), remainingSamples);
-
-            long currentFramePosition = (long)(Position * _config.SampleRate);
-            OnBufferUnderrun(new BufferUnderrunEventArgs(
-                frameCount - framesRead,
-                currentFramePosition));
-        }
-
-        ApplyVolume(buffer, frameCount * _config.Channels);
-
-        return framesRead;
+        // Live input is captured entirely on the native side: the captured audio lives in the native
+        // track ring and is mixed natively, so managed ReadSamples has no samples to hand back and
+        // yields silence. Retained for API compatibility (the method is part of the public source
+        // contract, and the native path never routes playback through it).
+        FillWithSilence(buffer, frameCount * _config.Channels);
+        return frameCount;
     }
 
     /// <inheritdoc/>
@@ -143,168 +89,40 @@ public sealed partial class InputSource : BaseAudioSource
     public override void Play()
     {
         ThrowIfDisposed();
-
-        if (_rustNative)
-        {
-            RustNativePlay();
-            return;
-        }
-
-        base.Play();
-        _pauseEvent.Set(); // Resume capture thread
+        RustNativePlay();
     }
 
     /// <inheritdoc/>
     public override void Pause()
     {
         ThrowIfDisposed();
-
-        if (_rustNative)
-        {
-            RustNativePause();
-            return;
-        }
-
-        base.Pause();
-        _pauseEvent.Reset(); // Pause capture thread
+        RustNativePause();
     }
 
     /// <inheritdoc/>
     public override void Stop()
     {
         ThrowIfDisposed();
-
-        if (_rustNative)
-        {
-            RustNativeStop();
-            return;
-        }
-
-        base.Stop();
-        _pauseEvent.Reset(); // Pause capture thread
-        _captureBuffer.Clear();
+        RustNativeStop();
     }
 
     /// <summary>
-    /// Capture thread procedure - continuously captures audio from the input device.
-    /// </summary>
-    private void CaptureThreadProc()
-    {
-        try
-        {
-            while (!_shouldStop)
-            {
-                if (State != AudioState.Playing)
-                {
-                    _pauseEvent.Wait(100);
-                    continue;
-                }
-
-                float[]? capturedData = _engine.Receive(out int sampleCount);
-
-                if (capturedData != null && sampleCount > 0)
-                {
-                    int samplesWritten = _captureBuffer.Write(capturedData.AsSpan(0, sampleCount));
-
-                    _engine.ReturnInputBuffer(capturedData);
-
-                    if (samplesWritten < sampleCount)
-                    {
-                        int droppedSamples = sampleCount - samplesWritten;
-                        int droppedFrames = droppedSamples / _config.Channels;
-
-                        long currentFramePosition = (long)(Position * _config.SampleRate);
-                        OnBufferUnderrun(new BufferUnderrunEventArgs(
-                            droppedFrames,
-                            currentFramePosition));
-                    }
-                }
-                else
-                {
-                    Thread.Sleep(5);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            OnError(new AudioErrorEventArgs($"Capture thread error: {ex.Message}", ex));
-        }
-    }
-
-    /// <summary>
-    /// Gets the current input levels (peak levels) from the capture buffer.
-    /// This monitors the captured audio for peak sample values.
+    /// Gets the current input levels (peak levels) of the live capture.
     /// </summary>
     /// <returns>Tuple containing left and right channel peak levels (0.0 to 1.0), or (0, 0) if not available.</returns>
     /// <remarks>
-    /// This method peeks at the current capture buffer without removing samples.
-    /// The returned values are scaled by the Volume property to reflect the actual output level.
-    /// For mono sources, both left and right values will be identical.
+    /// The peaks are read from the native capture's own metering and scaled by the Volume property to
+    /// reflect the actual output level. For mono sources, both left and right values are identical.
+    /// Returns (0, 0) when the source is not playing or before it is attached to a mixer.
     /// </remarks>
     public (float left, float right) GetInputLevels()
     {
         ThrowIfDisposed();
-
-        if (_rustNative)
-        {
-            return State == AudioState.Playing ? RustNativeInputLevels() : (0f, 0f);
-        }
-
-        if (State != AudioState.Playing || _captureBuffer.IsEmpty)
-        {
-            return (0f, 0f);
-        }
-
-        try
-        {
-            int peekSamples = Math.Min(512 * _config.Channels, _captureBuffer.Available);
-            if (peekSamples == 0)
-            {
-                return (0f, 0f);
-            }
-
-            Span<float> peekBuffer = stackalloc float[peekSamples];
-            int actualSamples = _captureBuffer.Peek(peekBuffer);
-
-            if (actualSamples == 0)
-            {
-                return (0f, 0f);
-            }
-            
-            float leftPeak = 0f;
-            float rightPeak = 0f;
-            int channels = _config.Channels;
-
-            for (int i = 0; i < actualSamples; i += channels)
-            {
-                float leftSample = Math.Abs(peekBuffer[i]);
-                leftPeak = Math.Max(leftPeak, leftSample);
-
-                if (channels > 1)
-                {
-                    float rightSample = Math.Abs(peekBuffer[i + 1]);
-                    rightPeak = Math.Max(rightPeak, rightSample);
-                }
-            }
-
-            if (channels == 1)
-            {
-                rightPeak = leftPeak;
-            }
-
-            leftPeak *= Volume;
-            rightPeak *= Volume;
-
-            return (leftPeak, rightPeak);
-        }
-        catch
-        {
-            return (0f, 0f);
-        }
+        return State == AudioState.Playing ? RustNativeInputLevels() : (0f, 0f);
     }
 
     /// <summary>
-    /// Releases the unmanaged resources used by the InputSource and optionally releases the managed resources.
+    /// Releases the resources used by the InputSource and detaches the native capture backend.
     /// </summary>
     protected override void Dispose(bool disposing)
     {
@@ -312,25 +130,7 @@ public sealed partial class InputSource : BaseAudioSource
         {
             if (disposing)
             {
-                if (_rustNative)
-                    DisposeRustBackend();
-
-                _shouldStop = true;
-                _pauseEvent.Set(); // Wake up thread if waiting
-
-                if (_captureThread.IsAlive)
-                {
-                    if (!_captureThread.Join(TimeSpan.FromSeconds(2)))
-                    {
-                        try
-                        {
-                            _captureThread.Interrupt();
-                        }
-                        catch {}
-                    }
-                }
-
-                _pauseEvent?.Dispose();
+                DisposeRustBackend();
             }
 
             _disposed = true;
