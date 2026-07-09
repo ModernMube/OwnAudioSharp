@@ -203,8 +203,9 @@ mod track_source {
         ownaudio_v1_mixer_pause_all, ownaudio_v1_mixer_play_all, ownaudio_v1_mixer_set_master_gain,
         ownaudio_v1_mixer_stop_all, ownaudio_v1_track_clear_output_channel_map,
         ownaudio_v1_track_create, ownaudio_v1_track_destroy, ownaudio_v1_track_get_peaks,
-        ownaudio_v1_track_get_rendered_frames, ownaudio_v1_track_reset_position,
-        ownaudio_v1_track_set_output_channel_map, ownaudio_v1_track_set_start_delay_frames,
+        ownaudio_v1_track_get_rendered_content_frames, ownaudio_v1_track_get_rendered_frames,
+        ownaudio_v1_track_reset_position, ownaudio_v1_track_set_output_channel_map,
+        ownaudio_v1_track_set_start_delay_frames,
     };
     use ownaudio_ffi::handles::{
         OwnAudioMixerHandle, OwnAudioTrackHandle, OwnAudioTrackSourceHandle,
@@ -408,6 +409,17 @@ mod track_source {
             OwnAudioErrorCode::NullPointer as i32
         );
 
+        // Content-frame accessor mirrors the rendered-frame accessor's null contract.
+        let mut content: f64 = 999.0;
+        assert_eq!(
+            ownaudio_v1_track_get_rendered_content_frames(std::ptr::null_mut(), &mut content),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        assert_eq!(
+            ownaudio_v1_track_get_rendered_content_frames(track, std::ptr::null_mut()),
+            OwnAudioErrorCode::NullPointer as i32
+        );
+
         // A fresh track has rendered nothing yet; reset keeps it at zero.
         let mut frames: u64 = 42;
         assert_eq!(
@@ -415,6 +427,13 @@ mod track_source {
             OwnAudioErrorCode::Success as i32
         );
         assert_eq!(frames, 0);
+
+        let mut content: f64 = 42.0;
+        assert_eq!(
+            ownaudio_v1_track_get_rendered_content_frames(track, &mut content),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(content, 0.0);
 
         assert_eq!(
             ownaudio_v1_track_reset_position(track),
@@ -426,6 +445,12 @@ mod track_source {
             OwnAudioErrorCode::Success as i32
         );
         assert_eq!(frames, 0);
+        let mut content: f64 = 42.0;
+        assert_eq!(
+            ownaudio_v1_track_get_rendered_content_frames(track, &mut content),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(content, 0.0);
 
         ownaudio_v1_track_destroy(track);
         ownaudio_v1_mixer_destroy(mixer);

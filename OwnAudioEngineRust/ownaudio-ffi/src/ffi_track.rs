@@ -446,11 +446,51 @@ pub extern "C" fn ownaudio_v1_track_get_rendered_frames(
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
 }
 
+/// Writes the number of *content* (source-timeline) frames the track has advanced
+/// through since the last position reset to `*out_frames`.
+///
+/// Unlike [`ownaudio_v1_track_get_rendered_frames`], which counts output frames
+/// (wall-clock time, tempo-independent), this integrates the per-block tempo
+/// (`Σ output_frames × tempo_ratio`), so it tracks the source content actually
+/// heard through a live time-stretch. Divide by the sample rate to get the
+/// content-time position in seconds — the tempo-aware playback position a file
+/// source reports, matching the legacy managed chain.
+///
+/// - `track` — valid track handle.
+/// - `out_frames` — receives the content frame count on success.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_track_get_rendered_content_frames(
+    track: *mut OwnAudioTrackHandle,
+    out_frames: *mut f64,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_frames.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let wrapper = match unsafe { track_from_ptr(track) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        unsafe {
+            *out_frames = wrapper.shared.content_frames();
+        }
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
 /// Resets the track's rendered-frame position counter to zero.
 ///
 /// Call this from the control thread after seeking the track's source (in the
 /// intermediate phase the decoder seek happens on the C# side), so the rendered
-/// position restarts from the seek target.
+/// position restarts from the seek target. Resets the tempo-aware content-frame
+/// counter in lock-step so the content-time position also restarts from the seek.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
 #[no_mangle]
@@ -462,6 +502,7 @@ pub extern "C" fn ownaudio_v1_track_reset_position(track: *mut OwnAudioTrackHand
         };
 
         wrapper.shared.reset_rendered_frames();
+        wrapper.shared.reset_content_frames();
         wrapper.shared.request_stretch_flush();
 
         OwnAudioErrorCode::Success as i32

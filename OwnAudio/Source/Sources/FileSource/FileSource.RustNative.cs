@@ -69,9 +69,20 @@ public partial class FileSource : IRustNativeChainSource
     /// <summary>
     /// Absolute content time (seconds) of the most recent seek target. The track's rendered
     /// position counts from zero after each seek, so the reported <see cref="Position"/> is this
-    /// base plus the track's rendered time.
+    /// base plus the track's tempo-aware content time.
     /// </summary>
     private double _rustPositionBaseSeconds;
+
+    /// <summary>
+    /// Absolute project (wall-clock timeline) time in seconds of the most recent seek target, i.e.
+    /// the content base divided by the tempo in effect at the seek. The track's <em>output</em>
+    /// (wall-clock) rendered time counts from zero after each seek, so the source's real-timeline
+    /// position — used to drive the shared <see cref="MasterClock"/> at the real playback rate
+    /// regardless of tempo — is this base plus the track's output time. Kept alongside
+    /// <see cref="_rustPositionBaseSeconds"/> so the content and project timelines stay coherent
+    /// across a seek at non-unity tempo.
+    /// </summary>
+    private double _rustProjectBaseSeconds;
 
     /// <summary>
     /// Gets whether this source was constructed to use the Rust-native chain. Captured once at
@@ -245,6 +256,7 @@ public partial class FileSource : IRustNativeChainSource
             _rustFileTrack = null;
             _rustBackendAttached = false;
             _rustPositionBaseSeconds = 0.0;
+            _rustProjectBaseSeconds = 0.0;
         }
     }
 
@@ -334,15 +346,26 @@ public partial class FileSource : IRustNativeChainSource
     /// <summary>
     /// Rust-native implementation of <see cref="Seek(double)"/>: repositions the native file
     /// source's decoder (clearing stale look-ahead) and resets the track's rendered-position
-    /// counter, then records the absolute seek base so <see cref="Position"/> reports content time.
+    /// counters, then records the absolute seek bases so <see cref="Position"/> reports content
+    /// time and the shared <see cref="MasterClock"/> stays on the project (wall-clock) timeline.
     /// </summary>
-    /// <param name="positionInSeconds">Absolute target position in seconds.</param>
+    /// <remarks>
+    /// The argument is a <b>content-time</b> position (the legacy <see cref="Seek(double)"/>
+    /// contract: it addresses the decoded source, not the wall-clock timeline). The matching
+    /// project base is the content base divided by the current tempo, so that after the seek the
+    /// content position advances by <c>output × tempo</c> from the content base while the project
+    /// position advances by <c>output</c> from the project base — the two timelines stay coherent
+    /// at any tempo, exactly as the legacy managed chain behaved.
+    /// </remarks>
+    /// <param name="positionInSeconds">Absolute target content-time position in seconds.</param>
     /// <returns><see langword="true"/> when the seek was accepted.</returns>
     private bool RustNativeSeek(double positionInSeconds)
     {
         lock (_rustBackendLock)
         {
             _rustPositionBaseSeconds = positionInSeconds;
+            float tempo = _tempo <= 0f ? 1f : _tempo;
+            _rustProjectBaseSeconds = positionInSeconds / tempo;
             _rustFileTrack?.Seek(TimeSpan.FromSeconds(positionInSeconds));
             _rustTrack?.Seek(TimeSpan.FromSeconds(positionInSeconds));
         }
@@ -351,17 +374,50 @@ public partial class FileSource : IRustNativeChainSource
     }
 
     /// <summary>
-    /// Gets the Rust-native playback position in seconds: the last seek base plus the track's
-    /// rendered time. Returns the seek base (or zero) before the backend exists.
+    /// Gets the Rust-native playback position in seconds: the last seek base (content time)
+    /// plus the track's tempo-aware content time. Returns the seek base (or zero) before the
+    /// backend exists.
     /// </summary>
+    /// <remarks>
+    /// Uses <see cref="AudioTrack.ContentPosition"/> (which integrates the live tempo), not the
+    /// wall-clock <see cref="AudioTrack.Position"/>, so a stretched track reports the content
+    /// position of the audio actually heard — matching the legacy managed chain, where the
+    /// position advanced by <c>frames_read × tempo</c>. Reporting the output/wall-clock position
+    /// here would drift the reported position away from the audio by the tempo factor and never
+    /// recover after the tempo returned to unity.
+    /// </remarks>
     private double RustNativePosition
     {
         get
         {
             lock (_rustBackendLock)
             {
+                double content = _rustTrack?.ContentPosition.TotalSeconds ?? 0.0;
+                return _rustPositionBaseSeconds + content;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the Rust-native project (wall-clock timeline) position in seconds: the last seek's
+    /// project base plus the track's output (wall-clock) rendered time. Returns the project base
+    /// (or zero) before the backend exists.
+    /// </summary>
+    /// <remarks>
+    /// Uses <see cref="AudioTrack.Position"/> (output frames, tempo-independent), so it advances at
+    /// the real playback rate regardless of tempo — the quantity the mixer feeds into the shared
+    /// <see cref="MasterClock"/> so a stretched track does not run the shared clock at its content
+    /// rate. This mirrors the legacy chain, where the master clock advanced by output frames while
+    /// <see cref="Position"/> reported content time.
+    /// </remarks>
+    internal double RustNativeRealPosition
+    {
+        get
+        {
+            lock (_rustBackendLock)
+            {
                 double rendered = _rustTrack?.Position.TotalSeconds ?? 0.0;
-                return _rustPositionBaseSeconds + rendered;
+                return _rustProjectBaseSeconds + rendered;
             }
         }
     }
@@ -401,9 +457,12 @@ public partial class FileSource : IRustNativeChainSource
                 return;
             }
 
-            actual = _rustPositionBaseSeconds + track.Position.TotalSeconds;
+            actual = _rustProjectBaseSeconds + track.Position.TotalSeconds;
         }
 
+        // The master clock and the drift comparison run on the project (wall-clock) timeline, so
+        // both `target` and `actual` are project-local seconds; the red-zone seek below converts
+        // the project target to a content-time position for the decoder via the current tempo.
         double target = clock.CurrentTimestamp - _startOffset;
         if (target < 0.0)
         {
@@ -432,7 +491,8 @@ public partial class FileSource : IRustNativeChainSource
             return;
         }
 
-        Seek(target);
+        float tempo = _tempo <= 0f ? 1f : _tempo;
+        Seek(target * tempo);
         track.Tempo = _tempo;
     }
 

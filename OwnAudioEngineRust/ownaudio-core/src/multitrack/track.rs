@@ -132,6 +132,19 @@ pub struct TrackShared {
     /// playback position. This is the *rendered* position, which lags the *fed*
     /// position by the ring-buffer depth — it is what an accurate `Position` must use.
     rendered_frames: AtomicU64,
+    /// Content (source-timeline) frames the track has advanced through since the last
+    /// position reset, as `f64` bits.
+    ///
+    /// Whereas [`TrackShared::rendered_frames`] counts *output* frames (wall-clock time,
+    /// tempo-independent, and the right quantity to drive the shared master clock), this
+    /// counts the *source content* consumed: each rendered block advances it by
+    /// `output_frames × tempo_ratio`, integrating a live tempo change sample-accurately.
+    /// It is the tempo-aware playback position a file source reports as its content-time
+    /// `Position`, matching the legacy managed chain (where the position advanced by
+    /// `frames_read × tempo`). Stored as `f64` bits because the per-block advance is
+    /// fractional; written only by the audio thread, so the load/store round-trip needs
+    /// no CAS.
+    content_frames_bits: AtomicU64,
     /// Most recent left-channel output peak of this track's own contribution
     /// (post effect-chain and post-gain) as `f32` bits. Written by the audio
     /// thread every rendered block; read from the control thread for per-track
@@ -177,6 +190,7 @@ impl TrackShared {
             stretch_flush_pending: AtomicBool::new(false),
             stretch_always_on: AtomicBool::new(false),
             rendered_frames: AtomicU64::new(0),
+            content_frames_bits: AtomicU64::new(0.0f64.to_bits()),
             peak_l_bits: AtomicU32::new(0.0f32.to_bits()),
             peak_r_bits: AtomicU32::new(0.0f32.to_bits()),
             pending_start_silence: AtomicU64::new(0),
@@ -359,6 +373,32 @@ impl TrackShared {
     #[inline]
     pub fn reset_rendered_frames(&self) {
         self.rendered_frames.store(0, Ordering::Relaxed);
+    }
+
+    /// Returns the content (source-timeline) frames advanced since the last position reset.
+    ///
+    /// This is the tempo-integrated position (`Σ output_frames × tempo`), used for the
+    /// tempo-aware content-time `Position`; see [`TrackShared::content_frames_bits`].
+    #[inline]
+    pub fn content_frames(&self) -> f64 {
+        f64::from_bits(self.content_frames_bits.load(Ordering::Relaxed))
+    }
+
+    /// Advances the content-frame counter by `frames` (called on the audio thread with
+    /// `output_frames × tempo_ratio`). Single-writer: a plain load/store is sufficient.
+    #[inline]
+    pub fn add_content_frames(&self, frames: f64) {
+        let next = f64::from_bits(self.content_frames_bits.load(Ordering::Relaxed)) + frames;
+        self.content_frames_bits
+            .store(next.to_bits(), Ordering::Relaxed);
+    }
+
+    /// Resets the content-frame counter to zero (on seek or source swap), kept in lock-step
+    /// with [`TrackShared::reset_rendered_frames`].
+    #[inline]
+    pub fn reset_content_frames(&self) {
+        self.content_frames_bits
+            .store(0.0f64.to_bits(), Ordering::Relaxed);
     }
 
     /// Returns the most recent left-channel output peak of this track.
@@ -585,6 +625,7 @@ impl Track {
     pub fn set_source(&mut self, source: Option<Box<dyn TrackSource>>) {
         self.source = source;
         self.shared.reset_rendered_frames();
+        self.shared.reset_content_frames();
         self.stretch.clear();
     }
 
@@ -600,6 +641,7 @@ impl Track {
         source: Option<Box<dyn TrackSource>>,
     ) -> Option<Box<dyn TrackSource>> {
         self.shared.reset_rendered_frames();
+        self.shared.reset_content_frames();
         self.stretch.clear();
         std::mem::replace(&mut self.source, source)
     }
@@ -840,6 +882,15 @@ impl Track {
         // playback rate regardless of per-track tempo — otherwise a stretched track would run
         // the shared clock at its content rate and desync every other track against it.
         self.shared.add_rendered_frames(active_frames as u64);
+
+        // Advance the content (source-timeline) position by the same output frames scaled by
+        // the tempo active for this block. At tempo `r` the stretch stage consumed ~`r` source
+        // frames per output frame, so this integrates the live tempo into a content-time
+        // position that tracks the audio actually heard — the tempo-aware quantity a file
+        // source reports as its `Position`, matching the legacy chain. At unity (bypass) the
+        // factor is 1.0, so it advances identically to the rendered position.
+        self.shared
+            .add_content_frames(active_frames as f64 * tempo as f64);
     }
 }
 
@@ -901,6 +952,66 @@ mod tests {
 
         track.set_source(None);
         assert_eq!(track.shared.rendered_frames(), 0);
+    }
+
+    #[test]
+    fn content_frames_track_rendered_at_unity_tempo() {
+        // At unity tempo the content position advances identically to the rendered
+        // (output) position: one content frame per output frame.
+        let mut track = Track::new(10, 48_000.0, 2, 64);
+        track.set_source(Some(Box::new(ConstSource(0.5))));
+        track.shared.set_state(TrackState::Playing);
+
+        let mut out = vec![0.0f32; 8]; // 4 stereo frames
+        track.process_additive(&mut out, 2);
+        assert_eq!(track.shared.rendered_frames(), 4);
+        assert_eq!(track.shared.content_frames(), 4.0);
+
+        track.process_additive(&mut out, 2);
+        assert_eq!(track.shared.rendered_frames(), 8);
+        assert_eq!(track.shared.content_frames(), 8.0);
+    }
+
+    #[test]
+    fn content_frames_scale_with_tempo_while_rendered_stays_realtime() {
+        // At tempo 1.5 the rendered (output/wall-clock) position still advances by the
+        // output frame count, but the content position advances 1.5× as fast, integrating
+        // the source content consumed by the time-stretch — the tempo-aware `Position`.
+        let mut track = Track::new(11, 48_000.0, 2, 64);
+        track.set_source(Some(Box::new(ConstSource(0.5))));
+        track.shared.set_state(TrackState::Playing);
+        track.shared.set_tempo_ratio(1.5);
+
+        let mut out = vec![0.0f32; 8]; // 4 stereo frames
+        track.process_additive(&mut out, 2);
+        assert_eq!(track.shared.rendered_frames(), 4);
+        assert!((track.shared.content_frames() - 6.0).abs() < 1e-9);
+
+        // A live tempo change integrates piecewise: the next block adds 4 × 0.5 = 2.
+        track.shared.set_tempo_ratio(0.5);
+        track.process_additive(&mut out, 2);
+        assert_eq!(track.shared.rendered_frames(), 8);
+        assert!((track.shared.content_frames() - 8.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn source_swap_and_reset_zero_content_frames() {
+        let mut track = Track::new(12, 48_000.0, 2, 64);
+        track.set_source(Some(Box::new(ConstSource(0.5))));
+        track.shared.set_state(TrackState::Playing);
+        track.shared.set_tempo_ratio(1.25);
+
+        let mut out = vec![0.0f32; 8];
+        track.process_additive(&mut out, 2);
+        assert!(track.shared.content_frames() > 0.0);
+
+        let _prev = track.replace_source(Some(Box::new(ConstSource(0.25))));
+        assert_eq!(track.shared.content_frames(), 0.0);
+
+        track.process_additive(&mut out, 2);
+        assert!(track.shared.content_frames() > 0.0);
+        track.shared.reset_content_frames();
+        assert_eq!(track.shared.content_frames(), 0.0);
     }
 
     #[test]

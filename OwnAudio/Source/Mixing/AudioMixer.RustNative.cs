@@ -503,17 +503,24 @@ public sealed partial class AudioMixer
         }
 
         double offset = fs.StartOffset;
-        double content = projectPosition - offset;
+        double projectLocal = projectPosition - offset;
 
-        if (content >= 0.0)
+        if (projectLocal >= 0.0)
         {
-            fs.Seek(Math.Clamp(content, 0.0, fs.Duration));
+            // The seek target is a project (wall-clock) position, but the decoder addresses the
+            // content timeline: at tempo r, a project-local time t maps to content t × r. This
+            // reproduces the legacy chain's `filePosition = trackTime × tempo`, so a seek at a
+            // non-unity tempo lands the audio at the position the caller intends instead of one
+            // scaled by the tempo. FileSource.Seek takes content seconds.
+            float tempo = fs.Tempo <= 0f ? 1f : fs.Tempo;
+            double contentTarget = projectLocal * tempo;
+            fs.Seek(Math.Clamp(contentTarget, 0.0, fs.Duration));
             track.SetStartDelayFrames(0);
         }
         else
         {
             fs.Seek(0.0);
-            track.SetStartDelayFrames((long)Math.Round(-content * _config.SampleRate));
+            track.SetStartDelayFrames((long)Math.Round(-projectLocal * _config.SampleRate));
         }
 
         _rustAppliedStartOffsets[fs.Id] = offset;
@@ -1094,7 +1101,12 @@ public sealed partial class AudioMixer
                     continue;
                 }
 
-                double p = fs.StartOffset + fs.Position;
+                // Drive the master clock from the source's *project* (wall-clock) position, not its
+                // content-time Position: the shared clock must advance at the real playback rate
+                // regardless of tempo (a stretched track would otherwise run it at its content
+                // rate and desync every other track), matching the legacy chain where the clock
+                // advanced by output frames while Position reported content time.
+                double p = fs.StartOffset + fs.RustNativeRealPosition;
                 if (p > projectPos)
                 {
                     projectPos = p;

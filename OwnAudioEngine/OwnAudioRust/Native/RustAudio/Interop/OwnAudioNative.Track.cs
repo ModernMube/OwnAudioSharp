@@ -154,6 +154,19 @@ internal static partial class OwnAudioNative
     internal static partial int ownaudio_v1_track_get_rendered_frames(IntPtr track, out ulong outFrames);
 
     /// <summary>
+    /// Writes the number of <em>content</em> (source-timeline) frames the track has advanced
+    /// through since the last position reset to <paramref name="outFrames"/>. Unlike
+    /// <see cref="ownaudio_v1_track_get_rendered_frames"/> (output frames, wall-clock time),
+    /// this integrates the per-block tempo, so it is the tempo-aware content-time position —
+    /// the quantity a file source reports as its <c>Position</c>, matching the legacy chain.
+    /// </summary>
+    /// <param name="track">Valid track handle.</param>
+    /// <param name="outFrames">Receives the content frame count on success.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_get_rendered_content_frames(IntPtr track, out double outFrames);
+
+    /// <summary>
     /// Writes the track's most recently measured output peak levels (absolute, of
     /// the track's own post-effect, post-gain contribution) to
     /// <paramref name="outLeft"/> and <paramref name="outRight"/>. A mono track

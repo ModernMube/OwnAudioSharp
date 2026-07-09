@@ -60,4 +60,41 @@ public class MultiTrackPositionTests
         Assert.AreEqual(0UL, track.RenderedFrames, "a disposed track reports a zero position");
         Assert.AreEqual(TimeSpan.Zero, track.Position);
     }
+
+    [TestMethod]
+    public void NewTrack_ContentPositionIsZero()
+    {
+        using var session = new MultiTrackSession(SampleRate, Channels);
+        AudioTrack track = session.AddTrack();
+
+        Assert.AreEqual(0.0, track.RenderedContentFrames,
+            "a track that has not been mixed yet has advanced no content");
+        Assert.AreEqual(TimeSpan.Zero, track.ContentPosition);
+    }
+
+    [TestMethod]
+    public void Seek_ResetsContentPosition_WithoutError()
+    {
+        using var session = new MultiTrackSession(SampleRate, Channels);
+        AudioTrack track = session.AddTrack();
+
+        // Exercises the content-frame reset that rides along with the rendered-frame reset, plus
+        // the f64 out-parameter P/Invoke marshalling of the content-frame accessor.
+        track.Seek(TimeSpan.FromSeconds(1.5));
+
+        Assert.AreEqual(0.0, track.RenderedContentFrames,
+            "seeking resets the content-frame counter to zero");
+        Assert.AreEqual(TimeSpan.Zero, track.ContentPosition);
+    }
+
+    [TestMethod]
+    public void ContentPosition_AfterDispose_IsZero()
+    {
+        var session = new MultiTrackSession(SampleRate, Channels);
+        AudioTrack track = session.AddTrack();
+        session.Dispose();
+
+        Assert.AreEqual(0.0, track.RenderedContentFrames, "a disposed track reports zero content");
+        Assert.AreEqual(TimeSpan.Zero, track.ContentPosition);
+    }
 }

@@ -197,6 +197,12 @@ public sealed class AudioTrack : IDisposable
     /// Gets the track's current playback position, derived from <see cref="RenderedFrames"/>
     /// and the session sample rate.
     /// </summary>
+    /// <remarks>
+    /// This is the <em>output</em> (wall-clock) position: it advances at the real playback
+    /// rate regardless of tempo, and is the right quantity to drive a shared multi-track
+    /// master clock. For the tempo-aware content-time position (where in the source the
+    /// audio actually is), use <see cref="ContentPosition"/>.
+    /// </remarks>
     public TimeSpan Position
     {
         get
@@ -207,6 +213,55 @@ public sealed class AudioTrack : IDisposable
             }
 
             return TimeSpan.FromSeconds(RenderedFrames / _sampleRate);
+        }
+    }
+
+    /// <summary>
+    /// Gets the number of content (source-timeline) frames this track has advanced through
+    /// since the last position reset (a seek or source swap).
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="RenderedFrames"/> (output frames, wall-clock time), this integrates
+    /// the per-block tempo (<c>Σ output_frames × tempo</c>), so it tracks the source content
+    /// actually rendered through a live time-stretch. Returns zero when the track is disposed.
+    /// </remarks>
+    public double RenderedContentFrames
+    {
+        get
+        {
+            if (_disposed)
+            {
+                return 0.0;
+            }
+
+            int code = OwnAudioNative.ownaudio_v1_track_get_rendered_content_frames(
+                _handle.DangerousGetHandle(),
+                out double frames);
+            ErrorCodeMapper.ThrowIfError(code, nameof(RenderedContentFrames));
+            return frames;
+        }
+    }
+
+    /// <summary>
+    /// Gets the track's current content-time playback position (where in the source the
+    /// rendered audio is), derived from <see cref="RenderedContentFrames"/> and the session
+    /// sample rate.
+    /// </summary>
+    /// <remarks>
+    /// This is the tempo-aware position: at non-unity tempo it advances faster or slower than
+    /// <see cref="Position"/>, tracking the audio actually heard. It is the quantity a file
+    /// source reports as its content-time position, matching the legacy managed chain.
+    /// </remarks>
+    public TimeSpan ContentPosition
+    {
+        get
+        {
+            if (_sampleRate <= 0f)
+            {
+                return TimeSpan.Zero;
+            }
+
+            return TimeSpan.FromSeconds(RenderedContentFrames / _sampleRate);
         }
     }
 
