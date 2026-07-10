@@ -1,55 +1,49 @@
 using System;
-using Logger;
 using System.IO;
+using Logger;
 using Ownaudio.Core;
 using Ownaudio.Core.Common;
-using Ownaudio.Decoders.FFmpeg;
-using Ownaudio.Decoders.Wav;
-using Ownaudio.Decoders.Flac;
-using Ownaudio.Decoders.Mp3;
 
 namespace Ownaudio.Decoders;
 
 /// <summary>
-/// Factory for creating audio decoders based on file format and platform.
-/// Automatically detects format from file extension or header magic bytes.
+/// Factory for creating audio decoders.
 /// </summary>
 /// <remarks>
-/// Supported formats:
-/// - WAV (PCM, IEEE Float, ADPCM) - Platform-independent, pure C#
-/// - MP3 (MPEG-1/2 Layer III) - Platform-specific or managed fallback
-/// - FLAC (Free Lossless Audio Codec) - Pure C# managed implementation
+/// As of 4.0 all decoding is handled by the native Rust (Symphonia) decoder, registered by the
+/// OwnaudioNET engine layer at module-init time. The built-in managed WAV/MP3/FLAC decoders and the
+/// optional FFmpeg fallback were removed; the native decoder reads MP3, FLAC, WAV (PCM/ADPCM), AAC,
+/// MP4/M4A, OGG/Vorbis and AIFF out of the box.
 /// </remarks>
 public static class AudioDecoderFactory
 {
     /// <summary>
-    /// AOT-safe factory delegate registered by the OwnaudioNET engine layer via [ModuleInitializer].
-    /// Null when the native engine assembly is not loaded (falls back to managed decoders / FFmpeg).
+    /// The native decoder factory registered by the OwnaudioNET engine layer, or
+    /// <see langword="null"/> when that assembly has not been loaded.
     /// </summary>
     private static Func<string, int, int, IAudioDecoder>? _nativeDecoderFactory;
 
     /// <summary>
-    /// Registers a native decoder factory. Called from the OwnaudioNET engine layer at module init time.
+    /// Registers the native decoder factory. Called from the OwnaudioNET engine layer at module-init
+    /// time so callers of this factory receive the native decoder without any setup code.
     /// </summary>
+    /// <param name="factory">A delegate that opens a decoder for a file path, target sample rate and
+    /// target channel count.</param>
     public static void RegisterNativeDecoder(Func<string, int, int, IAudioDecoder> factory)
         => _nativeDecoderFactory = factory;
 
     /// <summary>
-    /// True when a native decoder factory has been registered.
+    /// Creates a native audio decoder for the specified file. The format is auto-detected from the
+    /// file content by the native decoder.
     /// </summary>
-    private static bool NativeAvailable => _nativeDecoderFactory != null;
-    
-    /// <summary>
-    /// Creates an audio decoder for the specified file.
-    /// Automatically detects format from file extension or header.
-    /// </summary>
-    /// <param name="filePath">Path to audio file.</param>
+    /// <param name="filePath">Path to the audio file.</param>
     /// <param name="targetSampleRate">Target sample rate in Hz (0 = use source rate, no resampling).</param>
     /// <param name="targetChannels">Target channel count (0 = use source channels, no conversion).</param>
-    /// <returns>Platform-appropriate decoder instance.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when filePath is null or empty.</exception>
-    /// <exception cref="FileNotFoundException">Thrown when file does not exist.</exception>
-    /// <exception cref="AudioException">Thrown when format is unsupported or file cannot be opened.</exception>
+    /// <returns>A native decoder instance for the file.</returns>
+    /// <exception cref="AudioException">
+    /// Thrown when the path is null/empty, the file does not exist, the native decoder is not
+    /// available, or the file cannot be decoded.
+    /// </exception>
     public static IAudioDecoder Create(string filePath, int targetSampleRate = 0, int targetChannels = 0)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -58,85 +52,39 @@ public static class AudioDecoderFactory
         if (!File.Exists(filePath))
             throw new AudioException("AudioDecoderFactory ERROR: ", new FileNotFoundException($"Audio file not found: {filePath}", filePath));
 
-        var format = DetectFormatFromExtension(filePath);
-        if (format == AudioFormat.Unknown)
+        var factory = _nativeDecoderFactory
+            ?? throw new AudioException("AudioDecoderFactory ERROR: ",
+                new AudioException("The native audio decoder is not available. Ensure the OwnaudioNET engine assembly is loaded."));
+
+        try
         {
-            using var stream = File.OpenRead(filePath);
-            format = DetectFormat(stream);
+            var decoder = factory(filePath, targetSampleRate, targetChannels);
+            Log.Info($"Using native decoder for '{Path.GetExtension(filePath)}' file");
+            return decoder;
         }
-
-        if (format == AudioFormat.Unknown && !NativeAvailable && !FFmpegConfig.IsAvailable)
-            throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException($"Unable to detect audio format for file: {filePath}"));
-
-        string formatName = format == AudioFormat.Unknown ? "auto-detected" : format.ToString();
-        bool managedSupported = format is AudioFormat.Wav or AudioFormat.Mp3 or AudioFormat.Flac;
-
-        if (NativeAvailable)
+        catch (Exception ex) when (ex is not AudioException)
         {
-            try
-            {
-                var native = _nativeDecoderFactory!(filePath, targetSampleRate, targetChannels);
-                Log.Info($"Using Rust native decoder for {formatName} format");
-                return native;
-            }
-            catch (Exception ex)
-            {
-                Log.Error($"Rust native decoder failed for {filePath}: {ex.Message}");
-                Log.Info("Falling back to the built-in managed or FFmpeg decoder...");
-            }
+            throw new AudioException("AudioDecoderFactory ERROR: ",
+                new AudioException($"Native decoder failed for {filePath}: {ex.Message}", ex));
         }
-
-        if (managedSupported)
-        {
-            try
-            {
-                if (format == AudioFormat.Mp3)
-                    return CreateMp3DecoderFromFile(filePath, targetSampleRate, targetChannels);
-
-                var fileStream = File.OpenRead(filePath);
-                var decoder = CreateDecoderInternal(fileStream, format, true, targetSampleRate, targetChannels);
-                Log.Info($"Using built-in managed decoder for {format} format");
-                return decoder;
-            }
-            catch (Exception ex)
-            {
-                if (!FFmpegConfig.IsAvailable)
-                    throw;
-
-                Log.Error($"Built-in decoder failed for {filePath}: {ex.Message}");
-                Log.Info($"Falling back to FFmpeg decoder for {format} format...");
-            }
-        }
-
-        if (FFmpegConfig.IsAvailable)
-        {
-            Log.Info($"Using FFmpeg decoder for {formatName} format");
-            return new FFmpegDecoder(filePath, targetSampleRate, targetChannels);
-        }
-
-        throw new AudioException("AudioDecoderFactory ERROR: ",
-            new AudioException($"Format '{Path.GetExtension(filePath)}' could not be decoded: no native or managed decoder handled it and FFmpeg libraries were not found."));
     }
 
     /// <summary>
-    /// Creates an audio decoder for the specified stream and format.
+    /// Creates a native audio decoder for the specified stream.
     /// </summary>
-    /// <param name="stream">Stream containing audio data. Must support seeking.</param>
-    /// <param name="format">Audio format of the stream.</param>
+    /// <remarks>
+    /// The native decoder is file-based, so the stream is buffered to a temporary file that is
+    /// deleted when the returned decoder is disposed.
+    /// </remarks>
+    /// <param name="stream">Stream containing audio data. Must support reading.</param>
+    /// <param name="format">Audio format of the stream, used only as the temporary file's extension
+    /// hint; the native decoder auto-detects the actual format from the content.</param>
     /// <param name="targetSampleRate">Target sample rate in Hz (0 = use source rate, no resampling).</param>
     /// <param name="targetChannels">Target channel count (0 = use source channels, no conversion).</param>
-    /// <returns>Platform-appropriate decoder instance.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when stream does not support seeking or reading.</exception>
-    /// <exception cref="AudioException">Thrown when format is unsupported or unknown.</exception>
-    /// <example>
-    /// <code>
-    /// using var stream = new MemoryStream(audioData);
-    /// using var decoder = AudioDecoderFactory.Create(stream, AudioFormat.Wav, targetSampleRate: 48000, targetChannels: 2);
-    /// byte[] buffer = new byte[8192];
-    /// var result = decoder.ReadFrames(buffer);
-    /// </code>
-    /// </example>
+    /// <returns>A native decoder instance backed by a temporary file.</returns>
+    /// <exception cref="AudioException">
+    /// Thrown when the stream is null or not readable, or when the buffered content cannot be decoded.
+    /// </exception>
     public static IAudioDecoder Create(Stream stream, AudioFormat format, int targetSampleRate = 0, int targetChannels = 0)
     {
         if (stream == null)
@@ -145,25 +93,33 @@ public static class AudioDecoderFactory
         if (!stream.CanRead)
             throw new AudioException("AudioDecoderFactory ERROR: ", new ArgumentException("Stream must support reading.", nameof(stream)));
 
-        if (!stream.CanSeek)
-            throw new AudioException("AudioDecoderFactory ERROR: ", new ArgumentException("Stream must support seeking.", nameof(stream)));
+        string tempPath = Path.Combine(Path.GetTempPath(), $"ownaudio_stream_{Guid.NewGuid():N}{ExtensionFor(format)}");
 
-        if (format == AudioFormat.Unknown)
-            throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException("Audio format must be specified and cannot be Unknown."));
+        try
+        {
+            using (var file = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
+            {
+                if (stream.CanSeek)
+                    stream.Position = 0;
+                stream.CopyTo(file);
+            }
 
-        return CreateDecoderInternal(stream, format, false, targetSampleRate, targetChannels);
+            var inner = Create(tempPath, targetSampleRate, targetChannels);
+            return new TempFileDecoder(inner, tempPath);
+        }
+        catch
+        {
+            try { File.Delete(tempPath); } catch { /* best effort */ }
+            throw;
+        }
     }
 
     /// <summary>
-    /// Detects audio format from file header (magic bytes).
+    /// Detects the audio format from a stream's header (magic bytes), restoring the stream position.
     /// </summary>
-    /// <param name="stream">Stream to read from. Position will be reset after detection.</param>
-    /// <returns>Detected audio format or <see cref="AudioFormat.Unknown"/>.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
-    /// <remarks>
-    /// This method reads the first 12 bytes of the stream to detect the format.
-    /// Stream position is restored to original position after detection.
-    /// </remarks>
+    /// <param name="stream">Stream to read from. The position is restored after detection.</param>
+    /// <returns>The detected format, or <see cref="AudioFormat.Unknown"/>.</returns>
+    /// <exception cref="AudioException">Thrown when the stream is null.</exception>
     public static AudioFormat DetectFormat(Stream stream)
     {
         if (stream == null)
@@ -182,17 +138,14 @@ public static class AudioDecoderFactory
             if (bytesRead < 12)
                 return AudioFormat.Unknown;
 
-            // WAV: "RIFF....WAVE"
             if (header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F' &&
                 header[8] == 'W' && header[9] == 'A' && header[10] == 'V' && header[11] == 'E')
                 return AudioFormat.Wav;
 
-            // MP3: 0xFF 0xFB or 0xFF 0xFA (sync word) OR ID3 tag
             if ((header[0] == 0xFF && (header[1] & 0xE0) == 0xE0) ||
                 (header[0] == 'I' && header[1] == 'D' && header[2] == '3'))
                 return AudioFormat.Mp3;
 
-            // FLAC: "fLaC"
             if (header[0] == 'f' && header[1] == 'L' && header[2] == 'a' && header[3] == 'C')
                 return AudioFormat.Flac;
 
@@ -209,98 +162,64 @@ public static class AudioDecoderFactory
     }
 
     /// <summary>
-    /// Detects audio format from file extension.
-    /// Returns <see cref="AudioFormat.FFmpeg"/> for formats that require FFmpeg
-    /// (OGG, Opus, AAC, M4A, WMA, AIFF, APE, etc.) when FFmpeg is available.
+    /// Maps an <see cref="AudioFormat"/> to a temporary-file extension hint for stream decoding.
     /// </summary>
-    /// <param name="filePath">File path to analyze.</param>
-    /// <returns>Detected audio format or <see cref="AudioFormat.Unknown"/>.</returns>
-    private static AudioFormat DetectFormatFromExtension(string filePath)
+    /// <param name="format">The format to map.</param>
+    /// <returns>A file extension including the leading dot.</returns>
+    private static string ExtensionFor(AudioFormat format) => format switch
     {
-        if (string.IsNullOrWhiteSpace(filePath))
-            return AudioFormat.Unknown;
-
-        string extension = Path.GetExtension(filePath).ToLowerInvariant();
-
-        return extension switch
-        {
-            ".wav"  => AudioFormat.Wav,
-            ".mp3"  => AudioFormat.Mp3,
-            ".flac" => AudioFormat.Flac,
-
-            ".ogg"  or ".oga"  or
-            ".opus" or
-            ".aac"  or
-            ".m4a"  or ".m4b"  or ".m4r" or
-            ".mp4"  or
-            ".wma"  or
-            ".aiff" or ".aif"  or
-            ".ape"  or
-            ".wv"   or
-            ".mka"  or
-            ".ac3"  or
-            ".dts"  or
-            ".amr"  or
-            ".au"   or ".snd"  or
-            ".tta"  or
-            ".ra"   or ".rm"
-                => AudioFormat.FFmpeg,
-
-            _ => AudioFormat.Unknown
-        };
-    }
+        AudioFormat.Wav => ".wav",
+        AudioFormat.Mp3 => ".mp3",
+        AudioFormat.Flac => ".flac",
+        _ => ".bin"
+    };
 
     /// <summary>
-    /// Internal method to create decoder instance based on format.
-    /// Strategy: Try MiniAudio decoder first, fallback to managed decoders.
-    /// Note: MiniAudio decoder currently only supports file-based decoding, not streams.
+    /// Wraps a file-based native decoder created from a buffered stream, deleting the temporary file
+    /// when disposed.
     /// </summary>
-    private static IAudioDecoder CreateDecoderInternal(Stream stream, AudioFormat format, bool ownsStream, int targetSampleRate = 0, int targetChannels = 0)
+    private sealed class TempFileDecoder : IAudioDecoder
     {
-        return format switch
-        {
-            AudioFormat.Wav => new WavDecoder(stream, ownsStream, targetSampleRate, targetChannels),
-            AudioFormat.Mp3 => CreateMp3Decoder(stream, ownsStream, targetSampleRate, targetChannels),
-            AudioFormat.Flac => new FlacDecoder(stream, ownsStream, targetSampleRate, targetChannels),
-            _ => throw new AudioException($"Unsupported audio format: {format}")
-        };
-    }
+        /// <summary>The underlying native decoder reading the temporary file.</summary>
+        private readonly IAudioDecoder _inner;
 
-    /// <summary>
-    /// Creates the built-in managed MP3 decoder from a file path.
-    /// The Rust native decoder is attempted earlier by <see cref="Create(string, int, int)"/>;
-    /// this helper is the managed decode path and is followed by the FFmpeg fallback on failure.
-    /// </summary>
-    private static IAudioDecoder CreateMp3DecoderFromFile(string filePath, int targetSampleRate, int targetChannels)
-    {
-        try
-        {
-            var decoder = new Mp3Decoder(filePath, targetSampleRate, targetChannels);
-            Log.Info("Using built-in managed decoder for Mp3 format");
-            return decoder;
-        }
-        catch (Exception ex) when (ex is not AudioException)
-        {
-            throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException($"Failed to create MP3 decoder: {ex.Message}", ex));
-        }
-    }
+        /// <summary>The temporary file to delete on dispose.</summary>
+        private readonly string _tempPath;
 
-    /// <summary>
-    /// Creates platform-specific MP3 decoder from stream.
-    /// Uses Mp3Decoder wrapper which automatically selects the correct platform implementation:
-    /// Windows: Media Foundation (not fully supported for streams)
-    /// macOS: Core Audio (not supported for streams - requires file path)
-    /// Other: Managed decoder fallback (not yet implemented)
-    /// </summary>
-    private static IAudioDecoder CreateMp3Decoder(Stream stream, bool ownsStream, int targetSampleRate, int targetChannels)
-    {
-        try
+        /// <summary>Whether this wrapper has been disposed.</summary>
+        private bool _disposed;
+
+        /// <summary>
+        /// Initializes a new wrapper over <paramref name="inner"/>, taking ownership of the temporary
+        /// file at <paramref name="tempPath"/>.
+        /// </summary>
+        /// <param name="inner">The native decoder to wrap.</param>
+        /// <param name="tempPath">The temporary file to delete on dispose.</param>
+        public TempFileDecoder(IAudioDecoder inner, string tempPath)
         {
-            return new Mp3Decoder(stream, ownsStream, targetSampleRate, targetChannels);
+            _inner = inner;
+            _tempPath = tempPath;
         }
-        catch (Exception ex) when (!(ex is AudioException))
+
+        /// <inheritdoc/>
+        public AudioStreamInfo StreamInfo => _inner.StreamInfo;
+
+        /// <inheritdoc/>
+        public AudioDecoderResult ReadFrames(byte[] buffer) => _inner.ReadFrames(buffer);
+
+        /// <inheritdoc/>
+        public bool TrySeek(TimeSpan position, out string error) => _inner.TrySeek(position, out error);
+
+        /// <inheritdoc/>
+        public void Dispose()
         {
-            throw new AudioException("AudioDecoderFactory ERROR: ", new AudioException($"Failed to create MP3 decoder from stream: {ex.Message}", ex));
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            _inner.Dispose();
+
+            try { File.Delete(_tempPath); } catch { /* best effort */ }
         }
     }
 }
