@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <!-- Desktop platforms only (Windows, Linux, macOS) -->
@@ -52,8 +52,6 @@
   </ItemGroup>
 
   <!-- Embedded resources -->
-  <!-- Note: VocalRemover ONNX models (best/default/karaoke/htdemucs) are NOT embedded. -->
-  <!-- They are downloaded on demand via VocalRemoverModelManager.DownloadModelAsync(). -->
   <ItemGroup>
     <EmbeddedResource Include="basesample.bin" />
     <EmbeddedResource Include="nmp.onnx" />

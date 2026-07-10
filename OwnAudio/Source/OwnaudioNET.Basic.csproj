@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <!-- Default: desktop only. Pass -p:BuildMobile=true to include Android + iOS TFMs. -->
@@ -62,7 +62,6 @@
 
   <!-- Exclude Features and Visualization source files from compilation -->
   <ItemGroup>
-    <Compile Remove="Features\VocalRemover\**\*.cs" />
     <Compile Remove="Features\ChorDetect\**\*.cs" />
     <Compile Remove="Features\Matchering\**\*.cs" />
     <Compile Remove="Features\Extensions\AudioReaderNote.cs" />

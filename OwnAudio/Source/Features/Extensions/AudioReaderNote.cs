@@ -1,7 +1,6 @@
-﻿using OwnAudio.Midi.File;
+using OwnAudio.Midi.File;
 using Logger;
 using Microsoft.ML.OnnxRuntime;
-using OwnaudioNET.Features.Vocalremover;
 using System.Numerics.Tensors;
 using System.Reflection;
 

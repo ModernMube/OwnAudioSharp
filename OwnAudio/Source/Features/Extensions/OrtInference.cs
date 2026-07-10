@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using Microsoft.ML.OnnxRuntime;
 
-namespace OwnaudioNET.Features.Vocalremover;
+namespace OwnaudioNET.Features.Extensions;
 
 /// <summary>
 /// AOT-compatible float tensor replacing DenseTensor&lt;float&gt; / Tensor&lt;float&gt;
