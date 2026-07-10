@@ -52,6 +52,7 @@
   <ItemGroup>
     <Compile Remove="Features\ChorDetect\**\*.cs" />
     <Compile Remove="Features\Extensions\AudioReaderNote.cs" />
+    <Compile Remove="Features\Extensions\OrtInference.cs" />
   </ItemGroup>
 
   <!-- Embedded resources -->
