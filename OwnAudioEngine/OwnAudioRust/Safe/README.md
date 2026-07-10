@@ -9,8 +9,8 @@ and resource-managed API.
 ```
 HighLevel  ← developer-facing API (players, recorders, device manager)
   Safe     ← THIS LAYER: handles, error mapping, callback marshallers
- Native    ← raw LibraryImport / P/Invoke to ownaudio_ffi.dll
-  Rust     ← ownaudio-ffi + ownaudio-core
+ Native    ← raw LibraryImport / P/Invoke to ownaudio_ffi
+  Rust     ← ownaudio-ffi + ownaudio-core (cpal + Symphonia)
 ```
 
 The Safe layer does four things and nothing more:
@@ -29,6 +29,7 @@ The Safe layer does four things and nothing more:
 - You are building custom playback or capture logic and need full control over the callback.
 - The HighLevel layer does not fit your architecture.
 - You only need the raw audio stream callback without a high-level state machine.
+- You need low-level streaming decoding, BPM detection, or direct stream management.
 
 Most developers should start with the HighLevel layer. If you are unsure, start there.
 
@@ -45,11 +46,13 @@ Most developers should start with the HighLevel layer. If you are unsure, start 
 7. [AudioOutputStream](#7-audiooutputstream)
 8. [AudioInputStream](#8-audioinputstream)
 9. [Callbacks and Callback Arguments](#9-callbacks-and-callback-arguments)
-10. [Handles](#10-handles)
-11. [Error Handling and Exceptions](#11-error-handling-and-exceptions)
-12. [Threading and Real-Time Rules](#12-threading-and-real-time-rules)
-13. [Resource Management](#13-resource-management)
-14. [ABI Version Check](#14-abi-version-check)
+10. [StreamingAudioDecoder](#10-streamingaudiodecoder)
+11. [BpmDetect](#11-bpmdetect)
+12. [Handles](#12-handles)
+13. [Error Handling and Exceptions](#13-error-handling-and-exceptions)
+14. [Threading and Real-Time Rules](#14-threading-and-real-time-rules)
+15. [Resource Management](#15-resource-management)
+16. [ABI Version Check](#16-abi-version-check)
 
 ---
 
@@ -197,7 +200,7 @@ using var engine = AudioEngine.Create(hostApi: HostApi.Wasapi);
 | `HostApi.CoreAudio` | macOS | Default macOS backend |
 | `HostApi.Alsa` | Linux | Default Linux backend |
 
-> **ASIO note:** Only available when the native binary was compiled with `--features asio`
+> **ASIO note:** Only available when the native binary was compiled with ASIO support
 > and an ASIO driver is installed (e.g. ASIO4ALL, RME, Focusrite).
 > Without a driver, the engine throws `AsioDriverNotFoundException`.
 
@@ -223,17 +226,14 @@ AudioDevice? focusrite = outputs.FirstOrDefault(d => d.Name.Contains("Focusrite"
 ### Opening Streams
 
 ```csharp
-// Output stream (playback)
-AudioOutputStream outStream = engine.OpenOutputStream(
-    device,         // null = system default
-    config,
-    outputCallback);
+// Output stream (playback) with managed callback
+AudioOutputStream outStream = engine.OpenOutputStream(device, config, outputCallback);
 
-// Input stream (capture)
-AudioInputStream inStream = engine.OpenInputStream(
-    device,
-    config,
-    inputCallback);
+// Output stream driven by a native mixer (no managed callback — HighLevel path)
+AudioOutputStream mixerStream = engine.OpenMixerOutputStream(mixerHandle, device, config);
+
+// Input stream (capture) with managed callback
+AudioInputStream inStream = engine.OpenInputStream(device, config, inputCallback);
 ```
 
 Streams are always created in the **paused state** — call `.Play()` to start them.
@@ -355,7 +355,8 @@ Console.WriteLine(myDevice);
 
 **Namespace:** `Ownaudio.Safe`
 
-A playback audio stream. Created exclusively by `AudioEngine.OpenOutputStream()`.
+A playback audio stream. Created exclusively by `AudioEngine.OpenOutputStream()` or
+`AudioEngine.OpenMixerOutputStream()`.
 
 ### Methods
 
@@ -506,7 +507,99 @@ engine.OpenInputStream(null, config, (in AudioInputCallbackArgs args) =>
 
 ---
 
-## 10. Handles
+## 10. StreamingAudioDecoder
+
+**Namespace:** `Ownaudio.Safe`
+
+Memory-efficient streaming audio file decoder backed by the native Rust (Symphonia) engine.
+A dedicated native prefetch thread decodes the file incrementally into a lock-free ring buffer,
+bounding memory usage to the prefetch size rather than the file size.
+
+**Supported formats:** WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, AIFF (via Symphonia — no external deps).
+
+```csharp
+using var decoder = new StreamingAudioDecoder(
+    filePath: "music.flac",
+    targetSampleRate: 48_000,   // 0 = source rate
+    targetChannels: 2,           // 0 = source channels
+    prefetchSeconds: 2.0f);
+
+// Stream metadata (after resampling/downmix if requested)
+AudioStreamInfo info = decoder.StreamInfo;
+Console.WriteLine($"Channels:  {info.Channels}");
+Console.WriteLine($"Rate:      {info.SampleRate} Hz");
+Console.WriteLine($"Duration:  {info.Duration}");   // TimeSpan.Zero when unknown
+Console.WriteLine($"Bit depth: {info.BitDepth}");   // 0 for float/compressed
+
+// Pre-allocate a reusable buffer (single allocation outside the loop)
+float[] buffer = new float[4096];
+
+while (!decoder.IsEndOfStream)
+{
+    int samplesRead = decoder.Read(buffer, offset: 0, count: buffer.Length);
+    // or: int samplesRead = decoder.Read(buffer.AsSpan());
+    ProcessAudio(buffer.AsSpan(0, samplesRead));
+}
+
+// Seek (non-blocking — prefetch thread performs the actual seek)
+decoder.Seek(TimeSpan.FromSeconds(30));
+decoder.Seek(framePosition: 0);   // seek by frame index
+```
+
+### Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `StreamInfo` | `AudioStreamInfo` | Decoded output metadata (channels, rate, duration, bit depth) |
+| `IsEndOfStream` | `bool` | `true` once file is fully decoded and prefetch buffer is drained |
+
+### Methods
+
+| Method | Description |
+|---|---|
+| `Read(float[], int, int)` | Read decoded interleaved float samples into a buffer slice |
+| `Read(Span<float>)` | Zero-allocation Span overload |
+| `Seek(long framePosition)` | Non-blocking seek to output frame position |
+| `Seek(TimeSpan position)` | Non-blocking seek to time position |
+| `Dispose()` | Stops prefetch thread and releases native decoder |
+
+---
+
+## 11. BpmDetect
+
+**Namespace:** `Ownaudio.Safe`
+
+Offline BPM (tempo) estimator backed by the native Rust engine. Replaces the former
+managed `SoundTouch.BpmDetect`. Feed audio frames and query the estimated BPM.
+
+```csharp
+using var bpmDetector = new BpmDetect(channels: 2, sampleRate: 44_100);
+
+// Feed audio (e.g. from StreamingAudioDecoder)
+float[] audio = new float[4096];
+while (!decoder.IsEndOfStream)
+{
+    int n = decoder.Read(audio, 0, audio.Length);
+    int frames = n / 2; // stereo: frames = samples / channels
+    bpmDetector.InputSamples(audio.AsSpan(0, n), frames);
+}
+
+float bpm = bpmDetector.GetBpm();
+Console.WriteLine($"Estimated BPM: {bpm:F1}");
+// Returns 0 when not enough data has been fed yet
+```
+
+### Methods
+
+| Method | Description |
+|---|---|
+| `InputSamples(ReadOnlySpan<float>, int frames)` | Feed interleaved audio frames |
+| `GetBpm()` | Return estimated BPM, or `0` if not enough data |
+| `Dispose()` | Release native detector |
+
+---
+
+## 12. Handles
 
 Handles manage the lifetimes of native objects. As `SafeHandle` subclasses, the GC can
 invoke the finalizer even when `Dispose()` is never called, preventing native resource leaks.
@@ -518,14 +611,21 @@ invoke the finalizer even when `Dispose()` is never called, preventing native re
 | `AudioInputStreamHandle` | Input stream | `ownaudio_v1_input_stream_destroy` |
 | `MixerHandle` | Multi-track mixer | `ownaudio_v1_mixer_destroy` |
 | `TrackHandle` | Mixer track (non-owning) | — |
+| `TrackSourceHandle` | Ring-buffer source | `ownaudio_v1_track_source_destroy` |
+| `FileSourceHandle` | File source | `ownaudio_v1_track_file_source_destroy` |
+| `MemorySourceHandle` | Memory source | `ownaudio_v1_track_memory_source_destroy` |
+| `InputSourceHandle` | Input-capture source | `ownaudio_v1_track_input_source_destroy` |
 | `EffectHandle` | DSP effect (non-owning) | — |
+| `StreamingDecoderHandle` | Streaming decoder | `ownaudio_v1_decoder_destroy` |
+| `BpmDetectHandle` | BPM detector | `ownaudio_v1_bpm_destroy` |
 
 > Handles are `internal` types — you do not work with them directly.
-> `AudioEngine`, `AudioOutputStream`, and `AudioInputStream` manage them on your behalf.
+> `AudioEngine`, `AudioOutputStream`, `AudioInputStream`, `StreamingAudioDecoder`,
+> `BpmDetect`, and the HighLevel session types manage them on your behalf.
 
 ---
 
-## 11. Error Handling and Exceptions
+## 13. Error Handling and Exceptions
 
 Every native call result passes through `ErrorCodeMapper.ThrowIfError()`, which maps
 raw integer codes to typed exceptions and appends the native error message string
@@ -538,6 +638,7 @@ OwnAudioException               ← base for all OwnAudio errors
  │  .ErrorCode : AudioEngineErrorCode
  ├─ DeviceException             ← device errors (codes 1, 2)
  ├─ StreamException             ← stream errors (codes 3, 4, 5)
+ ├─ DecoderException            ← decoder errors (code 20+)
  ├─ HostApiNotAvailableException   ← requested host API unavailable (code 10)
  ├─ AsioDriverNotFoundException    ← ASIO driver not installed (code 11)
  └─ AbiVersionMismatchException    ← native binary version mismatch (code 12)
@@ -573,7 +674,7 @@ try
 }
 catch (AbiVersionMismatchException ex)
 {
-    // Critical: installed ownaudio_ffi.dll is incompatible
+    // Critical: installed ownaudio_ffi is incompatible
     Console.Error.WriteLine($"Version mismatch: {ex.Message}");
     Console.Error.WriteLine("Reinstall the OwnAudioSharp NuGet package.");
 }
@@ -593,6 +694,10 @@ catch (StreamException ex)
 {
     Console.Error.WriteLine($"Stream error [{ex.ErrorCode}]: {ex.Message}");
 }
+catch (DecoderException ex)
+{
+    Console.Error.WriteLine($"Decoder error [{ex.ErrorCode}]: {ex.Message}");
+}
 catch (OwnAudioException ex)
 {
     Console.Error.WriteLine($"Audio error [{ex.ErrorCode}]: {ex.Message}");
@@ -601,7 +706,7 @@ catch (OwnAudioException ex)
 
 ---
 
-## 12. Threading and Real-Time Rules
+## 14. Threading and Real-Time Rules
 
 ### The Audio Callback Runs on a Real-Time Thread
 
@@ -660,12 +765,14 @@ sourceSamples.AsSpan(position, count).CopyTo(args.Buffer);
 | `OpenOutputStream()` / `OpenInputStream()` | Do not call concurrently on the same instance |
 | `AudioOutputStream.Play()` / `Pause()` / `Dispose()` | Do not call concurrently on the same instance |
 | `AudioInputStream.Play()` / `Pause()` / `Dispose()` | Do not call concurrently on the same instance |
+| `StreamingAudioDecoder.Read()` | Real-time safe (zero-allocation) |
+| `StreamingAudioDecoder.Seek()` | Non-blocking; safe from any thread |
 | Audio callback body | Lock-free and allocation-free operations only |
 | `stream.CallbackError` event | Fires on a `ThreadPool` thread |
 
 ---
 
-## 13. Resource Management
+## 15. Resource Management
 
 Every resource-owning type in the Safe layer implements `IDisposable`.
 Always create instances with `using` declarations.
@@ -702,7 +809,7 @@ engine.Dispose();
 
 ---
 
-## 14. ABI Version Check
+## 16. ABI Version Check
 
 As its very first step, `AudioEngine.Create()` reads the ABI version from the loaded
 native binary and compares it with the constant baked into the managed assembly:
@@ -717,3 +824,16 @@ incompatible native binary.
 
 **Resolving an ABI mismatch:** Reinstall the OwnAudioSharp NuGet package and verify that
 the native binaries in the `runtimes/` folder match the package version.
+
+---
+
+## Related Documentation
+
+- [OwnAudioSharp Documentation](https://modernmube.github.io/OwnAudioSharp/)
+- [Native Layer](../Native/README.md)
+- [HighLevel Layer](../HighLevel/README.md)
+
+## License
+
+Copyright © 2025 Ownaudio Team  
+Part of the OwnAudioSharp project.

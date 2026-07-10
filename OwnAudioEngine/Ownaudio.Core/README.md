@@ -7,21 +7,24 @@ Cross-platform audio engine core library providing unified interfaces, decoders,
 This package provides the **core foundation** for OwnAudioSharp's audio engine architecture, including:
 
 - **Platform-agnostic interfaces** (`IAudioEngine`, `IAudioDecoder`, `IDeviceEnumerator`)
-- **Audio format decoders** (MP3, WAV, FLAC) with zero external dependencies
+- **Native Rust/Symphonia decoder** for broad format support (MP3, WAV, FLAC, AAC, OGG, AIFF, …)
 - **Lock-free data structures** for real-time audio thread communication
-- **Zero-allocation primitives** (object pools, SIMD converters, ring buffers)
-- **Platform detection and factory** for automatic engine selection
+- **Zero-allocation primitives** (object pools, ring buffers, pooled frame types)
+- **AOT-compatible factory pattern** for automatic engine and decoder selection
 
-**IMPORTANT**: This is a **core library only** - it does not contain platform-specific implementations. For actual audio I/O, use **[Ownaudio.Native](../Ownaudio.Native/)** — the cross-platform native engine built on PortAudio and MiniAudio, supporting all platforms (Windows, Linux, macOS, Android, iOS).
+**IMPORTANT**: This is a **core library only** — it does not contain platform-specific implementations. For actual audio I/O, use **[Ownaudio.Native](../Ownaudio.Native/)** — the cross-platform native engine built on **cpal** (Rust), supporting Windows, Linux, macOS, Android, and iOS.
+
+> **Version**: 3.4.0  
+> **Target Framework**: `net10.0` (mobile: `net10.0-android`, `net10.0-ios`)
 
 ### Key Features
 
 - **Zero-allocation design**: No GC pressure in real-time audio paths
 - **Lock-free architecture**: Wait-free SPSC ring buffers for thread-safe communication
-- **Pure managed code**: No native dependencies for core functionality
-- **SIMD optimization**: Vectorized audio processing using `System.Numerics`
-- **Object pooling**: Reusable buffers to minimize allocations
-- **Multi-platform support**: Windows, Linux, macOS, Android, iOS via Ownaudio.Native
+- **Pure managed code**: No native dependencies for core infrastructure
+- **AOT & trim compatible**: `IsAotCompatible = true`, `IsTrimmable = true`
+- **Object pooling**: Reusable `PooledAudioFrame` buffers to minimize allocations
+- **Broad format support**: Native Rust (Symphonia) decoder handles MP3, FLAC, WAV, AAC, OGG/Vorbis, AIFF, M4A out of the box
 
 ## Architecture
 
@@ -30,18 +33,25 @@ This package provides the **core foundation** for OwnAudioSharp's audio engine a
 The library defines three primary interfaces that all platform-specific implementations must adhere to:
 
 #### 1. IAudioEngine
+
 Core audio engine interface for playback and recording:
+
 ```csharp
 public interface IAudioEngine : IDisposable
 {
-    // Initialization (⚠️ BLOCKING 50-5000ms!)
-    int Initialize(AudioConfig config);
+    // Status
+    EngineStatus Status { get; }
+    int FramesPerBuffer { get; }
+    IntPtr GetStream();
+    int OwnAudioEngineActivate();
+    int OwnAudioEngineStopped();
 
-    // Control
+    // Lifecycle (⚠️ BLOCKING — use Async extensions on UI threads!)
+    int Initialize(AudioConfig config);  // Blocks 50–5000 ms
     int Start();
-    int Stop();  // ⚠️ BLOCKING up to 2000ms
+    int Stop();                          // Blocks up to 2000 ms
 
-    // Real-time I/O (⚠️ Send may block 1-20ms if buffer full)
+    // Real-time I/O (⚠️ Send blocks 10–50 ms if buffer full)
     void Send(Span<float> samples);
     int Receives(Span<float> destination); // zero-allocation: caller provides the buffer
 
@@ -49,226 +59,217 @@ public interface IAudioEngine : IDisposable
     List<AudioDeviceInfo> GetOutputDevices();
     List<AudioDeviceInfo> GetInputDevices();
     int SetOutputDeviceByName(string deviceName);
-    // ... more methods
+    int SetOutputDeviceByIndex(int deviceIndex);
+    int SetInputDeviceByName(string deviceName);
+    int SetInputDeviceByIndex(int deviceIndex);
+
+    // Device events
+    event EventHandler<AudioDeviceChangedEventArgs>      OutputDeviceChanged;
+    event EventHandler<AudioDeviceChangedEventArgs>      InputDeviceChanged;
+    event EventHandler<AudioDeviceStateChangedEventArgs> DeviceStateChanged;
+    event EventHandler<AudioDeviceReconnectedEventArgs>  DeviceReconnected;
+
+    // Device monitoring control
+    void PauseDeviceMonitoring();
+    void ResumeDeviceMonitoring();
 }
 ```
 
 #### 2. IAudioDecoder
-Unified interface for audio file decoding:
+
+Unified interface for audio file decoding (zero-allocation, buffer-based):
+
 ```csharp
 public interface IAudioDecoder : IDisposable
 {
     AudioStreamInfo StreamInfo { get; }
-    AudioDecoderResult DecodeNextFrame();
+
+    // Zero-allocation read path: caller provides the byte buffer
+    AudioDecoderResult ReadFrames(byte[] buffer);
+
     bool TrySeek(TimeSpan position, out string error);
-    AudioDecoderResult DecodeAllFrames(TimeSpan position);
 }
 ```
 
+> **Note (v4.0+):** The previous `DecodeNextFrame()` / `DecodeAllFrames()` API has been replaced by `ReadFrames(byte[] buffer)`. All decoding is now handled by the native Rust (Symphonia) engine — the managed MP3/WAV/FLAC decoders and optional FFmpeg fallback have been removed.
+
 #### 3. IDeviceEnumerator
+
 Platform-specific device enumeration:
+
 ```csharp
 public interface IDeviceEnumerator
 {
-    List<AudioDeviceInfo> EnumerateOutputDevices();
-    List<AudioDeviceInfo> EnumerateInputDevices();
-    AudioDeviceInfo GetDefaultOutputDevice();
-    AudioDeviceInfo GetDefaultInputDevice();
+    List<AudioDeviceInfo>  EnumerateOutputDevices();
+    List<AudioDeviceInfo>  EnumerateInputDevices();
+    List<AudioDeviceInfo>  EnumerateAllDevices();
+    AudioDeviceInfo?       GetDefaultOutputDevice();
+    AudioDeviceInfo?       GetDefaultInputDevice();
+    AudioDeviceInfo?       GetDeviceInfo(string deviceId);
 }
 ```
 
 ### Factory Pattern
 
-The `AudioEngineFactory` automatically detects the platform and loads the appropriate engine:
+Both factories use a **delegate-based, AOT-safe registration** — no reflection or late assembly loading.
+
+#### AudioEngineFactory
 
 ```csharp
-// Automatic platform detection
+// Automatic platform detection (Ownaudio.Native registers itself at module-init time)
 var engine = AudioEngineFactory.CreateDefault();
 
 // Or with custom configuration
 var config = new AudioConfig
 {
-    SampleRate = 48000,
-    Channels = 2,
-    BufferSize = 512
+    SampleRate  = 48000,
+    Channels    = 2,
+    BufferSize  = 512
 };
 var engine = AudioEngineFactory.Create(config);
+
+// Convenience presets
+var lowLatency  = AudioEngineFactory.CreateLowLatency();
+var highLatency = AudioEngineFactory.CreateHighLatency();
+
+// Diagnostic info
+Console.WriteLine(AudioEngineFactory.GetPlatformInfo());
+// Platform: macOS
+// Implementation: RustAudioEngine (cpal)
 ```
 
-**Platform Detection Logic**:
-All platforms → Loads `Ownaudio.Native.NativeAudioEngine` (PortAudio/MiniAudio backend)
+#### AudioDecoderFactory
 
-`NativeAudioEngine` handles all supported platforms (Windows, Linux, macOS, Android, iOS) through a single native library, eliminating the need for platform-specific engine packages.
+```csharp
+// Create decoder — format is auto-detected from file content
+using var decoder = AudioDecoderFactory.Create("music.mp3", targetSampleRate: 48000, targetChannels: 2);
+
+// Or from a stream (buffered to a temp file internally)
+using var decoder = AudioDecoderFactory.Create(stream, AudioFormat.Flac);
+
+// Detect format from stream magic bytes
+AudioFormat fmt = AudioDecoderFactory.DetectFormat(stream);
+
+// Register native decoder (called automatically by Ownaudio.Native at module-init)
+AudioDecoderFactory.RegisterNativeDecoder((path, rate, ch) => new MyDecoder(path, rate, ch));
+```
+
+**Supported formats** (via native Rust/Symphonia engine, loaded by Ownaudio.Native):
+
+| Format | Extensions |
+|--------|-----------|
+| MP3 | .mp3 |
+| FLAC | .flac |
+| WAV (PCM / ADPCM) | .wav |
+| AAC | .aac |
+| MP4 / M4A | .mp4, .m4a |
+| OGG / Vorbis | .ogg |
+| AIFF | .aif, .aiff |
 
 ## Project Structure
 
 ```
 Ownaudio.Core/
-├── Interfaces/
-│   ├── IAudioEngine.cs              # Core audio engine interface
-│   ├── IAudioDecoder.cs             # Audio decoder interface
-│   └── IDeviceEnumerator.cs         # Device enumeration interface
+├── IAudioEngine.cs              # Core audio engine interface
+├── IAudioDecoder.cs             # Audio decoder interface
+├── IDeviceEnumerator.cs         # Device enumeration interface
 │
-├── Configuration/
-│   ├── AudioConfig.cs               # Engine configuration
-│   ├── AudioFormat.cs               # Audio format definitions
-│   └── AudioStreamInfo.cs           # Stream metadata
+├── AudioConfig.cs               # Engine configuration (with channel selectors)
+├── AudioFormat.cs               # Audio format enum (Wav, Mp3, Flac, FFmpeg)
+├── AudioStreamInfo.cs           # Stream metadata
+├── AudioFrame.cs                # Immutable audio frame (byte[]-based)
+├── AudioDecoderResult.cs        # Decoder output (zero-alloc & legacy paths)
+├── AudioDeviceInfo.cs           # Device information
+├── AudioDeviceEventArgs.cs      # Device event argument types
+├── EngineStatus.cs              # Engine state enum
+├── EngineHostType.cs            # Host API selector (WASAPI, ASIO, CoreAudio, …)
 │
-├── Data Types/
-│   ├── AudioFrame.cs                # Immutable audio frame
-│   ├── MutableAudioFrame.cs         # Mutable audio frame (pooled)
-│   ├── AudioDeviceInfo.cs           # Device information
-│   ├── AudioDeviceEventArgs.cs      # Event arguments
-│   └── AudioDecoderResult.cs        # Decoder output
+├── AudioEngineFactory.cs        # AOT-safe delegate-based engine factory
+├── AudioDecoderFactory.cs       # AOT-safe delegate-based decoder factory
 │
-├── Common/ (Zero-Allocation Infrastructure)
-│   ├── LockFreeRingBuffer.cs        # Lock-free SPSC queue
-│   ├── AudioFramePool.cs            # Object pool for frames
-│   ├── ObjectPool.cs                # Generic object pool
-│   ├── SimdAudioConverter.cs        # SIMD audio conversion
-│   ├── AudioResampler.cs            # Sample rate converter
-│   ├── AudioChannelConverter.cs     # Channel layout converter
-│   ├── AudioFormatConverter.cs      # Format conversion
-│   ├── AudioBuffer.cs               # Reusable audio buffer
-│   ├── OptimizedAudioStream.cs      # Memory-efficient streaming
-│   ├── MemoryMappedAudioStream.cs   # Large file streaming
-│   ├── DecodedAudioCache.cs         # Decoded audio cache
-│   ├── StreamingAudioCache.cs       # Streaming cache
-│   ├── PooledByteBufferWriter.cs    # Pooled buffer writer
-│   └── AudioException.cs            # Base exception type
+├── AudioEngineAsyncExtensions.cs # Async wrappers for blocking engine methods
+├── AudioDecoderExtensions.cs    # Helper extensions for IAudioDecoder
 │
-├── Decoders/
-│   ├── BaseStreamDecoder.cs         # Base decoder class
-│   ├── Mp3/
-│   │   ├── Mp3Decoder.cs            # MPEG-1/2/2.5 Layer 1/2/3
-│   │   └── IPlatformMp3Decoder.cs   # Platform-specific backend
-│   ├── Wav/
-│   │   ├── WavDecoder.cs            # RIFF WAVE decoder
-│   │   └── WavFormat.cs             # WAV format structures
-│   └── Flac/
-│       ├── FlacDecoder.cs           # FLAC decoder
-│       ├── FlacBitReader.cs         # Bitstream reader
-│       ├── FlacCrc.cs               # CRC validation
-│       └── FlacStructs.cs           # FLAC structures
+├── Common/                      # Zero-Allocation Infrastructure
+│   ├── LockFreeRingBuffer.cs    # Lock-free SPSC queue (power-of-2)
+│   ├── AudioFramePool.cs        # Object pool for PooledAudioFrame (byte[]-based)
+│   ├── MutableAudioFrame.cs     # Mutable frame for internal use
+│   ├── ObjectPool.cs            # Generic object pool
+│   ├── PooledByteBufferWriter.cs # Pooled byte array writer
+│   ├── AudioBuffer.cs           # Reusable audio buffer helper
+│   └── AudioException.cs        # Base exception with error category & code
 │
-├── Factory/
-│   ├── AudioEngineFactory.cs        # Platform-specific engine factory
-│   └── AudioDecoderFactory.cs       # Format-based decoder factory
-│
-└── Extensions/
-    └── AudioEngineAsyncExtensions.cs # Async wrappers for blocking methods
+└── Logging/
+    └── Logger.cs                # Internal diagnostic logger
 ```
 
-## Audio Decoders
+> **Note:** The managed `Decoders/` directory (Mp3, Wav, Flac subdirectories) and types such as `SimdAudioConverter`, `AudioResampler`, `AudioChannelConverter`, `AudioFormatConverter`, `OptimizedAudioStream`, `MemoryMappedAudioStream`, `DecodedAudioCache`, and `StreamingAudioCache` **have been removed** as of v4.0. All format conversion and decoding is now delegated to the native Rust engine.
 
-Ownaudio.Core includes **pure managed decoders** for common audio formats, and optionally uses **FFmpeg** as the primary decoder when available.
+## Audio Decoding
 
-### Decoder Priority
+### Decoder Architecture (v4.0+)
 
-`AudioDecoderFactory.Create()` selects the best available decoder automatically:
-
-1. **FFmpeg** (if installed) — supports virtually any format: AAC, OGG, Opus, WMA, AIFF, MP3, WAV, FLAC, …
-2. **MiniAudio** (if Ownaudio.Native is loaded) — cross-platform native decoder
-3. **Built-in managed decoders** — pure C# fallback for MP3, WAV, FLAC
-
-### FFmpeg Integration (Optional)
-
-FFmpeg is **not bundled** and is **not part of the public API**. When its dynamic libraries (`libavcodec`, `libavformat`, `libavutil`, `libswresample`) are found on the system, the engine uses them transparently.
+All decoding is performed by the **native Rust (Symphonia) engine**, registered by the `Ownaudio.Native` assembly via a `[ModuleInitializer]`. No manual setup is needed.
 
 ```csharp
-using Ownaudio.Core;
-
-// Optional: provide a custom directory containing FFmpeg libraries
-// Default is empty — standard system paths are searched automatically
-FFmpegConfig.CustomLibraryPath = "/usr/local/ffmpeg/lib";
-
-// Read-only: true if FFmpeg was detected and loaded successfully
-if (FFmpegConfig.IsAvailable)
-    Console.WriteLine("FFmpeg active — extended format support enabled.");
-
-// No other changes needed; the factory picks FFmpeg automatically
-using var decoder = AudioDecoderFactory.Create("audio.aac", targetSampleRate: 48000, targetChannels: 2);
+// The factory will throw AudioException if Ownaudio.Native is not loaded
+using var decoder = AudioDecoderFactory.Create("audio.flac");
+Console.WriteLine($"Duration: {decoder.StreamInfo.Duration}");
 ```
 
-**Supported FFmpeg versions:** 8+ (libavcodec 62+).
-
-**System library paths searched automatically:**
-
-| Platform | Paths |
-|----------|-------|
-| Windows  | App directory, `PATH` (`avcodec-62.dll`, …) |
-| macOS    | `/opt/homebrew/lib`, `/usr/local/lib` |
-| Linux    | `/usr/lib/<arch>-linux-gnu`, `/usr/lib`, `/usr/local/lib` |
-
-### Built-in Managed Formats
-
-| Format | Extension | Codec | Compression | Performance |
-|--------|-----------|-------|-------------|-------------|
-| **MP3** | .mp3 | MPEG-1/2/2.5 Layer III | Lossy | High |
-| **WAV** | .wav | PCM, IEEE Float | Uncompressed | Very High |
-| **FLAC** | .flac | FLAC | Lossless | Medium |
-
-### Usage Example
+### Usage Example — Zero-Allocation Decode Loop
 
 ```csharp
-using Ownaudio.Core;
 using Ownaudio.Decoders;
 
-// Create decoder for any supported format
+// Create decoder (format auto-detected; optional resampling/downmix)
 using var decoder = AudioDecoderFactory.Create(
     "music.mp3",
     targetSampleRate: 48000,
     targetChannels: 2
 );
 
-// Get stream information
-var info = decoder.StreamInfo;
-Console.WriteLine($"Duration: {info.Duration}");
-Console.WriteLine($"Sample Rate: {info.SampleRate} Hz");
-Console.WriteLine($"Channels: {info.Channels}");
+// Allocate a single reusable buffer (pre-allocate outside the loop!)
+var buffer = new byte[65536];
 
-// Decode frame by frame
+// Seek to start
+decoder.TrySeek(TimeSpan.Zero, out _);
+
+// Decode frame by frame — zero allocation per iteration
 while (true)
 {
-    var result = decoder.DecodeNextFrame();
+    var result = decoder.ReadFrames(buffer);
+
     if (result.IsEOF)
         break;
 
-    // Process result.Frame.Samples (float[])
-    ProcessAudio(result.Frame.Samples);
-}
+    if (!result.IsSucceeded)
+    {
+        Console.WriteLine($"Error: {result.ErrorMessage}");
+        break;
+    }
 
-// Or decode all at once
-decoder.TrySeek(TimeSpan.Zero, out _);
-var allFrames = decoder.DecodeAllFrames(TimeSpan.Zero);
+    // result.FramesRead = number of audio frames written into buffer
+    // result.PresentationTime = PTS in milliseconds
+    ProcessAudio(buffer.AsSpan(0, result.FramesRead));
+}
 ```
 
-### MP3 Decoder Features
+### Stream Decoding
 
-- **Layers**: MPEG-1/2/2.5 Layer I, II, III
-- **Bit rates**: 8-320 kbps + VBR
-- **Sample rates**: 8000-48000 Hz
-- **Channels**: Mono, Stereo, Joint Stereo, Dual Channel
-- **ID3 tags**: v1, v2.2, v2.3, v2.4 parsing
-- **Frame sync**: Robust error recovery
-- **Zero allocation**: Reuses buffers via object pool
+```csharp
+// Stream is buffered to a temp file automatically (deleted on Dispose)
+using var fileStream = File.OpenRead("audio.ogg");
+using var decoder = AudioDecoderFactory.Create(fileStream, AudioFormat.Unknown);
+```
 
-### WAV Decoder Features
+### Format Detection
 
-- **Formats**: PCM (8/16/24/32-bit), IEEE Float (32/64-bit)
-- **Extensible format**: Support for WAVE_FORMAT_EXTENSIBLE
-- **Automatic conversion**: Converts all formats to Float32
-- **Chunk parsing**: Handles RIFF, fmt, data, fact chunks
-- **Large files**: Supports files >4GB (RF64)
-
-### FLAC Decoder Features
-
-- **Bit depths**: 4-32 bits per sample
-- **Sample rates**: 1-655350 Hz
-- **Channels**: 1-8 channels
-- **Compression**: All prediction orders (0-32)
-- **CRC validation**: Frame and stream integrity checks
-- **Metadata**: STREAMINFO, VORBIS_COMMENT, PICTURE tags
+```csharp
+using var stream = File.OpenRead("unknown_file");
+AudioFormat format = AudioDecoderFactory.DetectFormat(stream);
+// Inspects magic bytes (RIFF/WAVE, ID3/0xFF, fLaC); stream position is restored
+```
 
 ## Lock-Free Ring Buffer
 
@@ -277,124 +278,76 @@ Core primitive for real-time audio communication between threads:
 ```csharp
 using Ownaudio.Core.Common;
 
-// Create power-of-2 sized buffer
+// Capacity is rounded up to the next power of 2 automatically
 var ringBuffer = new LockFreeRingBuffer<float>(8192);
+
+// Available space and data counts
+int canWrite = ringBuffer.WritableCount;
+int canRead  = ringBuffer.Available;      // also: AvailableRead
 
 // Producer thread (e.g., decoder)
 float[] samples = new float[512];
 // ... fill samples ...
-ringBuffer.Write(samples);
+int written = ringBuffer.Write(samples);       // accepts ReadOnlySpan<T>
 
 // Consumer thread (e.g., audio callback)
 float[] output = new float[512];
-int read = ringBuffer.Read(output);
+int read = ringBuffer.Read(output);            // accepts Span<T>
+
+// Reset (call only when no concurrent access)
+ringBuffer.Clear();
 ```
-
-### Features
-
-- **Wait-free**: SPSC (Single Producer, Single Consumer) design
-- **Memory barriers**: Proper volatile semantics for ARM/x86
-- **Zero allocation**: Pre-allocated buffer
-- **Power-of-2 optimization**: Fast modulo via bitmask
-- **Span<T> support**: Modern zero-copy API
 
 ### Thread Safety
 
-- ✅ **Safe**: One reader + one writer simultaneously
+- ✅ **Safe**: One reader + one writer simultaneously (SPSC)
 - ❌ **Unsafe**: Multiple readers or multiple writers
 - ✅ **Real-time safe**: No locks, no allocations
+- ✅ Uses `Volatile.Read/Write` for correct ARM/x86 memory ordering
 
 ## Object Pooling
 
-Minimize GC pressure with reusable audio buffers:
+### AudioFramePool — Byte-Buffer–Based Pool
 
 ```csharp
 using Ownaudio.Core.Common;
 
-// Create pool for audio frames
-var framePool = new AudioFramePool(capacity: 128);
+// Pool of byte buffers for zero-allocation decoding
+var pool = new AudioFramePool(
+    bufferSize:      65536,   // bytes per frame buffer
+    initialPoolSize: 4,
+    maxPoolSize:     16
+);
 
-// Rent from pool
-var frame = framePool.Rent(sampleCount: 1024);
+// Rent a pooled frame
+PooledAudioFrame frame = pool.Rent(presentationTime: 0.0, dataLength: 4096);
 
-// Use frame...
-ProcessAudio(frame.Samples);
+// Access data
+Span<byte> data = frame.DataSpan;   // active data region
+Span<byte> buf  = frame.BufferSpan; // full buffer for writing
+
+// Convert to immutable AudioFrame if needed (allocates)
+AudioFrame immutable = frame.ToAudioFrame();
 
 // Return to pool
-framePool.Return(frame);
+pool.Return(frame);
 ```
 
-### Available Pools
-
-- `AudioFramePool` - Reusable `MutableAudioFrame` objects
-- `ObjectPool<T>` - Generic object pool for any type
-- `PooledByteBufferWriter` - Pooled byte array writer
-
-## SIMD Audio Processing
-
-Hardware-accelerated audio conversion using `System.Numerics`:
+### ObjectPool\<T\> — Generic Pool
 
 ```csharp
-using Ownaudio.Core.Common;
-
-// Convert Int16 PCM to Float32 (vectorized)
-short[] pcmSamples = new short[1024];
-float[] floatSamples = new float[1024];
-
-SimdAudioConverter.ConvertInt16ToFloat32(
-    pcmSamples,
-    floatSamples
-);
-
-// Volume scaling (vectorized)
-SimdAudioConverter.MultiplyInPlace(floatSamples, volume: 0.5f);
+var pool = new ObjectPool<MyObject>(() => new MyObject(), initialSize: 8);
+var obj = pool.Rent();
+// ... use obj ...
+pool.Return(obj);
 ```
 
-### Supported Operations
-
-- `ConvertInt16ToFloat32` - PCM int16 → float32
-- `ConvertInt32ToFloat32` - PCM int32 → float32
-- `ConvertFloat32ToInt16` - float32 → PCM int16
-- `MultiplyInPlace` - Volume/gain adjustment
-- `MixInPlace` - Mixing multiple audio streams
-
-Uses `Vector<T>` for automatic SIMD utilization (SSE/AVX on x64, NEON on ARM).
-
-## Audio Format Conversion
-
-### Sample Rate Conversion
+### PooledByteBufferWriter
 
 ```csharp
-using Ownaudio.Core.Common;
-
-var resampler = new AudioResampler(
-    inputRate: 44100,
-    outputRate: 48000,
-    channels: 2,
-    quality: ResamplerQuality.High
-);
-
-float[] input = new float[882]; // 10ms @ 44.1kHz
-float[] output = resampler.Resample(input);
-```
-
-### Channel Conversion
-
-```csharp
-using Ownaudio.Core.Common;
-
-var converter = new AudioChannelConverter();
-
-// Mono → Stereo
-float[] mono = new float[512];
-float[] stereo = converter.MonoToStereo(mono);
-
-// Stereo → Mono (mix down)
-float[] monoMixed = converter.StereoToMono(stereo);
-
-// 5.1 → Stereo (downmix)
-float[] surround = new float[512 * 6];
-float[] stereoDownmix = converter.DownmixToStereo(surround, channels: 6);
+var writer = new PooledByteBufferWriter(initialCapacity: 4096);
+// Write bytes into pooled buffer
+writer.Dispose(); // returns buffer to pool
 ```
 
 ## Configuration
@@ -402,152 +355,131 @@ float[] stereoDownmix = converter.DownmixToStereo(surround, channels: 6);
 ### AudioConfig
 
 ```csharp
-public class AudioConfig
+public sealed class AudioConfig
 {
-    public int SampleRate { get; set; } = 48000;       // Hz
-    public int Channels { get; set; } = 2;             // 1=Mono, 2=Stereo
-    public int BufferSize { get; set; } = 512;         // Frames
-    public bool EnableInput { get; set; } = false;     // Recording
-    public bool EnableOutput { get; set; } = true;     // Playback
-    public string? OutputDeviceId { get; set; } = null;
-    public string? InputDeviceId { get; set; } = null;
+    public int    SampleRate   { get; set; } = 48000;  // Hz
+    public int    Channels     { get; set; } = 2;       // 1=Mono, 2=Stereo
+    public int    BufferSize   { get; set; } = 512;     // Frames (~10.6 ms @ 48 kHz)
+    public bool   EnableInput  { get; set; } = false;   // Recording
+    public bool   EnableOutput { get; set; } = true;    // Playback
+    public string? OutputDeviceId { get; set; } = null; // null = system default
+    public string? InputDeviceId  { get; set; } = null; // null = system default
+
+    // Host API selector — only used with PortAudio backend; MiniAudio ignores it
+    public EngineHostType HostType { get; set; } = EngineHostType.None;
+
+    // Channel routing — null = sequential (0, 1, 2, …)
+    // Length must equal Channels when non-null
+    public int[]? InputChannelSelectors  { get; set; } = null;
+    public int[]? OutputChannelSelectors { get; set; } = null;
+
+    // Device disconnect behaviour
     public bool FallbackToDefaultOnDisconnect { get; set; } = true;
 }
 ```
 
-When `FallbackToDefaultOnDisconnect` is `true` (default), the engine automatically switches to the current system default device if the configured device disconnects. Playback continues without interruption. When the original device reconnects, the engine switches back automatically. Set to `false` to retain the previous behaviour: the engine enters `DeviceDisconnected` state and waits for the original device to return.
+**Channel selectors example** — route ASIO inputs 2 & 3 to logical channels 0 & 1:
 
-**Presets**:
 ```csharp
-AudioConfig.Default      // 48kHz, Stereo, 512 frames (~10ms)
-AudioConfig.LowLatency   // 48kHz, Stereo, 128 frames (~2.7ms)
-AudioConfig.HighLatency  // 48kHz, Stereo, 2048 frames (~42ms)
+var config = new AudioConfig
+{
+    Channels = 2,
+    HostType = EngineHostType.ASIO,
+    InputChannelSelectors = new[] { 2, 3 }
+};
 ```
 
-### AudioFormat
+**`FallbackToDefaultOnDisconnect`**:
+- `true` (default): engine automatically switches to the system default device on disconnect and switches back when the original reconnects — no interruption.
+- `false`: engine enters `EngineStatus.DeviceDisconnected` and waits for the original device to reappear.
+
+**Presets**:
+
+```csharp
+AudioConfig.Default     // 48 kHz, Stereo, 512 frames (~10.6 ms)
+AudioConfig.LowLatency  // 48 kHz, Stereo, 128 frames (~2.7 ms)
+AudioConfig.HighLatency // 48 kHz, Stereo, 2048 frames (~42.7 ms)
+```
+
+### EngineHostType
+
+Selects the host audio API (only when using the PortAudio backend):
+
+| Value | Platform | Description |
+|-------|----------|-------------|
+| `None` | All | Use platform default |
+| `WASAPI` | Windows | Low-latency modern API (Vista+) |
+| `ASIO` | Windows | Ultra-low latency, requires ASIO drivers |
+| `WDMKS` | Windows | WDM Kernel Streaming |
+| `COREAUDIO` | macOS | Core Audio (low latency) |
+| `ALSA` | Linux | Advanced Linux Sound Architecture |
+| `JACK` | Linux / macOS | Professional real-time audio server |
+| `AAUDIO` | Android 8.0+ | High-performance AAudio API |
+| `OPENSL` | Android | OpenSL ES (legacy) |
+| `WEBAUDIO` | Web | Web Audio API |
+
+### EngineStatus
+
+```csharp
+public enum EngineStatus
+{
+    Idle               = 0,   // Initialized, not yet started
+    Running            = 1,   // Actively processing audio
+    DeviceDisconnected = 2,   // USB/Bluetooth device unplugged; monitoring for reconnection
+    Error              = -1   // Fatal error
+}
+```
+
+### AudioFormat (file format enum)
 
 ```csharp
 public enum AudioFormat
 {
     Unknown = 0,
-    Float32 = 1,     // IEEE 754 float32 (native)
-    Int16 = 2,       // PCM signed 16-bit
-    Int24 = 3,       // PCM signed 24-bit
-    Int32 = 4,       // PCM signed 32-bit
-    UInt8 = 5        // PCM unsigned 8-bit
+    Wav     = 1,   // PCM, IEEE Float, ADPCM
+    Mp3     = 2,   // MPEG-1/2 Layer III
+    Flac    = 3,   // Free Lossless Audio Codec
+    FFmpeg  = 4    // Formats decoded by FFmpeg (OGG, Opus, AAC, M4A, WMA, AIFF, …)
 }
 ```
 
+> `AudioFormat` is used as an **extension hint** for stream decoding (temp-file suffix). The native decoder auto-detects the real format from the file content regardless of this value.
+
 ## Async Extensions
 
-Wrapper methods for blocking `IAudioEngine` calls:
+Wrapper methods for blocking `IAudioEngine` calls — always use these on UI threads:
 
 ```csharp
 using Ownaudio.Core;
 
 var engine = AudioEngineFactory.CreateDefault();
 
-// ✅ GOOD - Non-blocking initialization
+// Non-blocking — runs Initialize on a thread-pool thread
 await engine.InitializeAsync(config);
 
-// ✅ GOOD - Non-blocking stop
+// Non-blocking stop
 await engine.StopAsync();
 
-// ❌ BAD - Blocks UI thread!
-engine.Initialize(config);  // Blocks 50-5000ms!
-engine.Stop();              // Blocks up to 2000ms!
+// Device listing
+List<AudioDeviceInfo> outputs = await engine.GetOutputDevicesAsync();
+List<AudioDeviceInfo> inputs  = await engine.GetInputDevicesAsync();
+
+// Device switching
+await engine.SetOutputDeviceByNameAsync("Speakers (Realtek)");
+await engine.SetInputDeviceByNameAsync("Microphone (USB)");
+
+// BAD — Blocks UI thread!
+// engine.Initialize(config);
+// engine.Stop();
 ```
 
-## Threading Constraints
+All async extensions accept an optional `CancellationToken`.
 
-**CRITICAL**: The `IAudioEngine` interface has blocking operations that must NOT be called from UI threads:
-
-### Blocking Methods
-
-| Method | Typical Blocking Time | Worst Case |
-|--------|----------------------|------------|
-| `Initialize()` | 50-500ms | 5000ms (Linux PulseAudio) |
-| `Stop()` | 10-100ms | 2000ms (thread join timeout) |
-| `Send()` | 0-5ms | 20ms (buffer full) |
-| `Receives()` | < 0.1ms | 1ms (ring buffer read, zero-allocation) |
-
-### Solutions
-
-1. **Use async extensions** (recommended):
-```csharp
-await engine.InitializeAsync(config);
-await engine.StopAsync();
-```
-
-2. **Use AudioEngineWrapper** (for Send/Receive):
-```csharp
-var wrapper = new AudioEngineWrapper(engine, bufferSize: 8192);
-wrapper.Send(samples);  // Non-blocking, uses ring buffer
-```
-
-3. **Use high-level API** (OwnaudioNET):
-```csharp
-OwnaudioNet.Initialize(config);  // Handles threading internally
-```
-
-See [THREAD_BLOCKING_ANALYSIS.md](../../../THREAD_BLOCKING_ANALYSIS.md) for detailed analysis.
-
-## Platform Requirements
-
-### Minimum Requirements
-
-- **.NET**: 10.0 or later
-- **Architecture**: x64, ARM64, x86 (platform-dependent)
-- **OS**: Windows 10+, Linux (any modern distro), macOS 10.14+, Android 5.0+, iOS 11.0+
-
-### Target Frameworks
-
-The library targets multiple frameworks for maximum compatibility:
-
-```xml
-<TargetFrameworks>net10.0;net10.0-android;net10.0-ios</TargetFrameworks>
-```
-
-### Platform-Specific Dependencies
-
-Ownaudio.Core itself has **no external dependencies**. Platform audio I/O requires the **Ownaudio.Native** package, which bundles the PortAudio/MiniAudio native libraries for all supported platforms.
-
-## Performance Characteristics
-
-### Zero-Allocation Guarantees
-
-The following operations are guaranteed to produce **zero allocations** after warmup:
-
-- ✅ `Send(Span<float>)` - Audio output
-- ✅ `Receives(Span<float>)` - Audio input (caller provides pre-allocated buffer)
-- ✅ `AudioEngineWrapper.Receive()` - Input via pooled buffer (`AudioBufferPool`)
-- ✅ `LockFreeRingBuffer<T>.Write/Read` - Thread communication
-- ✅ `AudioFramePool.Rent/Return` - Object pooling
-- ✅ `SimdAudioConverter.*` - Format conversion
-- ✅ Decoder frame iteration (when using pooled buffers)
-
-### CPU Usage
-
-- **Lock-free buffers**: No mutex contention
-- **SIMD operations**: 4-8x faster than scalar code
-- **Object pooling**: Eliminates GC pressure
-- **Span<T>**: Zero-copy operations
-
-### Memory Usage
-
-| Component | Memory Footprint |
-|-----------|------------------|
-| AudioConfig | ~80 bytes |
-| AudioFrame | ~32 bytes + sample array |
-| LockFreeRingBuffer (8192 floats) | ~32 KB |
-| AudioFramePool (128 frames) | ~4 MB (depending on frame size) |
-| MP3 Decoder | ~100 KB |
-| FLAC Decoder | ~200 KB |
-| WAV Decoder | ~50 KB |
+> On **Windows**, `Initialize` always runs on a dedicated MTA thread to satisfy WASAPI COM requirements, regardless of whether you call the sync or async overload.
 
 ## Error Handling
 
-All errors are reported via exceptions derived from `AudioException`:
+All errors surface as `AudioException` (namespace `Ownaudio.Core.Common`):
 
 ```csharp
 using Ownaudio.Core.Common;
@@ -557,78 +489,107 @@ try
     var engine = AudioEngineFactory.Create(config);
     await engine.InitializeAsync(config);
 }
-catch (PlatformNotSupportedException ex)
-{
-    // Platform not supported
-    Console.WriteLine($"Platform error: {ex.Message}");
-}
 catch (AudioException ex)
 {
-    // Audio-specific error
-    Console.WriteLine($"Audio error: {ex.Message}");
-    Console.WriteLine($"Error code: {ex.ErrorCode}");
+    Console.WriteLine($"Category  : {ex.Category}");   // AudioErrorCategory enum
+    Console.WriteLine($"Error code: {ex.ErrorCode}");  // platform-specific int
+    Console.WriteLine($"File path : {ex.FilePath}");
+    Console.WriteLine($"Stream pos: {ex.StreamPosition}");
+}
+catch (PlatformNotSupportedException ex)
+{
+    Console.WriteLine($"Platform not supported: {ex.Message}");
 }
 ```
+
+### AudioErrorCategory
+
+| Value | Meaning |
+|-------|---------|
+| `Unknown` | Unspecified error |
+| `FileFormat` | Invalid or unsupported file format |
+| `IO` | Read/write/seek failure |
+| `Decoding` | Audio decoding failure |
+| `Seeking` | Seek operation failed |
+| `PlatformAPI` | Native API call failed |
+| `OutOfMemory` | Buffer or allocation failure |
+| `Device` | Audio device operation failed |
+| `Configuration` | Invalid configuration parameters |
 
 ### Common Error Codes
 
-Platform-specific implementations return error codes:
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `-1` | Generic / unknown error |
+| `-2` | Invalid configuration |
+| `-3` | Device not found |
+| `-4` | Device disconnected |
+| `-5` | Buffer overflow / underrun |
 
-- `0` - Success
-- `-1` - Generic error
-- `-2` - Invalid configuration
-- `-3` - Device not found
-- `-4` - Device disconnected
-- `-5` - Buffer overflow/underrun
+## Threading Constraints
 
-## API Reference
+**CRITICAL**: Never call blocking `IAudioEngine` operations from UI threads.
 
-### Key Types
+| Method | Typical Blocking Time | Worst Case |
+|--------|-----------------------|------------|
+| `Initialize()` | 50–500 ms | 5000 ms (Linux PulseAudio) |
+| `Stop()` | 10–100 ms | 2000 ms (thread join timeout) |
+| `Send()` | 10–50 ms | depends on buffer size |
+| `Receives()` | < 0.1 ms | 1 ms (ring buffer read, zero-allocation) |
 
-- `IAudioEngine` - Core audio engine interface
-- `IAudioDecoder` - Audio decoder interface
-- `IDeviceEnumerator` - Device enumeration interface
-- `AudioConfig` - Engine configuration
-- `AudioFrame` - Immutable audio frame
-- `AudioDeviceInfo` - Device information
-- `AudioStreamInfo` - Stream metadata
-- `LockFreeRingBuffer<T>` - Lock-free queue
-- `AudioFramePool` - Object pool for frames
+**Solutions:**
 
-### Factory Classes
+1. **Use async extensions** (recommended):
 
-- `AudioEngineFactory` - Platform-specific engine creation
-- `AudioDecoderFactory` - Format-based decoder creation
-
-### Extension Methods
-
-- `InitializeAsync` - Async initialization wrapper
-- `StopAsync` - Async stop wrapper
-
-## Building from Source
-
-```bash
-# Build Core library
-dotnet build OwnAudioEngine/Ownaudio.Core/Ownaudio.Core.csproj -c Release
-
-# Build for specific target framework
-dotnet build -f net10.0
-dotnet build -f net10.0-android
-dotnet build -f net10.0-ios
-
-# Output: Ownaudio.Core.dll
+```csharp
+await engine.InitializeAsync(config);
+await engine.StopAsync();
 ```
 
-## Testing
+2. **High-level API** (`OwnaudioNET`) handles threading internally.
+
+## Platform Requirements
+
+| Requirement | Value |
+|-------------|-------|
+| **.NET** | 10.0 or later |
+| **Default target** | `net10.0` |
+| **Mobile targets** | `net10.0-android` (API 24+), `net10.0-ios` (12.2+) |
+| **Architecture** | x64, ARM64 |
+| **Windows** | 10+ |
+| **Linux** | Any modern distro |
+| **macOS** | 10.14+ |
+| **Android** | API 24+ (Android 7.0+) |
+| **iOS** | 12.2+ |
+
+Mobile builds are only produced when `BuildingForMobile=true` is set:
 
 ```bash
-# Run Core library tests
-dotnet test OwnAudioTests/Ownaudio.EngineTest/Ownaudio.EngineTest.csproj --filter "TestCategory=Core"
-
-# Test specific components
-dotnet test --filter "FullyQualifiedName~LockFreeRingBuffer"
-dotnet test --filter "FullyQualifiedName~AudioDecoder"
+dotnet build -p:BuildingForMobile=true -f net10.0-android
+dotnet build -p:BuildingForMobile=true -f net10.0-ios
 ```
+
+## Performance Characteristics
+
+### Zero-Allocation Guarantees
+
+The following operations produce **zero allocations** after warmup:
+
+- ✅ `Send(Span<float>)` — audio output
+- ✅ `Receives(Span<float>)` — audio input (caller provides pre-allocated buffer)
+- ✅ `LockFreeRingBuffer<T>.Write/Read` — thread communication
+- ✅ `AudioFramePool.Rent/Return` — object pooling
+- ✅ `decoder.ReadFrames(byte[])` — decode into caller-provided buffer
+
+### CPU & Memory
+
+| Component | Footprint |
+|-----------|-----------|
+| `AudioConfig` | ~80 bytes |
+| `LockFreeRingBuffer<float>` (8192 elements) | ~32 KB |
+| `AudioFramePool` (16 × 64 KB) | ~1 MB |
+| `PooledAudioFrame` (64 KB buffer) | ~64 KB |
 
 ## Usage Examples
 
@@ -637,119 +598,142 @@ dotnet test --filter "FullyQualifiedName~AudioDecoder"
 ```csharp
 using Ownaudio.Core;
 
-// Create engine with factory
-var engine = AudioEngineFactory.CreateDefault();
-
-// Initialize asynchronously
+using var engine = AudioEngineFactory.CreateDefault();
 await engine.InitializeAsync(AudioConfig.Default);
-
-// Start playback
 engine.Start();
 
-// Send audio samples
-float[] samples = GenerateAudioSamples(512 * 2); // 512 frames * 2 channels
+// Send audio samples (interleaved Float32)
+float[] samples = GenerateAudioSamples(512 * 2); // 512 frames × 2 ch
 engine.Send(samples);
 
-// Stop and cleanup
+Console.WriteLine(engine.Status);          // Running
+Console.WriteLine(engine.FramesPerBuffer); // actual negotiated buffer size
+
 await engine.StopAsync();
-engine.Dispose();
 ```
 
-### Decoding Audio Files
+### Decoding and Playing an Audio File
 
 ```csharp
 using Ownaudio.Core;
 using Ownaudio.Decoders;
 
-// Decode MP3 file
-using var decoder = AudioDecoderFactory.Create("music.mp3");
-
-var engine = AudioEngineFactory.Create(new AudioConfig
+using var decoder = AudioDecoderFactory.Create("music.flac");
+using var engine  = AudioEngineFactory.Create(new AudioConfig
 {
     SampleRate = decoder.StreamInfo.SampleRate,
-    Channels = decoder.StreamInfo.Channels
+    Channels   = decoder.StreamInfo.Channels
 });
 
-await engine.InitializeAsync(config);
+await engine.InitializeAsync(AudioConfig.Default);
 engine.Start();
 
-// Stream decoded audio to engine
+var buffer = new byte[65536];
+decoder.TrySeek(TimeSpan.Zero, out _);
+
 while (true)
 {
-    var result = decoder.DecodeNextFrame();
+    var result = decoder.ReadFrames(buffer);
     if (result.IsEOF) break;
-
-    engine.Send(result.Frame.Samples);
+    // Send decoded PCM bytes reinterpreted as float — or convert as needed
 }
 
 await engine.StopAsync();
-engine.Dispose();
 ```
 
-### Using Lock-Free Ring Buffer
+### Device Selection with Channel Routing
+
+```csharp
+var config = new AudioConfig
+{
+    SampleRate             = 48000,
+    Channels               = 2,
+    HostType               = EngineHostType.ASIO,
+    OutputChannelSelectors = new[] { 4, 5 }  // use ASIO outputs 4 & 5
+};
+using var engine = AudioEngineFactory.Create(config);
+```
+
+### Cross-Thread Ring Buffer
 
 ```csharp
 using Ownaudio.Core.Common;
 
-// Create buffer for cross-thread communication
 var ringBuffer = new LockFreeRingBuffer<float>(8192);
 
-// Producer thread (decoder)
+// Producer (decoder thread)
 Task.Run(() =>
 {
     float[] samples = new float[512];
     while (decoding)
     {
-        DecodeAudio(samples);
-        ringBuffer.Write(samples);
+        FillSamples(samples);
+        ringBuffer.Write(samples);   // returns count actually written
     }
 });
 
-// Consumer thread (audio callback)
-void AudioCallback(float[] output)
+// Consumer (audio callback — real-time thread)
+void AudioCallback(Span<float> output)
 {
     int read = ringBuffer.Read(output);
     if (read < output.Length)
-    {
-        // Fill remaining with silence
-        Array.Clear(output, read, output.Length - read);
-    }
+        output.Slice(read).Clear(); // silence for underrun
 }
+```
+
+### Device Monitoring
+
+```csharp
+engine.DeviceStateChanged  += (_, e) => Console.WriteLine($"Device state: {e.DeviceName}");
+engine.OutputDeviceChanged += (_, e) => Console.WriteLine($"Output changed: {e.DeviceName}");
+engine.DeviceReconnected   += (_, e) => Console.WriteLine($"Reconnected: {e.DeviceName}");
+
+// Suppress monitoring during sensitive UI operations (e.g., opening a plugin editor)
+engine.PauseDeviceMonitoring();
+OpenPluginEditor();
+engine.ResumeDeviceMonitoring();
 ```
 
 ## Best Practices
 
-### 1. Always Use Async Wrappers
+### 1. Always Use Async Wrappers on UI Threads
 
 ```csharp
-// ✅ GOOD
+// GOOD
 await engine.InitializeAsync(config);
 await engine.StopAsync();
 
-// ❌ BAD - Blocks UI thread!
+// BAD — Blocks UI thread!
 engine.Initialize(config);
 engine.Stop();
 ```
 
-### 2. Use Lock-Free Wrappers for UI Applications
+### 2. Pre-Allocate Decode Buffers Outside the Loop
 
 ```csharp
-// ✅ GOOD - Non-blocking
-var wrapper = new AudioEngineWrapper(engine, bufferSize: 8192);
-wrapper.Send(samples);  // Returns immediately
+// GOOD — single allocation before the loop
+var buffer = new byte[65536];
+while (true)
+{
+    var result = decoder.ReadFrames(buffer);
+    if (result.IsEOF) break;
+}
 
-// ❌ BAD - May block up to 20ms
-engine.Send(samples);
+// BAD — allocates on every iteration
+while (true)
+{
+    var result = decoder.ReadFrames(new byte[65536]);
+}
 ```
 
 ### 3. Dispose Resources Properly
 
 ```csharp
-// ✅ GOOD
-using var engine = AudioEngineFactory.CreateDefault();
+// GOOD
+using var engine  = AudioEngineFactory.CreateDefault();
 using var decoder = AudioDecoderFactory.Create("music.mp3");
 
-// ❌ BAD - Memory leak
+// BAD — memory/resource leak
 var engine = AudioEngineFactory.CreateDefault();
 // ... never disposed
 ```
@@ -757,35 +741,61 @@ var engine = AudioEngineFactory.CreateDefault();
 ### 4. Return Pooled Objects
 
 ```csharp
-// ✅ GOOD
-var frame = framePool.Rent(1024);
-ProcessAudio(frame);
-framePool.Return(frame);
+// GOOD
+var frame = pool.Rent(presentationTime: 0.0, dataLength: 4096);
+ProcessAudio(frame.DataSpan);
+pool.Return(frame);
 
-// ❌ BAD - Pool exhaustion
-var frame = framePool.Rent(1024);
+// BAD — pool exhaustion
+var frame = pool.Rent(presentationTime: 0.0, dataLength: 4096);
 // ... never returned
 ```
 
-### 5. Use Span<T> for Zero-Copy
+### 5. Use Span\<T\> for Zero-Copy Paths
 
 ```csharp
-// ✅ GOOD - Zero allocation
+// GOOD — no allocation
 Span<float> samples = stackalloc float[512];
 engine.Send(samples);
 
-// ❌ BAD - Allocates array
-float[] samples = new float[512];
-engine.Send(samples);
+// BAD — heap allocation
+engine.Send(new float[512]);
+```
+
+## Building from Source
+
+```bash
+# Build Core library (default: net10.0)
+dotnet build OwnAudioEngine/Ownaudio.Core/Ownaudio.Core.csproj -c Release
+
+# Build for mobile (requires BuildingForMobile flag)
+dotnet build OwnAudioEngine/Ownaudio.Core/Ownaudio.Core.csproj \
+    -p:BuildingForMobile=true -f net10.0-android
+dotnet build OwnAudioEngine/Ownaudio.Core/Ownaudio.Core.csproj \
+    -p:BuildingForMobile=true -f net10.0-ios
+```
+
+## Testing
+
+```bash
+# Run Core library tests
+dotnet test OwnAudioTests/Ownaudio.EngineTest/Ownaudio.EngineTest.csproj \
+    --filter "TestCategory=Core"
+
+# Run specific component tests
+dotnet test --filter "FullyQualifiedName~LockFreeRingBuffer"
+dotnet test --filter "FullyQualifiedName~AudioDecoder"
+dotnet test --filter "FullyQualifiedName~AudioFramePool"
 ```
 
 ## Known Limitations
 
-1. **Platform-specific implementations required**: Core library alone cannot play audio
-2. **Float32 only**: All audio processing uses Float32 format internally
-3. **SPSC only**: Lock-free ring buffer supports single producer/consumer only
-4. **Power-of-2 buffers**: Ring buffer capacity must be power of 2
-5. **No DSP effects**: Core library focuses on I/O, not signal processing
+1. **Platform-specific implementations required**: Core library alone cannot play audio — load `Ownaudio.Native`.
+2. **Float32 only**: All audio I/O uses interleaved Float32 internally.
+3. **SPSC only**: `LockFreeRingBuffer<T>` supports a single producer and a single consumer.
+4. **Power-of-2 buffers**: Ring buffer capacity is automatically rounded up to the next power of 2.
+5. **Native decoder required**: `AudioDecoderFactory.Create()` throws if `Ownaudio.Native` has not been loaded.
+6. **No built-in DSP**: Signal processing (EQ, reverb, …) is out of scope for this library.
 
 ## Related Documentation
 
