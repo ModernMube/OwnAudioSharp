@@ -6,7 +6,7 @@ using OwnaudioNET.Features.OwnChordDetect.Detectors;
 using OwnaudioNET.Exceptions;
 using Ownaudio.Decoders;
 using Ownaudio.Core;
-using SoundTouch;
+using Ownaudio.Safe;
 
 namespace OwnaudioNET.Features.OwnChordDetect;
 
@@ -161,7 +161,7 @@ public static class ChordDetect
     private static int DetectBpmFromSamples(float[] samples, int sampleRate, int channels)
     {
         const int chunkSize = 4096;
-        var bpmDetect = new BpmDetect(channels, sampleRate);
+        using var bpmDetect = new BpmDetect(channels, sampleRate);
 
         int offset = 0;
         while (offset < samples.Length)

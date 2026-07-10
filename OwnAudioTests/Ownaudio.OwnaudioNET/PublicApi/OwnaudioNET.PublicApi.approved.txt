@@ -1840,23 +1840,6 @@ namespace OwnaudioNET
         public static void StopNetworkSync() { }
     }
 }
-namespace OwnaudioNET.Processing
-{
-    public sealed class SoundTouchProcessor : System.IDisposable
-    {
-        public SoundTouchProcessor(int sampleRate, int channels) { }
-        public int Channels { get; }
-        public float PitchSemiTones { get; set; }
-        public int SampleRate { get; }
-        public float TempoChange { get; set; }
-        public void Clear() { }
-        public void Dispose() { }
-        public void Flush() { }
-        public bool IsProcessingNeeded() { }
-        public void PutSamples(System.Span<float> samples, int frameCount) { }
-        public int ReceiveSamples(System.Span<float> output, int maxFrames) { }
-    }
-}
 namespace OwnaudioNET.Recording
 {
     public class AudioRecorder : System.IDisposable
@@ -2111,95 +2094,5 @@ namespace OwnaudioNET.Visualization
             Positive = 1,
             RMS = 2,
         }
-    }
-}
-namespace SoundTouch
-{
-    public sealed class BpmDetect : System.IDisposable
-    {
-        public BpmDetect(int numChannels, int sampleRate) { }
-        public void Dispose() { }
-        public int GetBeats(System.Span<float> pos, System.Span<float> strength) { }
-        public float GetBpm() { }
-        public void InputSamples(System.ReadOnlySpan<float> samples, int numSamples) { }
-    }
-    public abstract class FifoProcessor : SoundTouch.FifoSamplePipe
-    {
-        protected FifoProcessor(SoundTouch.FifoSamplePipe output) { }
-        public override int AvailableSamples { get; }
-        public override bool IsEmpty { get; }
-        protected SoundTouch.FifoSamplePipe Output { get; }
-        public override int AdjustAmountOfSamples(int numSamples) { }
-        public override System.Span<float> PtrBegin() { }
-        public override int ReceiveSamples(int maxSamples) { }
-        public override int ReceiveSamples(in System.Span<float> output, int maxSamples) { }
-        protected void SetOutPipe(SoundTouch.FifoSamplePipe output) { }
-    }
-    public sealed class FifoSampleBuffer : SoundTouch.FifoSamplePipe
-    {
-        public FifoSampleBuffer(int numberOfChannels = 2) { }
-        public override int AvailableSamples { get; }
-        public int Channels { get; set; }
-        public override bool IsEmpty { get; }
-        public void AddSilent(int numSamples) { }
-        public override int AdjustAmountOfSamples(int numSamples) { }
-        public override void Clear() { }
-        public override void Dispose() { }
-        public override System.Span<float> PtrBegin() { }
-        public System.Span<float> PtrEnd(int slackCapacity) { }
-        public void PutSamples(int numSamples) { }
-        public override void PutSamples(in System.ReadOnlySpan<float> samples, int numSamples) { }
-        public override int ReceiveSamples(int maxSamples) { }
-        public override int ReceiveSamples(in System.Span<float> output, int maxSamples) { }
-    }
-    public abstract class FifoSamplePipe : System.IDisposable
-    {
-        protected FifoSamplePipe() { }
-        public abstract int AvailableSamples { get; }
-        public abstract bool IsEmpty { get; }
-        public abstract int AdjustAmountOfSamples(int numSamples);
-        public abstract void Clear();
-        public virtual void Dispose() { }
-        public void MoveSamples(in SoundTouch.FifoSamplePipe other) { }
-        public abstract System.Span<float> PtrBegin();
-        public abstract void PutSamples(in System.ReadOnlySpan<float> samples, int numSamples);
-        public abstract int ReceiveSamples(int maxSamples);
-        public abstract int ReceiveSamples(in System.Span<float> output, int maxSamples);
-        protected static bool VerifyNumberOfChannels(int nChannels) { }
-    }
-    public enum SettingId
-    {
-        UseAntiAliasFilter = 0,
-        AntiAliasFilterLength = 1,
-        UseQuickSeek = 2,
-        SequenceDurationMs = 3,
-        SeekWindowDurationMs = 4,
-        OverlapDurationMs = 5,
-        NominalInputSequence = 6,
-        NominalOutputSequence = 7,
-        InitialLatency = 8,
-    }
-    public sealed class SoundTouchProcessor : SoundTouch.FifoProcessor
-    {
-        public SoundTouchProcessor() { }
-        public int Channels { get; set; }
-        public double Pitch { get; set; }
-        public double PitchOctaves { get; set; }
-        public double PitchSemiTones { get; set; }
-        public double Rate { get; set; }
-        public double RateChange { get; set; }
-        public int SampleRate { get; set; }
-        public double Tempo { get; set; }
-        public double TempoChange { get; set; }
-        public int UnprocessedSampleCount { get; }
-        public override void Clear() { }
-        public override void Dispose() { }
-        public void Flush() { }
-        public double GetInputOutputSampleRatio() { }
-        public int GetSetting(SoundTouch.SettingId settingId) { }
-        public override void PutSamples(in System.ReadOnlySpan<float> samples, int numSamples) { }
-        public override int ReceiveSamples(int maxSamples) { }
-        public override int ReceiveSamples(in System.Span<float> output, int maxSamples) { }
-        public bool SetSetting(SoundTouch.SettingId settingId, int value) { }
     }
 }

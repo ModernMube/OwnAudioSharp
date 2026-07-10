@@ -5,7 +5,6 @@ using OwnaudioNET.BufferManagement;
 using OwnaudioNET.Core;
 using OwnaudioNET.Events;
 using OwnaudioNET.Interfaces;
-using OwnaudioNET.Processing;
 using System;
 using System.IO;
 

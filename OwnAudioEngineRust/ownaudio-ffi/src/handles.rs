@@ -43,6 +43,15 @@ pub struct OwnAudioDecoderHandle {
     _private: [u8; 0],
 }
 
+/// Opaque handle to a native BPM detector.
+///
+/// Create with `ownaudio_v1_bpm_create`; release with `ownaudio_v1_bpm_destroy`. Wraps a boxed
+/// `ownaudio_soundtouch::BpmDetect` driven offline from the caller's thread.
+#[repr(C)]
+pub struct OwnAudioBpmHandle {
+    _private: [u8; 0],
+}
+
 // ---------------------------------------------------------------------------
 // Internal wrapper types — never exposed across the FFI boundary
 // ---------------------------------------------------------------------------

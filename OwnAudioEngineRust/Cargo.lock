@@ -844,6 +844,7 @@ dependencies = [
  "cbindgen",
  "cpal",
  "ownaudio-core",
+ "ownaudio-soundtouch",
 ]
 
 [[package]]

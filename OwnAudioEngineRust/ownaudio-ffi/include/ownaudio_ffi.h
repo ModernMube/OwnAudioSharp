@@ -155,6 +155,16 @@ typedef enum OwnHostApi {
 } OwnHostApi;
 
 /**
+ * Opaque handle to a native BPM detector.
+ *
+ * Create with `ownaudio_v1_bpm_create`; release with `ownaudio_v1_bpm_destroy`. Wraps a boxed
+ * `ownaudio_soundtouch::BpmDetect` driven offline from the caller's thread.
+ */
+typedef struct OwnAudioBpmHandle {
+    uint8_t _private[0];
+} OwnAudioBpmHandle;
+
+/**
  * Opaque handle to a streaming audio file decoder.
  *
  * Create with `ownaudio_v1_decoder_open`; release with
@@ -463,6 +473,47 @@ uint32_t ownaudio_v1_get_abi_version(void);
  * free it.  The string is derived from `version.json` at build time via `build.rs`.
  */
 const char *ownaudio_v1_get_package_version(void);
+
+/**
+ * Creates a BPM detector for the given channel count and input sample rate.
+ *
+ * - `channels` — interleaved channel count of the samples fed to
+ *   [`ownaudio_v1_bpm_input_samples`] (clamped to at least 1).
+ * - `sample_rate` — input sample rate in Hz.
+ * - `out_detector` — receives the new handle on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success. The handle must be released with
+ * `ownaudio_v1_bpm_destroy`.
+ */
+int32_t ownaudio_v1_bpm_create(uint32_t channels,
+                               uint32_t sample_rate,
+                               struct OwnAudioBpmHandle **out_detector);
+
+/**
+ * Feeds `num_samples` interleaved frames from `samples` into the detector.
+ *
+ * `samples` must point to at least `num_samples * channels` `f32` values (the channel count passed
+ * to `ownaudio_v1_bpm_create`).
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_bpm_input_samples(struct OwnAudioBpmHandle *handle,
+                                      const float *samples,
+                                      size_t num_samples,
+                                      size_t sample_count);
+
+/**
+ * Writes the current estimated tempo (in BPM) to `*out_bpm`, or `0.0` when there is not yet enough
+ * data for a reliable estimate.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_bpm_get_bpm(struct OwnAudioBpmHandle *handle, float *out_bpm);
+
+/**
+ * Destroys a BPM detector created by `ownaudio_v1_bpm_create`. Null is ignored.
+ */
+void ownaudio_v1_bpm_destroy(struct OwnAudioBpmHandle *handle);
 
 /**
  * Opens an audio file for streaming decoding and writes the handle to
