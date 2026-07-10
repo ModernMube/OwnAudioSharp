@@ -369,6 +369,52 @@ mod tests {
         assert_eq!(last, out.len(), "steady-state block must be fully produced");
     }
 
+    /// A tempo excursion (unity → slower → unity) must leave the unity passthrough transparent:
+    /// the pinned stretch stage recovers its full signal energy afterwards instead of settling into
+    /// a comb-filtered (phaser) passthrough, which is the audible defect this fixes.
+    #[test]
+    fn unity_energy_recovers_after_tempo_excursion() {
+        fn steady_rms(
+            s: &mut TrackStretch,
+            source: &mut Option<Box<dyn TrackSource>>,
+            tempo: f32,
+            blocks: usize,
+        ) -> f64 {
+            let mut out = vec![0.0f32; 1024];
+            let mut energy = 0.0f64;
+            let mut counted = 0usize;
+            for i in 0..blocks {
+                s.fill(source, &mut out, 2, tempo, 0.0);
+                if i >= blocks / 2 {
+                    energy += out.iter().map(|&v| (v as f64) * (v as f64)).sum::<f64>();
+                    counted += out.len();
+                }
+            }
+            (energy / counted.max(1) as f64).sqrt()
+        }
+
+        let mut s = TrackStretch::new(48000.0, 2, 4096);
+        let mut source: Option<Box<dyn TrackSource>> = Some(Box::new(SineSource {
+            phase: 0.0,
+            channels: 2,
+        }));
+
+        let unity_before = steady_rms(&mut s, &mut source, 1.0, 24);
+        assert!(
+            unity_before > 0.2,
+            "unity passthrough should carry the sine energy, got RMS {unity_before}"
+        );
+
+        let _ = steady_rms(&mut s, &mut source, 0.9, 24);
+        let unity_after = steady_rms(&mut s, &mut source, 1.0, 48);
+
+        assert!(
+            unity_after > 0.9 * unity_before,
+            "unity energy must recover after a tempo excursion (no persistent phaser): \
+             before RMS {unity_before}, after RMS {unity_after}"
+        );
+    }
+
     #[test]
     fn pitch_only_produces_output() {
         let mut s = TrackStretch::new(44100.0, 2, 4096);

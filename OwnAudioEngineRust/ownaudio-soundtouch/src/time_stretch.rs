@@ -305,6 +305,15 @@ impl TimeStretch {
     }
 
     fn seek_best_overlap_position(&self, ref_pos: &[f32]) -> usize {
+        // At unity tempo the nominal join (offset 0) reconstructs the signal exactly: consecutive
+        // windowed sequences advance by `seek_window - overlap` and overlap-add back to the input.
+        // Running the correlation search here would instead lock onto a shifted "best" match and
+        // comb-filter the passthrough (an audible phaser), and — because the shift is sticky — a
+        // track that was time-stretched and then returned to unity would never recover its clarity.
+        // Skipping the search keeps unity transparent and lets such a track heal immediately.
+        if (self.tempo - 1.0).abs() < 1e-6 {
+            return 0;
+        }
         if self.quick_seek {
             self.seek_best_overlap_position_quick(ref_pos)
         } else {
