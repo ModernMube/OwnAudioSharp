@@ -30,19 +30,11 @@ public sealed partial class AudioMixer
             }
         }
 
-        _shouldStop = false;
         _isRunning = true;
         _pauseEvent.Set();
 
-        if (_rustNative)
-        {
-            StartRustOutput();
-            StartRustSyncTick();
-            return;
-        }
-
-        if (!_mixThread.IsAlive)
-            _mixThread.Start();
+        StartRustOutput();
+        StartRustSyncTick();
     }
 
     /// <summary>
@@ -76,22 +68,10 @@ public sealed partial class AudioMixer
         if (!_isRunning)
             return;
 
-        _shouldStop = true;
         _pauseEvent.Reset();
 
-        if (_rustNative)
-        {
-            StopRustOutput();
-            StopRustSyncTick();
-        }
-
-        // if (_mixThread.IsAlive)
-        // {
-        //     if (!_mixThread.Join(TimeSpan.FromSeconds(2)))
-        //     {
-        //         // Thread didn't exit gracefully
-        //     }
-        // }
+        StopRustOutput();
+        StopRustSyncTick();
 
         // Stop all sources
         foreach (var source in _sources.Values)

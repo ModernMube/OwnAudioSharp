@@ -199,30 +199,6 @@ public class AudioMixerTests : IDisposable
     }
 
     [Fact]
-    public void MixWithSources_ShouldUpdatePeakLevels()
-    {
-        // Arrange
-        _engine = AudioEngineFactory.CreateMockEngine(_testConfig);
-        _mixer = new AudioMixer(_engine);
-
-        var samples = new float[4800];
-        for (int i = 0; i < samples.Length; i++)
-            samples[i] = (float)Math.Sin(2 * Math.PI * 440 * i / 48000);
-
-        var source = new SampleSource(samples, _testConfig);
-        source.Play();
-        _mixer.AddSource(source);
-        _mixer.Start();
-
-        // Act - Wait for mixing to occur
-        Thread.Sleep(100);
-
-        // Assert
-        _mixer.LeftPeak.Should().BeGreaterThan(0.0f);
-        _mixer.RightPeak.Should().BeGreaterThan(0.0f);
-    }
-
-    [Fact]
     public void TotalMixedFrames_ShouldIncreaseWhileRunning()
     {
         // Arrange

@@ -36,29 +36,8 @@ public sealed partial class AudioMixer : IDisposable
     /// <summary>
     /// Thread-safe dictionary of all currently registered audio sources keyed by their unique identifier.
     /// Mutations (add / remove) happen exclusively on the main thread.
-    /// The audio thread never enumerates this dictionary; it uses <c>_cachedSourcesArray</c> instead.
     /// </summary>
     private readonly ConcurrentDictionary<Guid, IAudioSource> _sources;
-
-    /// <summary>
-    /// Snapshot array of registered sources consumed by the mix thread.
-    /// Written by the mix thread after adopting <c>_pendingSourcesArray</c>; never written by the main thread.
-    /// </summary>
-    private IAudioSource[] _cachedSourcesArray = Array.Empty<IAudioSource>();
-
-    /// <summary>
-    /// Staging field where the main thread publishes a freshly built sources array before
-    /// signalling the mix thread via <c>_sourcesArrayNeedsUpdate</c>.
-    /// Written exclusively on the main thread via <see cref="Volatile.Write"/>;
-    /// read exclusively on the mix thread via <see cref="Volatile.Read"/>.
-    /// </summary>
-    private IAudioSource[]? _pendingSourcesArray;
-
-    /// <summary>
-    /// Flag that signals the mix thread to swap <c>_cachedSourcesArray</c> with <c>_pendingSourcesArray</c>.
-    /// Declared <see langword="volatile"/> to guarantee cross-thread visibility without a lock.
-    /// </summary>
-    private volatile bool _sourcesArrayNeedsUpdate = true;
 
     /// <summary>
     /// Reusable point-in-time snapshot of the sources, consumed by the Rust-native control-rate sync
@@ -91,22 +70,9 @@ public sealed partial class AudioMixer : IDisposable
     private readonly object _metricsLock = new();
 
     /// <summary>
-    /// The dedicated high-priority background thread that runs <c>MixThreadLoop</c>.
-    /// Created and started once; lives for the lifetime of the mixer instance.
-    /// </summary>
-    private readonly Thread _mixThread;
-
-    /// <summary>
-    /// Event used to pause the mix thread when the mixer is stopped without being disposed.
-    /// The mix thread waits on this event in its idle state.
+    /// Event retained for lifecycle coordination when the mixer is stopped without being disposed.
     /// </summary>
     private readonly ManualResetEventSlim _pauseEvent;
-
-    /// <summary>
-    /// When set to <see langword="true"/> the mix thread exits its loop on the next iteration.
-    /// Declared <see langword="volatile"/> to guarantee visibility from the main thread.
-    /// </summary>
-    private volatile bool _shouldStop;
 
     /// <summary>
     /// Indicates whether the mixer is actively producing audio.
@@ -126,9 +92,6 @@ public sealed partial class AudioMixer : IDisposable
     /// and stops, rather than spinning on a deterministic failure indefinitely.
     /// </summary>
     private const int LoopErrorFaultThreshold = 500;
-
-    /// <summary>Consecutive-error counter for the mix thread loop (see <c>HandleLoopError</c>).</summary>
-    private int _mixThreadConsecutiveErrors;
 
     /// <summary>Consecutive-error counter for the Rust-native control-rate sync tick.</summary>
     private int _rustSyncConsecutiveErrors;
@@ -172,11 +135,6 @@ public sealed partial class AudioMixer : IDisposable
     /// </summary>
     private volatile float _rightPeak;
 
-    /// <summary>
-    /// Cumulative count of audio frames mixed since the mixer was last started.
-    /// Incremented atomically on the mix thread via <see cref="Interlocked.Add"/>.
-    /// </summary>
-    private long _totalMixedFrames;
 
 #pragma warning disable CS0649
     /// <summary>
@@ -211,12 +169,6 @@ public sealed partial class AudioMixer : IDisposable
     /// Used for registration with the <see cref="OwnaudioNet"/> static registry.
     /// </summary>
     private readonly Guid _mixerId;
-
-    /// <summary>
-    /// Guards against raising <see cref="PlaybackEnded"/> more than once per playback session.
-    /// Reset to <see langword="false"/> whenever a new source is added.
-    /// </summary>
-    private volatile bool _playbackEndedFired;
 
     /// <summary>
     /// Tracks whether the mixer has been disposed to prevent use-after-dispose errors.
@@ -277,11 +229,10 @@ public sealed partial class AudioMixer : IDisposable
     public float RightPeak => _rightPeak;
 
     /// <summary>
-    /// Gets the total number of audio frames mixed and sent to the output engine
-    /// since the mixer was last started.
-    /// The value is read atomically via <see cref="Interlocked.Read"/> and is safe to access from any thread.
+    /// Gets the total number of audio frames rendered since the mixer was last started, taken from
+    /// the master clock the native mixer advances.
     /// </summary>
-    public long TotalMixedFrames => Interlocked.Read(ref _totalMixedFrames);
+    public long TotalMixedFrames => _masterClock.CurrentSamplePosition;
 
     /// <summary>
     /// Gets the total number of buffer underrun events detected since the mixer was last started.
@@ -435,16 +386,8 @@ public sealed partial class AudioMixer : IDisposable
         _mixIntervalMs = Math.Max(1, (int)Math.Round(quarterBufferTimeMs));
 
         _pauseEvent = new ManualResetEventSlim(false);
-        _shouldStop = false;
         _isRunning = false;
         _isRecording = false;
-
-        _mixThread = new Thread(MixThreadLoop)
-        {
-            Name = "AudioMixer.MixThread",
-            IsBackground = true,
-            Priority = ThreadPriority.Highest
-        };
 
         OwnaudioNet.RegisterAudioMixer(this);
     }

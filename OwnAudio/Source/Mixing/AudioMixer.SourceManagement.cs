@@ -51,7 +51,6 @@ public sealed partial class AudioMixer
 
             source.Error += OnSourceError;
             RebuildSourcesCache();
-            _playbackEndedFired = false;
             if (_isRunning && source.State != AudioState.Playing)
             {
                 try
@@ -102,7 +101,6 @@ public sealed partial class AudioMixer
 
             source.Error += OnSourceError;
             RebuildSourcesCache();
-            _playbackEndedFired = false;
         }
 
         return added;
@@ -222,22 +220,14 @@ public sealed partial class AudioMixer
 
     /// <summary>
     /// Builds a fresh point-in-time snapshot of the sources collection on the calling
-    /// (main or control) thread, then publishes the new array to the audio thread via
-    /// a single <see cref="Volatile.Write"/> so the mix loop can adopt it without any
-    /// lock or heap allocation on the real-time thread.
-    /// This method must be called exclusively from the main or control thread
-    /// immediately after any mutation of the sources collection.
+    /// (main or control) thread and publishes it to the Rust-native control tick via a single
+    /// <see cref="Volatile.Write"/>, so the tick can iterate it without a lock or a fresh
+    /// dictionary snapshot on every tick. Called immediately after any mutation of the sources
+    /// collection.
     /// </summary>
     private void RebuildSourcesCache()
     {
         var newArray = _sources.Values.ToArray();
-        Volatile.Write(ref _pendingSourcesArray, newArray);
-        _sourcesArrayNeedsUpdate = true;
-
-        // Publish the same immutable snapshot to the Rust-native control tick so it can iterate
-        // without allocating a fresh dictionary snapshot on every tick. Reuses the array already
-        // built above; the mix thread nulls _pendingSourcesArray after adopting it, so the tick
-        // needs its own stable reference.
         Volatile.Write(ref _rustSourceSnapshot, newArray);
     }
 
