@@ -65,6 +65,7 @@
     <Compile Remove="Features\ChorDetect\**\*.cs" />
     <Compile Remove="Features\Matchering\**\*.cs" />
     <Compile Remove="Features\Extensions\AudioReaderNote.cs" />
+    <Compile Remove="Features\Extensions\OrtInference.cs" />
     <Compile Remove="Visualization\**\*.cs" />
   </ItemGroup>
 
