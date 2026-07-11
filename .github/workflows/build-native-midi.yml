@@ -292,6 +292,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@v4
@@ -329,14 +330,35 @@ jobs:
           copy_if_exists "native-dl/midi-native-macos/osx-x64/libownaudio_midi_ffi.dylib"     "$RUNTIMES/osx-x64/native/libownaudio_midi_ffi.dylib"
           copy_if_exists "native-dl/midi-native-macos/osx-arm64/libownaudio_midi_ffi.dylib"   "$RUNTIMES/osx-arm64/native/libownaudio_midi_ffi.dylib"
 
-      - name: Commit and push
+      - name: Commit, push to bot branch and open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add OwnAudio/Midi/runtimes/
           if git diff --cached --quiet; then
             echo "No changes in runtimes/ -- nothing to commit."
-          else
-            git commit -m "chore(midi-runtimes): update ownaudio_midi_ffi native binaries [skip ci]"
-            git push origin HEAD:${{ github.ref_name }}
+            exit 0
           fi
+
+          BOT_BRANCH="bot/midi-runtimes-update-${{ github.run_id }}"
+          git checkout -b "$BOT_BRANCH"
+          git commit -m "chore(midi-runtimes): update ownaudio_midi_ffi native binaries [skip ci]"
+          git push origin "$BOT_BRANCH"
+
+          gh pr create \
+            --base "${{ github.ref_name }}" \
+            --head "$BOT_BRANCH" \
+            --title "chore(midi-runtimes): update native binaries (run #${{ github.run_id }})" \
+            --body "Automated PR: frissített Rust native binárisok a \`OwnAudio/Midi/runtimes/\` mappában.
+
+          Forrás workflow futtatás: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          _Ez a PR automatikusan jött létre a \`build-native-midi\` workflow által._" \
+            --label "automated" 2>/dev/null || \
+          gh pr create \
+            --base "${{ github.ref_name }}" \
+            --head "$BOT_BRANCH" \
+            --title "chore(midi-runtimes): update native binaries (run #${{ github.run_id }})" \
+            --body "Automated PR: updated Rust native binaries in \`OwnAudio/Midi/runtimes/\`."
