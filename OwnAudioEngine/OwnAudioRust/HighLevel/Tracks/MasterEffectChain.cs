@@ -291,6 +291,9 @@ public sealed class MasterEffectChain
             EffectType.PitchShift  => new PitchShiftEffect(handle, _mixerHandle),
             EffectType.DynamicAmp  => new DynamicAmpEffect(handle, _mixerHandle),
             EffectType.Equalizer30 => new Equalizer30Effect(handle, _mixerHandle),
+            // The SmartMaster composite has no strongly-typed managed wrapper; the managed
+            // SmartMasterEffect is the parameter model and mirrors onto this native effect by id.
+            EffectType.SmartMaster => new NativeSmartMasterEffect(),
             _ => throw new ArgumentOutOfRangeException(nameof(effectType)),
         };
     }

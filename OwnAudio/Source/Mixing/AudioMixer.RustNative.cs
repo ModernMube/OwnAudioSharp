@@ -735,11 +735,12 @@ public sealed partial class AudioMixer
 
         if (!RustEffectAdapters.TryGetEffectType(effect, out var effectType))
         {
-            // No native counterpart (the composite SmartMaster): in the Rust-native chain its managed
-            // DSP does not run, so it produces no master processing.
+            // No native counterpart: in the Rust-native chain the managed DSP does not run, so the
+            // effect produces no master processing. (SmartMaster is routed natively via its own
+            // adapter; VST3 has its dedicated hosting branch above.)
             System.Diagnostics.Debug.WriteLine(
                 $"[OwnAudio] Master effect '{effect.GetType().Name}' has no native adapter and is " +
-                "inactive in the Rust-native chain (SmartMaster is a composite).");
+                "inactive in the Rust-native chain.");
             return;
         }
 
@@ -900,8 +901,9 @@ public sealed partial class AudioMixer
     /// <remarks>
     /// The per-track effects are added directly to the wrapper (<c>SourceWithEffects.AddEffect</c>),
     /// not through the mixer, so there is no explicit hook; the wrapper's effect list is polled here
-    /// and the native chain rebuilt in order whenever it changes (adaptable effects only — VST3 /
-    /// SmartMaster are skipped). Parameters are then mirrored every tick.
+    /// and the native chain rebuilt in order whenever it changes (effects with a registered adapter,
+    /// including the composite SmartMaster, plus natively-hosted VST3). Parameters are then mirrored
+    /// every tick.
     /// </remarks>
     internal void ReconcileRustTrackEffectsOnce()
     {
@@ -937,9 +939,10 @@ public sealed partial class AudioMixer
 
                     foreach (IEffectProcessor effect in managed)
                     {
-                        // VST3 plugins are hosted natively on the track (plan E.6); other adaptable
-                        // built-ins go through their native DSP counterpart. Non-adaptable effects
-                        // (SmartMaster, or a VST not yet audio-initialized) are skipped this pass.
+                        // VST3 plugins are hosted natively on the track (plan E.6); other effects with
+                        // a registered adapter — including the composite SmartMaster — go through their
+                        // native counterpart. Effects without an adapter (or a VST not yet
+                        // audio-initialized) are skipped this pass.
                         if (effect is VST3EffectProcessor vst && vst.CanHostNatively)
                         {
                             object native = track.Effects.AddVst(

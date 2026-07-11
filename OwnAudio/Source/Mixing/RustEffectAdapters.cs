@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using OwnaudioNET.Interfaces;
 using ME = OwnaudioNET.Effects;
+using SM = OwnaudioNET.Effects.SmartMaster;
 using EffectType = Ownaudio.Audio.Effects.EffectType;
 
 namespace OwnaudioNET.Mixing;
@@ -21,9 +22,12 @@ namespace OwnaudioNET.Mixing;
 /// properties themselves.
 /// </para>
 /// <para>
-/// Only the built-in effect types with a registered adapter are routed to native. Effects without a
-/// native counterpart — VST3 (see plan E.6) and the composite <c>SmartMasterEffect</c> — are skipped
-/// and produce no native processing until their dedicated support lands.
+/// Only the effect types with a registered adapter are routed to native. This includes the composite
+/// <c>SmartMasterEffect</c>, which maps to the single native <see cref="EffectType.SmartMaster"/>
+/// effect (its whole DSP chain runs natively, with <see cref="MirrorSmartMaster"/> pushing the managed
+/// <c>SmartMasterConfig</c> onto the native parameters). VST3 is not routed through this registry — it
+/// is hosted natively through its own dedicated bridge (plan E.6). Any other effect without a
+/// registered adapter is skipped and produces no native processing.
 /// </para>
 /// </remarks>
 internal static class RustEffectAdapters
@@ -60,6 +64,7 @@ internal static class RustEffectAdapters
             [typeof(ME.AutoGainEffect)]         = new Adapter(EffectType.AutoGain, MirrorAutoGain),
             [typeof(ME.EnhancerEffect)]         = new Adapter(EffectType.Enhancer, MirrorEnhancer),
             [typeof(ME.DynamicAmpEffect)]       = new Adapter(EffectType.DynamicAmp, MirrorDynamicAmp),
+            [typeof(SM.SmartMasterEffect)]      = new Adapter(EffectType.SmartMaster, MirrorSmartMaster),
         };
 
     /// <summary>
@@ -246,5 +251,60 @@ internal static class RustEffectAdapters
         sink(7, d.MaxGainReductionDb);          // dB
         sink(8, d.RmsWindowSeconds);            // s
         sink(9, d.MaxGainChangePerSecondDb);    // dB/s
+    }
+
+    /// <summary>
+    /// Mirrors the composite <see cref="SM.SmartMasterEffect"/>'s current configuration onto its
+    /// single native <see cref="EffectType.SmartMaster"/> effect. The managed effect stays the
+    /// parameter model (UI / preset owner); the whole DSP chain runs natively.
+    /// </summary>
+    /// <remarks>
+    /// The parameter ids and units match the native composite's contract (see the Rust
+    /// <c>smartmaster</c> module): EQ band gains occupy ids 2–31 (dB), then subharmonic (32–33),
+    /// compressor (34–38, threshold kept as the config's linear 0–1 value and converted to dB
+    /// natively), crossover frequency (39), phase-alignment delays/inversions (40–45) and the limiter
+    /// (46–48). The common enable/mix (ids 0–1) are pushed by the base <see cref="Mirror"/>.
+    /// </remarks>
+    private static void MirrorSmartMaster(IEffectProcessor e, ParamSink sink)
+    {
+        var sm = (SM.SmartMasterEffect)e;
+        SM.SmartMasterConfig cfg = sm.GetConfiguration();
+
+        // Graphic EQ: 30 band gains in dB (ids 2..31). GraphicEQGains is oversized (31); use the
+        // first 30, matching the native 30-band equalizer.
+        float[] eqGains = cfg.GraphicEQGains;
+        for (int i = 0; i < 30; i++)
+        {
+            sink((uint)(2 + i), (eqGains is not null && i < eqGains.Length) ? eqGains[i] : 0f);
+        }
+
+        // Subharmonic synthesizer.
+        sink(32, cfg.SubharmonicEnabled ? 1f : 0f);
+        sink(33, cfg.SubharmonicMix);           // 0–1
+
+        // Compressor. Threshold is the config's linear 0–1 value; the native effect converts it to dB.
+        sink(34, cfg.CompressorEnabled ? 1f : 0f);
+        sink(35, cfg.CompressorThreshold);      // linear 0–1
+        sink(36, cfg.CompressorRatio);          // N:1
+        sink(37, cfg.CompressorAttack);         // ms
+        sink(38, cfg.CompressorRelease);        // ms
+
+        // Crossover split frequency.
+        sink(39, cfg.CrossoverFrequency);       // Hz
+
+        // Phase alignment: per-channel delays (ms) and polarity flips for L, R, Sub.
+        float[] delays = cfg.TimeDelays;
+        bool[] invert = cfg.PhaseInvert;
+        sink(40, (delays is not null && delays.Length > 0) ? delays[0] : 0f);
+        sink(41, (delays is not null && delays.Length > 1) ? delays[1] : 0f);
+        sink(42, (delays is not null && delays.Length > 2) ? delays[2] : 0f);
+        sink(43, (invert is not null && invert.Length > 0 && invert[0]) ? 1f : 0f);
+        sink(44, (invert is not null && invert.Length > 1 && invert[1]) ? 1f : 0f);
+        sink(45, (invert is not null && invert.Length > 2 && invert[2]) ? 1f : 0f);
+
+        // Brick-wall limiter.
+        sink(46, cfg.LimiterThreshold);         // dBFS
+        sink(47, cfg.LimiterCeiling);           // dBFS
+        sink(48, cfg.LimiterRelease);           // ms
     }
 }

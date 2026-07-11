@@ -20,8 +20,8 @@ use std::sync::Mutex;
 
 use ownaudio_core::effects::{
     AutoGain, Chorus, Compressor, Delay, Distortion, DynamicAmp, Effect, Enhancer, Equalizer,
-    Equalizer30, Flanger, Gate, Limiter, Overdrive, Phaser, Reverb, Rotary, VstAudioBuffer,
-    VstEffect,
+    Equalizer30, Flanger, Gate, Limiter, Overdrive, Phaser, Reverb, Rotary, SmartMaster,
+    VstAudioBuffer, VstEffect,
 };
 use ownaudio_core::multitrack::{MultiTrackMixer, TrackSource, TrackState};
 
@@ -114,6 +114,7 @@ fn effect_process_is_allocation_free_in_steady_state() {
         ("Enhancer", Box::new(Enhancer::new(SAMPLE_RATE))),
         ("Gate", Box::new(Gate::new(SAMPLE_RATE))),
         ("DynamicAmp", Box::new(DynamicAmp::new(SAMPLE_RATE))),
+        ("SmartMaster", Box::new(SmartMaster::new(SAMPLE_RATE))),
     ];
 
     for (name, mut effect) in effects {

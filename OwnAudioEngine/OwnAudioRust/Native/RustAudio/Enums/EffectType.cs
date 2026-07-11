@@ -62,4 +62,10 @@ internal enum NativeEffectType : uint
 
     /// <summary>30-band 1/3-octave parametric equalizer.</summary>
     Equalizer30 = 16,
+
+    /// <summary>External VST3 plugin hosted through a C ABI process callback.</summary>
+    Vst = 17,
+
+    /// <summary>SmartMaster composite mastering chain, hosted as one native effect.</summary>
+    SmartMaster = 18,
 }

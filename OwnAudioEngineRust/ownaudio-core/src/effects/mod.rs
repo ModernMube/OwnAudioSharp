@@ -17,6 +17,7 @@ pub mod phaser;
 pub mod pitch_shift;
 pub mod reverb;
 pub mod rotary;
+pub mod smartmaster;
 pub mod vst;
 
 pub use autogain::AutoGain;
@@ -36,6 +37,7 @@ pub use phaser::Phaser;
 pub use pitch_shift::PitchShift;
 pub use reverb::Reverb;
 pub use rotary::Rotary;
+pub use smartmaster::SmartMaster;
 pub use vst::{VstAudioBuffer, VstEffect, VstProcessFn};
 
 // ---------------------------------------------------------------------------
@@ -89,6 +91,10 @@ pub enum EffectType {
     /// its own — it forwards each audio block to a plugin handle that lives on
     /// the C# control plane (see [`vst::VstEffect`]).
     Vst = 17,
+    /// SmartMaster composite mastering chain (graphic EQ → subharmonic →
+    /// compressor → crossover/phase alignment → limiter), hosted as one native
+    /// effect (see [`smartmaster::SmartMaster`]).
+    SmartMaster = 18,
 }
 
 impl TryFrom<u32> for EffectType {
@@ -114,6 +120,7 @@ impl TryFrom<u32> for EffectType {
             15 => Ok(Self::DynamicAmp),
             16 => Ok(Self::Equalizer30),
             17 => Ok(Self::Vst),
+            18 => Ok(Self::SmartMaster),
             _ => Err(()),
         }
     }
