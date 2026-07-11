@@ -81,11 +81,15 @@ Reverb, equalizer, compressor, limiter, chorus, delay, distortion and more — f
 ### VST3 Plugin Support
 Load VST3 effect plugins and use their native cross-platform editor GUI, integrated into the effect chain like any built-in effect.
 
+> Full guide: [OwnAudio/Source/Effects/VST/README.md](OwnAudio/Source/Effects/VST/README.md)
+
 ### Simple Recording & Playback
 Straightforward capture from any input device with configurable sample rate, buffer size and channel count.
 
 ### SmartMaster — Automatic Speaker Calibration
 Measures your speakers with a microphone and corrects the output automatically. Includes speaker profiles (HiFi, Headphone, Studio, Club, Concert), a 31-band EQ, multiband compression and a brick-wall limiter.
+
+> Full guide: [OwnAudio/Source/Effects/SmartMaster/README.md](OwnAudio/Source/Effects/SmartMaster/README.md)
 
 ### NetworkSync — Multi-Device Synchronization
 Synchronizes playback across devices on the local network with sample-accurate precision (< 5 ms on LAN). Zero-configuration with automatic server discovery.
@@ -93,8 +97,12 @@ Synchronizes playback across devices on the local network with sample-accurate p
 ### Audio Matchering — Reference-Based Mastering
 Analyzes a reference track and applies its spectral and dynamic characteristics to your audio for professional mastering results.
 
+> Full guide: [OwnAudio/Source/Features/Matchering/README.md](OwnAudio/Source/Features/Matchering/README.md)
+
 ### Chord Detection — Real-Time Musical Analysis
 Recognizes major, minor, diminished, augmented and extended chords (7th–13th) from audio in real time or offline, using a chromagram-based pipeline.
+
+> Full guide: [OwnAudio/Source/Features/ChorDetect/README.md](OwnAudio/Source/Features/ChorDetect/README.md)
 
 ### MIDI — Hardware I/O, Files, and Clock
 
@@ -132,7 +140,8 @@ Application
 ```
 
 - **[Ownaudio.Core](OwnAudioEngine/Ownaudio.Core/README.md)** — platform-agnostic interfaces, lock-free ring buffers, SIMD converters and object pools.
-- **[OwnAudioRust](OwnAudioEngine/OwnAudioRust/HighLevel/README.md)** — the C# binding stack (HighLevel → Safe → Native) over the Rust core.
+- **OwnAudioRust** — the C# binding stack over the Rust core, in three layers: **[HighLevel](OwnAudioEngine/OwnAudioRust/HighLevel/README.md)** → **[Safe](OwnAudioEngine/OwnAudioRust/Safe/README.md)** → **[Native](OwnAudioEngine/OwnAudioRust/Native/README.md)**.
+- **Native Rust engine** — **[ownaudio-ffi](OwnAudioEngineRust/ownaudio-ffi/README.md)** (the C ABI boundary) wrapping **[ownaudio-core](OwnAudioEngineRust/ownaudio-core/README.md)** (decoding, mixing, effects, resampling, playback and capture).
 
 All blocking engine methods (`Initialize`, `Stop`, `Send`) must be called off the UI thread. The high-level `OwnaudioNet` API handles threading internally.
 
