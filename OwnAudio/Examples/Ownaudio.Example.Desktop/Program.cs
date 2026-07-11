@@ -189,7 +189,7 @@ public class TestProgram
             fileSource0.Volume = 1.0f;
             fileSource1.Volume = 1.0f;
             fileSource2.Volume = 1.0f;
-            fileSource3.Volume = 1.0f;
+            fileSource3.Volume = 0.65f;
 
             Console.WriteLine($"  ✓ File source created");
             Console.WriteLine($"  ✓ Format: {fileSource0.Config.ToString()}");
@@ -222,7 +222,7 @@ public class TestProgram
                 time: 375,            // 375ms (eighth note at 120 BPM)
                 repeat: 0.25f,        // Subtle feedback
                 mix: 0.15f,           // Low in mix
-                damping: 0.4f         // Warm repeats
+                damping: 0.15f         // Warm repeats
             );
 
             // 3. Reverb - ambience
@@ -233,7 +233,7 @@ public class TestProgram
                 dry: 0.75f,           // Dry signal
                 stereoWidth: 0.8f,    // Wide stereo
                 gainLevel: 0.015f,    // Standard gain
-                mix: 0.25f            // 25% wet mix
+                mix: 0.15f            // 25% wet mix
             );
 
             var fileSource3Effect = new SourceWithEffects(fileSource3);

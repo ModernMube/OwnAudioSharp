@@ -17,13 +17,13 @@ namespace ChordDetect
 
                     string audioFilePath = @"/path/audio/music.mp3";
 
-                    FileSource audioSource = new FileSource(audioFilePath);
-
                     if (!File.Exists(audioFilePath))
                     {
                         Console.WriteLine($"Audio file not found: {audioFilePath}");
                         return;
                     }
+
+                    FileSource audioSource = new FileSource(audioFilePath);
 
                     Console.WriteLine($"Audio loaded successfully!");
                     Console.WriteLine($"Duration: {audioSource.Duration}");

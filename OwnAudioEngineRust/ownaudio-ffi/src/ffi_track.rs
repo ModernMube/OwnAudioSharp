@@ -53,6 +53,7 @@ pub extern "C" fn ownaudio_v1_mixer_create(
             master_shared,
             sample_rate,
             channels,
+            capture_reader: None,
         });
 
         unsafe {
@@ -213,6 +214,121 @@ pub extern "C" fn ownaudio_v1_mixer_get_master_peaks(
         }
 
         OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+// ---------------------------------------------------------------------------
+// Master-output capture (recording)
+// ---------------------------------------------------------------------------
+
+/// Starts capturing the mixer's master output into a ring buffer so the control
+/// thread can persist the rendered mix (e.g. record to a file).
+///
+/// The mixer copies every fully rendered master block (post master effects and
+/// gain) into the ring; drain it with [`ownaudio_v1_mixer_capture_read`]. A slow
+/// drain never blocks rendering — overflow is dropped.
+///
+/// - `mixer` — valid mixer handle.
+/// - `capacity_samples` — ring capacity in interleaved samples (size for a few
+///   seconds of headroom, e.g. `sample_rate * channels * seconds`); `0` is
+///   treated as `1`.
+///
+/// Calling this while capture is already active replaces the previous ring.
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_mixer_capture_start(
+    mixer: *mut OwnAudioMixerHandle,
+    capacity_samples: usize,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        match wrapper.controller.start_capture(capacity_samples) {
+            Ok(reader) => {
+                wrapper.capture_reader = Some(reader);
+                OwnAudioErrorCode::Success as i32
+            }
+            Err(_) => {
+                set_last_error("mixer command queue is full; capture not started");
+                OwnAudioErrorCode::InternalError as i32
+            }
+        }
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Reads up to `len` captured samples into `out`, returning the number actually
+/// read through `*out_read` (fewer than `len` when the ring holds less; `0` when
+/// empty or when capture is not active).
+///
+/// Single-consumer: call only from one thread at a time, and never concurrently
+/// with [`ownaudio_v1_mixer_capture_stop`].
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_mixer_capture_read(
+    mixer: *mut OwnAudioMixerHandle,
+    out: *mut f32,
+    len: usize,
+    out_read: *mut usize,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out.is_null() || out_read.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        let read = match wrapper.capture_reader.as_mut() {
+            Some(reader) if len > 0 => {
+                let slice = unsafe { std::slice::from_raw_parts_mut(out, len) };
+                reader.read(slice)
+            }
+            _ => 0,
+        };
+
+        unsafe {
+            *out_read = read;
+        }
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Stops master-output capture and releases the ring's read side. The mixer's
+/// writer is cleared on the audio thread through the command queue.
+///
+/// Safe to call when capture is not active (no-op). Must not run concurrently
+/// with [`ownaudio_v1_mixer_capture_read`].
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_mixer_capture_stop(mixer: *mut OwnAudioMixerHandle) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        wrapper.capture_reader = None;
+        match wrapper.controller.stop_capture() {
+            Ok(()) => OwnAudioErrorCode::Success as i32,
+            Err(_) => {
+                set_last_error("mixer command queue is full; capture stop deferred");
+                OwnAudioErrorCode::InternalError as i32
+            }
+        }
     }));
 
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)

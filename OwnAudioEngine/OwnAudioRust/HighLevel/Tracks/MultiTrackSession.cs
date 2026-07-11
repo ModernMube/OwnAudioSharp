@@ -503,6 +503,83 @@ public sealed class MultiTrackSession : IDisposable
         return (left, right);
     }
 
+    /// <summary>
+    /// Starts capturing the mixer's master output (the summed mix after master
+    /// effects and gain, i.e. exactly what reaches the device) into a lock-free
+    /// ring so the control thread can persist it — for example, to record a WAV.
+    /// </summary>
+    /// <remarks>
+    /// Drain the ring with <see cref="ReadCapture"/> and stop with
+    /// <see cref="StopCapture"/>. Capture is non-blocking: if the drain falls
+    /// behind, overflowing samples are dropped rather than stalling rendering.
+    /// Calling this while capture is already active replaces the previous ring.
+    /// </remarks>
+    /// <param name="capacitySamples">Ring capacity in interleaved samples.</param>
+    /// <exception cref="ObjectDisposedException">Thrown when the session is disposed.</exception>
+    public void StartCapture(int capacitySamples)
+    {
+        ThrowIfDisposed();
+
+        int code = OwnAudioNative.ownaudio_v1_mixer_capture_start(
+            _mixerHandle.DangerousGetHandle(),
+            (nuint)Math.Max(1, capacitySamples));
+        ErrorCodeMapper.ThrowIfError(code, nameof(StartCapture));
+    }
+
+    /// <summary>
+    /// Reads up to <paramref name="destination"/><c>.Length</c> captured master
+    /// samples into <paramref name="destination"/>, returning the number actually
+    /// read (<c>0</c> when the ring is empty or capture is inactive).
+    /// </summary>
+    /// <remarks>
+    /// Single-consumer: call from one thread only, and never concurrently with
+    /// <see cref="StopCapture"/>.
+    /// </remarks>
+    /// <param name="destination">Buffer to fill with captured interleaved samples.</param>
+    /// <returns>The number of samples written into <paramref name="destination"/>.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the session is disposed.</exception>
+    public int ReadCapture(Span<float> destination)
+    {
+        ThrowIfDisposed();
+
+        if (destination.IsEmpty)
+        {
+            return 0;
+        }
+
+        nuint read;
+        int code;
+        unsafe
+        {
+            fixed (float* ptr = destination)
+            {
+                code = OwnAudioNative.ownaudio_v1_mixer_capture_read(
+                    _mixerHandle.DangerousGetHandle(),
+                    ptr,
+                    (nuint)destination.Length,
+                    out read);
+            }
+        }
+
+        ErrorCodeMapper.ThrowIfError(code, nameof(ReadCapture));
+        return (int)read;
+    }
+
+    /// <summary>
+    /// Stops master-output capture and releases the ring's read side. Safe to call
+    /// when capture is inactive. Must not run concurrently with
+    /// <see cref="ReadCapture"/>.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">Thrown when the session is disposed.</exception>
+    public void StopCapture()
+    {
+        ThrowIfDisposed();
+
+        int code = OwnAudioNative.ownaudio_v1_mixer_capture_stop(
+            _mixerHandle.DangerousGetHandle());
+        ErrorCodeMapper.ThrowIfError(code, nameof(StopCapture));
+    }
+
     #endregion
 
     #region IDisposable

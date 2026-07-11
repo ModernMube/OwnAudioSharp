@@ -3,7 +3,7 @@ use std::sync::Arc;
 use cpal::traits::DeviceTrait;
 
 use crate::{
-    config::{validate_input_config, validate_output_config, StreamConfig},
+    config::{validate_input_config_adaptive, validate_output_config, StreamConfig},
     device::{resolve_input_device, resolve_output_device, AudioDeviceInfo},
     error::{AudioError, Result},
     stream::{InputStream, OutputStream},
@@ -163,7 +163,8 @@ impl AudioEngine {
         mut callback: impl FnMut(&[f32]) + Send + 'static,
     ) -> Result<InputStream> {
         let cpal_device = resolve_input_device(&self.host, device.map(|d| d.name.as_str()))?;
-        let (stream_config, sample_format) = validate_input_config(&cpal_device, config)?;
+        let (stream_config, sample_format, device_channels) =
+            validate_input_config_adaptive(&cpal_device, config)?;
 
         // See `open_output_stream` for the rationale; the input path mirrors it.
         let error_state = Arc::new(StreamErrorState::new());
@@ -175,8 +176,27 @@ impl AudioEngine {
             }
         };
 
-        let pre_alloc =
-            config.buffer_size_frames.unwrap_or(4096) as usize * config.channels as usize;
+        // `tmp` (used by the integer paths below) holds device-native frames, so
+        // size it by the device channel count; `remap_scratch` holds the adapted
+        // output, so size it by the requested count.
+        let frames_hint = config.buffer_size_frames.unwrap_or(4096) as usize;
+        let pre_alloc = frames_hint * device_channels as usize;
+
+        // Adapt the device-native channel count to the requested one before the
+        // samples reach the user callback, so a mono-only capture device still
+        // feeds a stereo stream (and vice versa). Pre-sized so the remap allocates
+        // nothing on the audio thread once running; an exact match copies nothing.
+        let src_channels = device_channels as usize;
+        let dst_channels = config.channels as usize;
+        let mut remap_scratch: Vec<f32> = Vec::with_capacity(frames_hint * dst_channels);
+        let mut adapted = move |data: &[f32]| {
+            if src_channels == dst_channels {
+                callback(data);
+            } else {
+                crate::format::remap_channels_into(data, src_channels, dst_channels, &mut remap_scratch);
+                callback(&remap_scratch);
+            }
+        };
 
         // Each input callback body is wrapped in `rt_guard::guard_input` so a
         // panic cannot unwind across the cpal/C audio-thread frame (UB).  Input
@@ -185,7 +205,7 @@ impl AudioEngine {
             cpal::SampleFormat::F32 => cpal_device.build_input_stream(
                 stream_config,
                 move |data: &[f32], _| {
-                    crate::rt_guard::guard_input(|| callback(data));
+                    crate::rt_guard::guard_input(|| adapted(data));
                 },
                 err_fn,
                 None,
@@ -201,7 +221,7 @@ impl AudioEngine {
                             }
                             let buf = &mut tmp[..data.len()];
                             crate::format::i16_to_f32(data, buf);
-                            callback(buf);
+                            adapted(buf);
                         });
                     },
                     err_fn,
@@ -219,7 +239,7 @@ impl AudioEngine {
                             }
                             let buf = &mut tmp[..data.len()];
                             crate::format::u16_to_f32(data, buf);
-                            callback(buf);
+                            adapted(buf);
                         });
                     },
                     err_fn,

@@ -1,3 +1,4 @@
+using Ownaudio.Audio.Tracks;
 using Ownaudio.Core.Common;
 using OwnaudioNET.Core;
 
@@ -55,6 +56,15 @@ public sealed partial class AudioMixer
     private volatile bool _recorderDrainRunning;
 
     /// <summary>
+    /// Indicates that the active recording drains the native master-output capture
+    /// (Rust-native chain) rather than the managed <c>_recordingRingBuffer</c>.
+    /// In the Rust-native chain the mix is rendered natively and never passes
+    /// through the managed mix thread, so the recorder taps the mixer's native
+    /// master-output capture instead. Written and read only under <c>_recorderLock</c>.
+    /// </summary>
+    private bool _recorderUsesRustCapture;
+
+    /// <summary>
     /// Starts recording the mixed audio output to a WAV file using a lock-free pipeline.
     /// The mix thread pushes samples into a <see cref="LockFreeRingBuffer{T}"/> without
     /// any lock; a dedicated low-priority drain thread reads from that buffer and writes
@@ -77,6 +87,15 @@ public sealed partial class AudioMixer
         {
             if (_isRecording)
                 throw new InvalidOperationException("Already recording. Call StopRecording() first.");
+
+            // Rust-native chain: the mix is rendered natively and never reaches the managed
+            // mix thread, so tap the mixer's native master-output capture instead of the
+            // managed ring (which WriteToRecorder would fill only in the legacy chain).
+            if (_rustNative)
+            {
+                StartRustCaptureRecording(filePath);
+                return;
+            }
 
             try
             {
@@ -106,6 +125,55 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
+    /// Starts a Rust-native recording: begins native master-output capture on the shared
+    /// session and spins up a drain thread that writes the captured mix to the WAV file.
+    /// Must be called while holding <c>_recorderLock</c>.
+    /// </summary>
+    /// <param name="filePath">Output WAV file path.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when there is no active native session to record, or when capture cannot start.
+    /// </exception>
+    private void StartRustCaptureRecording(string filePath)
+    {
+        MultiTrackSession? session;
+        lock (_rustSessionLock)
+        {
+            session = _rustSession;
+        }
+
+        if (session is null)
+            throw new InvalidOperationException(
+                "Cannot record before audio is playing. Add a source and start the mixer, then start recording.");
+
+        try
+        {
+            _recorder = new WaveFileWriter(filePath, _config);
+            session.StartCapture(RecordingRingBufferCapacity);
+            _recorderUsesRustCapture = true;
+            _recorderDrainRunning = true;
+            _isRecording = true;
+
+            _recorderDrainThread = new Thread(RustCaptureDrainLoop)
+            {
+                Name = "AudioMixer.RustCaptureDrain",
+                IsBackground = true,
+                Priority = ThreadPriority.BelowNormal
+            };
+            _recorderDrainThread.Start();
+        }
+        catch (Exception ex)
+        {
+            _recorderDrainRunning = false;
+            _isRecording = false;
+            _recorderUsesRustCapture = false;
+            try { session.StopCapture(); } catch { }
+            _recorder?.Dispose();
+            _recorder = null;
+            throw new InvalidOperationException($"Failed to start recording: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
     /// Stops an active recording session, signals the drain thread to flush remaining
     /// buffered samples, and closes the WAV file.
     /// Blocks for up to two seconds to allow the drain thread to finish writing.
@@ -126,6 +194,12 @@ public sealed partial class AudioMixer
             _recorderDrainThread?.Join(TimeSpan.FromSeconds(2));
             _recorderDrainThread = null;
 
+            if (_recorderUsesRustCapture)
+            {
+                StopRustCaptureRecording();
+                return;
+            }
+
             try
             {
                 _recorder?.Dispose();
@@ -135,6 +209,96 @@ public sealed partial class AudioMixer
             {
                 _recorder = null;
                 _recordingRingBuffer = null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Finalises a Rust-native recording after the drain thread has been joined:
+    /// flushes any samples still buffered in the native capture ring, stops native
+    /// capture, and closes the WAV file. Must be called while holding <c>_recorderLock</c>.
+    /// The drain thread is already stopped, so the native ring has a single reader here.
+    /// </summary>
+    private void StopRustCaptureRecording()
+    {
+        MultiTrackSession? session;
+        lock (_rustSessionLock)
+        {
+            session = _rustSession;
+        }
+
+        try
+        {
+            if (session is not null && _recorder is not null)
+            {
+                float[] tail = new float[4096];
+                int read;
+                while ((read = session.ReadCapture(tail)) > 0)
+                {
+                    _recorder.WriteSamples(tail.AsSpan(0, read));
+                }
+            }
+
+            session?.StopCapture();
+        }
+        catch { }
+        finally
+        {
+            try { _recorder?.Dispose(); } catch { }
+            _recorder = null;
+            _recorderUsesRustCapture = false;
+        }
+    }
+
+    /// <summary>
+    /// Background drain loop for Rust-native recording: pulls captured master-output
+    /// samples from the native session ring and writes them to the WAV file. Runs on a
+    /// dedicated low-priority thread and is the sole reader of the capture ring and the
+    /// sole writer of <c>_recorder</c> while running, so it takes no lock (it is joined
+    /// before <see cref="StopRustCaptureRecording"/> touches either). Sleeps briefly when
+    /// the ring is empty to avoid spinning.
+    /// </summary>
+    private void RustCaptureDrainLoop()
+    {
+        const int DrainChunkSize = 4096;
+        float[] drainBuffer = new float[DrainChunkSize];
+
+        while (_recorderDrainRunning)
+        {
+            MultiTrackSession? session;
+            lock (_rustSessionLock)
+            {
+                session = _rustSession;
+            }
+
+            if (session is null)
+                break;
+
+            int read;
+            try
+            {
+                read = session.ReadCapture(drainBuffer);
+            }
+            catch
+            {
+                break;
+            }
+
+            if (read <= 0)
+            {
+                Thread.Sleep(1);
+                continue;
+            }
+
+            try
+            {
+                _recorder?.WriteSamples(drainBuffer.AsSpan(0, read));
+            }
+            catch
+            {
+                _recorderDrainRunning = false;
+                _isRecording = false;
+                break;
             }
         }
     }

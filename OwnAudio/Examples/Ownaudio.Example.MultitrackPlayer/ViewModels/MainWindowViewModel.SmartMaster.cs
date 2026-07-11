@@ -23,6 +23,12 @@ public partial class MainWindowViewModel
     private bool _isSmartMasterEnabled;
 
     /// <summary>
+    /// Tracks whether the SmartMaster effect is currently inserted into the mixer's master chain,
+    /// so <see cref="SyncSmartMasterAttachment"/> never double-adds or double-removes it.
+    /// </summary>
+    private bool _smartMasterInChain;
+
+    /// <summary>
     /// Called when IsSmartMasterEnabled changes.
     /// </summary>
     partial void OnIsSmartMasterEnabledChanged(bool value)
@@ -30,6 +36,41 @@ public partial class MainWindowViewModel
         if (_smartMaster != null)
         {
             _smartMaster.Enabled = value;
+        }
+
+        // Enabling/disabling must actually insert or remove the effect on the master bus — in the
+        // Rust-native chain a managed effect only processes audio while it is attached to the mixer.
+        SyncSmartMasterAttachment();
+    }
+
+    /// <summary>
+    /// Reconciles the SmartMaster effect's presence in the mixer master chain with
+    /// <see cref="IsSmartMasterEnabled"/>. Idempotent: adds it only when enabled and not already in
+    /// the chain, removes it only when disabled and currently in the chain. No-op before the mixer
+    /// or the effect exist.
+    /// </summary>
+    private void SyncSmartMasterAttachment()
+    {
+        var mixer = _audioService.Mixer;
+        if (mixer == null || _smartMaster == null)
+            return;
+
+        try
+        {
+            if (IsSmartMasterEnabled && !_smartMasterInChain)
+            {
+                mixer.AddMasterEffect(_smartMaster);
+                _smartMasterInChain = true;
+            }
+            else if (!IsSmartMasterEnabled && _smartMasterInChain)
+            {
+                mixer.RemoveMasterEffect(_smartMaster);
+                _smartMasterInChain = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Error toggling SmartMaster: {ex.Message}";
         }
     }
 
@@ -110,11 +151,12 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private void ToggleSmartMaster()
     {
+        // Flipping the property raises OnIsSmartMasterEnabledChanged, which mirrors Enabled onto the
+        // effect and attaches/detaches it on the mixer via SyncSmartMasterAttachment.
         IsSmartMasterEnabled = !IsSmartMasterEnabled;
-        
+
         if (_smartMaster != null)
         {
-            _smartMaster.Enabled = IsSmartMasterEnabled;
             StatusMessage = IsSmartMasterEnabled ? "SmartMaster enabled" : "SmartMaster disabled";
         }
     }

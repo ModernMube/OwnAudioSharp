@@ -157,6 +157,12 @@ pub struct MultiTrackMixer {
     /// [`MixerShared::master_gain`] so a live master-volume change fades in over
     /// a few milliseconds instead of clicking.
     master_gain_smoother: SmoothedParam,
+    /// Optional master-output capture sink. When present, the audio thread copies
+    /// every fully rendered master block (post effects and gain) into it, so the
+    /// control thread can persist the mix (e.g. record to disk). Installed and
+    /// cleared through [`MixerCommand::SetCaptureSink`]; overflow is dropped so a
+    /// slow drain never blocks rendering.
+    capture_sink: Option<crate::ringbuffer::RingBufferWriter>,
 }
 
 impl MultiTrackMixer {
@@ -180,6 +186,7 @@ impl MultiTrackMixer {
             master_effects: EffectChain::with_capacity(MAX_EFFECTS_PER_TRACK),
             master_shared: Arc::new(MixerShared::new()),
             master_gain_smoother: SmoothedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
+            capture_sink: None,
         }
     }
 
@@ -386,6 +393,13 @@ impl MultiTrackMixer {
         }
         self.master_shared.store_master_peaks(peak_l, peak_r);
 
+        // Tap the fully rendered master block for any active capture sink (e.g. a
+        // recorder). Non-blocking: overflow is dropped rather than stalling the
+        // audio thread when the control-side drain falls behind.
+        if let Some(sink) = self.capture_sink.as_mut() {
+            sink.write(output);
+        }
+
         self.clock.advance(frames);
     }
 
@@ -498,6 +512,14 @@ impl MultiTrackMixer {
                 if let Some(track) = self.track_mut(track_id) {
                     track.set_pdc_delay(delay_frames);
                 }
+            }
+            MixerCommand::SetCaptureSink { sink } => {
+                // Retire the previous writer for control-thread drop rather than
+                // freeing its ring on the audio thread.
+                if let Some(old) = self.capture_sink.take() {
+                    let _ = retire.push(Retired::CaptureSink(old));
+                }
+                self.capture_sink = sink;
             }
         }
     }

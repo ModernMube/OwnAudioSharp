@@ -79,6 +79,44 @@ internal static partial class OwnAudioNative
         out float outLeft,
         out float outRight);
 
+    /// <summary>
+    /// Starts capturing the mixer's master output into a ring buffer so the control
+    /// thread can persist the rendered mix (e.g. record to a file). Overflow is
+    /// dropped, so a slow drain never blocks rendering.
+    /// </summary>
+    /// <param name="mixer">Valid mixer handle.</param>
+    /// <param name="capacitySamples">Ring capacity in interleaved samples.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_capture_start(IntPtr mixer, nuint capacitySamples);
+
+    /// <summary>
+    /// Reads up to <paramref name="len"/> captured samples into <paramref name="outBuffer"/>,
+    /// reporting the count actually read through <paramref name="outRead"/>. Single-consumer:
+    /// never call concurrently with <see cref="ownaudio_v1_mixer_capture_stop"/>.
+    /// </summary>
+    /// <param name="mixer">Valid mixer handle.</param>
+    /// <param name="outBuffer">Destination buffer for captured interleaved samples.</param>
+    /// <param name="len">Maximum number of samples to read.</param>
+    /// <param name="outRead">Receives the number of samples actually read.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static unsafe partial int ownaudio_v1_mixer_capture_read(
+        IntPtr mixer,
+        float* outBuffer,
+        nuint len,
+        out nuint outRead);
+
+    /// <summary>
+    /// Stops master-output capture and releases the ring's read side. Safe to call
+    /// when capture is inactive. Must not run concurrently with
+    /// <see cref="ownaudio_v1_mixer_capture_read"/>.
+    /// </summary>
+    /// <param name="mixer">Valid mixer handle.</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_capture_stop(IntPtr mixer);
+
     #endregion
 
     #region Track lifecycle

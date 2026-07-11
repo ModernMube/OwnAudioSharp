@@ -47,7 +47,10 @@ public sealed partial class AudioMixer
                 clockSource.AttachToClock(_masterClock);
 
             if (_rustNative)
+            {
                 AttachSourceToRustSession(source);
+                EnsureRustOutputStartedAfterAttach();
+            }
 
             source.Error += OnSourceError;
             RebuildSourcesCache();
@@ -97,7 +100,10 @@ public sealed partial class AudioMixer
                 clockSource.AttachToClock(_masterClock);
 
             if (_rustNative)
+            {
                 AttachSourceToRustSession(source);
+                EnsureRustOutputStartedAfterAttach();
+            }
 
             source.Error += OnSourceError;
             RebuildSourcesCache();

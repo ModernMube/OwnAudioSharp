@@ -1362,6 +1362,50 @@ int32_t ownaudio_v1_mixer_get_master_peaks(struct OwnAudioMixerHandle *mixer,
                                            float *out_right);
 
 /**
+ * Starts capturing the mixer's master output into a ring buffer so the control
+ * thread can persist the rendered mix (e.g. record to a file).
+ *
+ * The mixer copies every fully rendered master block (post master effects and
+ * gain) into the ring; drain it with [`ownaudio_v1_mixer_capture_read`]. A slow
+ * drain never blocks rendering — overflow is dropped.
+ *
+ * - `mixer` — valid mixer handle.
+ * - `capacity_samples` — ring capacity in interleaved samples (size for a few
+ *   seconds of headroom, e.g. `sample_rate * channels * seconds`); `0` is
+ *   treated as `1`.
+ *
+ * Calling this while capture is already active replaces the previous ring.
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_mixer_capture_start(struct OwnAudioMixerHandle *mixer, size_t capacity_samples);
+
+/**
+ * Reads up to `len` captured samples into `out`, returning the number actually
+ * read through `*out_read` (fewer than `len` when the ring holds less; `0` when
+ * empty or when capture is not active).
+ *
+ * Single-consumer: call only from one thread at a time, and never concurrently
+ * with [`ownaudio_v1_mixer_capture_stop`].
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_mixer_capture_read(struct OwnAudioMixerHandle *mixer,
+                                       float *out,
+                                       size_t len,
+                                       size_t *out_read);
+
+/**
+ * Stops master-output capture and releases the ring's read side. The mixer's
+ * writer is cleared on the audio thread through the command queue.
+ *
+ * Safe to call when capture is not active (no-op). Must not run concurrently
+ * with [`ownaudio_v1_mixer_capture_read`].
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_mixer_capture_stop(struct OwnAudioMixerHandle *mixer);
+
+/**
  * Adds a new track to the mixer and writes its handle to `*out_track`.
  *
  * - `mixer` — valid mixer handle.

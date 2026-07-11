@@ -1284,6 +1284,34 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
+    /// Opens the shared session's native output when a source is attached to a Rust-native mixer that
+    /// is already running but whose output was not opened at <see cref="Start"/> time. This honours the
+    /// documented "start the mixer, then add sources" ordering: because the session is created lazily
+    /// with the first source, a <see cref="Start"/> call made before any source exists finds a null
+    /// session and opens no device stream, so the first source added afterwards must open it. The
+    /// sources are started individually by their own <c>Play()</c> in <see cref="AddSource"/>, so only
+    /// the device stream needs opening here (no <c>PlayAll</c>). No-op in legacy mode, when the mixer
+    /// is not running, or when the output is already open.
+    /// </summary>
+    private void EnsureRustOutputStartedAfterAttach()
+    {
+        if (!_rustNative || !_isRunning)
+        {
+            return;
+        }
+
+        lock (_rustSessionLock)
+        {
+            if (_rustOutputStream is not null)
+            {
+                return;
+            }
+
+            OpenRustOutputLocked();
+        }
+    }
+
+    /// <summary>
     /// Rust-native transport stop: stops all tracks when the device output is active.
     /// </summary>
     private void StopRustOutput()

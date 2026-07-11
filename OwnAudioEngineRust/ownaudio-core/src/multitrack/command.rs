@@ -33,6 +33,7 @@ use rtrb::{Consumer, Producer, RingBuffer};
 use std::sync::Arc;
 
 use crate::effects::{Effect, EffectEntry};
+use crate::ringbuffer::{ring_buffer, RingBufferReader, RingBufferWriter};
 
 use super::track::{Track, TrackShared, TrackSource, TrackState};
 
@@ -101,6 +102,14 @@ pub enum MixerCommand {
         /// Compensation delay in frames (`max_chain_latency − this_chain_latency`).
         delay_frames: u32,
     },
+    /// Install (or clear) the master-output capture sink. When present, the audio
+    /// thread copies every rendered master block into it after master effects and
+    /// gain, so the control thread can persist the mix (e.g. record to a file).
+    /// The previously installed sink, if any, is retired for control-thread drop.
+    SetCaptureSink {
+        /// New capture writer, or `None` to stop capturing.
+        sink: Option<RingBufferWriter>,
+    },
 }
 
 /// A resource removed by the audio thread and handed back to the control thread
@@ -112,6 +121,8 @@ pub enum Retired {
     Effect(EffectEntry),
     /// A replaced or orphaned audio source.
     Source(Box<dyn TrackSource>),
+    /// A replaced or cleared master-output capture sink.
+    CaptureSink(RingBufferWriter),
 }
 
 /// Error returned when a command cannot be enqueued because the queue is full.
@@ -327,6 +338,27 @@ impl MixerController {
         for (_, shared) in &self.track_registry {
             shared.set_state(TrackState::Stopped);
         }
+    }
+
+    /// Starts master-output capture: allocates a lock-free ring of
+    /// `capacity_samples`, enqueues its writer as the mixer's capture sink, and
+    /// returns the reader for the control thread to drain.
+    ///
+    /// The ring is sized on the control thread; the audio thread only ever writes
+    /// into it (dropping any overflow), so a slow drain never blocks rendering.
+    pub fn start_capture(
+        &mut self,
+        capacity_samples: usize,
+    ) -> Result<RingBufferReader, CommandError> {
+        let (writer, reader) = ring_buffer(capacity_samples.max(1));
+        self.enqueue(MixerCommand::SetCaptureSink { sink: Some(writer) })?;
+        Ok(reader)
+    }
+
+    /// Stops master-output capture by clearing the mixer's capture sink. The
+    /// previously installed writer is retired for control-thread drop.
+    pub fn stop_capture(&mut self) -> Result<(), CommandError> {
+        self.enqueue(MixerCommand::SetCaptureSink { sink: None })
     }
 
     /// Enqueues a replacement of the track's audio source.
@@ -987,6 +1019,33 @@ mod tests {
         // to remember to drain, and the audio thread never sees a full queue.
         ctl.add_track().unwrap();
         assert_eq!(ctl.collect_retired(), 0);
+    }
+
+    #[test]
+    fn capture_sink_receives_the_rendered_master_mix() {
+        let (mut ctl, mut mixer) = wired();
+        let (id, shared) = ctl.add_track().unwrap();
+        ctl.set_track_source(id, Some(Box::new(ConstSource(0.5))))
+            .unwrap();
+        shared.set_state(TrackState::Playing);
+
+        // Start capturing, then render a block: the sink must observe the same
+        // samples the device output buffer received.
+        let mut reader = ctl.start_capture(64).unwrap();
+        let mut out = [0.0f32; 4];
+        mixer.mix(&mut out);
+        assert_eq!(out, [0.5, 0.5, 0.5, 0.5]);
+
+        let mut captured = [0.0f32; 4];
+        assert_eq!(reader.read(&mut captured), 4);
+        assert_eq!(captured, [0.5, 0.5, 0.5, 0.5]);
+
+        // Stopping capture retires the writer and leaves the ring empty afterward.
+        ctl.stop_capture().unwrap();
+        mixer.mix(&mut out);
+        assert!(ctl.collect_retired() >= 1);
+        let mut after = [0.0f32; 4];
+        assert_eq!(reader.read(&mut after), 0);
     }
 
     #[test]

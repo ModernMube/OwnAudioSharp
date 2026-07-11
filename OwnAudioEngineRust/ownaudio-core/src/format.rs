@@ -50,6 +50,66 @@ pub fn f32_to_u16(input: &[f32], out: &mut [u16]) {
     }
 }
 
+/// Remaps an interleaved `f32` buffer from `src_channels` to `dst_channels`,
+/// replacing the contents of `out` with the result.
+///
+/// This is the capture-side counterpart of the decoder's channel conversion: it
+/// lets a device that only supports a different channel count than requested (a
+/// mono-only microphone asked for stereo, say) still feed a stream of the
+/// requested width.
+///
+/// Real-time safe once `out` is pre-sized to the expected output length: the
+/// vector only allocates when it has to grow, so sizing it ahead of the audio
+/// thread avoids allocation in the callback. When the channel counts already
+/// match, the input is copied verbatim.
+///
+/// - Mono to N: the single channel is duplicated across every output channel.
+/// - N to mono: all source channels are averaged.
+/// - Otherwise: shared channels are copied and any extra output channels are silenced.
+pub fn remap_channels_into(
+    src: &[f32],
+    src_channels: usize,
+    dst_channels: usize,
+    out: &mut Vec<f32>,
+) {
+    out.clear();
+
+    if src_channels == 0 || dst_channels == 0 {
+        return;
+    }
+
+    let frames = src.len() / src_channels;
+    out.reserve(frames * dst_channels);
+
+    if src_channels == dst_channels {
+        out.extend_from_slice(&src[..frames * src_channels]);
+    } else if src_channels == 1 {
+        for &s in &src[..frames] {
+            for _ in 0..dst_channels {
+                out.push(s);
+            }
+        }
+    } else if dst_channels == 1 {
+        let inv = 1.0 / src_channels as f32;
+        for f in 0..frames {
+            let base = f * src_channels;
+            let mut acc = 0.0f32;
+            for c in 0..src_channels {
+                acc += src[base + c];
+            }
+            out.push(acc * inv);
+        }
+    } else {
+        let common = src_channels.min(dst_channels);
+        for f in 0..frames {
+            let base = f * src_channels;
+            for c in 0..dst_channels {
+                out.push(if c < common { src[base + c] } else { 0.0 });
+            }
+        }
+    }
+}
+
 /// Converts planar audio (one slice per channel) to interleaved layout in `out`.
 ///
 /// `out.len()` must equal `sum of channel slice lengths * number_of_channels`.
@@ -174,5 +234,44 @@ mod tests {
         deinterleave(&interleaved, 2, &mut planar);
         assert_eq!(planar[0], ch0);
         assert_eq!(planar[1], ch1);
+    }
+
+    #[test]
+    fn remap_channels_mono_to_stereo_duplicates() {
+        let mono = vec![1.0f32, 2.0, 3.0];
+        let mut out = Vec::new();
+        remap_channels_into(&mono, 1, 2, &mut out);
+        assert_eq!(out, vec![1.0, 1.0, 2.0, 2.0, 3.0, 3.0]);
+    }
+
+    #[test]
+    fn remap_channels_stereo_to_mono_averages() {
+        let stereo = vec![1.0f32, 3.0, -2.0, 2.0];
+        let mut out = Vec::new();
+        remap_channels_into(&stereo, 2, 1, &mut out);
+        assert_eq!(out, vec![2.0, 0.0]);
+    }
+
+    #[test]
+    fn remap_channels_equal_counts_copies_verbatim() {
+        let stereo = vec![1.0f32, 2.0, 3.0, 4.0];
+        let mut out = Vec::new();
+        remap_channels_into(&stereo, 2, 2, &mut out);
+        assert_eq!(out, stereo);
+    }
+
+    #[test]
+    fn remap_channels_widen_pads_extra_with_silence() {
+        let stereo = vec![1.0f32, 2.0];
+        let mut out = Vec::new();
+        remap_channels_into(&stereo, 2, 4, &mut out);
+        assert_eq!(out, vec![1.0, 2.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn remap_channels_reuses_buffer_without_leftovers() {
+        let mut out = vec![9.0f32; 16];
+        remap_channels_into(&[1.0f32, 2.0], 1, 2, &mut out);
+        assert_eq!(out, vec![1.0, 1.0, 2.0, 2.0]);
     }
 }

@@ -246,6 +246,11 @@ pub(crate) struct MixerWrapper {
     pub sample_rate: f32,
     /// Output channel count the mixer was created with.
     pub channels: u16,
+    /// Read side of the master-output capture ring while recording is active.
+    /// Installed by `ownaudio_v1_mixer_capture_start`, drained by
+    /// `ownaudio_v1_mixer_capture_read`, and dropped by `..._capture_stop`.
+    /// The matching writer lives inside the mixer on the audio thread.
+    pub capture_reader: Option<ownaudio_core::RingBufferReader>,
 }
 
 /// References a track inside a mixer by its stable id.

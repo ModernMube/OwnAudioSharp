@@ -121,13 +121,12 @@ public partial class MainWindowViewModel
                     _audioService.Mixer.AddSource(source);
                 });
 
-                if (_smartMaster != null && IsSmartMasterEnabled)
-                {
-                    _audioService.Mixer.AddMasterEffect(_smartMaster);
-                }
-
                 _masterEffect?.SetTransportPlaying(true);
             });
+
+            // Ensure the SmartMaster effect is inserted on the master bus if the user enabled it —
+            // idempotent, so a toggle made while stopped or while already playing is honoured here too.
+            SyncSmartMasterAttachment();
 
             double longestDuration = 0.0;
             for (int i = 0; i < _cachedSourceArray.Length; i++)
@@ -234,11 +233,9 @@ public partial class MainWindowViewModel
                 }
             }
 
-            if (_audioService.Mixer != null && _smartMaster != null)
-            {
-                _audioService.Mixer.RemoveMasterEffect(_smartMaster);
-            }
-
+            // The SmartMaster effect stays attached across stop/play — its presence in the master chain
+            // is owned by the enable toggle (SyncSmartMasterAttachment), not the transport. Only its
+            // internal playback state is reset here.
             if (_smartMaster != null)
             {
                 _smartMaster.OnPlaybackStopped();

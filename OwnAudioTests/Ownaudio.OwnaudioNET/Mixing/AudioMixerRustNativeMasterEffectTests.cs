@@ -185,6 +185,33 @@ public sealed class AudioMixerRustNativeMasterEffectTests : IDisposable
         mixer.RustSession!.MasterEffects.Effects.Count.Should().Be(0);
     }
 
+    /// <summary>
+    /// The MultitrackPlayer flow: enable SmartMaster (attach), then load a factory speaker preset.
+    /// LoadSpeakerPreset replaces the effect's whole configuration object, so this verifies the
+    /// control-rate mirror re-reads the fresh config and pushes the preset's EQ curve onto the native
+    /// master SmartMaster (Club boosts the 20 Hz band by +4 dB, native EQ band-0 param id 2).
+    /// </summary>
+    [Fact]
+    public void SmartMaster_LoadSpeakerPresetAfterAttach_MirrorsPresetEqToNative()
+    {
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+        var sm = new global::OwnaudioNET.Effects.SmartMaster.SmartMasterEffect();
+        sm.Initialize(new AudioConfig { SampleRate = SampleRate, Channels = Channels, BufferSize = MixerBufferFrames });
+
+        // Attach with the default (flat) config first — mirror pushes band-0 = 0 dB.
+        mixer.AddMasterEffect(sm);
+        mixer.MirrorRustMasterEffectsOnce();
+        MasterEffectChainProxy chain = new(mixer);
+        chain.GetParam(2).Should().BeApproximately(0f, 0.01f, "flat default EQ before a preset is loaded");
+
+        // Load a preset AFTER enabling (the exact order the player uses), then let the mirror run.
+        sm.LoadSpeakerPreset(global::OwnaudioNET.Effects.SmartMaster.SpeakerType.Club);
+        mixer.MirrorRustMasterEffectsOnce();
+
+        chain.GetParam(2).Should().BeApproximately(4.0f, 0.01f,
+            "loading the Club preset after attach must mirror its +4 dB 20 Hz band onto the native effect");
+    }
+
     /// <summary>Reads native master effect params off the first (only) master effect under test.</summary>
     private readonly struct MasterEffectChainProxy
     {
