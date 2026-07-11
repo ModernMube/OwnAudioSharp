@@ -100,15 +100,36 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
                 kernel[i] = sincValue * window;
             }
 
-            // Normalization (so gain is ~1.0 in passband)
-            float sum = 0.0f;
+            // A band-pass must reject DC, but a short kernel at such a low centre
+            // frequency cannot resolve the narrow band: its raw coefficient sum
+            // (the DC gain) is comparable to its pass-band gain, so it leaks
+            // DC/subsonic rumble. Dividing by that sum merely forces the DC gain to
+            // unity instead of rejecting it. Restore true band-pass behaviour by
+            // removing the coefficient mean so the DC gain is exactly zero (the
+            // kernel stays symmetric, hence linear phase), then normalise to unity
+            // gain at the pass-band centre.
+            float mean = 0.0f;
             for (int i = 0; i < kernelSize; i++)
-                sum += kernel[i];
-            
-            if (MathF.Abs(sum) > 1e-6f)
+                mean += kernel[i];
+            mean /= kernelSize;
+            for (int i = 0; i < kernelSize; i++)
+                kernel[i] -= mean;
+
+            float centerFreq = 0.5f * (lowFreq + highFreq);
+            float wc = 2.0f * MathF.PI * centerFreq / sampleRate;
+            float re = 0.0f;
+            float im = 0.0f;
+            for (int i = 0; i < kernelSize; i++)
+            {
+                float nf = i - center;
+                re += kernel[i] * MathF.Cos(wc * nf);
+                im += kernel[i] * MathF.Sin(wc * nf);
+            }
+            float gain = MathF.Sqrt(re * re + im * im);
+            if (gain > 1e-6f)
             {
                 for (int i = 0; i < kernelSize; i++)
-                    kernel[i] /= sum;
+                    kernel[i] /= gain;
             }
 
             return kernel;

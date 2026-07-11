@@ -86,10 +86,32 @@ fn build_bandpass_kernel(sample_rate: f32, low: f32, high: f32) -> [f32; KERNEL_
         *k = sinc * kaiser_window(i, KERNEL_SIZE, KAISER_BETA);
     }
 
-    let sum: f32 = kernel.iter().sum();
-    if sum.abs() > 1.0e-6 {
+    // A band-pass must reject DC, but a short 127-tap kernel at such a low centre
+    // frequency cannot resolve the 40–120 Hz band: its raw coefficient sum (the
+    // DC gain) is comparable to its pass-band gain, so it leaks DC/subsonic
+    // rumble.  Normalising by that sum (the reference approach) merely forces the
+    // DC gain to unity instead of rejecting it.  Restore true band-pass behaviour
+    // by removing the coefficient mean so the DC gain is exactly zero (the kernel
+    // stays symmetric, hence linear phase), then normalise to unity gain at the
+    // pass-band centre.
+    let mean: f32 = kernel.iter().sum::<f32>() / KERNEL_SIZE as f32;
+    for k in kernel.iter_mut() {
+        *k -= mean;
+    }
+
+    let center_freq = 0.5 * (low + high);
+    let wc = 2.0 * std::f32::consts::PI * center_freq / sample_rate;
+    let mut re = 0.0f32;
+    let mut im = 0.0f32;
+    for (i, k) in kernel.iter().enumerate() {
+        let nf = (i as i32 - center) as f32;
+        re += *k * (wc * nf).cos();
+        im += *k * (wc * nf).sin();
+    }
+    let gain = (re * re + im * im).sqrt();
+    if gain > 1.0e-6 {
         for k in kernel.iter_mut() {
-            *k /= sum;
+            *k /= gain;
         }
     }
     kernel
