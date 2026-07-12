@@ -6,9 +6,9 @@ OwnAudioSharp.Mobile is a professional-grade audio engine providing high-perform
 
 ## Key Features
 
-- **Native Audio Engine**: Built on PortAudio and MiniAudio for high-performance, low-latency audio processing on Android and iOS
-- **Multi-format Support**: Built-in decoders for MP3, WAV, and FLAC
-- **Real-time Processing**: Zero-allocation design with lock-free buffers for professional-grade performance
+- **Native Rust Audio Engine**: Built on a purpose-built native Rust core for high-performance, low-latency audio on Android and iOS. Device I/O, mixing, and the full effect chain run entirely in native code with a real-time-safe, zero-GC hot path — no PortAudio or MiniAudio dependency.
+- **Multi-format Support**: Native pure-Rust decoder (Symphonia) with built-in support for WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, and AIFF
+- **Real-time Processing**: Zero-allocation design with lock-free buffers and native mixing for professional-grade performance
 - **Advanced Audio Features**:
   - **Network Synchronization**: Multi-device audio sync across WiFi (< 20ms accuracy)
   - **Master Clock**: Sample-accurate timeline synchronization for multi-track playback
@@ -92,8 +92,8 @@ var result = separator.Separate("song.mp3");
 
 OwnAudioSharp.Mobile uses a two-layer architecture:
 
-1. **Engine Layer**: Low-level platform-specific audio processing with real-time thread management
-2. **API Layer**: High-level thread-safe wrappers with lock-free ring buffers to prevent UI blocking
+1. **Native Rust Engine Layer**: Device I/O, multi-track mixing, resampling, and the full effect chain run in a native Rust core. Audio data stays in native memory on a real-time-safe, allocation-free hot path.
+2. **Managed API Layer**: High-level thread-safe wrappers that drive the native engine through a lock-free FFI boundary, issuing only control commands so the UI thread is never blocked.
 
 ## Documentation
 

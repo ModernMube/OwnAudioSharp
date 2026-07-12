@@ -1,0 +1,12 @@
+<Project>
+
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'ios'">
+    <NativeReference Include="$(MSBuildThisFileDirectory)../../runtimes/iOS-arm64/native/libownaudio_ffi.a">
+      <Kind>Static</Kind>
+      <ForceLoad>True</ForceLoad>
+      <SmartLink>False</SmartLink>
+      <Frameworks>AudioToolbox AVFAudio AVFoundation CoreAudio CoreFoundation Foundation</Frameworks>
+    </NativeReference>
+  </ItemGroup>
+
+</Project>

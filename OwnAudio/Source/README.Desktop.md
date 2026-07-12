@@ -6,9 +6,9 @@ OwnAudioSharp is a professional-grade audio engine providing high-performance au
 
 ## Key Features
 
-- **Native Audio Engine**: Built on PortAudio and MiniAudio for professional-grade, low-latency audio processing across all platforms
-- **Multi-format Support**: Built-in decoders for MP3, WAV, and FLAC. If FFmpeg 8+ is installed on the system, it is used automatically as the primary decoder, adding support for AAC, OGG, Opus, WMA, AIFF, and virtually any other format — no code changes required.
-- **Real-time Processing**: Zero-allocation design with lock-free buffers for professional-grade performance
+- **Native Rust Audio Engine**: Built on a purpose-built native Rust core for professional-grade, low-latency audio. Device I/O, mixing, and the full effect chain run entirely in native code with a real-time-safe, zero-GC hot path — no PortAudio or MiniAudio dependency.
+- **Multi-format Support**: Native pure-Rust decoder (Symphonia) with built-in support for WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, and AIFF. For any other format, FFmpeg is used automatically as a fallback when installed — no code changes required.
+- **Real-time Processing**: Zero-allocation design with lock-free buffers and native mixing for professional-grade performance
 - **Advanced Audio Features**:
   - **Network Synchronization**: Multi-device audio sync across local network (< 5ms accuracy on LAN)
   - **Master Clock**: Sample-accurate timeline synchronization for multi-track playback
@@ -76,32 +76,20 @@ var result = separator.Separate("song.mp3");
 // result.VocalsPath and result.InstrumentalPath contain the output files
 ```
 
-## FFmpeg Integration (Optional)
+## Audio Decoding
 
-OwnAudioSharp automatically detects FFmpeg dynamic libraries on startup. This is **not part of the public API** — it happens transparently in the decoder layer.
+Decoding is handled by the native Rust engine using a pure-Rust Symphonia backend — no managed decoder and no external runtime is required for the common formats:
 
-**Decoder priority:** FFmpeg → MiniAudio (native) → built-in managed decoder
+**Natively supported (built-in):** WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, AIFF
 
-```csharp
-using Ownaudio.Core;
+For any format the native backend cannot handle, OwnAudioSharp transparently falls back to FFmpeg when it is installed on the system. This is **not part of the public API** — the decoder layer selects the best backend automatically, with no code changes required.
 
-// Optional: set a custom path before first use (default: empty = system paths)
-FFmpegConfig.CustomLibraryPath = @"C:\ffmpeg\bin"; // Windows example
+**Decoder priority:** native Rust (Symphonia) → FFmpeg (optional fallback)
 
-// Check whether FFmpeg was detected successfully
-if (FFmpegConfig.IsAvailable)
-    Console.WriteLine("FFmpeg decoder active — extended format support enabled.");
-else
-    Console.WriteLine("FFmpeg not found — using built-in decoders (MP3/WAV/FLAC).");
-
-// No API changes needed — AudioDecoderFactory selects the best decoder automatically
-var decoder = AudioDecoderFactory.Create("audio.aac", targetSampleRate: 48000, targetChannels: 2);
-```
-
-**Installation per platform:**
-- **Windows:** Place `avcodec-62.dll`, `avformat-62.dll`, `avutil-60.dll`, `swresample-6.dll` next to the executable, or anywhere on `PATH`.
+**Optional FFmpeg installation per platform:**
+- **Windows:** Place the FFmpeg DLLs next to the executable, or anywhere on `PATH`.
 - **macOS:** `brew install ffmpeg`
-- **Linux:** `sudo apt install libavcodec-dev libavformat-dev` (or equivalent)
+- **Linux:** `sudo apt install ffmpeg` (or equivalent)
 
 ## Platform Support
 
@@ -113,8 +101,8 @@ var decoder = AudioDecoderFactory.Create("audio.aac", targetSampleRate: 48000, t
 
 OwnAudioSharp uses a two-layer architecture:
 
-1. **Engine Layer**: Low-level platform-specific audio processing with real-time thread management
-2. **API Layer**: High-level thread-safe wrappers with lock-free ring buffers to prevent UI blocking
+1. **Native Rust Engine Layer**: Device I/O, multi-track mixing, resampling, and the full effect chain run in a native Rust core. Audio data stays in native memory on a real-time-safe, allocation-free hot path.
+2. **Managed API Layer**: High-level thread-safe wrappers that drive the native engine through a lock-free FFI boundary. The managed side only issues control commands, so the UI thread is never blocked and no garbage is generated in the audio path.
 
 ## Documentation
 

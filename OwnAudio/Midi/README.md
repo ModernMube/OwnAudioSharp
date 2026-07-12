@@ -5,14 +5,14 @@ Part of the [OwnAudioSharp](https://github.com/modernmube/OwnAudioSharp) ecosyst
 
 ## Features
 
-- **MIDI I/O** — real-time input/output via platform-native APIs (WinMM / CoreMIDI / ALSA rawmidi)
+- **MIDI I/O** — real-time input/output through a native Rust core that wraps the platform MIDI APIs (WinMM / CoreMIDI / ALSA rawmidi)
 - **SysEx receive** — zero-allocation state-machine parser; complete frames delivered as `ReadOnlySpan<byte>`
 - **Virtual MIDI ports** — create software MIDI endpoints on macOS (CoreMIDI) and Linux (ALSA Sequencer)
 - **Hot-plug monitoring** — call `MidiPortFactory.StartMonitoring()` and the `PortsChanged` event fires (via background polling) when devices are added or removed
 - **MIDI File** — read, edit, and write Standard MIDI Files (SMF format 0 and 1)
 - **MIDI Clock** — thread-based 24 PPQN clock (`MidiClock`) and audio-engine-driven sample-accurate clock (`AudioEngineMidiClock`)
 - **Native AOT ready** — `IsAotCompatible=true`, `IsTrimmable=true`, zero reflection
-- **Zero managed dependencies** — no third-party packages; pure P/Invoke
+- **Zero managed dependencies** — no third-party NuGet packages; a bundled native Rust core loaded via source-generated P/Invoke
 
 ## Installation
 
@@ -23,7 +23,7 @@ Part of the [OwnAudioSharp](https://github.com/modernmube/OwnAudioSharp) ecosyst
 Or (once published to NuGet):
 
 ```xml
-<PackageReference Include="OwnAudioSharp.Midi" Version="3.1.0" />
+<PackageReference Include="OwnAudioSharp.Midi" Version="4.0.0-preview.27" />
 ```
 
 ---
@@ -594,6 +594,9 @@ Console.WriteLine("Saved: recording.mid");
 
 ## Platform support
 
+All backends below are driven by the bundled native Rust core (`ownaudio_midi_ffi`); the managed
+side only calls into it through P/Invoke.
+
 | Feature | Windows | macOS | Linux |
 |---|---|---|---|
 | Physical I/O | WinMM (`winmm.dll`) | CoreMIDI | ALSA rawmidi (`libasound`) |
@@ -605,7 +608,8 @@ Console.WriteLine("Saved: recording.mid");
 | `MidiClock` | ✅ | ✅ | ✅ |
 | `AudioEngineMidiClock` | ✅ | ✅ | ✅ |
 
-All platform code is selected at **runtime** via `RuntimeInformation.IsOSPlatform` — no compile-time defines required in application code.
+The correct native library is selected at **runtime** per runtime identifier (RID); the platform
+MIDI backend is chosen inside the native Rust core — no compile-time defines required in application code.
 
 ## AOT / Trimming
 

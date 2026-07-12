@@ -42,6 +42,18 @@ internal static class NativeLibraryLoader
             return IntPtr.Zero;
         }
 
+        if (OperatingSystem.IsIOS() || OperatingSystem.IsTvOS())
+        {
+            return NativeLibrary.GetMainProgramHandle();
+        }
+
+        if (OperatingSystem.IsAndroid())
+        {
+            return NativeLibrary.TryLoad("libownaudio_ffi.so", assembly, searchPath, out IntPtr androidHandle)
+                ? androidHandle
+                : IntPtr.Zero;
+        }
+
         string fileName = GetPlatformFileName();
         string baseDir = AppContext.BaseDirectory;
 

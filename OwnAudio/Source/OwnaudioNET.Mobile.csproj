@@ -25,7 +25,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Mobile</PackageId>
-    <Version>4.0.0-preview.26</Version>
+    <Version>4.0.0-preview.27</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine library for mobile platforms (Android and iOS)</Description>
     <PackageTags>audio;cross-platform;android;ios;mobile;sound;multitrack</PackageTags>
@@ -104,8 +104,12 @@
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\android-arm64\**\*.*" Pack="true" PackagePath="runtimes\android-arm64" />
     <!-- Android native libraries (x64) -->
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\android-x64\**\*.*" Pack="true" PackagePath="runtimes\android-x64" />
-    <!-- iOS native libraries (ARM64) - framework bundle -->
+    <!-- iOS native libraries (ARM64) - static archive linked via NativeReference -->
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\iOS-arm64\**\*.*" Pack="true" PackagePath="runtimes\iOS-arm64" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\OwnAudioSharp.Mobile.targets" Pack="true" PackagePath="buildTransitive\net10.0-ios18.0\OwnAudioSharp.Mobile.targets" />
   </ItemGroup>
 
 </Project>

@@ -13,7 +13,7 @@ OwnAudioSharp.Basic is a professional-grade audio engine providing high-performa
 | Effects & SmartMaster | ✅ | ✅ |
 | Network synchronization | ✅ | ✅ |
 | VST3 plugin support | ✅ | ✅ |
-| SoundTouch (pitch/tempo) | ✅ | ✅ |
+| Pitch shift / time stretch | ✅ | ✅ |
 | AI vocal removal (ONNX) | ✅ | ❌ |
 | Chord detection | ✅ | ❌ |
 | Audio matchering | ✅ | ❌ |
@@ -24,16 +24,16 @@ Use `OwnAudioSharp.Basic` when you need a lean audio engine without the overhead
 
 ## Key Features
 
-- **Native Audio Engine**: Built on PortAudio and MiniAudio for professional-grade, low-latency audio processing across all platforms
-- **Multi-format Support**: Built-in decoders for MP3, WAV, and FLAC. If FFmpeg 7/8 is installed on the system, it is used automatically as the primary decoder, adding support for AAC, OGG, Opus, WMA, AIFF, and virtually any other format — no code changes required.
-- **Real-time Processing**: Zero-allocation design with lock-free buffers for professional-grade performance
+- **Native Rust Audio Engine**: Built on a purpose-built native Rust core for professional-grade, low-latency audio. Device I/O, mixing, and the full effect chain run entirely in native code with a real-time-safe, zero-GC hot path — no PortAudio or MiniAudio dependency.
+- **Multi-format Support**: Native pure-Rust decoder (Symphonia) with built-in support for WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, and AIFF. For any other format, FFmpeg is used automatically as a fallback when installed — no code changes required.
+- **Real-time Processing**: Zero-allocation design with lock-free buffers and native mixing for professional-grade performance
 - **Advanced Audio Features**:
   - **Network Synchronization**: Multi-device audio sync across local network (< 5ms accuracy on LAN)
   - **Master Clock**: Sample-accurate timeline synchronization for multi-track playback
   - **SmartMaster Effect**: Intelligent audio mastering with auto-calibration
   - **VST3 Plugin Support**: Load and host VST3 audio effect plugins
   - Built-in effects and DSP routines (EQ, compressor, reverb, etc.)
-  - Pitch shifting and time stretching via SoundTouch
+  - Native pitch shifting and time stretching (Rust SoundTouch)
 
 ## Quick Start
 
@@ -85,10 +85,10 @@ source.Effects.Add(new ReverbEffect { RoomSize = 0.5f });
 source.Effects.Add(new EqualizerEffect());
 mixer.AddSource(source);
 
-// Pitch shifting / time stretching
-var pitchedSource = new SoundTouchSource("music.mp3");
-pitchedSource.SetPitchSemitones(2);   // Shift up 2 semitones
-pitchedSource.SetTempo(1.1f);         // 10% faster
+// Pitch shifting / time stretching (built into every source)
+var pitchedSource = new FileSource("music.mp3");
+pitchedSource.PitchShift = 2;   // Shift up 2 semitones
+pitchedSource.Tempo = 1.1f;     // 10% faster
 mixer.AddSource(pitchedSource);
 ```
 
@@ -114,41 +114,29 @@ The following features from the full `OwnAudioSharp` package are **not available
 
 If you need any of these features, use the full [`OwnAudioSharp`](https://www.nuget.org/packages/OwnAudioSharp) package instead.
 
-## FFmpeg Integration (Optional)
+## Audio Decoding
 
-OwnAudioSharp automatically detects FFmpeg dynamic libraries on startup. This is **not part of the public API** — it happens transparently in the decoder layer.
+Decoding is handled by the native Rust engine using a pure-Rust Symphonia backend — no managed decoder and no external runtime is required for the common formats:
 
-**Decoder priority:** FFmpeg → MiniAudio (native) → built-in managed decoder
+**Natively supported (built-in):** WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, AIFF
 
-```csharp
-using Ownaudio.Core;
+For any format the native backend cannot handle, OwnAudioSharp transparently falls back to FFmpeg when it is installed on the system. This is **not part of the public API** — the decoder layer selects the best backend automatically, with no code changes required.
 
-// Optional: set a custom path before first use (default: empty = system paths)
-FFmpegConfig.CustomLibraryPath = "/opt/ffmpeg/lib"; // custom path example
-
-// Check whether FFmpeg was detected successfully
-if (FFmpegConfig.IsAvailable)
-    Console.WriteLine("FFmpeg decoder active — extended format support enabled.");
-else
-    Console.WriteLine("FFmpeg not found — using built-in decoders (MP3/WAV/FLAC).");
-
-// No API changes needed — AudioDecoderFactory selects the best decoder automatically
-var decoder = AudioDecoderFactory.Create("audio.ogg", targetSampleRate: 48000, targetChannels: 2);
-```
+**Decoder priority:** native Rust (Symphonia) → FFmpeg (optional fallback)
 
 ## Architecture
 
 OwnAudioSharp.Basic uses a two-layer architecture:
 
-1. **Engine Layer**: Low-level platform-specific audio processing with real-time thread management
-2. **API Layer**: High-level thread-safe wrappers with lock-free ring buffers to prevent UI blocking
+1. **Native Rust Engine Layer**: Device I/O, multi-track mixing, resampling, and the full effect chain run in a native Rust core. Audio data stays in native memory on a real-time-safe, allocation-free hot path.
+2. **Managed API Layer**: High-level thread-safe wrappers that drive the native engine through a lock-free FFI boundary, issuing only control commands so the UI thread is never blocked.
 
 ```
 UI/Main Thread
-  └─> OwnaudioNet.Send() [lock-free, <0.1ms]
-       └─> AudioEngineWrapper [ring buffer write]
-            └─> Pump Thread [dedicated]
-                 └─> Audio RT Thread [platform-specific]
+  └─> Managed control API (Play/Seek/effect params) [lock-free, <0.1ms]
+       └─> FFI command queue [lock-free, allocation-free]
+            └─> Native Rust engine (mix + effects + device I/O)
+                 └─> OS audio callback [real-time thread]
 ```
 
 ## Documentation

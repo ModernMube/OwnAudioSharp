@@ -276,24 +276,18 @@ jobs:
         working-directory: OwnAudioEngineRust
         run: cargo build --release --target aarch64-apple-darwin
 
-      - name: Build ios-arm64 (best-effort)
+      - name: Build ios-arm64
         working-directory: OwnAudioEngineRust
-        continue-on-error: true
-        run: cargo build --release --target aarch64-apple-ios
+        run: cargo build --release --target aarch64-apple-ios -p ownaudio-ffi
 
       - name: Collect artifacts
         run: |
-          mkdir -p artifacts/osx-x64 artifacts/osx-arm64 artifacts/ios-arm64
+          mkdir -p artifacts/osx-x64 artifacts/osx-arm64 artifacts/iOS-arm64/native
           cp OwnAudioEngineRust/target/x86_64-apple-darwin/release/libownaudio_ffi.dylib  artifacts/osx-x64/
           cp OwnAudioEngineRust/target/aarch64-apple-darwin/release/libownaudio_ffi.dylib artifacts/osx-arm64/
-          # iOS: wrap static lib in a minimal .framework bundle for NativeReference consumption
-          IOS_LIB="OwnAudioEngineRust/target/aarch64-apple-ios/release/libownaudio_ffi.a"
-          if [[ -f "${IOS_LIB}" ]]; then
-            mkdir -p artifacts/ios-arm64/ownaudio_ffi.framework
-            cp "${IOS_LIB}" artifacts/ios-arm64/ownaudio_ffi.framework/ownaudio_ffi
-          else
-            echo "::warning::iOS build artifact missing — skipping framework bundle."
-          fi
+          # iOS ships as a static archive (.a); the Mobile csproj packs it from
+          # runtimes/iOS-arm64/native/. The RID casing (iOS-arm64) matches the csproj glob.
+          cp OwnAudioEngineRust/target/aarch64-apple-ios/release/libownaudio_ffi.a artifacts/iOS-arm64/native/
 
       - uses: actions/upload-artifact@v4
         with:
@@ -302,7 +296,7 @@ jobs:
           retention-days: 7
 
   rust-build-android:
-    name: Rust / Android ARM64
+    name: Rust / Android (ARM + ARM64 + x64)
     needs: version
     runs-on: ubuntu-latest
     env:
@@ -313,7 +307,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
@@ -329,15 +323,25 @@ jobs:
             ~/.cargo/git
           key: cargo-android-${{ hashFiles('OwnAudioEngineRust/**/Cargo.lock') }}
 
+      # cpal's Android backend uses AAudio, which requires API level 26 (Android 8.0).
       - name: Build android-arm64
         working-directory: OwnAudioEngineRust
-        # cpal's Android backend uses AAudio, which requires API level 26 (Android 8.0).
-        run: cargo ndk --target aarch64-linux-android --platform 26 -- build --release
+        run: cargo ndk --target aarch64-linux-android --platform 26 -- build --release -p ownaudio-ffi
+
+      - name: Build android-arm
+        working-directory: OwnAudioEngineRust
+        run: cargo ndk --target armv7-linux-androideabi --platform 26 -- build --release -p ownaudio-ffi
+
+      - name: Build android-x64
+        working-directory: OwnAudioEngineRust
+        run: cargo ndk --target x86_64-linux-android --platform 26 -- build --release -p ownaudio-ffi
 
       - name: Collect artifacts
         run: |
-          mkdir -p artifacts/android-arm64
-          cp OwnAudioEngineRust/target/aarch64-linux-android/release/libownaudio_ffi.so artifacts/android-arm64/
+          mkdir -p artifacts/android-arm artifacts/android-arm64 artifacts/android-x64
+          cp OwnAudioEngineRust/target/aarch64-linux-android/release/libownaudio_ffi.so   artifacts/android-arm64/
+          cp OwnAudioEngineRust/target/armv7-linux-androideabi/release/libownaudio_ffi.so artifacts/android-arm/
+          cp OwnAudioEngineRust/target/x86_64-linux-android/release/libownaudio_ffi.so    artifacts/android-x64/
 
       - uses: actions/upload-artifact@v4
         with:
@@ -481,6 +485,75 @@ jobs:
           retention-days: 30
 
   # -------------------------------------------------------------------------
+  # dotnet pack (mobile) — builds the net10.0-android + net10.0-ios TFMs, so it
+  # must run on macOS with the Android + iOS workloads (and Xcode) available.
+  # -------------------------------------------------------------------------
+  dotnet-pack-mobile:
+    name: Pack OwnAudioSharp.Mobile
+    needs:
+      - version
+      - rust-build-macos
+      - rust-build-android
+    runs-on: macos-14
+    env:
+      OWNAUDIO_VERSION: ${{ needs.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install .NET mobile workloads
+        run: dotnet workload install android ios
+
+      - name: Download native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: artifacts/
+          merge-multiple: true
+
+      # The Mobile project packs the mobile natives from OwnAudioRust/runtimes/{rid}/,
+      # so stage the freshly built Android + iOS binaries into that layout first.
+      - name: Stage mobile native binaries into runtimes/
+        run: |
+          RT="OwnAudioEngine/OwnAudioRust/runtimes"
+          stage() {
+            if [[ -f "artifacts/$1" ]]; then
+              mkdir -p "$RT/$(dirname "$2")"
+              cp "artifacts/$1" "$RT/$2"
+              echo "  staged: artifacts/$1 -> $RT/$2"
+            else
+              echo "::error::mobile native artifact missing: artifacts/$1"
+              exit 1
+            fi
+          }
+          stage "android-arm/libownaudio_ffi.so"       "android-arm/native/libownaudio_ffi.so"
+          stage "android-arm64/libownaudio_ffi.so"     "android-arm64/native/libownaudio_ffi.so"
+          stage "android-x64/libownaudio_ffi.so"       "android-x64/native/libownaudio_ffi.so"
+          stage "iOS-arm64/native/libownaudio_ffi.a"   "iOS-arm64/native/libownaudio_ffi.a"
+
+      - name: Restore .NET dependencies
+        run: dotnet restore OwnAudio/Source/OwnaudioNET.Mobile.csproj
+
+      - name: Pack OwnAudioSharp.Mobile
+        run: |
+          dotnet pack OwnAudio/Source/OwnaudioNET.Mobile.csproj \
+            --configuration Release \
+            -p:BuildMobile=true \
+            -p:GeneratePackageOnBuild=false \
+            --output packages-out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nupkg-mobile
+          path: packages-out/*.nupkg
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
   # Commit built native binaries back into runtimes/ for local development
   # -------------------------------------------------------------------------
   update-runtimes:
@@ -540,7 +613,10 @@ jobs:
           copy_if_exists "native-merged/linux-arm64/libownaudio_ffi.so"   "$RUNTIMES/linux-arm64/native/libownaudio_ffi.so"
           copy_if_exists "native-merged/osx-x64/libownaudio_ffi.dylib"    "$RUNTIMES/osx-x64/native/libownaudio_ffi.dylib"
           copy_if_exists "native-merged/osx-arm64/libownaudio_ffi.dylib"  "$RUNTIMES/osx-arm64/native/libownaudio_ffi.dylib"
-          copy_if_exists "native-merged/android-arm64/libownaudio_ffi.so" "$RUNTIMES/android-arm64/native/libownaudio_ffi.so"
+          copy_if_exists "native-merged/android-arm64/libownaudio_ffi.so"    "$RUNTIMES/android-arm64/native/libownaudio_ffi.so"
+          copy_if_exists "native-merged/android-arm/libownaudio_ffi.so"      "$RUNTIMES/android-arm/native/libownaudio_ffi.so"
+          copy_if_exists "native-merged/android-x64/libownaudio_ffi.so"      "$RUNTIMES/android-x64/native/libownaudio_ffi.so"
+          copy_if_exists "native-merged/iOS-arm64/native/libownaudio_ffi.a"  "$RUNTIMES/iOS-arm64/native/libownaudio_ffi.a"
 
       - name: Commit and push
         run: |
