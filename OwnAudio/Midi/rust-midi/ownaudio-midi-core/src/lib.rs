@@ -6,7 +6,9 @@
 //! `OwnAudio.Midi` package:
 //!
 //! - [`port`] — hardware and virtual MIDI input/output through the `midir`
-//!   crate (WinMM, CoreMIDI, ALSA sequencer).
+//!   crate (WinMM, CoreMIDI, ALSA sequencer). On Android, where `midir` has no
+//!   backend, this module is a stub that reports [`error::MidiError::PlatformUnsupported`]
+//!   for every port operation; file and clock functionality remain available.
 //! - [`clock`] — a high-resolution 24 PPQN timing clock.
 //! - [`file`] — Standard MIDI File parsing and serialization.
 //!
@@ -17,6 +19,12 @@ pub mod clock;
 pub mod error;
 pub mod file;
 pub mod message;
+
+#[cfg(not(target_os = "android"))]
+pub mod port;
+
+#[cfg(target_os = "android")]
+#[path = "port_android.rs"]
 pub mod port;
 
 pub use clock::MidiClock;

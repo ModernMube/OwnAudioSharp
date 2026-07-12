@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(BuildMobile)' == 'true'">net10.0;net10.0-android;net10.0-ios</TargetFrameworks>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.StartsWith('net10.0-android'))">24.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$(TargetFramework.StartsWith('net10.0-ios'))">12.2</SupportedOSPlatformVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -16,7 +19,7 @@
     <Version>4.0.0-preview.28</Version>
     <Authors>ModernMube</Authors>
     <Description>AOT-compatible MIDI I/O and file handling for OwnAudioSharp. Supports real-time MIDI input/output (WinMM / CoreMIDI / ALSA), Standard MIDI File read/write, and a hardware-accurate MIDI clock.</Description>
-    <PackageTags>midi;audio;aot;cross-platform;windows;linux;macos</PackageTags>
+    <PackageTags>midi;audio;aot;cross-platform;windows;linux;macos;android;ios;mobile</PackageTags>
     <RepositoryUrl>https://github.com/ModernMube/OwnAudioSharp</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageCopyright>Copyright (c) 2025 ModernMube</PackageCopyright>
@@ -78,5 +81,15 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Pack>true</Pack>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="runtimes\android-arm\**\*.*" Pack="true" PackagePath="runtimes\android-arm" />
+    <None Include="runtimes\android-arm64\**\*.*" Pack="true" PackagePath="runtimes\android-arm64" />
+    <None Include="runtimes\android-x64\**\*.*" Pack="true" PackagePath="runtimes\android-x64" />
+    <None Include="runtimes\ios-arm64\**\*.*" Pack="true" PackagePath="runtimes\ios-arm64" />
+    <None Include="runtimes\iossimulator-arm64\**\*.*" Pack="true" PackagePath="runtimes\iossimulator-arm64" />
+    <None Include="runtimes\iossimulator-x64\**\*.*" Pack="true" PackagePath="runtimes\iossimulator-x64" />
+    <None Include="build\OwnAudioSharp.Midi.targets" Pack="true" PackagePath="buildTransitive\net10.0-ios18.0\OwnAudioSharp.Midi.targets" />
   </ItemGroup>
 </Project>

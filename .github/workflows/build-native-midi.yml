@@ -148,14 +148,14 @@ jobs:
           retention-days: 7
 
   rust-build-macos:
-    name: Rust / macOS (x64 + ARM64)
+    name: Rust / macOS (x64 + ARM64 + iOS)
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-apple-darwin,aarch64-apple-darwin
+          targets: x86_64-apple-darwin,aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
 
       - name: Cache Cargo
         uses: actions/cache@v4
@@ -173,15 +173,79 @@ jobs:
         working-directory: OwnAudio/Midi/rust-midi
         run: cargo build --release -p ownaudio-midi-ffi --target aarch64-apple-darwin
 
+      - name: Build ios-arm64 (device)
+        working-directory: OwnAudio/Midi/rust-midi
+        run: cargo build --release -p ownaudio-midi-ffi --target aarch64-apple-ios
+
+      - name: Build iossimulator-arm64
+        working-directory: OwnAudio/Midi/rust-midi
+        run: cargo build --release -p ownaudio-midi-ffi --target aarch64-apple-ios-sim
+
+      - name: Build iossimulator-x64
+        working-directory: OwnAudio/Midi/rust-midi
+        run: cargo build --release -p ownaudio-midi-ffi --target x86_64-apple-ios
+
       - name: Collect artifacts
         run: |
-          mkdir -p artifacts/osx-x64 artifacts/osx-arm64
-          cp OwnAudio/Midi/rust-midi/target/x86_64-apple-darwin/release/libownaudio_midi_ffi.dylib  artifacts/osx-x64/
-          cp OwnAudio/Midi/rust-midi/target/aarch64-apple-darwin/release/libownaudio_midi_ffi.dylib artifacts/osx-arm64/
+          mkdir -p artifacts/osx-x64 artifacts/osx-arm64 artifacts/ios-arm64 artifacts/iossimulator-arm64 artifacts/iossimulator-x64
+          cp OwnAudio/Midi/rust-midi/target/x86_64-apple-darwin/release/libownaudio_midi_ffi.dylib   artifacts/osx-x64/
+          cp OwnAudio/Midi/rust-midi/target/aarch64-apple-darwin/release/libownaudio_midi_ffi.dylib  artifacts/osx-arm64/
+          cp OwnAudio/Midi/rust-midi/target/aarch64-apple-ios/release/libownaudio_midi_ffi.a         artifacts/ios-arm64/
+          cp OwnAudio/Midi/rust-midi/target/aarch64-apple-ios-sim/release/libownaudio_midi_ffi.a     artifacts/iossimulator-arm64/
+          cp OwnAudio/Midi/rust-midi/target/x86_64-apple-ios/release/libownaudio_midi_ffi.a          artifacts/iossimulator-x64/
 
       - uses: actions/upload-artifact@v4
         with:
           name: midi-native-macos
+          path: artifacts/
+          retention-days: 7
+
+  rust-build-android:
+    name: Rust / Android (ARM + ARM64 + x64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Set up Android NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-midi-android-${{ hashFiles('OwnAudio/Midi/rust-midi/**/Cargo.lock') }}
+
+      - name: Build android-arm64
+        working-directory: OwnAudio/Midi/rust-midi
+        run: cargo ndk --target aarch64-linux-android --platform 24 -- build --release -p ownaudio-midi-ffi
+
+      - name: Build android-arm
+        working-directory: OwnAudio/Midi/rust-midi
+        run: cargo ndk --target armv7-linux-androideabi --platform 24 -- build --release -p ownaudio-midi-ffi
+
+      - name: Build android-x64
+        working-directory: OwnAudio/Midi/rust-midi
+        run: cargo ndk --target x86_64-linux-android --platform 24 -- build --release -p ownaudio-midi-ffi
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/android-arm artifacts/android-arm64 artifacts/android-x64
+          cp OwnAudio/Midi/rust-midi/target/aarch64-linux-android/release/libownaudio_midi_ffi.so   artifacts/android-arm64/
+          cp OwnAudio/Midi/rust-midi/target/armv7-linux-androideabi/release/libownaudio_midi_ffi.so artifacts/android-arm/
+          cp OwnAudio/Midi/rust-midi/target/x86_64-linux-android/release/libownaudio_midi_ffi.so    artifacts/android-x64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: midi-native-android
           path: artifacts/
           retention-days: 7
 
@@ -195,7 +259,8 @@ jobs:
       - rust-build-linux-x64
       - rust-build-linux-arm64
       - rust-build-macos
-    runs-on: ubuntu-latest
+      - rust-build-android
+    runs-on: macos-14
 
     steps:
       - uses: actions/checkout@v4
@@ -204,6 +269,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
+
+      - name: Install .NET mobile workloads
+        run: dotnet workload install android ios
 
       - name: Download all native artifacts
         uses: actions/download-artifact@v4
@@ -234,6 +302,12 @@ jobs:
           copy_if_exists "native-dl/midi-native-linux-arm64/linux-arm64/libownaudio_midi_ffi.so" "$RUNTIMES/linux-arm64/native/libownaudio_midi_ffi.so"
           copy_if_exists "native-dl/midi-native-macos/osx-x64/libownaudio_midi_ffi.dylib"     "$RUNTIMES/osx-x64/native/libownaudio_midi_ffi.dylib"
           copy_if_exists "native-dl/midi-native-macos/osx-arm64/libownaudio_midi_ffi.dylib"   "$RUNTIMES/osx-arm64/native/libownaudio_midi_ffi.dylib"
+          copy_if_exists "native-dl/midi-native-macos/ios-arm64/libownaudio_midi_ffi.a"          "$RUNTIMES/ios-arm64/native/libownaudio_midi_ffi.a"
+          copy_if_exists "native-dl/midi-native-macos/iossimulator-arm64/libownaudio_midi_ffi.a" "$RUNTIMES/iossimulator-arm64/native/libownaudio_midi_ffi.a"
+          copy_if_exists "native-dl/midi-native-macos/iossimulator-x64/libownaudio_midi_ffi.a"   "$RUNTIMES/iossimulator-x64/native/libownaudio_midi_ffi.a"
+          copy_if_exists "native-dl/midi-native-android/android-arm/libownaudio_midi_ffi.so"     "$RUNTIMES/android-arm/native/libownaudio_midi_ffi.so"
+          copy_if_exists "native-dl/midi-native-android/android-arm64/libownaudio_midi_ffi.so"   "$RUNTIMES/android-arm64/native/libownaudio_midi_ffi.so"
+          copy_if_exists "native-dl/midi-native-android/android-x64/libownaudio_midi_ffi.so"     "$RUNTIMES/android-x64/native/libownaudio_midi_ffi.so"
 
           echo "Runtimes tree:"
           find "$RUNTIMES" -type f | sort
@@ -259,6 +333,7 @@ jobs:
         run: |
           dotnet pack OwnAudio/Midi/OwnAudio.Midi.csproj \
             --configuration Release \
+            -p:BuildMobile=true \
             -p:GeneratePackageOnBuild=false \
             --output nupkg-out
 
@@ -288,6 +363,7 @@ jobs:
       - rust-build-linux-x64
       - rust-build-linux-arm64
       - rust-build-macos
+      - rust-build-android
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
@@ -328,6 +404,12 @@ jobs:
           copy_if_exists "native-dl/midi-native-linux-arm64/linux-arm64/libownaudio_midi_ffi.so" "$RUNTIMES/linux-arm64/native/libownaudio_midi_ffi.so"
           copy_if_exists "native-dl/midi-native-macos/osx-x64/libownaudio_midi_ffi.dylib"     "$RUNTIMES/osx-x64/native/libownaudio_midi_ffi.dylib"
           copy_if_exists "native-dl/midi-native-macos/osx-arm64/libownaudio_midi_ffi.dylib"   "$RUNTIMES/osx-arm64/native/libownaudio_midi_ffi.dylib"
+          copy_if_exists "native-dl/midi-native-macos/ios-arm64/libownaudio_midi_ffi.a"          "$RUNTIMES/ios-arm64/native/libownaudio_midi_ffi.a"
+          copy_if_exists "native-dl/midi-native-macos/iossimulator-arm64/libownaudio_midi_ffi.a" "$RUNTIMES/iossimulator-arm64/native/libownaudio_midi_ffi.a"
+          copy_if_exists "native-dl/midi-native-macos/iossimulator-x64/libownaudio_midi_ffi.a"   "$RUNTIMES/iossimulator-x64/native/libownaudio_midi_ffi.a"
+          copy_if_exists "native-dl/midi-native-android/android-arm/libownaudio_midi_ffi.so"     "$RUNTIMES/android-arm/native/libownaudio_midi_ffi.so"
+          copy_if_exists "native-dl/midi-native-android/android-arm64/libownaudio_midi_ffi.so"   "$RUNTIMES/android-arm64/native/libownaudio_midi_ffi.so"
+          copy_if_exists "native-dl/midi-native-android/android-x64/libownaudio_midi_ffi.so"     "$RUNTIMES/android-x64/native/libownaudio_midi_ffi.so"
 
       - name: Commit and push
         run: |

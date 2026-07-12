@@ -597,19 +597,27 @@ Console.WriteLine("Saved: recording.mid");
 All backends below are driven by the bundled native Rust core (`ownaudio_midi_ffi`); the managed
 side only calls into it through P/Invoke.
 
-| Feature | Windows | macOS | Linux |
-|---|---|---|---|
-| Physical I/O | WinMM (`winmm.dll`) | CoreMIDI | ALSA rawmidi (`libasound`) |
-| SysEx receive | ✅ (WinMM MIDIHDR buffers) | ✅ (CoreMIDI packets) | ✅ (state-machine parser) |
-| Virtual ports | — | ✅ CoreMIDI | ✅ ALSA Sequencer |
-| Hot-plug detection | ✅ polling | ✅ polling | ✅ polling |
-| Timestamped send | — | planned | — |
-| MIDI File R/W | ✅ | ✅ | ✅ |
-| `MidiClock` | ✅ | ✅ | ✅ |
-| `AudioEngineMidiClock` | ✅ | ✅ | ✅ |
+| Feature | Windows | macOS | Linux | iOS | Android |
+|---|---|---|---|---|---|
+| Physical I/O | WinMM (`winmm.dll`) | CoreMIDI | ALSA rawmidi (`libasound`) | CoreMIDI | — |
+| SysEx receive | ✅ (WinMM MIDIHDR buffers) | ✅ (CoreMIDI packets) | ✅ (state-machine parser) | ✅ (CoreMIDI packets) | — |
+| Virtual ports | — | ✅ CoreMIDI | ✅ ALSA Sequencer | ✅ CoreMIDI | — |
+| Hot-plug detection | ✅ polling | ✅ polling | ✅ polling | ✅ polling | — |
+| Timestamped send | — | planned | — | planned | — |
+| MIDI File R/W | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `MidiClock` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `AudioEngineMidiClock` | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 The correct native library is selected at **runtime** per runtime identifier (RID); the platform
 MIDI backend is chosen inside the native Rust core — no compile-time defines required in application code.
+
+> **Mobile notes**
+> - **iOS** uses the same CoreMIDI backend as macOS. The static archive is linked into the app
+>   through a `NativeReference` supplied automatically by the package. On-device MIDI I/O
+>   (USB/network, virtual endpoints) has not yet been validated on hardware.
+> - **Android** has no `midir` backend, so real-time port I/O is unavailable: `MidiPortFactory`
+>   enumeration returns empty and opening a port throws a platform-unsupported error. Standard MIDI
+>   File read/write (`MidiFileReader`/`MidiFileWriter`) and both clocks are fully functional.
 
 ## AOT / Trimming
 

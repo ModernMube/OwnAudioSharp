@@ -9,5 +9,11 @@ license = "MIT"
 crate-type = ["lib"]
 
 [dependencies]
-midir = "0.10"
 thiserror = "1"
+
+# midir has no Android backend, so it is only a dependency on the platforms
+# where the hardware/virtual port module is compiled. On Android the port
+# module falls back to a stub (see src/port_android.rs); file and clock
+# functionality remain fully available.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+midir = "0.10"
