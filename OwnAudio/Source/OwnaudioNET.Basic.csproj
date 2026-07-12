@@ -10,7 +10,7 @@
     <!-- Separate obj directory set in Directory.Build.props (must be before SDK import) -->
     <!-- Exclude shared obj subdirectories from implicit Compile glob -->
     <DefaultItemExcludes>$(DefaultItemExcludes);obj\**</DefaultItemExcludes>
-    <NoWarn>$(NoWarn);CS8618;CS8625;CS1570;CS1572;CS1574;CS1587</NoWarn>
+    <NoWarn>$(NoWarn);CS8618;CS8625;CS1570;CS1572;CS1574;CS1587;CS0419</NoWarn>
 
     <!-- Android specific settings -->
     <SupportedOSPlatformVersion Condition="$(TargetFramework.StartsWith('net10.0-android'))">24.0</SupportedOSPlatformVersion>
