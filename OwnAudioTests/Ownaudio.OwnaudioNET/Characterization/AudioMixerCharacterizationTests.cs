@@ -32,10 +32,6 @@ public sealed class AudioMixerCharacterizationTests : IDisposable
     };
 
     private readonly bool? _priorRustNativeOverride;
-    private IAudioEngine? _engine;
-    private AudioMixer? _mixer;
-    private SampleSource? _source1;
-    private SampleSource? _source2;
 
     public AudioMixerCharacterizationTests()
     {
@@ -47,10 +43,6 @@ public sealed class AudioMixerCharacterizationTests : IDisposable
 
     public void Dispose()
     {
-        _mixer?.Dispose();
-        _engine?.Dispose();
-        _source1?.Dispose();
-        _source2?.Dispose();
         global::OwnaudioNET.Engine.RustNativeChain.Override = _priorRustNativeOverride;
     }
 

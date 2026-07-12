@@ -258,7 +258,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-apple-darwin,aarch64-apple-darwin,aarch64-apple-ios
+          targets: x86_64-apple-darwin,aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
 
       - name: Cache Cargo
         uses: actions/cache@v4
@@ -276,18 +276,28 @@ jobs:
         working-directory: OwnAudioEngineRust
         run: cargo build --release --target aarch64-apple-darwin
 
-      - name: Build ios-arm64
+      - name: Build ios-arm64 (device)
         working-directory: OwnAudioEngineRust
         run: cargo build --release --target aarch64-apple-ios -p ownaudio-ffi
 
+      - name: Build iossimulator-arm64
+        working-directory: OwnAudioEngineRust
+        run: cargo build --release --target aarch64-apple-ios-sim -p ownaudio-ffi
+
+      - name: Build iossimulator-x64
+        working-directory: OwnAudioEngineRust
+        run: cargo build --release --target x86_64-apple-ios -p ownaudio-ffi
+
       - name: Collect artifacts
         run: |
-          mkdir -p artifacts/osx-x64 artifacts/osx-arm64 artifacts/iOS-arm64/native
+          mkdir -p artifacts/osx-x64 artifacts/osx-arm64
+          mkdir -p artifacts/ios-arm64/native artifacts/iossimulator-arm64/native artifacts/iossimulator-x64/native
           cp OwnAudioEngineRust/target/x86_64-apple-darwin/release/libownaudio_ffi.dylib  artifacts/osx-x64/
           cp OwnAudioEngineRust/target/aarch64-apple-darwin/release/libownaudio_ffi.dylib artifacts/osx-arm64/
-          # iOS ships as a static archive (.a); the Mobile csproj packs it from
-          # runtimes/iOS-arm64/native/. The RID casing (iOS-arm64) matches the csproj glob.
-          cp OwnAudioEngineRust/target/aarch64-apple-ios/release/libownaudio_ffi.a artifacts/iOS-arm64/native/
+          # iOS ships as static archives (.a) linked via NativeReference: device + both simulators.
+          cp OwnAudioEngineRust/target/aarch64-apple-ios/release/libownaudio_ffi.a     artifacts/ios-arm64/native/
+          cp OwnAudioEngineRust/target/aarch64-apple-ios-sim/release/libownaudio_ffi.a artifacts/iossimulator-arm64/native/
+          cp OwnAudioEngineRust/target/x86_64-apple-ios/release/libownaudio_ffi.a      artifacts/iossimulator-x64/native/
 
       - uses: actions/upload-artifact@v4
         with:
@@ -531,10 +541,12 @@ jobs:
               exit 1
             fi
           }
-          stage "android-arm/libownaudio_ffi.so"       "android-arm/native/libownaudio_ffi.so"
-          stage "android-arm64/libownaudio_ffi.so"     "android-arm64/native/libownaudio_ffi.so"
-          stage "android-x64/libownaudio_ffi.so"       "android-x64/native/libownaudio_ffi.so"
-          stage "iOS-arm64/native/libownaudio_ffi.a"   "iOS-arm64/native/libownaudio_ffi.a"
+          stage "android-arm/libownaudio_ffi.so"                "android-arm/native/libownaudio_ffi.so"
+          stage "android-arm64/libownaudio_ffi.so"              "android-arm64/native/libownaudio_ffi.so"
+          stage "android-x64/libownaudio_ffi.so"                "android-x64/native/libownaudio_ffi.so"
+          stage "ios-arm64/native/libownaudio_ffi.a"            "ios-arm64/native/libownaudio_ffi.a"
+          stage "iossimulator-arm64/native/libownaudio_ffi.a"   "iossimulator-arm64/native/libownaudio_ffi.a"
+          stage "iossimulator-x64/native/libownaudio_ffi.a"     "iossimulator-x64/native/libownaudio_ffi.a"
 
       - name: Restore .NET dependencies
         run: dotnet restore OwnAudio/Source/OwnaudioNET.Mobile.csproj
@@ -615,8 +627,10 @@ jobs:
           copy_if_exists "native-merged/osx-arm64/libownaudio_ffi.dylib"  "$RUNTIMES/osx-arm64/native/libownaudio_ffi.dylib"
           copy_if_exists "native-merged/android-arm64/libownaudio_ffi.so"    "$RUNTIMES/android-arm64/native/libownaudio_ffi.so"
           copy_if_exists "native-merged/android-arm/libownaudio_ffi.so"      "$RUNTIMES/android-arm/native/libownaudio_ffi.so"
-          copy_if_exists "native-merged/android-x64/libownaudio_ffi.so"      "$RUNTIMES/android-x64/native/libownaudio_ffi.so"
-          copy_if_exists "native-merged/iOS-arm64/native/libownaudio_ffi.a"  "$RUNTIMES/iOS-arm64/native/libownaudio_ffi.a"
+          copy_if_exists "native-merged/android-x64/libownaudio_ffi.so"                "$RUNTIMES/android-x64/native/libownaudio_ffi.so"
+          copy_if_exists "native-merged/ios-arm64/native/libownaudio_ffi.a"            "$RUNTIMES/ios-arm64/native/libownaudio_ffi.a"
+          copy_if_exists "native-merged/iossimulator-arm64/native/libownaudio_ffi.a"   "$RUNTIMES/iossimulator-arm64/native/libownaudio_ffi.a"
+          copy_if_exists "native-merged/iossimulator-x64/native/libownaudio_ffi.a"     "$RUNTIMES/iossimulator-x64/native/libownaudio_ffi.a"
 
       - name: Commit and push
         run: |

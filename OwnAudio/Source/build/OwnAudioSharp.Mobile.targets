@@ -1,7 +1,25 @@
 <Project>
 
-  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'ios'">
-    <NativeReference Include="$(MSBuildThisFileDirectory)../../runtimes/iOS-arm64/native/libownaudio_ffi.a">
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'ios' AND '$(RuntimeIdentifier)' == 'ios-arm64'">
+    <NativeReference Include="$(MSBuildThisFileDirectory)../../runtimes/ios-arm64/native/libownaudio_ffi.a">
+      <Kind>Static</Kind>
+      <ForceLoad>True</ForceLoad>
+      <SmartLink>False</SmartLink>
+      <Frameworks>AudioToolbox AVFAudio AVFoundation CoreAudio CoreFoundation Foundation</Frameworks>
+    </NativeReference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'ios' AND '$(RuntimeIdentifier)' == 'iossimulator-arm64'">
+    <NativeReference Include="$(MSBuildThisFileDirectory)../../runtimes/iossimulator-arm64/native/libownaudio_ffi.a">
+      <Kind>Static</Kind>
+      <ForceLoad>True</ForceLoad>
+      <SmartLink>False</SmartLink>
+      <Frameworks>AudioToolbox AVFAudio AVFoundation CoreAudio CoreFoundation Foundation</Frameworks>
+    </NativeReference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'ios' AND '$(RuntimeIdentifier)' == 'iossimulator-x64'">
+    <NativeReference Include="$(MSBuildThisFileDirectory)../../runtimes/iossimulator-x64/native/libownaudio_ffi.a">
       <Kind>Static</Kind>
       <ForceLoad>True</ForceLoad>
       <SmartLink>False</SmartLink>

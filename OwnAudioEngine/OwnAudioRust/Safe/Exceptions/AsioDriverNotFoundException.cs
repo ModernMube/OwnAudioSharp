@@ -13,8 +13,7 @@ namespace Ownaudio.Safe.Exceptions;
 /// </para>
 /// <para>
 /// To resolve: install a compatible ASIO driver, or use the platform default host API
-/// (leave <see cref="Ownaudio.Audio.AudioEngineOptions.PreferredHostApi"/> as
-/// <see langword="null"/>).
+/// by calling <see cref="AudioEngine.Create()"/> without an explicit host API.
 /// </para>
 /// </remarks>
 public sealed class AsioDriverNotFoundException : OwnAudioException

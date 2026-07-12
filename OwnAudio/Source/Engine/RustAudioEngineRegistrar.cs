@@ -19,6 +19,11 @@ internal static class RustAudioEngineRegistrar
     /// creators into the core factories.
     /// </summary>
     [ModuleInitializer]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Usage",
+        "CA2255:The 'ModuleInitializer' attribute should not be used in libraries",
+        Justification = "Deliberate: auto-registers the Rust engine and decoder into the core " +
+            "factories on assembly load so consumers of the low-level factories need no setup code.")]
     internal static void Register()
     {
         Ownaudio.Core.AudioEngineFactory.Register(() => new RustAudioEngine());
