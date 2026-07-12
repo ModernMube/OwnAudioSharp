@@ -63,10 +63,23 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
 
     /// <summary>
     /// Analyzes a complete song and extracts timed chord progressions with key awareness.
-    /// Uses BPM-derived quarter-note windows and progressive note pruning for accurate results.
+    /// Uses BPM-derived quarter-note windows and progressive note pruning to build a
+    /// per-window candidate lattice, then decodes the most plausible chord sequence with
+    /// Viterbi dynamic programming (<see cref="ChordProgressionDecoder"/>) so the result
+    /// is temporally stable and musically coherent instead of frame-wise greedy.
     /// </summary>
     public class SongChordAnalyzer
     {
+        /// <summary>
+        /// Number of ranked chord hypotheses kept per analysis window for the Viterbi lattice.
+        /// Must be wide: on chord-transition mixture windows the union of two chords fully
+        /// supports many extended "chimera" templates that all outscore the plain triads,
+        /// and the decoder can only stay on the true chord if that chord is still a state
+        /// in the window. 32 keeps the plain triads present in practice while the decoding
+        /// cost stays trivial (windows × 33² transitions).
+        /// </summary>
+        private const int CandidatesPerWindow = 32;
+
         /// <summary>
         /// The chord detector used for analyzing individual chord segments.
         /// </summary>
@@ -88,6 +101,13 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         private readonly float _minimumChordDuration;
 
         /// <summary>
+        /// The minimum confidence threshold; also serves as the emission score of the
+        /// no-chord state in the Viterbi decoder, so windows whose best candidate falls
+        /// below it resolve to no-chord exactly as they previously fell below the threshold.
+        /// </summary>
+        private readonly float _confidence;
+
+        /// <summary>
         /// Reusable buffer holding the notes active in the current analysis window.
         /// Reused across windows to avoid a per-window list allocation on the hot path.
         /// </summary>
@@ -100,9 +120,22 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         private readonly List<Note> _workingSet = new List<Note>();
 
         /// <summary>
-        /// Gets the detected musical key of the song.
+        /// Gets the detected musical key of the song. With modulation tracking this is the
+        /// dominant key (the one active for the longest total duration).
         /// </summary>
         public MusicalKey? DetectedKey { get; private set; }
+
+        /// <summary>
+        /// Gets the modulation-aware key timeline of the last analyzed song: one segment per
+        /// key region in chronological order. Songs without modulation have a single segment.
+        /// </summary>
+        internal IReadOnlyList<TimedKey>? KeyTimeline { get; private set; }
+
+        /// <summary>
+        /// The key currently applied to the detector, tracked so segment lookups only pay
+        /// the template-rebuild cost of <see cref="ChordDetector.SetKey"/> at segment changes.
+        /// </summary>
+        private MusicalKey? _appliedKey;
 
         /// <summary>
         /// Initializes a new instance of the SongChordAnalyzer class.
@@ -130,6 +163,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         {
             _detector = new ChordDetector(DetectionMode.KeyAware, confidence);
             _minimumChordDuration = minimumChordDuration;
+            _confidence = confidence;
 
             if (bpm > 0)
             {
@@ -161,8 +195,13 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
 
             var sortedNotes = songNotes.OrderBy(n => n.StartTime).ToList();
 
-            DetectedKey = _detector.DetectKeyFromNotes(sortedNotes);
-            _detector.SetKey(DetectedKey);
+            var timeline = _detector.DetectKeyTimelineFromNotes(sortedNotes);
+            if (timeline.Count == 0)
+                timeline.Add(new TimedKey(0f, float.MaxValue, _detector.DetectKeyFromNotes(sortedNotes)));
+
+            KeyTimeline = timeline;
+            DetectedKey = GetDominantKey(timeline);
+            ApplyKey(timeline[0].Key);
 
             var chords = AnalyzeWindows(sortedNotes);
             return MergeAdjacentChords(chords);
@@ -182,23 +221,100 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
             var sortedNotes = songNotes.OrderBy(n => n.StartTime).ToList();
 
             DetectedKey = key;
-            _detector.SetKey(key);
+            KeyTimeline = new List<TimedKey> { new TimedKey(0f, float.MaxValue, key) };
+            ApplyKey(key);
 
             var chords = AnalyzeWindows(sortedNotes);
             return MergeAdjacentChords(chords);
         }
 
         /// <summary>
-        /// Analyzes the song in quarter-note-aligned windows.
-        /// Each window first attempts detection with all available notes, then falls back to
-        /// progressive pruning via <see cref="GetAndPruneNotes"/> if needed.
+        /// Returns the key active for the longest total duration across the timeline,
+        /// aggregating segments of the same key name and mode.
+        /// </summary>
+        /// <param name="timeline">The key timeline of the song.</param>
+        /// <returns>The dominant musical key.</returns>
+        private static MusicalKey GetDominantKey(IReadOnlyList<TimedKey> timeline)
+        {
+            var durations = new Dictionary<string, float>();
+            var keys = new Dictionary<string, MusicalKey>();
+
+            foreach (var segment in timeline)
+            {
+                string label = segment.Key.ToString();
+                durations.TryGetValue(label, out float total);
+                durations[label] = total + (segment.EndTime - segment.StartTime);
+                keys[label] = segment.Key;
+            }
+
+            string? bestLabel = null;
+            float bestDuration = float.MinValue;
+
+            foreach (var (label, total) in durations)
+            {
+                if (total > bestDuration)
+                {
+                    bestDuration = total;
+                    bestLabel = label;
+                }
+            }
+
+            return keys[bestLabel!];
+        }
+
+        /// <summary>
+        /// Applies a key to the detector when it differs from the currently applied one,
+        /// avoiding redundant template rebuilds inside the window loop.
+        /// </summary>
+        /// <param name="key">The key to apply.</param>
+        private void ApplyKey(MusicalKey key)
+        {
+            if (ReferenceEquals(_appliedKey, key))
+                return;
+
+            _appliedKey = key;
+            _detector.SetKey(key);
+        }
+
+        /// <summary>
+        /// Applies the key active at the given song position according to the key timeline.
+        /// Positions before the first or after the last segment use the nearest segment.
+        /// </summary>
+        /// <param name="time">The song position in seconds.</param>
+        private void ApplyKeyForTime(float time)
+        {
+            var timeline = KeyTimeline;
+            if (timeline == null || timeline.Count == 0)
+                return;
+
+            for (int i = 0; i < timeline.Count; i++)
+            {
+                if (time < timeline[i].EndTime || i == timeline.Count - 1)
+                {
+                    ApplyKey(timeline[i].Key);
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Analyzes the song in quarter-note-aligned windows and decodes the chord progression.
+        /// <para>
+        /// Algorithm:
+        /// <list type="number">
+        ///   <item>For every window, collect the active notes and build a ranked candidate
+        ///         list (top <see cref="CandidatesPerWindow"/> hypotheses, no threshold),
+        ///         using progressive pruning to clean noisy windows.</item>
+        ///   <item>Run Viterbi decoding over the whole lattice so chord choices are
+        ///         temporally smoothed and musically weighted.</item>
+        ///   <item>Emit a <see cref="TimedChord"/> for every window not resolved to no-chord.</item>
+        /// </list>
+        /// </para>
         /// </summary>
         /// <param name="notes">The list of notes to analyze.</param>
-        /// <returns>A list of timed chords detected in each analysis window.</returns>
+        /// <returns>A list of timed chords decoded from the analysis windows.</returns>
         private List<TimedChord> AnalyzeWindows(List<Note> notes)
         {
-            var chords = new List<TimedChord>();
-
             float songDuration = 0f;
             for (int i = 0; i < notes.Count; i++)
             {
@@ -206,45 +322,60 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                     songDuration = notes[i].EndTime;
             }
 
+            var windows = new List<ChordWindow>();
+
             for (float time = 0; time < songDuration; time += _hopSize)
             {
                 var windowEnd = Math.Min(time + _windowSize, songDuration);
-                var result = GetAndPruneNotes(notes, time, windowEnd);
+                ApplyKeyForTime((time + windowEnd) * 0.5f);
+                CollectWindowNotes(notes, time, windowEnd);
 
-                if (result.HasValue)
+                ChordCandidate[] candidates;
+                if (_windowNotes.Count < 3)
                 {
-                    chords.Add(new TimedChord(
-                        time, windowEnd,
-                        result.Value.analysis.ChordName,
-                        result.Value.analysis.Confidence,
-                        result.Value.analysis.NoteNames));
+                    candidates = Array.Empty<ChordCandidate>();
                 }
+                else
+                {
+                    var noteSet = SelectWindowNoteSet(time, windowEnd);
+                    candidates = _detector.GetChordCandidates(noteSet, CandidatesPerWindow, time, windowEnd).ToArray();
+                }
+
+                windows.Add(new ChordWindow(time, windowEnd, candidates));
+            }
+
+            var decoder = new ChordProgressionDecoder(_confidence);
+            int[] selection = decoder.Decode(windows);
+
+            var chords = new List<TimedChord>();
+
+            for (int i = 0; i < windows.Count; i++)
+            {
+                if (selection[i] == ChordProgressionDecoder.NoChordState)
+                    continue;
+
+                var window = windows[i];
+                var candidate = window.Candidates[selection[i]];
+
+                ApplyKeyForTime((window.StartTime + window.EndTime) * 0.5f);
+                CollectWindowNotes(notes, window.StartTime, window.EndTime);
+                var noteNames = _detector.GetChordNoteNames(candidate.Name, _windowNotes);
+
+                chords.Add(new TimedChord(
+                    window.StartTime, window.EndTime,
+                    candidate.Name, candidate.Cosine, noteNames));
             }
 
             return chords;
         }
 
         /// <summary>
-        /// Collects all notes active in a time window and attempts chord detection with progressive pruning.
-        /// <para>
-        /// Algorithm:
-        /// <list type="number">
-        ///   <item>Collect all notes whose playback overlaps the window.</item>
-        ///   <item>Try to detect a chord with all notes.</item>
-        ///   <item>If not found, repeatedly remove the shortest-duration note from the lowest-pitch group
-        ///         until a chord is detected or only 3 notes remain.</item>
-        ///   <item>Make one final attempt with exactly 3 notes; return null on failure.</item>
-        /// </list>
-        /// </para>
+        /// Fills the reusable window buffer with all notes whose playback overlaps the window.
         /// </summary>
         /// <param name="allNotes">All notes in the song.</param>
         /// <param name="windowStart">Start of the analysis window (seconds).</param>
         /// <param name="windowEnd">End of the analysis window (seconds).</param>
-        /// <returns>
-        ///   A tuple of the winning <see cref="ChordAnalysis"/> and the pruned note list, or null on failure.
-        /// </returns>
-        private (ChordAnalysis analysis, List<Note> notes)? GetAndPruneNotes(
-            List<Note> allNotes, float windowStart, float windowEnd)
+        private void CollectWindowNotes(List<Note> allNotes, float windowStart, float windowEnd)
         {
             _windowNotes.Clear();
             for (int i = 0; i < allNotes.Count; i++)
@@ -253,13 +384,29 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                 if (note.StartTime < windowEnd && note.EndTime > windowStart)
                     _windowNotes.Add(note);
             }
+        }
 
-            if (_windowNotes.Count < 3)
-                return null;
-
+        /// <summary>
+        /// Selects the note set used for candidate ranking in the current window.
+        /// <para>
+        /// Algorithm:
+        /// <list type="number">
+        ///   <item>Try to detect a chord with all notes; if it succeeds, use the full set.</item>
+        ///   <item>If not, repeatedly remove the shortest-overlap note from the lowest-pitch group
+        ///         until a chord is detected or only 3 notes remain, and use the pruned set.</item>
+        ///   <item>If pruning never succeeds, fall back to the full set — the candidate lattice
+        ///         carries the low scores and the decoder can still resolve the window to no-chord.</item>
+        /// </list>
+        /// </para>
+        /// </summary>
+        /// <param name="windowStart">Start of the analysis window (seconds).</param>
+        /// <param name="windowEnd">End of the analysis window (seconds).</param>
+        /// <returns>The note list to rank candidates from.</returns>
+        private List<Note> SelectWindowNoteSet(float windowStart, float windowEnd)
+        {
             var analysis = _detector.TryAnalyzeChord(_windowNotes);
             if (analysis != null)
-                return (analysis, _windowNotes);
+                return _windowNotes;
 
             _workingSet.Clear();
             _workingSet.AddRange(_windowNotes);
@@ -277,10 +424,10 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
 
                 analysis = _detector.TryAnalyzeChord(_workingSet);
                 if (analysis != null)
-                    return (analysis, _workingSet);
+                    return _workingSet;
             }
 
-            return null;
+            return _windowNotes;
         }
 
         /// <summary>

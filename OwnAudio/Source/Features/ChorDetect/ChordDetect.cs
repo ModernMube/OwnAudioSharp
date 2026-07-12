@@ -34,7 +34,7 @@ public static class ChordDetect
             OnsetThreshold = 0.5f,
             FrameThreshold = 0.2f,
             MinNoteLength = 15,
-            MinFreq = 65f,
+            MinFreq = 32.7f,
             MaxFreq = 2800f,
             IncludePitchBends = false,
             MelodiaTrick = true
@@ -127,7 +127,7 @@ public static class ChordDetect
             OnsetThreshold = 0.5f,
             FrameThreshold = 0.2f,
             MinNoteLength = 15,
-            MinFreq = 65f,
+            MinFreq = 32.7f,
             MaxFreq = 2800f,
             IncludePitchBends = false,
             MelodiaTrick = true
@@ -175,17 +175,55 @@ public static class ChordDetect
         return bpm > 0 ? (int)Math.Round(bpm) : 120;
     }
 
+    /// <summary>
+    /// Guards the cached real-time detector against concurrent callers.
+    /// </summary>
+    private static readonly object RealtimeDetectorLock = new object();
+
+    /// <summary>
+    /// The cached real-time detector reused across calls so its internal stability
+    /// buffer can accumulate history; a fresh instance per call would reset the
+    /// buffer and make the reported stability meaningless.
+    /// </summary>
+    private static RealTimeChordDetector? _realtimeDetector;
+
+    /// <summary>
+    /// The detection mode the cached real-time detector was created with.
+    /// </summary>
+    private static DetectionMode _realtimeDetectorMode;
+
+    /// <summary>
+    /// The buffer size the cached real-time detector was created with.
+    /// </summary>
+    private static int _realtimeDetectorBufferSize;
+
+    /// <summary>
+    /// Processes a group of notes with the shared real-time detector and returns the most
+    /// stable chord. The detector instance persists across calls (and is recreated only
+    /// when the mode or buffer size changes), so the stability score reflects the last
+    /// <paramref name="buffersize"/> calls rather than a single frame.
+    /// </summary>
+    /// <param name="notes">The notes of the current analysis frame.</param>
+    /// <param name="mode">The detection mode to use.</param>
+    /// <param name="buffersize">The number of recent frames considered for stability.</param>
+    /// <returns>A tuple containing the most stable chord name and its stability score (0.0 to 1.0).</returns>
     public static (string chord, float stability) DetectRealtime(
         List<Note> notes,
         DetectionMode mode = DetectionMode.Optimized,
         int buffersize = 5)
     {
-        
-        var realtimeDetector = new RealTimeChordDetector(buffersize, mode);
-        
-        if (realtimeDetector != null)
-            return realtimeDetector.ProcessNotes(notes);
-        else
-            return ("", 0.0f);
+        lock (RealtimeDetectorLock)
+        {
+            if (_realtimeDetector == null
+                || _realtimeDetectorMode != mode
+                || _realtimeDetectorBufferSize != buffersize)
+            {
+                _realtimeDetector = new RealTimeChordDetector(buffersize, mode);
+                _realtimeDetectorMode = mode;
+                _realtimeDetectorBufferSize = buffersize;
+            }
+
+            return _realtimeDetector.ProcessNotes(notes);
+        }
     }
 }

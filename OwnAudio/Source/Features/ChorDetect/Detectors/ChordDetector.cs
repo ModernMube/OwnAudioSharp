@@ -60,16 +60,46 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
 
         /// <summary>
         /// Reference chord size (a triad) against which the parsimony penalty is measured.
-        /// Templates larger than a triad are penalised proportionally to their extra tones.
+        /// Templates larger than a triad are penalised progressively per extra tone.
         /// </summary>
         private const int TriadToneCount = 3;
 
         /// <summary>
-        /// Score penalty applied per chord tone beyond a triad. Small enough that a genuine
-        /// seventh or extension still wins on cosine similarity, but large enough to break
-        /// near-ties in favour of the simpler chord, suppressing spurious extended-chord labels.
+        /// Score penalty for the fourth chord tone (sevenths, sixths, add9). Small, so a
+        /// genuine tetrad still wins on cosine similarity over its parent triad.
         /// </summary>
-        private const float ComplexityPenaltyPerTone = 0.012f;
+        private const float FourthTonePenalty = 0.012f;
+
+        /// <summary>
+        /// Score penalty for the fifth chord tone (9th chords). Noticeably higher than the
+        /// fourth-tone step: five-tone templates cover so many pitch classes that they match
+        /// mixed or noisy windows spuriously unless the voicing evidence is strong.
+        /// </summary>
+        private const float FifthTonePenalty = 0.06f;
+
+        /// <summary>
+        /// Score penalty for the sixth and any further chord tone (11th/13th chords).
+        /// Six-tone templates span near-complete scales and therefore match the chimera
+        /// chromagram of chord-transition windows almost perfectly; this steep step means
+        /// they are only reported when they beat every simpler reading decisively, matching
+        /// industry practice where recognition vocabularies stop at tetrads.
+        /// </summary>
+        private const float SixthTonePenalty = 0.12f;
+
+        /// <summary>
+        /// Weight of the missing-tone penalty: the score cost of template tones that have
+        /// no supporting energy in the chromagram, as a fraction of the template's total
+        /// weight. This is evidence-based parsimony — a seventh chord whose seventh is
+        /// actually sounding pays nothing, while one hallucinated onto a bare triad is
+        /// demoted well below the triad.
+        /// </summary>
+        private const float MissingTonePenaltyWeight = 0.4f;
+
+        /// <summary>
+        /// A template tone counts as missing when the chromagram energy at its pitch class
+        /// is below this fraction of the chromagram's maximum bin.
+        /// </summary>
+        private const float MissingToneThresholdRatio = 0.05f;
 
         /// <summary>
         /// Score bonus applied to chords whose tones all fit the detected key's scale.
@@ -77,6 +107,21 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
         /// of enharmonic rivals without overriding a clearly stronger cosine match.
         /// </summary>
         private const float DiatonicBonus = 0.02f;
+
+        /// <summary>
+        /// Score bonus applied to chords whose root matches the lowest sounding pitch class.
+        /// The bass note is the strongest root evidence in real music, so this prior resolves
+        /// shared-subset ambiguities (e.g. C6 vs Am7, Cmaj7 vs Em/C) in favour of the chord
+        /// whose root is actually in the bass, without overriding a clearly stronger match.
+        /// </summary>
+        private const float BassRootBonus = 0.03f;
+
+        /// <summary>
+        /// Minimum duration of the bass note relative to the longest note in the analysed set
+        /// for it to count as root evidence. Filters out brief low passing tones that would
+        /// otherwise mislead the bass-root prior.
+        /// </summary>
+        private const float BassMinimumDurationRatio = 0.25f;
 
         /// <summary>
         /// Pitch-class bitmask of the currently active key's scale, or all twelve bits set
@@ -154,8 +199,29 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
                 return new ChordAnalysis("N", 0.9f, "No notes detected", new string[0]);
 
             var chromagram = ComputeChromagram(notes);
-            var (chord, confidence, isAmbiguous, alternatives) = DetectChordAdvancedBase(chromagram);
+            var (chord, confidence, isAmbiguous, alternatives) = DetectChordAdvanced(chromagram, ComputeBassPitchClass(notes));
 
+            var (pitchClasses, noteNames) = BuildPresentNotes(notes, chord);
+
+            return new ChordAnalysis(chord, confidence, GenerateExplanation(pitchClasses, chord, confidence, isAmbiguous), noteNames)
+            {
+                IsAmbiguous = isAmbiguous,
+                Alternatives = alternatives,
+                PitchClasses = pitchClasses,
+                Chromagram = chromagram
+            };
+        }
+
+        /// <summary>
+        /// Builds the present pitch classes and their key-aware note names from a note list.
+        /// When a known chord is supplied, the result is filtered to the chord's tones so
+        /// non-chord (passing/ornament) pitches do not appear in the reported notes.
+        /// </summary>
+        /// <param name="notes">The notes whose pitch classes should be collected.</param>
+        /// <param name="chord">The detected chord name used for filtering, or "Unknown"/"N" to skip filtering.</param>
+        /// <returns>A tuple of the present pitch classes and their note names.</returns>
+        private (int[] pitchClasses, string[] noteNames) BuildPresentNotes(List<Note> notes, string chord)
+        {
             int presentMask = 0;
             foreach (var note in notes)
                 presentMask |= 1 << (note.Pitch % 12);
@@ -184,13 +250,118 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
                 }
             }
 
-            return new ChordAnalysis(chord, confidence, GenerateExplanation(pitchClasses, chord, confidence, isAmbiguous), noteNames)
+            return (pitchClasses, noteNames);
+        }
+
+        /// <summary>
+        /// Returns the key-aware note names of the pitches present in a note list, filtered
+        /// to the tones of the given chord. Used by the song analyzer to label a window with
+        /// the notes of the chord chosen by the progression decoder, which may differ from
+        /// the locally best-matching chord.
+        /// </summary>
+        /// <param name="chordName">The chord whose tones act as the filter.</param>
+        /// <param name="notes">The notes present in the analysed window.</param>
+        /// <returns>An array of note names present in both the window and the chord.</returns>
+        internal string[] GetChordNoteNames(string chordName, List<Note> notes)
+        {
+            return BuildPresentNotes(notes, chordName).noteNames;
+        }
+
+        /// <summary>
+        /// Returns the duration a note contributes to an analysis window: the overlap with
+        /// the window when bounds are supplied, otherwise the note's full duration.
+        /// Mirrors the weighting rule of <see cref="ComputeChromagram"/>.
+        /// </summary>
+        /// <param name="note">The note whose effective duration is measured.</param>
+        /// <param name="windowStart">Window start in seconds, or -1 to use the full duration.</param>
+        /// <param name="windowEnd">Window end in seconds, or -1 to use the full duration.</param>
+        /// <returns>The effective duration in seconds, never negative.</returns>
+        private static float GetEffectiveDuration(Note note, float windowStart, float windowEnd)
+        {
+            if (windowStart >= 0f && windowEnd > windowStart)
             {
-                IsAmbiguous = isAmbiguous,
-                Alternatives = alternatives,
-                PitchClasses = pitchClasses,
-                Chromagram = chromagram
-            };
+                float overlap = Math.Min(note.EndTime, windowEnd) - Math.Max(note.StartTime, windowStart);
+                return Math.Max(overlap, 0f);
+            }
+
+            return note.EndTime - note.StartTime;
+        }
+
+        /// <summary>
+        /// Determines the pitch class of the bass (lowest) note in a note list.
+        /// Only notes lasting at least <see cref="BassMinimumDurationRatio"/> of the longest
+        /// note are considered, so short low passing tones cannot masquerade as the bass.
+        /// When window bounds are supplied, durations are clipped to the window so a note
+        /// barely overlapping the window cannot dominate.
+        /// </summary>
+        /// <param name="notes">The notes to inspect.</param>
+        /// <param name="windowStart">Optional window start for duration clipping. Pass -1 to use full durations.</param>
+        /// <param name="windowEnd">Optional window end for duration clipping. Pass -1 to use full durations.</param>
+        /// <returns>The pitch class (0-11) of the qualifying lowest note, or -1 when none qualifies.</returns>
+        internal static int ComputeBassPitchClass(List<Note> notes, float windowStart = -1f, float windowEnd = -1f)
+        {
+            if (notes == null || notes.Count == 0)
+                return -1;
+
+            float maxDuration = 0f;
+            foreach (var note in notes)
+            {
+                float duration = GetEffectiveDuration(note, windowStart, windowEnd);
+                if (duration > maxDuration)
+                    maxDuration = duration;
+            }
+
+            if (maxDuration <= 0f)
+                return -1;
+
+            float minimumDuration = maxDuration * BassMinimumDurationRatio;
+            int bassPitch = int.MaxValue;
+
+            foreach (var note in notes)
+            {
+                float duration = GetEffectiveDuration(note, windowStart, windowEnd);
+                if (duration >= minimumDuration && note.Pitch < bassPitch)
+                    bassPitch = note.Pitch;
+            }
+
+            return bassPitch == int.MaxValue ? -1 : bassPitch % 12;
+        }
+
+        /// <summary>
+        /// Ranks the chord templates against the given notes and returns the best candidates
+        /// with their raw cosine similarity, perceptual score and root pitch class.
+        /// This is the lattice-building entry point used by the Viterbi progression decoder:
+        /// unlike single-chord detection it applies no confidence threshold, so weak windows
+        /// still yield candidates and the decoder can weigh them against the no-chord state.
+        /// </summary>
+        /// <param name="notes">The notes of the analysis window.</param>
+        /// <param name="topN">The maximum number of candidates to return.</param>
+        /// <param name="windowStart">Optional window start for duration clipping. Pass -1 to use full note durations.</param>
+        /// <param name="windowEnd">Optional window end for duration clipping. Pass -1 to use full note durations.</param>
+        /// <returns>The candidates in descending score order; empty when the window has no usable energy.</returns>
+        internal List<ChordCandidate> GetChordCandidates(List<Note> notes, int topN = 8, float windowStart = -1f, float windowEnd = -1f)
+        {
+            var result = new List<ChordCandidate>();
+
+            if (notes == null || notes.Count == 0 || topN < 1)
+                return result;
+
+            var chromagram = ComputeChromagram(notes, windowStart, windowEnd);
+            int bassPitchClass = ComputeBassPitchClass(notes, windowStart, windowEnd);
+
+            Span<ScoredChord> top = topN <= 32
+                ? stackalloc ScoredChord[topN]
+                : new ScoredChord[topN];
+
+            int count = RankChords(chromagram, bassPitchClass, top);
+
+            for (int i = 0; i < count; i++)
+            {
+                ref readonly TemplateEntry entry = ref _templateEntries[top[i].TemplateIndex];
+                result.Add(new ChordCandidate(entry.Name, top[i].Cosine, top[i].Score, entry.Root));
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -264,13 +435,25 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
         }
 
         /// <summary>
+        /// Detects the modulation-aware key timeline from a collection of notes.
+        /// Songs without modulation yield a single segment; genuine modulations produce
+        /// a new segment at the change point.
+        /// </summary>
+        /// <param name="notes">The list of notes to analyze.</param>
+        /// <returns>The chronological list of key segments; empty when there are no notes.</returns>
+        internal List<TimedKey> DetectKeyTimelineFromNotes(List<Note> notes)
+        {
+            return _keyDetector.DetectKeyTimeline(notes);
+        }
+
+        /// <summary>
         /// Processes notes for real-time detection with stability analysis.
         /// </summary>
         /// <param name="newNotes">The new notes to add to the processing buffer.</param>
         /// <returns>A tuple containing the most stable chord name and its stability score (0.0 to 1.0).</returns>
         public (string chord, float stability) ProcessNotes(List<Note> newNotes)
         {
-            var (chord, confidence, _, _) = DetectChordAdvancedBase(ComputeChromagram(newNotes));
+            var (chord, confidence, _, _) = DetectChordAdvanced(ComputeChromagram(newNotes), ComputeBassPitchClass(newNotes));
 
             _detectedChords.Enqueue(confidence > 0.5f ? chord : null);
             if (_detectedChords.Count > _bufferSize)
@@ -325,7 +508,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
                 ? stackalloc ScoredChord[topN]
                 : new ScoredChord[topN];
 
-            int count = RankChords(chromagram, top);
+            int count = RankChords(chromagram, ComputeBassPitchClass(notes), top);
 
             var result = new List<(string chord, float confidence)>(count);
             for (int i = 0; i < count; i++)
@@ -392,6 +575,8 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
                 float magnitudeSquared = 0f;
                 int toneCount = 0;
                 int activeMask = 0;
+                int root = 0;
+                float rootWeight = 0f;
 
                 for (int pc = 0; pc < 12; pc++)
                 {
@@ -401,6 +586,12 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
                         magnitudeSquared += value * value;
                         toneCount++;
                         activeMask |= 1 << pc;
+
+                        if (value > rootWeight)
+                        {
+                            rootWeight = value;
+                            root = pc;
+                        }
                     }
                 }
 
@@ -408,12 +599,45 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
                     ? (float)(1.0 / Math.Sqrt(magnitudeSquared))
                     : 0f;
 
+                float weightSum = 0f;
+                for (int pc = 0; pc < 12; pc++)
+                    weightSum += template[pc];
+
+                float inverseWeightSum = weightSum > 0f ? 1f / weightSum : 0f;
+
                 bool isDiatonic = (activeMask & ~_scaleMask) == 0;
 
-                entries[index++] = new TemplateEntry(chordName, template, inverseMagnitude, toneCount, isDiatonic);
+                entries[index++] = new TemplateEntry(
+                    chordName, template, inverseMagnitude,
+                    ComputeComplexityPenalty(toneCount), inverseWeightSum, isDiatonic, root);
             }
 
             _templateEntries = entries;
+        }
+
+        /// <summary>
+        /// Computes the progressive parsimony penalty of a template from its tone count.
+        /// The fourth tone is cheap (genuine tetrads must stay detectable), the fifth is
+        /// noticeably more expensive, and the sixth and beyond are steep, because templates
+        /// spanning near-complete scales match mixed windows spuriously.
+        /// </summary>
+        /// <param name="toneCount">The number of distinct chord tones in the template.</param>
+        /// <returns>The cumulative score penalty for all tones beyond a triad.</returns>
+        private static float ComputeComplexityPenalty(int toneCount)
+        {
+            float penalty = 0f;
+
+            for (int tone = TriadToneCount + 1; tone <= toneCount; tone++)
+            {
+                penalty += tone switch
+                {
+                    4 => FourthTonePenalty,
+                    5 => FifthTonePenalty,
+                    _ => SixthTonePenalty
+                };
+            }
+
+            return penalty;
         }
 
         /// <summary>
@@ -447,19 +671,36 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
 
         /// <summary>
         /// Advanced chord detection with ambiguity analysis.
-        /// Candidates are ranked by a perceptual score (cosine similarity plus a parsimony penalty
-        /// and a diatonic bonus), but the reported confidence is always the winner's raw cosine
-        /// similarity so the meaning of <see cref="_confidenceThreshold"/> stays unchanged.
+        /// Candidates are ranked by a perceptual score (cosine similarity adjusted by the
+        /// parsimony, missing-tone, diatonic and bass-root priors), but the reported confidence
+        /// is always the winner's raw cosine similarity so the meaning of
+        /// <see cref="_confidenceThreshold"/> stays unchanged. Ambiguity likewise compares
+        /// perceptual scores, so candidates separated by the priors (e.g. a bare triad versus
+        /// its unsupported seventh extension) are no longer reported as ambiguous.
         /// </summary>
         /// <param name="chromagram">The chromagram to analyze for chord detection.</param>
         /// <returns>A tuple containing the chord name, confidence, ambiguity flag, and alternative chord names.</returns>
         protected (string chord, float confidence, bool isAmbiguous, string[] alternatives) DetectChordAdvancedBase(float[]? chromagram)
         {
+            return DetectChordAdvanced(chromagram, -1);
+        }
+
+        /// <summary>
+        /// Bass-aware variant of <see cref="DetectChordAdvancedBase(float[])"/>.
+        /// The bass pitch class feeds the root prior in ranking, resolving shared-subset
+        /// ambiguities in favour of the chord whose root is actually in the bass.
+        /// Kept internal so the frozen public API surface stays unchanged.
+        /// </summary>
+        /// <param name="chromagram">The chromagram to analyze for chord detection.</param>
+        /// <param name="bassPitchClass">The pitch class of the bass note, or -1 when unknown.</param>
+        /// <returns>A tuple containing the chord name, confidence, ambiguity flag, and alternative chord names.</returns>
+        internal (string chord, float confidence, bool isAmbiguous, string[] alternatives) DetectChordAdvanced(float[]? chromagram, int bassPitchClass)
+        {
             if (chromagram == null || _templateEntries.Length == 0)
                 return ("Unknown", 0f, false, new string[0]);
 
             Span<ScoredChord> top = stackalloc ScoredChord[TopCandidateCount];
-            int count = RankChords(chromagram, top);
+            int count = RankChords(chromagram, bassPitchClass, top);
 
             if (count == 0)
                 return ("Unknown", 0f, false, new string[0]);
@@ -471,7 +712,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
                 int ambiguousCount = 0;
                 for (int i = 0; i < count; i++)
                 {
-                    if (Math.Abs(top[i].Cosine - best.Cosine) <= _ambiguityThreshold)
+                    if (best.Score - top[i].Score <= _ambiguityThreshold)
                         ambiguousCount++;
                 }
 
@@ -484,7 +725,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
                         var ambiguous = new string[ambiguousCount];
                         for (int i = 0, w = 0; i < count && w < ambiguousCount; i++)
                         {
-                            if (Math.Abs(top[i].Cosine - best.Cosine) <= _ambiguityThreshold)
+                            if (best.Score - top[i].Score <= _ambiguityThreshold)
                                 ambiguous[w++] = _templateEntries[top[i].TemplateIndex].Name;
                         }
 
@@ -560,25 +801,35 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
         /// best candidates in descending score order. Performs no allocations or LINQ: the caller
         /// provides a (typically stack-allocated) span whose length defines how many candidates are kept.
         /// <para>
-        /// The ranking score is the cosine similarity adjusted by two perceptual priors:
-        /// a parsimony penalty proportional to the number of tones beyond a triad, and a diatonic
-        /// bonus when every chord tone belongs to the active key. Each candidate still carries its
-        /// raw cosine similarity so callers can report unbiased confidence.
+        /// The ranking score is the cosine similarity adjusted by four perceptual priors:
+        /// a progressive parsimony penalty for tones beyond a triad, an evidence-based
+        /// missing-tone penalty for template tones with no support in the chromagram,
+        /// a diatonic bonus when every chord tone belongs to the active key, and a bass-root
+        /// bonus when the chord's root matches the lowest sounding pitch class. Each candidate
+        /// still carries its raw cosine similarity so callers can report unbiased confidence.
         /// </para>
         /// </summary>
         /// <param name="chromagram">The 12-element chromagram to match.</param>
+        /// <param name="bassPitchClass">The pitch class of the bass note for the root prior, or -1 when unknown.</param>
         /// <param name="top">A buffer receiving the top candidates; its length is the retention count.</param>
         /// <returns>The number of candidates written to <paramref name="top"/>.</returns>
-        private int RankChords(float[] chromagram, Span<ScoredChord> top)
+        private int RankChords(float[] chromagram, int bassPitchClass, Span<ScoredChord> top)
         {
             float chromaMagnitudeSquared = 0f;
+            float chromaMax = 0f;
             for (int i = 0; i < 12; i++)
-                chromaMagnitudeSquared += chromagram[i] * chromagram[i];
+            {
+                float value = chromagram[i];
+                chromaMagnitudeSquared += value * value;
+                if (value > chromaMax)
+                    chromaMax = value;
+            }
 
             if (chromaMagnitudeSquared <= 0f)
                 return 0;
 
             float inverseChromaMagnitude = (float)(1.0 / Math.Sqrt(chromaMagnitudeSquared));
+            float missingThreshold = chromaMax * MissingToneThresholdRatio;
 
             int capacity = top.Length;
             int filled = 0;
@@ -590,16 +841,29 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
                 float[] vector = entry.Vector;
 
                 float dot = 0f;
+                float missingWeight = 0f;
                 for (int pc = 0; pc < 12; pc++)
-                    dot += chromagram[pc] * vector[pc];
+                {
+                    float templateWeight = vector[pc];
+                    float chromaValue = chromagram[pc];
+
+                    dot += chromaValue * templateWeight;
+
+                    if (templateWeight > 0f && chromaValue < missingThreshold)
+                        missingWeight += templateWeight;
+                }
 
                 float cosine = dot * inverseChromaMagnitude * entry.InverseMagnitude;
                 if (cosine <= 0f)
                     continue;
 
-                float score = cosine - ComplexityPenaltyPerTone * (entry.ToneCount - TriadToneCount);
+                float score = cosine
+                    - entry.ComplexityPenalty
+                    - MissingTonePenaltyWeight * missingWeight * entry.InverseWeightSum;
                 if (entry.IsDiatonic)
                     score += DiatonicBonus;
+                if (bassPitchClass >= 0 && entry.Root == bassPitchClass)
+                    score += BassRootBonus;
 
                 if (filled == capacity && score <= top[capacity - 1].Score)
                     continue;
@@ -671,9 +935,15 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
             public readonly float InverseMagnitude;
 
             /// <summary>
-            /// The number of distinct chord tones, used by the parsimony penalty.
+            /// The pre-computed progressive parsimony penalty of the template.
             /// </summary>
-            public readonly int ToneCount;
+            public readonly float ComplexityPenalty;
+
+            /// <summary>
+            /// The reciprocal of the sum of all template weights, pre-computed so the
+            /// missing-tone fraction needs no division in the matching loop.
+            /// </summary>
+            public readonly float InverseWeightSum;
 
             /// <summary>
             /// Whether every chord tone lies within the active key's scale.
@@ -681,20 +951,30 @@ namespace OwnaudioNET.Features.OwnChordDetect.Detectors
             public readonly bool IsDiatonic;
 
             /// <summary>
+            /// The root pitch class of the chord (0-11), identified as the template tone
+            /// with the highest perceptual weight. Used by the bass-root prior.
+            /// </summary>
+            public readonly int Root;
+
+            /// <summary>
             /// Initializes a new template entry with its pre-computed matching metadata.
             /// </summary>
             /// <param name="name">The chord name.</param>
             /// <param name="vector">The weighted 12-element chromagram pattern.</param>
             /// <param name="inverseMagnitude">The reciprocal of the template's Euclidean magnitude.</param>
-            /// <param name="toneCount">The number of distinct chord tones.</param>
+            /// <param name="complexityPenalty">The pre-computed progressive parsimony penalty.</param>
+            /// <param name="inverseWeightSum">The reciprocal of the sum of all template weights.</param>
             /// <param name="isDiatonic">Whether the chord is diatonic to the active key.</param>
-            public TemplateEntry(string name, float[] vector, float inverseMagnitude, int toneCount, bool isDiatonic)
+            /// <param name="root">The root pitch class of the chord (0-11).</param>
+            public TemplateEntry(string name, float[] vector, float inverseMagnitude, float complexityPenalty, float inverseWeightSum, bool isDiatonic, int root)
             {
                 Name = name;
                 Vector = vector;
                 InverseMagnitude = inverseMagnitude;
-                ToneCount = toneCount;
+                ComplexityPenalty = complexityPenalty;
+                InverseWeightSum = inverseWeightSum;
                 IsDiatonic = isDiatonic;
+                Root = root;
             }
         }
 

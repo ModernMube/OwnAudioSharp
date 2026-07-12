@@ -60,6 +60,47 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
     }
 
     /// <summary>
+    /// A musical key active over a time span of the song, produced by the modulation-aware
+    /// key timeline detection. Songs without modulation yield a single segment.
+    /// </summary>
+    internal sealed class TimedKey
+    {
+        /// <summary>
+        /// The start time of the key segment in seconds.
+        /// </summary>
+        internal float StartTime { get; }
+
+        /// <summary>
+        /// The end time of the key segment in seconds.
+        /// </summary>
+        internal float EndTime { get; }
+
+        /// <summary>
+        /// The musical key active in this segment.
+        /// </summary>
+        internal MusicalKey Key { get; }
+
+        /// <summary>
+        /// Initializes a new timed key segment.
+        /// </summary>
+        /// <param name="startTime">The start time of the segment in seconds.</param>
+        /// <param name="endTime">The end time of the segment in seconds.</param>
+        /// <param name="key">The musical key active in the segment.</param>
+        internal TimedKey(float startTime, float endTime, MusicalKey key)
+        {
+            StartTime = startTime;
+            EndTime = endTime;
+            Key = key;
+        }
+
+        /// <summary>
+        /// Returns a string representation of the timed key segment.
+        /// </summary>
+        /// <returns>A formatted string containing the time span and key.</returns>
+        public override string ToString() => $"{StartTime:F1}s-{EndTime:F1}s: {Key}";
+    }
+
+    /// <summary>
     /// Detects the musical key of a song using the Krumhansl-Schmuckler algorithm.
     /// </summary>
     public class KeyDetector
@@ -134,6 +175,223 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
             }
 
             return CreateKey(bestKey.name, bestKey.isMajor, bestKey.useFlats, bestKey.tonic);
+        }
+
+        /// <summary>
+        /// Default analysis window for modulation-aware key tracking, in seconds.
+        /// Keys need substantially more context than chords to be identified reliably,
+        /// so the window is several times the typical chord-analysis window.
+        /// </summary>
+        private const float DefaultKeyWindowSeconds = 8f;
+
+        /// <summary>
+        /// Default hop between key-analysis windows, in seconds.
+        /// </summary>
+        private const float DefaultKeyHopSeconds = 2f;
+
+        /// <summary>
+        /// Viterbi penalty for changing key between consecutive windows. Sized so a genuine
+        /// modulation (whose correlation advantage persists over many windows) switches after
+        /// a couple of windows, while a single ambiguous window cannot flip the key.
+        /// </summary>
+        private const float KeyChangePenalty = 0.3f;
+
+        /// <summary>
+        /// Additional per-change penalty weight multiplied by the circle-of-fifths distance
+        /// between the tonics of the outgoing and incoming keys. Encodes the musical prior
+        /// that modulations move mostly to closely related keys.
+        /// </summary>
+        private const float TonicDistanceWeight = 0.01f;
+
+        /// <summary>
+        /// Detects the key timeline of a song with modulation tracking.
+        /// <para>
+        /// The song is scanned with overlapping windows; each window is correlated against all
+        /// key profiles (Krumhansl-Schmuckler), and the most plausible key sequence is decoded
+        /// with Viterbi dynamic programming in which key changes carry a musically informed
+        /// cost (base penalty plus circle-of-fifths distance between tonics). Songs without
+        /// modulation therefore yield a single segment identical to global key detection,
+        /// while genuine modulations produce a new segment at the change point.
+        /// </para>
+        /// </summary>
+        /// <param name="notes">The notes of the song.</param>
+        /// <param name="windowSeconds">The key-analysis window length in seconds.</param>
+        /// <param name="hopSeconds">The hop between key-analysis windows in seconds.</param>
+        /// <returns>The chronological list of key segments; empty when there are no notes.</returns>
+        internal List<TimedKey> DetectKeyTimeline(
+            List<Note> notes,
+            float windowSeconds = DefaultKeyWindowSeconds,
+            float hopSeconds = DefaultKeyHopSeconds)
+        {
+            var timeline = new List<TimedKey>();
+
+            if (notes == null || notes.Count == 0)
+                return timeline;
+
+            float duration = 0f;
+            foreach (var note in notes)
+            {
+                if (note.EndTime > duration)
+                    duration = note.EndTime;
+            }
+
+            if (duration <= 0f)
+                return timeline;
+
+            if (duration <= windowSeconds)
+            {
+                timeline.Add(new TimedKey(0f, duration, DetectKey(notes)));
+                return timeline;
+            }
+
+            float lastStart = Math.Max(0f, duration - windowSeconds);
+            var windowStarts = new List<float>();
+            for (float time = 0f; time < lastStart; time += hopSeconds)
+                windowStarts.Add(time);
+            windowStarts.Add(lastStart);
+
+            int windowCount = windowStarts.Count;
+            int stateCount = KeyDefinitions.Length;
+
+            var emissions = new float[windowCount][];
+            for (int w = 0; w < windowCount; w++)
+            {
+                float windowEnd = Math.Min(windowStarts[w] + windowSeconds, duration);
+                var chromagram = ComputeWindowChromagram(notes, windowStarts[w], windowEnd);
+
+                emissions[w] = new float[stateCount];
+                for (int s = 0; s < stateCount; s++)
+                    emissions[w][s] = ComputeKeyCorrelation(chromagram, KeyDefinitions[s]);
+            }
+
+            var scores = new float[stateCount];
+            var previousScores = new float[stateCount];
+            var backpointers = new int[windowCount][];
+
+            for (int s = 0; s < stateCount; s++)
+                previousScores[s] = emissions[0][s];
+
+            backpointers[0] = new int[stateCount];
+
+            for (int w = 1; w < windowCount; w++)
+            {
+                backpointers[w] = new int[stateCount];
+
+                for (int s = 0; s < stateCount; s++)
+                {
+                    float best = float.MinValue;
+                    int bestPrevious = 0;
+
+                    for (int p = 0; p < stateCount; p++)
+                    {
+                        float penalty = p == s
+                            ? 0f
+                            : KeyChangePenalty + TonicDistanceWeight
+                                * CircleOfFifthsDistance(KeyDefinitions[p].tonic, KeyDefinitions[s].tonic);
+
+                        float candidate = previousScores[p] - penalty;
+                        if (candidate > best)
+                        {
+                            best = candidate;
+                            bestPrevious = p;
+                        }
+                    }
+
+                    scores[s] = best + emissions[w][s];
+                    backpointers[w][s] = bestPrevious;
+                }
+
+                (previousScores, scores) = (scores, previousScores);
+            }
+
+            int state = 0;
+            float bestFinal = float.MinValue;
+            for (int s = 0; s < stateCount; s++)
+            {
+                if (previousScores[s] > bestFinal)
+                {
+                    bestFinal = previousScores[s];
+                    state = s;
+                }
+            }
+
+            var selection = new int[windowCount];
+            for (int w = windowCount - 1; w >= 0; w--)
+            {
+                selection[w] = state;
+                state = backpointers[w][state];
+            }
+
+            int segmentStart = 0;
+            float segmentStartTime = 0f;
+            for (int w = 1; w <= windowCount; w++)
+            {
+                if (w == windowCount || selection[w] != selection[segmentStart])
+                {
+                    var definition = KeyDefinitions[selection[segmentStart]];
+                    float end = w == windowCount
+                        ? duration
+                        : (windowStarts[w - 1] + windowStarts[w] + windowSeconds) * 0.5f;
+
+                    timeline.Add(new TimedKey(
+                        segmentStartTime, end,
+                        CreateKey(definition.name, definition.isMajor, definition.useFlats, definition.tonic)));
+
+                    segmentStartTime = end;
+                    segmentStart = w;
+                }
+            }
+
+            return timeline;
+        }
+
+        /// <summary>
+        /// Computes a chromagram from the notes overlapping a time window, weighting each
+        /// pitch class by amplitude multiplied by the overlap duration with the window.
+        /// </summary>
+        /// <param name="notes">The notes of the song.</param>
+        /// <param name="windowStart">The window start in seconds.</param>
+        /// <param name="windowEnd">The window end in seconds.</param>
+        /// <returns>A normalized 12-element pitch-class distribution.</returns>
+        private static float[] ComputeWindowChromagram(List<Note> notes, float windowStart, float windowEnd)
+        {
+            var chroma = new float[12];
+
+            foreach (var note in notes)
+            {
+                float overlap = Math.Min(note.EndTime, windowEnd) - Math.Max(note.StartTime, windowStart);
+                if (overlap <= 0f)
+                    continue;
+
+                chroma[note.Pitch % 12] += note.Amplitude * overlap;
+            }
+
+            float sum = 0f;
+            for (int i = 0; i < 12; i++)
+                sum += chroma[i];
+
+            if (sum > 0f)
+            {
+                float inverseSum = 1f / sum;
+                for (int i = 0; i < 12; i++)
+                    chroma[i] *= inverseSum;
+            }
+
+            return chroma;
+        }
+
+        /// <summary>
+        /// Computes the distance between two pitch classes on the circle of fifths (0-6).
+        /// </summary>
+        /// <param name="pitchClassA">The first pitch class (0-11).</param>
+        /// <param name="pitchClassB">The second pitch class (0-11).</param>
+        /// <returns>The circle-of-fifths distance in the range 0-6.</returns>
+        private static int CircleOfFifthsDistance(int pitchClassA, int pitchClassB)
+        {
+            int positionA = pitchClassA * 7 % 12;
+            int positionB = pitchClassB * 7 % 12;
+            int difference = Math.Abs(positionA - positionB);
+            return Math.Min(difference, 12 - difference);
         }
 
         /// <summary>
