@@ -145,24 +145,17 @@ public sealed partial class AudioMixer : IDisposable
 #pragma warning restore CS0649
 
     /// <summary>
-    /// Ordered list of master effect processors applied to the mixed output each cycle.
-    /// Mutations are protected by <c>_effectsLock</c> on the main thread; the mix thread
-    /// reads only the lock-free snapshot in <c>_cachedEffects</c>.
+    /// Ordered list of master effect processors acting as the parameter model for the native
+    /// master bus. Mutations are protected by <c>_effectsLock</c> on the main thread; the audio
+    /// itself is processed by the paired native effects on the Rust master chain.
     /// </summary>
     private readonly List<IEffectProcessor> _masterEffects;
 
     /// <summary>
-    /// Guards mutations to <c>_masterEffects</c> on the main thread and serialises calls
-    /// to <c>PublishEffectsCache()</c>. Never acquired on the real-time audio thread.
+    /// Guards mutations to <c>_masterEffects</c> on the main thread.
+    /// Never acquired on the real-time audio thread.
     /// </summary>
     private readonly object _effectsLock = new();
-
-    /// <summary>
-    /// Atomically published snapshot of <c>_masterEffects</c> consumed by the mix thread.
-    /// Written by the main thread inside <c>_effectsLock</c> via <see cref="Volatile.Write"/>;
-    /// read by the mix thread via <see cref="Volatile.Read"/> — completely lock-free on the RT path.
-    /// </summary>
-    private IEffectProcessor[] _cachedEffects = Array.Empty<IEffectProcessor>();
 
     /// <summary>
     /// Unique identifier assigned to this mixer instance at construction time.

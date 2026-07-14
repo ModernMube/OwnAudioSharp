@@ -32,7 +32,6 @@ public sealed partial class AudioMixer
         {
             effect.Initialize(_config);
             _masterEffects.Add(effect);
-            PublishEffectsCache();
         }
 
         // In the Rust-native chain the managed effect's DSP is inert (no MixThread); route it onto
@@ -42,8 +41,8 @@ public sealed partial class AudioMixer
 
     /// <summary>
     /// Removes the specified master effect from the processing chain.
-    /// The internal effects cache is atomically updated after removal so the audio
-    /// thread immediately stops using the removed effect on the next mix cycle.
+    /// The paired native master effect is detached from the Rust master bus after removal,
+    /// so the audio thread stops processing the effect promptly.
     /// </summary>
     /// <param name="effect">The effect processor to remove.</param>
     /// <returns>
@@ -63,10 +62,6 @@ public sealed partial class AudioMixer
         lock (_effectsLock)
         {
             removed = _masterEffects.Remove(effect);
-            if (removed)
-            {
-                PublishEffectsCache();
-            }
         }
 
         if (removed)
@@ -79,8 +74,8 @@ public sealed partial class AudioMixer
 
     /// <summary>
     /// Removes all effects from the master processing chain.
-    /// The internal effects cache is atomically set to an empty array after clearing,
-    /// ensuring the audio thread observes the change on its very next mix cycle.
+    /// Every paired native master effect is removed from the Rust master bus after clearing,
+    /// so the audio thread stops processing them promptly.
     /// </summary>
     /// <exception cref="ObjectDisposedException">Thrown if the mixer has been disposed.</exception>
     public void ClearMasterEffects()
@@ -90,7 +85,6 @@ public sealed partial class AudioMixer
         lock (_effectsLock)
         {
             _masterEffects.Clear();
-            PublishEffectsCache();
         }
 
         ClearRustMasterEffects();
@@ -109,16 +103,4 @@ public sealed partial class AudioMixer
         }
     }
 
-    /// <summary>
-    /// Builds a fresh snapshot of the effects list and publishes it atomically to the audio
-    /// thread via <see cref="Volatile.Write"/>, replacing the previously cached array.
-    /// The audio thread reads <c>_cachedEffects</c> with <see cref="Volatile.Read"/> inside
-    /// <c>ApplyMasterEffects</c> — no lock or blocking occurs on the real-time thread.
-    /// This method must always be called while the caller holds <c>_effectsLock</c>.
-    /// </summary>
-    private void PublishEffectsCache()
-    {
-        var snapshot = _masterEffects.ToArray();
-        Volatile.Write(ref _cachedEffects, snapshot);
-    }
 }

@@ -86,22 +86,52 @@ namespace OwnaudioInput
                 // Wrap the input source with effects support
                 var sourceWithEffects = new SourceWithEffects(inputSource);
 
-                // Create and add Delay effect
-                Console.WriteLine("Adding Delay effect (Classic Echo preset)...");
-                var delayEffect = new DelayEffect(DelayPreset.ClassicEcho);
-                delayEffect.Enabled = true;
-                sourceWithEffects.AddEffect(delayEffect);
+                // Professional vocal chain: compressor -> chorus -> delay -> reverb
 
-                // Create and add Chorus effect
-                Console.WriteLine("Adding Chorus effect (Guitar Classic preset)...");
-                var chorusEffect = new ChorusEffect(ChorusPreset.GuitarClassic);
+                // Compressor at the front - smooth, consistent vocal level
+                Console.WriteLine("Adding Compressor (gentle vocal leveling)...");
+                var compressorEffect = new CompressorEffect(
+                    threshold: 0.35f,     // ~ -9 dB
+                    ratio: 3.0f,          // 3:1 gentle leveling
+                    attackTime: 12f,      // preserves consonant transients
+                    releaseTime: 140f,    // natural release
+                    makeupGain: 1.5f      // restore perceived loudness
+                );
+                compressorEffect.Enabled = true;
+                sourceWithEffects.AddEffect(compressorEffect);
+
+                // Chorus - subtle vocal doubling / thickening
+                Console.WriteLine("Adding Chorus effect (subtle vocal doubling)...");
+                var chorusEffect = new ChorusEffect(rate: 0.55f, depth: 0.30f, mix: 0.30f, voices: 4);
                 chorusEffect.Enabled = true;
                 sourceWithEffects.AddEffect(chorusEffect);
 
+                // Delay - tasteful vocal throw, low in the mix
+                Console.WriteLine("Adding Delay effect (subtle vocal throw)...");
+                var delayEffect = new DelayEffect(time: 350, repeat: 0.22f, mix: 0.16f, damping: 0.35f);
+                delayEffect.Enabled = true;
+                sourceWithEffects.AddEffect(delayEffect);
+
+                // Reverb - plate-style vocal ambience at the tail
+                Console.WriteLine("Adding Reverb effect (plate-style vocal ambience)...");
+                var reverbEffect = new ReverbEffect(
+                    size: 0.5f,           // Medium plate/room
+                    damp: 0.5f,           // Natural damping
+                    wet: 0.28f,           // Reverb amount
+                    dry: 0.85f,           // Keep the voice present
+                    stereoWidth: 1.0f,    // Full stereo spread
+                    mix: 0.25f,           // Tasteful wet blend
+                    gainLevel: 1.0f       // Unity input into the reverb tank
+                );
+                reverbEffect.Enabled = true;
+                sourceWithEffects.AddEffect(reverbEffect);
+
                 Console.WriteLine();
-                Console.WriteLine("Effects configured:");
-                Console.WriteLine($"  1. {delayEffect}");
+                Console.WriteLine("Vocal chain configured:");
+                Console.WriteLine($"  1. {compressorEffect}");
                 Console.WriteLine($"  2. {chorusEffect}");
+                Console.WriteLine($"  3. {delayEffect}");
+                Console.WriteLine($"  4. {reverbEffect}");
                 Console.WriteLine();
 
                 // Create mixer and add the source

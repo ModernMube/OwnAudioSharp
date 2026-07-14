@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using Ownaudio.Core;
 
@@ -75,6 +76,13 @@ public sealed class WaveFileWriter : IDisposable
     /// <summary>
     /// Writes audio samples to the WAV file.
     /// </summary>
+    /// <remarks>
+    /// The WAV data chunk stores little-endian Float32, which is the in-memory layout of
+    /// <see langword="float"/> on every supported platform, so the whole block is written in one
+    /// stream call instead of one <see cref="BinaryWriter"/> call per sample. A big-endian
+    /// platform would need the per-sample fallback path; none of the supported runtimes are
+    /// big-endian.
+    /// </remarks>
     /// <param name="samples">Audio samples in Float32 format, interleaved.</param>
     /// <exception cref="ObjectDisposedException">Thrown if writer is disposed.</exception>
     /// <exception cref="IOException">Thrown if write operation fails.</exception>
@@ -87,9 +95,17 @@ public sealed class WaveFileWriter : IDisposable
 
         try
         {
-            for (int i = 0; i < samples.Length; i++)
+            if (BitConverter.IsLittleEndian)
             {
-                _writer.Write(samples[i]);
+                _writer.Flush();
+                _stream.Write(MemoryMarshal.AsBytes(samples));
+            }
+            else
+            {
+                for (int i = 0; i < samples.Length; i++)
+                {
+                    _writer.Write(samples[i]);
+                }
             }
 
             _totalSamplesWritten += samples.Length;

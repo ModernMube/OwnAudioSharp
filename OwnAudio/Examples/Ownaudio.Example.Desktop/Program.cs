@@ -207,34 +207,37 @@ public class TestProgram
             // Step 5: Start Mixer and Add Source
             Console.WriteLine("\n[5/6] Starting mixer and adding source...");
 
-            // Add effect vocal track
-            // 1. Compressor - dynamic control
+            // Professional lead-vocal chain: compressor -> delay -> reverb
+            // 1. Compressor - smooth, consistent vocal level
             CompressorEffect compressor = new CompressorEffect(
-                threshold: 0.4f,      // 40% threshold
-                ratio: 3.0f,          // 3:1 compression
-                attackTime: 5f,       // Fast attack
-                releaseTime: 150f,    // Smooth release
-                makeupGain: 1.5f      // +50% makeup gain
+                threshold: 0.30f,     // ~ -10.5 dB, catches vocal peaks early
+                ratio: 3.5f,          // 3.5:1 musical leveling
+                attackTime: 10f,      // 10ms - lets consonant transients through for clarity
+                releaseTime: 120f,    // 120ms - natural, breathing release
+                makeupGain: 1.6f      // ~ +4 dB to restore perceived loudness
             );
+            compressor.Mix = 0.2f;
 
-            // 2. Delay - depth and space
+            // 2. Delay - eighth-note throw, sitting low behind the voice
             DelayEffect delay = new DelayEffect(
-                time: 375,            // 375ms (eighth note at 120 BPM)
-                repeat: 0.25f,        // Subtle feedback
-                mix: 0.15f,           // Low in mix
-                damping: 0.15f         // Warm repeats
+                time: 375,            // 375ms (eighth note at 80 BPM / quarter at 160)
+                repeat: 0.20f,        // Subtle feedback, no clutter
+                mix: 0.12f,           // Low in the mix - ambience, not an effect
+                damping: 0.35f        // Dark repeats so they tuck behind the dry vocal
             );
+            delay.Mix = 0.12f;
 
-            // 3. Reverb - ambience
+            // 3. Reverb - plate-style vocal ambience
             ReverbEffect reverb = new ReverbEffect(
-                size: 0.5f,           // Medium room
-                damp: 0.6f,           // Natural damping
-                wet: 0.25f,           // Reverb level
-                dry: 0.75f,           // Dry signal
-                stereoWidth: 0.8f,    // Wide stereo
-                gainLevel: 0.015f,    // Standard gain
-                mix: 0.15f            // 25% wet mix
+                size: 0.55f,          // Medium plate/room
+                damp: 0.5f,           // Natural high-frequency damping
+                wet: 0.30f,           // Reverb amount
+                dry: 0.85f,           // Keep the vocal up front and present
+                stereoWidth: 1.0f,    // Full stereo spread
+                gainLevel: 1.0f,      // Unity input into the reverb tank (audible tail)
+                mix: 0.28f            // Tasteful wet blend
             );
+            reverb.Mix = 0.18f;
 
             var fileSource3Effect = new SourceWithEffects(fileSource3);
             fileSource3Effect.AddEffect(compressor);

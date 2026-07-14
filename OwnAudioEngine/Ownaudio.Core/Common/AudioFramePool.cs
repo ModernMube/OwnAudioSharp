@@ -61,6 +61,7 @@ public sealed class AudioFramePool
 
         if (_frames.TryTake(out PooledAudioFrame frame))
         {
+            System.Threading.Interlocked.Decrement(ref _currentSize);
             frame.Reset(presentationTime, dataLength);
             return frame;
         }
@@ -81,11 +82,15 @@ public sealed class AudioFramePool
         if (frame.BufferCapacity != _bufferSize)
             return; // Discard frames with wrong buffer size
 
-        if (_maxPoolSize > 0 && _currentSize >= _maxPoolSize)
+        int newSize = System.Threading.Interlocked.Increment(ref _currentSize);
+
+        if (_maxPoolSize > 0 && newSize > _maxPoolSize)
+        {
+            System.Threading.Interlocked.Decrement(ref _currentSize);
             return; // Discard excess frames
+        }
 
         _frames.Add(frame);
-        System.Threading.Interlocked.Increment(ref _currentSize);
     }
 
     /// <summary>
