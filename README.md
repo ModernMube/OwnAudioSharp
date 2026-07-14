@@ -23,10 +23,10 @@
 
 **OwnAudioSharp** is a professional-grade, cross-platform audio API for C# — with something no other .NET audio library has: **from the first sample to the last byte, your audio is processed by a purpose-built Rust engine.** You write 100% C#; Rust does the heavy lifting.
 
-The entire audio path — decoding, mixing, effects, resampling, playback and capture — runs in a native Rust core that was **written specifically for this package**. On top of it sits a clean, idiomatic C# surface. The result is a fully **GC-free** API: zero garbage collection in the real-time path, low CPU usage, and a small memory footprint — engineered to industry standards for professional, production-ready use.
+The entire audio path — decoding, mixing, effects, resampling, playback and capture — runs in a native Rust core that was **written specifically for this package**. On top of it sits a clean, idiomatic C# surface. The result: low CPU usage and a small memory footprint — engineered to industry standards for professional, production-ready use.
 
 - 🦀 **Rust engine, C# surface** — native performance with a managed developer experience.
-- ♻️ **Zero GC** — no allocations on the audio thread, no dropouts, no glitches.
+- 🎯 **Rock-solid real-time path** — no dropouts, no glitches.
 - 📦 **Zero external dependencies** — one NuGet package, native code bundled and built for it.
 - ⚡ **Low CPU & memory** — real-time headroom on desktop and mobile alike.
 - 🌍 **Truly cross-platform** — Windows, macOS, Linux, Android and iOS from a single API.
@@ -114,16 +114,16 @@ AOT-compatible, reflection-free MIDI on Windows (WinMM), macOS (CoreMIDI) and Li
 
 ## The road to 4.0
 
-Getting to a truly GC-independent audio API took four generations — each one solved a problem the last one exposed:
+Getting to a truly dependable real-time audio API took four generations — each one solved a problem the last one exposed:
 
 | Version | Approach | What it taught us |
 |---|---|---|
 | **1.0** | MiniAudio + PortAudio + FFmpeg, no optimization | Proved the core idea and shaped the API — but left performance on the table. |
-| **2.0** | Fully managed, cross-platform engine, zero native dependencies | Clean and portable, but the GC's impact on the real-time audio path could not be eliminated. |
-| **3.0** | Optimized native engines (MiniAudio + PortAudio + FFmpeg); mixing, effects and sync in managed code with zero GC pressure of its own | Fast — until the *host* application caused GC pressure, which stalled the managed processing stage. |
-| **4.0** | The **entire** audio chain runs in native Rust; the whole API is wrapped in a thin managed layer | A C# audio API that is completely unaffected by the GC — professional, industry-standard behavior for real-world .NET audio apps. |
+| **2.0** | Fully managed, cross-platform engine, zero native dependencies | Clean and portable, but managed code alone could not deliver the consistency the real-time audio path demands. |
+| **3.0** | Optimized native engines (MiniAudio + PortAudio + FFmpeg); mixing, effects and sync in managed code | Fast — but the managed processing stage could still be stalled by the *host* application under load. |
+| **4.0** | The **entire** audio chain runs in native Rust; the whole API is wrapped in a thin managed layer | A C# audio API whose real-time path is completely independent of the host application — professional, industry-standard behavior for real-world .NET audio apps. |
 
-**4.0 is the payoff:** no matter what the surrounding C# code does to the garbage collector, the audio never stutters — because not a single sample is processed on the managed heap.
+**4.0 is the payoff:** no matter what the surrounding C# code does, the audio never stutters — because not a single sample is processed in managed code.
 
 ---
 
