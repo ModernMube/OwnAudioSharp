@@ -5,25 +5,20 @@ using Ownaudio.Native.RustAudio.Structs;
 namespace Ownaudio.Native.RustAudio.Interop;
 
 /// <summary>
-/// P/Invoke declarations for the native streaming audio file decoder API.
+/// P/Invokes for the native streaming file decoder. 0 means ok, anything else is an error code.
 /// </summary>
 internal static unsafe partial class OwnAudioNative
 {
     #region Decoder lifecycle
 
     /// <summary>
-    /// Opens an audio file for streaming decoding and writes its handle to <paramref name="outDecoder"/>.
+    /// Opens a file for streaming, handle comes back in outDecoder.
     /// </summary>
-    /// <param name="path">Null-terminated UTF-8 file path.</param>
-    /// <param name="targetSampleRate">Desired output sample rate in Hz; 0 keeps the source rate.</param>
-    /// <param name="targetChannels">Desired output channel count; 0 keeps the source channels.</param>
-    /// <param name="prefetchSeconds">Prefetch buffer length in seconds; values ≤ 0 use the 2.0 s default.</param>
-    /// <param name="outDecoder">Receives the new decoder handle on success.</param>
-    /// <returns>Zero on success; non-zero error code otherwise.</returns>
-    /// <remarks>
-    /// Mirrors:
-    /// <c>ownaudio_v1_decoder_open(path, target_sample_rate, target_channels, prefetch_seconds, out_decoder) → i32</c>
-    /// </remarks>
+    /// <param name="path">utf8 path</param>
+    /// <param name="targetSampleRate">0 keeps whatever the source has</param>
+    /// <param name="targetChannels">0 keeps whatever the source has</param>
+    /// <param name="prefetchSeconds">prefetch buffer length, 0 or less falls back to 2 sec</param>
+    /// <param name="outDecoder"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName, StringMarshalling = StringMarshalling.Utf8)]
     internal static partial int ownaudio_v1_decoder_open(
         string path,
@@ -33,10 +28,9 @@ internal static unsafe partial class OwnAudioNative
         out IntPtr outDecoder);
 
     /// <summary>
-    /// Destroys a decoder handle, stopping and joining its prefetch thread.
+    /// Kills the decoder and joins its prefetch thread. Zero handle is fine.
     /// </summary>
-    /// <param name="decoder">Decoder handle to destroy; passing <see cref="IntPtr.Zero"/> is safe.</param>
-    /// <remarks>Mirrors: <c>ownaudio_v1_decoder_destroy(OwnAudioDecoderHandle*) → void</c></remarks>
+    /// <param name="decoder"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial void ownaudio_v1_decoder_destroy(IntPtr decoder);
 
@@ -45,18 +39,12 @@ internal static unsafe partial class OwnAudioNative
     #region Decoding
 
     /// <summary>
-    /// Reads up to <paramref name="bufferCount"/> decoded interleaved <c>f32</c> samples into
-    /// <paramref name="buffer"/> and writes the number actually produced to <paramref name="outSamplesWritten"/>.
+    /// Pulls decoded interleaved f32 samples into the buffer, rt safe on the native side.
     /// </summary>
-    /// <param name="decoder">Valid decoder handle.</param>
-    /// <param name="buffer">Reference to the first element of the destination buffer.</param>
-    /// <param name="bufferCount">Number of <c>f32</c> elements available in the buffer.</param>
-    /// <param name="outSamplesWritten">Receives the number of samples written.</param>
-    /// <returns>Zero on success; non-zero error code otherwise.</returns>
-    /// <remarks>
-    /// Real-time safe on the native side. Mirrors:
-    /// <c>ownaudio_v1_decoder_read(decoder, buffer, buffer_count, out_samples_written) → i32</c>
-    /// </remarks>
+    /// <param name="decoder"></param>
+    /// <param name="buffer">first element of the destination</param>
+    /// <param name="bufferCount">how many f32 elements fit in there</param>
+    /// <param name="outSamplesWritten">what we really got</param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_decoder_read(
         IntPtr decoder,
@@ -65,12 +53,10 @@ internal static unsafe partial class OwnAudioNative
         out nuint outSamplesWritten);
 
     /// <summary>
-    /// Requests a non-blocking seek to <paramref name="framePosition"/> (output sample frames).
+    /// Asks for a seek, doesn't block. Position is in output frames.
     /// </summary>
-    /// <param name="decoder">Valid decoder handle.</param>
-    /// <param name="framePosition">Target output frame position.</param>
-    /// <returns>Zero on success; non-zero error code otherwise.</returns>
-    /// <remarks>Mirrors: <c>ownaudio_v1_decoder_seek(decoder, frame_position) → i32</c></remarks>
+    /// <param name="decoder"></param>
+    /// <param name="framePosition"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_decoder_seek(IntPtr decoder, ulong framePosition);
 
@@ -79,25 +65,20 @@ internal static unsafe partial class OwnAudioNative
     #region Queries
 
     /// <summary>
-    /// Writes the decoded output stream metadata to <paramref name="outInfo"/>.
+    /// Metadata of the decoded output stream.
     /// </summary>
-    /// <param name="decoder">Valid decoder handle.</param>
-    /// <param name="outInfo">Receives the stream metadata.</param>
-    /// <returns>Zero on success; non-zero error code otherwise.</returns>
-    /// <remarks>Mirrors: <c>ownaudio_v1_decoder_get_stream_info(decoder, out_info) → i32</c></remarks>
+    /// <param name="decoder"></param>
+    /// <param name="outInfo"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_decoder_get_stream_info(
         IntPtr decoder,
         out NativeAudioStreamInfo outInfo);
 
     /// <summary>
-    /// Writes <see langword="true"/> to <paramref name="outIsEof"/> when the file has been fully
-    /// decoded and the prefetch buffer is drained.
+    /// True only when the file is done and the prefetch buffer is empty too.
     /// </summary>
-    /// <param name="decoder">Valid decoder handle.</param>
-    /// <param name="outIsEof">Receives the end-of-file flag.</param>
-    /// <returns>Zero on success; non-zero error code otherwise.</returns>
-    /// <remarks>Mirrors: <c>ownaudio_v1_decoder_is_eof(decoder, out_is_eof) → i32</c></remarks>
+    /// <param name="decoder"></param>
+    /// <param name="outIsEof"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_decoder_is_eof(
         IntPtr decoder,

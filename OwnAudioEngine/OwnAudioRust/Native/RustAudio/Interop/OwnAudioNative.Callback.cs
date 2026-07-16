@@ -3,23 +3,14 @@ using System.Runtime.InteropServices;
 namespace Ownaudio.Native.RustAudio.Interop;
 
 /// <summary>
-/// Managed delegate type for the output audio callback, matching the C ABI signature
-/// <c>OwnAudioOutputCallback</c> in <c>ownaudio_ffi.h</c>.
+/// Output callback, same shape as OwnAudioOutputCallback in ownaudio_ffi.h.
+/// Runs on the rust/cpal rt thread, so no allocation, no locks, no blocking in here.
+/// The safe layer pins it with GCHandle.Alloc and keeps that alive while the stream lives.
 /// </summary>
-/// <remarks>
-/// <para>
-/// This delegate runs on the Rust/cpal real-time audio thread.
-/// Implementations must be real-time safe: no heap allocation, no blocking I/O,
-/// no managed GC interaction, no non-RT-safe locks.
-/// </para>
-/// <para>
-/// The safe wrapper layer (step 5) is responsible for pinning an instance of this
-/// delegate via <c>GCHandle.Alloc(pin, GCHandleType.Normal)</c> and converting it
-/// to a native function pointer with <c>Marshal.GetFunctionPointerForDelegate</c>
-/// before passing it to <c>ownaudio_v1_open_output_stream</c>.
-/// The <c>GCHandle</c> must stay alive for the entire lifetime of the stream.
-/// </para>
-/// </remarks>
+/// <param name="buffer"></param>
+/// <param name="frameCount"></param>
+/// <param name="channels"></param>
+/// <param name="userData"></param>
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 internal unsafe delegate void NativeOutputCallback(
     float* buffer,
@@ -28,13 +19,12 @@ internal unsafe delegate void NativeOutputCallback(
     void* userData);
 
 /// <summary>
-/// Managed delegate type for the input audio callback, matching the C ABI signature
-/// <c>OwnAudioInputCallback</c> in <c>ownaudio_ffi.h</c>.
+/// Input side of the same deal. Rt rules apply here too, and the buffer is read only.
 /// </summary>
-/// <remarks>
-/// Same real-time and lifetime constraints as <see cref="NativeOutputCallback"/>.
-/// The buffer is read-only; writing to it results in undefined behaviour.
-/// </remarks>
+/// <param name="buffer"></param>
+/// <param name="frameCount"></param>
+/// <param name="channels"></param>
+/// <param name="userData"></param>
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 internal unsafe delegate void NativeInputCallback(
     float* buffer,

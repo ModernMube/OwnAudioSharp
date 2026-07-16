@@ -5,209 +5,97 @@ namespace OwnaudioNET.Visualization
 {
     public partial class WaveAvaloniaDisplay : Avalonia.Controls.Control
     {
-        private const int _maxsample = 10000;
+        const int _maxsample = 10000;
 
-        /// <summary>
-        /// Loads and displays audio data from the specified file with minimal memory usage.
-        /// Supports both MiniAudio and FFmpeg decoders automatically.
-        /// </summary>
-        /// <param name="filePath">Path to the audio file to load.</param>
-        /// <param name="maxSamples">Maximum number of samples to keep for visualization (default: 100000).</param>
-        /// <param name="preferFFmpeg">If true, tries FFmpeg decoder first, otherwise tries MiniAudio first (default: false).</param>
-        /// <param name="channels">Desired channel count for decoding (default: 1 for mono visualization).</param>
-        /// <param name="sampleRate">Desired sample rate for decoding (default: 44100).</param>
-        /// <returns>True if the file was loaded successfully, false otherwise.</returns>
-        /// <exception cref="ArgumentNullException">Thrown when filePath is null or empty.</exception>
+        // load waveform from file; maxSamples caps kept samples (rest gets downsampled),
+        // preferFFmpeg is legacy and ignored
         public bool LoadFromAudioFile(string filePath, int maxSamples = 100000, bool preferFFmpeg = false,
             int channels = 1, int sampleRate = 44100)
         {
-            if (string.IsNullOrEmpty(filePath))
-                throw new ArgumentNullException(nameof(filePath));
+            if (string.IsNullOrEmpty(filePath)) throw new ArgumentNullException(nameof(filePath));
+            if (!File.Exists(filePath)) return false;
 
-            if (!File.Exists(filePath))
-                return false;
-
-            _audioData = null!;
-            ZoomFactor = 1.0;
-            ScrollOffset = 0.0;
-            InvalidateVisual();
-
-            return TryLoadFile(filePath, maxSamples, channels, sampleRate);
-        }
-
-        /// <summary>
-        /// Tries to load audio file using MiniAudio decoder.
-        /// </summary>
-        /// <param name="filePath">Path to the audio file.</param>
-        /// <param name="maxSamples">Maximum number of samples for visualization.</param>
-        /// <param name="channels">Desired channel count.</param>
-        /// <param name="sampleRate">Desired sample rate.</param>
-        /// <returns>True if successful, false otherwise.</returns>
-        private bool TryLoadFile(string filePath, int maxSamples, int channels, int sampleRate)
-        {
-            IAudioDecoder? decoder = null;
-            var tempBuffer = ArrayPool<float>.Shared.Rent(4096);
-            var sampleList = new List<float>(maxSamples);
-
-            try
-            {
-                decoder = AudioDecoderFactory.Create(filePath, sampleRate, channels);
-
-                return ProcessDecoderData(decoder, tempBuffer, sampleList, maxSamples);
+            ResetView();
+            try {
+                using var decoder = AudioDecoderFactory.Create(filePath, sampleRate, channels);
+                return ProcessDecoderData(decoder, maxSamples);
             }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"MiniAudio decoder failed: {ex.Message}");
+            catch (Exception ex) {
+                System.Diagnostics.Debug.WriteLine($"decoder failed: {ex.Message}");
                 return false;
-            }
-            finally
-            {
-                ArrayPool<float>.Shared.Return(tempBuffer);
-                decoder?.Dispose();
             }
         }
 
-        /// <summary>
-        /// Asynchronously loads and displays audio data from the specified file with minimal memory usage.
-        /// Supports both MiniAudio and FFmpeg decoders automatically.
-        /// </summary>
-        /// <param name="filePath">Path to the audio file to load.</param>
-        /// <param name="maxSamples">Maximum number of samples to keep for visualization (default: 100000).</param>
-        /// <param name="preferFFmpeg">If true, tries FFmpeg decoder first, otherwise tries MiniAudio first (default: false).</param>
-        /// <param name="channels">Desired channel count for decoding (default: 1 for mono visualization).</param>
-        /// <param name="sampleRate">Desired sample rate for decoding (default: 44100).</param>
-        /// <param name="cancellationToken">Token to cancel the operation.</param>
-        /// <returns>Task that returns true if the file was loaded successfully, false otherwise.</returns>
-        public async Task<bool> LoadFromAudioFileAsync(string filePath, int maxSamples = 100000, bool preferFFmpeg = false,
+        // same but off the UI thread
+        public Task<bool> LoadFromAudioFileAsync(string filePath, int maxSamples = 100000, bool preferFFmpeg = false,
             int channels = 1, int sampleRate = 44100, CancellationToken cancellationToken = default)
-        {
-            return await Task.Run(() => LoadFromAudioFile(filePath, maxSamples, preferFFmpeg, channels, sampleRate), cancellationToken);
-        }
+            => Task.Run(() => LoadFromAudioFile(filePath, maxSamples, preferFFmpeg, channels, sampleRate), cancellationToken);
 
-        /// <summary>
-        /// Loads audio data from a stream with minimal memory usage.
-        /// Supports both MiniAudio and FFmpeg decoders automatically.
-        /// </summary>
-        /// <param name="stream">Audio stream to load from.</param>
-        /// <param name="audioFormat">Audio format (wav, mp3, flac) <see cref="AudioFormat"/></param>
-        /// <param name="preferFFmpeg">If true, tries FFmpeg decoder first, otherwise tries MiniAudio first (default: false).</param>
-        /// <param name="channels">Desired channel count for decoding (default: 1 for mono visualization).</param>
-        /// <param name="sampleRate">Desired sample rate for decoding (default: 44100).</param>
-        /// <returns>True if the stream was loaded successfully, false otherwise.</returns>
+        // load waveform from stream, audioFormat tells the decoder what's inside (wav/mp3/flac)
         public bool LoadFromAudioStream(Stream stream, AudioFormat audioFormat, bool preferFFmpeg = false,
             int channels = 1, int sampleRate = 44100)
         {
-            if (stream == null)
-                throw new ArgumentNullException(nameof(stream));
+            if (stream == null) throw new ArgumentNullException(nameof(stream));
 
+            ResetView();
+            try {
+                using var decoder = AudioDecoderFactory.Create(stream, audioFormat, sampleRate, channels);
+                return ProcessDecoderData(decoder, _maxsample);
+            }
+            catch (Exception ex) {
+                System.Diagnostics.Debug.WriteLine($"stream decoder failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        // wipe old data + zoom/scroll state
+        void ResetView()
+        {
             _audioData = null;
             ZoomFactor = 1.0;
             ScrollOffset = 0.0;
             InvalidateVisual();
-
-            return TryLoadStream(stream, AudioFormat.Wav, channels, sampleRate);
         }
 
-        /// <summary>
-        /// Tries to load audio stream using MiniAudio decoder.
-        /// </summary>
-        /// <param name="stream">Audio stream to load.</param>
-        /// <param name="maxSamples">Maximum number of samples for visualization.</param>
-        /// <param name="channels">Desired channel count.</param>
-        /// <param name="sampleRate">Desired sample rate.</param>
-        /// <returns>True if successful, false otherwise.</returns>
-        private bool TryLoadStream(Stream stream, AudioFormat audioFormat, int channels, int sampleRate)
+        // decode whole stream, downsample to maxSamples, channels averaged to mono
+        bool ProcessDecoderData(IAudioDecoder decoder, int maxSamples)
         {
-            IAudioDecoder? decoder = null;
-            var tempBuffer = ArrayPool<float>.Shared.Rent(4096);
-            var sampleList = new List<float>(_maxsample);
+            var info = decoder.StreamInfo;
+            if (info.Channels == 0 || info.SampleRate == 0) return false;
 
-            try
-            {
-                decoder = AudioDecoderFactory.Create(stream, AudioFormat.Wav, sampleRate, channels);
+            long estimated = (long)(info.Duration.TotalSeconds * info.SampleRate * info.Channels);
+            int step = Math.Max(1, (int)(estimated / maxSamples));
+            int ch = info.Channels, counter = 0;
 
-                return ProcessDecoderData(decoder, tempBuffer, sampleList, _maxsample);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"MiniAudio stream decoder failed: {ex.Message}");
-                return false;
-            }
-            finally
-            {
-                ArrayPool<float>.Shared.Return(tempBuffer);
-                decoder?.Dispose();
-            }
-        }
-
-        /// <summary>
-        /// Common method to process decoder data regardless of decoder type.
-        /// </summary>
-        /// <param name="decoder">The audio decoder (MiniDecoder or FFmpegDecoder).</param>
-        /// <param name="tempBuffer">Temporary buffer for processing.</param>
-        /// <param name="sampleList">List to collect processed samples.</param>
-        /// <param name="maxSamples">Maximum number of samples to collect.</param>
-        /// <returns>True if processing was successful, false otherwise.</returns>
-        private bool ProcessDecoderData(IAudioDecoder decoder, float[] tempBuffer, List<float> sampleList, int maxSamples)
-        {
-            var streamInfo = decoder.StreamInfo;
-            if (streamInfo.Channels == 0 || streamInfo.SampleRate == 0)
-                return false;
-
-            var estimatedTotalSamples = (long)(streamInfo.Duration.TotalSeconds * streamInfo.SampleRate * streamInfo.Channels);
-            var downsampleRatio = Math.Max(1, (int)(estimatedTotalSamples / maxSamples));
-
-            int sampleCounter = 0;
-            int channelCount = streamInfo.Channels;
-
-            var byteBuffer = ArrayPool<byte>.Shared.Rent(4096 * channelCount * sizeof(float));
-
-            while (true)
-            {
-                var result = decoder.ReadFrames(byteBuffer);
-
-                if (result.IsEOF || !result.IsSucceeded)
-                    break;
-                
-                if (result.FramesRead == 0)
-                    continue;
-
-                int bytesRead = result.FramesRead * channelCount * sizeof(float);
-                var floatSpan = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(byteBuffer.AsSpan(0, bytesRead));
-
-                for (int i = 0; i < floatSpan.Length; i += channelCount)
+            var samples = new List<float>(maxSamples);
+            var byteBuffer = ArrayPool<byte>.Shared.Rent(4096 * ch * sizeof(float));
+            try {
+                while (samples.Count < maxSamples)
                 {
-                    if (sampleCounter % downsampleRatio == 0)
+                    var result = decoder.ReadFrames(byteBuffer);
+                    if (result.IsEOF || !result.IsSucceeded) break;
+                    if (result.FramesRead == 0) continue;
+
+                    var floats = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(
+                        byteBuffer.AsSpan(0, result.FramesRead * ch * sizeof(float)));
+
+                    for (int i = 0; i + ch <= floats.Length && samples.Count < maxSamples; i += ch)
                     {
-                        float sample = 0f;
-                        for (int ch = 0; ch < channelCount && i + ch < floatSpan.Length; ch++)
+                        if (counter++ % step == 0)
                         {
-                            sample += floatSpan[i + ch];
+                            float s = 0f;
+                            for (int c = 0; c < ch; c++) s += floats[i + c];
+                            samples.Add(s / ch);
                         }
-                        sample /= channelCount;
-
-                        sampleList.Add(sample);
-
-                        if (sampleList.Count >= maxSamples)
-                            break;
                     }
-                    sampleCounter++;
                 }
-
-                if (sampleList.Count >= maxSamples)
-                    break;
             }
-            
-            ArrayPool<byte>.Shared.Return(byteBuffer);
+            finally { ArrayPool<byte>.Shared.Return(byteBuffer); }
 
-            if (sampleList.Count > 0)
-            {
-                _audioData = sampleList.ToArray();
-                InvalidateVisual();
-                return true;
-            }
-
-            return false;
+            if (samples.Count == 0) return false;
+            _audioData = samples.ToArray();
+            InvalidateVisual();
+            return true;
         }
     }
 }

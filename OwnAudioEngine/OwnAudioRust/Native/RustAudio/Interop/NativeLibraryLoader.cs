@@ -6,106 +6,86 @@ using System.Runtime.InteropServices;
 namespace Ownaudio.Native.RustAudio.Interop;
 
 /// <summary>
-/// Resolves the native <c>ownaudio_ffi</c> library across platforms using
-/// <see cref="NativeLibrary.SetDllImportResolver"/>.
-/// Must be registered once before any <c>LibraryImport</c> call is made.
-/// Call <see cref="EnsureRegistered"/> from the static constructor of
-/// <see cref="OwnAudioNative"/>.
+/// Finds the ownaudio_ffi native lib on every platform we support.
+/// Has to be registered before the first LibraryImport call, OwnAudioNative does it in its cctor.
 /// </summary>
 internal static class NativeLibraryLoader
 {
-    /// <summary>
-    /// The logical library name used in every <c>[LibraryImport]</c> attribute in this layer.
-    /// </summary>
+    /// The name every [LibraryImport] in this layer uses.
     internal const string LogicalName = "ownaudio_ffi";
 
     private static bool _registered;
 
     /// <summary>
-    /// Registers the custom resolver exactly once. Idempotent — safe to call multiple times.
+    /// Hooks up our resolver, only once. Calling it again does nothing.
     /// </summary>
     public static void EnsureRegistered()
     {
-        if (_registered)
-        {
-            return;
-        }
+        if (_registered) { return; }
 
-        NativeLibrary.SetDllImportResolver(typeof(NativeLibraryLoader).Assembly, Resolve);
+        NativeLibrary.SetDllImportResolver(typeof(NativeLibraryLoader).Assembly, _resolve);
         _registered = true;
     }
 
-    private static IntPtr Resolve(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
+    /// <summary>
+    /// The resolver itself. Rid folder first, then next to the exe, then let the loader search.
+    /// </summary>
+    /// <param name="libraryName"></param>
+    /// <param name="assembly"></param>
+    /// <param name="searchPath"></param>
+    private static IntPtr _resolve(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
     {
         if (!string.Equals(libraryName, LogicalName, StringComparison.Ordinal))
-        {
             return IntPtr.Zero;
-        }
 
+        //On ios everything is linked into the main binary
         if (OperatingSystem.IsIOS() || OperatingSystem.IsTvOS())
-        {
             return NativeLibrary.GetMainProgramHandle();
-        }
 
         if (OperatingSystem.IsAndroid())
-        {
-            return NativeLibrary.TryLoad("libownaudio_ffi.so", assembly, searchPath, out IntPtr androidHandle)
-                ? androidHandle
-                : IntPtr.Zero;
-        }
+            return NativeLibrary.TryLoad("libownaudio_ffi.so", assembly, searchPath, out IntPtr _droidHandle) ? _droidHandle : IntPtr.Zero;
 
-        string fileName = GetPlatformFileName();
-        string baseDir = AppContext.BaseDirectory;
+        string _fileName = _getPlatformFileName();
+        string _baseDir = AppContext.BaseDirectory;
 
-        string ridPath = Path.Combine(baseDir, "runtimes", GetCurrentRid(), "native", fileName);
-        if (NativeLibrary.TryLoad(ridPath, out IntPtr handle))
-        {
-            return handle;
-        }
+        string _ridPath = Path.Combine(_baseDir, "runtimes", _getCurrentRid(), "native", _fileName);
+        if (NativeLibrary.TryLoad(_ridPath, out IntPtr _handle)) return _handle;
 
-        string sideBySide = Path.Combine(baseDir, fileName);
-        if (NativeLibrary.TryLoad(sideBySide, out handle))
-        {
-            return handle;
-        }
+        if (NativeLibrary.TryLoad(Path.Combine(_baseDir, _fileName), out _handle)) return _handle;
 
-        return NativeLibrary.TryLoad(fileName, assembly, searchPath, out handle) ? handle : IntPtr.Zero;
+        return NativeLibrary.TryLoad(_fileName, assembly, searchPath, out _handle) ? _handle : IntPtr.Zero;
     }
 
-    private static string GetPlatformFileName()
+    /// <summary>
+    /// The lib file name for the current os.
+    /// </summary>
+    /// <returns></returns>
+    private static string _getPlatformFileName()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            return "ownaudio_ffi.dll";
-        }
-
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-            return "libownaudio_ffi.dylib";
-        }
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return "ownaudio_ffi.dll";
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) return "libownaudio_ffi.dylib";
 
         return "libownaudio_ffi.so";
     }
 
-    private static string GetCurrentRid()
+    /// <summary>
+    /// Builds the rid string we look for under runtimes, like win-x64 or osx-arm64.
+    /// </summary>
+    private static string _getCurrentRid()
     {
-        string os;
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            os = "win";
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            os = "osx";
-        else
-            os = "linux";
+        string _os = "linux";
+        if(RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) _os = "win";
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) _os = "osx";
 
-        string arch = RuntimeInformation.ProcessArchitecture switch
+        string _arch = RuntimeInformation.ProcessArchitecture switch
         {
-            Architecture.X64   => "x64",
-            Architecture.X86   => "x86",
-            Architecture.Arm   => "arm",
+            Architecture.X64 => "x64",
+            Architecture.X86 => "x86",
+            Architecture.Arm => "arm",
             Architecture.Arm64 => "arm64",
-            _                  => "x64"
+            _ => "x64"
         };
 
-        return $"{os}-{arch}";
+        return $"{_os}-{_arch}";
     }
 }

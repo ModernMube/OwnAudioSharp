@@ -1,204 +1,121 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
-using Avalonia.Reactive;
 using System.Buffers;
 
 namespace OwnaudioNET.Visualization
 {
     /// <summary>
-    /// A control for displaying audio waveforms with zoom and scroll capabilities.
-    /// Provides different display styles and interactive features for audio visualization.
+    /// Waveform view for Avalonia. Zoom + scroll + click/drag to seek, no GC in render.
     /// </summary>
     public partial class WaveAvaloniaDisplay : Avalonia.Controls.Control
     {
         private float[]? _audioData;
 
+        // pooled scratch buffer, filled with line-pair points every frame
         private readonly ArrayPool<Point> _pointPool = ArrayPool<Point>.Shared;
         private Point[] _pointCache;
-        private int _pointCacheSize = 0;
+        private int _pointCacheSize;
         private int _pointCacheCapacity = 1000;
 
         private Pen _waveformPen;
         private Pen _playbackPen;
-
         private readonly Point[] _linePoints = new Point[2];
 
-#pragma warning disable CS0414 // Field is assigned but its value is never used
-        private bool _autoFollow = true;
-#pragma warning restore CS0414
-        private bool _isUserDragging = false;
-        private bool _isUpdatingProperties = false; // Prevent recursive updates
+        private bool _dragging;
+        private bool _updatingProps;   // stops scroll<->playhead feedback loop
 
-        #region Display properties
-        /// <summary>
-        /// Defines the WaveformBrush dependency property.
-        /// This brush is used to render the waveform.
-        /// </summary>
+        #region styled props
+        // wave color
         public static readonly StyledProperty<IBrush> WaveformBrushProperty =
-            AvaloniaProperty.Register<WaveAvaloniaDisplay, IBrush>(
-                nameof(WaveformBrush),
-                Brushes.LimeGreen);
+            AvaloniaProperty.Register<WaveAvaloniaDisplay, IBrush>(nameof(WaveformBrush), Brushes.LimeGreen);
 
-        /// <summary>
-        /// Defines the PlaybackPositionBrush dependency property.
-        /// This brush is used to render the playback position indicator.
-        /// </summary>
+        // playhead color
         public static readonly StyledProperty<IBrush> PlaybackPositionBrushProperty =
-            AvaloniaProperty.Register<WaveAvaloniaDisplay, IBrush>(
-                nameof(PlaybackPositionBrush),
-                Brushes.Red);
+            AvaloniaProperty.Register<WaveAvaloniaDisplay, IBrush>(nameof(PlaybackPositionBrush), Brushes.Red);
 
-        /// <summary>
-        /// Defines the VerticalScale dependency property.
-        /// This property controls the vertical scaling of the waveform.
-        /// </summary>
+        // vertical gain of the drawing
         public static readonly StyledProperty<double> VerticalScaleProperty =
-            AvaloniaProperty.Register<WaveAvaloniaDisplay, double>(
-                nameof(VerticalScale),
-                1.0);
+            AvaloniaProperty.Register<WaveAvaloniaDisplay, double>(nameof(VerticalScale), 1.0);
 
-        /// <summary>
-        /// Defines the DisplayStyle dependency property.
-        /// This property determines how the waveform is visualized.
-        /// </summary>
+        // how the wave is drawn (minmax/positive/rms)
         public static readonly StyledProperty<WaveformDisplayStyle> DisplayStyleProperty =
-            AvaloniaProperty.Register<WaveAvaloniaDisplay, WaveformDisplayStyle>(
-                nameof(DisplayStyle),
-                WaveformDisplayStyle.MinMax);
+            AvaloniaProperty.Register<WaveAvaloniaDisplay, WaveformDisplayStyle>(nameof(DisplayStyle), WaveformDisplayStyle.MinMax);
 
-        /// <summary>
-        /// Defines the ZoomFactor dependency property.
-        /// </summary>
+        // 1 = whole file, up to 50x
         public static readonly StyledProperty<double> ZoomFactorProperty =
-            AvaloniaProperty.Register<WaveAvaloniaDisplay, double>(
-                nameof(ZoomFactor),
-                1.0, // default value
-                validate: value => Math.Clamp(value, 1.0, 50.0) == value); // validation directly in property system
+            AvaloniaProperty.Register<WaveAvaloniaDisplay, double>(nameof(ZoomFactor), 1.0,
+                validate: v => Math.Clamp(v, 1.0, 50.0) == v);
 
-        /// <summary>
-        /// Defines the ScrollOffset dependency property.
-        /// </summary>
+        // left edge of the view, 0..1
         public static readonly StyledProperty<double> ScrollOffsetProperty =
-            AvaloniaProperty.Register<WaveAvaloniaDisplay, double>(
-                nameof(ScrollOffset),
-                0.0, // default value
-                validate: value => Math.Clamp(value, 0.0, 1.0) == value);
+            AvaloniaProperty.Register<WaveAvaloniaDisplay, double>(nameof(ScrollOffset), 0.0,
+                validate: v => Math.Clamp(v, 0.0, 1.0) == v);
 
-        /// <summary>
-        /// Defines the PlaybackPosition dependency property.
-        /// </summary>
+        // playhead, 0..1
         public static readonly StyledProperty<double> PlaybackPositionProperty =
-            AvaloniaProperty.Register<WaveAvaloniaDisplay, double>(
-                nameof(PlaybackPosition),
-                0.0, // default value
-                validate: value => Math.Clamp(value, 0.0, 1.0) == value);
+            AvaloniaProperty.Register<WaveAvaloniaDisplay, double>(nameof(PlaybackPosition), 0.0,
+                validate: v => Math.Clamp(v, 0.0, 1.0) == v);
 
-        /// <summary>
-        /// Defines the AutoFollow dependency property.
-        /// Controls whether the view automatically follows the playback position.
-        /// </summary>
+        // view chases the playhead when true
         public static readonly StyledProperty<bool> AutoFollowProperty =
-            AvaloniaProperty.Register<WaveAvaloniaDisplay, bool>(
-                nameof(AutoFollow),
-                true);
+            AvaloniaProperty.Register<WaveAvaloniaDisplay, bool>(nameof(AutoFollow), true);
 
         /// <summary>
-        /// Enum defining different waveform visualization styles.
+        /// Waveform drawing styles.
         /// </summary>
         public enum WaveformDisplayStyle
         {
-            /// <summary>
-            /// Shows both minimum and maximum values (classic waveform).
-            /// </summary>
+            // classic min/max column per pixel
             MinMax,
-
-            /// <summary>
-            /// Shows only positive values (half-wave rectified).
-            /// </summary>
+            // abs peak only, drawn from the bottom
             Positive,
-
-            /// <summary>
-            /// Shows RMS values (energy representation).
-            /// </summary>
+            // energy view
             RMS
         }
 
-        /// <summary>
-        /// Gets or sets the brush used to render the waveform.
-        /// </summary>
         public IBrush WaveformBrush
         {
             get => GetValue(WaveformBrushProperty);
             set => SetValue(WaveformBrushProperty, value);
         }
 
-        /// <summary>
-        /// Gets or sets the brush used to render the playback position indicator.
-        /// </summary>
         public IBrush PlaybackPositionBrush
         {
             get => GetValue(PlaybackPositionBrushProperty);
             set => SetValue(PlaybackPositionBrushProperty, value);
         }
 
-        /// <summary>
-        /// Gets or sets the vertical scale of the waveform.
-        /// Higher values make the waveform taller.
-        /// </summary>
         public double VerticalScale
         {
             get => GetValue(VerticalScaleProperty);
             set => SetValue(VerticalScaleProperty, value);
         }
 
-        /// <summary>
-        /// Gets or sets the display style of the waveform.
-        /// </summary>
         public WaveformDisplayStyle DisplayStyle
         {
             get => GetValue(DisplayStyleProperty);
             set => SetValue(DisplayStyleProperty, value);
         }
 
-        /// <summary>
-        /// Gets or sets the zoom factor for the waveform.
-        /// Value of 1.0 means no zoom (showing the entire waveform),
-        /// larger values zoom in to show more detail.
-        /// Valid range: 1.0 to 50.0.
-        /// </summary>
         public double ZoomFactor
         {
             get => GetValue(ZoomFactorProperty);
             set => SetValue(ZoomFactorProperty, value);
         }
 
-        /// <summary>
-        /// Gets or sets the horizontal scroll offset (0.0 to 1.0).
-        /// 0.0 represents the start of the audio data,
-        /// 1.0 represents the end of the audio data.
-        /// </summary>
         public double ScrollOffset
         {
             get => GetValue(ScrollOffsetProperty);
             set => SetValue(ScrollOffsetProperty, value);
         }
 
-        /// <summary>
-        /// Gets or sets the current playback position (0.0 to 1.0).
-        /// 0.0 represents the start of the audio data,
-        /// 1.0 represents the end of the audio data.
-        /// </summary>
         public double PlaybackPosition
         {
             get => GetValue(PlaybackPositionProperty);
             set => SetValue(PlaybackPositionProperty, value);
         }
 
-        /// <summary>
-        /// Gets or sets whether the view should automatically follow the playback position.
-        /// When enabled, the waveform scrolls to keep the playback indicator visible.
-        /// </summary>
         public bool AutoFollow
         {
             get => GetValue(AutoFollowProperty);
@@ -206,483 +123,265 @@ namespace OwnaudioNET.Visualization
         }
         #endregion
 
-        /// <summary>
-        /// Event triggered when the playback position changes (e.g., by user interaction).
-        /// The event argument is the new position (0.0 to 1.0).
-        /// </summary>
+        // fires on user seek, arg = new position 0..1
         public event EventHandler<double>? PlaybackPositionChanged;
 
-        /// <summary>
-        /// Initializes a new instance of the WaveAvaloniaDisplay class.
-        /// Sets up default values and subscribes to property changes.
-        /// </summary>
         public WaveAvaloniaDisplay()
         {
             MinHeight = 50;
             _pointCache = _pointPool.Rent(_pointCacheCapacity);
-
             _waveformPen = new Pen(WaveformBrush);
             _playbackPen = new Pen(PlaybackPositionBrush, 2);
-
-            this.GetObservable(WaveformBrushProperty).Subscribe(new AnonymousObserver<IBrush>(brush => {
-                _waveformPen = new Pen(brush);
-                InvalidateVisual();
-            }));
-
-            this.GetObservable(PlaybackPositionBrushProperty).Subscribe(new AnonymousObserver<IBrush>(brush => {
-                _playbackPen = new Pen(brush, 2);
-                InvalidateVisual();
-            }));
-
-            this.GetObservable(VerticalScaleProperty).Subscribe(new AnonymousObserver<double>(_ => InvalidateVisual()));
-            this.GetObservable(DisplayStyleProperty).Subscribe(new AnonymousObserver<WaveformDisplayStyle>(_ => InvalidateVisual()));
-
-            this.GetObservable(ZoomFactorProperty).Subscribe(new AnonymousObserver<double>(_ => {
-                ValidateScrollOffset();
-                InvalidateVisual();
-            }));
-            this.GetObservable(ScrollOffsetProperty).Subscribe(new AnonymousObserver<double>(_ => InvalidateVisual()));
-
-            this.GetObservable(PlaybackPositionProperty).Subscribe(new AnonymousObserver<double>(_ => {
-                if (AutoFollow && !_isUserDragging && !_isUpdatingProperties)
-                {
-                    UpdateAutoFollow();
-                }
-                InvalidateVisual();
-            }));
-
-            this.GetObservable(AutoFollowProperty).Subscribe(new AnonymousObserver<bool>(_ => InvalidateVisual()));
-
-#nullable disable
-            this.PointerPressed += WaveformDisplay_PointerPressed;
-            this.PointerMoved += WaveformDisplay_PointerMoved;
-            this.PointerReleased += WaveformDisplay_PointerReleased;
-            this.PointerWheelChanged += WaveformDisplay_PointerWheelChanged;
-#nullable restore
         }
 
-        /// <summary>
-        /// Updates scroll position to follow playback position automatically.
-        /// The playback indicator stays in the center until it reaches the end of the visible area.
-        /// </summary>
-        private void UpdateAutoFollow()
+        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
-            if (_audioData == null || _audioData.Length == 0 || _isUpdatingProperties)
-                return;
+            base.OnPropertyChanged(change);
+            var p = change.Property;
 
-            try
+            if (p == WaveformBrushProperty) _waveformPen = new Pen(WaveformBrush);
+            else if (p == PlaybackPositionBrushProperty) _playbackPen = new Pen(PlaybackPositionBrush, 2);
+            else if (p == ZoomFactorProperty) ValidateScrollOffset();
+            else if (p == PlaybackPositionProperty)
             {
-                _isUpdatingProperties = true;
-
-                double playbackPos = PlaybackPosition;
-                double zoomFactor = Math.Max(1.0, ZoomFactor);
-                double visibleRange = 1.0 / zoomFactor;
-                double currentScrollOffset = ScrollOffset;
-
-                visibleRange = Math.Clamp(visibleRange, 0.02, 1.0);
-
-                double maxScrollOffset = Math.Max(0.0, 1.0 - visibleRange);
-
-                currentScrollOffset = Math.Clamp(currentScrollOffset, 0.0, maxScrollOffset);
-
-                double visibleStart = currentScrollOffset;
-                double visibleEnd = Math.Min(1.0, currentScrollOffset + visibleRange);
-
-                double centerThreshold = visibleStart + (visibleRange * 0.5);
-
-                bool needsScroll = false;
-                double newScrollOffset = currentScrollOffset;
-
-                if (playbackPos > centerThreshold && visibleEnd < 0.999) // Use 0.999 to avoid floating point precision issues
-                {
-                    newScrollOffset = playbackPos - (visibleRange * 0.5);
-                    needsScroll = true;
-                }
-                else if (playbackPos < visibleStart)
-                {
-                    newScrollOffset = Math.Max(0.0, playbackPos - (visibleRange * 0.25));
-                    needsScroll = true;
-                }
-                else if (playbackPos > visibleEnd)
-                {
-                    newScrollOffset = playbackPos - (visibleRange * 0.25);
-                    needsScroll = true;
-                }
-
-                if (needsScroll)
-                {
-                    newScrollOffset = Math.Clamp(newScrollOffset, 0.0, maxScrollOffset);
-
-                    if (Math.Abs(newScrollOffset - currentScrollOffset) > 0.001)
-                    {
-                        ScrollOffset = newScrollOffset;
-                    }
-                }
+                if (AutoFollow && !_dragging && !_updatingProps) UpdateAutoFollow();
             }
-            finally
-            {
-                _isUpdatingProperties = false;
-            }
-        }
-
-        /// <summary>
-        /// Sets the audio data to be displayed and resets zoom and scroll state.
-        /// </summary>
-        /// <param name="audioData">The audio sample data to display.</param>
-        public void SetAudioData(float[] audioData)
-        {
-            _audioData = audioData;
-
-            ZoomFactor = 1.0;
-            ScrollOffset = 0.0;
-            PlaybackPosition = 0.0;
+            else if (p != VerticalScaleProperty && p != DisplayStyleProperty &&
+                     p != ScrollOffsetProperty && p != AutoFollowProperty) return;
 
             InvalidateVisual();
         }
 
-        /// <summary>
-        /// Renders the waveform based on the current display settings.
-        /// </summary>
-        /// <param name="context">The drawing context.</param>
-        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-        private static double SampleToPixel(double sampleIndex, double startSample, double samplesPerPixel)
+        // keeps the playhead in view: recenter once it passes mid-screen
+        private void UpdateAutoFollow()
         {
-            return (sampleIndex - startSample) / samplesPerPixel;
+            if (_audioData == null || _audioData.Length == 0 || _updatingProps) return;
+
+            _updatingProps = true;
+            try {
+                double pos = PlaybackPosition;
+                double range = Math.Clamp(1.0 / Math.Max(1.0, ZoomFactor), 0.02, 1.0);
+                double maxOff = Math.Max(0.0, 1.0 - range);
+                double off = Math.Clamp(ScrollOffset, 0.0, maxOff);
+                double end = Math.Min(1.0, off + range);
+
+                double target = off;
+                if (pos > off + range * 0.5 && end < 0.999) target = pos - range * 0.5;
+                else if (pos < off || pos > end) target = Math.Max(0.0, pos - range * 0.25);
+
+                target = Math.Clamp(target, 0.0, maxOff);
+                if (Math.Abs(target - off) > 0.001) ScrollOffset = target;
+            }
+            finally { _updatingProps = false; }
         }
 
-        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-        private static double PixelToSample(double pixel, double startSample, double samplesPerPixel)
+        // hand over the samples to show; resets zoom/scroll/playhead
+        public void SetAudioData(float[] audioData)
         {
-            return startSample + pixel * samplesPerPixel;
+            _audioData = audioData;
+            ZoomFactor = 1.0;
+            ScrollOffset = 0.0;
+            PlaybackPosition = 0.0;
+            InvalidateVisual();
         }
 
-        /// <summary>
-        /// Renders the waveform based on the current display settings.
-        /// </summary>
-        /// <param name="context">The drawing context.</param>
+        static double SampleToPixel(double sample, double start, double spp) => (sample - start) / spp;
+        static double PixelToSample(double px, double start, double spp) => start + px * spp;
+
+        // wave + playhead line
         public override void Render(DrawingContext context)
         {
             base.Render(context);
+            if (_audioData == null || _audioData.Length == 0) return;
 
-            if (_audioData == null || _audioData.Length == 0)
-                return;
+            double width = Bounds.Width, height = Bounds.Height, centerY = height / 2;
+            float vScale = (float)(centerY * VerticalScale);
 
-            var bounds = Bounds;
-            double width = bounds.Width;
-            double height = bounds.Height;
-            double centerY = height / 2;
-
-            var vScale = (float)(height / 2 * VerticalScale);
-
-            int totalSamples = _audioData.Length;
+            int total = _audioData.Length;
             double zoom = Math.Max(1.0, ZoomFactor);
+            double spp = total / (zoom * width);
+            double start = Math.Clamp(total * ScrollOffset, 0.0, Math.Max(0.0, total - spp * width));
 
-            double startSample = totalSamples * ScrollOffset;
-            double samplesPerPixel = totalSamples / (zoom * width);
-
-            double maxStartSample = totalSamples - samplesPerPixel * width;
-            if (startSample > maxStartSample) startSample = Math.Max(0, maxStartSample);
-            if (startSample < 0) startSample = 0;
-
-            int requiredSize = (int)width * 2;
-            EnsurePointCacheCapacity(requiredSize);
-
+            EnsurePointCache((int)width * 2);
             _pointCacheSize = 0;
 
-            if (samplesPerPixel < 1.0)
+            if (spp < 1.0) RenderSamples(centerY, vScale, start, spp);
+            else RenderBlocks(width, height, centerY, vScale, start, spp);
+
+            for (int i = 0; i + 1 < _pointCacheSize; i += 2)
+                context.DrawLine(_waveformPen, _pointCache[i], _pointCache[i + 1]);
+
+            double px = SampleToPixel(PlaybackPosition * total, start, spp);
+            if ((px >= 0 && px <= width) || AutoFollow)
             {
-                RenderZoomedInLineStyle(centerY, vScale, startSample, samplesPerPixel);
-            }
-            else
-            {
-                var displayStyle = DisplayStyle;
-
-                if (displayStyle == WaveformDisplayStyle.MinMax)
-                    RenderMinMaxStyle(width, centerY, vScale, startSample, samplesPerPixel);
-                else if (displayStyle == WaveformDisplayStyle.Positive)
-                    RenderPositiveStyle(width, height, vScale, startSample, samplesPerPixel);
-                else
-                    RenderRmsStyle(width, centerY, vScale, startSample, samplesPerPixel);
-            }
-
-            if (_pointCacheSize > 1)
-            {
-                for (int i = 0; i < _pointCacheSize - 1; i += 2)
-                {
-                    context.DrawLine(_waveformPen, _pointCache[i], _pointCache[i + 1]);
-                }
-            }
-
-            double pixelPosition = SampleToPixel(PlaybackPosition * totalSamples, startSample, samplesPerPixel);
-
-            if ((pixelPosition >= 0 && pixelPosition <= width) || AutoFollow)
-            {
-                double visualPosition = Math.Clamp(pixelPosition, 0, width);
-
-                double snappedX = (_playbackPen.Thickness % 2 != 0)
-                    ? Math.Floor(visualPosition) + 0.5
-                    : Math.Round(visualPosition);
-
-                _linePoints[0] = new Point(snappedX, 0);
-                _linePoints[1] = new Point(snappedX, height);
+                double x = Math.Clamp(px, 0, width);
+                x = _playbackPen.Thickness % 2 != 0 ? Math.Floor(x) + 0.5 : Math.Round(x);
+                _linePoints[0] = new Point(x, 0);
+                _linePoints[1] = new Point(x, height);
                 context.DrawLine(_playbackPen, _linePoints[0], _linePoints[1]);
             }
         }
 
-        /// <summary>
-        /// Ensures the point cache has enough capacity for the required number of points.
-        /// </summary>
-        private void EnsurePointCacheCapacity(int requiredCapacity)
+        void EnsurePointCache(int required)
         {
-            if (_pointCacheCapacity < requiredCapacity)
-            {
-                _pointPool.Return(_pointCache, clearArray: false);
-                _pointCacheCapacity = ((requiredCapacity + 999) / 1000) * 1000;
-                if (_pointCacheCapacity < requiredCapacity) _pointCacheCapacity = requiredCapacity;
-                if (_pointCacheCapacity == 0) _pointCacheCapacity = 1000;
-                _pointCache = _pointPool.Rent(_pointCacheCapacity);
-            }
+            if (_pointCache != null && _pointCacheCapacity >= required) return;
+            if (_pointCache != null) _pointPool.Return(_pointCache);
+            _pointCacheCapacity = Math.Max(required, 1000);
+            _pointCache = _pointPool.Rent(_pointCacheCapacity);
         }
 
-        private void RenderZoomedInLineStyle(double centerY, float vScale, double startSample, double samplesPerPixel)
+        // zoomed in past 1 sample/px: connect the actual samples
+        void RenderSamples(double centerY, float vScale, double start, double spp)
         {
-            int dataLen = _audioData!.Length;
-            int firstVisibleSample = (int)Math.Max(0, Math.Floor(startSample));
-            int lastVisibleSample = (int)Math.Min(dataLen, Math.Ceiling(startSample + Bounds.Width * samplesPerPixel) + 1);
+            var data = _audioData!;
+            int first = (int)Math.Max(0, Math.Floor(start));
+            int last = (int)Math.Min(data.Length, Math.Ceiling(start + Bounds.Width * spp) + 1);
+            if (first >= data.Length) return;
 
-            if (firstVisibleSample >= dataLen) return;
-
-            double prevX = SampleToPixel(firstVisibleSample, startSample, samplesPerPixel);
-            double prevY = centerY + _audioData[firstVisibleSample] * vScale;
-
-            for (int i = firstVisibleSample + 1; i < lastVisibleSample; i++)
+            double prevX = SampleToPixel(first, start, spp);
+            double prevY = centerY + data[first] * vScale;
+            for (int i = first + 1; i < last; i++)
             {
-                double curX = SampleToPixel(i, startSample, samplesPerPixel);
-                double curY = centerY + _audioData[i] * vScale;
-
+                double x = SampleToPixel(i, start, spp);
+                double y = centerY + data[i] * vScale;
                 _pointCache[_pointCacheSize++] = new Point(prevX, prevY);
-                _pointCache[_pointCacheSize++] = new Point(curX, curY);
-
-                prevX = curX;
-                prevY = curY;
+                _pointCache[_pointCacheSize++] = new Point(x, y);
+                prevX = x; prevY = y;
             }
         }
 
-        private void RenderMinMaxStyle(double width, double centerY, float vScale, double startSample, double samplesPerPixel)
+        // one column per pixel, style decides what the column shows
+        void RenderBlocks(double width, double height, double centerY, float vScale, double start, double spp)
         {
-            int dataLen = _audioData!.Length;
-            float minValue, maxValue, sample;
+            var data = _audioData!;
+            var style = DisplayStyle;
 
             for (int x = 0; x < width; x++)
             {
-                int sampleStart = (int)Math.Max(0, Math.Floor(PixelToSample(x, startSample, samplesPerPixel)));
-                int sampleEnd   = (int)Math.Min(dataLen, Math.Ceiling(PixelToSample(x + 1, startSample, samplesPerPixel)));
-                if (sampleStart >= dataLen) break;
-                if (sampleEnd <= sampleStart) sampleEnd = sampleStart + 1;
+                int s0 = (int)Math.Max(0, Math.Floor(PixelToSample(x, start, spp)));
+                int s1 = (int)Math.Min(data.Length, Math.Ceiling(PixelToSample(x + 1, start, spp)));
+                if (s0 >= data.Length) break;
+                if (s1 <= s0) s1 = s0 + 1;
 
-                minValue = 1.0f;
-                maxValue = -1.0f;
-
-                for (int i = sampleStart; i < sampleEnd; i++)
+                float min = 1f, max = -1f, sum = 0f;
+                for (int i = s0; i < s1; i++)
                 {
-                    sample = _audioData[i];
-                    if (sample < minValue) minValue = sample;
-                    if (sample > maxValue) maxValue = sample;
+                    float s = data[i];
+                    if (s < min) min = s;
+                    if (s > max) max = s;
+                    sum += s * s;
                 }
 
-                _pointCache[_pointCacheSize++] = new Point(x, centerY + minValue * vScale);
-                _pointCache[_pointCacheSize++] = new Point(x, centerY + maxValue * vScale);
+                if (style == WaveformDisplayStyle.MinMax) {
+                    _pointCache[_pointCacheSize++] = new Point(x, centerY + min * vScale);
+                    _pointCache[_pointCacheSize++] = new Point(x, centerY + max * vScale);
+                }
+                else if (style == WaveformDisplayStyle.Positive) {
+                    float peak = Math.Max(Math.Abs(min), max);
+                    _pointCache[_pointCacheSize++] = new Point(x, height);
+                    _pointCache[_pointCacheSize++] = new Point(x, height - peak * vScale);
+                }
+                else {
+                    float rms = (float)Math.Sqrt(sum / (s1 - s0));
+                    _pointCache[_pointCacheSize++] = new Point(x, centerY + rms * vScale);
+                    _pointCache[_pointCacheSize++] = new Point(x, centerY - rms * vScale);
+                }
             }
         }
 
-        private void RenderPositiveStyle(double width, double height, float vScale, double startSample, double samplesPerPixel)
+        protected override void OnPointerPressed(PointerPressedEventArgs e)
         {
-            int dataLen = _audioData!.Length;
-            float maxPositive, sample;
-
-            for (int x = 0; x < width; x++)
-            {
-                int sampleStart = (int)Math.Max(0, Math.Floor(PixelToSample(x, startSample, samplesPerPixel)));
-                int sampleEnd   = (int)Math.Min(dataLen, Math.Ceiling(PixelToSample(x + 1, startSample, samplesPerPixel)));
-                if (sampleStart >= dataLen) break;
-                if (sampleEnd <= sampleStart) sampleEnd = sampleStart + 1;
-
-                maxPositive = 0;
-
-                for (int i = sampleStart; i < sampleEnd; i++)
-                {
-                    sample = Math.Abs(_audioData[i]);
-                    if (sample > maxPositive) maxPositive = sample;
-                }
-
-                _pointCache[_pointCacheSize++] = new Point(x, height);
-                _pointCache[_pointCacheSize++] = new Point(x, height - maxPositive * vScale);
-            }
-        }
-
-        private void RenderRmsStyle(double width, double centerY, float vScale, double startSample, double samplesPerPixel)
-        {
-            int dataLen = _audioData!.Length;
-            float sumSquares, sample, rms;
-            int count;
-
-            for (int x = 0; x < width; x++)
-            {
-                int sampleStart = (int)Math.Max(0, Math.Floor(PixelToSample(x, startSample, samplesPerPixel)));
-                int sampleEnd   = (int)Math.Min(dataLen, Math.Ceiling(PixelToSample(x + 1, startSample, samplesPerPixel)));
-                if (sampleStart >= dataLen) break;
-                if (sampleEnd <= sampleStart) sampleEnd = sampleStart + 1;
-
-                sumSquares = 0;
-                count = 0;
-
-                for (int i = sampleStart; i < sampleEnd; i++)
-                {
-                    sample = _audioData[i];
-                    sumSquares += sample * sample;
-                    count++;
-                }
-
-                rms = count > 0 ? (float)Math.Sqrt(sumSquares / count) : 0;
-
-                _pointCache[_pointCacheSize++] = new Point(x, centerY + rms * vScale);
-                _pointCache[_pointCacheSize++] = new Point(x, centerY - rms * vScale);
-            }
-        }
-
-        private bool _isDraggingPlayhead = false;
-
-        private void WaveformDisplay_PointerPressed(object sender, PointerPressedEventArgs e)
-        {
-            var point = e.GetPosition(this);
-
-            if (e.GetCurrentPoint(this).Properties.IsMiddleButtonPressed ||
-                e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
-            {
-                e.Pointer.Capture(this);
-                return;
-            }
-
+            base.OnPointerPressed(e);
             if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             {
-                _isUserDragging = true; // Disable auto-follow during user interaction
-                var position = CalculatePlaybackPositionFromMousePosition(point.X);
-                PlaybackPosition = position;
-                PlaybackPositionChanged?.Invoke(this, position);
-
-                _isDraggingPlayhead = true;
-                e.Pointer.Capture(this);
+                _dragging = true;
+                SeekTo(e.GetPosition(this).X);
             }
+            e.Pointer.Capture(this);
         }
 
-        private void WaveformDisplay_PointerMoved(object sender, PointerEventArgs e)
+        protected override void OnPointerMoved(PointerEventArgs e)
         {
-            if (_isDraggingPlayhead)
-            {
-                var point = e.GetPosition(this);
-                var position = CalculatePlaybackPositionFromMousePosition(point.X);
-                PlaybackPosition = position;
-                PlaybackPositionChanged?.Invoke(this, position);
-            }
+            base.OnPointerMoved(e);
+            if (_dragging) SeekTo(e.GetPosition(this).X);
         }
 
-        private void WaveformDisplay_PointerReleased(object sender, PointerReleasedEventArgs e)
+        protected override void OnPointerReleased(PointerReleasedEventArgs e)
         {
-            _isDraggingPlayhead = false;
-            _isUserDragging = false; // Re-enable auto-follow
+            base.OnPointerReleased(e);
+            _dragging = false;
             e.Pointer.Capture(null);
         }
 
-        private void WaveformDisplay_PointerWheelChanged(object sender, PointerWheelEventArgs e)
+        // ctrl+wheel = zoom at cursor, shift/horiz wheel = scroll, plain wheel = vertical gain
+        protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
         {
+            base.OnPointerWheelChanged(e);
             if (_audioData == null || _audioData.Length == 0) return;
 
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
             {
-                bool wasAutoFollow = AutoFollow;
-                if (wasAutoFollow) AutoFollow = false;
+                bool follow = AutoFollow;
+                if (follow) AutoFollow = false;
 
-                var point = e.GetPosition(this);
-                double pointRatio = Math.Clamp(point.X / Math.Max(1.0, Bounds.Width), 0.0, 1.0);
-
+                double ratio = Math.Clamp(e.GetPosition(this).X / Math.Max(1.0, Bounds.Width), 0.0, 1.0);
                 double oldZoom = ZoomFactor;
-                double zoomChange = e.Delta.Y > 0 ? 1.2 : 0.8;
+                double newZoom = Math.Clamp(oldZoom * (e.Delta.Y > 0 ? 1.2 : 0.8), 1.0, 50.0);
 
-                double newZoom = Math.Clamp(oldZoom * zoomChange, 1.0, 50.0);
-
-                double oldVisibleRange = 1.0 / oldZoom;
-                double newVisibleRange = 1.0 / newZoom;
-                double absPositionAtMouse = ScrollOffset + (pointRatio * oldVisibleRange);
-                double newScrollOffset = absPositionAtMouse - (pointRatio * newVisibleRange);
-
+                double anchor = ScrollOffset + ratio / oldZoom;
                 ZoomFactor = newZoom;
+                ScrollOffset = Math.Clamp(anchor - ratio / newZoom, 0.0, Math.Max(0.0, 1.0 - 1.0 / newZoom));
 
-                double maxScrollOffset = Math.Max(0.0, 1.0 - newVisibleRange);
-                ScrollOffset = Math.Clamp(newScrollOffset, 0.0, maxScrollOffset);
-
-                if (wasAutoFollow)
+                if (follow)
                 {
                     AutoFollow = true;
-                    if (!_isUserDragging)
-                    {
-                        UpdateAutoFollow();
-                    }
+                    if (!_dragging) UpdateAutoFollow();
                 }
             }
-            else if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) || Math.Abs(e.Delta.X) > 0)
+            else if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) || e.Delta.X != 0)
             {
-                double scrollDelta = (e.Delta.X != 0 ? e.Delta.X : e.Delta.Y) * 0.01 / Math.Max(1.0, ZoomFactor);
-                double newScrollOffset = ScrollOffset - scrollDelta;
-                double maxScrollOffset = Math.Max(0.0, 1.0 - (1.0 / Math.Max(1.0, ZoomFactor)));
-                ScrollOffset = Math.Clamp(newScrollOffset, 0.0, maxScrollOffset);
+                double delta = (e.Delta.X != 0 ? e.Delta.X : e.Delta.Y) * 0.01 / Math.Max(1.0, ZoomFactor);
+                double maxOff = Math.Max(0.0, 1.0 - 1.0 / Math.Max(1.0, ZoomFactor));
+                ScrollOffset = Math.Clamp(ScrollOffset - delta, 0.0, maxOff);
             }
             else
             {
-                double newScale = VerticalScale * (e.Delta.Y > 0 ? 1.1 : 0.9);
-                VerticalScale = Math.Clamp(newScale, 0.1, 10.0);
+                VerticalScale = Math.Clamp(VerticalScale * (e.Delta.Y > 0 ? 1.1 : 0.9), 0.1, 10.0);
             }
         }
 
-        private double CalculatePlaybackPositionFromMousePosition(double x)
+        void SeekTo(double x)
         {
-            if (_audioData == null || _audioData.Length == 0)
-                return 0.0;
-
-            double absPos = ScrollOffset + (x / Bounds.Width) / Math.Max(1.0, ZoomFactor);
-            return Math.Clamp(absPos, 0.0, 1.0);
+            var pos = CalcPositionFromX(x);
+            PlaybackPosition = pos;
+            PlaybackPositionChanged?.Invoke(this, pos);
         }
 
-        private void ValidateScrollOffset()
+        double CalcPositionFromX(double x)
+        {
+            if (_audioData == null || _audioData.Length == 0) return 0.0;
+            return Math.Clamp(ScrollOffset + x / Bounds.Width / Math.Max(1.0, ZoomFactor), 0.0, 1.0);
+        }
+
+        void ValidateScrollOffset()
         {
             if (_audioData == null || _audioData.Length == 0)
             {
                 if (ScrollOffset != 0.0) ScrollOffset = 0.0;
                 return;
             }
-
-            double maxOffset = Math.Max(0.0, 1.0 - (1.0 / ZoomFactor));
-            if (ScrollOffset > maxOffset)
-            {
-                ScrollOffset = maxOffset;
-            }
+            double maxOff = Math.Max(0.0, 1.0 - 1.0 / ZoomFactor);
+            if (ScrollOffset > maxOff) ScrollOffset = maxOff;
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             base.OnDetachedFromVisualTree(e);
-
             if (_pointCache != null)
             {
-                _pointPool.Return(_pointCache, clearArray: false);
+                _pointPool.Return(_pointCache);
                 _pointCache = null!;
             }
-
-#nullable disable
-            this.PointerPressed -= WaveformDisplay_PointerPressed;
-            this.PointerMoved -= WaveformDisplay_PointerMoved;
-            this.PointerReleased -= WaveformDisplay_PointerReleased;
-            this.PointerWheelChanged -= WaveformDisplay_PointerWheelChanged;
-#nullable restore
         }
     }
 }

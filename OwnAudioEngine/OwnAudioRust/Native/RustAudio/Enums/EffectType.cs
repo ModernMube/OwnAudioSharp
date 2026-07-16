@@ -1,71 +1,27 @@
 namespace Ownaudio.Native.RustAudio.Enums;
 
 /// <summary>
-/// Numeric identifiers for the native Rust audio effects.
+/// Effect ids for the rust side. Keep in sync with effects/mod.rs and Audio.Effects.EffectType.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Values must stay in sync with the <c>EffectType</c> enum in
-/// <c>ownaudio-core/src/effects/mod.rs</c> and
-/// <c>Ownaudio.Audio.Effects.EffectType</c>.
-/// </para>
-/// </remarks>
 internal enum NativeEffectType : uint
 {
-    /// <summary>Freeverb algorithmic reverb.</summary>
-    Reverb = 0,
-
-    /// <summary>10-band parametric equalizer.</summary>
-    Equalizer = 1,
-
-    /// <summary>Dynamic range compressor with soft knee.</summary>
-    Compressor = 2,
-
-    /// <summary>Look-ahead brick-wall limiter.</summary>
-    Limiter = 3,
-
-    /// <summary>Stereo delay with ping-pong and damping.</summary>
-    Delay = 4,
-
-    /// <summary>Multi-voice chorus with LFO modulation.</summary>
+    Reverb = 0,             //Freeverb
+    Equalizer = 1,          //10 band
+    Compressor = 2,         //soft knee
+    Limiter = 3,            //look-ahead brickwall
+    Delay = 4,              //ping-pong + damping
     Chorus = 5,
-
-    /// <summary>Soft-clipping distortion.</summary>
     Distortion = 6,
-
-    /// <summary>Asymmetric tube overdrive.</summary>
-    Overdrive = 7,
-
-    /// <summary>Flanger with short modulated delay.</summary>
+    Overdrive = 7,          //asymmetric tube
     Flanger = 8,
-
-    /// <summary>Phaser with all-pass filter stages.</summary>
     Phaser = 9,
-
-    /// <summary>Rotary / Leslie-cabinet speaker simulator.</summary>
-    Rotary = 10,
-
-    /// <summary>Automatic gain control.</summary>
+    Rotary = 10,            //Leslie sim
     AutoGain = 11,
-
-    /// <summary>Harmonic enhancer / exciter.</summary>
-    Enhancer = 12,
-
-    /// <summary>Noise gate / dynamic amplifier.</summary>
+    Enhancer = 12,          //exciter
     Gate = 13,
-
-    /// <summary>Real-time pitch shifter.</summary>
     PitchShift = 14,
-
-    /// <summary>Adaptive dynamic amplifier — dual-window RMS AGC with noise gate.</summary>
-    DynamicAmp = 15,
-
-    /// <summary>30-band 1/3-octave parametric equalizer.</summary>
-    Equalizer30 = 16,
-
-    /// <summary>External VST3 plugin hosted through a C ABI process callback.</summary>
-    Vst = 17,
-
-    /// <summary>SmartMaster composite mastering chain, hosted as one native effect.</summary>
-    SmartMaster = 18,
+    DynamicAmp = 15,        //dual-window RMS agc + gate
+    Equalizer30 = 16,       //1/3 octave
+    Vst = 17,               //external plugin over C ABI
+    SmartMaster = 18,       //whole mastering chain as one effect
 }

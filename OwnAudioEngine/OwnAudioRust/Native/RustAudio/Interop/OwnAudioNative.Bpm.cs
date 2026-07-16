@@ -4,18 +4,16 @@ using System.Runtime.InteropServices;
 namespace Ownaudio.Native.RustAudio.Interop;
 
 /// <summary>
-/// P/Invoke declarations for the native BPM detector API.
+/// P/Invokes for the native bpm detector. Every call gives back 0 on success, error code otherwise.
 /// </summary>
 internal static unsafe partial class OwnAudioNative
 {
     /// <summary>
-    /// Creates a BPM detector and writes its handle to <paramref name="outDetector"/>.
+    /// Makes a detector, handle comes back in outDetector.
     /// </summary>
-    /// <param name="channels">Interleaved channel count of the fed samples (clamped to at least 1).</param>
-    /// <param name="sampleRate">Input sample rate in Hz.</param>
-    /// <param name="outDetector">Receives the new detector handle on success.</param>
-    /// <returns>Zero on success; non-zero error code otherwise.</returns>
-    /// <remarks>Mirrors: <c>ownaudio_v1_bpm_create(channels, sample_rate, out_detector) → i32</c></remarks>
+    /// <param name="channels">interleaved channel count of what we feed, at least 1</param>
+    /// <param name="sampleRate"></param>
+    /// <param name="outDetector"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_bpm_create(
         uint channels,
@@ -23,14 +21,12 @@ internal static unsafe partial class OwnAudioNative
         out IntPtr outDetector);
 
     /// <summary>
-    /// Feeds interleaved frames into the detector.
+    /// Pushes interleaved f32 frames into the detector.
     /// </summary>
-    /// <param name="detector">Valid detector handle.</param>
-    /// <param name="samples">Reference to the first interleaved <c>f32</c> sample.</param>
-    /// <param name="numSamples">Number of frames (not samples) to feed.</param>
-    /// <param name="sampleCount">Total number of <c>f32</c> elements available at <paramref name="samples"/>.</param>
-    /// <returns>Zero on success; non-zero error code otherwise.</returns>
-    /// <remarks>Mirrors: <c>ownaudio_v1_bpm_input_samples(detector, samples, num_samples, sample_count) → i32</c></remarks>
+    /// <param name="detector"></param>
+    /// <param name="samples">first sample of the interleaved block</param>
+    /// <param name="numSamples">frames to feed, not samples</param>
+    /// <param name="sampleCount">how many f32 elements are actually there</param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_bpm_input_samples(
         IntPtr detector,
@@ -39,22 +35,19 @@ internal static unsafe partial class OwnAudioNative
         nuint sampleCount);
 
     /// <summary>
-    /// Writes the current estimated tempo in BPM to <paramref name="outBpm"/> (0 when not yet reliable).
+    /// Current tempo guess. Still 0 while it hasn't got enough to say anything.
     /// </summary>
-    /// <param name="detector">Valid detector handle.</param>
-    /// <param name="outBpm">Receives the estimated BPM.</param>
-    /// <returns>Zero on success; non-zero error code otherwise.</returns>
-    /// <remarks>Mirrors: <c>ownaudio_v1_bpm_get_bpm(detector, out_bpm) → i32</c></remarks>
+    /// <param name="detector"></param>
+    /// <param name="outBpm"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_bpm_get_bpm(
         IntPtr detector,
         out float outBpm);
 
     /// <summary>
-    /// Destroys a BPM detector handle. Passing <see cref="IntPtr.Zero"/> is safe.
+    /// Throws away the detector. Zero handle is fine.
     /// </summary>
-    /// <param name="detector">Detector handle to destroy.</param>
-    /// <remarks>Mirrors: <c>ownaudio_v1_bpm_destroy(OwnAudioBpmHandle*) → void</c></remarks>
+    /// <param name="detector"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial void ownaudio_v1_bpm_destroy(IntPtr detector);
 }

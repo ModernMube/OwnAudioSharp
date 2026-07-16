@@ -1,21 +1,20 @@
 namespace Ownaudio.Safe;
 
 /// <summary>
-/// Sample data format for audio streams.
-/// Values mirror <c>OwnAudioSampleFormat</c> in <c>ownaudio_ffi.h</c>;
-/// changing them is a breaking FFI ABI change requiring a major version bump.
+/// Sample formats we hand over to the ffi side.
+/// Keep the numbers as they are, OwnAudioSampleFormat in ownaudio_ffi.h relies on them.
 /// </summary>
 public enum SampleFormat
 {
-    /// <summary>32-bit IEEE 754 float — recommended for all DSP work.</summary>
+    /// 32 bit float, this is what the dsp chain wants.
     F32 = 0,
 
-    /// <summary>Signed 16-bit integer.</summary>
+    /// Signed 16 bit pcm.
     I16 = 1,
 
-    /// <summary>Unsigned 16-bit integer.</summary>
+    /// Unsigned 16 bit pcm.
     U16 = 2,
 
-    /// <summary>Signed 32-bit integer — the native wire format of many ASIO drivers.</summary>
+    /// Signed 32 bit, most asio drivers speak this natively.
     I32 = 3,
 }
