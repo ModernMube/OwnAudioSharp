@@ -22,6 +22,35 @@ pub fn u16_to_f32(input: &[u16], out: &mut [f32]) {
     }
 }
 
+/// Converts a buffer of `i32` samples to normalised `f32` in the range `[-1.0, 1.0]`.
+///
+/// The division runs in `f64` because `i32` exceeds the 24-bit `f32` mantissa;
+/// the result is rounded to `f32` only at the end.
+///
+/// # Panics
+/// Panics if `input.len() != out.len()`.
+pub fn i32_to_f32(input: &[i32], out: &mut [f32]) {
+    assert_eq!(input.len(), out.len(), "i32_to_f32: length mismatch");
+    for (o, &s) in out.iter_mut().zip(input) {
+        *o = (s as f64 / i32::MAX as f64) as f32;
+    }
+}
+
+/// Converts normalised `f32` samples in the range `[-1.0, 1.0]` to `i32`.
+///
+/// Values outside `[-1.0, 1.0]` are clamped to `[i32::MIN, i32::MAX]`.
+///
+/// # Panics
+/// Panics if `input.len() != out.len()`.
+pub fn f32_to_i32(input: &[f32], out: &mut [i32]) {
+    assert_eq!(input.len(), out.len(), "f32_to_i32: length mismatch");
+    // Scale by 2^31 in f64 (i32 exceeds the f32 mantissa) so that -1.0 maps to
+    // i32::MIN and 1.0 maps to 2^31, which is clamped to i32::MAX.
+    for (o, &s) in out.iter_mut().zip(input) {
+        *o = (s as f64 * 2_147_483_648.0).clamp(i32::MIN as f64, i32::MAX as f64) as i32;
+    }
+}
+
 /// Converts normalised `f32` samples in the range `[-1.0, 1.0]` to `i16`.
 ///
 /// Values outside `[-1.0, 1.0]` are clamped to `[i16::MIN, i16::MAX]`.
@@ -209,6 +238,29 @@ mod tests {
         assert_eq!(out[2], i16::MIN);
         assert_eq!(out[3], i16::MAX);
         assert_eq!(out[4], i16::MIN);
+    }
+
+    #[test]
+    fn i32_to_f32_round_trip() {
+        let input: Vec<i32> = vec![0, i32::MAX, i32::MIN, 1 << 30];
+        let mut out = vec![0.0f32; input.len()];
+        i32_to_f32(&input, &mut out);
+        assert!((out[0] - 0.0).abs() < 1e-9);
+        assert!((out[1] - 1.0).abs() < 1e-6);
+        assert!(out[2] < -0.999);
+        assert!(out[3] > 0.4 && out[3] < 0.6);
+    }
+
+    #[test]
+    fn f32_to_i32_clamps() {
+        let input = vec![0.0f32, 1.0, -1.0, 2.0, -2.0];
+        let mut out = vec![0i32; 5];
+        f32_to_i32(&input, &mut out);
+        assert_eq!(out[0], 0);
+        assert_eq!(out[1], i32::MAX);
+        assert_eq!(out[2], i32::MIN);
+        assert_eq!(out[3], i32::MAX);
+        assert_eq!(out[4], i32::MIN);
     }
 
     #[test]

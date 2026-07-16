@@ -46,8 +46,8 @@ pub mod stream_error;
 pub use config::{SampleFormat, StreamConfig};
 pub use decoder::{open_streaming, AudioStreamInfo, DecoderReadResult, StreamingTrack};
 pub use device::{
-    default_input_device, default_output_device, list_input_devices, list_output_devices,
-    AudioDeviceInfo,
+    default_input_device, default_output_device, list_input_devices, list_input_devices_on,
+    list_output_devices, list_output_devices_on, AudioDeviceInfo,
 };
 pub use effects::{Effect, EffectChain, EffectType};
 pub use engine::AudioEngine;

@@ -105,7 +105,7 @@ namespace Ownaudio.Core
             if (SampleRate <= 0 || SampleRate > 192000)
                 return false;
 
-            if (Channels <= 0 || Channels > 32)
+            if (Channels <= 0 || Channels > 256)
                 return false;
 
             if (BufferSize <= 0 || BufferSize > 16384)

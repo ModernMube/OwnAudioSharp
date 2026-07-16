@@ -15,7 +15,7 @@ public sealed class AudioStreamConfig
     /// <summary>Target sample rate in Hz. Valid range: 8 000 – 192 000.</summary>
     public int SampleRate { get; }
 
-    /// <summary>Number of channels. Valid range: 1 – 32.</summary>
+    /// <summary>Number of channels. Valid range: 1 – 256.</summary>
     public int Channels { get; }
 
     /// <summary>Sample data format used for the audio buffer.</summary>
@@ -35,7 +35,7 @@ public sealed class AudioStreamConfig
     /// Initializes a new <see cref="AudioStreamConfig"/> with explicit validation.
     /// </summary>
     /// <param name="sampleRate">Target sample rate in Hz (8 000 – 192 000).</param>
-    /// <param name="channels">Number of channels (1 – 32).</param>
+    /// <param name="channels">Number of channels (1 – 256).</param>
     /// <param name="sampleFormat">Sample data format.</param>
     /// <param name="bufferSizeFrames">
     /// Buffer size in frames (16 – 8 192), or 0 for the platform default.
@@ -50,7 +50,7 @@ public sealed class AudioStreamConfig
         int bufferSizeFrames = 0)
     {
         Guard.InRange(sampleRate, 8_000, 192_000, nameof(sampleRate));
-        Guard.InRange(channels, 1, 32, nameof(channels));
+        Guard.InRange(channels, 1, 256, nameof(channels));
 
         if (bufferSizeFrames != 0)
         {

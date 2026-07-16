@@ -24,7 +24,20 @@ pub struct AudioDeviceInfo {
 
 /// Returns a list of all available output devices on the default host.
 pub fn list_output_devices() -> Result<Vec<AudioDeviceInfo>> {
-    let host = cpal::default_host();
+    list_output_devices_on(&cpal::default_host())
+}
+
+/// Returns a list of all available input devices on the default host.
+pub fn list_input_devices() -> Result<Vec<AudioDeviceInfo>> {
+    list_input_devices_on(&cpal::default_host())
+}
+
+/// Returns a list of all available output devices on the given host.
+///
+/// Used by [`crate::AudioEngine::list_output_devices`] so that an engine
+/// created for a non-default host API (e.g. ASIO on Windows) enumerates the
+/// devices of that host instead of the platform default one.
+pub fn list_output_devices_on(host: &cpal::Host) -> Result<Vec<AudioDeviceInfo>> {
     let default_name = host
         .default_output_device()
         .and_then(|d| d.description().map(|desc| desc.name().to_owned()).ok());
@@ -38,9 +51,12 @@ pub fn list_output_devices() -> Result<Vec<AudioDeviceInfo>> {
     Ok(devices)
 }
 
-/// Returns a list of all available input devices on the default host.
-pub fn list_input_devices() -> Result<Vec<AudioDeviceInfo>> {
-    let host = cpal::default_host();
+/// Returns a list of all available input devices on the given host.
+///
+/// Used by [`crate::AudioEngine::list_input_devices`] so that an engine
+/// created for a non-default host API (e.g. ASIO on Windows) enumerates the
+/// devices of that host instead of the platform default one.
+pub fn list_input_devices_on(host: &cpal::Host) -> Result<Vec<AudioDeviceInfo>> {
     let default_name = host
         .default_input_device()
         .and_then(|d| d.description().map(|desc| desc.name().to_owned()).ok());

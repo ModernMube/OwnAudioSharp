@@ -148,7 +148,7 @@ namespace Ownaudio.EngineTest
             var config = new AudioConfig
             {
                 SampleRate = 48000,
-                Channels = 33,
+                Channels = 257,
                 BufferSize = 512
             };
 
@@ -156,7 +156,25 @@ namespace Ownaudio.EngineTest
             bool isValid = config.Validate();
 
             // Assert
-            Assert.IsFalse(isValid, "More than 32 channels should fail validation");
+            Assert.IsFalse(isValid, "More than 256 channels should fail validation");
+        }
+
+        [TestMethod]
+        public void Validate_MultichannelProAudioChannelCount_ShouldReturnTrue()
+        {
+            // Arrange
+            var config = new AudioConfig
+            {
+                SampleRate = 48000,
+                Channels = 64,
+                BufferSize = 512
+            };
+
+            // Act
+            bool isValid = config.Validate();
+
+            // Assert
+            Assert.IsTrue(isValid, "64 channels (e.g. MADI) should pass validation");
         }
 
         [TestMethod]

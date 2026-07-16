@@ -10,6 +10,8 @@ pub enum OwnAudioSampleFormat {
     I16 = 1,
     /// Unsigned 16-bit integer.
     U16 = 2,
+    /// Signed 32-bit integer — the native wire format of many ASIO drivers.
+    I32 = 3,
 }
 
 impl From<OwnAudioSampleFormat> for SampleFormat {
@@ -18,6 +20,7 @@ impl From<OwnAudioSampleFormat> for SampleFormat {
             OwnAudioSampleFormat::F32 => SampleFormat::F32,
             OwnAudioSampleFormat::I16 => SampleFormat::I16,
             OwnAudioSampleFormat::U16 => SampleFormat::U16,
+            OwnAudioSampleFormat::I32 => SampleFormat::I32,
         }
     }
 }

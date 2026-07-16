@@ -47,9 +47,58 @@ internal static unsafe partial class OwnAudioNative
         out nuint outCount);
 
     /// <summary>
+    /// Lists all available output devices on the host of the given engine.
+    /// Unlike <see cref="ownaudio_v1_list_output_devices"/>, which always queries the
+    /// platform default host, this respects the host API the engine was created with,
+    /// so an ASIO engine lists ASIO devices rather than WASAPI endpoints.
+    /// </summary>
+    /// <param name="engine">Valid engine handle from <c>ownaudio_v1_engine_create*</c>.</param>
+    /// <param name="outDevices">
+    /// On success, receives a pointer to a Rust-owned array of
+    /// <see cref="NativeDeviceInfo"/> elements.  Must be released with
+    /// <see cref="ownaudio_v1_free_device_list"/>.
+    /// </param>
+    /// <param name="outCount">On success, receives the number of elements in the array.</param>
+    /// <returns>
+    /// <see cref="NativeErrorCode.Success"/> (0) on success;
+    /// a non-zero <see cref="NativeErrorCode"/> otherwise.
+    /// </returns>
+    /// <remarks>Mirrors: <c>ownaudio_v1_engine_list_output_devices(OwnAudioEngineHandle*, OwnAudioDeviceInfo**, size_t*) → i32</c></remarks>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_engine_list_output_devices(
+        IntPtr engine,
+        out IntPtr outDevices,
+        out nuint outCount);
+
+    /// <summary>
+    /// Lists all available input devices on the host of the given engine.
+    /// Unlike <see cref="ownaudio_v1_list_input_devices"/>, which always queries the
+    /// platform default host, this respects the host API the engine was created with,
+    /// so an ASIO engine lists ASIO devices rather than WASAPI endpoints.
+    /// </summary>
+    /// <param name="engine">Valid engine handle from <c>ownaudio_v1_engine_create*</c>.</param>
+    /// <param name="outDevices">
+    /// On success, receives a pointer to a Rust-owned array of
+    /// <see cref="NativeDeviceInfo"/> elements.  Must be released with
+    /// <see cref="ownaudio_v1_free_device_list"/>.
+    /// </param>
+    /// <param name="outCount">On success, receives the number of elements in the array.</param>
+    /// <returns>
+    /// <see cref="NativeErrorCode.Success"/> (0) on success;
+    /// a non-zero <see cref="NativeErrorCode"/> otherwise.
+    /// </returns>
+    /// <remarks>Mirrors: <c>ownaudio_v1_engine_list_input_devices(OwnAudioEngineHandle*, OwnAudioDeviceInfo**, size_t*) → i32</c></remarks>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_engine_list_input_devices(
+        IntPtr engine,
+        out IntPtr outDevices,
+        out nuint outCount);
+
+    /// <summary>
     /// Releases a device array previously returned by
-    /// <see cref="ownaudio_v1_list_output_devices"/> or
-    /// <see cref="ownaudio_v1_list_input_devices"/>.
+    /// <see cref="ownaudio_v1_list_output_devices"/>,
+    /// <see cref="ownaudio_v1_list_input_devices"/>, or their
+    /// engine-scoped counterparts.
     /// </summary>
     /// <param name="devices">Pointer to the first element of the array.  Null is safe.</param>
     /// <param name="count">Number of elements.  Zero is safe.</param>

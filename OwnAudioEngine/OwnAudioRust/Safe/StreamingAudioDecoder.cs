@@ -87,7 +87,7 @@ public sealed class StreamingAudioDecoder : IDisposable
         }
         if (targetChannels != 0)
         {
-            Guard.InRange(targetChannels, 1, 32, nameof(targetChannels));
+            Guard.InRange(targetChannels, 1, 256, nameof(targetChannels));
         }
 
         int openCode = OwnAudioNative.ownaudio_v1_decoder_open(

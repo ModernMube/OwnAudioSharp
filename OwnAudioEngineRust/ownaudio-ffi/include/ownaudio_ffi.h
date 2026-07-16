@@ -117,6 +117,10 @@ typedef enum OwnAudioSampleFormat {
      * Unsigned 16-bit integer.
      */
     U16 = 2,
+    /**
+     * Signed 32-bit integer — the native wire format of many ASIO drivers.
+     */
+    I32 = 3,
 } OwnAudioSampleFormat;
 
 /**
@@ -233,6 +237,16 @@ typedef struct OwnAudioDeviceInfo {
 } OwnAudioDeviceInfo;
 
 /**
+ * Opaque handle to an [`AudioEngine`] instance.
+ *
+ * The C# side holds this as `IntPtr`.  Create with
+ * `ownaudio_v1_engine_create`; release with `ownaudio_v1_engine_destroy`.
+ */
+typedef struct OwnAudioEngineHandle {
+    uint8_t _private[0];
+} OwnAudioEngineHandle;
+
+/**
  * Opaque handle to a [`MultiTrackMixer`] instance.
  *
  * Create with `ownaudio_v1_mixer_create`; release with `ownaudio_v1_mixer_destroy`.
@@ -314,16 +328,6 @@ typedef bool (*VstProcessFn)(void *handle, struct VstAudioBuffer *buffer);
 typedef struct OwnAudioFileSourceHandle {
     uint8_t _private[0];
 } OwnAudioFileSourceHandle;
-
-/**
- * Opaque handle to an [`AudioEngine`] instance.
- *
- * The C# side holds this as `IntPtr`.  Create with
- * `ownaudio_v1_engine_create`; release with `ownaudio_v1_engine_destroy`.
- */
-typedef struct OwnAudioEngineHandle {
-    uint8_t _private[0];
-} OwnAudioEngineHandle;
 
 /**
  * Opaque handle to the control side of an input-capture track source.
@@ -604,8 +608,45 @@ int32_t ownaudio_v1_list_output_devices(struct OwnAudioDeviceInfo **out_devices,
 int32_t ownaudio_v1_list_input_devices(struct OwnAudioDeviceInfo **out_devices, size_t *out_count);
 
 /**
- * Releases an array previously returned by `ownaudio_v1_list_output_devices`
- * or `ownaudio_v1_list_input_devices`.
+ * Lists all available output devices on the host of the given engine.
+ *
+ * Unlike `ownaudio_v1_list_output_devices`, which always queries the platform
+ * default host, this respects the host API the engine was created with (see
+ * `ownaudio_v1_engine_create_with_host`), so an ASIO engine lists ASIO
+ * devices rather than WASAPI endpoints.
+ *
+ * On success, `*out_devices` points to a Rust-owned array of
+ * `*out_count` elements.  The caller must release it with
+ * `ownaudio_v1_free_device_list(*out_devices, *out_count)`.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_engine_list_output_devices(struct OwnAudioEngineHandle *engine,
+                                               struct OwnAudioDeviceInfo **out_devices,
+                                               size_t *out_count);
+
+/**
+ * Lists all available input devices on the host of the given engine.
+ *
+ * Unlike `ownaudio_v1_list_input_devices`, which always queries the platform
+ * default host, this respects the host API the engine was created with (see
+ * `ownaudio_v1_engine_create_with_host`), so an ASIO engine lists ASIO
+ * devices rather than WASAPI endpoints.
+ *
+ * On success, `*out_devices` points to a Rust-owned array of
+ * `*out_count` elements.  The caller must release it with
+ * `ownaudio_v1_free_device_list(*out_devices, *out_count)`.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_engine_list_input_devices(struct OwnAudioEngineHandle *engine,
+                                              struct OwnAudioDeviceInfo **out_devices,
+                                              size_t *out_count);
+
+/**
+ * Releases an array previously returned by `ownaudio_v1_list_output_devices`,
+ * `ownaudio_v1_list_input_devices`, or their `ownaudio_v1_engine_list_*`
+ * counterparts.
  *
  * Passing `null` or `count = 0` is safe and has no effect.
  */

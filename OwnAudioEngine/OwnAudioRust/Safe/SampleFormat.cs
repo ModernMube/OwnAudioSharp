@@ -15,4 +15,7 @@ public enum SampleFormat
 
     /// <summary>Unsigned 16-bit integer.</summary>
     U16 = 2,
+
+    /// <summary>Signed 32-bit integer — the native wire format of many ASIO drivers.</summary>
+    I32 = 3,
 }

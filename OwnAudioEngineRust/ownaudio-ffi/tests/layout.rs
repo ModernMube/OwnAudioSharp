@@ -192,6 +192,7 @@ fn sample_format_discriminants() {
     assert_eq!(OwnAudioSampleFormat::F32 as i32, 0);
     assert_eq!(OwnAudioSampleFormat::I16 as i32, 1);
     assert_eq!(OwnAudioSampleFormat::U16 as i32, 2);
+    assert_eq!(OwnAudioSampleFormat::I32 as i32, 3);
 }
 
 #[test]

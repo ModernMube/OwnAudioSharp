@@ -122,9 +122,7 @@ pub extern "C" fn ownaudio_v1_bpm_destroy(handle: *mut OwnAudioBpmHandle) {
     if handle.is_null() {
         return;
     }
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        unsafe {
-            drop(Box::from_raw(handle as *mut BpmDetect));
-        }
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        drop(Box::from_raw(handle as *mut BpmDetect));
     }));
 }

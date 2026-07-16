@@ -4,6 +4,7 @@ use std::os::raw::c_char;
 use ownaudio_core::{list_input_devices, list_output_devices};
 
 use crate::error_code::{set_last_error, OwnAudioErrorCode};
+use crate::handles::{engine_from_ptr, OwnAudioEngineHandle};
 
 /// Snapshot descriptor of an audio device, passed to the C# caller.
 ///
@@ -98,8 +99,103 @@ pub extern "C" fn ownaudio_v1_list_input_devices(
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
 }
 
-/// Releases an array previously returned by `ownaudio_v1_list_output_devices`
-/// or `ownaudio_v1_list_input_devices`.
+/// Lists all available output devices on the host of the given engine.
+///
+/// Unlike `ownaudio_v1_list_output_devices`, which always queries the platform
+/// default host, this respects the host API the engine was created with (see
+/// `ownaudio_v1_engine_create_with_host`), so an ASIO engine lists ASIO
+/// devices rather than WASAPI endpoints.
+///
+/// On success, `*out_devices` points to a Rust-owned array of
+/// `*out_count` elements.  The caller must release it with
+/// `ownaudio_v1_free_device_list(*out_devices, *out_count)`.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_engine_list_output_devices(
+    engine: *mut OwnAudioEngineHandle,
+    out_devices: *mut *mut OwnAudioDeviceInfo,
+    out_count: *mut usize,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_devices.is_null() || out_count.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let engine_wrapper = match unsafe { engine_from_ptr(engine) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::NullPointer as i32,
+        };
+
+        match engine_wrapper.inner.list_output_devices() {
+            Ok(devices) => {
+                let (ptr, count) = devices_to_c(devices);
+                unsafe {
+                    *out_devices = ptr;
+                    *out_count = count;
+                }
+                OwnAudioErrorCode::Success as i32
+            }
+            Err(e) => {
+                set_last_error(e.to_string());
+                OwnAudioErrorCode::from(e) as i32
+            }
+        }
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Lists all available input devices on the host of the given engine.
+///
+/// Unlike `ownaudio_v1_list_input_devices`, which always queries the platform
+/// default host, this respects the host API the engine was created with (see
+/// `ownaudio_v1_engine_create_with_host`), so an ASIO engine lists ASIO
+/// devices rather than WASAPI endpoints.
+///
+/// On success, `*out_devices` points to a Rust-owned array of
+/// `*out_count` elements.  The caller must release it with
+/// `ownaudio_v1_free_device_list(*out_devices, *out_count)`.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_engine_list_input_devices(
+    engine: *mut OwnAudioEngineHandle,
+    out_devices: *mut *mut OwnAudioDeviceInfo,
+    out_count: *mut usize,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_devices.is_null() || out_count.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let engine_wrapper = match unsafe { engine_from_ptr(engine) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::NullPointer as i32,
+        };
+
+        match engine_wrapper.inner.list_input_devices() {
+            Ok(devices) => {
+                let (ptr, count) = devices_to_c(devices);
+                unsafe {
+                    *out_devices = ptr;
+                    *out_count = count;
+                }
+                OwnAudioErrorCode::Success as i32
+            }
+            Err(e) => {
+                set_last_error(e.to_string());
+                OwnAudioErrorCode::from(e) as i32
+            }
+        }
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Releases an array previously returned by `ownaudio_v1_list_output_devices`,
+/// `ownaudio_v1_list_input_devices`, or their `ownaudio_v1_engine_list_*`
+/// counterparts.
 ///
 /// Passing `null` or `count = 0` is safe and has no effect.
 #[no_mangle]

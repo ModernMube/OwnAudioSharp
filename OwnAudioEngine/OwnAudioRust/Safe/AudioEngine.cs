@@ -138,7 +138,9 @@ public sealed class AudioEngine : IDisposable
     #region Device enumeration
 
     /// <summary>
-    /// Returns all available output devices reported by the OS audio subsystem.
+    /// Returns all available output devices on this engine's audio host.
+    /// The enumeration respects the <see cref="HostApi"/> the engine was created with,
+    /// so an engine created for ASIO lists ASIO devices rather than WASAPI endpoints.
     /// </summary>
     /// <returns>Read-only list of output devices; never <see langword="null"/>.</returns>
     /// <exception cref="ObjectDisposedException">Thrown when this engine has been disposed.</exception>
@@ -147,15 +149,17 @@ public sealed class AudioEngine : IDisposable
     {
         Guard.NotDisposed(_disposed, nameof(AudioEngine));
 
-        int code = OwnAudioNative.ownaudio_v1_list_output_devices(
-            out IntPtr devicePtr, out nuint count);
+        int code = OwnAudioNative.ownaudio_v1_engine_list_output_devices(
+            _handle.DangerousGetHandle(), out IntPtr devicePtr, out nuint count);
         ErrorCodeMapper.ThrowIfError(code, nameof(EnumerateOutputDevices));
 
         return MarshalDeviceList(devicePtr, count);
     }
 
     /// <summary>
-    /// Returns all available input devices reported by the OS audio subsystem.
+    /// Returns all available input devices on this engine's audio host.
+    /// The enumeration respects the <see cref="HostApi"/> the engine was created with,
+    /// so an engine created for ASIO lists ASIO devices rather than WASAPI endpoints.
     /// </summary>
     /// <returns>Read-only list of input devices; never <see langword="null"/>.</returns>
     /// <exception cref="ObjectDisposedException">Thrown when this engine has been disposed.</exception>
@@ -164,8 +168,8 @@ public sealed class AudioEngine : IDisposable
     {
         Guard.NotDisposed(_disposed, nameof(AudioEngine));
 
-        int code = OwnAudioNative.ownaudio_v1_list_input_devices(
-            out IntPtr devicePtr, out nuint count);
+        int code = OwnAudioNative.ownaudio_v1_engine_list_input_devices(
+            _handle.DangerousGetHandle(), out IntPtr devicePtr, out nuint count);
         ErrorCodeMapper.ThrowIfError(code, nameof(EnumerateInputDevices));
 
         return MarshalDeviceList(devicePtr, count);

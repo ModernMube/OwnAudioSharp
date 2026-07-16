@@ -279,8 +279,10 @@ impl Effect for SmartMaster {
             }
             PARAM_COMP_THRESHOLD => {
                 self.comp_threshold_lin = value.clamp(0.0, 1.0);
-                self.compressor
-                    .set_param(compressor::PARAM_THRESHOLD, lin_to_db(self.comp_threshold_lin));
+                self.compressor.set_param(
+                    compressor::PARAM_THRESHOLD,
+                    lin_to_db(self.comp_threshold_lin),
+                );
                 true
             }
             PARAM_COMP_RATIO => self.compressor.set_param(compressor::PARAM_RATIO, value),
@@ -326,13 +328,13 @@ impl Effect for SmartMaster {
             PARAM_DELAY_L..=PARAM_DELAY_SUB => {
                 Some(self.delays_ms[(param_id - PARAM_DELAY_L) as usize])
             }
-            PARAM_INVERT_L..=PARAM_INVERT_SUB => Some(if self.invert
-                [(param_id - PARAM_INVERT_L) as usize]
-            {
-                1.0
-            } else {
-                0.0
-            }),
+            PARAM_INVERT_L..=PARAM_INVERT_SUB => {
+                Some(if self.invert[(param_id - PARAM_INVERT_L) as usize] {
+                    1.0
+                } else {
+                    0.0
+                })
+            }
             PARAM_LIMIT_THRESHOLD => self.limiter.get_param(limiter::PARAM_THRESHOLD),
             PARAM_LIMIT_CEILING => self.limiter.get_param(limiter::PARAM_CEILING),
             PARAM_LIMIT_RELEASE => self.limiter.get_param(limiter::PARAM_RELEASE),

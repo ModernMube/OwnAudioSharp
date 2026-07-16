@@ -38,6 +38,24 @@ impl AudioEngine {
         Ok(AudioEngine { host })
     }
 
+    /// Returns a list of all available output devices on this engine's host.
+    ///
+    /// Unlike [`crate::device::list_output_devices`], which always queries the
+    /// platform default host, this respects the host the engine was created
+    /// with, so an ASIO engine lists ASIO devices rather than WASAPI endpoints.
+    pub fn list_output_devices(&self) -> Result<Vec<AudioDeviceInfo>> {
+        crate::device::list_output_devices_on(&self.host)
+    }
+
+    /// Returns a list of all available input devices on this engine's host.
+    ///
+    /// Unlike [`crate::device::list_input_devices`], which always queries the
+    /// platform default host, this respects the host the engine was created
+    /// with, so an ASIO engine lists ASIO devices rather than WASAPI endpoints.
+    pub fn list_input_devices(&self) -> Result<Vec<AudioDeviceInfo>> {
+        crate::device::list_input_devices_on(&self.host)
+    }
+
     /// Opens an output stream on the given device (or the system default if
     /// `device` is `None`).
     ///
@@ -110,6 +128,24 @@ impl AudioEngine {
                             let buf = &mut tmp[..data.len()];
                             callback(buf);
                             crate::format::f32_to_i16(buf, data);
+                        });
+                    },
+                    err_fn,
+                    None,
+                )?
+            }
+            cpal::SampleFormat::I32 => {
+                let mut tmp = vec![0f32; pre_alloc];
+                cpal_device.build_output_stream(
+                    stream_config,
+                    move |data: &mut [i32], _| {
+                        crate::rt_guard::guard_output(data, 0i32, |data| {
+                            if data.len() > tmp.len() {
+                                tmp.resize(data.len(), 0.0);
+                            }
+                            let buf = &mut tmp[..data.len()];
+                            callback(buf);
+                            crate::format::f32_to_i32(buf, data);
                         });
                     },
                     err_fn,
@@ -193,7 +229,12 @@ impl AudioEngine {
             if src_channels == dst_channels {
                 callback(data);
             } else {
-                crate::format::remap_channels_into(data, src_channels, dst_channels, &mut remap_scratch);
+                crate::format::remap_channels_into(
+                    data,
+                    src_channels,
+                    dst_channels,
+                    &mut remap_scratch,
+                );
                 callback(&remap_scratch);
             }
         };
@@ -221,6 +262,24 @@ impl AudioEngine {
                             }
                             let buf = &mut tmp[..data.len()];
                             crate::format::i16_to_f32(data, buf);
+                            adapted(buf);
+                        });
+                    },
+                    err_fn,
+                    None,
+                )?
+            }
+            cpal::SampleFormat::I32 => {
+                let mut tmp = vec![0f32; pre_alloc];
+                cpal_device.build_input_stream(
+                    stream_config,
+                    move |data: &[i32], _| {
+                        crate::rt_guard::guard_input(|| {
+                            if data.len() > tmp.len() {
+                                tmp.resize(data.len(), 0.0);
+                            }
+                            let buf = &mut tmp[..data.len()];
+                            crate::format::i32_to_f32(data, buf);
                             adapted(buf);
                         });
                     },

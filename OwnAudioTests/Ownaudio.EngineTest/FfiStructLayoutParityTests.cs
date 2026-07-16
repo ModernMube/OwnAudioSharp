@@ -104,6 +104,7 @@ public class FfiStructLayoutParityTests
         Assert.AreEqual(0, (int)NativeSampleFormat.F32);
         Assert.AreEqual(1, (int)NativeSampleFormat.I16);
         Assert.AreEqual(2, (int)NativeSampleFormat.U16);
+        Assert.AreEqual(3, (int)NativeSampleFormat.I32);
     }
 
     [TestMethod]
