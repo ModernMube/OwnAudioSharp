@@ -112,6 +112,13 @@ public sealed class SourceWithEffects : IAudioSource
     }
 
     /// <inheritdoc/>
+    public float Pan
+    {
+        get => _innerSource.Pan;
+        set => _innerSource.Pan = value;
+    }
+
+    /// <inheritdoc/>
     public bool Loop
     {
         get => _innerSource.Loop;

@@ -201,10 +201,12 @@ mod track_source {
     use ownaudio_ffi::ffi_track::{
         ownaudio_v1_mixer_create, ownaudio_v1_mixer_destroy, ownaudio_v1_mixer_get_master_peaks,
         ownaudio_v1_mixer_pause_all, ownaudio_v1_mixer_play_all, ownaudio_v1_mixer_set_master_gain,
-        ownaudio_v1_mixer_stop_all, ownaudio_v1_track_clear_output_channel_map,
-        ownaudio_v1_track_create, ownaudio_v1_track_destroy, ownaudio_v1_track_get_peaks,
+        ownaudio_v1_mixer_set_master_pan, ownaudio_v1_mixer_stop_all,
+        ownaudio_v1_track_clear_output_channel_map, ownaudio_v1_track_create,
+        ownaudio_v1_track_destroy, ownaudio_v1_track_get_peaks,
         ownaudio_v1_track_get_rendered_content_frames, ownaudio_v1_track_get_rendered_frames,
-        ownaudio_v1_track_reset_position, ownaudio_v1_track_set_output_channel_map,
+        ownaudio_v1_track_reset_position, ownaudio_v1_track_set_gain,
+        ownaudio_v1_track_set_output_channel_map, ownaudio_v1_track_set_pan,
         ownaudio_v1_track_set_start_delay_frames,
     };
     use ownaudio_ffi::handles::{
@@ -351,6 +353,29 @@ mod track_source {
         // Setting the master gain succeeds; a fresh mixer/track reports zero peaks.
         assert_eq!(
             ownaudio_v1_mixer_set_master_gain(mixer, 0.5),
+            OwnAudioErrorCode::Success as i32
+        );
+
+        // Pan: null handle → InvalidHandle; real handles accept the request (values are
+        // clamped internally, so an out-of-range request still succeeds).
+        assert_eq!(
+            ownaudio_v1_mixer_set_master_pan(std::ptr::null_mut(), -0.5),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        assert_eq!(
+            ownaudio_v1_track_set_pan(std::ptr::null_mut(), 0.5),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        assert_eq!(
+            ownaudio_v1_mixer_set_master_pan(mixer, -0.75),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(
+            ownaudio_v1_track_set_gain(track, 0.8),
+            OwnAudioErrorCode::Success as i32
+        );
+        assert_eq!(
+            ownaudio_v1_track_set_pan(track, 2.0),
             OwnAudioErrorCode::Success as i32
         );
         let (mut ml, mut mr) = (9.0f32, 9.0f32);

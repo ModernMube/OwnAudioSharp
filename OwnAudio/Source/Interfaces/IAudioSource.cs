@@ -36,6 +36,13 @@ public interface IAudioSource : IDisposable
     float Volume { get; set; }
 
     /// <summary>
+    /// Gets or sets the stereo pan position (-1.0 = hard left, 0.0 = center,
+    /// +1.0 = hard right). Applied under an equal-power law normalized to unity at
+    /// center, so a centered source is unaffected.
+    /// </summary>
+    float Pan { get; set; }
+
+    /// <summary>
     /// Gets or sets whether the source should loop when reaching the end.
     /// </summary>
     bool Loop { get; set; }

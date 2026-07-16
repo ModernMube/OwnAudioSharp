@@ -1298,6 +1298,7 @@ namespace OwnaudioNET.Interfaces
         System.Guid Id { get; }
         bool IsEndOfStream { get; }
         bool Loop { get; set; }
+        float Pan { get; set; }
         float PitchShift { get; set; }
         double Position { get; }
         OwnaudioNET.Core.AudioState State { get; }
@@ -1359,6 +1360,7 @@ namespace OwnaudioNET.Mixing
         public bool IsRunning { get; }
         public float LeftPeak { get; }
         public OwnaudioNET.Synchronization.MasterClock MasterClock { get; }
+        public float MasterPan { get; set; }
         public float MasterVolume { get; set; }
         public System.Guid MixerId { get; }
         public OwnaudioNET.Synchronization.ClockMode RenderingMode { get; set; }
@@ -1644,6 +1646,7 @@ namespace OwnaudioNET.Sources
                 "left",
                 "right"})]
         public System.ValueTuple<float, float> OutputLevels { get; }
+        public float Pan { get; set; }
         public virtual float PitchShift { get; set; }
         public abstract double Position { get; }
         public long SamplePosition { get; protected set; }
@@ -1769,6 +1772,7 @@ namespace OwnaudioNET.Sources
         public System.Guid Id { get; }
         public bool IsEndOfStream { get; }
         public bool Loop { get; set; }
+        public float Pan { get; set; }
         public float PitchShift { get; set; }
         public double Position { get; }
         public OwnaudioNET.Core.AudioState State { get; }

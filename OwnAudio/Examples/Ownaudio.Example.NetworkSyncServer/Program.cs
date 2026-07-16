@@ -71,6 +71,10 @@ public class ServerProgram
             _other.Volume = 1.0f;
             _vocals.Volume = 1.0f;
 
+            // Stereo pan (-1.0 left … 0.0 center … +1.0 right): spread the stems a little
+            _other.Pan = -0.3f;
+            _vocals.Pan = 0.3f;
+
             Console.WriteLine($"  ✓ Loaded 4 tracks ({_drums.Duration:F1}s duration)");
 
             // Add sources to mixer and attach to MasterClock

@@ -39,6 +39,7 @@ public sealed class AudioTrack : IDisposable
     private bool _disposed;
 
     private float _gain            = 1.0f;
+    private float _pan             = 0.0f;
     private float _tempo           = 1.0f;
     private float _pitchSemitones  = 0.0f;
     private bool  _muted           = false;
@@ -99,6 +100,33 @@ public sealed class AudioTrack : IDisposable
             if (!_disposed)
             {
                 OwnAudioNative.ownaudio_v1_track_set_gain(_handle.DangerousGetHandle(), _gain);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the stereo pan position (-1.0 = hard left, 0.0 = center,
+    /// +1.0 = hard right). Applied under an equal-power law normalized to unity at
+    /// center, so a centered track passes through unchanged.
+    /// </summary>
+    public float Pan
+    {
+        get => _pan;
+        set
+        {
+            float clamped = Math.Clamp(value, -1.0f, 1.0f);
+            // Skip the native call when the value is unchanged. The mirror starts at the native
+            // default (0.0 = center), so the two never drift. The control-rate sync tick re-assigns
+            // this every tick from the source pan; without this guard that is an unconditional
+            // P/Invoke per track per tick even when nothing changed.
+            if (clamped == _pan)
+            {
+                return;
+            }
+            _pan = clamped;
+            if (!_disposed)
+            {
+                OwnAudioNative.ownaudio_v1_track_set_pan(_handle.DangerousGetHandle(), _pan);
             }
         }
     }

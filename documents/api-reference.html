@@ -265,6 +265,9 @@ AudioConstants.MaxTempo         // 1.2 — maximum tempo multiplier (120% speed)
 <h3>Volume Range</h3>
 <p>All source <code>Volume</code> properties accept values from <code>0.0</code> (silence) to <code>20.0</code> (maximum amplification). The default is <code>1.0</code> (unity gain). Values above <code>1.0</code> amplify the signal and may clip without a limiter.</p>
 
+<h3>Pan Range</h3>
+<p>Source <code>Pan</code> and the mixer's <code>MasterPan</code> accept values from <code>-1.0</code> (hard left) through <code>0.0</code> (center, the default) to <code>+1.0</code> (hard right). An equal-power law keeps the perceived loudness constant across the sweep, and a centered value leaves the signal unchanged.</p>
+
 <h3>Pitch Shift Range</h3>
 <p>The <code>PitchShift</code> property on audio sources accepts values from <code>-12</code> to <code>+12</code> semitones. Use in combination with <code>Tempo</code> to time-stretch without changing pitch.</p>
 

@@ -482,8 +482,8 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Mirrors every attached file source's <c>Volume</c> and <c>Loop</c> onto its track and file
-    /// source once. Called on the sync tick and available for deterministic tests.
+    /// Mirrors every attached source's <c>Volume</c>, <c>Pan</c> and <c>Loop</c> onto its track and
+    /// backing source once. Called on the sync tick and available for deterministic tests.
     /// </summary>
     internal void SyncRustControlStateOnce()
     {
@@ -499,6 +499,7 @@ public sealed partial class AudioMixer
                 }
 
                 track.Gain = fs.Volume;
+                track.Pan = fs.Pan;
 
                 FileTrack? fileTrack = fs.RustFileTrack;
                 if (fileTrack is not null)
@@ -521,6 +522,7 @@ public sealed partial class AudioMixer
                 }
 
                 track.Gain = ss.Volume;
+                track.Pan = ss.Pan;
 
                 MemoryTrack? memoryTrack = ss.RustMemoryTrack;
                 if (memoryTrack is not null)
@@ -539,6 +541,7 @@ public sealed partial class AudioMixer
                 }
 
                 track.Gain = ins.Volume;
+                track.Pan = ins.Pan;
 
                 // Live capture has no loop; mirror the native track's metering peaks onto the source.
                 ins.SetOutputLevels(ins.State == AudioState.Playing ? track.Peaks : (0f, 0f));
@@ -547,11 +550,11 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Mirrors the mixer's master volume onto the shared session's native master gain and reads
-    /// back the session's master output peaks into <c>_leftPeak</c>/<c>_rightPeak</c>. Called on
-    /// the control-rate sync tick, so a live master-volume change propagates promptly and the
-    /// mixer's <c>LeftPeak</c>/<c>RightPeak</c> metering stays current even though the managed
-    /// <c>MixThread</c> (which computed them in legacy mode) does not run here.
+    /// Mirrors the mixer's master volume and master pan onto the shared session's native master bus
+    /// and reads back the session's master output peaks into <c>_leftPeak</c>/<c>_rightPeak</c>.
+    /// Called on the control-rate sync tick, so a live master-volume or master-pan change propagates
+    /// promptly and the mixer's <c>LeftPeak</c>/<c>RightPeak</c> metering stays current even though
+    /// the managed <c>MixThread</c> (which computed them in legacy mode) does not run here.
     /// </summary>
     internal void SyncRustMasterOnce()
     {
@@ -567,6 +570,7 @@ public sealed partial class AudioMixer
         }
 
         session.MasterGain = _masterVolume;
+        session.MasterPan = _masterPan;
 
         (float left, float right) = session.GetMasterPeaks();
         _leftPeak = left;

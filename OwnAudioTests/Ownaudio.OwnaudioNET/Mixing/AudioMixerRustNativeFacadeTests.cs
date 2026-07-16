@@ -130,6 +130,38 @@ public sealed class AudioMixerRustNativeFacadeTests : IDisposable
     }
 
     /// <summary>
+    /// The control-rate tick mirrors a source's <see cref="OwnaudioNET.Sources.FileSource.Pan"/>
+    /// onto its native track, so a per-source pan set on the managed side reaches the native mixer.
+    /// </summary>
+    [Fact]
+    public void SyncControlState_MirrorsPan()
+    {
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+        var source = new FileSource(_wavPath) { Pan = -0.75f };
+        mixer.AddSource(source);
+
+        mixer.SyncRustControlStateOnce();
+
+        source.RustTrack!.Pan.Should().BeApproximately(-0.75f, 0.0001f);
+    }
+
+    /// <summary>
+    /// The control-rate master tick mirrors the mixer's <see cref="AudioMixer.MasterPan"/> onto the
+    /// shared session's native master bus.
+    /// </summary>
+    [Fact]
+    public void SyncMaster_MirrorsMasterPan()
+    {
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+        mixer.AddSource(new FileSource(_wavPath));
+        mixer.MasterPan = 0.5f;
+
+        mixer.SyncRustMasterOnce();
+
+        mixer.RustSession!.MasterPan.Should().BeApproximately(0.5f, 0.0001f);
+    }
+
+    /// <summary>
     /// Seeking the Rust-native mixer moves the master clock and repositions each attached source's
     /// native decoder (the managed MixThread/soft-sync path that legacy relies on does not run here).
     /// </summary>

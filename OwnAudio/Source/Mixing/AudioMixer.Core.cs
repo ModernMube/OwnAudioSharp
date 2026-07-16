@@ -122,6 +122,13 @@ public sealed partial class AudioMixer : IDisposable
     private volatile float _masterVolume;
 
     /// <summary>
+    /// Current master stereo pan position in the range [-1.0, +1.0] (0.0 = center).
+    /// Declared <see langword="volatile"/> so writes from the main thread are immediately
+    /// visible to the control-rate sync tick without a memory barrier instruction.
+    /// </summary>
+    private volatile float _masterPan;
+
+    /// <summary>
     /// Most recently measured absolute peak level for the left output channel.
     /// Updated every mix cycle; read by the main thread for metering displays.
     /// Declared <see langword="volatile"/> to avoid stale reads without a lock.
@@ -203,6 +210,18 @@ public sealed partial class AudioMixer : IDisposable
     {
         get => _masterVolume;
         set => _masterVolume = Math.Clamp(value, 0.0f, 1.0f);
+    }
+
+    /// <summary>
+    /// Gets or sets the master stereo pan position applied to the final mixed signal
+    /// (-1.0 = hard left, 0.0 = center, +1.0 = hard right). Values are clamped to
+    /// [-1.0, +1.0]. Applied under an equal-power law normalized to unity at center, so
+    /// a centered master leaves the mix unchanged. Changes sweep without an audible click.
+    /// </summary>
+    public float MasterPan
+    {
+        get => _masterPan;
+        set => _masterPan = Math.Clamp(value, -1.0f, 1.0f);
     }
 
     /// <summary>

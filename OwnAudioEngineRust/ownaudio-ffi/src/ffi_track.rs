@@ -181,6 +181,34 @@ pub extern "C" fn ownaudio_v1_mixer_set_master_gain(
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
 }
 
+/// Sets the mixer's master stereo pan position (`-1.0` = hard left, `0.0` = center,
+/// `+1.0` = hard right), applied once over the fully summed mix under an equal-power
+/// law normalized to unity at center.
+///
+/// The pan is ramped on the audio thread, so a live change sweeps rather than clicks,
+/// and a centered master leaves the mix unchanged. Keeps working after the mixer has
+/// been moved onto the audio thread by an output stream (the master block is shared).
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_mixer_set_master_pan(
+    mixer: *mut OwnAudioMixerHandle,
+    pan: f32,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        wrapper.master_shared.set_master_pan(pan);
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
 /// Writes the mixer's most recently measured master output peak levels (absolute,
 /// post master gain) to `*out_left` and `*out_right`.
 ///
@@ -777,6 +805,28 @@ pub extern "C" fn ownaudio_v1_track_set_gain(track: *mut OwnAudioTrackHandle, ga
         };
 
         wrapper.shared.set_gain(gain);
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Sets the track stereo pan position (`-1.0` = hard left, `0.0` = center,
+/// `+1.0` = hard right) under an equal-power law normalized to unity at center, so a
+/// centered track passes through unchanged. The pan is ramped on the audio thread, so
+/// a live change sweeps rather than clicks.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_track_set_pan(track: *mut OwnAudioTrackHandle, pan: f32) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { track_from_ptr(track) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        wrapper.shared.set_pan(pan);
 
         OwnAudioErrorCode::Success as i32
     }));

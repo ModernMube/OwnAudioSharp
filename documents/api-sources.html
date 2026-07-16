@@ -39,6 +39,7 @@
     <tr><td><code>Id</code></td><td><code>Guid</code></td><td>auto</td><td>Unique identifier for this source.</td></tr>
     <tr><td><code>State</code></td><td><code>AudioState</code></td><td><code>Stopped</code></td><td>Current playback state.</td></tr>
     <tr><td><code>Volume</code></td><td><code>float</code></td><td><code>1.0</code></td><td>Track volume (0.0 – 20.0). Values above 1.0 amplify.</td></tr>
+    <tr><td><code>Pan</code></td><td><code>float</code></td><td><code>0.0</code></td><td>Stereo pan (-1.0 left … 0.0 center … +1.0 right), equal-power.</td></tr>
     <tr><td><code>Loop</code></td><td><code>bool</code></td><td><code>false</code></td><td>Loop when reaching end of stream.</td></tr>
     <tr><td><code>Position</code></td><td><code>double</code></td><td>—</td><td>Current playback position in seconds (read-only).</td></tr>
     <tr><td><code>Duration</code></td><td><code>double</code></td><td>—</td><td>Total duration in seconds (read-only).</td></tr>
@@ -117,6 +118,7 @@ var source = new FileSource("backing.mp3",
     targetChannels: ch);
 
 source.Volume      = 0.8f;
+source.Pan         = -0.3f;                // slightly left
 source.Tempo       = GlobalTempo / 100f;  // e.g. 100 → 1.0f
 source.PitchShift  = 0;
 source.StartOffset = 0.0;

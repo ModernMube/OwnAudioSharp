@@ -1386,6 +1386,19 @@ int32_t ownaudio_v1_mixer_stop_all(struct OwnAudioMixerHandle *mixer);
 int32_t ownaudio_v1_mixer_set_master_gain(struct OwnAudioMixerHandle *mixer, float gain);
 
 /**
+ * Sets the mixer's master stereo pan position (`-1.0` = hard left, `0.0` = center,
+ * `+1.0` = hard right), applied once over the fully summed mix under an equal-power
+ * law normalized to unity at center.
+ *
+ * The pan is ramped on the audio thread, so a live change sweeps rather than clicks,
+ * and a centered master leaves the mix unchanged. Keeps working after the mixer has
+ * been moved onto the audio thread by an output stream (the master block is shared).
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_mixer_set_master_pan(struct OwnAudioMixerHandle *mixer, float pan);
+
+/**
  * Writes the mixer's most recently measured master output peak levels (absolute,
  * post master gain) to `*out_left` and `*out_right`.
  *
@@ -1620,6 +1633,16 @@ int32_t ownaudio_v1_track_clear_output_channel_map(struct OwnAudioTrackHandle *t
  * Returns `OwnAudioErrorCode::Success` (0) on success.
  */
 int32_t ownaudio_v1_track_set_gain(struct OwnAudioTrackHandle *track, float gain);
+
+/**
+ * Sets the track stereo pan position (`-1.0` = hard left, `0.0` = center,
+ * `+1.0` = hard right) under an equal-power law normalized to unity at center, so a
+ * centered track passes through unchanged. The pan is ramped on the audio thread, so
+ * a live change sweeps rather than clicks.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ */
+int32_t ownaudio_v1_track_set_pan(struct OwnAudioTrackHandle *track, float pan);
 
 /**
  * Sets the track tempo ratio (1.0 = normal speed, 2.0 = double speed).

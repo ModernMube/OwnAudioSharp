@@ -105,6 +105,11 @@ pub struct TrackShared {
     state: AtomicU8,
     /// Gain as `f32` bits (linear amplitude, 1.0 = unity).
     gain_bits: AtomicU32,
+    /// Stereo pan position as `f32` bits, in `[-1.0, +1.0]` (`0.0` = center,
+    /// `-1.0` = hard left, `+1.0` = hard right). Applied per source channel by an
+    /// equal-power law normalized to unity at center (see [`equal_power_pan`]), so
+    /// a centered track passes through unchanged.
+    pan_bits: AtomicU32,
     /// Mute flag — when `true` the track contributes nothing to the mix.
     muted: AtomicBool,
     /// Solo flag — when any track is soloed, non-soloed tracks are muted.
@@ -193,6 +198,7 @@ impl TrackShared {
         Self {
             state: AtomicU8::new(TrackState::Stopped as u8),
             gain_bits: AtomicU32::new(1.0f32.to_bits()),
+            pan_bits: AtomicU32::new(0.0f32.to_bits()),
             muted: AtomicBool::new(false),
             soloed: AtomicBool::new(false),
             tempo_ratio_bits: AtomicU32::new(1.0f32.to_bits()),
@@ -272,6 +278,19 @@ impl TrackShared {
     pub fn set_gain(&self, gain: f32) {
         self.gain_bits
             .store(gain.max(0.0).to_bits(), Ordering::Relaxed);
+    }
+
+    /// Returns the stereo pan position, in `[-1.0, +1.0]` (`0.0` = center).
+    #[inline]
+    pub fn pan(&self) -> f32 {
+        f32::from_bits(self.pan_bits.load(Ordering::Relaxed))
+    }
+
+    /// Sets the stereo pan position (clamped to `[-1.0, +1.0]`).
+    #[inline]
+    pub fn set_pan(&self, pan: f32) {
+        self.pan_bits
+            .store(pan.clamp(-1.0, 1.0).to_bits(), Ordering::Relaxed);
     }
 
     /// Returns whether the track is muted.
@@ -582,6 +601,10 @@ pub struct Track {
     /// Per-frame gain smoother; ramps the atomic [`TrackShared::gain`] toward its
     /// latest value to suppress zipper noise on abrupt changes.
     gain_smoother: SmoothedParam,
+    /// Per-frame pan smoother; ramps the atomic [`TrackShared::pan`] position toward
+    /// its latest value so a live pan move sweeps rather than clicks. The smoothed
+    /// position is mapped to per-channel gains by [`equal_power_pan`].
+    pan_smoother: SmoothedParam,
     /// Per-track time-stretch / pitch-shift stage; applies the track's tempo and pitch to the
     /// source audio via SoundTouch, or bypasses transparently at unity.
     stretch: super::stretch::TrackStretch,
@@ -615,6 +638,28 @@ const UNITY_EPS: f32 = 1.0e-4;
 /// unity-gain fast path in the per-track mix loop.
 const GAIN_SETTLE_EPS: f32 = 1.0e-6;
 
+/// Tolerance within which the pan smoother is treated as settled at its target, so the per-frame
+/// pan gains can be computed once per block instead of re-evaluating the trig each frame.
+const PAN_SETTLE_EPS: f32 = 1.0e-6;
+
+/// Half-width of the pan deadband around center within which the track is considered centered,
+/// enabling the full-bypass fast path in the per-track mix loop.
+const PAN_CENTER_EPS: f32 = 1.0e-6;
+
+/// Maps a stereo pan position `p` in `[-1.0, +1.0]` to `(left, right)` channel gains under an
+/// equal-power law normalized to unity at center: `p == 0` returns `(1.0, 1.0)` so an un-panned
+/// track passes through unchanged, while `p` sweeps the image along a constant-power curve
+/// (`left² + right² == 2` for all `p`) — full-left `p == -1` → `(√2, 0)`, full-right
+/// `p == +1` → `(0, √2)`.
+#[inline]
+pub(crate) fn equal_power_pan(p: f32) -> (f32, f32) {
+    let angle = (p.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
+    (
+        std::f32::consts::SQRT_2 * angle.cos(),
+        std::f32::consts::SQRT_2 * angle.sin(),
+    )
+}
+
 impl Track {
     /// Creates a new idle track with the given id, sample rate (for gain
     /// smoothing), interleaved channel count, and pre-sized scratch buffer.
@@ -627,6 +672,7 @@ impl Track {
     pub fn new(id: u64, sample_rate: f32, channels: u16, max_buffer_size: usize) -> Self {
         let shared = Arc::new(TrackShared::new());
         let gain_smoother = SmoothedParam::new(shared.gain(), sample_rate, GAIN_SMOOTH_MS);
+        let pan_smoother = SmoothedParam::new(shared.pan(), sample_rate, GAIN_SMOOTH_MS);
         Self {
             id,
             shared,
@@ -634,6 +680,7 @@ impl Track {
             source: None,
             scratch: vec![0.0f32; max_buffer_size],
             gain_smoother,
+            pan_smoother,
             stretch: super::stretch::TrackStretch::new(sample_rate, channels, max_buffer_size),
             pdc: PdcDelay::new(),
             start_silence_remaining: 0,
@@ -775,12 +822,13 @@ impl Track {
         self.pdc.process(buf, channels);
 
         self.gain_smoother.set_target(self.shared.gain());
-        // Peak of this track's own (post-gain) contribution, per channel, for
-        // per-track metering. Measured on the scaled sample, not the raw source,
+        self.pan_smoother.set_target(self.shared.pan());
+        // Peak of this track's own (post-gain, post-pan) contribution, per channel,
+        // for per-track metering. Measured on the scaled sample, not the raw source,
         // so a muted-down track reads a low level as a user would expect.
         let mut peak_l = 0.0f32;
         let mut peak_r = 0.0f32;
-        // Advance the gain once per frame so both channels of a stereo frame
+        // Advance the gain and pan once per frame so both channels of a stereo frame
         // share the same (smoothed) gain. The active region is written starting at
         // `out_off` so any start-offset silence prefix is left untouched.
         let out_active = &mut output[out_off..out_off + active_samples];
@@ -796,12 +844,22 @@ impl Track {
 
         let settled_unity = self.gain_smoother.is_settled(GAIN_SETTLE_EPS)
             && (self.gain_smoother.target() - 1.0).abs() <= GAIN_SETTLE_EPS;
+        // Pan is centered when the smoother has both settled and rests at 0.0; only then does the
+        // full-bypass fast path apply (an un-panned, unity-gain track passes through bit-for-bit).
+        let pan_centered = self.pan_smoother.is_settled(PAN_SETTLE_EPS)
+            && self.pan_smoother.target().abs() <= PAN_CENTER_EPS;
+        let bypass = settled_unity && pan_centered;
+        // When the pan smoother is settled the per-channel pan gains are constant for the whole
+        // block, so compute the trig once here; otherwise they are recomputed per frame as the
+        // position ramps.
+        let pan_settled = self.pan_smoother.is_settled(PAN_SETTLE_EPS);
+        let (const_pan_l, const_pan_r) = equal_power_pan(self.pan_smoother.current());
 
         if route_len == 0 {
-            // Fast path: once the gain smoother has settled at unity, every frame would multiply by
-            // 1.0 and re-advance a no-op ramp. Skip both with a flat additive copy the compiler can
-            // vectorise cleanly, and measure the per-channel peak in a separate branch-light pass.
-            if settled_unity {
+            // Fast path: once gain has settled at unity and pan is centered, every frame would
+            // multiply by 1.0 and re-advance no-op ramps. Skip both with a flat additive copy the
+            // compiler can vectorise cleanly, measuring the per-channel peak in a separate pass.
+            if bypass {
                 for (o, &s) in out_active.iter_mut().zip(buf.iter()) {
                     *o += s;
                 }
@@ -820,8 +878,23 @@ impl Track {
             } else {
                 for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(ch)) {
                     let gain = self.gain_smoother.advance();
+                    let p = self.pan_smoother.advance();
+                    let (pan_l, pan_r) = if pan_settled {
+                        (const_pan_l, const_pan_r)
+                    } else {
+                        equal_power_pan(p)
+                    };
                     for (i, (o, &s)) in out_frame.iter_mut().zip(in_frame.iter()).enumerate() {
-                        let scaled = s * gain;
+                        // Pan positions source channel 0 (left) and 1 (right); any further
+                        // channel carries gain only (there is no meaningful stereo image for it).
+                        let ch_pan = if i == 0 {
+                            pan_l
+                        } else if i == 1 {
+                            pan_r
+                        } else {
+                            1.0
+                        };
+                        let scaled = s * gain * ch_pan;
                         *o += scaled;
                         let abs = scaled.abs();
                         if i == 0 {
@@ -839,7 +912,7 @@ impl Track {
             // only onto in-range output channels; the source width is `ch` (the track
             // decodes at the mixer's channel count), so cap the map at `ch`.
             let n = route_len.min(ch);
-            if settled_unity {
+            if bypass {
                 for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(ch)) {
                     for c in 0..n {
                         let dst = route_buf[c] as usize;
@@ -861,18 +934,33 @@ impl Track {
             } else {
                 for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(ch)) {
                     let gain = self.gain_smoother.advance();
+                    let p = self.pan_smoother.advance();
+                    let (pan_l, pan_r) = if pan_settled {
+                        (const_pan_l, const_pan_r)
+                    } else {
+                        equal_power_pan(p)
+                    };
                     for c in 0..n {
                         let dst = route_buf[c] as usize;
                         if dst < ch {
-                            out_frame[dst] += in_frame[c] * gain;
+                            // Pan by source channel index, so a routed left/right source
+                            // channel keeps its pan weight regardless of its destination.
+                            let ch_pan = if c == 0 {
+                                pan_l
+                            } else if c == 1 {
+                                pan_r
+                            } else {
+                                1.0
+                            };
+                            out_frame[dst] += in_frame[c] * gain * ch_pan;
                         }
                     }
-                    let l = (in_frame[0] * gain).abs();
+                    let l = (in_frame[0] * gain * pan_l).abs();
                     if l > peak_l {
                         peak_l = l;
                     }
                     if ch > 1 {
-                        let r = (in_frame[1] * gain).abs();
+                        let r = (in_frame[1] * gain * pan_r).abs();
                         if r > peak_r {
                             peak_r = r;
                         }

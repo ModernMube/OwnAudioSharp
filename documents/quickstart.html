@@ -126,9 +126,11 @@ var backing = new FileSource("backing.mp3", targetSampleRate: sr, targetChannels
 vocals.AttachToClock(mixer.MasterClock);
 backing.AttachToClock(mixer.MasterClock);
 
-// Set volumes
+// Set volume and stereo pan
 vocals.Volume  = 0.9f;
 backing.Volume = 0.8f;
+vocals.Pan  = -0.2f;   // slightly left
+backing.Pan =  0.2f;   // slightly right
 
 // Seek and play
 vocals.Seek(0);

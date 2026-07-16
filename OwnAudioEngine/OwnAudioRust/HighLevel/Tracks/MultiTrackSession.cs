@@ -38,6 +38,7 @@ public sealed class MultiTrackSession : IDisposable
     private readonly MasterEffectChain _masterEffects;
     private AudioOutputStream? _outputStream;
     private float _masterGain = 1.0f;
+    private float _masterPan = 0.0f;
     private bool _disposed;
 
     #endregion
@@ -100,6 +101,30 @@ public sealed class MultiTrackSession : IDisposable
                     _mixerHandle.DangerousGetHandle(),
                     _masterGain);
                 ErrorCodeMapper.ThrowIfError(code, nameof(MasterGain));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the master stereo pan position applied once over the fully summed
+    /// mix (-1.0 = hard left, 0.0 = center, +1.0 = hard right). Values are clamped to
+    /// [-1.0, +1.0] and applied under an equal-power law normalized to unity at center,
+    /// so a centered master leaves the mix unchanged. The change is ramped on the audio
+    /// thread, so it sweeps without a click. Keeps working after <see cref="OpenOutput"/>
+    /// has moved the mixer onto the audio thread.
+    /// </summary>
+    public float MasterPan
+    {
+        get => _masterPan;
+        set
+        {
+            _masterPan = Math.Clamp(value, -1.0f, 1.0f);
+            if (!_disposed)
+            {
+                int code = OwnAudioNative.ownaudio_v1_mixer_set_master_pan(
+                    _mixerHandle.DangerousGetHandle(),
+                    _masterPan);
+                ErrorCodeMapper.ThrowIfError(code, nameof(MasterPan));
             }
         }
     }

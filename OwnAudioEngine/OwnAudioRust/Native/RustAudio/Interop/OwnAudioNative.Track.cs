@@ -65,6 +65,17 @@ internal static partial class OwnAudioNative
     internal static partial int ownaudio_v1_mixer_set_master_gain(IntPtr mixer, float gain);
 
     /// <summary>
+    /// Sets the mixer's master stereo pan position (-1.0 = hard left, 0.0 = center,
+    /// +1.0 = hard right), applied once over the fully summed mix under an equal-power
+    /// law normalized to unity at center. Ramped on the audio thread.
+    /// </summary>
+    /// <param name="mixer">Valid mixer handle.</param>
+    /// <param name="pan">Master pan position (clamped to [-1.0, +1.0]).</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_set_master_pan(IntPtr mixer, float pan);
+
+    /// <summary>
     /// Writes the mixer's most recently measured master output peak levels
     /// (absolute, post master gain) to <paramref name="outLeft"/> and
     /// <paramref name="outRight"/>. A mono mixer reports the same value on both.
@@ -238,6 +249,16 @@ internal static partial class OwnAudioNative
     /// <returns>Zero on success; non-zero error code otherwise.</returns>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_track_set_gain(IntPtr track, float gain);
+
+    /// <summary>
+    /// Sets the track stereo pan position (-1.0 = hard left, 0.0 = center,
+    /// +1.0 = hard right) under an equal-power law normalized to unity at center.
+    /// </summary>
+    /// <param name="track">Valid track handle.</param>
+    /// <param name="pan">Pan position (clamped to [-1.0, +1.0]).</param>
+    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_set_pan(IntPtr track, float pan);
 
     /// <summary>Sets the track tempo ratio (1.0 = normal speed).</summary>
     /// <param name="track">Valid track handle.</param>

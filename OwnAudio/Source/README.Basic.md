@@ -85,8 +85,10 @@ source.Effects.Add(new ReverbEffect { RoomSize = 0.5f });
 source.Effects.Add(new EqualizerEffect());
 mixer.AddSource(source);
 
-// Pitch shifting / time stretching (built into every source)
+// Per-source controls (built into every source)
 var pitchedSource = new FileSource("music.mp3");
+pitchedSource.Volume = 0.8f;    // 80% volume
+pitchedSource.Pan = -0.3f;      // stereo pan: -1 left … 0 center … +1 right
 pitchedSource.PitchShift = 2;   // Shift up 2 semitones
 pitchedSource.Tempo = 1.1f;     // 10% faster
 mixer.AddSource(pitchedSource);

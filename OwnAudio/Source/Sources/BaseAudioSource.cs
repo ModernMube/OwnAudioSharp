@@ -14,6 +14,7 @@ public abstract partial class BaseAudioSource : IAudioSource
 {
     private AudioState _state;
     private float _volume;
+    private float _pan;
     private bool _loop;
     private bool _disposed;
 
@@ -46,6 +47,13 @@ public abstract partial class BaseAudioSource : IAudioSource
     {
         get => _volume;
         set => _volume = Math.Clamp(value, 0.0f, 20.0f);
+    }
+
+    /// <inheritdoc/>
+    public float Pan
+    {
+        get => _pan;
+        set => _pan = Math.Clamp(value, -1.0f, 1.0f);
     }
 
     /// <inheritdoc/>

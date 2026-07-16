@@ -191,6 +191,9 @@ public class TestProgram
             fileSource2.Volume = 1.0f;
             fileSource3.Volume = 0.65f;
 
+            // Stereo pan: -1.0 = hard left, 0.0 = center (default), +1.0 = hard right
+            fileSource3.Pan = -0.2f;
+
             Console.WriteLine($"  ✓ File source created");
             Console.WriteLine($"  ✓ Format: {fileSource0.Config.ToString()}");
             Console.WriteLine($"  ✓ Duration: {fileSource0.Duration:F2} seconds");

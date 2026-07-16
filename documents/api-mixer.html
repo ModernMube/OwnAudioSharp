@@ -80,6 +80,7 @@ mixer.Start();</code></pre></div>
     <tr><td><code>IsRunning</code></td><td><code>bool</code></td><td>Whether the mix thread is active.</td></tr>
     <tr><td><code>SourceCount</code></td><td><code>int</code></td><td>Number of active sources.</td></tr>
     <tr><td><code>MasterVolume</code></td><td><code>float</code></td><td>Master output volume (0.0 – 1.0). Settable at any time.</td></tr>
+    <tr><td><code>MasterPan</code></td><td><code>float</code></td><td>Master stereo pan (-1.0 left … 0.0 center … +1.0 right). Settable at any time.</td></tr>
     <tr><td><code>LeftPeak</code> / <code>RightPeak</code></td><td><code>float</code></td><td>Real-time peak levels (0.0 – 1.0) for VU metering.</td></tr>
     <tr><td><code>TotalMixedFrames</code></td><td><code>long</code></td><td>Total frames processed since last <code>Start()</code>.</td></tr>
     <tr><td><code>TotalUnderruns</code></td><td><code>long</code></td><td>Total buffer underruns since last <code>Start()</code>.</td></tr>

@@ -38,6 +38,10 @@ use self::track::MAX_EFFECTS_PER_TRACK;
 pub struct MixerShared {
     /// Master output gain as `f32` bits (linear amplitude, 1.0 = unity).
     master_gain_bits: AtomicU32,
+    /// Master stereo pan position as `f32` bits, in `[-1.0, +1.0]` (`0.0` = center).
+    /// Applied to the final mix under the same equal-power law as a track's pan, so a
+    /// centered master leaves the mix unchanged.
+    master_pan_bits: AtomicU32,
     /// Most recent left-channel output peak as `f32` bits (absolute, 0.0–…).
     master_peak_l_bits: AtomicU32,
     /// Most recent right-channel output peak as `f32` bits (absolute, 0.0–…).
@@ -49,6 +53,7 @@ impl MixerShared {
     pub fn new() -> Self {
         Self {
             master_gain_bits: AtomicU32::new(1.0f32.to_bits()),
+            master_pan_bits: AtomicU32::new(0.0f32.to_bits()),
             master_peak_l_bits: AtomicU32::new(0.0f32.to_bits()),
             master_peak_r_bits: AtomicU32::new(0.0f32.to_bits()),
         }
@@ -65,6 +70,19 @@ impl MixerShared {
     pub fn set_master_gain(&self, gain: f32) {
         self.master_gain_bits
             .store(gain.max(0.0).to_bits(), Ordering::Relaxed);
+    }
+
+    /// Returns the master stereo pan position, in `[-1.0, +1.0]` (`0.0` = center).
+    #[inline]
+    pub fn master_pan(&self) -> f32 {
+        f32::from_bits(self.master_pan_bits.load(Ordering::Relaxed))
+    }
+
+    /// Sets the master stereo pan position (clamped to `[-1.0, +1.0]`).
+    #[inline]
+    pub fn set_master_pan(&self, pan: f32) {
+        self.master_pan_bits
+            .store(pan.clamp(-1.0, 1.0).to_bits(), Ordering::Relaxed);
     }
 
     /// Returns the most recently measured left-channel output peak.
@@ -157,6 +175,10 @@ pub struct MultiTrackMixer {
     /// [`MixerShared::master_gain`] so a live master-volume change fades in over
     /// a few milliseconds instead of clicking.
     master_gain_smoother: SmoothedParam,
+    /// Per-frame smoother for the master pan position, ramping toward
+    /// [`MixerShared::master_pan`] so a live master-pan move sweeps rather than
+    /// clicks. Mapped to per-channel gains by [`crate::multitrack::track::equal_power_pan`].
+    master_pan_smoother: SmoothedParam,
     /// Optional master-output capture sink. When present, the audio thread copies
     /// every fully rendered master block (post effects and gain) into it, so the
     /// control thread can persist the mix (e.g. record to disk). Installed and
@@ -186,6 +208,7 @@ impl MultiTrackMixer {
             master_effects: EffectChain::with_capacity(MAX_EFFECTS_PER_TRACK),
             master_shared: Arc::new(MixerShared::new()),
             master_gain_smoother: SmoothedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
+            master_pan_smoother: SmoothedParam::new(0.0, sample_rate, DEFAULT_SMOOTH_MS),
             capture_sink: None,
         }
     }
@@ -344,22 +367,30 @@ impl MultiTrackMixer {
         // Apply the master effect chain once over the fully summed mix.
         self.master_effects.process_all(output, channels);
 
-        // Apply the master output gain over the processed mix and measure the
-        // output peak levels for metering. The gain is ramped per frame (like a
-        // track's gain) so a live master-volume change fades rather than clicks;
-        // at unity the smoother rests at 1.0 and the multiply is a no-op, so a
-        // mixer whose master gain is never touched stays bit-exact.
+        // Apply the master output gain and pan over the processed mix and measure the
+        // output peak levels for metering. Both are ramped per frame (like a track's
+        // gain/pan) so a live master change fades rather than clicks; at unity gain and
+        // center pan the smoothers rest at their neutral values and the multiply is a
+        // no-op, so a mixer whose master gain/pan is never touched stays bit-exact.
         self.master_gain_smoother
             .set_target(self.master_shared.master_gain());
+        self.master_pan_smoother
+            .set_target(self.master_shared.master_pan());
         let ch = channels.max(1) as usize;
         let mut peak_l = 0.0f32;
         let mut peak_r = 0.0f32;
-        // Fast path: a master gain resting at unity would multiply every sample by 1.0 and advance
-        // a no-op ramp. Skip both and only measure the output peaks over a branch-light pass.
+        // Fast path: a master gain at unity AND pan centered would multiply every sample by 1.0 and
+        // advance no-op ramps. Skip both and only measure the output peaks over a branch-light pass.
         const MASTER_GAIN_SETTLE_EPS: f32 = 1.0e-6;
-        if self.master_gain_smoother.is_settled(MASTER_GAIN_SETTLE_EPS)
-            && (self.master_gain_smoother.target() - 1.0).abs() <= MASTER_GAIN_SETTLE_EPS
-        {
+        const MASTER_PAN_SETTLE_EPS: f32 = 1.0e-6;
+        let gain_unity = self.master_gain_smoother.is_settled(MASTER_GAIN_SETTLE_EPS)
+            && (self.master_gain_smoother.target() - 1.0).abs() <= MASTER_GAIN_SETTLE_EPS;
+        let pan_centered = self.master_pan_smoother.is_settled(MASTER_PAN_SETTLE_EPS)
+            && self.master_pan_smoother.target().abs() <= MASTER_PAN_SETTLE_EPS;
+        let pan_settled = self.master_pan_smoother.is_settled(MASTER_PAN_SETTLE_EPS);
+        let (const_pan_l, const_pan_r) =
+            crate::multitrack::track::equal_power_pan(self.master_pan_smoother.current());
+        if gain_unity && pan_centered {
             for frame in output.chunks(ch) {
                 let l = frame[0].abs();
                 if l > peak_l {
@@ -375,8 +406,23 @@ impl MultiTrackMixer {
         } else {
             for frame in output.chunks_mut(ch) {
                 let gain = self.master_gain_smoother.advance();
+                let p = self.master_pan_smoother.advance();
+                let (pan_l, pan_r) = if pan_settled {
+                    (const_pan_l, const_pan_r)
+                } else {
+                    crate::multitrack::track::equal_power_pan(p)
+                };
                 for (i, sample) in frame.iter_mut().enumerate() {
-                    *sample *= gain;
+                    // Master pan positions output channel 0 (left) and 1 (right); any further
+                    // channel carries gain only.
+                    let ch_pan = if i == 0 {
+                        pan_l
+                    } else if i == 1 {
+                        pan_r
+                    } else {
+                        1.0
+                    };
+                    *sample *= gain * ch_pan;
                     let abs = sample.abs();
                     if i == 0 {
                         if abs > peak_l {
@@ -580,6 +626,82 @@ mod tests {
         let mut out = [0.0f32; 4];
         mixer.mix(&mut out);
         assert_eq!(out, [1.5, 2.5, 3.5, 4.5]);
+    }
+
+    #[test]
+    fn equal_power_pan_is_unity_at_center_and_constant_power() {
+        use crate::multitrack::track::equal_power_pan;
+        // Center passes through unchanged (both channels at unity), so adding a pan
+        // control never attenuates an un-panned track.
+        let (l, r) = equal_power_pan(0.0);
+        assert!(
+            (l - 1.0).abs() < 1e-6 && (r - 1.0).abs() < 1e-6,
+            "center=({l},{r})"
+        );
+        // Hard left/right place all energy on one channel at √2 (the +3 dB the
+        // equal-power law boosts the extreme to, relative to a unity-center reference).
+        let (l, r) = equal_power_pan(-1.0);
+        assert!(
+            (l - std::f32::consts::SQRT_2).abs() < 1e-6 && r.abs() < 1e-6,
+            "left=({l},{r})"
+        );
+        let (l, r) = equal_power_pan(1.0);
+        assert!(
+            l.abs() < 1e-6 && (r - std::f32::consts::SQRT_2).abs() < 1e-6,
+            "right=({l},{r})"
+        );
+        // Power (L² + R²) is constant across the whole sweep.
+        for p in [-1.0, -0.5, 0.0, 0.3, 1.0f32] {
+            let (l, r) = equal_power_pan(p);
+            assert!(
+                (l * l + r * r - 2.0).abs() < 1e-5,
+                "power not constant at {p}"
+            );
+        }
+        // Out-of-range positions clamp instead of extrapolating.
+        let (l, r) = equal_power_pan(-5.0);
+        assert!((l - std::f32::consts::SQRT_2).abs() < 1e-6 && r.abs() < 1e-6);
+    }
+
+    #[test]
+    fn track_pan_hard_left_silences_right_channel() {
+        // A stereo track panned hard left must, once the pan smoother settles, place its
+        // energy on the left channel (boosted to √2) and silence the right.
+        let mut mixer = MultiTrackMixer::new(48_000.0, 2);
+        let (a, shared) = mixer.add_track();
+        mixer.set_track_source(a, Some(Box::new(VecSource::new(vec![1.0f32; 4096]))));
+        shared.set_pan(-1.0);
+        play(&mut mixer, a);
+
+        let mut out = vec![0.0f32; 4096];
+        mixer.mix(&mut out);
+
+        let (l, r) = (out[out.len() - 2], out[out.len() - 1]);
+        assert!(r.abs() < 1e-3, "right should be silent, got {r}");
+        assert!(
+            (l - std::f32::consts::SQRT_2).abs() < 1e-2,
+            "left should be ~√2, got {l}"
+        );
+    }
+
+    #[test]
+    fn master_pan_hard_right_silences_left_channel() {
+        // Master pan applies the same law once over the summed mix.
+        let mut mixer = MultiTrackMixer::new(48_000.0, 2);
+        let (a, _) = mixer.add_track();
+        mixer.set_track_source(a, Some(Box::new(VecSource::new(vec![1.0f32; 4096]))));
+        mixer.master_shared().set_master_pan(1.0);
+        play(&mut mixer, a);
+
+        let mut out = vec![0.0f32; 4096];
+        mixer.mix(&mut out);
+
+        let (l, r) = (out[out.len() - 2], out[out.len() - 1]);
+        assert!(l.abs() < 1e-3, "left should be silent, got {l}");
+        assert!(
+            (r - std::f32::consts::SQRT_2).abs() < 1e-2,
+            "right should be ~√2, got {r}"
+        );
     }
 
     #[test]
