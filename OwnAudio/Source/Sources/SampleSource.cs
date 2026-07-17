@@ -6,14 +6,10 @@ using OwnaudioNET.Events;
 namespace OwnaudioNET.Sources;
 
 /// <summary>
-/// Audio source that plays audio samples from memory.
-/// Provides fast, low-latency playback of pre-loaded or dynamically generated audio.
+/// Plays audio straight from an in-memory sample buffer, low latency.
+/// In the rust-native chain a native MemoryTrack owns the buffer (see the RustNative partial),
+/// managed side is just a controller - no audio flows through managed code.
 /// </summary>
-/// <remarks>
-/// In the Rust-native chain the buffer is served by a native <see cref="Ownaudio.Audio.Tracks.MemoryTrack"/>
-/// (see the <c>SampleSource.RustNative</c> partial): the managed side only hands the buffer to native
-/// code once and then acts as a controller, so no audio data flows through managed code.
-/// </remarks>
 public sealed partial class SampleSource : BaseAudioSource
 {
     private readonly AudioConfig _config;
@@ -23,45 +19,59 @@ public sealed partial class SampleSource : BaseAudioSource
     private double _duration;
     private bool _disposed;
 
+    /// <summary>
+    /// Audio config this source runs at.
+    /// </summary>
     public override AudioConfig Config => _config;
 
+    /// <summary>
+    /// Stream info (channels, rate, length).
+    /// </summary>
     public override AudioStreamInfo StreamInfo => new AudioStreamInfo(
         channels: _config.Channels,
         sampleRate: _config.SampleRate,
         duration: TimeSpan.FromSeconds(_duration));
 
+    /// <summary>
+    /// Playback pos in seconds. Native path asks the rust track.
+    /// </summary>
     public override double Position
     {
         get
         {
-            if (_rustNative)
-                return RustNativePosition;
+            if (_rustNative) return _rustPosition;
 
             lock (_dataLock)
             {
-                if (_sampleData == null || _sampleData.Length == 0)
-                    return 0.0;
-                int currentFrame = _readPosition / _config.Channels;
-                return (double)currentFrame / _config.SampleRate;
+                if (_sampleData == null || _sampleData.Length == 0) return 0.0;
+                return (double)(_readPosition / _config.Channels) / _config.SampleRate;
             }
         }
     }
 
+    /// <summary>
+    /// Total length in seconds.
+    /// </summary>
     public override double Duration => _duration;
 
+    /// <summary>
+    /// True once we've run out of samples and aren't looping.
+    /// </summary>
     public override bool IsEndOfStream
     {
-        get
-        {
-            lock (_dataLock)
-            {
-                return _readPosition >= (_sampleData?.Length ?? 0) && !Loop;
-            }
-        }
+        get { lock (_dataLock) return _readPosition >= (_sampleData?.Length ?? 0) && !Loop; }
     }
 
+    /// <summary>
+    /// Allow SubmitSamples() to swap the buffer on the fly.
+    /// </summary>
     public bool AllowDynamicUpdate { get; set; } = false;
 
+    /// <summary>
+    /// Wraps a ready sample buffer.
+    /// </summary>
+    /// <param name="samples"></param>
+    /// <param name="config"></param>
     public SampleSource(float[] samples, AudioConfig config)
     {
         if (samples == null || samples.Length == 0)
@@ -70,21 +80,23 @@ public sealed partial class SampleSource : BaseAudioSource
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _sampleData = samples;
         _readPosition = 0;
-
-        int totalFrames = samples.Length / config.Channels;
-        _duration = (double)totalFrames / config.SampleRate;
+        _duration = (double)(samples.Length / config.Channels) / config.SampleRate;
 
         _rustNative = OwnaudioNET.Engine.RustNativeChain.Enabled;
     }
 
+    /// <summary>
+    /// Empty buffer of the given size, dynamic update on.
+    /// </summary>
+    /// <param name="bufferSizeInFrames"></param>
+    /// <param name="config"></param>
     public SampleSource(int bufferSizeInFrames, AudioConfig config)
     {
-        if (bufferSizeInFrames <= 0)
+        if(bufferSizeInFrames <= 0)
             throw new ArgumentException("Buffer size must be positive.", nameof(bufferSizeInFrames));
 
         _config = config ?? throw new ArgumentNullException(nameof(config));
-        int bufferSizeInSamples = bufferSizeInFrames * config.Channels;
-        _sampleData = new float[bufferSizeInSamples];
+        _sampleData = new float[bufferSizeInFrames * config.Channels];
         _readPosition = 0;
         _duration = 0.0;
         AllowDynamicUpdate = true;
@@ -92,6 +104,10 @@ public sealed partial class SampleSource : BaseAudioSource
         _rustNative = OwnaudioNET.Engine.RustNativeChain.Enabled;
     }
 
+    /// <summary>
+    /// Swaps in a fresh buffer while playing. Grows storage if needed, rewinds to start.
+    /// </summary>
+    /// <param name="samples"></param>
     public void SubmitSamples(ReadOnlySpan<float> samples)
     {
         ThrowIfDisposed();
@@ -102,44 +118,45 @@ public sealed partial class SampleSource : BaseAudioSource
         lock (_dataLock)
         {
             if (samples.Length > _sampleData.Length)
-            {
                 Array.Resize(ref _sampleData, samples.Length);
-            }
 
             samples.CopyTo(_sampleData.AsSpan());
             _readPosition = 0;
-
-            int totalFrames = samples.Length / _config.Channels;
-            _duration = (double)totalFrames / _config.SampleRate;
+            _duration = (double)(samples.Length / _config.Channels) / _config.SampleRate;
         }
 
-        // In the Rust-native chain the native memory source owns the audio, so push the new buffer to
-        // it (a one-shot control-thread copy, never on the audio path).
-        if (_rustNative)
-            RustNativeSubmit(samples);
+        //Native source owns the audio, so push the new buffer to it (control copy, never on the audio path).
+        if (_rustNative) _rustSubmit(samples);
     }
 
+    /// <summary>
+    /// Silences the buffer and rewinds.
+    /// </summary>
     public void Clear()
     {
         ThrowIfDisposed();
 
-        float[]? cleared = null;
+        float[]? _cleared = null;
         lock (_dataLock)
         {
             if (_sampleData != null)
             {
                 Array.Clear(_sampleData, 0, _sampleData.Length);
-                cleared = _sampleData;
+                _cleared = _sampleData;
             }
             _readPosition = 0;
             _duration = 0.0;
         }
 
-        // Mirror the cleared (silent) buffer onto the native memory source.
-        if (_rustNative && cleared is not null)
-            RustNativeSubmit(cleared);
+        if (_rustNative && _cleared != null) _rustSubmit(_cleared);
     }
 
+    /// <summary>
+    /// Pulls frameCount frames into buffer, handles loop/EOS, applies volume. Silence when not playing.
+    /// </summary>
+    /// <param name="buffer"></param>
+    /// <param name="frameCount"></param>
+    /// <returns></returns>
     public override int ReadSamples(Span<float> buffer, int frameCount)
     {
         ThrowIfDisposed();
@@ -158,16 +175,15 @@ public sealed partial class SampleSource : BaseAudioSource
                 return frameCount;
             }
 
-            int samplesToRead = frameCount * _config.Channels;
-            int samplesAvailable = _sampleData.Length - _readPosition;
-            int samplesToCopy = Math.Min(samplesToRead, samplesAvailable);
+            int wanted = frameCount * _config.Channels;
+            int toCopy = Math.Min(wanted, _sampleData.Length - _readPosition);
             int framesRead = 0;
 
-            if (samplesToCopy > 0)
+            if (toCopy > 0)
             {
-                _sampleData.AsSpan(_readPosition, samplesToCopy).CopyTo(buffer);
-                _readPosition += samplesToCopy;
-                framesRead = samplesToCopy / _config.Channels;
+                _sampleData.AsSpan(_readPosition, toCopy).CopyTo(buffer);
+                _readPosition += toCopy;
+                framesRead = toCopy / _config.Channels;
             }
 
             if (_readPosition >= _sampleData.Length)
@@ -176,71 +192,53 @@ public sealed partial class SampleSource : BaseAudioSource
                 {
                     _readPosition = 0;
 
+                    //We wrap around and keep filling from the start of the buffer
                     if (framesRead < frameCount)
                     {
-                        int remainingFrames = frameCount - framesRead;
-                        int remainingSamples = remainingFrames * _config.Channels;
-                        int samplesLeftInBuffer = _sampleData.Length - _readPosition;
-                        int samplesToFill = Math.Min(remainingSamples, samplesLeftInBuffer);
-
-                        if (samplesToFill > 0)
+                        int rest = Math.Min((frameCount - framesRead) * _config.Channels, _sampleData.Length);
+                        if (rest > 0)
                         {
-                            int offsetInOutput = framesRead * _config.Channels;
-                            _sampleData.AsSpan(_readPosition, samplesToFill).CopyTo(buffer.Slice(offsetInOutput));
-                            _readPosition += samplesToFill;
-                            framesRead += samplesToFill / _config.Channels;
+                            _sampleData.AsSpan(0, rest).CopyTo(buffer.Slice(framesRead * _config.Channels));
+                            _readPosition = rest;
+                            framesRead += rest / _config.Channels;
                         }
                     }
                 }
                 else
                 {
                     State = AudioState.EndOfStream;
-
                     if (framesRead < frameCount)
-                    {
-                        int remainingSamples = (frameCount - framesRead) * _config.Channels;
-                        int offsetInOutput = framesRead * _config.Channels;
-                        FillWithSilence(buffer.Slice(offsetInOutput), remainingSamples);
-                    }
+                        FillWithSilence(buffer.Slice(framesRead * _config.Channels), (frameCount - framesRead) * _config.Channels);
                 }
             }
             else if (framesRead < frameCount)
-            {
-                int remainingSamples = (frameCount - framesRead) * _config.Channels;
-                int offsetInOutput = framesRead * _config.Channels;
-                FillWithSilence(buffer.Slice(offsetInOutput), remainingSamples);
-            }
+                FillWithSilence(buffer.Slice(framesRead * _config.Channels), (frameCount - framesRead) * _config.Channels);
 
             ApplyVolume(buffer, frameCount * _config.Channels);
             return framesRead;
         }
     }
 
+    /// <summary>
+    /// Jumps to positionInSeconds. Native path hands off to the rust track.
+    /// </summary>
+    /// <param name="positionInSeconds"></param>
+    /// <returns></returns>
     public override bool Seek(double positionInSeconds)
     {
         ThrowIfDisposed();
 
-        if (positionInSeconds < 0 || positionInSeconds > Duration)
-            return false;
+        if (positionInSeconds < 0 || positionInSeconds > Duration) return false;
 
-        if (_rustNative)
-            return RustNativeSeek(positionInSeconds);
+        if (_rustNative) return _rustSeek(positionInSeconds);
 
         lock (_dataLock)
         {
-            try
-            {
-                long targetFrame = (long)(positionInSeconds * _config.SampleRate);
-                int targetSample = (int)(targetFrame * _config.Channels);
-                targetSample = Math.Clamp(targetSample, 0, _sampleData.Length);
-                _readPosition = targetSample;
-                return true;
-            }
-            catch (Exception ex)
-            {
-                OnError(new AudioErrorEventArgs($"Seek failed: {ex.Message}", ex));
-                return false;
-            }
+            if (_sampleData == null) return false;
+
+            long _targetFrame = (long)(positionInSeconds * _config.SampleRate);
+            _readPosition = Math.Clamp((int)(_targetFrame * _config.Channels), 0, _sampleData.Length);
+            return true;
         }
     }
 
@@ -249,11 +247,7 @@ public sealed partial class SampleSource : BaseAudioSource
     {
         ThrowIfDisposed();
 
-        if (_rustNative)
-        {
-            RustNativePlay();
-            return;
-        }
+        if (_rustNative) { _rustPlay(); return; }
 
         base.Play();
     }
@@ -263,11 +257,7 @@ public sealed partial class SampleSource : BaseAudioSource
     {
         ThrowIfDisposed();
 
-        if (_rustNative)
-        {
-            RustNativePause();
-            return;
-        }
+        if (_rustNative) { _rustPause(); return; }
 
         base.Pause();
     }
@@ -277,28 +267,24 @@ public sealed partial class SampleSource : BaseAudioSource
     {
         ThrowIfDisposed();
 
-        if (_rustNative)
-        {
-            RustNativeStop();
-            return;
-        }
+        if (_rustNative) { _rustStop(); return; }
 
         base.Stop();
     }
 
+    /// <summary>
+    /// Tears down the native backend and drops the buffer.
+    /// </summary>
+    /// <param name="disposing"></param>
     protected override void Dispose(bool disposing)
     {
         if (!_disposed)
         {
             if (disposing)
             {
-                if (_rustNative)
-                    DisposeRustBackend();
+                if (_rustNative) _disposeRustBackend();
 
-                lock (_dataLock)
-                {
-                    _sampleData = null!;
-                }
+                lock (_dataLock) _sampleData = null!;
             }
             _disposed = true;
         }

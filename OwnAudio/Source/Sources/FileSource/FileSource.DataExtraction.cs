@@ -6,13 +6,15 @@ using System.Buffers;
 namespace OwnaudioNET.Sources;
 
 /// <summary>
-/// Partial class for FileSource - implements audio data extraction functionality.
-/// Provides GetByteAudioData and GetFloatAudioData methods for extracting raw audio samples.
+/// Raw audio data extraction, uses a temp decoder so playback is untouched.
 /// </summary>
 public partial class FileSource
 {
     #region Fields
 
+    /// <summary>
+    /// Source file path, "stream_source" for stream based sources.
+    /// </summary>
     private string? _filePath;
 
     #endregion
@@ -20,87 +22,68 @@ public partial class FileSource
     #region Data Extraction Methods
 
     /// <summary>
-    /// Extracts raw audio data as bytes at the specified position.
-    /// This creates a temporary decoder instance to read the data without affecting playback.
+    /// Reads raw Float32 interleaved bytes from position, the whole rest of the file
+    /// when duration is null.
     /// </summary>
-    /// <param name="position">The position in the audio to extract data from.</param>
-    /// <param name="duration">Optional duration of audio to extract. If null, extracts from position to end.</param>
-    /// <returns>Byte array containing raw audio data (Float32 interleaved samples).</returns>
-    /// <exception cref="AudioException">Thrown when data extraction fails.</exception>
+    /// <param name="position"></param>
+    /// <param name="duration"></param>
+    /// <returns></returns>
     public byte[] GetByteAudioData(TimeSpan position, TimeSpan? duration = null)
     {
         ThrowIfDisposed();
 
         try
         {
-            if (string.IsNullOrEmpty(_filePath))
+            if (string.IsNullOrEmpty(_filePath)) return Array.Empty<byte>();
+
+            using var _tempDecoder = AudioDecoderFactory.Create(_filePath, _streamInfo.SampleRate, _streamInfo.Channels);
+
+            if (!_tempDecoder.TrySeek(position, out string _seekError))
+                throw new AudioException($"Failed to seek to position {position}: {_seekError}");
+
+            bool _readUntilEOF = duration == null;
+
+            int _targetBytes = 0;
+            if (!_readUntilEOF)
             {
-                return Array.Empty<byte>();
+                int _targetFrames = (int)(duration!.Value.TotalSeconds * _streamInfo.SampleRate);
+                _targetBytes = _targetFrames * _streamInfo.Channels * sizeof(float);
+                if (_targetBytes <= 0) return Array.Empty<byte>();
             }
 
-            using var tempDecoder = AudioDecoderFactory.Create(_filePath, _streamInfo.SampleRate, _streamInfo.Channels);
-
-            if (!tempDecoder.TrySeek(position, out string seekError))
-            {
-                throw new AudioException($"Failed to seek to position {position}: {seekError}");
-            }
-
-            bool readUntilEOF = (duration == null);
-
-            int targetBytes = 0;
-            if (!readUntilEOF)
-            {
-                int targetFrames = (int)(duration!.Value.TotalSeconds * _streamInfo.SampleRate);
-                targetBytes = targetFrames * _streamInfo.Channels * sizeof(float);
-
-                if (targetBytes <= 0)
-                {
-                    return Array.Empty<byte>();
-                }
-            }
-
-            using var memoryStream = new MemoryStream(targetBytes > 0 ? targetBytes : 65536);
-
-            var byteBuffer = ArrayPool<byte>.Shared.Rent(4096 * _streamInfo.Channels * sizeof(float));
+            using var _memoryStream = new MemoryStream(_targetBytes > 0 ? _targetBytes : 65536);
+            var _byteBuffer = ArrayPool<byte>.Shared.Rent(4096 * _streamInfo.Channels * sizeof(float));
 
             try
             {
-                int bytesWritten = 0;
+                int _bytesWritten = 0;
 
                 while (true)
                 {
-                    var result = tempDecoder.ReadFrames(byteBuffer);
+                    var _result = _tempDecoder.ReadFrames(_byteBuffer);
+                    if (_result.IsEOF || !_result.IsSucceeded || _result.FramesRead == 0) break;
 
-                    if (result.IsEOF || !result.IsSucceeded || result.FramesRead == 0)
+                    int _bytesRead = _result.FramesRead * _streamInfo.Channels * sizeof(float);
+
+                    if (_readUntilEOF)
                     {
-                        break;
-                    }
-
-                    int bytesRead = result.FramesRead * _streamInfo.Channels * sizeof(float);
-
-                    if (readUntilEOF)
-                    {
-                        memoryStream.Write(byteBuffer, 0, bytesRead);
-                        bytesWritten += bytesRead;
+                        _memoryStream.Write(_byteBuffer, 0, _bytesRead);
+                        _bytesWritten += _bytesRead;
                     }
                     else
                     {
-                        int bytesToCopy = Math.Min(bytesRead, targetBytes - bytesWritten);
-                        memoryStream.Write(byteBuffer, 0, bytesToCopy);
-                        bytesWritten += bytesToCopy;
-
-                        if (bytesWritten >= targetBytes)
-                        {
-                            break;
-                        }
+                        int _toCopy = Math.Min(_bytesRead, _targetBytes - _bytesWritten);
+                        _memoryStream.Write(_byteBuffer, 0, _toCopy);
+                        _bytesWritten += _toCopy;
+                        if (_bytesWritten >= _targetBytes) break;
                     }
                 }
 
-                return memoryStream.ToArray();
+                return _memoryStream.ToArray();
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(byteBuffer);
+                ArrayPool<byte>.Shared.Return(_byteBuffer);
             }
         }
         catch (Exception ex) when (ex is not AudioException)
@@ -110,26 +93,19 @@ public partial class FileSource
     }
 
     /// <summary>
-    /// Extracts raw audio data as float samples at the specified position.
-    /// This creates a temporary decoder instance to read the data without affecting playback.
+    /// Same as GetByteAudioData but returns Float32 samples.
     /// </summary>
-    /// <param name="position">The position in the audio to extract data from.</param>
-    /// <param name="duration">Optional duration of audio to extract. If null, extracts from position to end.</param>
-    /// <returns>Float array containing audio samples (Float32 interleaved).</returns>
-    /// <exception cref="AudioException">Thrown when data extraction fails.</exception>
+    /// <param name="position"></param>
+    /// <param name="duration"></param>
+    /// <returns></returns>
     public float[] GetFloatAudioData(TimeSpan position, TimeSpan? duration = null)
     {
-        byte[] byteData = GetByteAudioData(position, duration);
+        byte[] _byteData = GetByteAudioData(position, duration);
+        if (_byteData.Length == 0) return Array.Empty<float>();
 
-        if (byteData.Length == 0)
-        {
-            return Array.Empty<float>();
-        }
-
-        float[] floatData = new float[byteData.Length / sizeof(float)];
-        Buffer.BlockCopy(byteData, 0, floatData, 0, byteData.Length);
-
-        return floatData;
+        float[] _floatData = new float[_byteData.Length / sizeof(float)];
+        Buffer.BlockCopy(_byteData, 0, _floatData, 0, _byteData.Length);
+        return _floatData;
     }
 
     #endregion
@@ -137,10 +113,9 @@ public partial class FileSource
     #region Output Level Monitoring
 
     /// <summary>
-    /// Gets the current output levels (peak levels) for this source.
-    /// This monitors the audio buffer for peak sample values.
+    /// Peak levels for the left and right channel while playing, 0.0 to 1.0.
     /// </summary>
-    /// <returns>Tuple containing left and right channel peak levels (0.0 to 1.0), or null if not available.</returns>
+    /// <returns></returns>
     public (float left, float right)? GetOutputLevels()
     {
         ThrowIfDisposed();

@@ -8,14 +8,10 @@ using OwnaudioNET.Events;
 namespace OwnaudioNET.Sources;
 
 /// <summary>
-/// Audio source that captures audio from an input device (microphone, line-in, etc.).
+/// Live capture source (mic, line-in). Capture runs fully on the native rust side - the input
+/// stream writes straight into the track ring, managed side is just a controller (start/stop,
+/// metering). Input must be enabled in AudioConfig.
 /// </summary>
-/// <remarks>
-/// Capture runs entirely on the native Rust side (plan L): a native input stream writes straight
-/// into the track ring and the mixer renders it natively, so no audio data flows through managed
-/// code and the GC never touches the capture path. The managed side is only a controller
-/// (start/stop, metering). Input must be enabled in AudioConfig for this source to work.
-/// </remarks>
 public sealed partial class InputSource : BaseAudioSource
 {
     private readonly AudioConfig _config;
@@ -30,109 +26,97 @@ public sealed partial class InputSource : BaseAudioSource
     public override AudioStreamInfo StreamInfo => new AudioStreamInfo(
         channels: _config.Channels,
         sampleRate: _config.SampleRate,
-        duration: TimeSpan.Zero); // Live input has no duration
+        duration: TimeSpan.Zero);
 
     /// <inheritdoc/>
     public override double Position => Interlocked.CompareExchange(ref _currentPosition, 0, 0);
 
     /// <inheritdoc/>
-    public override double Duration => 0.0; // Live input has infinite duration
+    public override double Duration => 0.0;
 
     /// <inheritdoc/>
-    public override bool IsEndOfStream => false; // Live input never ends
+    public override bool IsEndOfStream => false;
 
     /// <summary>
-    /// Initializes a new instance of the InputSource class.
+    /// Needs a running engine. No managed capture thread - the mixer opens the native capture
+    /// and attaches the track when this source is added.
     /// </summary>
-    /// <param name="engine">The audio engine wrapper for input capture.</param>
-    /// <param name="bufferSizeInFrames">Size of the capture buffer in frames (default: 8192).</param>
-    /// <exception cref="ArgumentNullException">Thrown when engine is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when input is not enabled in the engine.</exception>
+    /// <param name="engine"></param>
+    /// <param name="bufferSizeInFrames"></param>
     public InputSource(AudioEngineWrapper engine, int bufferSizeInFrames = 8192)
     {
         ArgumentNullException.ThrowIfNull(engine);
 
         _config = engine.Config;
-        if (!engine.IsRunning)
-        {
+        if(!engine.IsRunning)
             throw new InvalidOperationException("Audio engine must be running to create InputSource. Call OwnaudioNet.Start() first.");
-        }
 
-        _currentPosition = 0.0;
-
-        // Device capture runs entirely on the native side: no managed capture thread is created and
-        // no audio data flows through managed memory. The mixer opens the native input capture and
-        // attaches the native track when this source is added to it.
         _rustNative = OwnaudioNET.Engine.RustNativeChain.Enabled;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Always silence - the captured audio lives in the native track ring and gets mixed natively,
+    /// managed ReadSamples has nothing to hand back. Kept for API compat.
+    /// </summary>
+    /// <param name="buffer"></param>
+    /// <param name="frameCount"></param>
+    /// <returns></returns>
     public override int ReadSamples(Span<float> buffer, int frameCount)
     {
         ThrowIfDisposed();
 
-        // Live input is captured entirely on the native side: the captured audio lives in the native
-        // track ring and is mixed natively, so managed ReadSamples has no samples to hand back and
-        // yields silence. Retained for API compatibility (the method is part of the public source
-        // contract, and the native path never routes playback through it).
         FillWithSilence(buffer, frameCount * _config.Channels);
         return frameCount;
     }
 
-    /// <inheritdoc/>
-    public override bool Seek(double positionInSeconds)
-    {
-        return false;
-    }
+    /// <summary>
+    /// No seeking on live input.
+    /// </summary>
+    /// <param name="positionInSeconds"></param>
+    /// <returns></returns>
+    public override bool Seek(double positionInSeconds) => false;
 
     /// <inheritdoc/>
     public override void Play()
     {
         ThrowIfDisposed();
-        RustNativePlay();
+        _rustPlay();
     }
 
     /// <inheritdoc/>
     public override void Pause()
     {
         ThrowIfDisposed();
-        RustNativePause();
+        _rustPause();
     }
 
     /// <inheritdoc/>
     public override void Stop()
     {
         ThrowIfDisposed();
-        RustNativeStop();
+        _rustStop();
     }
 
     /// <summary>
-    /// Gets the current input levels (peak levels) of the live capture.
+    /// L/R peak levels of the live capture, from the native metering, scaled by Volume.
+    /// (0,0) when not playing or not yet attached to a mixer. Mono gives identical L/R.
     /// </summary>
-    /// <returns>Tuple containing left and right channel peak levels (0.0 to 1.0), or (0, 0) if not available.</returns>
-    /// <remarks>
-    /// The peaks are read from the native capture's own metering and scaled by the Volume property to
-    /// reflect the actual output level. For mono sources, both left and right values are identical.
-    /// Returns (0, 0) when the source is not playing or before it is attached to a mixer.
-    /// </remarks>
+    /// <returns></returns>
     public (float left, float right) GetInputLevels()
     {
         ThrowIfDisposed();
-        return State == AudioState.Playing ? RustNativeInputLevels() : (0f, 0f);
+        return State == AudioState.Playing ? _rustInputLevels() : (0f, 0f);
     }
 
     /// <summary>
-    /// Releases the resources used by the InputSource and detaches the native capture backend.
+    /// Detaches the native capture backend.
     /// </summary>
+    /// <param name="disposing"></param>
     protected override void Dispose(bool disposing)
     {
         if (!_disposed)
         {
-            if (disposing)
-            {
-                DisposeRustBackend();
-            }
-
+            if (disposing) _disposeRustBackend();
             _disposed = true;
         }
 

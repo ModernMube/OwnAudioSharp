@@ -9,22 +9,8 @@ using OwnaudioNET.Interfaces;
 namespace OwnaudioNET.Sources;
 
 /// <summary>
-/// Wrapper class that adds effect processing capabilities to any IAudioSource.
-/// This is an optional decorator that applies effects to a source's audio output.
-///
-/// Usage:
-/// <code>
-/// var fileSource = new FileSource("music.mp3", engine);
-/// var sourceWithEffects = new SourceWithEffects(fileSource);
-/// sourceWithEffects.AddEffect(new LowPassFilter(0.5f));
-/// sourceWithEffects.AddEffect(new DelayEffect(300f, 0.3f));
-/// mixer.AddSource(sourceWithEffects);
-/// </code>
-///
-/// Architecture:
-/// - Delegates all IAudioSource methods to the inner source
-/// - Intercepts ReadSamples() to apply effect chain
-/// - Thread-safe effect management
+/// Decorator that bolts an effect chain onto any IAudioSource. Delegates everything to the inner
+/// source, intercepts ReadSamples to run the fx. Effect list is thread-safe.
 /// </summary>
 public sealed class SourceWithEffects : IAudioSource
 {
@@ -36,59 +22,51 @@ public sealed class SourceWithEffects : IAudioSource
     private volatile bool _effectsChanged = false;
 
     /// <summary>
-    /// Monotonic version bumped whenever the effect chain changes (add / remove / clear).
-    /// The Rust-native control tick compares this against the version it last reconciled, so it
-    /// only re-snapshots the effect list (a heap allocation) when the chain actually changed,
-    /// instead of allocating and comparing an array on every tick. Incremented under
-    /// <c>_effectsLock</c>; read lock-free via <see cref="EffectsVersion"/>.
+    /// Bumped on every chain change (add/remove/clear). The native control tick diffs this against
+    /// its last-seen value, so it only re-snapshots the fx list when something actually changed
+    /// instead of allocating an array every tick. Written under _effectsLock, read lock-free.
     /// </summary>
     private int _effectsVersion;
 
     #region Plugin Delay Compensation Fields
 
     /// <summary>
-    /// Ring buffer used to introduce a sample-accurate delay for PDC alignment.
-    /// Null when no delay compensation is active.
+    /// Ring buffer for sample-accurate PDC delay. Null when compensation is off.
     /// </summary>
     private float[]? _delayBuffer;
 
     /// <summary>
-    /// Current write position inside the circular delay buffer.
-    /// Advances by one sample each call to <see cref="ApplyDelayCompensation"/>.
+    /// Write cursor in the ring buffer.
     /// </summary>
     private int _delayWritePos;
 
     /// <summary>
-    /// Current read position inside the circular delay buffer.
-    /// Lags <see cref="_delayWritePos"/> by exactly <see cref="_compensationSamples"/> frames.
+    /// Read cursor, lagging the write cursor by _compensationSamples frames.
     /// </summary>
     private int _delayReadPos;
 
     /// <summary>
-    /// Number of frames of delay currently applied to this source for PDC.
-    /// Zero means compensation is disabled and <see cref="_delayBuffer"/> is null.
+    /// Frames of delay applied for PDC. Zero = off, buffer is null.
     /// </summary>
     private int _compensationSamples;
 
     #endregion
 
     /// <summary>
-    /// Initializes a new instance of the SourceWithEffects class.
+    /// Wraps a source for effect processing.
     /// </summary>
-    /// <param name="source">The source to wrap with effect processing.</param>
-    /// <exception cref="ArgumentNullException">Thrown when source is null.</exception>
+    /// <param name="source"></param>
     public SourceWithEffects(IAudioSource source)
     {
         _innerSource = source ?? throw new ArgumentNullException(nameof(source));
         _effects = new List<IEffectProcessor>();
     }
 
-    #region IAudioSource Properties (delegated to inner source)
+    #region IAudioSource Propertyes (delegated to inner source)
 
     /// <summary>
-    /// Gets the wrapped inner source. Used by the Rust-native mixer facade to reach the underlying
-    /// <c>FileSource</c> (and its native track) so the wrapper's effects can be routed to the native
-    /// per-track effect chain instead of the managed <see cref="Process"/> path.
+    /// The wrapped source. Native mixer facade reaches through this to route fx to the native
+    /// per-track chain instead of the managed Process path.
     /// </summary>
     internal IAudioSource InnerSource => _innerSource;
 
@@ -153,18 +131,14 @@ public sealed class SourceWithEffects : IAudioSource
     #region Effect Management
 
     /// <summary>
-    /// Adds an effect to this source's effect chain.
-    /// Effects are processed in the order they are added.
+    /// Appends an effect. Run in add order. VST3 fx must be ready first.
     /// </summary>
-    /// <param name="effect">The effect to add.</param>
-    /// <exception cref="ArgumentNullException">Thrown when effect is null.</exception>
-    /// <exception cref="ObjectDisposedException">Thrown if wrapper is disposed.</exception>
+    /// <param name="effect"></param>
     public void AddEffect(IEffectProcessor effect)
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
-        if (effect == null)
-            throw new ArgumentNullException(nameof(effect));
+        if (effect == null) throw new ArgumentNullException(nameof(effect));
 
         if (!effect.IsReady)
             throw new InvalidOperationException(
@@ -181,38 +155,32 @@ public sealed class SourceWithEffects : IAudioSource
     }
 
     /// <summary>
-    /// Removes an effect from this source's effect chain.
+    /// Drops an effect from the chain.
     /// </summary>
-    /// <param name="effect">The effect to remove.</param>
-    /// <returns>True if removed successfully, false if not found.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when effect is null.</exception>
-    /// <exception cref="ObjectDisposedException">Thrown if wrapper is disposed.</exception>
+    /// <param name="effect"></param>
+    /// <returns></returns>
     public bool RemoveEffect(IEffectProcessor effect)
     {
-        ThrowIfDisposed();
-
-        if (effect == null)
-            throw new ArgumentNullException(nameof(effect));
+        _throwIfDisposed();
 
         lock (_effectsLock)
         {
-            bool removed = _effects.Remove(effect);
-            if (removed)
+            bool _removed = _effects.Remove(effect);
+            if (_removed)
             {
                 _effectsChanged = true;
                 _effectsVersion++;
             }
-            return removed;
+            return _removed;
         }
     }
 
     /// <summary>
-    /// Clears all effects from this source's effect chain.
+    /// Wipes the whole chain.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown if wrapper is disposed.</exception>
     public void ClearEffects()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
         lock (_effectsLock)
         {
@@ -223,36 +191,26 @@ public sealed class SourceWithEffects : IAudioSource
     }
 
     /// <summary>
-    /// Gets all effects in this source's effect chain.
+    /// Snapshot of the chain.
     /// </summary>
-    /// <returns>Array of effects (snapshot).</returns>
+    /// <returns></returns>
     public IEffectProcessor[] GetEffects()
     {
-        lock (_effectsLock)
-        {
-            return _effects.ToArray();
-        }
+        lock (_effectsLock) return _effects.ToArray();
     }
 
     /// <summary>
-    /// Monotonic version of the effect chain, bumped on every add / remove / clear. A consumer that
-    /// caches the last version it processed can detect a change with a single integer comparison,
-    /// avoiding an allocation-and-compare of the whole effect list on every poll. Read lock-free.
+    /// Monotonic chain version, bumped on every add/remove/clear. A consumer that caches its last
+    /// value spots a change with one int compare, no list allocation per poll. Read lock-free.
     /// </summary>
     internal int EffectsVersion => Volatile.Read(ref _effectsVersion);
 
     /// <summary>
-    /// Gets the number of effects in this source's chain.
+    /// How many effects are in the chain.
     /// </summary>
     public int EffectCount
     {
-        get
-        {
-            lock (_effectsLock)
-            {
-                return _effects.Count;
-            }
-        }
+        get { lock (_effectsLock) return _effects.Count; }
     }
 
     #endregion
@@ -260,67 +218,43 @@ public sealed class SourceWithEffects : IAudioSource
     #region Plugin Delay Compensation
 
     /// <summary>
-    /// Gets the total effect chain latency in samples.
+    /// Total chain latency in samples - sum of each effect's LatencySamples. Zero-latency fx add nothing.
+    /// Grabs the effects lock briefly, so don't call from the RT thread.
     /// </summary>
-    /// <remarks>
-    /// Sums the <see cref="IEffectProcessor.LatencySamples"/> value of every effect
-    /// currently in the chain. Zero-latency effects (EQ, compressor, reverb) return 0
-    /// and do not contribute. Call this before <see cref="AudioMixer.ApplyPluginDelayCompensation"/>
-    /// to determine the per-track latency.
-    /// This property acquires the effects lock briefly and must NOT be called from
-    /// the real-time audio thread.
-    /// </remarks>
     public int EffectLatencySamples
     {
         get
         {
             lock (_effectsLock)
             {
-                int total = 0;
-                foreach (var e in _effects)
-                    total += e.LatencySamples;
-                return total;
+                int _total = 0;
+                foreach (var e in _effects) _total += e.LatencySamples;
+                return _total;
             }
         }
     }
 
     /// <summary>
-    /// Sets the delay compensation for this source in samples.
+    /// Sets PDC delay in frames (maxLatency - thisTrackLatency). Allocates a samples*channels ring buffer.
+    /// Zero disables it and frees the buffer.
     /// </summary>
-    /// <remarks>
-    /// Called by <see cref="AudioMixer.ApplyPluginDelayCompensation"/> before playback
-    /// starts. The compensation equals
-    /// <c>maxLatencyAcrossAllTracks − thisTrack.EffectLatencySamples</c>.
-    /// A ring buffer of <paramref name="samples"/> × <see cref="Config.Channels"/>
-    /// floats is allocated. Passing 0 disables compensation and releases the buffer.
-    /// </remarks>
-    /// <param name="samples">
-    /// Number of delay frames to apply. Must be ≥ 0.
-    /// </param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// Thrown when <paramref name="samples"/> is negative.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">Thrown if the wrapper is disposed.</exception>
+    /// <param name="samples"></param>
     public void SetDelayCompensation(int samples)
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
-        if (samples < 0)
-            throw new ArgumentOutOfRangeException(nameof(samples));
+        if(samples < 0) throw new ArgumentOutOfRangeException(nameof(samples));
 
         _compensationSamples = samples;
 
         if (samples > 0)
         {
-            int bufferSize = samples * Config.Channels;
-            _delayBuffer = new float[bufferSize];
+            _delayBuffer = new float[samples * Config.Channels];
             _delayWritePos = 0;
             _delayReadPos = 0;
         }
         else
-        {
             _delayBuffer = null;
-        }
     }
 
     #endregion
@@ -328,21 +262,19 @@ public sealed class SourceWithEffects : IAudioSource
     #region IAudioSource Methods (with effect processing)
 
     /// <summary>
-    /// Reads audio samples and applies effect chain.
-    /// This is the hot path - zero allocation after initialization.
+    /// Reads from the inner source then runs the fx chain. Hot path, zero-alloc after warmup.
     /// </summary>
-    /// <param name="buffer">The buffer to fill with audio data.</param>
-    /// <param name="frameCount">The number of frames to read.</param>
-    /// <returns>The actual number of frames read.</returns>
+    /// <param name="buffer"></param>
+    /// <param name="frameCount"></param>
+    /// <returns></returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int ReadSamples(Span<float> buffer, int frameCount)
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
         int framesRead = _innerSource.ReadSamples(buffer, frameCount);
 
-        if (framesRead == 0)
-            return 0;
+        if (framesRead == 0) return 0;
 
         if (_effectsChanged)
         {
@@ -357,21 +289,19 @@ public sealed class SourceWithEffects : IAudioSource
         }
 
         var effects = _cachedEffects;
-        if (effects.Length == 0)
-            return framesRead;
+        if (effects.Length == 0) return framesRead;
 
         foreach (var effect in effects)
         {
             try
             {
-                if (effect.Enabled)
-                    effect.Process(buffer, framesRead);
+                if (effect.Enabled) effect.Process(buffer, framesRead);
             }
             catch {}
         }
 
         if (_compensationSamples > 0 && _delayBuffer != null)
-            framesRead = ApplyDelayCompensation(buffer, framesRead);
+            framesRead = _applyDelayCompensation(buffer, framesRead);
 
         return framesRead;
     }
@@ -379,68 +309,30 @@ public sealed class SourceWithEffects : IAudioSource
     /// <inheritdoc/>
     public bool Seek(double positionInSeconds)
     {
-        ThrowIfDisposed();
-
-        lock (_effectsLock)
-        {
-            foreach (var effect in _effects)
-            {
-                try
-                {
-                    effect.Reset();
-                }
-                catch {}
-            }
-        }
-
-        if (_delayBuffer != null)
-        {
-            Array.Clear(_delayBuffer, 0, _delayBuffer.Length);
-            _delayWritePos = 0;
-            _delayReadPos = 0;
-        }
-
+        _throwIfDisposed();
+        _resetEffectsAndDelay();
         return _innerSource.Seek(positionInSeconds);
     }
 
     /// <inheritdoc/>
     public void Play()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
         _innerSource.Play();
     }
 
     /// <inheritdoc/>
     public void Pause()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
         _innerSource.Pause();
     }
 
     /// <inheritdoc/>
     public void Stop()
     {
-        ThrowIfDisposed();
-
-        lock (_effectsLock)
-        {
-            foreach (var effect in _effects)
-            {
-                try
-                {
-                    effect.Reset();
-                }
-                catch {}
-            }
-        }
-
-        if (_delayBuffer != null)
-        {
-            Array.Clear(_delayBuffer, 0, _delayBuffer.Length);
-            _delayWritePos = 0;
-            _delayReadPos = 0;
-        }
-
+        _throwIfDisposed();
+        _resetEffectsAndDelay();
         _innerSource.Stop();
     }
 
@@ -474,26 +366,40 @@ public sealed class SourceWithEffects : IAudioSource
     #region Private Methods
 
     /// <summary>
-    /// Applies ring-buffer delay compensation to align this source with
-    /// higher-latency tracks in the mix.
+    /// Resets every effect and clears the PDC ring, used on Seek/Stop.
     /// </summary>
-    /// <remarks>
-    /// Writes incoming samples into the circular delay buffer and simultaneously
-    /// reads back samples that are <c>_compensationSamples</c> frames older,
-    /// effectively introducing a fixed delay equal to the compensation amount.
-    /// This is a zero-allocation, zero-lock hot path.
-    /// </remarks>
-    /// <param name="buffer">The audio buffer to delay in-place.</param>
-    /// <param name="framesRead">The number of valid frames in the buffer.</param>
-    /// <returns>The number of frames written back to <paramref name="buffer"/>.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private int ApplyDelayCompensation(Span<float> buffer, int framesRead)
+    private void _resetEffectsAndDelay()
     {
-        if (_delayBuffer == null)
-            return framesRead;
+        lock (_effectsLock)
+        {
+            foreach (var effect in _effects)
+            {
+                try { effect.Reset(); }
+                catch {}
+            }
+        }
 
-        int channels = Config.Channels;
-        int sampleCount = framesRead * channels;
+        if (_delayBuffer != null)
+        {
+            Array.Clear(_delayBuffer, 0, _delayBuffer.Length);
+            _delayWritePos = 0;
+            _delayReadPos = 0;
+        }
+    }
+
+    /// <summary>
+    /// Ring-buffer delay to line this source up with higher-latency tracks. Writes fresh samples in,
+    /// reads back ones _compensationSamples frames older. Zero-alloc, zero-lock hot path.
+    /// </summary>
+    /// <param name="buffer"></param>
+    /// <param name="framesRead"></param>
+    /// <returns></returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private int _applyDelayCompensation(Span<float> buffer, int framesRead)
+    {
+        if (_delayBuffer == null) return framesRead;
+
+        int sampleCount = framesRead * Config.Channels;
 
         for (int i = 0; i < sampleCount; i++)
         {
@@ -511,39 +417,33 @@ public sealed class SourceWithEffects : IAudioSource
 
     #region Dispose
 
+    /// <summary>
+    /// Throws if we're already disposed.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ThrowIfDisposed()
+    private void _throwIfDisposed()
     {
-        if (_disposed)
-            throw new ObjectDisposedException(nameof(SourceWithEffects));
+        if (_disposed) throw new ObjectDisposedException(nameof(SourceWithEffects));
     }
 
     /// <summary>
-    /// Disposes the wrapper and all effects.
-    /// The inner source is also disposed.
+    /// Disposes the wrapper, every effect, and the inner source.
     /// </summary>
     public void Dispose()
     {
-        if (_disposed)
-            return;
+        if (_disposed) return;
 
         lock (_effectsLock)
         {
             foreach (var effect in _effects)
             {
-                try
-                {
-                    effect?.Dispose();
-                }
+                try { effect?.Dispose(); }
                 catch {}
             }
             _effects.Clear();
         }
 
-        try
-        {
-            _innerSource?.Dispose();
-        }
+        try { _innerSource?.Dispose(); }
         catch {}
 
         _disposed = true;
@@ -552,11 +452,9 @@ public sealed class SourceWithEffects : IAudioSource
     #endregion
 
     /// <summary>
-    /// Returns a string representation of the source with effect info.
+    /// Debug string with inner type and effect count.
     /// </summary>
+    /// <returns></returns>
     public override string ToString()
-    {
-        int effectCount = EffectCount;
-        return $"SourceWithEffects: InnerSource={_innerSource.GetType().Name}, Effects={effectCount}, State={State}";
-    }
+        => $"SourceWithEffects: InnerSource={_innerSource.GetType().Name}, Effects={EffectCount}, State={State}";
 }

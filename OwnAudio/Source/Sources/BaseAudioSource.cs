@@ -8,7 +8,7 @@ using System.Numerics;
 namespace OwnaudioNET.Sources;
 
 /// <summary>
-/// Base implementation for audio sources providing common functionality.
+/// Common base for audio sources - state machine, volume/pan, events, buffer helpers.
 /// </summary>
 public abstract partial class BaseAudioSource : IAudioSource
 {
@@ -29,9 +29,9 @@ public abstract partial class BaseAudioSource : IAudioSource
         {
             if (_state != value)
             {
-                var oldState = _state;
+                var _old = _state;
                 _state = value;
-                OnStateChanged(new AudioStateChangedEventArgs(oldState, value));
+                OnStateChanged(new AudioStateChangedEventArgs(_old, value));
             }
         }
     }
@@ -88,15 +88,13 @@ public abstract partial class BaseAudioSource : IAudioSource
     public event EventHandler<AudioErrorEventArgs>? Error;
 
     /// <summary>
-    /// Initializes a new instance of the BaseAudioSource class.
+    /// Fresh id, stopped state, unity volume.
     /// </summary>
     protected BaseAudioSource()
     {
         Id = Guid.NewGuid();
         _state = AudioState.Stopped;
         _volume = 1.0f;
-        _loop = false;
-        _disposed = false;
     }
 
     /// <inheritdoc/>
@@ -111,9 +109,7 @@ public abstract partial class BaseAudioSource : IAudioSource
         ThrowIfDisposed();
 
         if (State == AudioState.Stopped || State == AudioState.Paused || State == AudioState.EndOfStream)
-        {
             State = AudioState.Playing;
-        }
     }
 
     /// <inheritdoc/>
@@ -121,10 +117,7 @@ public abstract partial class BaseAudioSource : IAudioSource
     {
         ThrowIfDisposed();
 
-        if (State == AudioState.Playing)
-        {
-            State = AudioState.Paused;
-        }
+        if (State == AudioState.Playing) State = AudioState.Paused;
     }
 
     /// <inheritdoc/>
@@ -140,24 +133,21 @@ public abstract partial class BaseAudioSource : IAudioSource
     }
 
     /// <summary>
-    /// Raises the StateChanged event.
+    /// Fires StateChanged.
     /// </summary>
-    protected virtual void OnStateChanged(AudioStateChangedEventArgs e)
-    {
-        StateChanged?.Invoke(this, e);
-    }
+    /// <param name="e"></param>
+    protected virtual void OnStateChanged(AudioStateChangedEventArgs e) => StateChanged?.Invoke(this, e);
 
     /// <summary>
-    /// Raises the BufferUnderrun event.
+    /// Fires BufferUnderrun.
     /// </summary>
-    protected virtual void OnBufferUnderrun(BufferUnderrunEventArgs e)
-    {
-        BufferUnderrun?.Invoke(this, e);
-    }
+    /// <param name="e"></param>
+    protected virtual void OnBufferUnderrun(BufferUnderrunEventArgs e) => BufferUnderrun?.Invoke(this, e);
 
     /// <summary>
-    /// Raises the Error event.
+    /// Fires Error and flips state to Error.
     /// </summary>
+    /// <param name="e"></param>
     protected virtual void OnError(AudioErrorEventArgs e)
     {
         Error?.Invoke(this, e);
@@ -165,88 +155,72 @@ public abstract partial class BaseAudioSource : IAudioSource
     }
 
     /// <summary>
-    /// Applies volume to the buffer using SIMD vectorization for optimal performance.
+    /// Multiplies the buffer by volume, SIMD where the hw allows. Skips when volume ~= 1.
     /// </summary>
+    /// <param name="buffer"></param>
+    /// <param name="sampleCount"></param>
     protected void ApplyVolume(Span<float> buffer, int sampleCount)
     {
-        if (Math.Abs(_volume - 1.0f) < 0.001f)
-            return; // Skip if volume is essentially 1.0
+        if (Math.Abs(_volume - 1.0f) < 0.001f) return;
 
-        var targetSpan = buffer.Slice(0, sampleCount);
-        float vol = _volume; // Cache field in local variable
+        var _span = buffer.Slice(0, sampleCount);
+        float _vol = _volume;
 
         int i = 0;
-        int simdLength = Vector<float>.Count;
+        int _simd = Vector<float>.Count;
 
-        if (Vector.IsHardwareAccelerated && targetSpan.Length >= simdLength)
+        if (Vector.IsHardwareAccelerated && _span.Length >= _simd)
         {
-            var volumeVec = new Vector<float>(vol);
-            for (; i <= targetSpan.Length - simdLength; i += simdLength)
+            var _volVec = new Vector<float>(_vol);
+            for (; i <= _span.Length - _simd; i += _simd)
             {
-                var vec = new Vector<float>(targetSpan.Slice(i, simdLength));
-                vec *= volumeVec;
-                vec.CopyTo(targetSpan.Slice(i, simdLength));
+                var _vec = new Vector<float>(_span.Slice(i, _simd));
+                _vec *= _volVec;
+                _vec.CopyTo(_span.Slice(i, _simd));
             }
         }
 
-        for (; i < targetSpan.Length; i++)
-        {
-            targetSpan[i] *= vol;
-        }
+        for (; i < _span.Length; i++) _span[i] *= _vol;
     }
 
     /// <summary>
-    /// Fills the buffer with silence.
+    /// Zeros the first sampleCount samples.
     /// </summary>
-    protected static void FillWithSilence(Span<float> buffer, int sampleCount)
-    {
-        buffer.Slice(0, sampleCount).Clear();
-    }
+    /// <param name="buffer"></param>
+    /// <param name="sampleCount"></param>
+    protected static void FillWithSilence(Span<float> buffer, int sampleCount) => buffer.Slice(0, sampleCount).Clear();
 
     /// <summary>
-    /// Applies a short linear fade-out to the tail of the buffer.
-    /// Prevents audible click/pop artifacts when the buffer transitions abruptly to silence
-    /// during a buffer underrun (data → 0.0 discontinuity).
-    /// Zero-allocation, in-place; safe to call with any buffer length.
+    /// Short linear fade-out on the buffer tail, kills the click when we drop to silence
+    /// on an underrun. In-place, zero-alloc, any length is fine.
     /// </summary>
-    /// <param name="buffer">The audio buffer whose tail will be faded.</param>
-    /// <param name="fadeSamples">Number of samples to fade (from full volume to silence).</param>
+    /// <param name="buffer"></param>
+    /// <param name="fadeSamples"></param>
     protected static void FadeOutTail(Span<float> buffer, int fadeSamples)
     {
-        if (buffer.IsEmpty || fadeSamples <= 0)
-            return;
+        if(buffer.IsEmpty || fadeSamples <= 0) return;
 
-        int count = Math.Min(fadeSamples, buffer.Length);
-        int startIdx = buffer.Length - count;
+        int _count = Math.Min(fadeSamples, buffer.Length);
+        int _start = buffer.Length - _count;
 
-        for (int i = 0; i < count; i++)
-        {
-            float t = (float)(count - 1 - i) / count;
-            buffer[startIdx + i] *= t;
-        }
+        for (int i = 0; i < _count; i++)
+            buffer[_start + i] *= (float)(_count - 1 - i) / _count;
     }
 
     /// <summary>
-    /// Applies a short linear fade-in to the head of the buffer.
-    /// Prevents audible click/pop artifacts when audio resumes after a hard buffer skip
-    /// (Red Zone drift correction) caused a waveform discontinuity: the first sample after
-    /// the skip may be far from the last sample before it, producing a loud crack.
-    /// Zero-allocation, in-place; safe to call with any buffer length.
+    /// Short linear fade-in on the buffer head, kills the crack after a hard buffer skip
+    /// (Red Zone drift correction). In-place, zero-alloc, any length is fine.
     /// </summary>
-    /// <param name="buffer">The audio buffer whose head will be faded in.</param>
-    /// <param name="fadeSamples">Number of samples to ramp from silence to full volume.</param>
+    /// <param name="buffer"></param>
+    /// <param name="fadeSamples"></param>
     protected static void FadeInHead(Span<float> buffer, int fadeSamples)
     {
-        if (buffer.IsEmpty || fadeSamples <= 0)
-            return;
+        if(buffer.IsEmpty || fadeSamples <= 0) return;
 
-        int count = Math.Min(fadeSamples, buffer.Length);
+        int _count = Math.Min(fadeSamples, buffer.Length);
 
-        for (int i = 0; i < count; i++)
-        {
-            float t = (float)i / count;
-            buffer[i] *= t;
-        }
+        for (int i = 0; i < _count; i++)
+            buffer[i] *= (float)i / _count;
     }
 
 
@@ -255,46 +229,27 @@ public abstract partial class BaseAudioSource : IAudioSource
     private int[]? _outputChannelMapping = null;
 
     /// <summary>
-    /// Specifies which logical mix-buffer channels this source writes its audio into,
-    /// enabling per-source routing to distinct physical output channel pairs.
-    /// Works for any source type (FileSource, SampleSource, InputSource, custom sources).
-    /// <para>
-    /// The mapping array length must equal the source's <c>Config.Channels</c>.
-    /// Indices must be valid within the mixer's total logical channel count.
-    /// Channels are zero-indexed.
-    /// </para>
-    /// <example>
-    /// <code>
-    /// // 8-channel device: stereo music on ch 0+1, metronome on ch 2+3
-    /// // AudioConfig: Channels=4, OutputChannelSelectors=[0,1,2,3] (physical routing)
-    /// music.OutputChannelMapping    = new[] { 0, 1 };
-    /// metronome.OutputChannelMapping = new[] { 2, 3 };
-    /// </code>
-    /// </example>
+    /// Which logical mix-buffer channels this source writes into - per-source routing to output
+    /// channel pairs. Length must equal Config.Channels, indices are zero-based logical channels.
+    /// E.g. stereo music on [0,1], metronome on [2,3] over an 8ch device.
     /// </summary>
-    /// <exception cref="ArgumentException">
-    /// Thrown when the array length does not match <c>Config.Channels</c>.
-    /// </exception>
     public int[]? OutputChannelMapping
     {
         get => _outputChannelMapping;
         set
         {
             if (value != null && value.Length != Config.Channels)
-            {
                 throw new ArgumentException(
                     $"OutputChannelMapping length ({value.Length}) must match source channel count ({Config.Channels})");
-            }
             _outputChannelMapping = value;
         }
     }
 
     /// <summary>
-    /// Routes this source to the specified logical channel pair and returns <c>this</c>
-    /// for fluent configuration.
+    /// Fluent shortcut for OutputChannelMapping, returns this.
     /// </summary>
-    /// <param name="channels">Logical channel indices (length must equal <c>Config.Channels</c>).</param>
-    /// <returns>This source instance (fluent API).</returns>
+    /// <param name="channels"></param>
+    /// <returns></returns>
     public BaseAudioSource RouteToChannels(params int[] channels)
     {
         OutputChannelMapping = channels;
@@ -304,26 +259,22 @@ public abstract partial class BaseAudioSource : IAudioSource
     #endregion
 
     /// <summary>
-    /// Throws ObjectDisposedException if the object has been disposed.
+    /// Throws if we're already disposed.
     /// </summary>
     protected void ThrowIfDisposed()
     {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().Name);
+        if (_disposed) throw new ObjectDisposedException(GetType().Name);
     }
 
     /// <summary>
-    /// Releases the unmanaged resources used by the BaseAudioSource and optionally releases the managed resources.
+    /// Stops playback and marks the source disposed.
     /// </summary>
+    /// <param name="disposing"></param>
     protected virtual void Dispose(bool disposing)
     {
         if (!_disposed)
         {
-            if (disposing)
-            {
-                Stop();
-            }
-
+            if (disposing) Stop();
             _disposed = true;
         }
     }

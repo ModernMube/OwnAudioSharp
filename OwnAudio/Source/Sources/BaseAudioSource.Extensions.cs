@@ -4,8 +4,7 @@ using OwnaudioNET.Core;
 namespace OwnaudioNET.Sources;
 
 /// <summary>
-/// Extension methods for BaseAudioSource to add output level monitoring.
-/// This partial class extends BaseAudioSource without modifying the original implementation.
+/// Output level metering + throttled position events for BaseAudioSource.
 /// </summary>
 public partial class BaseAudioSource
 {
@@ -14,92 +13,75 @@ public partial class BaseAudioSource
     private DateTime _lastPositionUpdate = DateTime.UtcNow;
 
     /// <summary>
-    /// Gets the current output audio levels (left and right channels).
-    /// Values range from 0.0 (silence) to 1.0 (maximum).
+    /// Current L/R output levels, 0.0 - 1.0.
     /// </summary>
     public (float left, float right) OutputLevels => _outputLevels;
 
     /// <summary>
-    /// Sets the current output levels directly, bypassing <see cref="CalculateOutputLevels"/>.
-    /// Used by the Rust-native mixer path, where the source's audio is rendered on the
-    /// native audio thread (so <see cref="OnSamplesRead"/> never runs) and the levels are
-    /// instead polled from the native track's metering on the mixer's control-rate tick.
+    /// Sets the levels directly, bypassing CalculateOutputLevels. The rust-native mixer uses this:
+    /// audio renders on the native thread so OnSamplesRead never runs, levels come from the
+    /// native track's metering on the control tick.
     /// </summary>
-    /// <param name="levels">The measured left/right peak levels (0.0–1.0).</param>
-    internal void SetOutputLevels((float left, float right) levels)
-    {
-        _outputLevels = levels;
-    }
+    /// <param name="levels"></param>
+    internal void SetOutputLevels((float left, float right) levels) => _outputLevels = levels;
 
     /// <summary>
-    /// Event that fires when the playback position changes significantly.
-    /// Throttled to prevent excessive event firing.
+    /// Fires when the position moved noticeably. Throttled.
     /// </summary>
     public event EventHandler? PositionChanged;
 
     /// <summary>
-    /// Calculates the audio levels from the provided buffer.
-    /// Should be called after ReadSamples to update OutputLevels.
+    /// Averages abs sample values into OutputLevels. Call after ReadSamples.
     /// </summary>
-    /// <param name="buffer">The audio buffer to analyze.</param>
-    /// <param name="sampleCount">The number of samples in the buffer.</param>
+    /// <param name="buffer"></param>
+    /// <param name="sampleCount"></param>
     protected void CalculateOutputLevels(Span<float> buffer, int sampleCount)
     {
-        if (sampleCount == 0)
-        {
-            _outputLevels = (0f, 0f);
-            return;
-        }
+        if (sampleCount == 0) { _outputLevels = (0f, 0f); return; }
 
-        float leftSum = 0f;
-        float rightSum = 0f;
-        int frameCount = sampleCount / Config.Channels;
+        float _leftSum = 0f;
+        float _rightSum = 0f;
 
         if (Config.Channels == 2)
         {
-            for (int i = 0; i < frameCount; i++)
+            int _frames = sampleCount / 2;
+            for (int i = 0; i < _frames; i++)
             {
-                leftSum += Math.Abs(buffer[i * 2]);
-                rightSum += Math.Abs(buffer[i * 2 + 1]);
+                _leftSum += Math.Abs(buffer[i * 2]);
+                _rightSum += Math.Abs(buffer[i * 2 + 1]);
             }
 
-            _outputLevels = (
-                leftSum / frameCount,
-                rightSum / frameCount
-            );
+            _outputLevels = (_leftSum / _frames, _rightSum / _frames);
         }
-        else // Mono
+        else
         {
-            for (int i = 0; i < sampleCount; i++)
-            {
-                leftSum += Math.Abs(buffer[i]);
-            }
+            for (int i = 0; i < sampleCount; i++) _leftSum += Math.Abs(buffer[i]);
 
-            float level = leftSum / sampleCount;
-            _outputLevels = (level, level);
+            float _level = _leftSum / sampleCount;
+            _outputLevels = (_level, _level);
         }
     }
 
     /// <summary>
-    /// Updates the position change notification.
-    /// Throttled to fire events only when position changes significantly (>50ms).
+    /// Fires PositionChanged if we moved >10ms and at least 50ms passed since the last event.
     /// </summary>
     protected void UpdatePositionChanged()
     {
-        var now = DateTime.UtcNow;
-        var timeSinceUpdate = (now - _lastPositionUpdate).TotalMilliseconds;
+        var _now = DateTime.UtcNow;
 
-        if (timeSinceUpdate >= 50 && Math.Abs(Position - _lastPositionReported) > 0.01)
+        if ((_now - _lastPositionUpdate).TotalMilliseconds >= 50 && Math.Abs(Position - _lastPositionReported) > 0.01)
         {
             _lastPositionReported = Position;
-            _lastPositionUpdate = now;
+            _lastPositionUpdate = _now;
             PositionChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
     /// <summary>
-    /// Override this in derived classes to call CalculateOutputLevels after reading samples.
+    /// Hook for derived classes - metering + position event after a read.
     /// </summary>
+    /// <param name="buffer"></param>
+    /// <param name="samplesRead"></param>
     protected virtual void OnSamplesRead(Span<float> buffer, int samplesRead)
     {
         CalculateOutputLevels(buffer, samplesRead);

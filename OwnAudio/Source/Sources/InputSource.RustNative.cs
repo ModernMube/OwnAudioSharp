@@ -5,96 +5,71 @@ using OwnaudioNET.Core;
 namespace OwnaudioNET.Sources;
 
 /// <summary>
-/// Rust-native chain backend for <see cref="InputSource"/>: device capture runs entirely on the
-/// native side (a native input stream writes straight into the track's ring buffer), so no audio
-/// data flows through managed code and the GC never touches the capture or render path. The managed
-/// side is only a controller (start/stop capture, metering).
+/// Rust-native backend for InputSource: capture runs fully native, managed side is just a controller.
+/// Unlike File/SampleSource there's no standalone backend - an input source only makes sense on a
+/// mixer (that owns the capture device), the native InputTrack is created by the mixer on attach.
 /// </summary>
-/// <remarks>
-/// Unlike <see cref="FileSource"/>/<see cref="SampleSource"/>, an input source is only meaningful
-/// while attached to a mixer (which supplies the native engine that owns the capture device), so
-/// there is no standalone backend: the managed capture thread is simply not started in Rust-native
-/// mode, and the native <see cref="InputTrack"/> is created by the mixer on attach.
-/// </remarks>
 public sealed partial class InputSource : IRustNativeChainSource
 {
     /// <summary>
-    /// Whether this source runs on the Rust-native chain. Assigned once in the constructor from
-    /// <see cref="Engine.RustNativeChain.Enabled"/> so the mode is stable for the source's lifetime.
+    /// Runs on the rust-native chain? Latched once in the ctor, stable for life.
     /// </summary>
     private readonly bool _rustNative;
 
-    /// <summary>Serializes attachment and teardown of the Rust-native backend.</summary>
+    /// <summary>
+    /// Guards attach/teardown of the native backend.
+    /// </summary>
     private readonly object _rustBackendLock = new();
 
-    /// <summary>The native input capture feeding the track, when attached to a mixer session.</summary>
+    /// <summary>
+    /// Native input capture feeding the track, when attached to a mixer session.
+    /// </summary>
     private InputTrack? _rustInputTrack;
 
-    /// <summary>The native track rendering this source, or null before attachment.</summary>
+    /// <summary>
+    /// Native track rendering us, null before attach.
+    /// </summary>
     private AudioTrack? _rustTrack;
 
-    /// <summary>Gets whether this source was constructed to use the Rust-native chain.</summary>
+    /// <summary>
+    /// Was this source built for the rust-native chain?
+    /// </summary>
     internal bool IsRustNativeChain => _rustNative;
 
     /// <inheritdoc/>
     AudioTrack? IRustNativeChainSource.RustTrack => RustTrack;
 
     /// <summary>
-    /// Gets the native track backing this source in the Rust-native chain, or
-    /// <see langword="null"/> when running legacy or before it is attached to a mixer.
+    /// The native track backing us, null on legacy or before attach.
     /// </summary>
     internal AudioTrack? RustTrack
     {
-        get
-        {
-            lock (_rustBackendLock)
-            {
-                return _rustTrack;
-            }
-        }
+        get { lock (_rustBackendLock) return _rustTrack; }
     }
 
     /// <summary>
-    /// Gets the native input capture driving this source's track, or <see langword="null"/> when
-    /// running legacy or before attachment.
+    /// The native input capture driving our track, null on legacy or before attach.
     /// </summary>
     internal InputTrack? RustInputTrack
     {
-        get
-        {
-            lock (_rustBackendLock)
-            {
-                return _rustInputTrack;
-            }
-        }
+        get { lock (_rustBackendLock) return _rustInputTrack; }
     }
 
     /// <summary>
-    /// Attaches this source to a track that lives in a mixer's shared session, fed by a native input
-    /// capture. The source references but does not own the track or the capture, so it will not
-    /// dispose them.
+    /// Attaches us to a mixer-session track fed by a native capture. We reference but don't own
+    /// them, so we won't dispose them.
     /// </summary>
-    /// <param name="track">The mixer-session track that renders this source.</param>
-    /// <param name="inputTrack">The native input capture feeding <paramref name="track"/>.</param>
+    /// <param name="track"></param>
+    /// <param name="inputTrack"></param>
     internal void AttachRustTrack(AudioTrack track, InputTrack inputTrack)
     {
-        ArgumentNullException.ThrowIfNull(track);
-        ArgumentNullException.ThrowIfNull(inputTrack);
-
-        if (!_rustNative)
-        {
-            throw new InvalidOperationException(
-                "AttachRustTrack requires the Rust-native chain to be enabled for this source.");
-        }
-
         lock (_rustBackendLock)
         {
             _rustTrack = track;
             _rustInputTrack = inputTrack;
             _rustTrack.Gain = Volume;
 
-            // Preserve the transport state captured before attachment: if the source was already
-            // playing, start capture and the track so it is audible through the mixer.
+            //Already playing before attach? Start capture and track so it's audible right away.
             if (State == AudioState.Playing)
             {
                 _rustInputTrack.Play();
@@ -104,8 +79,7 @@ public sealed partial class InputSource : IRustNativeChainSource
     }
 
     /// <summary>
-    /// Detaches this source from a mixer-owned track. The track and capture are owned by the mixer's
-    /// session, so they are only unreferenced here, not disposed.
+    /// Detaches from a mixer-owned track. The mixer owns it, we just drop the refs.
     /// </summary>
     internal void DetachRustTrack()
     {
@@ -116,8 +90,10 @@ public sealed partial class InputSource : IRustNativeChainSource
         }
     }
 
-    /// <summary>Rust-native implementation of <see cref="Play"/>: starts native capture and the track.</summary>
-    private void RustNativePlay()
+    /// <summary>
+    /// Rust-native Play: starts capture and the track.
+    /// </summary>
+    private void _rustPlay()
     {
         base.Play();
 
@@ -128,8 +104,10 @@ public sealed partial class InputSource : IRustNativeChainSource
         }
     }
 
-    /// <summary>Rust-native implementation of <see cref="Pause"/>: pauses native capture and the track.</summary>
-    private void RustNativePause()
+    /// <summary>
+    /// Rust-native Pause: pauses capture and the track.
+    /// </summary>
+    private void _rustPause()
     {
         lock (_rustBackendLock)
         {
@@ -140,8 +118,10 @@ public sealed partial class InputSource : IRustNativeChainSource
         base.Pause();
     }
 
-    /// <summary>Rust-native implementation of <see cref="Stop"/>: stops native capture and the track.</summary>
-    private void RustNativeStop()
+    /// <summary>
+    /// Rust-native Stop: stops capture and the track.
+    /// </summary>
+    private void _rustStop()
     {
         lock (_rustBackendLock)
         {
@@ -153,28 +133,24 @@ public sealed partial class InputSource : IRustNativeChainSource
     }
 
     /// <summary>
-    /// Rust-native input levels: the native capture's own metering peaks, scaled by volume to match
-    /// the legacy behavior. Returns silence before attachment.
+    /// Native capture's metering peaks scaled by volume, matches legacy behavior. Silence before attach.
     /// </summary>
-    private (float left, float right) RustNativeInputLevels()
+    /// <returns></returns>
+    private (float left, float right) _rustInputLevels()
     {
-        InputTrack? inputTrack;
-        lock (_rustBackendLock)
-        {
-            inputTrack = _rustInputTrack;
-        }
+        InputTrack? _input;
+        lock (_rustBackendLock) _input = _rustInputTrack;
 
-        if (inputTrack is null)
-        {
-            return (0f, 0f);
-        }
+        if (_input == null) return (0f, 0f);
 
-        (float left, float right) = inputTrack.GetInputPeaks();
-        return (left * Volume, right * Volume);
+        (float _left, float _right) = _input.GetInputPeaks();
+        return (_left * Volume, _right * Volume);
     }
 
-    /// <summary>Tears down the Rust-native backend reference (the track is owned by the mixer).</summary>
-    private void DisposeRustBackend()
+    /// <summary>
+    /// Drops the backend refs (the track is owned by the mixer).
+    /// </summary>
+    private void _disposeRustBackend()
     {
         lock (_rustBackendLock)
         {

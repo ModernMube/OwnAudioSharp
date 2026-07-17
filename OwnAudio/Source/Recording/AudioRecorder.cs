@@ -3,57 +3,50 @@ using Ownaudio.Core;
 namespace OwnaudioNET.Recording;
 
 /// <summary>
-/// Records audio data to memory and can export to WAV files.
-/// Used by AudioMixer to implement the Play(fileName, bitDepth) recording functionality.
+/// Grabs the audio going through the mixer and dumps it into a WAV.
 /// </summary>
 public class AudioRecorder : IDisposable
 {
     private readonly AudioConfig _config;
-    private readonly List<float> _recordedSamples = new();
+    private readonly List<float> _samples = new();
     private readonly object _lock = new();
     private bool _isRecording;
-    private string? _outputFilePath;
+    private string? _outPath;
     private int _bitDepth = 16;
     private bool _disposed;
 
     /// <summary>
-    /// Initializes a new instance of the AudioRecorder class.
+    /// New recorder wired to the given audio config.
     /// </summary>
-    /// <param name="config">Audio configuration for the recording.</param>
+    /// <param name="config"></param>
     public AudioRecorder(AudioConfig config)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
     }
 
     /// <summary>
-    /// Gets whether the recorder is currently recording.
+    /// True while we are capturing samples.
     /// </summary>
     public bool IsRecording => _isRecording;
 
     /// <summary>
-    /// Gets the output file path if set.
+    /// Where the WAV will land, once StartRecording was called.
     /// </summary>
-    public string? OutputFilePath => _outputFilePath;
+    public string? OutputFilePath => _outPath;
 
     /// <summary>
-    /// Gets the number of recorded samples.
+    /// How many samples we grabbed so far.
     /// </summary>
     public int RecordedSampleCount
     {
-        get
-        {
-            lock (_lock)
-            {
-                return _recordedSamples.Count;
-            }
-        }
+        get { lock (_lock) { return _samples.Count; } }
     }
 
     /// <summary>
-    /// Starts recording audio data.
+    /// Arm the recorder and clear whatever was buffered before.
     /// </summary>
-    /// <param name="outputFilePath">The file path where the recording will be saved.</param>
-    /// <param name="bitDepth">Bit depth for the output file (16, 24, or 32).</param>
+    /// <param name="outputFilePath"></param>
+    /// <param name="bitDepth"></param>
     public void StartRecording(string outputFilePath, int bitDepth = 16)
     {
         if (string.IsNullOrEmpty(outputFilePath))
@@ -65,156 +58,75 @@ public class AudioRecorder : IDisposable
         lock (_lock)
         {
             _isRecording = true;
-            _outputFilePath = outputFilePath;
+            _outPath = outputFilePath;
             _bitDepth = bitDepth;
-            _recordedSamples.Clear();
+            _samples.Clear();
         }
     }
 
     /// <summary>
-    /// Stops recording and returns the number of recorded samples.
+    /// Stop capturing, hand back the sample count.
     /// </summary>
-    /// <returns>The number of samples recorded.</returns>
+    /// <returns></returns>
     public int StopRecording()
     {
         lock (_lock)
         {
             _isRecording = false;
-
-            return _recordedSamples.Count;
+            return _samples.Count;
         }
     }
 
     /// <summary>
-    /// Writes audio samples to the recording buffer.
-    /// This method should be called during playback to capture audio.
+    /// Feed the current playback block in. No-op when we are not recording.
     /// </summary>
-    /// <param name="samples">The audio samples to record.</param>
+    /// <param name="samples"></param>
     public void WriteSamples(ReadOnlySpan<float> samples)
     {
-        if (!_isRecording || samples.Length == 0)
+        if(!_isRecording || samples.Length == 0)
             return;
 
         lock (_lock)
         {
-            if (_isRecording)
-            {
-                foreach (var sample in samples)
-                {
-                    _recordedSamples.Add(sample);
-                }
-            }
+            foreach (var s in samples)
+                _samples.Add(s);
         }
     }
 
     /// <summary>
-    /// Saves the recorded audio to a WAV file asynchronously.
+    /// Flush everything we captured out to the WAV on a worker thread.
     /// </summary>
-    /// <returns>A task representing the asynchronous save operation.</returns>
+    /// <returns></returns>
     public async Task SaveToFileAsync()
     {
-        if (string.IsNullOrEmpty(_outputFilePath))
+        if (string.IsNullOrEmpty(_outPath))
             throw new InvalidOperationException("Output file path is not set.");
 
-        float[] samples;
-        lock (_lock)
-        {
-            samples = _recordedSamples.ToArray();
-        }
+        float[] data;
+        lock (_lock) { data = _samples.ToArray(); }
 
-        if (samples.Length == 0)
+        if (data.Length == 0)
             throw new InvalidOperationException("No audio data to save.");
 
-        await Task.Run(() => SaveWavFile(_outputFilePath, samples, _config.SampleRate, _config.Channels, _bitDepth));
+        await Task.Run(() => WaveFile.Create(_outPath, data, _config.SampleRate, _config.Channels, _bitDepth));
     }
 
     /// <summary>
-    /// Clears all recorded audio data.
+    /// Drop the captured samples.
     /// </summary>
     public void Clear()
     {
-        lock (_lock)
-        {
-            _recordedSamples.Clear();
-        }
+        lock (_lock) { _samples.Clear(); }
     }
 
-    private void SaveWavFile(string filePath, float[] samples, int sampleRate, int channels, int bitDepth)
-    {
-        using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
-        using var writer = new BinaryWriter(fileStream);
-
-        int bytesPerSample = bitDepth / 8;
-        int dataSize = samples.Length * bytesPerSample;
-
-        WriteWavHeader(writer, sampleRate, channels, bitDepth, dataSize);
-        WriteAudioData(writer, samples, bitDepth);
-    }
-
-    private void WriteWavHeader(BinaryWriter writer, int sampleRate, int channels, int bitDepth, int dataSize)
-    {
-        int bytesPerSample = bitDepth / 8;
-
-        // RIFF header
-        writer.Write(new[] { 'R', 'I', 'F', 'F' });
-        writer.Write(36 + dataSize); // File size - 8
-        writer.Write(new[] { 'W', 'A', 'V', 'E' });
-
-        // fmt chunk
-        writer.Write(new[] { 'f', 'm', 't', ' ' });
-        writer.Write(16); // Chunk size
-        writer.Write((short)1); // Audio format (1 = PCM)
-        writer.Write((short)channels);
-        writer.Write(sampleRate);
-        writer.Write(sampleRate * channels * bytesPerSample); // Byte rate
-        writer.Write((short)(channels * bytesPerSample)); // Block align
-        writer.Write((short)bitDepth);
-
-        // data chunk
-        writer.Write(new[] { 'd', 'a', 't', 'a' });
-        writer.Write(dataSize);
-    }
-
-    private void WriteAudioData(BinaryWriter writer, float[] samples, int bitDepth)
-    {
-        switch (bitDepth)
-        {
-            case 16:
-                foreach (var sample in samples)
-                {
-                    short value = (short)(Math.Clamp(sample, -1f, 1f) * 32767f);
-                    writer.Write(value);
-                }
-                break;
-
-            case 24:
-                foreach (var sample in samples)
-                {
-                    int value = (int)(Math.Clamp(sample, -1f, 1f) * 8388607f);
-                    writer.Write((byte)(value & 0xFF));
-                    writer.Write((byte)((value >> 8) & 0xFF));
-                    writer.Write((byte)((value >> 16) & 0xFF));
-                }
-                break;
-
-            case 32:
-                foreach (var sample in samples)
-                {
-                    int value = (int)(Math.Clamp(sample, -1f, 1f) * 2147483647f);
-                    writer.Write(value);
-                }
-                break;
-        }
-    }
-
+    /// <summary>
+    /// Free the buffer.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed) return;
 
-        lock (_lock)
-        {
-            _recordedSamples.Clear();
-        }
+        lock (_lock) { _samples.Clear(); }
 
         _disposed = true;
         GC.SuppressFinalize(this);

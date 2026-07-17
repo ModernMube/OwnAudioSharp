@@ -83,7 +83,7 @@ public class OwnaudioNetTests : IDisposable
 
         // Assert
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*must be initialized*");
+            .WithMessage("*Initialize()*");
     }
 
     [Fact]
@@ -191,7 +191,7 @@ public class OwnaudioNetTests : IDisposable
 
         // Assert
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*must be initialized*");
+            .WithMessage("*Initialize()*");
     }
 
     [Fact]
@@ -202,7 +202,7 @@ public class OwnaudioNetTests : IDisposable
 
         // Assert
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*must be initialized*");
+            .WithMessage("*Initialize()*");
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public class OwnaudioNetTests : IDisposable
 
         // Assert
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*must be initialized*");
+            .WithMessage("*Initialize()*");
     }
 
     [Fact]
@@ -224,7 +224,7 @@ public class OwnaudioNetTests : IDisposable
 
         // Assert
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*must be initialized*");
+            .WithMessage("*Initialize()*");
     }
 
     [Fact]

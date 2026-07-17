@@ -11,41 +11,35 @@ using System.IO;
 namespace OwnaudioNET.Sources;
 
 /// <summary>
-/// Partial class for FileSource - implements stream-based loading functionality.
-/// Provides constructors for loading audio from streams instead of file paths.
+/// Stream based constructors for FileSource.
 /// </summary>
 public partial class FileSource
 {
     #region Stream-Based Constructors
 
     /// <summary>
-    /// Initializes a new instance of the FileSource class from a stream.
-    /// Automatically detects audio format from stream header.
+    /// Builds a source from a seekable stream, format given by the caller.
     /// </summary>
-    /// <param name="stream">Stream containing audio data. Must support seeking.</param>
-    /// <param name="format">Audio format of the stream.</param>
-    /// <param name="bufferSizeInFrames">Size of the internal buffer in frames (default: 8192).</param>
-    /// <param name="targetSampleRate">Target sample rate (0 = use source rate, default: 48000).</param>
-    /// <param name="targetChannels">Target channel count (0 = use source channels, default: 2).</param>
-    /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when stream doesn't support seeking.</exception>
-    /// <exception cref="AudioException">Thrown when the stream cannot be decoded or format is unsupported.</exception>
+    /// <param name="stream"></param>
+    /// <param name="format"></param>
+    /// <param name="bufferSizeInFrames"></param>
+    /// <param name="targetSampleRate"></param>
+    /// <param name="targetChannels"></param>
     public FileSource(
         Stream stream,
         AudioFormat format,
         int bufferSizeInFrames = 8192,
         int targetSampleRate = 48000,
         int targetChannels = 2)
-        : this(CreateDecoderFromStream(stream, format, targetSampleRate, targetChannels), bufferSizeInFrames)
+        : this(_createDecoderFromStream(stream, format, targetSampleRate, targetChannels), bufferSizeInFrames)
     {
     }
 
     /// <summary>
-    /// Creates a new FileSource with a custom audio decoder.
-    /// Useful for dependency injection or using custom decoder implementations.
+    /// Builds a source around a ready decoder, handy for custom decoder implementations.
     /// </summary>
-    /// <param name="decoder">Pre-configured audio decoder.</param>
-    /// <param name="bufferSizeInFrames">Size of the internal buffer in frames.</param>
+    /// <param name="decoder"></param>
+    /// <param name="bufferSizeInFrames"></param>
     public FileSource(IAudioDecoder decoder, int bufferSizeInFrames = 8192)
     {
         if (decoder == null)
@@ -77,22 +71,22 @@ public partial class FileSource
     #region Helper Methods
 
     /// <summary>
-    /// Creates an audio decoder from a stream.
+    /// Decoder from a stream, must be readable and seekable.
     /// </summary>
-    /// <param name="stream">Stream containing audio data.</param>
-    /// <param name="format">Audio format.</param>
-    /// <param name="targetSampleRate">Target sample rate.</param>
-    /// <param name="targetChannels">Target channel count.</param>
-    /// <returns>Configured audio decoder.</returns>
-    private static IAudioDecoder CreateDecoderFromStream(Stream stream, AudioFormat format, int targetSampleRate, int targetChannels)
+    /// <param name="stream"></param>
+    /// <param name="format"></param>
+    /// <param name="targetSampleRate"></param>
+    /// <param name="targetChannels"></param>
+    /// <returns></returns>
+    private static IAudioDecoder _createDecoderFromStream(Stream stream, AudioFormat format, int targetSampleRate, int targetChannels)
     {
         if (stream == null)
             throw new ArgumentNullException(nameof(stream));
 
-        if (!stream.CanSeek)
+        if(!stream.CanSeek)
             throw new ArgumentException("Stream must support seeking for audio playback.", nameof(stream));
 
-        if (!stream.CanRead)
+        if(!stream.CanRead)
             throw new ArgumentException("Stream must support reading.", nameof(stream));
 
         return AudioDecoderFactory.Create(stream, format, targetSampleRate, targetChannels);

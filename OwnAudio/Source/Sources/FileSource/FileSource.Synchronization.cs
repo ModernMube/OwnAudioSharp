@@ -5,14 +5,9 @@ using OwnaudioNET.Interfaces;
 namespace OwnaudioNET.Sources;
 
 /// <summary>
-/// FileSource partial class containing MasterClock attachment and time-based reading.
+/// MasterClock attachment and time based reading. Real drift correction lives in
+/// the native engine, this surface stays for API compatibility.
 /// </summary>
-/// <remarks>
-/// As of 4.0 (plan L) playback and its drift correction run entirely in the native engine, so the
-/// managed real-time soft-sync / adaptive-tolerance machinery has been removed. The
-/// <see cref="ISynchronizable"/> / <see cref="IMasterClockSource"/> surface is retained for API
-/// compatibility; <see cref="ReadSamplesAtTime"/> now decodes on demand for analysis callers.
-/// </remarks>
 public partial class FileSource
 {
     #region MasterClock Synchronization
@@ -26,11 +21,11 @@ public partial class FileSource
 
         _masterClock = clock;
 
-        double targetTrackPosition = _masterClock.CurrentTimestamp - _startOffset;
+        double _target = _masterClock.CurrentTimestamp - _startOffset;
 
-        if (targetTrackPosition > 0 && Seek(targetTrackPosition))
+        if (_target > 0 && Seek(_target))
         {
-            _trackLocalTime = targetTrackPosition;
+            _trackLocalTime = _target;
         }
         else
         {
@@ -44,13 +39,11 @@ public partial class FileSource
     /// <inheritdoc/>
     public void DetachFromClock()
     {
-        if (_masterClock != null)
-        {
-            _masterClock = null;
-            _trackLocalTime = 0.0;
+        if (_masterClock == null) return;
 
-            IsSynchronized = false;
-        }
+        _masterClock = null;
+        _trackLocalTime = 0.0;
+        IsSynchronized = false;
     }
 
     #endregion
@@ -58,46 +51,36 @@ public partial class FileSource
     #region Time-Based Reading
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// The managed real-time drift correction was removed with the legacy playback path (plan L); this
-    /// now decodes on demand for analysis callers. Timestamps before the source's
-    /// <see cref="StartOffset"/> yield silence; otherwise raw frames are decoded sequentially.
-    /// </remarks>
     public bool ReadSamplesAtTime(double masterTimestamp, Span<float> buffer, int frameCount, out ReadResult result)
     {
         ThrowIfDisposed();
 
-        double relativeTimestamp = masterTimestamp - _startOffset;
+        double _relative = masterTimestamp - _startOffset;
 
-        if (relativeTimestamp < 0)
+        if (_relative < 0)
         {
             FillWithSilence(buffer, frameCount * _streamInfo.Channels);
             result = ReadResult.CreateSuccess(frameCount);
             return true;
         }
 
-        int framesRead = DecodeSynchronously(buffer, frameCount);
-        _trackLocalTime = relativeTimestamp + framesRead / (double)_streamInfo.SampleRate;
+        int _framesRead = _decodeSynchronously(buffer, frameCount);
+        _trackLocalTime = _relative + _framesRead / (double)_streamInfo.SampleRate;
 
-        result = ReadResult.CreateSuccess(framesRead);
+        result = ReadResult.CreateSuccess(_framesRead);
         return true;
     }
 
     /// <summary>
-    /// Reads samples when attached to a <see cref="MasterClock"/>, using the clock's current timestamp.
+    /// Reads using the attached clock's current timestamp.
     /// </summary>
-    /// <param name="buffer">Destination span for interleaved samples.</param>
-    /// <param name="frameCount">Number of frames requested.</param>
-    /// <returns>The number of frames decoded.</returns>
-    private int ReadSamplesSynchronized(Span<float> buffer, int frameCount)
+    /// <param name="buffer"></param>
+    /// <param name="frameCount"></param>
+    /// <returns></returns>
+    private int _readSamplesSynchronized(Span<float> buffer, int frameCount)
     {
-        ReadSamplesAtTime(
-            _masterClock!.CurrentTimestamp,
-            buffer,
-            frameCount,
-            out ReadResult result);
-
-        return result.FramesRead;
+        ReadSamplesAtTime(_masterClock!.CurrentTimestamp, buffer, frameCount, out ReadResult _result);
+        return _result.FramesRead;
     }
 
     #endregion

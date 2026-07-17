@@ -5,40 +5,25 @@ using OwnaudioNET.Events;
 namespace OwnaudioNET.Sources;
 
 /// <summary>
-/// FileSource partial class implementing on-demand synchronous decoding used by
-/// <see cref="FileSource.ReadSamples"/>.
+/// On demand synchronous decoding for analysis callers. The native engine plays the
+/// file, so no background thread and no allocation here.
 /// </summary>
-/// <remarks>
-/// As of 4.0 (plan L — legacy cut-over) the file is decoded and rendered entirely by the native Rust
-/// engine on its own audio thread. The managed side keeps a decoder only so external callers can pull
-/// raw samples for analysis: this class decodes on the caller's thread, on demand, with no background
-/// thread, no circular buffer and no SoundTouch — so managed code never processes audio in real time
-/// and the GC is never touched during playback.
-/// </remarks>
 public partial class FileSource
 {
     #region Synchronous Decoding
 
     /// <summary>
-    /// Decodes up to <paramref name="frameCount"/> frames on the calling thread directly from the
-    /// managed decoder into <paramref name="destination"/> as raw interleaved PCM (no tempo/pitch
-    /// processing), advancing the analysis read position and applying <see cref="BaseAudioSource.Volume"/>.
+    /// Decodes raw PCM on the caller's thread into destination, pads with silence at
+    /// EOF or wraps when Loop is set. Returns the decoded frame count.
     /// </summary>
-    /// <remarks>
-    /// This is a sequential analysis cursor independent of native playback: it reads from the start of
-    /// the file and advances only as samples are consumed here. Any shortfall at end of stream is
-    /// padded with silence so the caller always receives <paramref name="frameCount"/> frames; when
-    /// <see cref="BaseAudioSource.Loop"/> is set the decoder wraps to the start instead.
-    /// </remarks>
-    /// <param name="destination">Destination span for interleaved samples; must hold at least
-    /// <paramref name="frameCount"/> × channel-count elements.</param>
-    /// <param name="frameCount">Number of frames requested.</param>
-    /// <returns>The number of decoded frames actually produced (excluding silence padding).</returns>
-    private int DecodeSynchronously(Span<float> destination, int frameCount)
+    /// <param name="destination"></param>
+    /// <param name="frameCount"></param>
+    /// <returns></returns>
+    private int _decodeSynchronously(Span<float> destination, int frameCount)
     {
-        int channels = _streamInfo.Channels;
-        int samplesRequested = frameCount * channels;
-        int samplesFilled = 0;
+        int _channels = _streamInfo.Channels;
+        int _samplesRequested = frameCount * _channels;
+        int _samplesFilled = 0;
 
         lock (_seekLock)
         {
@@ -46,20 +31,20 @@ public partial class FileSource
             {
                 if (_decoder.TrySeek(TimeSpan.FromSeconds(_analysisSeekTarget), out _))
                 {
-                    ClearPending();
+                    _clearPending();
                     Interlocked.Exchange(ref _currentPosition, _analysisSeekTarget);
                     SetSamplePosition((long)(_analysisSeekTarget * _streamInfo.SampleRate));
                 }
                 _analysisSeekTarget = -1.0;
             }
 
-            samplesFilled += DrainPending(destination.Slice(0, samplesRequested));
+            _samplesFilled += _drainPending(destination.Slice(0, _samplesRequested));
 
-            while (samplesFilled < samplesRequested)
+            while (_samplesFilled < _samplesRequested)
             {
-                var readResult = _decoder.ReadFrames(_decodeBuffer);
+                var _readResult = _decoder.ReadFrames(_decodeBuffer);
 
-                if (readResult.IsEOF || readResult.FramesRead == 0)
+                if (_readResult.IsEOF || _readResult.FramesRead == 0)
                 {
                     _isEndOfStream = true;
 
@@ -74,79 +59,72 @@ public partial class FileSource
                     break;
                 }
 
-                if (!readResult.IsSucceeded)
+                if (!_readResult.IsSucceeded)
                 {
-                    OnError(new AudioErrorEventArgs($"Decode error: {readResult.ErrorMessage}", null));
+                    OnError(new AudioErrorEventArgs($"Decode error: {_readResult.ErrorMessage}", null));
                     _isEndOfStream = true;
                     break;
                 }
 
-                int decodedSamples = readResult.FramesRead * channels;
-                Span<float> decoded = MemoryMarshal.Cast<byte, float>(
-                    _decodeBuffer.AsSpan(0, decodedSamples * sizeof(float)));
+                int _decodedSamples = _readResult.FramesRead * _channels;
+                Span<float> _decoded = MemoryMarshal.Cast<byte, float>(
+                    _decodeBuffer.AsSpan(0, _decodedSamples * sizeof(float)));
 
-                int copy = Math.Min(decodedSamples, samplesRequested - samplesFilled);
-                decoded.Slice(0, copy).CopyTo(destination.Slice(samplesFilled));
-                samplesFilled += copy;
+                int _copy = Math.Min(_decodedSamples, _samplesRequested - _samplesFilled);
+                _decoded.Slice(0, _copy).CopyTo(destination.Slice(_samplesFilled));
+                _samplesFilled += _copy;
 
-                int remainder = decodedSamples - copy;
-                if (remainder > 0)
+                int _remainder = _decodedSamples - _copy;
+                if (_remainder > 0)
                 {
-                    decoded.Slice(copy, remainder).CopyTo(_pendingDecoded.AsSpan(0));
+                    _decoded.Slice(_copy, _remainder).CopyTo(_pendingDecoded.AsSpan(0));
                     _pendingOffset = 0;
-                    _pendingCount = remainder;
+                    _pendingCount = _remainder;
                 }
             }
         }
 
-        int framesFilled = samplesFilled / channels;
+        int _framesFilled = _samplesFilled / _channels;
 
-        if (framesFilled > 0)
+        if (_framesFilled > 0)
         {
-            UpdateSamplePosition(framesFilled);
+            UpdateSamplePosition(_framesFilled);
 
-            double frameDuration = 1.0 / _streamInfo.SampleRate;
-            double newPosition = Interlocked.CompareExchange(ref _currentPosition, 0, 0) + framesFilled * frameDuration;
-            Interlocked.Exchange(ref _currentPosition, newPosition);
+            double _newPosition = Interlocked.CompareExchange(ref _currentPosition, 0, 0)
+                + _framesFilled / (double)_streamInfo.SampleRate;
+            Interlocked.Exchange(ref _currentPosition, _newPosition);
         }
 
-        if (samplesFilled < samplesRequested)
-        {
-            FillWithSilence(destination.Slice(samplesFilled), samplesRequested - samplesFilled);
-        }
+        if (_samplesFilled < _samplesRequested)
+            FillWithSilence(destination.Slice(_samplesFilled), _samplesRequested - _samplesFilled);
 
-        if (framesFilled == 0 && _isEndOfStream && !Loop)
-        {
+        if (_framesFilled == 0 && _isEndOfStream && !Loop)
             State = AudioState.EndOfStream;
-        }
 
-        ApplyVolume(destination, samplesRequested);
-        return framesFilled;
+        ApplyVolume(destination, _samplesRequested);
+        return _framesFilled;
     }
 
     /// <summary>
-    /// Copies samples left over from a previous <see cref="DecodeSynchronously"/> call (decoder frame
-    /// granularity rarely matches the requested frame count) into <paramref name="destination"/>.
+    /// Copies leftover samples from the previous decode call into destination.
     /// </summary>
-    /// <param name="destination">Destination span sized to the current request.</param>
-    /// <returns>The number of samples copied from the pending buffer.</returns>
-    private int DrainPending(Span<float> destination)
+    /// <param name="destination"></param>
+    /// <returns></returns>
+    private int _drainPending(Span<float> destination)
     {
-        if (_pendingCount == 0)
-            return 0;
+        if (_pendingCount == 0) return 0;
 
-        int copy = Math.Min(_pendingCount, destination.Length);
-        _pendingDecoded.AsSpan(_pendingOffset, copy).CopyTo(destination);
-        _pendingOffset += copy;
-        _pendingCount -= copy;
-        return copy;
+        int _copy = Math.Min(_pendingCount, destination.Length);
+        _pendingDecoded.AsSpan(_pendingOffset, _copy).CopyTo(destination);
+        _pendingOffset += _copy;
+        _pendingCount -= _copy;
+        return _copy;
     }
 
     /// <summary>
-    /// Discards any samples buffered from a previous decode call. Called on seek so the analysis cursor
-    /// does not emit stale audio from the old position.
+    /// Drops the pending samples, called on seek so no stale audio leaks through.
     /// </summary>
-    private void ClearPending()
+    private void _clearPending()
     {
         _pendingOffset = 0;
         _pendingCount = 0;

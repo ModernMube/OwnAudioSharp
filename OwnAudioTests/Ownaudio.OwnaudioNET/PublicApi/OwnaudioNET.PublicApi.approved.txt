@@ -1856,6 +1856,11 @@ namespace OwnaudioNET.Visualization
         public System.Threading.Tasks.Task<bool> LoadFromAudioFileAsync(string filePath, int maxSamples = 100000, bool preferFFmpeg = false, int channels = 1, int sampleRate = 44100, System.Threading.CancellationToken cancellationToken = default) { }
         public bool LoadFromAudioStream(System.IO.Stream stream, Ownaudio.Decoders.AudioFormat audioFormat, bool preferFFmpeg = false, int channels = 1, int sampleRate = 44100) { }
         protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e) { }
+        protected override void OnPointerMoved(Avalonia.Input.PointerEventArgs e) { }
+        protected override void OnPointerPressed(Avalonia.Input.PointerPressedEventArgs e) { }
+        protected override void OnPointerReleased(Avalonia.Input.PointerReleasedEventArgs e) { }
+        protected override void OnPointerWheelChanged(Avalonia.Input.PointerWheelEventArgs e) { }
+        protected override void OnPropertyChanged(Avalonia.AvaloniaPropertyChangedEventArgs change) { }
         public override void Render(Avalonia.Media.DrawingContext context) { }
         public void SetAudioData(float[] audioData) { }
         public enum WaveformDisplayStyle
