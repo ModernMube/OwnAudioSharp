@@ -34,8 +34,10 @@ public static partial class OwnaudioNet
     // one-shot init w/ default cfg
     public static void Initialize() => Initialize(CreateDefaultConfig());
 
+    //<Summary>
     // init w/ custom cfg; useMockEngine = no hw needed (tests),
     // bufferMultiplier sizes the ring buffer, bump to 16 for lots of srcs/fx
+    //</Summary>
     public static void Initialize(AudioConfig config, bool useMockEngine = false, int bufferMultiplier = 8)
     {
         if(config == null) throw new ArgumentNullException(nameof(config));
@@ -46,7 +48,9 @@ public static partial class OwnaudioNet
         }
     }
 
+    //<Summary>
     // kick off audio processing
+    //</Summary>
     public static void Start()
     {
         lock (_initLock) {
@@ -55,7 +59,9 @@ public static partial class OwnaudioNet
         }
     }
 
+    //<Summary>
     // halt processing, Start() resumes
+    //</Summary>
     public static void Stop()
     {
         lock (_initLock) {
@@ -64,7 +70,10 @@ public static partial class OwnaudioNet
         }
     }
 
+    //<Summary>
+    // stop processing, free engine, reset state
     // full teardown, stops engine too
+    //</Summary>
     public static void Shutdown()
     {
         lock (_initLock) {
