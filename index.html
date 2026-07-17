@@ -10,7 +10,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OwnAudioSharp — A Rust audio engine with a C# soul</title>
-  <meta name="description" content="OwnAudioSharp 4.0 runs your entire audio path in a purpose-built Rust engine, wrapped in a 100% C# API. Zero GC on the real-time path, zero external dependencies, truly cross-platform.">
+  <meta name="description" content="OwnAudioSharp 4.0 runs your entire audio path in a purpose-built Rust engine, wrapped in a 100% C# API. A fully native real-time path, zero external dependencies, truly cross-platform.">
   <link rel="stylesheet" href="assets/docs.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
   <style>
@@ -59,7 +59,7 @@
       <p class="hero-sub">
         The entire audio path — decode, mix, effects, resample, playback and capture —
         now runs in a purpose-built native Rust engine. You still write 100% C#.
-        The result: <strong>zero garbage collection</strong> on the real-time path, and audio that never stutters.
+        The result: a <strong>fully native real-time path</strong>, and audio that never stutters.
       </p>
 
       <div class="hero-actions">
@@ -79,7 +79,7 @@
 
       <div class="features-strip">
         <span class="feature-chip">🦀 Rust engine, C# surface</span>
-        <span class="feature-chip">♻️ Zero GC on the audio thread</span>
+        <span class="feature-chip">♻️ Fully native audio thread</span>
         <span class="feature-chip">📦 Zero external dependencies</span>
         <span class="feature-chip">🎛️ 17 built-in DSP effects</span>
         <span class="feature-chip">🔌 VST3 plugin hosting</span>
@@ -149,17 +149,17 @@
       <p class="section-eyebrow">Why the Rust + C# pairing wins</p>
       <h2 class="section-title">Native performance,<br>managed developer experience.</h2>
       <p class="section-lead">
-        The hardest problem in .NET audio is the garbage collector — one collection at the wrong
+        The hardest problem in .NET audio is a managed processing stage — one pause at the wrong
         moment and the buffer underruns. 4.0 removes that failure mode entirely by moving every
-        sample off the managed heap.
+        sample into native code.
       </p>
 
       <div class="value-grid">
         <div class="value-card">
           <div class="value-card-icon">♻️</div>
-          <h3>Zero GC, zero dropouts</h3>
-          <p>Not a single sample is processed on the managed heap. No matter what your surrounding
-          C# code does to the garbage collector, the audio never stutters.</p>
+          <h3>Fully native, zero dropouts</h3>
+          <p>Not a single sample is processed in managed code. No matter what your surrounding
+          C# code is doing, the audio never stutters.</p>
         </div>
         <div class="value-card">
           <div class="value-card-icon">🦀</div>
@@ -237,7 +237,7 @@ await OwnaudioNet.ShutdownAsync();</code></pre>
       <p class="section-eyebrow">Four generations</p>
       <h2 class="section-title">The road to 4.0.</h2>
       <p class="section-lead">
-        A truly GC-independent audio API took four generations — each one solved a problem the last one exposed.
+        A truly real-time-safe audio API took four generations — each one solved a problem the last one exposed.
       </p>
 
       <div class="timeline">
@@ -252,21 +252,21 @@ await OwnaudioNet.ShutdownAsync();</code></pre>
           <div class="tl-ver">2.0</div>
           <div class="tl-body">
             <h4>Fully managed, zero native dependencies</h4>
-            <p>Clean and portable, but the GC's impact on the real-time audio path could not be eliminated.</p>
+            <p>Clean and portable, but the managed runtime's impact on the real-time audio path could not be eliminated.</p>
           </div>
         </div>
         <div class="tl-item">
           <div class="tl-ver">3.0</div>
           <div class="tl-body">
             <h4>Optimized native I/O, managed DSP</h4>
-            <p>Fast — until the <em>host</em> application caused GC pressure, which stalled the managed processing stage.</p>
+            <p>Fast — until the <em>host</em> application put the runtime under load, which stalled the managed processing stage.</p>
           </div>
         </div>
         <div class="tl-item is-current">
           <div class="tl-ver">4.0</div>
           <div class="tl-body">
             <h4>The entire audio chain runs in native Rust</h4>
-            <p>A C# audio API that is completely unaffected by the GC — professional, industry-standard
+            <p>A C# audio API that is completely unaffected by the managed runtime — professional, industry-standard
             behaviour for real-world .NET audio apps. This is the payoff.</p>
           </div>
         </div>

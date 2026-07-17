@@ -42,7 +42,7 @@
 <h1 class="page-title">Quick Start</h1>
 <p class="page-subtitle">Get OwnAudioSharp running in your .NET project in minutes.</p>
 
-<div class="callout callout-info"><div class="callout-icon">🦀</div><p><strong>New in 4.0:</strong> the entire audio path now runs in a purpose-built native Rust engine, wrapped in the same C# API you already use. The upgrade is fully backward compatible — your existing code keeps working, and gains a real-time path with <strong>zero garbage collection</strong>. <a href="api-reference.html#architecture">Read about the architecture →</a></p></div>
+<div class="callout callout-info"><div class="callout-icon">🦀</div><p><strong>New in 4.0:</strong> the entire audio path now runs in a purpose-built native Rust engine, wrapped in the same C# API you already use. The upgrade is fully backward compatible — your existing code keeps working, and gains a <strong>fully native real-time path</strong>. <a href="api-reference.html#architecture">Read about the architecture →</a></p></div>
 
 <h2 id="installation">Installation</h2>
 <p>Choose the package that fits your use case. Requires <strong>.NET 10.0 or later</strong>. The native Rust engine — including the built-in audio decoder — is bundled; there are no external codecs to configure.</p>
@@ -64,12 +64,12 @@ dotnet add package OwnVocalRemover        # Optional vocal separation add-on</co
 <div class="callout callout-success"><div class="callout-icon">🎵</div><p><strong>Formats out of the box:</strong> the pure-Rust decoder handles MP3, FLAC, WAV (PCM/ADPCM), AAC, MP4/M4A, OGG/Vorbis and AIFF on every platform — no FFmpeg, no system dependencies. FFmpeg 8+ remains supported as an optional legacy fallback for exotic formats; see <a href="api-reference.html#ffmpeg">FFmpeg Integration</a>.</p></div>
 
 <h2 id="architecture">Architecture</h2>
-<p>OwnAudioSharp is a thin C# surface over a native Rust engine. The design keeps the real-time audio thread — now entirely inside Rust — completely separate from your application code and the garbage collector.</p>
+<p>OwnAudioSharp is a thin C# surface over a native Rust engine. The design keeps the real-time audio thread — now entirely inside Rust — completely separate from your application code and the managed runtime.</p>
 <div class="code-block"><div class="code-header"><span>Thread diagram</span><button class="copy-btn">Copy</button></div><pre><code>UI / Main Thread
   └─> OwnaudioNet.Send()     [lock-free ring buffer, &lt;0.1ms]
        └─> AudioEngineWrapper   [managed bridge, non-blocking]
             └─> Native Rust engine   [ownaudio-ffi + ownaudio-core]
-                 └─> Audio RT Thread  [WASAPI / CoreAudio / ALSA — zero GC]</code></pre></div>
+                 └─> Audio RT Thread  [WASAPI / CoreAudio / ALSA — fully native]</code></pre></div>
 <div class="callout callout-warning"><div class="callout-icon">⚠️</div><p><strong>Never call blocking engine methods from the UI thread.</strong> Use <code>InitializeAsync()</code>, <code>StopAsync()</code>, and <code>ShutdownAsync()</code> in all UI applications (WPF, WinForms, MAUI, Avalonia).</p></div>
 
 <h2 id="basic-playback">Basic Playback</h2>

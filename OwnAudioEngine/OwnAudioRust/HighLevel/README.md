@@ -68,7 +68,7 @@ session.PauseAll();
 
 ```csharp
 // The Rust prefetch thread decodes and feeds the track;
-// no managed pump, no GC pause on the audio path.
+// no managed pump, no managed stage on the audio path.
 FileTrack fileTrack = session.AddFileTrack("music.flac");
 fileTrack.Track.Gain = 0.8f;
 
@@ -77,7 +77,7 @@ fileTrack.Completed += (_, e) =>
     Console.WriteLine($"File finished: {e.EndReason}");
 ```
 
-### In-memory track (GC-free after initial copy)
+### In-memory track (fully native after initial copy)
 
 ```csharp
 // Samples are copied into native memory once (control-thread copy).
@@ -245,7 +245,7 @@ while (!decoder.IsEndOfStream)
 **Namespace:** `Ownaudio.Audio.Tracks`
 
 A track whose audio source is a file decoded entirely in native Rust (Symphonia prefetch thread).
-No managed pump, no GC pressure on the audio path.
+No managed pump, no managed processing on the audio path.
 
 ```csharp
 FileTrack fileTrack = session.AddFileTrack("music.flac");
@@ -269,7 +269,7 @@ track.Seek(TimeSpan.FromSeconds(30));
 **Namespace:** `Ownaudio.Audio.Tracks`
 
 A track whose audio source is a buffer copied into native memory once at creation time.
-The audio path is entirely native — no managed copy per audio block, no GC involvement.
+The audio path is entirely native — no managed copy per audio block, no managed runtime involvement.
 
 ```csharp
 // Samples must be at the session's sample rate and channel count
@@ -288,7 +288,7 @@ memTrack.Track.Gain = 0.5f;
 **Namespace:** `Ownaudio.Audio.Tracks`
 
 A track whose audio source is a live capture device. The capture callback writes into the
-track's ring buffer entirely in native code — no managed callback, no GC stall risk.
+track's ring buffer entirely in native code — no managed callback, no managed stall risk.
 
 ```csharp
 InputTrack inputTrack = session.AddInputTrack(engine, device: null, bufferFrames: 0);

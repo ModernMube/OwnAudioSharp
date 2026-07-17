@@ -19,7 +19,7 @@ This package provides the **core foundation** for OwnAudioSharp's audio engine a
 
 ### Key Features
 
-- **Zero-allocation design**: No GC pressure in real-time audio paths
+- **Zero-allocation design**: No heap activity in real-time audio paths
 - **Lock-free architecture**: Wait-free SPSC ring buffers for thread-safe communication
 - **Pure managed code**: No native dependencies for core infrastructure
 - **AOT & trim compatible**: `IsAotCompatible = true`, `IsTrimmable = true`

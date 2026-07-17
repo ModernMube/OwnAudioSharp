@@ -34,7 +34,7 @@
 
 <!-- Architecture -->
 <h2 id="architecture">Architecture (4.0)</h2>
-<p>OwnAudioSharp 4.0 is a thin C# surface over a purpose-built native <strong>Rust</strong> engine. The public API is unchanged from 3.x — the change is entirely underneath it. From the first sample to the last byte, decoding, mixing, effects, resampling, playback and capture all run in native code, so <strong>not a single sample is processed on the managed heap</strong>. The result is an audio path that is completely unaffected by the .NET garbage collector.</p>
+<p>OwnAudioSharp 4.0 is a thin C# surface over a purpose-built native <strong>Rust</strong> engine. The public API is unchanged from 3.x — the change is entirely underneath it. From the first sample to the last byte, decoding, mixing, effects, resampling, playback and capture all run in native code, so <strong>not a single sample is processed in managed code</strong>. The result is an audio path that is completely unaffected by the .NET runtime.</p>
 
 <div class="code-block"><div class="code-header"><span>Layer stack</span><button class="copy-btn">Copy</button></div><pre><code>Application
   └─ OwnaudioNet / AudioMixer / sources / effects   [your unchanged C# code]
@@ -52,7 +52,7 @@
   </tbody>
 </table></div>
 
-<div class="callout callout-success"><div class="callout-icon">♻️</div><p><strong>Why it matters:</strong> no matter what the surrounding C# code does to the garbage collector, the audio never stutters — because the real-time path never touches the managed heap. This is the payoff of the 4.0 redesign, delivered without breaking your existing code.</p></div>
+<div class="callout callout-success"><div class="callout-icon">♻️</div><p><strong>Why it matters:</strong> no matter what the surrounding C# code is doing, the audio never stutters — because the real-time path never runs in managed code. This is the payoff of the 4.0 redesign, delivered without breaking your existing code.</p></div>
 
 <!-- Events Reference -->
 <h2 id="events">Events Reference</h2>

@@ -11,7 +11,7 @@ A professional multitrack audio player built with Avalonia UI and the OwnAudioSh
 - **NEW: Start Offset Support**: DAW-style regions - tracks can start at different timeline positions
 - **Real-time Mixing**: Professional audio mixing with per-track volume controls
 - **Global Tempo & Pitch**: Tempo and pitch shifting applied globally to all synchronized tracks (like professional DAWs)
-- **Zero-Allocation Design**: Optimized for minimal GC pressure and low CPU usage
+- **Zero-Allocation Design**: Optimized for minimal heap activity and low CPU usage
 
 ### User Interface
 - **Modern Dark Theme**: Professional audio workstation aesthetic
@@ -167,7 +167,7 @@ dotnet run --project MultitrackPlayer.csproj
 - `Span<T>` for stack-allocated audio processing
 - Lock-free ring buffers for cross-thread communication
 - No allocations in the audio processing hot path
-- Debounced slider updates (250ms) to reduce GC pressure
+- Debounced slider updates (250ms) to reduce heap activity
 
 ### Thread Safety
 - Audio initialization happens async to prevent UI freezing
