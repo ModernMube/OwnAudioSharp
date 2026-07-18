@@ -5,110 +5,91 @@ using Ownaudio.Safe.Handles;
 namespace Ownaudio.Audio.Effects;
 
 /// <summary>
-/// Flanger with a short modulated delay and feedback, backed by the native Rust DSP engine.
+/// Flanger, short modulated delay with feedback. Rust side DSP.
 /// </summary>
-/// <remarks>
-/// All parameters are forwarded immediately to the native effect via
-/// <c>ownaudio_v1_effect_set_param</c>.  The property getters return cached values
-/// to avoid interop overhead on every UI read.
-/// </remarks>
 public sealed class FlangerEffect : IDisposable
 {
-    #region Parameter identifiers
-
-    private const uint ParamEnabled  = 0;
-    private const uint ParamMix      = 1;
-    private const uint ParamRate     = 2;
-    private const uint ParamDepth    = 3;
+    private const uint ParamEnabled = 0;
+    private const uint ParamMix = 1;
+    private const uint ParamRate = 2;
+    private const uint ParamDepth = 3;
     private const uint ParamFeedback = 4;
-
-    #endregion
-
-    #region Fields
 
     private readonly EffectHandle _handle;
     private readonly IntPtr _mixerHandle;
     private bool _disposed;
 
-    private bool  _isEnabled = true;
-    private float _mix       = 0.5f;
-    private float _rate      = 0.5f;
-    private float _depth     = 0.8f;
-    private float _feedback  = 0.6f;
-
-    #endregion
-
-    #region Construction
+    private bool _isEnabled = true;
+    private float _mix = 0.5f;
+    private float _rate = 0.5f;
+    private float _depth = 0.8f;
+    private float _feedback = 0.6f;
 
     internal FlangerEffect(EffectHandle handle, IntPtr mixerHandle)
     {
-        _handle      = handle;
+        _handle = handle;
         _mixerHandle = mixerHandle;
     }
 
-    #endregion
+    #region Propertyes
 
-    #region Properties
-
-    /// <summary>Gets the effect type identifier.</summary>
+    /// <summary>
+    /// Which native effect this wrapper drives.
+    /// </summary>
     public EffectType EffectType => EffectType.Flanger;
 
-    /// <summary>Gets or sets whether the effect is active.</summary>
+    /// <summary>Bypass switch.</summary>
     public bool IsEnabled
     {
         get => _isEnabled;
-        set { _isEnabled = value; SetParam(ParamEnabled, value ? 1f : 0f); }
+        set { _isEnabled = value; _setParam(ParamEnabled, value ? 1f : 0f); }
     }
 
-    /// <summary>Gets or sets the dry/wet mix (0.0–1.0).</summary>
+    /// <summary>Dry/wet, 0.0 - 1.0.</summary>
     public float Mix
     {
         get => _mix;
-        set { _mix = value; SetParam(ParamMix, value); }
+        set { _mix = value; _setParam(ParamMix, value); }
     }
 
-    /// <summary>Gets or sets the LFO modulation rate in Hz (0.1–5.0).</summary>
+    /// <summary>LFO speed in Hz, 0.1 - 5.0.</summary>
     public float Rate
     {
         get => _rate;
-        set { _rate = value; SetParam(ParamRate, value); }
+        set { _rate = value; _setParam(ParamRate, value); }
     }
 
-    /// <summary>Gets or sets the modulation depth (0.0–1.0).</summary>
+    /// <summary>Sweep depth, 0.0 - 1.0.</summary>
     public float Depth
     {
         get => _depth;
-        set { _depth = value; SetParam(ParamDepth, value); }
+        set { _depth = value; _setParam(ParamDepth, value); }
     }
 
-    /// <summary>Gets or sets the feedback amount (0.0–0.95).</summary>
+    /// <summary>
+    /// Feedback, 0.0 - 0.95. Push it up for the jet sound.
+    /// </summary>
     public float Feedback
     {
         get => _feedback;
-        set { _feedback = value; SetParam(ParamFeedback, value); }
+        set { _feedback = value; _setParam(ParamFeedback, value); }
     }
 
     #endregion
 
-    #region Private helpers
-
-    private void SetParam(uint paramId, float value)
+    private void _setParam(uint paramId, float value)
     {
-        if (_disposed) return;
+        if(_disposed) return;
         OwnAudioNative.ownaudio_v1_effect_set_param(_mixerHandle, _handle.DangerousGetHandle(), paramId, value);
     }
 
-    #endregion
-
-    #region IDisposable
-
-    /// <summary>Releases the native effect handle.</summary>
+    /// <summary>
+    /// Drops the native effect handle.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
         _handle.Dispose();
     }
-
-    #endregion
 }

@@ -1,131 +1,111 @@
 using System;
-using System.Collections.Generic;
 using Ownaudio.Native.RustAudio.Interop;
-using Ownaudio.Safe.Exceptions;
 using Ownaudio.Safe.Handles;
 
 namespace Ownaudio.Audio.Effects;
 
 /// <summary>
-/// Freeverb-based algorithmic reverb backed by the native Rust DSP engine.
+/// Freeverb style algorithmic reverb on the rust engine. Every setter pushes
+/// straight down to the native effect, the getters just read back our copy.
 /// </summary>
-/// <remarks>
-/// <para>
-/// All parameters are forwarded immediately to the native effect via
-/// <c>ownaudio_v1_effect_set_param</c>.  The property getters return cached values
-/// to avoid interop overhead on every UI read.
-/// </para>
-/// </remarks>
 public sealed class ReverbEffect : IDisposable
 {
-    #region Parameter identifiers
-
-    private const uint ParamEnabled  = 0;
-    private const uint ParamMix      = 1;
+    private const uint ParamEnabled = 0;
+    private const uint ParamMix = 1;
     private const uint ParamRoomSize = 2;
-    private const uint ParamDamping  = 3;
-    private const uint ParamWidth    = 4;
+    private const uint ParamDamping = 3;
+    private const uint ParamWidth = 4;
     private const uint ParamWetLevel = 5;
     private const uint ParamDryLevel = 6;
-
-    #endregion
-
-    #region Fields
 
     private readonly EffectHandle _handle;
     private readonly IntPtr _mixerHandle;
     private bool _disposed;
 
     private bool _isEnabled = true;
-    private float _mix      = 0.5f;
+    private float _mix = 0.5f;
     private float _roomSize = 0.5f;
-    private float _damping  = 0.5f;
-    private float _width    = 1.0f;
+    private float _damping = 0.5f;
+    private float _width = 1.0f;
     private float _wetLevel = 0.33f;
     private float _dryLevel = 0.67f;
 
-    #endregion
-
-    #region Construction
-
     internal ReverbEffect(EffectHandle handle, IntPtr mixerHandle)
     {
-        _handle      = handle;
+        _handle = handle;
         _mixerHandle = mixerHandle;
     }
 
-    #endregion
+    #region Propertyes
 
-    #region Properties
-
-    /// <summary>Gets the effect type identifier.</summary>
+    /// <summary>
+    /// Which native effect this wrapper drives.
+    /// </summary>
     public EffectType EffectType => EffectType.Reverb;
 
-    /// <summary>Gets or sets whether the effect is active (not bypassed).</summary>
+    /// <summary>Bypass switch.</summary>
     public bool IsEnabled
     {
         get => _isEnabled;
-        set { _isEnabled = value; SetParam(ParamEnabled, value ? 1f : 0f); }
+        set { _isEnabled = value; _setParam(ParamEnabled, value ? 1f : 0f); }
     }
 
-    /// <summary>Gets or sets the dry/wet mix (0.0 = fully dry, 1.0 = fully wet).</summary>
+    /// <summary>
+    /// Dry/wet, 0.0 is fully dry and 1.0 fully wet.
+    /// </summary>
     public float Mix
     {
         get => _mix;
-        set { _mix = value; SetParam(ParamMix, value); }
+        set { _mix = value; _setParam(ParamMix, value); }
     }
 
-    /// <summary>Gets or sets the room size (0.0–1.0).</summary>
+    /// <summary>Room size, 0.0 - 1.0.</summary>
     public float RoomSize
     {
         get => _roomSize;
-        set { _roomSize = value; SetParam(ParamRoomSize, value); }
+        set { _roomSize = value; _setParam(ParamRoomSize, value); }
     }
 
-    /// <summary>Gets or sets the damping (0.0–1.0).</summary>
+    /// <summary>
+    /// Damping in the tail, 0.0 - 1.0. Higher kills the highs faster.
+    /// </summary>
     public float Damping
     {
         get => _damping;
-        set { _damping = value; SetParam(ParamDamping, value); }
+        set { _damping = value; _setParam(ParamDamping, value); }
     }
 
-    /// <summary>Gets or sets the stereo width (0.0–2.0).</summary>
+    /// <summary>Stereo width, 0.0 - 2.0.</summary>
     public float Width
     {
         get => _width;
-        set { _width = value; SetParam(ParamWidth, value); }
+        set { _width = value; _setParam(ParamWidth, value); }
     }
 
-    /// <summary>Gets or sets the wet signal level (0.0–1.0).</summary>
+    /// <summary>Wet level, 0.0 - 1.0.</summary>
     public float WetLevel
     {
         get => _wetLevel;
-        set { _wetLevel = value; SetParam(ParamWetLevel, value); }
+        set { _wetLevel = value; _setParam(ParamWetLevel, value); }
     }
 
-    /// <summary>Gets or sets the dry signal level (0.0–1.0).</summary>
+    /// <summary>Dry level, 0.0 - 1.0.</summary>
     public float DryLevel
     {
         get => _dryLevel;
-        set { _dryLevel = value; SetParam(ParamDryLevel, value); }
+        set { _dryLevel = value; _setParam(ParamDryLevel, value); }
     }
 
     #endregion
 
-    #region Private helpers
-
-    private void SetParam(uint paramId, float value)
+    private void _setParam(uint paramId, float value)
     {
-        if (_disposed) return;
+        if(_disposed) return;
         OwnAudioNative.ownaudio_v1_effect_set_param(_mixerHandle, _handle.DangerousGetHandle(), paramId, value);
     }
 
-    #endregion
-
-    #region IDisposable
-
     /// <summary>
-    /// Releases the native effect handle.
+    /// Drops the native effect handle.
     /// </summary>
     public void Dispose()
     {
@@ -133,6 +113,4 @@ public sealed class ReverbEffect : IDisposable
         _disposed = true;
         _handle.Dispose();
     }
-
-    #endregion
 }

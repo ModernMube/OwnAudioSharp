@@ -1,74 +1,71 @@
 namespace Ownaudio.Audio.Effects;
 
 /// <summary>
-/// Identifies the variant of a native Rust-backed audio effect.
+/// Which native effect variant we are talking about. The numbers are part of
+/// the C ABI, keep them in sync with ownaudio-core/src/effects/mod.rs and
+/// with NativeEffectType.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Numeric values are part of the stable C ABI and must stay in sync with
-/// <c>ownaudio-core/src/effects/mod.rs</c> and
-/// <c>Ownaudio.Native.RustAudio.Enums.NativeEffectType</c>.
-/// </para>
-/// </remarks>
 public enum EffectType : uint
 {
     /// <summary>Freeverb algorithmic reverb.</summary>
     Reverb = 0,
 
-    /// <summary>10-band parametric equalizer.</summary>
+    /// <summary>10 band parametric EQ.</summary>
     Equalizer = 1,
 
-    /// <summary>Dynamic range compressor with soft knee.</summary>
+    /// <summary>Soft knee compressor.</summary>
     Compressor = 2,
 
-    /// <summary>Look-ahead brick-wall limiter.</summary>
+    /// <summary>Look-ahead brickwall limiter.</summary>
     Limiter = 3,
 
-    /// <summary>Stereo delay with ping-pong and damping.</summary>
+    /// <summary>Stereo delay, ping-pong capable.</summary>
     Delay = 4,
 
-    /// <summary>Multi-voice chorus with LFO modulation.</summary>
+    /// <summary>Multi voice chorus.</summary>
     Chorus = 5,
 
-    /// <summary>Soft-clipping distortion.</summary>
+    /// <summary>Soft clipping distortion.</summary>
     Distortion = 6,
 
-    /// <summary>Asymmetric tube overdrive.</summary>
+    /// <summary>Asymmetric tube style overdrive.</summary>
     Overdrive = 7,
 
-    /// <summary>Flanger with short modulated delay.</summary>
+    /// <summary>Flanger, short modulated delay.</summary>
     Flanger = 8,
 
-    /// <summary>Phaser with all-pass filter stages.</summary>
+    /// <summary>All-pass stage phaser.</summary>
     Phaser = 9,
 
-    /// <summary>Rotary / Leslie-cabinet speaker simulator.</summary>
+    /// <summary>Leslie cabinet sim.</summary>
     Rotary = 10,
 
-    /// <summary>Automatic gain control.</summary>
+    /// <summary>Auto gain control.</summary>
     AutoGain = 11,
 
-    /// <summary>Harmonic enhancer / exciter.</summary>
+    /// <summary>Harmonic exciter.</summary>
     Enhancer = 12,
 
-    /// <summary>Noise gate / dynamic amplifier.</summary>
+    /// <summary>Noise gate.</summary>
     Gate = 13,
 
-    /// <summary>Real-time pitch shifter.</summary>
+    /// <summary>Realtime pitch shifter.</summary>
     PitchShift = 14,
 
-    /// <summary>Adaptive dynamic amplifier — dual-window RMS AGC with noise gate.</summary>
+    /// <summary>
+    /// Adaptive dynamic amp, dual window RMS AGC with a gate.
+    /// </summary>
     DynamicAmp = 15,
 
-    /// <summary>30-band 1/3-octave parametric equalizer.</summary>
+    /// <summary>30 band 1/3 octave EQ.</summary>
     Equalizer30 = 16,
 
-    /// <summary>External VST3 plugin hosted through a C ABI process callback.</summary>
+    /// <summary>External VST3 plugin behind a C ABI process callback.</summary>
     Vst = 17,
 
     /// <summary>
-    /// SmartMaster composite mastering chain (graphic EQ → subharmonic →
-    /// compressor → crossover/phase alignment → limiter), hosted as one native effect.
+    /// SmartMaster chain (graphic EQ, subharmonic, comp, crossover/phase, limiter)
+    /// packed into one native effect.
     /// </summary>
     SmartMaster = 18,
 }
