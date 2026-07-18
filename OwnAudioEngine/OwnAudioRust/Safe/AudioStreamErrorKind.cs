@@ -1,21 +1,19 @@
 namespace Ownaudio.Safe;
 
 /// <summary>
-/// Classification of an audio-stream error reported by the native backend and
-/// polled through <see cref="AudioOutputStream.PollErrorState"/>.
+/// What the backend reported on a stream, polled via AudioOutputStream.PollErrorState.
 /// </summary>
 public enum AudioStreamErrorKind
 {
-    /// <summary>No error has been observed on the stream.</summary>
+    /// Nothing happened so far.
     None = 0,
 
     /// <summary>
-    /// The audio device is no longer available (unplugged, disabled, or lost on
-    /// sleep/wake or a sample-rate change). The stream has stopped and must be
-    /// reopened to resume audio.
+    /// Device is gone: unplugged, disabled, or lost on sleep/wake or a rate change.
+    /// The stream stopped, it has to be reopened.
     /// </summary>
     DeviceNotAvailable = 1,
 
-    /// <summary>A backend-specific error that is not a plain device removal.</summary>
+    /// Some backend specific failure, not a plain device removal.
     BackendSpecific = 2,
 }

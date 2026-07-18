@@ -15,7 +15,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Basic</PackageId>
-    <Version>4.0.0-preview.31</Version>
+    <Version>4.0.0-preview.32</Version>
     <Authors>ModernMube</Authors>
     <Description>Minimal cross-platform audio engine for .NET desktop apps (Windows, Linux, macOS), built on a native Rust core. Audio in and out only: playback, recording, multi-track mixing, effects and VST3 hosting. Everything that could be left out is left out - no analysis features, no ONNX models, no UI dependency - so it stays a fraction of the full package size. AOT-compatible and trimmable.</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;desktop;sound;multitrack</PackageTags>

@@ -10,59 +10,32 @@ using Ownaudio.Safe.Validation;
 namespace Ownaudio.Safe;
 
 /// <summary>
-/// Safe wrapper for a native output audio stream opened via <c>ownaudio_v1_open_output_stream</c>.
+/// Safe wrapper around a native output stream. You get one from AudioEngine.OpenOutputStream,
+/// paused, call Play to start. Play/Pause/Dispose are not meant to race each other.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Obtain instances through <see cref="AudioEngine.OpenOutputStream"/>.
-/// The stream is created in the paused state; call <see cref="Play"/> to start audio output.
-/// </para>
-/// <para>
-/// <b>Thread safety:</b> <see cref="Play"/>, <see cref="Pause"/>, and <see cref="Dispose"/>
-/// must not be called concurrently on the same instance.
-/// </para>
-/// </remarks>
 public sealed class AudioOutputStream : IDisposable
 {
-    #region Fields
-
     private readonly AudioOutputStreamHandle _handle;
     private readonly AudioOutputCallbackMarshaller? _marshaller;
     private bool _disposed;
 
-    #endregion
-
-    #region Events
-
     /// <summary>
-    /// Raised on a <see cref="System.Threading.ThreadPool"/> thread whenever the user-supplied
-    /// audio callback throws an unhandled exception.
-    /// The exception is swallowed at the FFI boundary so the real-time audio thread is unaffected.
+    /// Fires on a threadpool thread when the audio callback throws. We swallow it at the ffi
+    /// boundary so the rt thread keeps running.
     /// </summary>
     public event EventHandler<Exception>? CallbackError;
 
-    #endregion
-
-    #region Construction
-
-    private AudioOutputStream(
-        AudioOutputStreamHandle handle,
-        AudioOutputCallbackMarshaller? marshaller)
+    private AudioOutputStream(AudioOutputStreamHandle handle, AudioOutputCallbackMarshaller? marshaller)
     {
         _handle     = handle;
         _marshaller = marshaller;
 
-        // Mixer-driven streams render natively and have no managed callback, so
-        // there is no marshaller to forward errors from.
+        // mixer driven streams render natively, no marshaller, nothing to forward
         if (_marshaller is not null)
-        {
             _marshaller.CallbackError += (_, ex) => CallbackError?.Invoke(this, ex);
-        }
     }
 
-    /// <summary>
-    /// Opens a native output stream. Called exclusively by <see cref="AudioEngine"/>.
-    /// </summary>
+    // engine only
     internal static unsafe AudioOutputStream Open(
         AudioEngineHandle engine,
         AudioDevice? device,
@@ -72,9 +45,7 @@ public sealed class AudioOutputStream : IDisposable
         var marshaller = new AudioOutputCallbackMarshaller(callback);
 
         NativeStreamConfig nativeConfig = config.ToNative();
-        IntPtr deviceNamePtr = device is not null
-            ? Marshal.StringToCoTaskMemUTF8(device.Name)
-            : IntPtr.Zero;
+        IntPtr deviceNamePtr = device is not null ? Marshal.StringToCoTaskMemUTF8(device.Name) : IntPtr.Zero;
 
         int code;
         IntPtr rawStream;
@@ -91,10 +62,7 @@ public sealed class AudioOutputStream : IDisposable
         }
         finally
         {
-            if (deviceNamePtr != IntPtr.Zero)
-            {
-                Marshal.FreeCoTaskMem(deviceNamePtr);
-            }
+            if (deviceNamePtr != IntPtr.Zero) Marshal.FreeCoTaskMem(deviceNamePtr);
         }
 
         if (code != (int)NativeErrorCode.Success)
@@ -109,14 +77,7 @@ public sealed class AudioOutputStream : IDisposable
         return new AudioOutputStream(handle, marshaller);
     }
 
-    /// <summary>
-    /// Opens an output stream driven directly by a native multi-track mixer.
-    /// Called exclusively by <see cref="AudioEngine"/>.
-    /// </summary>
-    /// <remarks>
-    /// The mixer renders every buffer on the audio thread itself, so there is no
-    /// managed callback and no per-buffer P/Invoke.
-    /// </remarks>
+    // engine only, the mixer fills every buffer on the audio thread, zero per buffer pinvoke
     internal static unsafe AudioOutputStream OpenMixerDriven(
         AudioEngineHandle engine,
         MixerHandle mixer,
@@ -124,9 +85,7 @@ public sealed class AudioOutputStream : IDisposable
         AudioStreamConfig config)
     {
         NativeStreamConfig nativeConfig = config.ToNative();
-        IntPtr deviceNamePtr = device is not null
-            ? Marshal.StringToCoTaskMemUTF8(device.Name)
-            : IntPtr.Zero;
+        IntPtr deviceNamePtr = device is not null ? Marshal.StringToCoTaskMemUTF8(device.Name) : IntPtr.Zero;
 
         int code;
         IntPtr rawStream;
@@ -142,10 +101,7 @@ public sealed class AudioOutputStream : IDisposable
         }
         finally
         {
-            if (deviceNamePtr != IntPtr.Zero)
-            {
-                Marshal.FreeCoTaskMem(deviceNamePtr);
-            }
+            if (deviceNamePtr != IntPtr.Zero) Marshal.FreeCoTaskMem(deviceNamePtr);
         }
 
         ErrorCodeMapper.ThrowIfError(code, nameof(OpenMixerDriven));
@@ -156,16 +112,9 @@ public sealed class AudioOutputStream : IDisposable
         return new AudioOutputStream(handle, marshaller: null);
     }
 
-    #endregion
-
-    #region Playback control
-
     /// <summary>
-    /// Starts or resumes audio output on this stream.
-    /// The audio callback will begin receiving calls on the real-time thread.
+    /// Starts or resumes playback, the callback begins firing on the rt thread.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown when this stream has been disposed.</exception>
-    /// <exception cref="StreamException">Thrown when the native play call fails.</exception>
     public void Play()
     {
         Guard.NotDisposed(_disposed, nameof(AudioOutputStream));
@@ -175,11 +124,8 @@ public sealed class AudioOutputStream : IDisposable
     }
 
     /// <summary>
-    /// Pauses audio output without destroying the stream.
-    /// The audio callback will stop being called until <see cref="Play"/> is invoked again.
+    /// Stops the callback but keeps the stream alive, Play picks it up again.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown when this stream has been disposed.</exception>
-    /// <exception cref="StreamException">Thrown when the native pause call fails.</exception>
     public void Pause()
     {
         Guard.NotDisposed(_disposed, nameof(AudioOutputStream));
@@ -188,57 +134,32 @@ public sealed class AudioOutputStream : IDisposable
         ErrorCodeMapper.ThrowIfError(code, nameof(Pause));
     }
 
-    #endregion
-
-    #region Error state
-
     /// <summary>
-    /// Polls the native backend's error state for this stream. The backend reports
-    /// device-lost / backend failures on an internal callback that the core records
-    /// into a lock-free shared state; this reads it without disturbing the audio
-    /// thread.
+    /// Reads the error state the backend records into a lock free slot on device loss and
+    /// friends, without poking the audio thread. errorCount is a monotonic total since open,
+    /// compare it against the last seen value to catch a fresh error when the kind repeats.
     /// </summary>
-    /// <param name="errorCount">
-    /// Receives the monotonic total number of errors reported since the stream
-    /// opened. A caller comparing this against a previously-seen value can detect a
-    /// fresh error even when <see cref="AudioStreamErrorKind"/> repeats.
-    /// </param>
-    /// <returns>The most recently reported error kind.</returns>
-    /// <exception cref="ObjectDisposedException">Thrown when this stream has been disposed.</exception>
     public AudioStreamErrorKind PollErrorState(out ulong errorCount)
     {
         Guard.NotDisposed(_disposed, nameof(AudioOutputStream));
 
         int code = OwnAudioNative.ownaudio_v1_output_stream_get_error_state(
-            _handle.DangerousGetHandle(),
-            out uint kind,
-            out errorCount);
+            _handle.DangerousGetHandle(), out uint kind, out errorCount);
         ErrorCodeMapper.ThrowIfError(code, nameof(PollErrorState));
 
         return (AudioStreamErrorKind)kind;
     }
 
-    #endregion
-
-    #region IDisposable
-
     /// <summary>
-    /// Destroys the native stream and releases the callback delegate pin.
-    /// Safe to call multiple times.
+    /// Native stream goes first so the callback is quiet before we drop the delegate pin.
+    /// Idempotent.
     /// </summary>
     public void Dispose()
     {
-        if (_disposed)
-        {
-            return;
-        }
+        if (_disposed) return;
 
         _disposed = true;
-
-        // Destroy the native stream first so the callback stops firing before the pin is freed.
         _handle.Dispose();
         _marshaller?.Dispose();
     }
-
-    #endregion
 }

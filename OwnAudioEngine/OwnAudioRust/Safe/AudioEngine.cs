@@ -12,139 +12,78 @@ using Ownaudio.Safe.Validation;
 namespace Ownaudio.Safe;
 
 /// <summary>
-/// Safe, managed entry point to the native Rust audio engine.
+/// Managed door to the rust engine. One instance per process is the sane setup, more of them
+/// work too but every one of them owns a separate native context and device cache.
+/// Create and Dispose are fine from any thread, the rest is not meant to be called concurrently.
 /// </summary>
-/// <remarks>
-/// <para>
-/// One instance per process is recommended; multiple instances are supported but each
-/// owns an independent native engine context with its own device enumeration cache.
-/// </para>
-/// <para>
-/// <b>Thread safety:</b> <see cref="Create()"/> and <see cref="Dispose"/> are safe to call
-/// from any thread.  All other methods must not be called concurrently on the same instance
-/// unless otherwise documented.
-/// </para>
-/// </remarks>
 public sealed class AudioEngine : IDisposable
 {
-    #region ABI versioning
-
     /// <summary>
-    /// The ABI version this managed assembly was compiled against.
-    /// Must match the value returned by <c>ownaudio_v1_get_abi_version()</c> in the
-    /// loaded native binary.  Increment both values together for every breaking FFI change.
+    /// Abi version this assembly was built against, has to match
+    /// ownaudio_v1_get_abi_version() in the loaded binary. Bump both together.
     /// </summary>
     public const uint ExpectedAbiVersion = 1u;
-
-    #endregion
-
-    #region Fields
 
     private readonly AudioEngineHandle _handle;
     private bool _disposed;
 
-    #endregion
-
-    /// <summary>
-    /// Gets the raw native engine handle, for opening a native input-capture track source
-    /// (<see cref="Ownaudio.Audio.Tracks.MultiTrackSession.AddInputTrack"/>).
-    /// </summary>
+    // raw handle for the native input capture track source (MultiTrackSession.AddInputTrack)
     internal IntPtr NativeHandle => _handle.DangerousGetHandle();
-
-    #region Construction
 
     private AudioEngine(AudioEngineHandle handle)
     {
         _handle = handle;
     }
 
+    #region Create
+
     /// <summary>
-    /// Creates a new <see cref="AudioEngine"/> instance using the platform default audio host.
-    /// Equivalent to calling <see cref="Create(HostApi?)"/> with <see langword="null"/>.
+    /// Spins up an engine on the platform default host.
     /// </summary>
-    /// <returns>A new, ready-to-use <see cref="AudioEngine"/>.</returns>
-    /// <exception cref="AbiVersionMismatchException">
-    /// Thrown when the loaded native binary reports an ABI version that does not match
-    /// <see cref="ExpectedAbiVersion"/>.
-    /// </exception>
-    /// <exception cref="OwnAudioException">Thrown when the native engine fails to initialize.</exception>
     public static AudioEngine Create() => Create(hostApi: null);
 
     /// <summary>
-    /// Creates a new <see cref="AudioEngine"/> instance using the specified audio host API,
-    /// or the platform default when <paramref name="hostApi"/> is <see langword="null"/>.
+    /// Same, but on the given host api. Null means platform default: wasapi on windows,
+    /// core audio on mac, alsa on linux.
     /// </summary>
-    /// <param name="hostApi">
-    /// The host API to use, or <see langword="null"/> for the platform default
-    /// (WASAPI on Windows, Core Audio on macOS, ALSA on Linux).
-    /// </param>
-    /// <returns>A new, ready-to-use <see cref="AudioEngine"/>.</returns>
-    /// <exception cref="AbiVersionMismatchException">
-    /// Thrown when the loaded native binary reports an ABI version that does not match
-    /// <see cref="ExpectedAbiVersion"/>.
-    /// </exception>
-    /// <exception cref="HostApiNotAvailableException">
-    /// Thrown when the requested host API is not compiled into this binary or not
-    /// available on the current platform.
-    /// </exception>
-    /// <exception cref="AsioDriverNotFoundException">
-    /// Thrown when ASIO is compiled in but no ASIO driver is installed on this machine.
-    /// </exception>
-    /// <exception cref="OwnAudioException">Thrown for all other native engine failures.</exception>
+    /// <exception cref="AbiVersionMismatchException"></exception>
+    /// <exception cref="HostApiNotAvailableException"></exception>
+    /// <exception cref="AsioDriverNotFoundException"></exception>
     public static AudioEngine Create(HostApi? hostApi)
     {
-        VerifyAbiVersion();
+        _verifyAbiVersion();
 
         int code;
         IntPtr rawHandle;
 
         if (hostApi.HasValue)
-        {
-            var nativeApi = (NativeHostApi)(int)hostApi.Value;
-            code = OwnAudioNative.ownaudio_v1_engine_create_with_host(nativeApi, out rawHandle);
-        }
+            code = OwnAudioNative.ownaudio_v1_engine_create_with_host((NativeHostApi)(int)hostApi.Value, out rawHandle);
         else
-        {
             code = OwnAudioNative.ownaudio_v1_engine_create(out rawHandle);
-        }
 
         ErrorCodeMapper.ThrowIfError(code, nameof(Create));
 
         var handle = new AudioEngineHandle();
-
-        // Transfer the raw handle into the SafeHandle so the runtime manages its lifetime.
         Marshal.InitHandle(handle, rawHandle);
 
         return new AudioEngine(handle);
     }
 
-    /// <summary>
-    /// Verifies that the loaded native binary's ABI version matches <see cref="ExpectedAbiVersion"/>.
-    /// </summary>
-    /// <exception cref="AbiVersionMismatchException">
-    /// Thrown when the native binary reports a different ABI version.
-    /// </exception>
-    private static void VerifyAbiVersion()
+    private static void _verifyAbiVersion()
     {
         uint nativeVersion = OwnAudioNative.ownaudio_v1_get_abi_version();
         if (nativeVersion != ExpectedAbiVersion)
-        {
             throw new AbiVersionMismatchException(nativeVersion, ExpectedAbiVersion);
-        }
     }
 
     #endregion
 
-    #region Device enumeration
+    #region Devices
 
     /// <summary>
-    /// Returns all available output devices on this engine's audio host.
-    /// The enumeration respects the <see cref="HostApi"/> the engine was created with,
-    /// so an engine created for ASIO lists ASIO devices rather than WASAPI endpoints.
+    /// Output devices of the host this engine was created with, so an asio engine
+    /// lists asio devices and not wasapi endpoints.
     /// </summary>
-    /// <returns>Read-only list of output devices; never <see langword="null"/>.</returns>
-    /// <exception cref="ObjectDisposedException">Thrown when this engine has been disposed.</exception>
-    /// <exception cref="DeviceException">Thrown when the native enumeration call fails.</exception>
     public IReadOnlyList<AudioDevice> EnumerateOutputDevices()
     {
         Guard.NotDisposed(_disposed, nameof(AudioEngine));
@@ -153,17 +92,12 @@ public sealed class AudioEngine : IDisposable
             _handle.DangerousGetHandle(), out IntPtr devicePtr, out nuint count);
         ErrorCodeMapper.ThrowIfError(code, nameof(EnumerateOutputDevices));
 
-        return MarshalDeviceList(devicePtr, count);
+        return _marshalDeviceList(devicePtr, count);
     }
 
     /// <summary>
-    /// Returns all available input devices on this engine's audio host.
-    /// The enumeration respects the <see cref="HostApi"/> the engine was created with,
-    /// so an engine created for ASIO lists ASIO devices rather than WASAPI endpoints.
+    /// Same for the capture side.
     /// </summary>
-    /// <returns>Read-only list of input devices; never <see langword="null"/>.</returns>
-    /// <exception cref="ObjectDisposedException">Thrown when this engine has been disposed.</exception>
-    /// <exception cref="DeviceException">Thrown when the native enumeration call fails.</exception>
     public IReadOnlyList<AudioDevice> EnumerateInputDevices()
     {
         Guard.NotDisposed(_disposed, nameof(AudioEngine));
@@ -172,135 +106,12 @@ public sealed class AudioEngine : IDisposable
             _handle.DangerousGetHandle(), out IntPtr devicePtr, out nuint count);
         ErrorCodeMapper.ThrowIfError(code, nameof(EnumerateInputDevices));
 
-        return MarshalDeviceList(devicePtr, count);
+        return _marshalDeviceList(devicePtr, count);
     }
 
-    #endregion
-
-    #region Stream factory
-
-    /// <summary>
-    /// Opens an output stream with the given configuration and registers the audio fill callback.
-    /// The stream starts in the paused state; call <see cref="AudioOutputStream.Play"/> to begin.
-    /// </summary>
-    /// <param name="device">
-    /// The output device to use, or <see langword="null"/> to use the system default.
-    /// </param>
-    /// <param name="config">Stream parameters (sample rate, channels, format, buffer size).</param>
-    /// <param name="callback">
-    /// Called from the real-time audio thread for every buffer cycle.
-    /// Must not allocate, lock, or perform blocking I/O.
-    /// </param>
-    /// <returns>A new <see cref="AudioOutputStream"/> in the paused state.</returns>
-    /// <exception cref="ObjectDisposedException">Thrown when this engine has been disposed.</exception>
-    /// <exception cref="System.ArgumentNullException">
-    /// Thrown when <paramref name="config"/> or <paramref name="callback"/> is <see langword="null"/>.
-    /// </exception>
-    /// <exception cref="StreamException">Thrown when the stream cannot be opened.</exception>
-    public AudioOutputStream OpenOutputStream(
-        AudioDevice? device,
-        AudioStreamConfig config,
-        AudioOutputCallbackHandler callback)
+    private static unsafe IReadOnlyList<AudioDevice> _marshalDeviceList(IntPtr devicePtr, nuint count)
     {
-        Guard.NotDisposed(_disposed, nameof(AudioEngine));
-        Guard.NotNull(config, nameof(config));
-        Guard.NotNull(callback, nameof(callback));
-
-        return AudioOutputStream.Open(_handle, device, config, callback);
-    }
-
-    /// <summary>
-    /// Opens an output stream driven directly by a native multi-track mixer.
-    /// The mixer renders every buffer on the real-time audio thread itself, so no
-    /// managed callback is involved and the audio data never crosses back into
-    /// managed memory.
-    /// </summary>
-    /// <param name="mixer">
-    /// Handle to a native mixer (see <see cref="Ownaudio.Audio.Tracks.MultiTrackSession"/>).
-    /// Its sample rate and channel count must match <paramref name="config"/>.
-    /// </param>
-    /// <param name="device">
-    /// The output device to use, or <see langword="null"/> to use the system default.
-    /// </param>
-    /// <param name="config">Stream parameters (sample rate, channels, format, buffer size).</param>
-    /// <returns>A new <see cref="AudioOutputStream"/> in the paused state.</returns>
-    /// <exception cref="ObjectDisposedException">Thrown when this engine has been disposed.</exception>
-    /// <exception cref="System.ArgumentNullException">
-    /// Thrown when <paramref name="mixer"/> or <paramref name="config"/> is <see langword="null"/>.
-    /// </exception>
-    /// <exception cref="StreamException">Thrown when the stream cannot be opened.</exception>
-    public AudioOutputStream OpenMixerOutputStream(
-        MixerHandle mixer,
-        AudioDevice? device,
-        AudioStreamConfig config)
-    {
-        Guard.NotDisposed(_disposed, nameof(AudioEngine));
-        Guard.NotNull(mixer, nameof(mixer));
-        Guard.NotNull(config, nameof(config));
-
-        return AudioOutputStream.OpenMixerDriven(_handle, mixer, device, config);
-    }
-
-    /// <summary>
-    /// Opens an input stream with the given configuration and registers the capture callback.
-    /// The stream starts in the paused state; call <see cref="AudioInputStream.Play"/> to begin.
-    /// </summary>
-    /// <param name="device">
-    /// The input device to use, or <see langword="null"/> to use the system default.
-    /// </param>
-    /// <param name="config">Stream parameters (sample rate, channels, format, buffer size).</param>
-    /// <param name="callback">
-    /// Called from the real-time audio thread for every captured buffer.
-    /// Must not allocate, lock, or perform blocking I/O.
-    /// </param>
-    /// <returns>A new <see cref="AudioInputStream"/> in the paused state.</returns>
-    /// <exception cref="ObjectDisposedException">Thrown when this engine has been disposed.</exception>
-    /// <exception cref="System.ArgumentNullException">
-    /// Thrown when <paramref name="config"/> or <paramref name="callback"/> is <see langword="null"/>.
-    /// </exception>
-    /// <exception cref="StreamException">Thrown when the stream cannot be opened.</exception>
-    public AudioInputStream OpenInputStream(
-        AudioDevice? device,
-        AudioStreamConfig config,
-        AudioInputCallbackHandler callback)
-    {
-        Guard.NotDisposed(_disposed, nameof(AudioEngine));
-        Guard.NotNull(config, nameof(config));
-        Guard.NotNull(callback, nameof(callback));
-
-        return AudioInputStream.Open(_handle, device, config, callback);
-    }
-
-    #endregion
-
-    #region IDisposable
-
-    /// <summary>
-    /// Destroys the native engine context and releases the underlying handle.
-    /// All streams opened from this engine must be disposed before calling this method.
-    /// </summary>
-    public void Dispose()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
-        _handle.Dispose();
-    }
-
-    #endregion
-
-    #region Private helpers
-
-    private static unsafe IReadOnlyList<AudioDevice> MarshalDeviceList(
-        IntPtr devicePtr, nuint count)
-    {
-        if (count == 0 || devicePtr == IntPtr.Zero)
-        {
-            return Array.Empty<AudioDevice>();
-        }
+        if (count == 0 || devicePtr == IntPtr.Zero) return Array.Empty<AudioDevice>();
 
         var devices = new AudioDevice[(int)count];
 
@@ -308,9 +119,7 @@ public sealed class AudioEngine : IDisposable
         {
             NativeDeviceInfo* ptr = (NativeDeviceInfo*)devicePtr;
             for (int i = 0; i < (int)count; i++)
-            {
                 devices[i] = new AudioDevice(in ptr[i]);
-            }
         }
         finally
         {
@@ -321,4 +130,58 @@ public sealed class AudioEngine : IDisposable
     }
 
     #endregion
+
+    #region Streams
+
+    /// <summary>
+    /// Opens an output stream, paused. The callback runs on the rt thread, so no allocation,
+    /// no locking, no blocking io in there. Null device means system default.
+    /// </summary>
+    public AudioOutputStream OpenOutputStream(AudioDevice? device, AudioStreamConfig config, AudioOutputCallbackHandler callback)
+    {
+        Guard.NotDisposed(_disposed, nameof(AudioEngine));
+        Guard.NotNull(config, nameof(config));
+        Guard.NotNull(callback, nameof(callback));
+
+        return AudioOutputStream.Open(_handle, device, config, callback);
+    }
+
+    /// <summary>
+    /// Output stream driven by a native mixer. Rendering happens on the audio thread itself,
+    /// no managed callback, the samples never come back to managed memory. The mixer rate and
+    /// channel count has to line up with the config.
+    /// </summary>
+    public AudioOutputStream OpenMixerOutputStream(MixerHandle mixer, AudioDevice? device, AudioStreamConfig config)
+    {
+        Guard.NotDisposed(_disposed, nameof(AudioEngine));
+        Guard.NotNull(mixer, nameof(mixer));
+        Guard.NotNull(config, nameof(config));
+
+        return AudioOutputStream.OpenMixerDriven(_handle, mixer, device, config);
+    }
+
+    /// <summary>
+    /// Opens a capture stream, paused. Same rt rules for the callback as on the output side.
+    /// </summary>
+    public AudioInputStream OpenInputStream(AudioDevice? device, AudioStreamConfig config, AudioInputCallbackHandler callback)
+    {
+        Guard.NotDisposed(_disposed, nameof(AudioEngine));
+        Guard.NotNull(config, nameof(config));
+        Guard.NotNull(callback, nameof(callback));
+
+        return AudioInputStream.Open(_handle, device, config, callback);
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Tears down the native context. Dispose every stream opened from here first.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+
+        _disposed = true;
+        _handle.Dispose();
+    }
 }

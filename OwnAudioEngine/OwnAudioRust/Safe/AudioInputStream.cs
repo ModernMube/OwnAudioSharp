@@ -10,53 +10,29 @@ using Ownaudio.Safe.Validation;
 namespace Ownaudio.Safe;
 
 /// <summary>
-/// Safe wrapper for a native input audio stream opened via <c>ownaudio_v1_open_input_stream</c>.
+/// Safe wrapper around a native capture stream. You get one from AudioEngine.OpenInputStream,
+/// paused, call Play to start. Play/Pause/Dispose are not meant to race each other.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Obtain instances through <see cref="AudioEngine.OpenInputStream"/>.
-/// The stream is created in the paused state; call <see cref="Play"/> to start capturing.
-/// </para>
-/// <para>
-/// <b>Thread safety:</b> <see cref="Play"/>, <see cref="Pause"/>, and <see cref="Dispose"/>
-/// must not be called concurrently on the same instance.
-/// </para>
-/// </remarks>
 public sealed class AudioInputStream : IDisposable
 {
-    #region Fields
-
     private readonly AudioInputStreamHandle _handle;
     private readonly AudioInputCallbackMarshaller _marshaller;
     private bool _disposed;
 
-    #endregion
-
-    #region Events
-
     /// <summary>
-    /// Raised on a <see cref="System.Threading.ThreadPool"/> thread whenever the user-supplied
-    /// capture callback throws an unhandled exception.
-    /// The exception is swallowed at the FFI boundary so the real-time audio thread is unaffected.
+    /// Fires on a threadpool thread when the capture callback throws. We swallow it at the ffi
+    /// boundary so the rt thread keeps running.
     /// </summary>
     public event EventHandler<Exception>? CallbackError;
 
-    #endregion
-
-    #region Construction
-
-    private AudioInputStream(
-        AudioInputStreamHandle handle,
-        AudioInputCallbackMarshaller marshaller)
+    private AudioInputStream(AudioInputStreamHandle handle, AudioInputCallbackMarshaller marshaller)
     {
         _handle     = handle;
         _marshaller = marshaller;
         _marshaller.CallbackError += (_, ex) => CallbackError?.Invoke(this, ex);
     }
 
-    /// <summary>
-    /// Opens a native input stream. Called exclusively by <see cref="AudioEngine"/>.
-    /// </summary>
+    // engine only
     internal static unsafe AudioInputStream Open(
         AudioEngineHandle engine,
         AudioDevice? device,
@@ -66,9 +42,7 @@ public sealed class AudioInputStream : IDisposable
         var marshaller = new AudioInputCallbackMarshaller(callback);
 
         NativeStreamConfig nativeConfig = config.ToNative();
-        IntPtr deviceNamePtr = device is not null
-            ? Marshal.StringToCoTaskMemUTF8(device.Name)
-            : IntPtr.Zero;
+        IntPtr deviceNamePtr = device is not null ? Marshal.StringToCoTaskMemUTF8(device.Name) : IntPtr.Zero;
 
         int code;
         IntPtr rawStream;
@@ -85,10 +59,7 @@ public sealed class AudioInputStream : IDisposable
         }
         finally
         {
-            if (deviceNamePtr != IntPtr.Zero)
-            {
-                Marshal.FreeCoTaskMem(deviceNamePtr);
-            }
+            if (deviceNamePtr != IntPtr.Zero) Marshal.FreeCoTaskMem(deviceNamePtr);
         }
 
         if (code != (int)NativeErrorCode.Success)
@@ -103,16 +74,9 @@ public sealed class AudioInputStream : IDisposable
         return new AudioInputStream(handle, marshaller);
     }
 
-    #endregion
-
-    #region Capture control
-
     /// <summary>
-    /// Starts or resumes audio capture on this stream.
-    /// The capture callback will begin receiving calls on the real-time thread.
+    /// Starts or resumes capture, the callback begins firing on the rt thread.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown when this stream has been disposed.</exception>
-    /// <exception cref="StreamException">Thrown when the native play call fails.</exception>
     public void Play()
     {
         Guard.NotDisposed(_disposed, nameof(AudioInputStream));
@@ -122,11 +86,8 @@ public sealed class AudioInputStream : IDisposable
     }
 
     /// <summary>
-    /// Pauses audio capture without destroying the stream.
-    /// The capture callback will stop being called until <see cref="Play"/> is invoked again.
+    /// Stops the callback but keeps the stream alive, Play picks it up again.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown when this stream has been disposed.</exception>
-    /// <exception cref="StreamException">Thrown when the native pause call fails.</exception>
     public void Pause()
     {
         Guard.NotDisposed(_disposed, nameof(AudioInputStream));
@@ -135,27 +96,16 @@ public sealed class AudioInputStream : IDisposable
         ErrorCodeMapper.ThrowIfError(code, nameof(Pause));
     }
 
-    #endregion
-
-    #region IDisposable
-
     /// <summary>
-    /// Destroys the native stream and releases the callback delegate pin.
-    /// Safe to call multiple times.
+    /// Native stream goes first so the callback is quiet before we drop the delegate pin.
+    /// Idempotent.
     /// </summary>
     public void Dispose()
     {
-        if (_disposed)
-        {
-            return;
-        }
+        if (_disposed) return;
 
         _disposed = true;
-
-        // Destroy the native stream first so the callback stops firing before the pin is freed.
         _handle.Dispose();
         _marshaller.Dispose();
     }
-
-    #endregion
 }

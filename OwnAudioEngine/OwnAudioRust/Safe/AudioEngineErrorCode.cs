@@ -1,68 +1,65 @@
 namespace Ownaudio.Safe;
 
 /// <summary>
-/// Error codes returned by the native Rust audio engine, surfaced as a public managed enum.
-/// Values mirror <c>OwnAudioErrorCode</c> in <c>ownaudio_ffi.h</c> — changes are a breaking
-/// FFI ABI change and require a major version bump.
+/// Error codes coming back from the rust engine. The numbers mirror OwnAudioErrorCode
+/// in ownaudio_ffi.h, touching them is a breaking abi change.
 /// </summary>
 public enum AudioEngineErrorCode
 {
-    /// <summary>Operation succeeded.</summary>
+    /// All good.
     Success = 0,
 
-    /// <summary>No audio device matched the requested criteria.</summary>
+    /// Nothing matched the requested device.
     DeviceNotFound = 1,
 
-    /// <summary>The OS audio subsystem failed to enumerate devices.</summary>
+    /// The os side failed to list the devices.
     DeviceEnumerationFailed = 2,
 
-    /// <summary>The requested stream parameters are not supported by the device.</summary>
+    /// The device does not support these stream params.
     UnsupportedConfig = 3,
 
-    /// <summary>The audio stream could not be built.</summary>
+    /// Could not build the stream.
     StreamBuildFailed = 4,
 
-    /// <summary>Starting or stopping the stream failed.</summary>
+    /// Start or stop failed on an existing stream.
     StreamControlFailed = 5,
 
-    /// <summary>A required pointer argument was null.</summary>
+    /// A pointer argument was null.
     NullPointer = 6,
 
-    /// <summary>The supplied handle does not point to a valid object.</summary>
+    /// The handle does not point to a live object.
     InvalidHandle = 7,
 
-    /// <summary>A panic was caught inside the FFI boundary.</summary>
+    /// A panic got caught at the ffi boundary.
     InternalPanic = 8,
 
-    /// <summary>An internal error not covered by the above codes.</summary>
+    /// Anything else that went wrong inside.
     InternalError = 9,
 
     /// <summary>
-    /// The requested host API (e.g. ASIO) is not compiled into this binary,
-    /// or no compatible driver is installed on this machine.
+    /// The host api (asio for example) is not compiled into this binary,
+    /// or there is no compatible driver on the machine.
     /// </summary>
     HostApiNotAvailable = 10,
 
-    /// <summary>
-    /// The ASIO host API is compiled in but no ASIO driver is installed on this machine.
-    /// </summary>
+    /// Asio is compiled in but no driver is installed here.
     AsioDriverNotFound = 11,
 
     /// <summary>
-    /// The ABI version reported by the loaded native binary does not match the version
-    /// the managed layer was compiled against.  Reinstall the OwnAudioSharp NuGet package.
+    /// The native binary reports a different abi version than the managed side
+    /// was built against. Reinstall the nuget package.
     /// </summary>
     AbiVersionMismatch = 12,
 
-    /// <summary>The audio file could not be opened or its format could not be probed.</summary>
+    /// Could not open the file or probe its format.
     DecoderOpenFailed = 13,
 
-    /// <summary>No decoder backend supports the file's container or codec.</summary>
+    /// No backend handles this container or codec.
     DecoderUnsupportedFormat = 14,
 
-    /// <summary>An error occurred while decoding audio data from the stream.</summary>
+    /// Decoding blew up mid stream.
     DecoderReadFailed = 15,
 
-    /// <summary>Seeking within the audio stream failed.</summary>
+    /// Seek failed inside the stream.
     DecoderSeekFailed = 16,
 }
