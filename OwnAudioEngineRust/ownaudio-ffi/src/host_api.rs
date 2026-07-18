@@ -5,8 +5,9 @@
 ///
 /// Not all variants are available on every platform or binary build:
 /// - `Asio` requires Windows and a build compiled with `--features asio`.
-/// - `CoreAudio` is only meaningful on macOS.
+/// - `CoreAudio` covers both macOS and iOS.
 /// - `Alsa` is only meaningful on Linux.
+/// - `AAudio` is only meaningful on Android (8.0+).
 ///
 /// Requesting an unavailable variant returns
 /// [`OwnAudioErrorCode::HostApiNotAvailable`] (10) or
@@ -19,10 +20,12 @@ pub enum OwnHostApi {
     /// Steinberg ASIO — low-latency Windows audio for professional interfaces.
     /// Requires `--features asio` at build time and an installed ASIO driver.
     Asio = 1,
-    /// Apple Core Audio — the default macOS audio backend.
+    /// Apple Core Audio — the default backend on macOS and on iOS.
     CoreAudio = 2,
     /// Advanced Linux Sound Architecture — the default Linux audio backend.
     Alsa = 3,
+    /// Android AAudio — the default Android audio backend on 8.0 and up.
+    AAudio = 4,
 }
 
 /// Resolves `OwnHostApi` to a `cpal::Host`.
@@ -60,12 +63,12 @@ pub(crate) fn resolve_host(api: OwnHostApi) -> Result<cpal::Host, i32> {
         }
 
         OwnHostApi::CoreAudio => {
-            #[cfg(target_os = "macos")]
+            #[cfg(target_vendor = "apple")]
             {
                 cpal::host_from_id(cpal::HostId::CoreAudio)
                     .map_err(|_| OwnAudioErrorCode::HostApiNotAvailable as i32)
             }
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(not(target_vendor = "apple"))]
             {
                 Err(OwnAudioErrorCode::HostApiNotAvailable as i32)
             }
@@ -78,6 +81,18 @@ pub(crate) fn resolve_host(api: OwnHostApi) -> Result<cpal::Host, i32> {
                     .map_err(|_| OwnAudioErrorCode::HostApiNotAvailable as i32)
             }
             #[cfg(not(target_os = "linux"))]
+            {
+                Err(OwnAudioErrorCode::HostApiNotAvailable as i32)
+            }
+        }
+
+        OwnHostApi::AAudio => {
+            #[cfg(target_os = "android")]
+            {
+                cpal::host_from_id(cpal::HostId::AAudio)
+                    .map_err(|_| OwnAudioErrorCode::HostApiNotAvailable as i32)
+            }
+            #[cfg(not(target_os = "android"))]
             {
                 Err(OwnAudioErrorCode::HostApiNotAvailable as i32)
             }

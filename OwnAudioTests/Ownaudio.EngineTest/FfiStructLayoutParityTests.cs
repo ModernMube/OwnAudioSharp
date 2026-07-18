@@ -135,6 +135,7 @@ public class FfiStructLayoutParityTests
         Assert.AreEqual(1, (int)NativeHostApi.Asio);
         Assert.AreEqual(2, (int)NativeHostApi.CoreAudio);
         Assert.AreEqual(3, (int)NativeHostApi.Alsa);
+        Assert.AreEqual(4, (int)NativeHostApi.AAudio);
     }
 #pragma warning restore MSTEST0032
 }

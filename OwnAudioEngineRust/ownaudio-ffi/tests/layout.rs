@@ -221,6 +221,7 @@ fn host_api_discriminants() {
     assert_eq!(OwnHostApi::Asio as i32, 1);
     assert_eq!(OwnHostApi::CoreAudio as i32, 2);
     assert_eq!(OwnHostApi::Alsa as i32, 3);
+    assert_eq!(OwnHostApi::AAudio as i32, 4);
 }
 
 // ---------------------------------------------------------------------------

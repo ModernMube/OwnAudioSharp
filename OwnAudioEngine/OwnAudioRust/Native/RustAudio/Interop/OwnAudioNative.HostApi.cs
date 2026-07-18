@@ -15,11 +15,14 @@ internal enum NativeHostApi : int
     /// <summary>Steinberg ASIO — requires <c>--features asio</c> and an installed driver.</summary>
     Asio = 1,
 
-    /// <summary>Apple Core Audio — the default macOS audio backend.</summary>
+    /// <summary>Apple Core Audio — the default backend on macOS and on iOS.</summary>
     CoreAudio = 2,
 
     /// <summary>Advanced Linux Sound Architecture — the default Linux audio backend.</summary>
     Alsa = 3,
+
+    /// <summary>Android AAudio — the default Android backend on 8.0 and up.</summary>
+    AAudio = 4,
 }
 
 internal static unsafe partial class OwnAudioNative

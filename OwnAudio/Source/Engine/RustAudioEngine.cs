@@ -540,6 +540,7 @@ internal sealed class RustAudioEngine : IAudioEngine
         EngineHostType.COREAUDIO => Ownaudio.Audio.HostApi.CoreAudio,
         EngineHostType.ALSA => Ownaudio.Audio.HostApi.Alsa,
         EngineHostType.WASAPI => Ownaudio.Audio.HostApi.Wasapi,
+        EngineHostType.AAUDIO => Ownaudio.Audio.HostApi.AAudio,
         _ => null,
     };
 

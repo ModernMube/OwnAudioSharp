@@ -131,8 +131,9 @@ typedef enum OwnAudioSampleFormat {
  *
  * Not all variants are available on every platform or binary build:
  * - `Asio` requires Windows and a build compiled with `--features asio`.
- * - `CoreAudio` is only meaningful on macOS.
+ * - `CoreAudio` covers both macOS and iOS.
  * - `Alsa` is only meaningful on Linux.
+ * - `AAudio` is only meaningful on Android (8.0+).
  *
  * Requesting an unavailable variant returns
  * [`OwnAudioErrorCode::HostApiNotAvailable`] (10) or
@@ -149,13 +150,17 @@ typedef enum OwnHostApi {
      */
     Asio = 1,
     /**
-     * Apple Core Audio — the default macOS audio backend.
+     * Apple Core Audio — the default backend on macOS and on iOS.
      */
     CoreAudio = 2,
     /**
      * Advanced Linux Sound Architecture — the default Linux audio backend.
      */
     Alsa = 3,
+    /**
+     * Android AAudio — the default Android audio backend on 8.0 and up.
+     */
+    AAudio = 4,
 } OwnHostApi;
 
 /**
