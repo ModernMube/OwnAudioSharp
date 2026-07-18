@@ -5,32 +5,31 @@ using System.Runtime.CompilerServices;
 namespace OwnaudioNET.Dsp;
 
 /// <summary>
-/// AOT-compatible, pure-managed FFT.
-/// Power-of-two sizes use the Cooley-Tukey radix-2 DIT algorithm.
-/// Arbitrary sizes (e.g. NFft=6144) use Bluestein's Chirp-Z algorithm,
-/// which internally pads to the next power of two.
-/// Both Forward and Inverse are unnormalized (matching FourierOptions.NoScaling).
+/// Pure managed, AOT-safe FFT. Power-of-two lengths go through plain radix-2
+/// Cooley-Tukey; anything else (NFft=6144 and friends) falls back to Bluestein,
+/// which pads up to a power of two internally. Nothing is normalized here —
+/// same deal as FourierOptions.NoScaling.
 /// </summary>
 public static class OwnAudioFft
 {
     #region Public Transform Methods
 
     /// <summary>
-    /// In-place forward FFT. Handles any positive length (not just powers of two).
+    /// Forward FFT, in place, any positive length.
     /// </summary>
     public static void Forward(Span<Complex> data)
     {
-        if (!IsPowerOfTwo(data.Length))
+        if (!_isPow2(data.Length))
         {
-            BluesteinForward(data);
+            _bluesteinForward(data);
             return;
         }
-        BitReversePermute(data);
-        ButterflyStages(data);
+        _bitReversePermute(data);
+        _butterflyStages(data);
     }
 
     /// <summary>
-    /// In-place inverse FFT (unnormalized). Callers must divide by N afterward.
+    /// Inverse FFT, in place and unnormalized — divide by N yourself afterwards.
     /// </summary>
     public static void Inverse(Span<Complex> data)
     {
@@ -52,17 +51,20 @@ public static class OwnAudioFft
     #region Private — Power-of-2 helpers
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsPowerOfTwo(int n) => n > 0 && (n & (n - 1)) == 0;
+    private static bool _isPow2(int n) => n > 0 && (n & (n - 1)) == 0;
 
-    private static int NextPowerOfTwo(int n)
+    private static int _nextPow2(int n)
     {
         int p = 1;
         while (p < n) p <<= 1;
         return p;
     }
 
+    /// <summary>
+    /// Shuffles samples into bit-reversed order so the butterflies can run in place.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void BitReversePermute(Span<Complex> data)
+    private static void _bitReversePermute(Span<Complex> data)
     {
         int n = data.Length;
         int j = 0;
@@ -77,23 +79,25 @@ public static class OwnAudioFft
             }
             j ^= bit;
 
-            if (i < j)
-                (data[i], data[j]) = (data[j], data[i]);
+            if (i < j) (data[i], data[j]) = (data[j], data[i]);
         }
     }
 
-    private static void ButterflyStages(Span<Complex> data)
+    /// <summary>
+    /// The actual radix-2 DIT passes, doubling the block length each round.
+    /// </summary>
+    private static void _butterflyStages(Span<Complex> data)
     {
         int n = data.Length;
         for (int len = 2; len <= n; len <<= 1)
         {
             double angle = -2.0 * Math.PI / len;
-            Complex wLen = new(Math.Cos(angle), Math.Sin(angle));
+            Complex wLen = new Complex(Math.Cos(angle), Math.Sin(angle));
+            int half = len >> 1;
 
             for (int i = 0; i < n; i += len)
             {
                 Complex w = Complex.One;
-                int half = len >> 1;
 
                 for (int j = 0; j < half; j++)
                 {
@@ -111,45 +115,42 @@ public static class OwnAudioFft
 
     #region Private — Bluestein (Chirp-Z) for arbitrary N
 
-    // One cached state per thread; recreated only when N changes.
+    /// <summary>
+    /// One cached state per thread, rebuilt only when N changes.
+    /// </summary>
     [ThreadStatic]
     private static BluesteinState? _bluesteinState;
 
-    private static void BluesteinForward(Span<Complex> data)
+    private static void _bluesteinForward(Span<Complex> data)
     {
         int n = data.Length;
-        BluesteinState state = GetOrCreateBluesteinState(n);
+        BluesteinState state = _getBluesteinState(n);
         Complex[] a = state.A;
+        int m = state.M;
 
-        // a[k] = x[k] * W[k],  W[k] = exp(-πi·k²/N)
         for (int k = 0; k < n; k++)
             a[k] = data[k] * state.Chirp[k];
 
-        // Zero the padding region (reuse buffer: must clear tail each call)
-        Array.Clear(a, n, state.M - n);
+        Array.Clear(a, n, m - n);
 
-        // FFT of a (power-of-2 size M)
-        BitReversePermute(a.AsSpan(0, state.M));
-        ButterflyStages(a.AsSpan(0, state.M));
+        _bitReversePermute(a.AsSpan(0, m));
+        _butterflyStages(a.AsSpan(0, m));
 
-        // Pointwise multiply: a *= BExtFft  (BExtFft is pre-computed FFT of h_ext)
         Complex[] bFft = state.BExtFft;
-        for (int k = 0; k < state.M; k++)
+        for (int k = 0; k < m; k++)
             a[k] *= bFft[k];
 
-        // IFFT via conjugate-forward-conjugate, then divide by M
-        for (int k = 0; k < state.M; k++) a[k] = Complex.Conjugate(a[k]);
-        BitReversePermute(a.AsSpan(0, state.M));
-        ButterflyStages(a.AsSpan(0, state.M));
-        double invM = 1.0 / state.M;
-        for (int k = 0; k < state.M; k++) a[k] = Complex.Conjugate(a[k]) * invM;
+        double invM = 1.0 / m;
+        for (int k = 0; k < m; k++) a[k] = Complex.Conjugate(a[k]);
+        _bitReversePermute(a.AsSpan(0, m));
+        _butterflyStages(a.AsSpan(0, m));
+        for (int k = 0; k < m; k++) a[k] = Complex.Conjugate(a[k]) * invM;
 
-        // DFT[k] = W[k] · c[k]
         for (int k = 0; k < n; k++)
             data[k] = state.Chirp[k] * a[k];
     }
 
-    private static BluesteinState GetOrCreateBluesteinState(int n)
+    private static BluesteinState _getBluesteinState(int n)
     {
         if (_bluesteinState == null || _bluesteinState.N != n)
             _bluesteinState = new BluesteinState(n);
@@ -157,42 +158,54 @@ public static class OwnAudioFft
     }
 
     /// <summary>
-    /// Pre-computed and cached data for a specific non-power-of-2 FFT size N.
+    /// Everything we can precompute for one particular non-power-of-2 size.
+    /// Built once per N, then reused for every call on that thread.
     /// </summary>
     private sealed class BluesteinState
     {
         public readonly int N;
-        public readonly int M;           // next power of 2 >= 2N-1
-        public readonly Complex[] Chirp; // W[k] = exp(-πi·k²/N), length N
-        public readonly Complex[] A;     // reusable work buffer, length M
-        public readonly Complex[] BExtFft; // pre-computed FFT of h_ext, length M
+
+        /// <summary>
+        /// Next power of two at or above 2N-1.
+        /// </summary>
+        public readonly int M;
+
+        /// <summary>
+        /// W[k] = exp(-pi·i·k^2/N), N long.
+        /// </summary>
+        public readonly Complex[] Chirp;
+
+        /// <summary>
+        /// Scratch we convolve in, M long. Reused, so the tail needs clearing per call.
+        /// </summary>
+        public readonly Complex[] A;
+
+        /// <summary>
+        /// FFT of the extended chirp kernel, M long.
+        /// </summary>
+        public readonly Complex[] BExtFft;
 
         public BluesteinState(int n)
         {
             N = n;
-            M = NextPowerOfTwo(2 * n - 1);
+            M = _nextPow2(2 * n - 1);
             Chirp    = new Complex[n];
             A        = new Complex[M];
-            BExtFft  = new Complex[M]; // zero-initialised
+            BExtFft  = new Complex[M];
 
-            // Chirp[k] = exp(-πi·k²/N)
             for (int k = 0; k < n; k++)
             {
                 double theta = -Math.PI * k * k / n;
                 Chirp[k] = new Complex(Math.Cos(theta), Math.Sin(theta));
             }
 
-            // h[k] = conj(Chirp[k]) = exp(+πi·k²/N); h is even so h[-k]=h[k].
-            // Lay out h_ext: h_ext[k]=h[k] for k=0..N-1,
-            //                h_ext[M-k]=h[k] for k=1..N-1, rest zero.
             for (int k = 0; k < n; k++)
                 BExtFft[k] = Complex.Conjugate(Chirp[k]);
             for (int k = 1; k < n; k++)
                 BExtFft[M - k] = BExtFft[k];
 
-            // Pre-compute FFT of h_ext (reused for every call with this N)
-            BitReversePermute(BExtFft.AsSpan(0, M));
-            ButterflyStages(BExtFft.AsSpan(0, M));
+            _bitReversePermute(BExtFft.AsSpan(0, M));
+            _butterflyStages(BExtFft.AsSpan(0, M));
         }
     }
 

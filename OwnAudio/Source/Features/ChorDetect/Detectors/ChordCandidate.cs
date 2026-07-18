@@ -1,41 +1,34 @@
 namespace OwnaudioNET.Features.OwnChordDetect.Detectors
 {
     /// <summary>
-    /// A ranked chord hypothesis for one analysis window, produced by
-    /// <see cref="ChordDetector.GetChordCandidates"/> and consumed by the Viterbi
-    /// progression decoder. Carries both the raw cosine similarity (for unbiased
-    /// confidence reporting) and the perceptual score (for ranking and decoding).
+    /// One chord guess for a window. Keeps the raw cosine for honest confidence numbers
+    /// and the tweaked score for ranking / Viterbi.
     /// </summary>
     internal readonly struct ChordCandidate
     {
         /// <summary>
-        /// The chord name this candidate represents (e.g. "Cmaj7").
+        /// Chord name, e.g. "Cmaj7".
         /// </summary>
         internal readonly string Name;
 
         /// <summary>
-        /// The raw cosine similarity between the window chromagram and the chord template.
+        /// Plain cosine between window chroma and template.
         /// </summary>
         internal readonly float Cosine;
 
         /// <summary>
-        /// The perceptual ranking score (cosine adjusted by parsimony, diatonic and bass-root priors).
+        /// Cosine after the parsimony / diatonic / bass-root priors.
         /// </summary>
         internal readonly float Score;
 
         /// <summary>
-        /// The root pitch class of the chord (0-11), used for musically weighted transitions
-        /// (circle-of-fifths distance) in the progression decoder.
+        /// Root as pitch class 0-11, the decoder needs it for circle-of-fifths distance.
         /// </summary>
         internal readonly int RootPitchClass;
 
         /// <summary>
-        /// Initializes a new chord candidate.
+        /// All four fields at once.
         /// </summary>
-        /// <param name="name">The chord name.</param>
-        /// <param name="cosine">The raw cosine similarity.</param>
-        /// <param name="score">The perceptual ranking score.</param>
-        /// <param name="rootPitchClass">The root pitch class of the chord (0-11).</param>
         internal ChordCandidate(string name, float cosine, float score, int rootPitchClass)
         {
             Name = name;

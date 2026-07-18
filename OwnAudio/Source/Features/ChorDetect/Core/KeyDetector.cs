@@ -1,48 +1,42 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using OwnaudioNET.Features.Extensions;
 
 namespace OwnaudioNET.Features.OwnChordDetect.Core
 {
     /// <summary>
-    /// Represents a musical key with its signature and note naming preferences.
+    /// A key with its signature and how it likes its notes spelled.
     /// </summary>
     public class MusicalKey
     {
         /// <summary>
-        /// Gets the name of the key (e.g., "C", "F#", "Bb").
+        /// "C", "F#", "Bbm" and friends.
         /// </summary>
         public string KeyName { get; }
 
         /// <summary>
-        /// Gets a value indicating whether this is a major key (true) or minor key (false).
+        /// True for major, false for minor.
         /// </summary>
         public bool IsMajor { get; }
 
         /// <summary>
-        /// Gets the number of sharps in the key signature (0-7).
+        /// Sharps in the signature, 0-7.
         /// </summary>
         public int Sharps { get; }
 
         /// <summary>
-        /// Gets the number of flats in the key signature (0-7).
+        /// Flats in the signature, 0-7.
         /// </summary>
         public int Flats { get; }
 
         /// <summary>
-        /// Gets the array of preferred note names for this key, determining whether to use sharps or flats.
+        /// The 12 note names to use here — decides sharps vs flats everywhere downstream.
         /// </summary>
         public string[] PreferredNoteNames { get; }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="MusicalKey"/> class.
+        /// Everything gets passed in, nothing is derived here.
         /// </summary>
-        /// <param name="keyName">The name of the key (e.g., "C", "F#", "Bb").</param>
-        /// <param name="isMajor">True if this is a major key, false if minor.</param>
-        /// <param name="sharps">The number of sharps in the key signature (0-7).</param>
-        /// <param name="flats">The number of flats in the key signature (0-7).</param>
-        /// <param name="preferredNoteNames">The array of preferred note names for this key.</param>
         public MusicalKey(string keyName, bool isMajor, int sharps, int flats, string[] preferredNoteNames)
         {
             KeyName = keyName;
@@ -53,39 +47,34 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
         }
 
         /// <summary>
-        /// Returns a string representation of the musical key in the format "KeyName major/minor".
+        /// "C major" / "A minor".
         /// </summary>
-        /// <returns>A string representation of the musical key.</returns>
         public override string ToString() => $"{KeyName} {(IsMajor ? "major" : "minor")}";
     }
 
     /// <summary>
-    /// A musical key active over a time span of the song, produced by the modulation-aware
-    /// key timeline detection. Songs without modulation yield a single segment.
+    /// A key holding for one stretch of the song. No modulation means one single segment.
     /// </summary>
     internal sealed class TimedKey
     {
         /// <summary>
-        /// The start time of the key segment in seconds.
+        /// Segment start, seconds.
         /// </summary>
         internal float StartTime { get; }
 
         /// <summary>
-        /// The end time of the key segment in seconds.
+        /// Segment end, seconds.
         /// </summary>
         internal float EndTime { get; }
 
         /// <summary>
-        /// The musical key active in this segment.
+        /// What's in force here.
         /// </summary>
         internal MusicalKey Key { get; }
 
         /// <summary>
-        /// Initializes a new timed key segment.
+        /// Span plus key.
         /// </summary>
-        /// <param name="startTime">The start time of the segment in seconds.</param>
-        /// <param name="endTime">The end time of the segment in seconds.</param>
-        /// <param name="key">The musical key active in the segment.</param>
         internal TimedKey(float startTime, float endTime, MusicalKey key)
         {
             StartTime = startTime;
@@ -94,79 +83,68 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
         }
 
         /// <summary>
-        /// Returns a string representation of the timed key segment.
+        /// Span and key, for the log.
         /// </summary>
-        /// <returns>A formatted string containing the time span and key.</returns>
         public override string ToString() => $"{StartTime:F1}s-{EndTime:F1}s: {Key}";
     }
 
     /// <summary>
-    /// Detects the musical key of a song using the Krumhansl-Schmuckler algorithm.
+    /// Key detection the Krumhansl-Schmuckler way: correlate the pitch class histogram
+    /// against the 30 key profiles and take the winner.
     /// </summary>
     public class KeyDetector
     {
-        /// <summary>
-        /// Krumhansl-Schmuckler major key profile weights for each pitch class.
-        /// </summary>
-        private static readonly float[] MajorProfile =
+        private static readonly float[] _majorProfile =
         {
             6.35f, 2.23f, 3.48f, 2.33f, 4.38f, 4.09f, 2.52f, 5.19f, 2.39f, 3.66f, 2.29f, 2.88f
         };
 
-        /// <summary>
-        /// Krumhansl-Schmuckler minor key profile weights for each pitch class.
-        /// </summary>
-        private static readonly float[] MinorProfile =
+        private static readonly float[] _minorProfile =
         {
             6.33f, 2.68f, 3.52f, 5.38f, 2.60f, 3.53f, 2.54f, 4.75f, 3.98f, 2.69f, 3.34f, 3.17f
         };
 
         /// <summary>
-        /// Key definitions with note naming preferences, including name, major/minor mode, flat preference, and tonic pitch class.
+        /// Every key we know, with its spelling preference and tonic pitch class.
         /// </summary>
-        private static readonly (string name, bool isMajor, bool useFlats, int tonic)[] KeyDefinitions =
+        private static readonly (string name, bool isMajor, bool useFlats, int tonic)[] _keyDefs =
         {
-            // Major keys with sharps
             ("C", true, false, 0), ("G", true, false, 7), ("D", true, false, 2), ("A", true, false, 9),
             ("E", true, false, 4), ("B", true, false, 11), ("F#", true, false, 6), ("C#", true, false, 1),
-            // Major keys with flats
+
             ("F", true, true, 5), ("Bb", true, true, 10), ("Eb", true, true, 3), ("Ab", true, true, 8),
             ("Db", true, true, 1), ("Gb", true, true, 6), ("Cb", true, true, 11),
-            // Minor keys with sharps
+
             ("Am", false, false, 9), ("Em", false, false, 4), ("Bm", false, false, 11), ("F#m", false, false, 6),
             ("C#m", false, false, 1), ("G#m", false, false, 8), ("D#m", false, false, 3), ("A#m", false, false, 10),
-            // Minor keys with flats
+
             ("Dm", false, true, 2), ("Gm", false, true, 7), ("Cm", false, true, 0), ("Fm", false, true, 5),
             ("Bbm", false, true, 10), ("Ebm", false, true, 3), ("Abm", false, true, 8)
         };
 
-        /// <summary>
-        /// Note names using sharp accidentals in chromatic order starting from C.
-        /// </summary>
-        private static readonly string[] SharpNames = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+        private static readonly string[] _sharpNames = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+        private static readonly string[] _flatNames = { "C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B" };
+
+        private static readonly string[] _sharpOrder = { "C", "G", "D", "A", "E", "B", "F#", "C#" };
+        private static readonly string[] _minorSharpOrder = { "Am", "Em", "Bm", "F#m", "C#m", "G#m", "D#m", "A#m" };
+        private static readonly string[] _flatOrder = { "C", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb" };
+        private static readonly string[] _minorFlatOrder = { "Am", "Dm", "Gm", "Cm", "Fm", "Bbm", "Ebm", "Abm" };
 
         /// <summary>
-        /// Note names using flat accidentals in chromatic order starting from C.
+        /// Global key of the whole note list. Falls back to C major when there's nothing to look at.
         /// </summary>
-        private static readonly string[] FlatNames = { "C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B" };
-
-        /// <summary>
-        /// Detects the musical key from a list of notes using the Krumhansl-Schmuckler algorithm.
-        /// </summary>
-        /// <param name="notes">The list of notes to analyze for key detection.</param>
-        /// <returns>The detected musical key with the highest correlation score.</returns>
         public MusicalKey DetectKey(List<Note> notes)
         {
-            if (!notes.Any())
-                return CreateKey("C", true, false, 0);
+            if (notes.Count == 0)
+                return _createKey("C", true, false, 0);
 
-            var chromagram = ComputeChromagram(notes);
-            var bestKey = KeyDefinitions[0];
+            var chromagram = _chromagram(notes);
+            var bestKey = _keyDefs[0];
             var bestCorrelation = float.MinValue;
 
-            foreach (var keyDef in KeyDefinitions)
+            foreach (var keyDef in _keyDefs)
             {
-                var correlation = ComputeKeyCorrelation(chromagram, keyDef);
+                var correlation = _keyCorrelation(chromagram, keyDef);
                 if (correlation > bestCorrelation)
                 {
                     bestCorrelation = correlation;
@@ -174,50 +152,36 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
                 }
             }
 
-            return CreateKey(bestKey.name, bestKey.isMajor, bestKey.useFlats, bestKey.tonic);
+            return _createKey(bestKey.name, bestKey.isMajor, bestKey.useFlats, bestKey.tonic);
         }
 
         /// <summary>
-        /// Default analysis window for modulation-aware key tracking, in seconds.
-        /// Keys need substantially more context than chords to be identified reliably,
-        /// so the window is several times the typical chord-analysis window.
+        /// Keys need way more context than chords, hence the fat window.
         /// </summary>
         private const float DefaultKeyWindowSeconds = 8f;
 
         /// <summary>
-        /// Default hop between key-analysis windows, in seconds.
+        /// Step between key windows.
         /// </summary>
         private const float DefaultKeyHopSeconds = 2f;
 
         /// <summary>
-        /// Viterbi penalty for changing key between consecutive windows. Sized so a genuine
-        /// modulation (whose correlation advantage persists over many windows) switches after
-        /// a couple of windows, while a single ambiguous window cannot flip the key.
+        /// Cost of changing key. Big enough that one shaky window can't flip it, small enough
+        /// that a real modulation gets through after a couple of windows.
         /// </summary>
         private const float KeyChangePenalty = 0.3f;
 
         /// <summary>
-        /// Additional per-change penalty weight multiplied by the circle-of-fifths distance
-        /// between the tonics of the outgoing and incoming keys. Encodes the musical prior
-        /// that modulations move mostly to closely related keys.
+        /// Extra cost per step of fifths distance — modulations mostly go somewhere close.
         /// </summary>
         private const float TonicDistanceWeight = 0.01f;
 
         /// <summary>
-        /// Detects the key timeline of a song with modulation tracking.
-        /// <para>
-        /// The song is scanned with overlapping windows; each window is correlated against all
-        /// key profiles (Krumhansl-Schmuckler), and the most plausible key sequence is decoded
-        /// with Viterbi dynamic programming in which key changes carry a musically informed
-        /// cost (base penalty plus circle-of-fifths distance between tonics). Songs without
-        /// modulation therefore yield a single segment identical to global key detection,
-        /// while genuine modulations produce a new segment at the change point.
-        /// </para>
+        /// Key timeline with modulation tracking: overlapping windows, correlation against every
+        /// profile, then Viterbi over the whole thing so changes have to earn their place.
+        /// A song that never modulates comes back as one segment, same as DetectKey would say.
         /// </summary>
-        /// <param name="notes">The notes of the song.</param>
-        /// <param name="windowSeconds">The key-analysis window length in seconds.</param>
-        /// <param name="hopSeconds">The hop between key-analysis windows in seconds.</param>
-        /// <returns>The chronological list of key segments; empty when there are no notes.</returns>
+        /// <returns>Chronological segments, empty when there are no notes.</returns>
         internal List<TimedKey> DetectKeyTimeline(
             List<Note> notes,
             float windowSeconds = DefaultKeyWindowSeconds,
@@ -225,18 +189,15 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
         {
             var timeline = new List<TimedKey>();
 
-            if (notes == null || notes.Count == 0)
-                return timeline;
+            if (notes == null || notes.Count == 0) return timeline;
 
             float duration = 0f;
             foreach (var note in notes)
             {
-                if (note.EndTime > duration)
-                    duration = note.EndTime;
+                if (note.EndTime > duration) duration = note.EndTime;
             }
 
-            if (duration <= 0f)
-                return timeline;
+            if (duration <= 0f) return timeline;
 
             if (duration <= windowSeconds)
             {
@@ -251,17 +212,17 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
             windowStarts.Add(lastStart);
 
             int windowCount = windowStarts.Count;
-            int stateCount = KeyDefinitions.Length;
+            int stateCount = _keyDefs.Length;
 
             var emissions = new float[windowCount][];
             for (int w = 0; w < windowCount; w++)
             {
                 float windowEnd = Math.Min(windowStarts[w] + windowSeconds, duration);
-                var chromagram = ComputeWindowChromagram(notes, windowStarts[w], windowEnd);
+                var chromagram = _windowChromagram(notes, windowStarts[w], windowEnd);
 
                 emissions[w] = new float[stateCount];
                 for (int s = 0; s < stateCount; s++)
-                    emissions[w][s] = ComputeKeyCorrelation(chromagram, KeyDefinitions[s]);
+                    emissions[w][s] = _keyCorrelation(chromagram, _keyDefs[s]);
             }
 
             var scores = new float[stateCount];
@@ -287,7 +248,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
                         float penalty = p == s
                             ? 0f
                             : KeyChangePenalty + TonicDistanceWeight
-                                * CircleOfFifthsDistance(KeyDefinitions[p].tonic, KeyDefinitions[s].tonic);
+                                * _fifthsDistance(_keyDefs[p].tonic, _keyDefs[s].tonic);
 
                         float candidate = previousScores[p] - penalty;
                         if (candidate > best)
@@ -328,14 +289,14 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
             {
                 if (w == windowCount || selection[w] != selection[segmentStart])
                 {
-                    var definition = KeyDefinitions[selection[segmentStart]];
+                    var definition = _keyDefs[selection[segmentStart]];
                     float end = w == windowCount
                         ? duration
                         : (windowStarts[w - 1] + windowStarts[w] + windowSeconds) * 0.5f;
 
                     timeline.Add(new TimedKey(
                         segmentStartTime, end,
-                        CreateKey(definition.name, definition.isMajor, definition.useFlats, definition.tonic)));
+                        _createKey(definition.name, definition.isMajor, definition.useFlats, definition.tonic)));
 
                     segmentStartTime = end;
                     segmentStart = w;
@@ -346,47 +307,25 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
         }
 
         /// <summary>
-        /// Computes a chromagram from the notes overlapping a time window, weighting each
-        /// pitch class by amplitude multiplied by the overlap duration with the window.
+        /// Pitch class weights for the notes touching a window, each scaled by amplitude times
+        /// how long it actually overlaps. Normalized at the end.
         /// </summary>
-        /// <param name="notes">The notes of the song.</param>
-        /// <param name="windowStart">The window start in seconds.</param>
-        /// <param name="windowEnd">The window end in seconds.</param>
-        /// <returns>A normalized 12-element pitch-class distribution.</returns>
-        private static float[] ComputeWindowChromagram(List<Note> notes, float windowStart, float windowEnd)
+        private static float[] _windowChromagram(List<Note> notes, float windowStart, float windowEnd)
         {
             var chroma = new float[12];
 
             foreach (var note in notes)
             {
                 float overlap = Math.Min(note.EndTime, windowEnd) - Math.Max(note.StartTime, windowStart);
-                if (overlap <= 0f)
-                    continue;
+                if (overlap <= 0f) continue;
 
                 chroma[note.Pitch % 12] += note.Amplitude * overlap;
             }
 
-            float sum = 0f;
-            for (int i = 0; i < 12; i++)
-                sum += chroma[i];
-
-            if (sum > 0f)
-            {
-                float inverseSum = 1f / sum;
-                for (int i = 0; i < 12; i++)
-                    chroma[i] *= inverseSum;
-            }
-
-            return chroma;
+            return _normalize(chroma);
         }
 
-        /// <summary>
-        /// Computes the distance between two pitch classes on the circle of fifths (0-6).
-        /// </summary>
-        /// <param name="pitchClassA">The first pitch class (0-11).</param>
-        /// <param name="pitchClassB">The second pitch class (0-11).</param>
-        /// <returns>The circle-of-fifths distance in the range 0-6.</returns>
-        private static int CircleOfFifthsDistance(int pitchClassA, int pitchClassB)
+        private static int _fifthsDistance(int pitchClassA, int pitchClassB)
         {
             int positionA = pitchClassA * 7 % 12;
             int positionB = pitchClassB * 7 % 12;
@@ -394,52 +333,44 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
             return Math.Min(difference, 12 - difference);
         }
 
-        /// <summary>
-        /// Creates a MusicalKey instance with appropriate note naming preferences.
-        /// </summary>
-        /// <param name="name">The name of the key.</param>
-        /// <param name="isMajor">True if this is a major key, false if minor.</param>
-        /// <param name="useFlats">True to use flat notation, false to use sharp notation.</param>
-        /// <param name="tonic">The tonic pitch class of the key (0-11).</param>
-        /// <returns>A new MusicalKey instance with the specified properties.</returns>
-        private MusicalKey CreateKey(string name, bool isMajor, bool useFlats, int tonic)
+        private MusicalKey _createKey(string name, bool isMajor, bool useFlats, int tonic)
         {
-            var noteNames = useFlats ? FlatNames : SharpNames;
-            var sharps = useFlats ? 0 : GetSharpCount(name, isMajor);
-            var flats = useFlats ? GetFlatCount(name, isMajor) : 0;
+            var noteNames = useFlats ? _flatNames : _sharpNames;
+            var sharps = useFlats ? 0 : _signatureCount(name, isMajor ? _sharpOrder : _minorSharpOrder);
+            var flats = useFlats ? _signatureCount(name, isMajor ? _flatOrder : _minorFlatOrder) : 0;
 
             return new MusicalKey(name, isMajor, sharps, flats, noteNames);
         }
 
         /// <summary>
-        /// Computes the correlation between a chromagram and a key profile.
+        /// Position in the sharp/flat order is the accidental count, 0 if we don't find it.
         /// </summary>
-        /// <param name="chromagram">The pitch class histogram of the input notes.</param>
-        /// <param name="keyDef">The key definition containing name, mode, and tonic information.</param>
-        /// <returns>The correlation coefficient between the chromagram and the key profile.</returns>
-        private float ComputeKeyCorrelation(float[] chromagram, (string name, bool isMajor, bool useFlats, int tonic) keyDef)
+        private static int _signatureCount(string keyName, string[] order)
         {
-            var profile = keyDef.isMajor ? MajorProfile : MinorProfile;
-            var rotatedProfile = RotateProfile(profile, keyDef.tonic);
-            return ComputeCorrelation(chromagram, rotatedProfile);
+            var index = Array.IndexOf(order, keyName);
+            return index >= 0 ? index : 0;
+        }
+
+        private float _keyCorrelation(float[] chromagram, (string name, bool isMajor, bool useFlats, int tonic) keyDef)
+        {
+            return _correlation(chromagram, keyDef.isMajor ? _majorProfile : _minorProfile, keyDef.tonic);
         }
 
         /// <summary>
-        /// Computes a chromagram (pitch class histogram) from a list of notes.
+        /// Pitch class histogram over the whole list, weighted by amplitude times note length.
         /// </summary>
-        /// <param name="notes">The list of notes to analyze.</param>
-        /// <returns>A normalized 12-element array representing the pitch class distribution.</returns>
-        private float[] ComputeChromagram(List<Note> notes)
+        private float[] _chromagram(List<Note> notes)
         {
             var chroma = new float[12];
 
             foreach (var note in notes)
-            {
-                var pitchClass = note.Pitch % 12;
-                var duration = note.EndTime - note.StartTime;
-                chroma[pitchClass] += note.Amplitude * duration;
-            }
+                chroma[note.Pitch % 12] += note.Amplitude * (note.EndTime - note.StartTime);
 
+            return _normalize(chroma);
+        }
+
+        private static float[] _normalize(float[] chroma)
+        {
             float sum = 0f;
             for (int i = 0; i < 12; i++)
                 sum += chroma[i];
@@ -455,28 +386,10 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
         }
 
         /// <summary>
-        /// Rotates a key profile array to align with a specific tonic pitch class.
+        /// Pearson between the chromagram and a profile rotated onto the given tonic.
+        /// The rotation is done by index so we don't build a copy per key per window.
         /// </summary>
-        /// <param name="profile">The original key profile array.</param>
-        /// <param name="steps">The number of semitones to rotate (0-11).</param>
-        /// <returns>A rotated copy of the profile array.</returns>
-        private float[] RotateProfile(float[] profile, int steps)
-        {
-            var rotated = new float[12];
-            for (int i = 0; i < 12; i++)
-            {
-                rotated[i] = profile[(i - steps + 12) % 12];
-            }
-            return rotated;
-        }
-
-        /// <summary>
-        /// Computes the Pearson correlation coefficient between two arrays.
-        /// </summary>
-        /// <param name="x">The first array for correlation calculation.</param>
-        /// <param name="y">The second array for correlation calculation.</param>
-        /// <returns>The Pearson correlation coefficient between the two arrays (-1.0 to 1.0).</returns>
-        private float ComputeCorrelation(float[] x, float[] y)
+        private float _correlation(float[] x, float[] profile, int steps)
         {
             int n = x.Length;
             float sumX = 0f, sumY = 0f, sumXY = 0f, sumX2 = 0f, sumY2 = 0f;
@@ -484,7 +397,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
             for (int i = 0; i < n; i++)
             {
                 float xi = x[i];
-                float yi = y[i];
+                float yi = profile[(i - steps + 12) % 12];
                 sumX += xi;
                 sumY += yi;
                 sumXY += xi * yi;
@@ -496,38 +409,6 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
             double denominator = Math.Sqrt(((double)n * sumX2 - (double)sumX * sumX) * ((double)n * sumY2 - (double)sumY * sumY));
 
             return denominator > 0 ? (float)(numerator / denominator) : 0f;
-        }
-
-        /// <summary>
-        /// Gets the number of sharps in the key signature for a given key name.
-        /// </summary>
-        /// <param name="keyName">The name of the key.</param>
-        /// <param name="isMajor">True if this is a major key, false if minor.</param>
-        /// <returns>The number of sharps in the key signature (0-7).</returns>
-        private int GetSharpCount(string keyName, bool isMajor)
-        {
-            var sharpOrder = new[] { "C", "G", "D", "A", "E", "B", "F#", "C#" };
-            var minorSharpOrder = new[] { "Am", "Em", "Bm", "F#m", "C#m", "G#m", "D#m", "A#m" };
-
-            var order = isMajor ? sharpOrder : minorSharpOrder;
-            var index = Array.IndexOf(order, keyName);
-            return index >= 0 ? index : 0;
-        }
-
-        /// <summary>
-        /// Gets the number of flats in the key signature for a given key name.
-        /// </summary>
-        /// <param name="keyName">The name of the key.</param>
-        /// <param name="isMajor">True if this is a major key, false if minor.</param>
-        /// <returns>The number of flats in the key signature (0-7).</returns>
-        private int GetFlatCount(string keyName, bool isMajor)
-        {
-            var flatOrder = new[] { "C", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb" };
-            var minorFlatOrder = new[] { "Am", "Dm", "Gm", "Cm", "Fm", "Bbm", "Ebm", "Abm" };
-
-            var order = isMajor ? flatOrder : minorFlatOrder;
-            var index = Array.IndexOf(order, keyName);
-            return index >= 0 ? index : 0;
         }
     }
 }

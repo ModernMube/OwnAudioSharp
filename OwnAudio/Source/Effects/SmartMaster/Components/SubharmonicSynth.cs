@@ -3,151 +3,75 @@ using System;
 namespace OwnaudioNET.Effects.SmartMaster.Components
 {
     /// <summary>
-    /// Professional subharmonic synthesizer
-    /// With phase-aligned, linear phase FIR filter and waveshaping-based harmonic generation
+    /// Sub generator: linear phase FIR bandpass into a soft clipper, blended
+    /// back over the dry signal.
     /// </summary>
     public class SubharmonicSynth
     {
-        /// <summary>
-        /// Sample rate in Hz.
-        /// </summary>
-        private readonly float _sampleRate;
-        
-        /// <summary>
-        /// Mix level (0.0 = dry, 1.0 = full effect).
-        /// </summary>
         private float _mix = 0.0f;
-        
+
         /// <summary>
-        /// Indicates whether the subharmonic synthesizer is enabled.
-        /// </summary>
-        private bool _enabled = false;
-        
-        /// <summary>
-        /// FIR bandpass filter (40-120Hz) with linear phase.
+        /// 40-120Hz bandpass, the bit we feed the waveshaper.
         /// </summary>
         private readonly FIRFilter _bandpassFilter;
-        
+
         /// <summary>
-        /// Temporary buffer for filtered signal (per channel).
+        /// Scratch space for the filtered copy, grows if a block is bigger.
         /// </summary>
         private float[] _filteredBuffer;
-        
+
+        public bool Enabled { get; set; }
+
         /// <summary>
-        /// Enable/disable subharmonic synthesis
+        /// 0.0 = dry only, 1.0 = all sub.
         /// </summary>
-        public bool Enabled 
-        { 
-            get => _enabled; 
-            set => _enabled = value; 
+        public float Mix
+        {
+            get => _mix;
+            set => _mix = Math.Clamp(value, 0.0f, 1.0f);
         }
-        
+
         /// <summary>
-        /// Mix ratio (0.0 = original signal, 1.0 = full subharmonic effect)
+        /// Sample rate in Hz. Kernel is 127 taps with a Kaiser window.
         /// </summary>
-        public float Mix 
-        { 
-            get => _mix; 
-            set => _mix = Math.Clamp(value, 0.0f, 1.0f); 
-        }
-        
-        /// <summary>
-        /// SubharmonicSynth constructor
-        /// </summary>
-        /// <param name="sampleRate">Sample rate (Hz)</param>
+        /// <param name="sampleRate"></param>
         public SubharmonicSynth(float sampleRate)
         {
-            _sampleRate = sampleRate;
-            
-            // Generate FIR bandpass kernel (40-120Hz, 127 taps, Kaiser window)
-            const int kernelSize = 127;
-            const float lowFreq = 40.0f;
-            const float highFreq = 120.0f;
-            const float kaiserBeta = 5.0f;
-            
-            float[] kernel = FIRFilter.CreateBandpassKernel(
-                sampleRate, 
-                lowFreq, 
-                highFreq, 
-                kernelSize, 
-                kaiserBeta
-            );
-            
-            _bandpassFilter = new FIRFilter(kernel, maxChannels: 2);
-            
-            // Initialize temporary buffer (max 2048 frames for stereo)
+            _bandpassFilter = new FIRFilter(FIRFilter.CreateBandpassKernel(sampleRate, 40.0f, 120.0f, 127, 5.0f), maxChannels: 2);
             _filteredBuffer = new float[2048 * 2];
         }
-        
+
         /// <summary>
-        /// Audio processing with subharmonic generation
+        /// Runs an interleaved block in place.
         /// </summary>
-        /// <param name="buffer">Audio buffer (interleaved)</param>
-        /// <param name="frameCount">Number of frames</param>
-        /// <param name="channels">Number of channels</param>
         public void Process(Span<float> buffer, int frameCount, int channels)
         {
-            if (!_enabled || _mix <= 0.0f)
-                return;
-            
-            int requiredSize = frameCount * channels;
-            if (_filteredBuffer.Length < requiredSize)
+            if (!Enabled || _mix <= 0.0f) return;
+
+            int count = frameCount * channels;
+            if (_filteredBuffer.Length < count) _filteredBuffer = new float[count];
+
+            Span<float> filtered = _filteredBuffer.AsSpan(0, count);
+            buffer.Slice(0, count).CopyTo(filtered);
+            _bandpassFilter.Process(filtered, frameCount, channels);
+
+            for (int i = 0; i < count; i++)
             {
-                _filteredBuffer = new float[requiredSize];
-            }
-            
-            // 1. Copy original signal to filtered buffer
-            Span<float> filteredSpan = _filteredBuffer.AsSpan(0, requiredSize);
-            buffer.Slice(0, requiredSize).CopyTo(filteredSpan);
-            
-            // 2. FIR bandpass filtering (isolate 40-120Hz)
-            _bandpassFilter.Process(filteredSpan, frameCount, channels);
-            
-            // 3. Waveshaping harmonic generation + mix
-            ApplyWaveshapingAndMix(buffer, filteredSpan, frameCount, channels);
-        }
-        
-        /// <summary>
-        /// Waveshaping-based harmonic generation and mixing
-        /// </summary>
-        private void ApplyWaveshapingAndMix(Span<float> originalBuffer, Span<float> filteredBuffer, int frameCount, int channels)
-        {
-            int sampleCount = frameCount * channels;
-            
-            for (int i = 0; i < sampleCount; i++)
-            {
-                float original = originalBuffer[i];
-                float filtered = filteredBuffer[i];
-                
-                float shaped = Waveshape(filtered * 2.0f); // 2x gain before waveshaper
-                
-                float mixed = original * (1.0f - _mix) + shaped * _mix;
-                
-                if (mixed > 1.0f) mixed = 1.0f;
-                else if (mixed < -1.0f) mixed = -1.0f;
-                
-                originalBuffer[i] = mixed;
+                float sub = _waveshape(filtered[i] * 2.0f);
+                float mixed = buffer[i] * (1.0f - _mix) + sub * _mix;
+                buffer[i] = Math.Clamp(mixed, -1.0f, 1.0f);
             }
         }
-        
+
+        private static float _waveshape(float x) => x / (1.0f + MathF.Abs(x));
+
         /// <summary>
-        /// Soft clipping waveshaper function
-        /// Generates harmonics from input signal
-        /// </summary>
-        /// <param name="x">Input sample</param>
-        /// <returns>Waveshaped output</returns>
-        private static float Waveshape(float x)
-        {
-            return x / (1.0f + MathF.Abs(x));
-        }
-        
-        /// <summary>
-        /// Clear filter state (e.g. on playback restart)
+        /// Drops the filter tail, e.g. when playback restarts.
         /// </summary>
         public void Reset()
         {
             _bandpassFilter.Reset();
-            Array.Clear(_filteredBuffer, 0, _filteredBuffer.Length);
+            Array.Clear(_filteredBuffer);
         }
     }
 }

@@ -1,32 +1,23 @@
 namespace OwnaudioNET.Core;
 
 /// <summary>
-/// Represents the playback state of an audio source.
+/// Where a source currently stands in its playback lifecycle.
 /// </summary>
 public enum AudioState
 {
-    /// <summary>
-    /// Source is stopped and not processing audio.
-    /// </summary>
     Stopped,
 
-    /// <summary>
-    /// Source is actively playing audio.
-    /// </summary>
     Playing,
 
     /// <summary>
-    /// Source is paused and can be resumed.
+    /// Held, but resumable from the same spot.
     /// </summary>
     Paused,
 
     /// <summary>
-    /// Source has reached the end of the audio.
+    /// Ran out of audio to hand over.
     /// </summary>
     EndOfStream,
 
-    /// <summary>
-    /// Source is in an error state.
-    /// </summary>
     Error
 }

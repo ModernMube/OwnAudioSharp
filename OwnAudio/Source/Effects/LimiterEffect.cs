@@ -159,7 +159,7 @@ namespace OwnaudioNET.Effects
         /// to detect upcoming peaks before they arrive. The field <c>_lookAheadSamples</c>
         /// is recalculated whenever <see cref="LookAheadMs"/> changes.
         /// Example values at 48 000 Hz: 5 ms → 240 samples, 20 ms → 960 samples.
-        /// Reported to <see cref="AudioMixer.ApplyPluginDelayCompensation"/> for PDC alignment.
+        /// Reported to <see cref="OwnaudioNET.Mixing.AudioMixer.ApplyPluginDelayCompensation"/> for PDC alignment.
         /// </remarks>
         public int LatencySamples => _lookAheadSamples;
 

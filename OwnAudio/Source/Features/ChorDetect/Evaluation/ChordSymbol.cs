@@ -4,233 +4,91 @@ using System.Collections.Generic;
 namespace OwnaudioNET.Features.OwnChordDetect.Evaluation
 {
     /// <summary>
-    /// Detailed chord quality shared by the Harte-syntax reference parser and the
-    /// detector-name parser, later reduced to a comparison vocabulary level.
+    /// Full chord quality, shared by the Harte reference parser and our own name parser.
+    /// Gets squashed to a comparison class later. NoChord is Harte "N", Unknown is "X" or
+    /// anything we couldn't read, Other is a quality we know but don't have a slot for.
     /// </summary>
     internal enum ChordQuality
     {
-        /// <summary>
-        /// Explicit no-chord (silence, noise); Harte "N".
-        /// </summary>
         NoChord,
-
-        /// <summary>
-        /// Unknown or out-of-vocabulary content; Harte "X" or an unparsable label.
-        /// </summary>
         Unknown,
-
-        /// <summary>
-        /// Major triad.
-        /// </summary>
         Major,
-
-        /// <summary>
-        /// Minor triad.
-        /// </summary>
         Minor,
-
-        /// <summary>
-        /// Dominant seventh chord.
-        /// </summary>
         Dominant7,
-
-        /// <summary>
-        /// Major seventh chord.
-        /// </summary>
         Major7,
-
-        /// <summary>
-        /// Minor seventh chord.
-        /// </summary>
         Minor7,
-
-        /// <summary>
-        /// Major triad with added sixth.
-        /// </summary>
         MajorSixth,
-
-        /// <summary>
-        /// Minor triad with added sixth.
-        /// </summary>
         MinorSixth,
-
-        /// <summary>
-        /// Suspended second chord.
-        /// </summary>
         Sus2,
-
-        /// <summary>
-        /// Suspended fourth chord.
-        /// </summary>
         Sus4,
-
-        /// <summary>
-        /// Diminished triad.
-        /// </summary>
         Diminished,
-
-        /// <summary>
-        /// Augmented triad.
-        /// </summary>
         Augmented,
-
-        /// <summary>
-        /// Diminished seventh chord.
-        /// </summary>
         Diminished7,
-
-        /// <summary>
-        /// Half-diminished seventh chord.
-        /// </summary>
         HalfDiminished7,
-
-        /// <summary>
-        /// Minor triad with major seventh.
-        /// </summary>
         MinorMajor7,
-
-        /// <summary>
-        /// Dominant ninth chord.
-        /// </summary>
         Dominant9,
-
-        /// <summary>
-        /// Major ninth chord.
-        /// </summary>
         Major9,
-
-        /// <summary>
-        /// Minor ninth chord.
-        /// </summary>
         Minor9,
-
-        /// <summary>
-        /// Major triad with added ninth.
-        /// </summary>
         Add9,
-
-        /// <summary>
-        /// Minor triad with added ninth.
-        /// </summary>
         MinorAdd9,
-
-        /// <summary>
-        /// Dominant eleventh chord.
-        /// </summary>
         Dominant11,
-
-        /// <summary>
-        /// Minor eleventh chord.
-        /// </summary>
         Minor11,
-
-        /// <summary>
-        /// Dominant thirteenth chord.
-        /// </summary>
         Dominant13,
-
-        /// <summary>
-        /// Minor thirteenth chord.
-        /// </summary>
         Minor13,
-
-        /// <summary>
-        /// Any other quality outside the recognised set.
-        /// </summary>
         Other
     }
 
     /// <summary>
-    /// Vocabulary level of the WCSR comparison, mirroring the standard MIREX/mir_eval levels.
+    /// How coarse the WCSR comparison is, same levels MIREX/mir_eval use. MajMin keeps root plus
+    /// major/minor, Sevenths also keeps 7, maj7 and min7. Anything outside drops out of scoring.
     /// </summary>
     internal enum ChordComparisonLevel
     {
-        /// <summary>
-        /// Major/minor level: every chord is reduced to its root plus major or minor quality;
-        /// references outside the vocabulary (sus, dim, aug) are excluded from scoring.
-        /// </summary>
         MajMin,
-
-        /// <summary>
-        /// Sevenths level: chords are reduced to root plus one of maj, min, 7, maj7, min7;
-        /// references outside the vocabulary are excluded from scoring.
-        /// </summary>
         Sevenths
     }
 
     /// <summary>
-    /// Comparison class of a chord after reduction to a vocabulary level.
+    /// What a chord reduces to at a given level. Excluded means out of vocabulary: skipped as
+    /// reference, never matches as estimate.
     /// </summary>
     internal enum ComparisonQuality
     {
-        /// <summary>
-        /// Outside the vocabulary: excluded from scoring as reference, never matches as estimate.
-        /// </summary>
         Excluded,
-
-        /// <summary>
-        /// No-chord class.
-        /// </summary>
         NoChord,
-
-        /// <summary>
-        /// Major class.
-        /// </summary>
         Major,
-
-        /// <summary>
-        /// Minor class.
-        /// </summary>
         Minor,
-
-        /// <summary>
-        /// Dominant-seventh class (sevenths level only).
-        /// </summary>
         Dominant7,
-
-        /// <summary>
-        /// Major-seventh class (sevenths level only).
-        /// </summary>
         Major7,
-
-        /// <summary>
-        /// Minor-seventh class (sevenths level only).
-        /// </summary>
         Minor7
     }
 
     /// <summary>
-    /// A parsed chord symbol: root pitch class plus detailed quality. Produced from either
-    /// a Harte-syntax reference label ("A:min7") or an OwnAudio detector name ("Am7"),
-    /// so both sides of the evaluation reduce through the same vocabulary mapping.
+    /// Root plus quality, parsed from either a Harte label ("A:min7") or one of our own names
+    /// ("Am7") so both sides of the evaluation go through the same reduction.
     /// </summary>
     internal readonly struct ChordSymbol
     {
         /// <summary>
-        /// The root pitch class (0-11, C = 0), or -1 for no-chord and unknown symbols.
+        /// 0-11 with C = 0, or -1 for no-chord and unknown.
         /// </summary>
         internal readonly int RootPitchClass;
 
         /// <summary>
-        /// The detailed chord quality.
+        /// The detailed quality, before any reduction.
         /// </summary>
         internal readonly ChordQuality Quality;
 
         /// <summary>
-        /// Initializes a new chord symbol.
+        /// Pass -1 as root when the symbol is rootless.
         /// </summary>
-        /// <param name="rootPitchClass">The root pitch class (0-11), or -1 when rootless.</param>
-        /// <param name="quality">The detailed chord quality.</param>
         internal ChordSymbol(int rootPitchClass, ChordQuality quality)
         {
             RootPitchClass = rootPitchClass;
             Quality = quality;
         }
 
-        /// <summary>
-        /// Maps Harte shorthand strings to detailed qualities.
-        /// </summary>
-        private static readonly Dictionary<string, ChordQuality> HarteShorthands = new()
+        private static readonly Dictionary<string, ChordQuality> _harteShorthands = new()
         {
             ["maj"] = ChordQuality.Major,
             ["min"] = ChordQuality.Minor,
@@ -258,10 +116,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Evaluation
             ["min13"] = ChordQuality.Minor13,
         };
 
-        /// <summary>
-        /// Maps OwnAudio detector name suffixes to detailed qualities.
-        /// </summary>
-        private static readonly Dictionary<string, ChordQuality> DetectorSuffixes = new()
+        private static readonly Dictionary<string, ChordQuality> _detectorSuffixes = new()
         {
             [""] = ChordQuality.Major,
             ["m"] = ChordQuality.Minor,
@@ -291,12 +146,9 @@ namespace OwnaudioNET.Features.OwnChordDetect.Evaluation
         };
 
         /// <summary>
-        /// Parses a chord label in Harte syntax (the standard of .lab reference annotations):
-        /// root with accidentals, optional ":shorthand", optional "(intervals)" and "/bass"
-        /// parts (both ignored), plus the special labels "N" (no chord) and "X" (unknown).
+        /// Harte syntax as .lab files use it: root, optional ":shorthand", and the "(intervals)"
+        /// and "/bass" parts which we throw away. "N" and "X" are special.
         /// </summary>
-        /// <param name="label">The Harte chord label (e.g. "A:min7", "Db", "N").</param>
-        /// <returns>The parsed chord symbol; unparsable labels yield <see cref="ChordQuality.Unknown"/>.</returns>
         internal static ChordSymbol ParseHarte(string label)
         {
             if (string.IsNullOrWhiteSpace(label))
@@ -304,14 +156,11 @@ namespace OwnaudioNET.Features.OwnChordDetect.Evaluation
 
             label = label.Trim();
 
-            if (label == "N")
-                return new ChordSymbol(-1, ChordQuality.NoChord);
-            if (label == "X")
-                return new ChordSymbol(-1, ChordQuality.Unknown);
+            if (label == "N") return new ChordSymbol(-1, ChordQuality.NoChord);
+            if (label == "X") return new ChordSymbol(-1, ChordQuality.Unknown);
 
             int slash = label.IndexOf('/');
-            if (slash >= 0)
-                label = label.Substring(0, slash);
+            if (slash >= 0) label = label.Substring(0, slash);
 
             string rootPart = label;
             string? shorthand = null;
@@ -323,9 +172,8 @@ namespace OwnaudioNET.Features.OwnChordDetect.Evaluation
                 shorthand = label.Substring(colon + 1);
             }
 
-            int root = ParseRoot(rootPart);
-            if (root < 0)
-                return new ChordSymbol(-1, ChordQuality.Unknown);
+            int root = _parseRoot(rootPart);
+            if (root < 0) return new ChordSymbol(-1, ChordQuality.Unknown);
 
             if (shorthand == null || shorthand.Length == 0)
                 return new ChordSymbol(root, ChordQuality.Major);
@@ -341,18 +189,15 @@ namespace OwnaudioNET.Features.OwnChordDetect.Evaluation
             if (shorthand.Length == 0)
                 return new ChordSymbol(root, hadIntervalList ? ChordQuality.Other : ChordQuality.Major);
 
-            return HarteShorthands.TryGetValue(shorthand, out var quality)
+            return _harteShorthands.TryGetValue(shorthand, out var quality)
                 ? new ChordSymbol(root, quality)
                 : new ChordSymbol(root, ChordQuality.Other);
         }
 
         /// <summary>
-        /// Parses an OwnAudio detector chord name (e.g. "C", "Am7", "Bbmaj7", "F#dim").
-        /// Combined ambiguity labels ("C/C7") reduce to their first alternative; "N" and
-        /// "Unknown" map to their dedicated qualities.
+        /// Our own naming ("C", "Am7", "Bbmaj7", "F#dim"). An ambiguity label like "C/C7" keeps
+        /// the first alternative only.
         /// </summary>
-        /// <param name="name">The detector chord name.</param>
-        /// <returns>The parsed chord symbol; unparsable names yield <see cref="ChordQuality.Unknown"/>.</returns>
         internal static ChordSymbol ParseDetectorName(string name)
         {
             if (string.IsNullOrWhiteSpace(name))
@@ -360,44 +205,31 @@ namespace OwnaudioNET.Features.OwnChordDetect.Evaluation
 
             name = name.Trim();
 
-            if (name == "N")
-                return new ChordSymbol(-1, ChordQuality.NoChord);
-            if (name == "Unknown")
-                return new ChordSymbol(-1, ChordQuality.Unknown);
+            if (name == "N") return new ChordSymbol(-1, ChordQuality.NoChord);
+            if (name == "Unknown") return new ChordSymbol(-1, ChordQuality.Unknown);
 
             int slash = name.IndexOf('/');
-            if (slash >= 0)
-                name = name.Substring(0, slash);
+            if (slash >= 0) name = name.Substring(0, slash);
 
-            int rootLength = RootLength(name);
-            if (rootLength == 0)
-                return new ChordSymbol(-1, ChordQuality.Unknown);
+            int rootLength = _rootLength(name);
+            if (rootLength == 0) return new ChordSymbol(-1, ChordQuality.Unknown);
 
-            int root = ParseRoot(name.Substring(0, rootLength));
-            if (root < 0)
-                return new ChordSymbol(-1, ChordQuality.Unknown);
+            int root = _parseRoot(name.Substring(0, rootLength));
+            if (root < 0) return new ChordSymbol(-1, ChordQuality.Unknown);
 
-            string suffix = name.Substring(rootLength);
-
-            return DetectorSuffixes.TryGetValue(suffix, out var quality)
+            return _detectorSuffixes.TryGetValue(name.Substring(rootLength), out var quality)
                 ? new ChordSymbol(root, quality)
                 : new ChordSymbol(root, ChordQuality.Other);
         }
 
         /// <summary>
-        /// Reduces the symbol to its comparison class at the given vocabulary level.
-        /// The same reduction applies to reference and estimate: references reduced to
-        /// <see cref="ComparisonQuality.Excluded"/> are skipped from scoring, while excluded
-        /// estimates simply never match.
+        /// Squashes down to the comparison class of the level. Reference and estimate go through
+        /// the exact same mapping.
         /// </summary>
-        /// <param name="level">The comparison vocabulary level.</param>
-        /// <returns>The comparison class of the symbol.</returns>
         internal ComparisonQuality Reduce(ChordComparisonLevel level)
         {
-            if (Quality == ChordQuality.NoChord)
-                return ComparisonQuality.NoChord;
-            if (Quality == ChordQuality.Unknown)
-                return ComparisonQuality.Excluded;
+            if (Quality == ChordQuality.NoChord) return ComparisonQuality.NoChord;
+            if (Quality == ChordQuality.Unknown) return ComparisonQuality.Excluded;
 
             if (level == ChordComparisonLevel.MajMin)
             {
@@ -441,28 +273,21 @@ namespace OwnaudioNET.Features.OwnChordDetect.Evaluation
         }
 
         /// <summary>
-        /// Returns the length of the root portion (letter plus one optional accidental)
-        /// at the start of a detector chord name.
+        /// How many chars the root eats up front — letter plus at most one accidental.
         /// </summary>
-        /// <param name="name">The detector chord name.</param>
-        /// <returns>The number of characters forming the root, or 0 when there is no root letter.</returns>
-        private static int RootLength(string name)
+        private static int _rootLength(string name)
         {
-            if (name.Length == 0 || name[0] < 'A' || name[0] > 'G')
-                return 0;
+            if (name.Length == 0 || name[0] < 'A' || name[0] > 'G') return 0;
 
             return name.Length > 1 && (name[1] == '#' || name[1] == 'b') ? 2 : 1;
         }
 
         /// <summary>
-        /// Parses a root note name (letter plus any number of accidentals) to a pitch class.
+        /// Note name to pitch class, any number of accidentals. -1 if it isn't a note name.
         /// </summary>
-        /// <param name="root">The root name (e.g. "C", "F#", "Bbb").</param>
-        /// <returns>The pitch class (0-11), or -1 when the name is invalid.</returns>
-        private static int ParseRoot(string root)
+        private static int _parseRoot(string root)
         {
-            if (root.Length == 0)
-                return -1;
+            if (root.Length == 0) return -1;
 
             int pitchClass = root[0] switch
             {
@@ -476,8 +301,7 @@ namespace OwnaudioNET.Features.OwnChordDetect.Evaluation
                 _ => -1
             };
 
-            if (pitchClass < 0)
-                return -1;
+            if (pitchClass < 0) return -1;
 
             for (int i = 1; i < root.Length; i++)
             {

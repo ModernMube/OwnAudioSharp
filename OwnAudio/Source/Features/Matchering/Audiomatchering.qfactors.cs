@@ -1,59 +1,39 @@
-﻿using System;
+using System;
 using Logger;
 
 namespace OwnaudioNET.Features.Matchering;
 
+/// <summary>
+/// Q factor picking for the matching EQ.
+/// </summary>
 partial class AudioAnalyzer
 {
     #region Q Factor Calculation
 
     /// <summary>
-    /// Calculates optimal Q factors for each frequency band based on required corrections and spectral analysis.
+    /// Final Q per band. Mixes a psychoacoustic base Q with modifiers from the gain
+    /// amount, how much the neighbouring bands agree, and the source/target density.
     /// </summary>
-    /// <param name="eqAdjustments">EQ adjustment values in dB for each band</param>
-    /// <param name="sourceSpectrum">Source audio frequency spectrum</param>
-    /// <param name="targetSpectrum">Target audio frequency spectrum</param>
-    /// <returns>Array of optimized Q factors for each frequency band</returns>
-    /// <remarks>
-    /// This method combines multiple analysis techniques to determine optimal Q factors:
-    /// - Psychoacoustic frequency-based Q values
-    /// - Gain-dependent Q adjustments for surgical vs musical corrections
-    /// - Neighboring band correlation analysis for smooth transitions
-    /// - Spectral density differences for targeted corrections
-    /// All factors are weighted and combined to produce musically appropriate Q values.
-    /// </remarks>
-    private float[] CalculateOptimalQFactors(float[] eqAdjustments, AudioSpectrum sourceSpectrum, AudioSpectrum targetSpectrum)
+    private float[] _optimalQFactors(float[] eqAdjustments, AudioSpectrum sourceSpectrum, AudioSpectrum targetSpectrum)
     {
-        var qFactors = new float[FrequencyBands.Length];
-
-        for (int i = 0; i < FrequencyBands.Length; i++)
-        {
-            float freq = FrequencyBands[i];
-            float gainAdjustment = Math.Abs(eqAdjustments[i]);
-
-            float baseQ = GetFrequencyBasedQ(freq);
-
-            float gainBasedQ = CalculateGainBasedQ(gainAdjustment);
-
-            float neighborQ = CalculateNeighboringBandsQ(eqAdjustments, i);
-
-            float spectralQ = CalculateSpectralDensityQ(sourceSpectrum.FrequencyBands[i], targetSpectrum.FrequencyBands[i]);
-
-            qFactors[i] = CombineQFactors(baseQ, gainBasedQ, neighborQ, spectralQ, freq);
-
-            qFactors[i] = Math.Max(2.5f, Math.Min(8.0f, qFactors[i]));
-        }
+        var qFactors = new float[_freqBands.Length];
 
         Log.Info("Calculated Q factors:");
-        var bandNames = new[] {
-            "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", "63Hz", "80Hz", "100Hz", "125Hz", "160Hz",
-            "200Hz", "250Hz", "315Hz", "400Hz", "500Hz", "630Hz", "800Hz", "1kHz", "1.25kHz", "1.6kHz",
-            "2kHz", "2.5kHz", "3.15kHz", "4kHz", "5kHz", "6.3kHz", "8kHz", "10kHz", "12.5kHz", "16kHz"
-        };
 
-        for (int i = 0; i < qFactors.Length; i++)
+        for (int i = 0; i < _freqBands.Length; i++)
         {
-            Log.Info($"{bandNames[i]}: Q={qFactors[i]:F2} (Gain: {eqAdjustments[i]:+0.1;-0.1}dB)");
+            float freq = _freqBands[i];
+            float baseQ = _freqBasedQ(freq);
+
+            float q = _combineQ(baseQ,
+                _gainBasedQ(Math.Abs(eqAdjustments[i])),
+                _neighborQ(eqAdjustments, i),
+                _spectralQ(sourceSpectrum.FrequencyBands[i], targetSpectrum.FrequencyBands[i]),
+                freq);
+
+            qFactors[i] = Math.Clamp(q, 2.5f, 8.0f);
+
+            Log.Info($"{_bandNames[i]}: Q={qFactors[i]:F2} (Gain: {eqAdjustments[i]:+0.1;-0.1}dB)");
         }
 
         return qFactors;
@@ -64,50 +44,35 @@ partial class AudioAnalyzer
     #region Base Q Factor Calculations
 
     /// <summary>
-    /// Determines base Q factor based on frequency range using psychoacoustic principles.
+    /// Base Q by frequency range - wider down low, roughly 1/3 octave through the mids.
     /// </summary>
-    /// <param name="frequency">Center frequency in Hz</param>
-    /// <returns>Base Q factor optimized for the given frequency range</returns>
-    /// <remarks>
-    /// Uses psychoacoustic research to determine appropriate Q factors for different frequency ranges.
-    /// Lower frequencies typically use wider Q factors (lower values) for more musical results,
-    /// while mid-frequencies use moderate Q factors, and high frequencies use progressively
-    /// narrower Q factors for precise control without harshness.
-    /// </remarks>
-    private float GetFrequencyBasedQ(float frequency)
+    private float _freqBasedQ(float frequency)
     {
         return frequency switch
         {
-            <= 40f => 3.0f,      // Slightly wider for loose low end
+            <= 40f => 3.0f,
             <= 80f => 3.5f,
             <= 160f => 3.8f,
-            <= 315f => 4.0f,     // Standard tracking
+            <= 315f => 4.0f,
             <= 630f => 4.2f,
-            <= 1250f => 4.3f,    // Ideal 1/3 octave Q
+            <= 1250f => 4.3f,
             <= 4000f => 4.3f,
-            <= 10000f => 4.2f,   // Slightly wider for high frequency air
+            <= 10000f => 4.2f,
             _ => 4.0f
         };
     }
 
     /// <summary>
-    /// Calculates Q adjustment based on the amount of gain correction needed.
+    /// Bigger correction, tighter bell. Kept conservative so it stays musical.
     /// </summary>
-    /// <param name="gainAdjustment">Absolute gain adjustment in dB</param>
-    /// <returns>Q factor modifier based on gain amount</returns>
-    /// <remarks>
-    /// Larger gain adjustments typically require narrower Q factors for more surgical correction
-    /// while smaller adjustments can use wider Q factors for more musical results.
-    /// This method provides a conservative approach to Q factor scaling to maintain musicality.
-    /// </remarks>
-    private float CalculateGainBasedQ(float gainAdjustment)
-    {       
+    private float _gainBasedQ(float gainAdjustment)
+    {
         return gainAdjustment switch
         {
-            <= 2.0f => 1.0f,     // No change
-            <= 5.0f => 1.05f,    // Minimal tightening
-            <= 10.0f => 1.1f,    // Slight tightening
-            _ => 1.2f            // Max tightening (Q ~5.2)
+            <= 2.0f => 1.0f,
+            <= 5.0f => 1.05f,
+            <= 10.0f => 1.1f,
+            _ => 1.2f
         };
     }
 
@@ -116,18 +81,10 @@ partial class AudioAnalyzer
     #region Contextual Q Factor Analysis
 
     /// <summary>
-    /// Analyzes neighboring frequency bands to determine if wide or narrow Q is more appropriate.
+    /// Looks at +/-2 bands around the current one. If they're moving the same way we
+    /// can go wide, if the correction is isolated we go narrow. Closer bands weigh more.
     /// </summary>
-    /// <param name="adjustments">All EQ adjustments for context analysis</param>
-    /// <param name="currentBand">Current band index being analyzed</param>
-    /// <returns>Q factor modifier based on neighboring band correlation</returns>
-    /// <remarks>
-    /// Examines the correlation between the current band and its neighbors (±2 bands).
-    /// High correlation (similar adjustments in neighboring bands) suggests using wider Q factors
-    /// for more musical, smooth transitions. Low correlation suggests using narrower Q factors
-    /// for more surgical, isolated corrections. Distance weighting gives closer neighbors more influence.
-    /// </remarks>
-    private float CalculateNeighboringBandsQ(float[] adjustments, int currentBand)
+    private float _neighborQ(float[] adjustments, int currentBand)
     {
         float currentGain = adjustments[currentBand];
         float correlation = 0f;
@@ -137,59 +94,45 @@ partial class AudioAnalyzer
         {
             if (offset == 0) continue;
 
-            int neighborIndex = currentBand + offset;
-            if (neighborIndex >= 0 && neighborIndex < adjustments.Length)
-            {
-                float neighborGain = adjustments[neighborIndex];
+            int n = currentBand + offset;
+            if (n < 0 || n >= adjustments.Length) continue;
 
-                float gainDifference = Math.Abs(currentGain - neighborGain);
-                bool sameDirection = (currentGain > 0 && neighborGain > 0) || (currentGain < 0 && neighborGain < 0);
+            float neighborGain = adjustments[n];
+            bool sameDirection = (currentGain > 0 && neighborGain > 0) || (currentGain < 0 && neighborGain < 0);
 
-                if (sameDirection && gainDifference < 3.0f)
-                {
-                    correlation += 1.0f / (Math.Abs(offset) + 1); // Closer neighbors have more weight
-                }
+            if (sameDirection && Math.Abs(currentGain - neighborGain) < 3.0f)
+                correlation += 1.0f / (Math.Abs(offset) + 1);
 
-                neighborCount++;
-            }
+            neighborCount++;
         }
 
-        float normalizedCorrelation = neighborCount > 0 ? correlation / neighborCount : 0f;
-        
-        return normalizedCorrelation switch
+        float normalized = neighborCount > 0 ? correlation / neighborCount : 0f;
+
+        return normalized switch
         {
-            >= 0.7f => 0.7f,     // Wide Q for highly correlated regions
-            >= 0.5f => 0.8f,     // Moderate-wide Q for correlated regions
-            >= 0.3f => 0.9f,     // Neutral Q for somewhat correlated regions
-            >= 0.1f => 1.1f,     // Narrow Q for low correlation
-            _ => 1.3f            // Narrower Q for isolated corrections
+            >= 0.7f => 0.7f,
+            >= 0.5f => 0.8f,
+            >= 0.3f => 0.9f,
+            >= 0.1f => 1.1f,
+            _ => 1.3f
         };
     }
 
     /// <summary>
-    /// Calculates Q factor based on spectral density differences between source and target spectrums.
+    /// Sharp level differences between source and target want a narrow bell,
+    /// broad shifts want a wide one.
     /// </summary>
-    /// <param name="sourceLevel">Source frequency band level</param>
-    /// <param name="targetLevel">Target frequency band level</param>
-    /// <returns>Q factor modifier based on spectral density analysis</returns>
-    /// <remarks>
-    /// Analyzes the ratio between source and target levels to determine appropriate Q factor.
-    /// Sharp spectral features (large level differences) benefit from narrower Q factors
-    /// for precise correction, while broad spectral changes benefit from wider Q factors
-    /// for more natural, musical results.
-    /// </remarks>
-    private float CalculateSpectralDensityQ(float sourceLevel, float targetLevel)
+    private float _spectralQ(float sourceLevel, float targetLevel)
     {
-        float ratio = targetLevel / Math.Max(sourceLevel, 1e-10f);
-        float logRatio = (float)Math.Log10(ratio);
-        
+        float logRatio = (float)Math.Log10(targetLevel / Math.Max(sourceLevel, 1e-10f));
+
         return Math.Abs(logRatio) switch
         {
-            <= 0.1f => 0.8f,     // Wide for very similar levels
-            <= 0.3f => 0.9f,     // Moderate-wide for similar levels
-            <= 0.6f => 1.0f,     // Neutral for moderate differences
-            <= 1.0f => 1.2f,     // Narrow for large differences
-            _ => 1.4f            // Very narrow for extreme differences
+            <= 0.1f => 0.8f,
+            <= 0.3f => 0.9f,
+            <= 0.6f => 1.0f,
+            <= 1.0f => 1.2f,
+            _ => 1.4f
         };
     }
 
@@ -198,44 +141,31 @@ partial class AudioAnalyzer
     #region Q Factor Combination
 
     /// <summary>
-    /// Combines all Q factor considerations with frequency-dependent weighting to produce the final Q value.
+    /// Weighted mix of the four Q sources. Base Q drives it, lows lean on the neighbour
+    /// context for smooth transitions, highs lean on the gain modifier for precision.
     /// </summary>
-    /// <param name="baseQ">Base Q factor from frequency characteristics</param>
-    /// <param name="gainQ">Q modifier from gain amount analysis</param>
-    /// <param name="neighborQ">Q modifier from neighboring band correlation</param>
-    /// <param name="spectralQ">Q modifier from spectral density analysis</param>
-    /// <param name="frequency">Center frequency for frequency-dependent weighting</param>
-    /// <returns>Final optimized Q factor combining all analysis methods</returns>
-    /// <remarks>
-    /// Uses weighted combination of all Q factor analysis methods with frequency-dependent
-    /// weight adjustments. Low frequencies emphasize neighboring band correlation for smooth
-    /// transitions, while high frequencies emphasize gain-based adjustments for surgical precision.
-    /// The base psychoacoustic Q factor receives the highest weight across all frequencies.
-    /// </remarks>
-    private float CombineQFactors(float baseQ, float gainQ, float neighborQ, float spectralQ, float frequency)
-    {        
-        float baseWeight = 0.6f;      // Base Q is now the primary driver (mathematically correct)
-        float gainWeight = 0.2f;      // Gain adjustments are secondary
-        float neighborWeight = 0.1f;  // Minor context awareness
-        float spectralWeight = 0.1f;  // Minor spectral tuning
+    private float _combineQ(float baseQ, float gainQ, float neighborQ, float spectralQ, float frequency)
+    {
+        float baseWeight = 0.6f;
+        float gainWeight = 0.2f;
+        float neighborWeight = 0.1f;
+        float spectralWeight = 0.1f;
 
-        if (frequency <= 250f) // Low frequencies
+        if(frequency <= 250f)
         {
-            neighborWeight += 0.1f; // More emphasis on smooth transitions
+            neighborWeight += 0.1f;
             spectralWeight -= 0.05f;
         }
-        else if (frequency >= 4000f) // High frequencies
+        else if (frequency >= 4000f)
         {
-            gainWeight += 0.1f; // More emphasis on surgical corrections
+            gainWeight += 0.1f;
             neighborWeight -= 0.1f;
         }
 
-        float combinedQ = baseQ * baseWeight +
-                          (baseQ * gainQ) * gainWeight +
-                          (baseQ * neighborQ) * neighborWeight +
-                          (baseQ * spectralQ) * spectralWeight;
-
-        return combinedQ;
+        return baseQ * baseWeight +
+               (baseQ * gainQ) * gainWeight +
+               (baseQ * neighborQ) * neighborWeight +
+               (baseQ * spectralQ) * spectralWeight;
     }
 
     #endregion

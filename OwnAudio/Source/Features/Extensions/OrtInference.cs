@@ -4,9 +4,7 @@ using Microsoft.ML.OnnxRuntime;
 namespace OwnaudioNET.Features.Extensions;
 
 /// <summary>
-/// AOT-compatible float tensor replacing DenseTensor&lt;float&gt; / Tensor&lt;float&gt;
-/// from Microsoft.ML.OnnxRuntime.Tensors.
-/// Stores data in row-major flat float[] with explicit shape.
+/// AOT friendly stand-in for DenseTensor&lt;float&gt;: flat row-major array plus an explicit shape.
 /// </summary>
 internal sealed class OrtTensor
 {
@@ -29,13 +27,11 @@ internal sealed class OrtTensor
 
     internal int Length => Data.Length;
 
-    // Dimensions property - compatibility with DenseTensor.Dimensions
     internal int[] Dimensions => Shape;
 
     internal float GetValue(int i) => Data[i];
     internal void SetValue(int i, float v) => Data[i] = v;
 
-    // 3D indexer [d0, d1, d2]
     internal float this[int d0, int d1, int d2]
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -44,7 +40,6 @@ internal sealed class OrtTensor
         set => Data[d0 * Shape[1] * Shape[2] + d1 * Shape[2] + d2] = value;
     }
 
-    // 4D indexer [d0, d1, d2, d3]
     internal float this[int d0, int d1, int d2, int d3]
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -53,7 +48,6 @@ internal sealed class OrtTensor
         set => Data[((d0 * Shape[1] + d1) * Shape[2] + d2) * Shape[3] + d3] = value;
     }
 
-    // 5D indexer [d0, d1, d2, d3, d4]
     internal float this[int d0, int d1, int d2, int d3, int d4]
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -64,14 +58,13 @@ internal sealed class OrtTensor
 }
 
 /// <summary>
-/// AOT-compatible ONNX inference helpers.
-/// Uses OrtValue API (OnnxRuntime 1.16+) instead of NamedOnnxValue / DenseTensor,
-/// which rely on reflection and are not compatible with Native AOT compilation.
+/// Inference through the OrtValue API (ORT 1.16+). NamedOnnxValue/DenseTensor need reflection,
+/// so they're out for Native AOT.
 /// </summary>
 internal static class OrtRunner
 {
     /// <summary>
-    /// Run single-input, single-output model inference.
+    /// One tensor in, one out.
     /// </summary>
     internal static OrtTensor Run(
         InferenceSession session,
@@ -80,21 +73,16 @@ internal static class OrtRunner
         string outputName = "output")
     {
         var longShape = Array.ConvertAll(input.Shape, x => (long)x);
-        using var inputValue = OrtValue.CreateTensorValueFromMemory<float>(
-            input.Data, longShape);
-
-        using var runOptions = new RunOptions();
-        using var results = session.Run(
-            runOptions,
-            new[] { inputName },
-            new[] { inputValue },
-            new[] { outputName });
-
-        return ToOrtTensor(results[0]);
+        using (var inputValue = OrtValue.CreateTensorValueFromMemory<float>(input.Data, longShape))
+        using (var runOptions = new RunOptions())
+        using (var results = session.Run(runOptions, new[] { inputName }, new[] { inputValue }, new[] { outputName }))
+        {
+            return _toOrtTensor(results[0]);
+        }
     }
 
     /// <summary>
-    /// Run model with arbitrary inputs and outputs.
+    /// Same thing with as many named inputs/outputs as the model wants.
     /// </summary>
     internal static OrtTensor[] Run(
         InferenceSession session,
@@ -110,17 +98,17 @@ internal static class OrtRunner
             {
                 inputNames[i] = inputs[i].name;
                 var longShape = Array.ConvertAll(inputs[i].tensor.Shape, x => (long)x);
-                inputValues[i] = OrtValue.CreateTensorValueFromMemory<float>(
-                    inputs[i].tensor.Data, longShape);
+                inputValues[i] = OrtValue.CreateTensorValueFromMemory<float>(inputs[i].tensor.Data, longShape);
             }
 
-            using var runOptions = new RunOptions();
-            using var results = session.Run(runOptions, inputNames, inputValues, outputNames);
-
-            var output = new OrtTensor[results.Count];
-            for (int i = 0; i < results.Count; i++)
-                output[i] = ToOrtTensor(results[i]);
-            return output;
+            using (var runOptions = new RunOptions())
+            using (var results = session.Run(runOptions, inputNames, inputValues, outputNames))
+            {
+                var output = new OrtTensor[results.Count];
+                for (int i = 0; i < results.Count; i++)
+                    output[i] = _toOrtTensor(results[i]);
+                return output;
+            }
         }
         finally
         {
@@ -129,11 +117,10 @@ internal static class OrtRunner
         }
     }
 
-    private static OrtTensor ToOrtTensor(OrtValue value)
+    private static OrtTensor _toOrtTensor(OrtValue value)
     {
         var data = value.GetTensorDataAsSpan<float>().ToArray();
-        var typeInfo = value.GetTensorTypeAndShape();
-        var shape = Array.ConvertAll(typeInfo.Shape, x => (int)x);
+        var shape = Array.ConvertAll(value.GetTensorTypeAndShape().Shape, x => (int)x);
         return new OrtTensor(data, shape);
     }
 }

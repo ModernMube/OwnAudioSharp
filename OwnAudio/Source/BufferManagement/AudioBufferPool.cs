@@ -4,8 +4,8 @@ using OwnaudioNET.Exceptions;
 namespace OwnaudioNET.BufferManagement;
 
 /// <summary>
-/// Object pool for audio buffers to minimize GC allocations.
-/// Thread-safe implementation using ConcurrentBag.
+/// Keeps a stash of float buffers around so the mix path doesn't hand work to the GC.
+/// Backed by a ConcurrentBag, so any thread may rent and return.
 /// </summary>
 public sealed class AudioBufferPool
 {
@@ -15,47 +15,43 @@ public sealed class AudioBufferPool
     private int _currentPoolSize;
 
     /// <summary>
-    /// Gets the buffer size in samples.
+    /// Length of every buffer this pool deals in, in samples.
     /// </summary>
     public int BufferSize => _bufferSize;
 
     /// <summary>
-    /// Gets the current number of buffers in the pool.
+    /// Buffers sitting idle in the pool right now.
     /// </summary>
     public int PoolSize => _currentPoolSize;
 
     /// <summary>
-    /// Initializes a new instance of the AudioBufferPool class.
+    /// initialPoolSize buffers get allocated up front, and we never keep more
+    /// than maxPoolSize of them around.
     /// </summary>
-    /// <param name="bufferSize">The size of each buffer in samples.</param>
-    /// <param name="initialPoolSize">The initial number of buffers to pre-allocate.</param>
-    /// <param name="maxPoolSize">The maximum number of buffers to keep in the pool.</param>
+    /// <param name="bufferSize">Size of one buffer in samples.</param>
+    /// <param name="initialPoolSize"></param>
+    /// <param name="maxPoolSize"></param>
     public AudioBufferPool(int bufferSize, int initialPoolSize = 4, int maxPoolSize = 16)
     {
         if (bufferSize <= 0)
             throw new AudioException("AudioBufferPool ERROR: ", new ArgumentException("Buffer size must be greater than zero.", nameof(bufferSize)));
-        if (initialPoolSize < 0)
-            throw new AudioException("AudioBufferPool ERROR: ", new ArgumentException("Initial pool size cannot be negative.", nameof(initialPoolSize)));
-        if (maxPoolSize < initialPoolSize)
-            throw new AudioException("AudioBufferPool ERROR: ", new ArgumentException("Max pool size must be >= initial pool size.", nameof(maxPoolSize)));
+        if (maxPoolSize < initialPoolSize || initialPoolSize < 0)
+            throw new AudioException("AudioBufferPool ERROR: ", new ArgumentException("Bad pool sizes, need 0 <= initial <= max.", nameof(maxPoolSize)));
 
         _bufferSize = bufferSize;
         _maxPoolSize = maxPoolSize;
         _pool = new ConcurrentBag<float[]>();
-        _currentPoolSize = 0;
 
-        // Pre-allocate initial buffers
         for (int i = 0; i < initialPoolSize; i++)
         {
             _pool.Add(new float[bufferSize]);
-            Interlocked.Increment(ref _currentPoolSize);
+            _currentPoolSize++;
         }
     }
 
     /// <summary>
-    /// Rents a buffer from the pool. If the pool is empty, allocates a new buffer.
+    /// Grabs a buffer, allocating a fresh one when the pool ran dry.
     /// </summary>
-    /// <returns>A buffer with at least BufferSize capacity.</returns>
     public float[] Rent()
     {
         if (_pool.TryTake(out float[]? buffer))
@@ -64,49 +60,34 @@ public sealed class AudioBufferPool
             return buffer;
         }
 
-        // Pool is empty, allocate new buffer
         return new float[_bufferSize];
     }
 
     /// <summary>
-    /// Returns a buffer to the pool for reuse.
+    /// Hands a buffer back. Wrong-sized ones are dropped on the floor rather than
+    /// poisoning the pool.
     /// </summary>
-    /// <param name="buffer">The buffer to return.</param>
     public void Return(float[] buffer)
     {
-        if (buffer == null)
-            throw new ArgumentNullException(nameof(buffer));
-
-        if (buffer.Length != _bufferSize)
-            throw new ArgumentException($"Buffer size mismatch. Expected {_bufferSize}, got {buffer.Length}.", nameof(buffer));
+        if (buffer == null || buffer.Length != _bufferSize) return;
+        if (_currentPoolSize >= _maxPoolSize) return;
 
         Array.Clear(buffer, 0, buffer.Length);
-
-        int newSize = Interlocked.Increment(ref _currentPoolSize);
-
-        if (newSize <= _maxPoolSize)
-        {
-            _pool.Add(buffer);
-        }
-        else
-        {
-            Interlocked.Decrement(ref _currentPoolSize);
-        }
+        _pool.Add(buffer);
+        Interlocked.Increment(ref _currentPoolSize);
     }
 
     /// <summary>
-    /// Clears all buffers from the pool.
+    /// Throws away everything we're holding.
     /// </summary>
     public void Clear()
     {
         while (_pool.TryTake(out _))
-        {
             Interlocked.Decrement(ref _currentPoolSize);
-        }
     }
 
     /// <summary>
-    /// Gets statistics about the pool.
+    /// Snapshot of the pool, mostly for diagnostics.
     /// </summary>
     public PoolStatistics GetStatistics()
     {
@@ -119,7 +100,7 @@ public sealed class AudioBufferPool
     }
 
     /// <summary>
-    /// Represents statistics about the buffer pool.
+    /// Plain value snapshot of the pool state.
     /// </summary>
     public struct PoolStatistics
     {

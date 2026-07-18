@@ -3,141 +3,95 @@ using System;
 namespace OwnaudioNET.Effects.SmartMaster.Components
 {
     /// <summary>
-    /// Noise generator class for white and pink noise generation.
+    /// Test signal source for calibration - white, pink and low-freq noise.
+    /// Cold path only, we allocate the buffer we hand back.
     /// </summary>
     internal static class NoiseGenerator
     {
         private static readonly Random _random = new Random();
-        
+
         /// <summary>
-        /// Generate white noise (flat spectrum).
+        /// Flat spectrum noise, amplitude in 0..1.
         /// </summary>
-        /// <param name="sampleCount">Number of samples</param>
-        /// <param name="amplitude">Amplitude (0.0 - 1.0)</param>
-        /// <returns>White noise samples</returns>
         public static float[] GenerateWhiteNoise(int sampleCount, float amplitude = 0.5f)
         {
             float[] noise = new float[sampleCount];
-            
             for (int i = 0; i < sampleCount; i++)
-            {
-                noise[i] = ((float)_random.NextDouble() * 2.0f - 1.0f) * amplitude;
-            }
-            
+                noise[i] = _bipolar() * amplitude;
+
             return noise;
         }
-        
+
         /// <summary>
-        /// Generate pink noise (1/f spectrum, -3dB/octave).
-        /// Using Voss-McCartney algorithm.
+        /// 1/f noise (-3dB/oct) the Voss-McCartney way, 7 octave generators.
         /// </summary>
-        /// <param name="sampleCount">Number of samples</param>
-        /// <param name="amplitude">Amplitude (0.0 - 1.0)</param>
-        /// <returns>Pink noise samples</returns>
         public static float[] GeneratePinkNoise(int sampleCount, float amplitude = 0.5f)
         {
+            const int gens = 7;
             float[] noise = new float[sampleCount];
-            
-            // Voss-McCartney algorithm - 7 octave generator
-            const int numGenerators = 7;
-            float[] generators = new float[numGenerators];
-            int[] counters = new int[numGenerators];
-            
-            // Initialization
-            for (int i = 0; i < numGenerators; i++)
-            {
-                generators[i] = (float)_random.NextDouble() * 2.0f - 1.0f;
-                counters[i] = (int)Math.Pow(2, i);
-            }
-            
-            int sampleIndex = 0;
-            
+            float[] generators = new float[gens];
+
+            for (int g = 0; g < gens; g++)
+                generators[g] = _bipolar();
+
             for (int i = 0; i < sampleCount; i++)
             {
-                // Update generators at appropriate frequency
-                for (int g = 0; g < numGenerators; g++)
-                {
-                    if (sampleIndex % counters[g] == 0)
-                    {
-                        generators[g] = (float)_random.NextDouble() * 2.0f - 1.0f;
-                    }
-                }
-                
-                // Sum all generators
                 float sum = 0;
-                for (int g = 0; g < numGenerators; g++)
+                for (int g = 0; g < gens; g++)
                 {
+                    if (i % (1 << g) == 0) generators[g] = _bipolar();
                     sum += generators[g];
                 }
-                
-                // Normalization and amplitude application
-                noise[i] = (sum / numGenerators) * amplitude;
-                sampleIndex++;
+
+                noise[i] = (sum / gens) * amplitude;
             }
-            
+
             return noise;
         }
-        
+
         /// <summary>
-        /// Generate low frequency noise (filtered white noise, 20-100Hz).
+        /// White noise squeezed into roughly 20-100Hz with a pair of one-pole
+        /// filters, then peak-normalised to the given amplitude.
         /// </summary>
-        /// <param name="sampleCount">Number of samples</param>
-        /// <param name="sampleRate">Sample rate</param>
-        /// <param name="amplitude">Amplitude (0.0 - 1.0)</param>
-        /// <returns>Low frequency noise samples</returns>
         public static float[] GenerateLowFrequencyNoise(int sampleCount, int sampleRate, float amplitude = 0.5f)
         {
-            // Generate white noise
-            float[] whiteNoise = GenerateWhiteNoise(sampleCount, amplitude);
-            
-            // Simple low-pass filter (around 100Hz)
-            float cutoffFreq = 100.0f;
-            float rc = 1.0f / (2.0f * (float)Math.PI * cutoffFreq);
+            float[] buf = GenerateWhiteNoise(sampleCount, amplitude);
+            if (sampleCount < 2) return buf;
+
             float dt = 1.0f / sampleRate;
-            float alpha = dt / (rc + dt);
-            
-            float[] filtered = new float[sampleCount];
-            filtered[0] = whiteNoise[0];
-            
-            for (int i = 1; i < sampleCount; i++)
-            {
-                filtered[i] = filtered[i - 1] + alpha * (whiteNoise[i] - filtered[i - 1]);
-            }
-            
-            // High-pass filter (around 20Hz) to remove DC
-            float hpCutoffFreq = 20.0f;
-            float hpRc = 1.0f / (2.0f * (float)Math.PI * hpCutoffFreq);
+            float lpAlpha = dt / (1.0f / (2.0f * MathF.PI * 100.0f) + dt);
+            float hpRc = 1.0f / (2.0f * MathF.PI * 20.0f);
             float hpAlpha = hpRc / (hpRc + dt);
-            
-            float[] output = new float[sampleCount];
-            output[0] = filtered[0];
-            float prevInput = filtered[0];
-            float prevOutput = 0;
-            
+
+            for (int i = 1; i < sampleCount; i++)
+                buf[i] = buf[i - 1] + lpAlpha * (buf[i] - buf[i - 1]);
+
+            float prevIn = buf[0], prevOut = 0f;
             for (int i = 1; i < sampleCount; i++)
             {
-                output[i] = hpAlpha * (prevOutput + filtered[i] - prevInput);
-                prevInput = filtered[i];
-                prevOutput = output[i];
+                float x = buf[i];
+                prevOut = hpAlpha * (prevOut + x - prevIn);
+                prevIn = x;
+                buf[i] = prevOut;
             }
-            
-            // Normalization
+
             float maxVal = 0;
             for (int i = 0; i < sampleCount; i++)
             {
-                if (Math.Abs(output[i]) > maxVal)
-                    maxVal = Math.Abs(output[i]);
+                float a = MathF.Abs(buf[i]);
+                if (a > maxVal) maxVal = a;
             }
-            
+
             if (maxVal > 0)
             {
+                float scale = amplitude / maxVal;
                 for (int i = 0; i < sampleCount; i++)
-                {
-                    output[i] = (output[i] / maxVal) * amplitude;
-                }
+                    buf[i] *= scale;
             }
-            
-            return output;
+
+            return buf;
         }
+
+        private static float _bipolar() => (float)_random.NextDouble() * 2.0f - 1.0f;
     }
 }

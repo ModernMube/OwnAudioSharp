@@ -10,9 +10,16 @@ using Ownaudio.Safe;
 
 namespace OwnaudioNET.Features.OwnChordDetect;
 
+/// <summary>
+/// One-shot chord detection: file (or files) in, chord list + key + tempo out.
+/// </summary>
 public static class ChordDetect
 {
-    public static (List<TimedChord>, MusicalKey, int) DetectFromFile( string audioFile, float intervalSecond = 1.0f)
+    /// <summary>
+    /// Runs the whole chain on one file — decode, note transcription, chord analysis.
+    /// intervalSecond is only the fallback window when we can't find a tempo.
+    /// </summary>
+    public static (List<TimedChord>, MusicalKey, int) DetectFromFile(string audioFile, float intervalSecond = 1.0f)
     {
         if (!File.Exists(audioFile))
             throw new AudioException("Source is not loaded.");
@@ -20,64 +27,21 @@ public static class ChordDetect
 #nullable disable
         IAudioDecoder _decoder = AudioDecoderFactory.Create(audioFile, 22050, 1);
         var samples = _decoder.ReadAllSamples();
-        var _waveBuffer = new WaveBuffer(samples);
-#nullable restore
-
-        using var model = new Model();
-        var modelOutput = model.Predict(_waveBuffer, progress =>
-        {
-            Log.Info($"\rRecognizing musical notes: {progress:P1}");
-        });
-
-        var convertOptions = new NotesConvertOptions
-        {
-            OnsetThreshold = 0.5f,
-            FrameThreshold = 0.2f,
-            MinNoteLength = 15,
-            MinFreq = 32.7f,
-            MaxFreq = 2800f,
-            IncludePitchBends = false,
-            MelodiaTrick = true
-        };
-
-        var converter = new NotesConverter(modelOutput);
-        List<OwnaudioNET.Features.Extensions.Note> rawNotes = converter.Convert(convertOptions);
-
-        int detectTempo = DetectBpmFromSamples(samples, 22050, 1);
-
-        var analyzer = new SongChordAnalyzer(
-                windowSize: intervalSecond,        // fallback if bpm = 0
-                hopSize: 0.5f,
-                minimumChordDuration: 0.5f,
-                confidence: 0.65f,
-                bpm: detectTempo           // derive quarter-note window from detected BPM
-            );
-
-        var chords = analyzer.AnalyzeSong(rawNotes);
-        MusicalKey? detectedKey = analyzer.DetectedKey;
-
         _decoder.Dispose();
-#nullable disable
-        return (chords, detectedKey, detectTempo);
+
+        return _analyze(samples, intervalSecond);
 #nullable restore
     }
 
     /// <summary>
-    /// Detects chords from multiple audio files by mixing them into a single audio stream.
-    /// Useful for multi-track projects where each track is a separate file.
+    /// Same thing for a multitrack project — everything gets summed to one mono stream first.
     /// </summary>
-    /// <param name="audioFiles">List of audio file paths to mix and analyze.</param>
-    /// <param name="intervalSecond">Analysis window size in seconds.</param>
-    /// <returns>Tuple of timed chords, detected musical key, and tempo BPM.</returns>
     public static (List<TimedChord>, MusicalKey, int) DetectFromFiles(
         IReadOnlyList<string> audioFiles,
         float intervalSecond = 1.0f)
     {
         if (audioFiles == null || audioFiles.Count == 0)
             throw new AudioException("No audio files provided.");
-
-        const int targetSampleRate = 22050;
-        const int targetChannels = 1;
 
         var allTrackSamples = new List<float[]>(audioFiles.Count);
         int maxLength = 0;
@@ -87,11 +51,12 @@ public static class ChordDetect
             if (!File.Exists(file))
                 throw new AudioException($"Audio file not found: {file}");
 
-            using var decoder = AudioDecoderFactory.Create(file, targetSampleRate, targetChannels);
-            float[] samples = decoder.ReadAllSamples();
-            if (samples.Length > maxLength)
-                maxLength = samples.Length;
-            allTrackSamples.Add(samples);
+            using (var decoder = AudioDecoderFactory.Create(file, 22050, 1))
+            {
+                float[] _samples = decoder.ReadAllSamples();
+                if (_samples.Length > maxLength) maxLength = _samples.Length;
+                allTrackSamples.Add(_samples);
+            }
         }
 
         var mixed = new float[maxLength];
@@ -114,10 +79,16 @@ public static class ChordDetect
                 mixed[i] *= inv;
         }
 
-        var waveBuffer = new WaveBuffer(mixed);
+#nullable disable
+        return _analyze(mixed, intervalSecond);
+#nullable restore
+    }
 
+#nullable disable
+    private static (List<TimedChord>, MusicalKey, int) _analyze(float[] samples, float intervalSecond)
+    {
         using var model = new Model();
-        var modelOutput = model.Predict(waveBuffer, progress =>
+        var modelOutput = model.Predict(new WaveBuffer(samples), progress =>
         {
             Log.Info($"\rRecognizing musical notes: {progress:P1}");
         });
@@ -133,32 +104,21 @@ public static class ChordDetect
             MelodiaTrick = true
         };
 
-        var converter = new NotesConverter(modelOutput);
-        List<Note> rawNotes = converter.Convert(convertOptions);
-
-        int detectTempo = DetectBpmFromSamples(mixed, 22050, 1);
+        var rawNotes = new NotesConverter(modelOutput).Convert(convertOptions);
+        int detectTempo = _detectBpm(samples, 22050, 1);
 
         var analyzer = new SongChordAnalyzer(
-            windowSize: intervalSecond,        // fallback if bpm = 0
+            windowSize: intervalSecond,
             hopSize: 0.5f,
             minimumChordDuration: 0.5f,
             confidence: 0.65f,
-            bpm: detectTempo           // derive quarter-note window from detected BPM
-        );
+            bpm: detectTempo);
 
-        var chords = analyzer.AnalyzeSong(rawNotes);
-        MusicalKey? detectedKey = analyzer.DetectedKey;
-
-#nullable disable
-        return (chords, detectedKey, detectTempo);
-#nullable restore
+        return (analyzer.AnalyzeSong(rawNotes), analyzer.DetectedKey, detectTempo);
     }
+#nullable restore
 
-    /// <summary>
-    /// Detects BPM from raw audio samples using SoundTouch auto-correlation algorithm.
-    /// Falls back to 120 BPM if detection fails (e.g. speech or non-rhythmic content).
-    /// </summary>
-    private static int DetectBpmFromSamples(float[] samples, int sampleRate, int channels)
+    private static int _detectBpm(float[] samples, int sampleRate, int channels)
     {
         const int chunkSize = 4096;
         using var bpmDetect = new BpmDetect(channels, sampleRate);
@@ -175,44 +135,24 @@ public static class ChordDetect
         return bpm > 0 ? (int)Math.Round(bpm) : 120;
     }
 
-    /// <summary>
-    /// Guards the cached real-time detector against concurrent callers.
-    /// </summary>
-    private static readonly object RealtimeDetectorLock = new object();
+    private static readonly object _realtimeLock = new object();
 
-    /// <summary>
-    /// The cached real-time detector reused across calls so its internal stability
-    /// buffer can accumulate history; a fresh instance per call would reset the
-    /// buffer and make the reported stability meaningless.
-    /// </summary>
     private static RealTimeChordDetector? _realtimeDetector;
-
-    /// <summary>
-    /// The detection mode the cached real-time detector was created with.
-    /// </summary>
     private static DetectionMode _realtimeDetectorMode;
-
-    /// <summary>
-    /// The buffer size the cached real-time detector was created with.
-    /// </summary>
     private static int _realtimeDetectorBufferSize;
 
     /// <summary>
-    /// Processes a group of notes with the shared real-time detector and returns the most
-    /// stable chord. The detector instance persists across calls (and is recreated only
-    /// when the mode or buffer size changes), so the stability score reflects the last
-    /// <paramref name="buffersize"/> calls rather than a single frame.
+    /// Realtime path. The detector is kept between calls on purpose — a fresh one every frame
+    /// would wipe the history and the stability number would mean nothing. Rebuilt only when
+    /// mode or buffersize changes.
     /// </summary>
-    /// <param name="notes">The notes of the current analysis frame.</param>
-    /// <param name="mode">The detection mode to use.</param>
-    /// <param name="buffersize">The number of recent frames considered for stability.</param>
-    /// <returns>A tuple containing the most stable chord name and its stability score (0.0 to 1.0).</returns>
+    /// <returns>The steadiest chord over the last buffersize calls plus its stability, 0..1.</returns>
     public static (string chord, float stability) DetectRealtime(
         List<Note> notes,
         DetectionMode mode = DetectionMode.Optimized,
         int buffersize = 5)
     {
-        lock (RealtimeDetectorLock)
+        lock (_realtimeLock)
         {
             if (_realtimeDetector == null
                 || _realtimeDetectorMode != mode

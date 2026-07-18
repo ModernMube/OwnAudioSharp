@@ -1,50 +1,39 @@
-﻿using System.Collections.Generic;
-using System.Linq;
+using System.Collections.Generic;
 
 namespace OwnaudioNET.Features.OwnChordDetect.Core
 {
     /// <summary>
-    /// Manages chord templates and note name conversion with key-aware naming.
+    /// Builds the chord templates we match chromagrams against, and spells note names for a key.
     /// </summary>
     public static class ChordTemplates
     {
-        /// <summary>
-        /// Array of note names in chromatic order starting from C (default with sharps).
-        /// </summary>
-        private static readonly string[] DefaultNoteNames = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+        private static readonly string[] _defaultNoteNames = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
 
         /// <summary>
-        /// Converts a pitch class number to its corresponding note name using the specified key context.
+        /// Pitch class 0-11 to a note name. Without a key we spell everything with sharps.
         /// </summary>
-        /// <param name="pitchClass">The pitch class number (0-11, where 0=C, 1=C#, etc.)</param>
-        /// <param name="key">The musical key context for appropriate note naming. If null, uses default sharp notation.</param>
-        /// <returns>The note name as a string (e.g., "C", "F#", "Bb")</returns>
         public static string GetNoteName(int pitchClass, MusicalKey? key = null)
         {
-            return key?.PreferredNoteNames[pitchClass % 12] ?? DefaultNoteNames[pitchClass % 12];
+            return key?.PreferredNoteNames[pitchClass % 12] ?? _defaultNoteNames[pitchClass % 12];
         }
 
         /// <summary>
-        /// Perceptual weights by chord-tone position (index 0 = root, 1 = third, 2 = fifth, 3+ = extensions).
-        /// Based on Krumhansl–Kessler probe-tone research: root carries the strongest tonal identity,
-        /// followed by the third (major/minor quality), then the fifth and upper extensions.
-        /// Cosine similarity normalizes magnitudes at match time, so these are relative importance values.
+        /// Weight per chord-tone slot: root, third, fifth, then extensions. Krumhansl-Kessler probe-tone
+        /// ordering — the root carries the identity, the third the quality. Cosine normalizes later,
+        /// so only the ratios matter.
         /// </summary>
-        private static readonly float[] ToneWeights = { 1.0f, 0.85f, 0.65f, 0.45f, 0.30f, 0.20f };
+        private static readonly float[] _toneWeights = { 1.0f, 0.85f, 0.65f, 0.45f, 0.30f, 0.20f };
 
         /// <summary>
-        /// Creates a chord template array from an array of pitch classes.
-        /// Pitch classes must be ordered by harmonic importance (root first, then third, fifth, extensions).
+        /// Turns pitch classes into a 12 bin template. Order matters: root first, then third, fifth, extensions.
         /// </summary>
-        /// <param name="pitchClasses">Array of pitch class numbers that form the chord, root at index 0</param>
-        /// <returns>A 12-element float array representing the chord template with position-based weights</returns>
         public static float[] CreateTemplate(int[] pitchClasses)
         {
             var template = new float[12];
 
             for (int i = 0; i < pitchClasses.Length; i++)
             {
-                float weight = i < ToneWeights.Length ? ToneWeights[i] : ToneWeights[ToneWeights.Length - 1];
+                float weight = i < _toneWeights.Length ? _toneWeights[i] : _toneWeights[_toneWeights.Length - 1];
                 template[pitchClasses[i] % 12] = weight;
             }
 
@@ -52,15 +41,13 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
         }
 
         /// <summary>
-        /// Creates all chord templates with key-aware naming.
+        /// Every chord type on every root, named for the key.
+        /// includeExtended pulls in the 9th/11th/13th and altered stuff too.
         /// </summary>
-        /// <param name="key">The musical key context for appropriate chord naming</param>
-        /// <param name="includeExtended">Whether to include extended chords (9th, 11th, 13th)</param>
-        /// <returns>A dictionary mapping chord names to their template arrays</returns>
         public static Dictionary<string, float[]> CreateAllTemplates(MusicalKey? key = null, bool includeExtended = true)
         {
             var templates = new Dictionary<string, float[]>();
-            var chordDefinitions = includeExtended ? GetAllChordDefinitions() : GetBasicChordDefinitions();
+            var chordDefinitions = includeExtended ? _allChordDefs() : _basicChordDefs();
 
             for (int root = 0; root < 12; root++)
             {
@@ -68,7 +55,10 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
 
                 foreach (var (suffix, intervals) in chordDefinitions)
                 {
-                    var pitchClasses = intervals.Select(interval => (root + interval) % 12).ToArray();
+                    var pitchClasses = new int[intervals.Length];
+                    for (int i = 0; i < intervals.Length; i++)
+                        pitchClasses[i] = (root + intervals[i]) % 12;
+
                     templates[noteName + suffix] = CreateTemplate(pitchClasses);
                 }
             }
@@ -76,51 +66,43 @@ namespace OwnaudioNET.Features.OwnChordDetect.Core
             return templates;
         }
 
-        /// <summary>
-        /// Gets basic chord definitions (triads and 7th chords).
-        /// </summary>
-        /// <returns>An array of tuples containing chord suffixes and their corresponding interval patterns</returns>
-        private static (string suffix, int[] intervals)[] GetBasicChordDefinitions() => new[]
+        private static (string suffix, int[] intervals)[] _basicChordDefs() => new[]
         {
-            ("", new[] { 0, 4, 7 }),           // Major
-            ("m", new[] { 0, 3, 7 }),          // Minor
-            ("7", new[] { 0, 4, 7, 10 }),      // Dominant 7th
-            ("maj7", new[] { 0, 4, 7, 11 }),   // Major 7th
-            ("m7", new[] { 0, 3, 7, 10 })      // Minor 7th
+            ("", new[] { 0, 4, 7 }),
+            ("m", new[] { 0, 3, 7 }),
+            ("7", new[] { 0, 4, 7, 10 }),
+            ("maj7", new[] { 0, 4, 7, 11 }),
+            ("m7", new[] { 0, 3, 7, 10 })
         };
 
-        /// <summary>
-        /// Gets all chord definitions including extended chords.
-        /// </summary>
-        /// <returns>An array of tuples containing chord suffixes and their corresponding interval patterns for all chord types</returns>
-        private static (string suffix, int[] intervals)[] GetAllChordDefinitions() => new[]
+        private static (string suffix, int[] intervals)[] _allChordDefs() => new[]
         {
-            ("", new[] { 0, 4, 7 }),           // Major
-            ("m", new[] { 0, 3, 7 }),          // Minor
-            ("7", new[] { 0, 4, 7, 10 }),      // Dominant 7th
-            ("maj7", new[] { 0, 4, 7, 11 }),   // Major 7th
-            ("m7", new[] { 0, 3, 7, 10 }),     // Minor 7th
-            ("sus2", new[] { 0, 2, 7 }),       // Sus2
-            ("sus4", new[] { 0, 5, 7 }),       // Sus4
-            ("dim", new[] { 0, 3, 6 }),        // Diminished
-            ("aug", new[] { 0, 4, 8 }),        // Augmented
-            ("add9", new[] { 0, 4, 7, 2 }),    // Add9
-            ("6", new[] { 0, 4, 7, 9 }),       // 6th
-            ("m6", new[] { 0, 3, 7, 9 }),      // Minor 6th
-            ("9", new[] { 0, 4, 7, 10, 2 }),   // 9th
-            ("m9", new[] { 0, 3, 7, 10, 2 }),  // Minor 9th
-            ("maj9", new[] { 0, 4, 7, 11, 2 }), // Major 9th
-            ("11", new[] { 0, 4, 7, 10, 2, 5 }), // 11th
-            ("m11", new[] { 0, 3, 7, 10, 2, 5 }), // Minor 11th
-            ("13", new[] { 0, 4, 7, 10, 2, 9 }), // 13th
-            ("m13", new[] { 0, 3, 7, 10, 2, 9 }), // Minor 13th
+            ("", new[] { 0, 4, 7 }),
+            ("m", new[] { 0, 3, 7 }),
+            ("7", new[] { 0, 4, 7, 10 }),
+            ("maj7", new[] { 0, 4, 7, 11 }),
+            ("m7", new[] { 0, 3, 7, 10 }),
+            ("sus2", new[] { 0, 2, 7 }),
+            ("sus4", new[] { 0, 5, 7 }),
+            ("dim", new[] { 0, 3, 6 }),
+            ("aug", new[] { 0, 4, 8 }),
+            ("add9", new[] { 0, 4, 7, 2 }),
+            ("6", new[] { 0, 4, 7, 9 }),
+            ("m6", new[] { 0, 3, 7, 9 }),
+            ("9", new[] { 0, 4, 7, 10, 2 }),
+            ("m9", new[] { 0, 3, 7, 10, 2 }),
+            ("maj9", new[] { 0, 4, 7, 11, 2 }),
+            ("11", new[] { 0, 4, 7, 10, 2, 5 }),
+            ("m11", new[] { 0, 3, 7, 10, 2, 5 }),
+            ("13", new[] { 0, 4, 7, 10, 2, 9 }),
+            ("m13", new[] { 0, 3, 7, 10, 2, 9 }),
 
-            ("7b5", new[] { 0, 4, 6, 10 }),   // Altered chords
+            ("7b5", new[] { 0, 4, 6, 10 }),
             ("7#5", new[] { 0, 4, 8, 10 }),
             ("7#9", new[] { 0, 4, 7, 10, 3 }),
-            ("m7b5", new[] { 0, 3, 6, 10 }),    // Half-diminished
-            ("dim7", new[] { 0, 3, 6, 9 }),     // Diminished 7th
-            ("madd9", new[] { 0, 3, 7, 2 })    // Add2 variations           
+            ("m7b5", new[] { 0, 3, 6, 10 }),
+            ("dim7", new[] { 0, 3, 6, 9 }),
+            ("madd9", new[] { 0, 3, 7, 2 })
         };
     }
 }

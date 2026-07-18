@@ -4,218 +4,144 @@ using OwnaudioNET.Exceptions;
 namespace OwnaudioNET.BufferManagement;
 
 /// <summary>
-/// Lock-free single-producer single-consumer (SPSC) circular buffer for audio data.
-/// This implementation is designed for zero-allocation in the hot path.
-///
-/// Thread Safety:
-/// - Write() must only be called from ONE producer thread
-/// - Read(), Peek(), Skip() must only be called from ONE consumer thread
-/// - Clear() is NOT thread-safe and must be called when no other operations are in progress
-/// - Available, IsEmpty, IsFull are thread-safe (volatile reads)
-///
-/// Performance:
-/// - Write/Read: O(1) time complexity, zero allocations
-/// - Capacity is rounded up to power-of-2 for efficient modulo operations
-/// - AggressiveInlining on hot path methods
+/// Lock-free SPSC ring buffer for audio. One producer calls Write, one consumer
+/// calls Read/Peek/Skip. Capacity gets rounded up to a power of two so the wrap
+/// is a cheap mask instead of a modulo.
 /// </summary>
 public sealed class CircularBuffer
 {
     private readonly float[] _buffer;
     private readonly int _capacity;
+    private readonly int _mask;
     private volatile int _writePos;
     private volatile int _readPos;
     private int _available;
 
+    /// <summary>
+    /// Set by Clear(), consumed by whichever side touches the buffer next.
+    /// </summary>
     private volatile bool _clearRequested;
 
     private readonly object _lock = new object();
 
     /// <summary>
-    /// Gets the capacity of the buffer in samples.
+    /// Buffer size in samples, after the power-of-two rounding.
     /// </summary>
     public int Capacity => _capacity;
 
     /// <summary>
-    /// Gets the number of samples available to read.
-    /// Returns 0 immediately when a Clear() is pending, consistent with the deferred reset.
+    /// Samples waiting to be read. Reports 0 while a Clear is still pending.
     /// </summary>
     public int Available => _clearRequested ? 0 : Volatile.Read(ref _available);
 
     /// <summary>
-    /// Gets the number of samples that can be written.
+    /// How much room is left for writing.
     /// </summary>
     public int WritableCount => _capacity - Available;
 
-    /// <summary>
-    /// Gets whether the buffer is empty.
-    /// </summary>
     public bool IsEmpty => Available == 0;
 
-    /// <summary>
-    /// Gets whether the buffer is full.
-    /// </summary>
     public bool IsFull => Available == _capacity;
 
     /// <summary>
-    /// Initializes a new instance of the CircularBuffer class.
+    /// Capacity is given in samples, not frames.
     /// </summary>
-    /// <param name="capacityInSamples">The capacity in samples (NOT frames).</param>
+    /// <param name="capacityInSamples"></param>
     public CircularBuffer(int capacityInSamples)
     {
         if (capacityInSamples <= 0)
             throw new AudioException("CircularBuffer ERROR: ", new ArgumentException("Capacity must be greater than zero.", nameof(capacityInSamples)));
 
-        _capacity = RoundUpToPowerOf2(capacityInSamples);
+        _capacity = _roundUpPow2(capacityInSamples);
+        _mask = _capacity - 1;
         _buffer = new float[_capacity];
-        _writePos = 0;
-        _readPos = 0;
-        _available = 0;
     }
 
     /// <summary>
-    /// Writes samples to the buffer.
-    /// When a <see cref="Clear"/> is pending the buffer is reset and the incoming data
-    /// is discarded (returns 0) so that stale pre-seek samples never enter the buffer.
+    /// Pushes samples in. If a Clear is pending we swallow the data and return 0,
+    /// that way stale pre-seek stuff never sneaks back in.
     /// </summary>
-    /// <param name="data">The data to write.</param>
-    /// <returns>The number of samples actually written.</returns>
+    /// <returns>How many samples actually landed.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Write(ReadOnlySpan<float> data)
     {
-        if (_clearRequested)
-        {
-            lock (_lock)
-            {
-                if (_clearRequested)
-                {
-                    _writePos = 0;
-                    _readPos = 0;
-                    Volatile.Write(ref _available, 0);
-                    _clearRequested = false;
-                }
-            }
-            return 0;
-        }
+        if (_clearRequested) { _applyPendingClear(); return 0; }
 
-        int available = Volatile.Read(ref _available);
-        int writable = _capacity - available;
+        int writable = _capacity - Volatile.Read(ref _available);
         int toWrite = Math.Min(data.Length, writable);
+        if (toWrite == 0) return 0;
 
-        if (toWrite == 0)
-            return 0;
-
-        int writePos = _writePos; // Volatile read (implicit)
+        int writePos = _writePos;
         int firstChunk = Math.Min(toWrite, _capacity - writePos);
 
         data.Slice(0, firstChunk).CopyTo(_buffer.AsSpan(writePos, firstChunk));
-
         if (toWrite > firstChunk)
-        {
-            int secondChunk = toWrite - firstChunk;
-            data.Slice(firstChunk, secondChunk).CopyTo(_buffer.AsSpan(0, secondChunk));
-        }
+            data.Slice(firstChunk, toWrite - firstChunk).CopyTo(_buffer.AsSpan(0, toWrite - firstChunk));
 
-        _writePos = (writePos + toWrite) & (_capacity - 1); // Efficient modulo with power of 2
+        _writePos = (writePos + toWrite) & _mask;
 
         Thread.MemoryBarrier();
-
         Interlocked.Add(ref _available, toWrite);
 
         return toWrite;
     }
 
     /// <summary>
-    /// Reads samples from the buffer.
+    /// Pulls samples out into destination.
     /// </summary>
-    /// <param name="destination">The destination buffer.</param>
-    /// <returns>The number of samples actually read.</returns>
+    /// <returns>How many samples we managed to hand over.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Read(Span<float> destination)
     {
-        if (_clearRequested)
-        {
-            lock (_lock)
-            {
-                if (_clearRequested)
-                {
-                    _writePos = 0;
-                    _readPos = 0;
-                    Volatile.Write(ref _available, 0);
-                    _clearRequested = false;
-                }
-            }
-            return 0;
-        }
+        if (_clearRequested) { _applyPendingClear(); return 0; }
 
-        int available = Volatile.Read(ref _available);
-        int toRead = Math.Min(destination.Length, available);
+        int toRead = Math.Min(destination.Length, Volatile.Read(ref _available));
+        if (toRead == 0) return 0;
 
-        if (toRead == 0)
-            return 0;
-
-        int readPos = _readPos; // Volatile read (implicit)
+        int readPos = _readPos;
         int firstChunk = Math.Min(toRead, _capacity - readPos);
 
         _buffer.AsSpan(readPos, firstChunk).CopyTo(destination.Slice(0, firstChunk));
-
         if (toRead > firstChunk)
-        {
-            int secondChunk = toRead - firstChunk;
-            _buffer.AsSpan(0, secondChunk).CopyTo(destination.Slice(firstChunk, secondChunk));
-        }
+            _buffer.AsSpan(0, toRead - firstChunk).CopyTo(destination.Slice(firstChunk, toRead - firstChunk));
 
-        _readPos = (readPos + toRead) & (_capacity - 1); // Efficient modulo with power of 2
+        _readPos = (readPos + toRead) & _mask;
 
         Thread.MemoryBarrier();
-
         Interlocked.Add(ref _available, -toRead);
 
         return toRead;
     }
 
     /// <summary>
-    /// Peeks at samples without consuming them.
+    /// Same as Read but leaves the data in place.
     /// </summary>
-    /// <param name="destination">The destination buffer.</param>
-    /// <returns>The number of samples actually peeked.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Peek(Span<float> destination)
     {
-        int available = Volatile.Read(ref _available);
-        int toPeek = Math.Min(destination.Length, available);
-
-        if (toPeek == 0)
-            return 0;
+        int toPeek = Math.Min(destination.Length, Volatile.Read(ref _available));
+        if (toPeek == 0) return 0;
 
         int readPos = _readPos;
         int firstChunk = Math.Min(toPeek, _capacity - readPos);
 
         _buffer.AsSpan(readPos, firstChunk).CopyTo(destination.Slice(0, firstChunk));
-
         if (toPeek > firstChunk)
-        {
-            int secondChunk = toPeek - firstChunk;
-            _buffer.AsSpan(0, secondChunk).CopyTo(destination.Slice(firstChunk, secondChunk));
-        }
+            _buffer.AsSpan(0, toPeek - firstChunk).CopyTo(destination.Slice(firstChunk, toPeek - firstChunk));
 
         return toPeek;
     }
 
     /// <summary>
-    /// Skips the specified number of samples.
+    /// Drops up to sampleCount samples without copying them anywhere.
     /// </summary>
-    /// <param name="sampleCount">The number of samples to skip.</param>
-    /// <returns>The number of samples actually skipped.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Skip(int sampleCount)
     {
-        int available = Volatile.Read(ref _available);
-        int toSkip = Math.Min(sampleCount, available);
+        int toSkip = Math.Min(sampleCount, Volatile.Read(ref _available));
+        if (toSkip == 0) return 0;
 
-        if (toSkip == 0)
-            return 0;
-
-        _readPos = (_readPos + toSkip) & (_capacity - 1);
+        _readPos = (_readPos + toSkip) & _mask;
         Thread.MemoryBarrier();
         Interlocked.Add(ref _available, -toSkip);
 
@@ -223,10 +149,8 @@ public sealed class CircularBuffer
     }
 
     /// <summary>
-    /// Requests a thread-safe clear of the buffer.
-    /// The actual reset is applied atomically inside the next Write() or Read() call
-    /// by the producer/consumer thread, avoiding the race condition where resetting
-    /// _available to 0 mid-operation causes it to go negative.
+    /// Asks for a reset. The real work happens on the next Write/Read from the
+    /// owning thread — resetting _available here would race it negative.
     /// </summary>
     public void Clear()
     {
@@ -234,10 +158,8 @@ public sealed class CircularBuffer
     }
 
     /// <summary>
-    /// Clears the buffer and zeros out the array to prevent residual audio.
-    /// Uses the same deferred thread-safe mechanism as Clear().
-    /// The zero-fill of the backing array happens immediately (safe because float[] writes
-    /// to positions outside [readPos, writePos) are never consumed).
+    /// Deferred clear plus an immediate wipe of the backing array, so no residual
+    /// audio can be heard if something reads ahead.
     /// </summary>
     public void ClearWithZero()
     {
@@ -245,11 +167,21 @@ public sealed class CircularBuffer
         _clearRequested = true;
     }
 
-    /// <summary>
-    /// Rounds up to the nearest power of 2.
-    /// </summary>
+    private void _applyPendingClear()
+    {
+        lock (_lock)
+        {
+            if(!_clearRequested) return;
+
+            _writePos = 0;
+            _readPos = 0;
+            Volatile.Write(ref _available, 0);
+            _clearRequested = false;
+        }
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int RoundUpToPowerOf2(int value)
+    private static int _roundUpPow2(int value)
     {
         value--;
         value |= value >> 1;
@@ -257,7 +189,6 @@ public sealed class CircularBuffer
         value |= value >> 4;
         value |= value >> 8;
         value |= value >> 16;
-        value++;
-        return value;
+        return value + 1;
     }
 }

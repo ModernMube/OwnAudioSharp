@@ -1,47 +1,45 @@
-﻿using OwnaudioNET.Effects;
+using OwnaudioNET.Effects;
 using OwnaudioNET.Sources;
 using Logger;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 
 namespace OwnaudioNET.Features.Matchering
 {
+    /// <summary>
+    /// Preset based matching - we bake the preset curve into a neutral base sample
+    /// and then match the source track to that.
+    /// </summary>
     partial class AudioAnalyzer
     {
         /// <summary>
-        /// Enhanced preset processing using base sample as reference
-        /// First applies preset to base sample, then matches source to the processed base sample
+        /// Renders the source through a playback system preset. The preset is applied to
+        /// the embedded base sample first, that becomes the matchering target.
         /// </summary>
-        /// <param name="sourceFile">Source audio file to process</param>
-        /// <param name="baseSampleFile">Base reference sample (20-30 sec FLAC)</param>
-        /// <param name="outputFile">Final output file path</param>
-        /// <param name="system">Playback system preset to apply</param>
-        /// <param name="tempDirectory">Directory for temporary files (optional)</param>
-        /// <param name="eqOnlyMode">If true, applies only EQ without compression/dynamics</param>
+        /// <param name="sourceFile"></param>
+        /// <param name="outputFile"></param>
+        /// <param name="system">Which playback system curve to bake in.</param>
+        /// <param name="tempDirectory">Where the intermediate wavs go, temp path if null.</param>
+        /// <param name="eqOnlyMode">Skip the compressor on the base sample.</param>
         public void ProcessWithEnhancedPreset(string sourceFile, string outputFile,
             PlaybackSystem system, string? tempDirectory = null, bool eqOnlyMode = true)
         {
             if (string.IsNullOrEmpty(tempDirectory))
                 tempDirectory = Path.GetTempPath();
 
-            string processedBaseSample = Path.Combine(tempDirectory,
-                $"processed_base_{system}_{DateTime.Now.Ticks}.wav");
+            long stamp = DateTime.Now.Ticks;
+            string processedBaseSample = Path.Combine(tempDirectory, $"processed_base_{system}_{stamp}.wav");
+            string baseSampleFile = Path.Combine(tempDirectory, $"base_sample_{system}_{stamp}.wav");
 
-            string baseSampleFile = Path.Combine(tempDirectory,
-                $"base_sample_{system}_{DateTime.Now.Ticks}.wav");
-
-            if (!LoadBaseSample(baseSampleFile))
-                return;
+            _loadBaseSample(baseSampleFile);
 
             try
             {
-                Log.Info($"=== ENHANCED PRESET PROCESSING: {SystemPresets[system].Name} ===");
+                Log.Info($"=== ENHANCED PRESET PROCESSING: {_systemPresets[system].Name} ===");
                 Log.Info($"Mode: {(eqOnlyMode ? "EQ Only" : "Full Effects Chain")}");
 
-                ApplyPresetToBaseSample(baseSampleFile, processedBaseSample, system, eqOnlyMode);
+                _applyPresetToBase(baseSampleFile, processedBaseSample, system, eqOnlyMode);
                 ProcessEQMatching(sourceFile, processedBaseSample, outputFile);
 
                 Log.Info($"Enhanced preset processing completed: {outputFile}");
@@ -50,11 +48,8 @@ namespace OwnaudioNET.Features.Matchering
             {
                 try
                 {
-                    if (File.Exists(processedBaseSample))
-                        File.Delete(processedBaseSample);
-
-                    if (File.Exists(baseSampleFile))
-                        File.Delete(baseSampleFile);
+                    if (File.Exists(processedBaseSample)) File.Delete(processedBaseSample);
+                    if (File.Exists(baseSampleFile)) File.Delete(baseSampleFile);
                 }
                 catch (Exception ex)
                 {
@@ -64,16 +59,13 @@ namespace OwnaudioNET.Features.Matchering
         }
 
         /// <summary>
-        /// Applies preset effects to the base sample to create enhanced target
+        /// Bakes the preset EQ (and optionally its compressor) into the base sample,
+        /// then matches the level back to where it started.
         /// </summary>
-        /// <param name="baseSampleFile">Input base sample file</param>
-        /// <param name="processedBaseSample">Output processed base sample file</param>
-        /// <param name="system">Playback system preset</param>
-        /// <param name="eqOnlyMode">If true, applies only EQ without compression/dynamics</param>
-        private void ApplyPresetToBaseSample(string baseSampleFile, string processedBaseSample,
+        private void _applyPresetToBase(string baseSampleFile, string processedBaseSample,
             PlaybackSystem system, bool eqOnlyMode = false)
         {
-            var preset = SystemPresets[system];
+            var preset = _systemPresets[system];
 
             float[] audioData;
             int channels;
@@ -93,17 +85,15 @@ namespace OwnaudioNET.Features.Matchering
 
             Log.Info($"Base sample loaded: {audioData.Length / channels / sampleRate:F1}s, {channels}ch, {sampleRate}Hz");
 
-            float originalRMS = CalculateRMS(audioData);
+            float originalRMS = _calcRms(audioData);
 
-            for (int i = 0; i < audioData.Length; i++)
-                audioData[i] *= 0.95f;
+            var curve = _conservativeCurve(preset.FrequencyResponse);
+            var qFactors = _presetQFactors(curve);
 
-            var enhancedCurve = CreateConservativePresetCurve(preset.FrequencyResponse);
-            var baseSpectrum = AnalyzeAudioFile(baseSampleFile);
-            var optimizedQFactors = CalculateEnhancedPresetQFactors(enhancedCurve, baseSpectrum);
+            float totalBoosts = 0f;
+            foreach (float g in curve) if (g > 0) totalBoosts += g;
 
-            float totalBoosts = enhancedCurve.Where(x => x > 0).Sum();
-            float protectiveGain = Math.Max(0.7f, 1.0f - (totalBoosts * 0.03f)); // 3% reduction per dB boost
+            float protectiveGain = 0.95f * Math.Max(0.7f, 1.0f - (totalBoosts * 0.03f));
 
             for (int i = 0; i < audioData.Length; i++)
                 audioData[i] *= protectiveGain;
@@ -111,24 +101,12 @@ namespace OwnaudioNET.Features.Matchering
             Log.Info($"Applied protective gain: {20 * Math.Log10(protectiveGain):F1}dB (total boosts: {totalBoosts:F1}dB)");
 
             var presetEQ = new Equalizer30BandEffect(sampleRate);
-            for (int i = 0; i < FrequencyBands.Length; i++)
-            {
-                presetEQ.SetBandGain(i, FrequencyBands[i], optimizedQFactors[i], enhancedCurve[i]);
-            }
+            for (int i = 0; i < _freqBands.Length; i++)
+                presetEQ.SetBandGain(i, _freqBands[i], qFactors[i], curve[i]);
 
-            CompressorEffect? enhancedCompressor = null;
-
-            if (!eqOnlyMode)
-            {
-                enhancedCompressor = new CompressorEffect(
-                    CompressorEffect.DbToLinear(-15f),
-                    1.8f,
-                    50f,
-                    200f,
-                    2.0f,
-                    sampleRate
-                );
-            }
+            CompressorEffect? compressor = eqOnlyMode
+                ? null
+                : new CompressorEffect(CompressorEffect.DbToLinear(-15f), 1.8f, 50f, 200f, 2.0f, sampleRate);
 
             var audioConfig = new Ownaudio.Core.AudioConfig
             {
@@ -138,82 +116,57 @@ namespace OwnaudioNET.Features.Matchering
             };
 
             presetEQ.Initialize(audioConfig);
-            if (enhancedCompressor != null)
-            {
-                enhancedCompressor.Initialize(audioConfig);
-            }
-
-            int framesPerChunk = 512;
-            int samplesPerChunk = framesPerChunk * channels;
-            var processedData = new List<float>();
-            int totalSamples = audioData.Length;
-            float maxLevel = 0f;
+            compressor?.Initialize(audioConfig);
 
             Log.Info($"Applying {(eqOnlyMode ? "EQ-only" : "full")} {preset.Name} effects to base sample...");
 
+            int samplesPerChunk = 512 * channels;
+            int totalSamples = (audioData.Length / channels) * channels;
+            float maxLevel = 0f;
+
             for (int offset = 0; offset < totalSamples; offset += samplesPerChunk)
             {
-                int samplesToProcess = Math.Min(samplesPerChunk, totalSamples - offset);
-                int framesToProcess = samplesToProcess / channels;
+                int count = Math.Min(samplesPerChunk, totalSamples - offset);
+                int frames = count / channels;
+                var chunk = audioData.AsSpan(offset, count);
 
-                var chunk = new float[samplesToProcess];
-                Array.Copy(audioData, offset, chunk, 0, samplesToProcess);
-
-                presetEQ.Process(chunk.AsSpan(), framesToProcess);
-
-                if (!eqOnlyMode && enhancedCompressor != null)
-                {
-                    enhancedCompressor.Process(chunk.AsSpan(), framesToProcess);
-                }
+                presetEQ.Process(chunk, frames);
+                compressor?.Process(chunk, frames);
 
                 for (int i = 0; i < chunk.Length; i++)
                 {
-                    float sample = chunk[i];
-                    maxLevel = Math.Max(maxLevel, Math.Abs(sample));
+                    float abs = Math.Abs(chunk[i]);
+                    if (abs > maxLevel) maxLevel = abs;
 
-                    if (Math.Abs(sample) > 0.95f)
-                    {
-                        float sign = Math.Sign(sample);
-                        float limited = sign * (0.95f + 0.05f * MathF.Tanh((Math.Abs(sample) - 0.95f) * 4f));
-                        chunk[i] = limited;
-                    }
-                }
-
-                processedData.AddRange(chunk);
-
-                if ((offset / samplesPerChunk) % 50 == 0)
-                {
-                    float progress = (float)(offset + samplesToProcess) / totalSamples * 100f;
-                    Log.Info($"\rProcessing base sample: {progress:F1}%");
+                    if (abs > 0.95f)
+                        chunk[i] = Math.Sign(chunk[i]) * (0.95f + 0.05f * MathF.Tanh((abs - 0.95f) * 4f));
                 }
             }
 
             Log.Info($"\nBase sample processed. Max level: {20 * Math.Log10(maxLevel):F1}dB");
 
-            float processedRMS = CalculateRMS(processedData.ToArray());
-            float levelCompensation = originalRMS / Math.Max(processedRMS, 1e-10f);
+            float levelCompensation = originalRMS / Math.Max(_calcRms(audioData), 1e-10f);
+            float finalMax = 0f;
 
-            for (int i = 0; i < processedData.Count; i++)
+            for (int i = 0; i < audioData.Length; i++)
             {
-                processedData[i] *= levelCompensation;
+                audioData[i] *= levelCompensation;
+                finalMax = Math.Max(finalMax, Math.Abs(audioData[i]));
             }
 
-            float finalMaxLevel = processedData.Max(Math.Abs);
             Log.Info($"Level compensation applied: {20 * Math.Log10(levelCompensation):F1}dB");
-            Log.Info($"Final max level: {20 * Math.Log10(finalMaxLevel):F1}dB");
+            Log.Info($"Final max level: {20 * Math.Log10(finalMax):F1}dB");
 
-            OwnaudioNET.Recording.WaveFile.Create(processedBaseSample, processedData.ToArray(), sampleRate, channels, 24);
+            OwnaudioNET.Recording.WaveFile.Create(processedBaseSample, audioData, sampleRate, channels, 24);
 
             Log.Info($"Enhanced base sample created: {processedBaseSample}");
         }
 
         /// <summary>
-        /// Loads the embedded basesample audio from resources.
+        /// Dumps the embedded basesample blob out to a wav we can open.
         /// </summary>
-        private bool LoadBaseSample(string path)
+        private void _loadBaseSample(string path)
         {
-            bool isLoadSample = false;
-
             try
             {
                 using Stream stream = Assembly.GetExecutingAssembly()
@@ -222,98 +175,80 @@ namespace OwnaudioNET.Features.Matchering
                 stream.CopyTo(memoryStream);
 
                 OwnaudioNET.Recording.WaveFile.Create(path, memoryStream.ToArray(), 48000, 2, 24);
-
-                isLoadSample = true;
             }
             catch
             {
-                isLoadSample = false;
                 throw new Exception("Load error target audio data!");
             }
-
-            return isLoadSample;
         }
 
         /// <summary>
-        /// Creates CONSERVATIVE preset curve to avoid overdriving the matchering algorithm
+        /// Tames the preset curve before it's used as a matchering target - full strength
+        /// presets overdrive the matcher badly.
         /// </summary>
-        /// <param name="originalCurve">Original preset frequency response curve</param>
-        /// <returns>Conservative curve suitable for matchering target</returns>
-        private float[] CreateConservativePresetCurve(float[] originalCurve)
+        private float[] _conservativeCurve(float[] originalCurve)
         {
-            var conservativeCurve = new float[originalCurve.Length];
+            var curve = new float[originalCurve.Length];
 
             for (int i = 0; i < originalCurve.Length; i++)
             {
-                float freq = FrequencyBands[i];
-                float originalGain = originalCurve[i];
+                float freq = _freqBands[i];
 
-                float conservativeFactor = freq switch
+                float factor = freq switch
                 {
-                    <= 63f => 0.75f,    // Bass needs to be solid (was 0.6)
-                    <= 250f => 0.8f,    // Low-mids (was 0.7)
-                    <= 1000f => 0.85f,  // Mids (was 0.8)
-                    <= 4000f => 0.85f,  // Presence (was 0.8)
-                    <= 8000f => 0.8f,   // Brilliance (was 0.7)
-                    _ => 0.75f          // Air (was 0.6)
+                    <= 63f => 0.75f,
+                    <= 250f => 0.8f,
+                    <= 1000f => 0.85f,
+                    <= 4000f => 0.85f,
+                    <= 8000f => 0.8f,
+                    _ => 0.75f
                 };
 
-                float conservativeGain = originalGain * conservativeFactor;
-
-                float maxConservativeBoost = freq switch
+                float maxBoost = freq switch
                 {
-                    < 100f => 3f,       // Allow reasonable bass boost (was 2f)
-                    < 500f => 3f,       // (was 2.5f)
-                    < 2000f => 3.5f,    // (was 3f)
-                    < 5000f => 3.5f,    // (was 3f)
-                    < 10000f => 3f,     // (was 2.5f)
-                    _ => 3f             // (was 2f)
+                    < 100f => 3f,
+                    < 500f => 3f,
+                    < 2000f => 3.5f,
+                    < 5000f => 3.5f,
+                    < 10000f => 3f,
+                    _ => 3f
                 };
 
-                conservativeCurve[i] = Math.Max(-4f, Math.Min(maxConservativeBoost, conservativeGain));
+                curve[i] = Math.Clamp(originalCurve[i] * factor, -4f, maxBoost);
             }
 
             Log.Info("Conservative preset curve created for matchering:");
-            var bandNames = new[] {
-                "20Hz", "25Hz", "31Hz", "40Hz", "50Hz", "63Hz", "80Hz", "100Hz", "125Hz", "160Hz",
-                "200Hz", "250Hz", "315Hz", "400Hz", "500Hz", "630Hz", "800Hz", "1kHz", "1.25kHz", "1.6kHz",
-                "2kHz", "2.5kHz", "3.15kHz", "4kHz", "5kHz", "6.3kHz", "8kHz", "10kHz", "12.5kHz", "16kHz"
-            };
 
-            for (int i = 0; i < conservativeCurve.Length; i++)
+            for (int i = 0; i < curve.Length; i++)
             {
-                if (Math.Abs(conservativeCurve[i]) > 0.5f)
-                {
-                    Log.Info($"{bandNames[i]}: {conservativeCurve[i]:+0.1;-0.1}dB (was {originalCurve[i]:+0.1;-0.1}dB)");
-                }
+                if (Math.Abs(curve[i]) > 0.5f)
+                    Log.Info($"{_bandNames[i]}: {curve[i]:+0.1;-0.1}dB (was {originalCurve[i]:+0.1;-0.1}dB)");
             }
 
-            return conservativeCurve;
+            return curve;
         }
 
         /// <summary>
-        /// Calculates optimized Q factors for enhanced preset processing
+        /// Q factors for the preset EQ. Wider down low, tighter around the presence
+        /// region, plus a nudge for the bigger gains.
         /// </summary>
-        /// <param name="enhancedCurve">Enhanced frequency response curve</param>
-        /// <param name="baseSpectrum">Base sample spectrum analysis</param>
-        /// <returns>Array of optimized Q factors</returns>
-        private float[] CalculateEnhancedPresetQFactors(float[] enhancedCurve, AudioSpectrum baseSpectrum)
+        private float[] _presetQFactors(float[] curve)
         {
-            var qFactors = new float[FrequencyBands.Length];
+            var qFactors = new float[_freqBands.Length];
 
-            for (int i = 0; i < FrequencyBands.Length; i++)
+            for (int i = 0; i < _freqBands.Length; i++)
             {
-                float freq = FrequencyBands[i];
-                float gain = Math.Abs(enhancedCurve[i]);
+                float freq = _freqBands[i];
+                float gain = Math.Abs(curve[i]);
 
                 float baseQ = freq switch
                 {
-                    <= 63f => 2.5f,     // Wide for bass foundation (was 0.5)
-                    <= 250f => 3.0f,    // Moderate for low-mids (was 0.6)
-                    <= 1000f => 3.8f,   // Standard 1/3 octave spacing (was 0.8)
-                    <= 4000f => 4.0f,   // Precise presence (was 0.9)
-                    <= 10000f => 3.8f,  // Moderate brilliance (was 0.8)
-                    _ => 3.0f           // Wider air (was 0.7)
+                    <= 63f => 2.5f,
+                    <= 250f => 3.0f,
+                    <= 1000f => 3.8f,
+                    <= 4000f => 4.0f,
+                    <= 10000f => 3.8f,
+                    _ => 3.0f
                 };
 
                 float gainAdjustment = gain switch
@@ -324,67 +259,20 @@ namespace OwnaudioNET.Features.Matchering
                     _ => 1.2f
                 };
 
-                qFactors[i] = Math.Max(2.5f, Math.Min(5.0f, baseQ * gainAdjustment));
+                qFactors[i] = Math.Clamp(baseQ * gainAdjustment, 2.5f, 5.0f);
             }
 
             return qFactors;
         }
 
         /// <summary>
-        /// Prints comprehensive results from enhanced preset processing
+        /// Same preset run over a bunch of files.
         /// </summary>
-        /// <param name="sourceFile">Original source file</param>
-        /// <param name="baseSampleFile">Original base sample file</param>
-        /// <param name="processedBaseSample">Processed base sample file</param>
-        /// <param name="outputFile">Final output file</param>
-        /// <param name="system">Applied playback system</param>
-        private void PrintEnhancedPresetResults(string sourceFile, string baseSampleFile,
-            string processedBaseSample, string outputFile, PlaybackSystem system)
-        {
-            Log.Info("\n=== ENHANCED PRESET PROCESSING RESULTS ===");
-            Log.Info($"Applied System: {SystemPresets[system].Name}");
-            Log.Info($"Source: {Path.GetFileName(sourceFile)}");
-            Log.Info($"Base Sample: {Path.GetFileName(baseSampleFile)}");
-            Log.Info($"Output: {Path.GetFileName(outputFile)}");
-
-            try
-            {
-                var originalBaseSpectrum = AnalyzeAudioFile(baseSampleFile);
-                var processedBaseSpectrum = AnalyzeAudioFile(processedBaseSample);
-                var finalSpectrum = AnalyzeAudioFile(outputFile);
-
-                Log.Info("\nSpectrum Analysis:");
-                Log.Info($"Original Base - RMS: {originalBaseSpectrum.RMSLevel:F3}, Loudness: {originalBaseSpectrum.Loudness:F1}dBFS");
-                Log.Info($"Enhanced Base - RMS: {processedBaseSpectrum.RMSLevel:F3}, Loudness: {processedBaseSpectrum.Loudness:F1}dBFS");
-                Log.Info($"Final Output - RMS: {finalSpectrum.RMSLevel:F3}, Loudness: {finalSpectrum.Loudness:F1}dBFS");
-
-                float baseEnhancement = processedBaseSpectrum.Loudness - originalBaseSpectrum.Loudness;
-                Console.WriteLine($"Base Sample Enhancement: {baseEnhancement:+0.1;-0.1}dB");
-
-                Console.WriteLine("\n=== PROCESSING CHAIN SUMMARY ===");
-                Console.WriteLine("Step 1: Enhanced preset effects applied to base sample");
-                Console.WriteLine("Step 2: EQ matching applied from source to enhanced base");
-                Console.WriteLine("Result: Source audio with enhanced preset characteristics");
-            }
-            catch (Exception ex)
-            {
-                Log.Error($"Analysis error: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Batch processing for multiple sources with the same enhanced preset
-        /// </summary>
-        /// <param name="sourceFiles">Array of source files to process</param>
-        /// <param name="baseSampleFile">Base reference sample</param>
-        /// <param name="outputDirectory">Output directory for processed files</param>
-        /// <param name="system">Playback system preset</param>
-        /// <param name="fileNameSuffix">Suffix for output filenames</param>
+        /// <param name="fileNameSuffix">Appended to each output name, defaults to the system name.</param>
         public void BatchProcessWithEnhancedPreset(string[] sourceFiles, string baseSampleFile,
             string outputDirectory, PlaybackSystem system, string? fileNameSuffix = null)
         {
-            if (!Directory.Exists(outputDirectory))
-                Directory.CreateDirectory(outputDirectory);
+            Directory.CreateDirectory(outputDirectory);
 
             string suffix = fileNameSuffix ?? $"_{system.ToString().ToLower()}";
             string tempDirectory = Path.Combine(Path.GetTempPath(), $"enhanced_preset_{DateTime.Now.Ticks}");
@@ -393,25 +281,24 @@ namespace OwnaudioNET.Features.Matchering
             try
             {
                 Log.Info($"=== BATCH ENHANCED PRESET PROCESSING ===");
-                Log.Info($"System: {SystemPresets[system].Name}");
+                Log.Info($"System: {_systemPresets[system].Name}");
                 Log.Info($"Processing {sourceFiles.Length} files...");
 
                 for (int i = 0; i < sourceFiles.Length; i++)
                 {
-                    string sourceFile = sourceFiles[i];
-                    string fileName = Path.GetFileNameWithoutExtension(sourceFile);
-                    string outputFile = Path.Combine(outputDirectory, $"{fileName}{suffix}.wav");
+                    string _fileName = Path.GetFileNameWithoutExtension(sourceFiles[i]);
+                    string outputFile = Path.Combine(outputDirectory, $"{_fileName}{suffix}.wav");
 
-                    Log.Info($"\n[{i + 1}/{sourceFiles.Length}] Processing: {Path.GetFileName(sourceFile)}");
+                    Log.Info($"\n[{i + 1}/{sourceFiles.Length}] Processing: {Path.GetFileName(sourceFiles[i])}");
 
                     try
                     {
-                        ProcessWithEnhancedPreset(sourceFile, outputFile, system, tempDirectory);
+                        ProcessWithEnhancedPreset(sourceFiles[i], outputFile, system, tempDirectory);
                         Log.Info($"Completed: {Path.GetFileName(outputFile)}");
                     }
                     catch (Exception ex)
                     {
-                        Log.Error($"Error processing {Path.GetFileName(sourceFile)}: {ex.Message}");
+                        Log.Error($"Error processing {Path.GetFileName(sourceFiles[i])}: {ex.Message}");
                     }
                 }
 
@@ -421,8 +308,7 @@ namespace OwnaudioNET.Features.Matchering
             {
                 try
                 {
-                    if (Directory.Exists(tempDirectory))
-                        Directory.Delete(tempDirectory, true);
+                    if (Directory.Exists(tempDirectory)) Directory.Delete(tempDirectory, true);
                 }
                 catch (Exception ex)
                 {

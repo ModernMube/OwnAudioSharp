@@ -131,7 +131,7 @@ namespace OwnaudioNET.Effects
         /// AutoGain uses a 5 ms lookahead ring buffer whose actual length depends on
         /// the sample rate configured during <see cref="Initialize"/>.
         /// At 48 000 Hz this equals 240 samples; at 44 100 Hz it equals 220 samples.
-        /// This value is reported to <see cref="AudioMixer.ApplyPluginDelayCompensation"/>
+        /// This value is reported to <see cref="OwnaudioNET.Mixing.AudioMixer.ApplyPluginDelayCompensation"/>
         /// so that other tracks in the mix can be delayed by an equal amount.
         /// </remarks>
         public int LatencySamples => _lookaheadLength;

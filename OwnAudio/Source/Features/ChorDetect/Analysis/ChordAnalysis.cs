@@ -1,59 +1,55 @@
-﻿using System.Linq;
+using System.Linq;
 
 namespace OwnaudioNET.Features.OwnChordDetect.Analysis
 {
     /// <summary>
-    /// Detailed chord analysis result.
+    /// Everything we figured out about one chord: the call itself, how sure we are, and the raw data behind it.
     /// </summary>
     public class ChordAnalysis
     {
         /// <summary>
-        /// Gets the name of the detected chord.
+        /// The chord we settled on.
         /// </summary>
         public string ChordName { get; }
 
         /// <summary>
-        /// Gets the confidence level of the chord detection (0.0 to 1.0).
+        /// 0..1, how well the template matched.
         /// </summary>
         public float Confidence { get; }
 
         /// <summary>
-        /// Gets the detailed explanation of the chord analysis.
+        /// Human readable reasoning.
         /// </summary>
         public string Explanation { get; }
 
         /// <summary>
-        /// Gets the array of note names that form the chord.
+        /// The notes making up the chord, already spelled for the key.
         /// </summary>
         public string[] NoteNames { get; }
 
         /// <summary>
-        /// Gets or sets a value indicating whether the chord detection is ambiguous.
+        /// True when a runner-up came uncomfortably close.
         /// </summary>
         public bool IsAmbiguous { get; set; }
 
         /// <summary>
-        /// Gets or sets the alternative chord names if the detection is ambiguous.
+        /// Those runner-ups, if any.
         /// </summary>
         public string[] Alternatives { get; set; } = new string[0];
 
         /// <summary>
-        /// Gets or sets the pitch classes used in the chord analysis.
+        /// Pitch classes we fed the matcher.
         /// </summary>
         public int[] PitchClasses { get; set; } = new int[0];
 
         /// <summary>
-        /// Gets or sets the chromagram data used for chord analysis.
+        /// The 12 bin chromagram this came from.
         /// </summary>
         public float[] Chromagram { get; set; } = new float[0];
 
         /// <summary>
-        /// Initializes a new instance of the ChordAnalysis class.
+        /// The read-only half gets set here, the rest is filled in by the detector afterwards.
         /// </summary>
-        /// <param name="chordName">The name of the detected chord.</param>
-        /// <param name="confidence">The confidence level of the chord detection (0.0 to 1.0).</param>
-        /// <param name="explanation">The detailed explanation of the chord analysis.</param>
-        /// <param name="noteNames">The array of note names that form the chord.</param>
         public ChordAnalysis(string chordName, float confidence, string explanation, string[] noteNames)
         {
             ChordName = chordName;
@@ -63,17 +59,14 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         }
 
         /// <summary>
-        /// Returns a string representation of the chord analysis.
+        /// Name, confidence and explanation, plus the alternatives when it's a close call.
         /// </summary>
-        /// <returns>A string containing the chord name, confidence level, explanation, and alternatives if ambiguous.</returns>
         public override string ToString()
         {
             var result = $"{ChordName} (confidence: {Confidence:F3})\n{Explanation}";
 
             if (IsAmbiguous && Alternatives.Any())
-            {
                 result += $"\nAlternatives: {string.Join(", ", Alternatives)}";
-            }
 
             return result;
         }

@@ -1,32 +1,27 @@
-﻿using OwnaudioNET.Features.Extensions;
+using OwnaudioNET.Features.Extensions;
 using System.Collections.Generic;
 
 namespace OwnaudioNET.Features.OwnChordDetect.Detectors
 {
     /// <summary>
-    /// Real-time chord detector for continuous analysis with stability tracking.
+    /// Chord detection for a running stream, keeps a short history so the answer doesn't flicker.
     /// </summary>
     public class RealTimeChordDetector
     {
-        /// <summary>
-        /// The underlying chord detector configured for optimized real-time analysis.
-        /// </summary>
         private readonly ChordDetector _detector;
 
         /// <summary>
-        /// Initializes a new instance of the RealTimeChordDetector class.
+        /// bufferSize is how many past windows the stability vote looks at.
         /// </summary>
-        /// <param name="bufferSize">The size of the internal buffer for stability analysis. Default is 5.</param>
         public RealTimeChordDetector(int bufferSize = 5, DetectionMode mode = DetectionMode.Optimized)
         {
             _detector = new ChordDetector(mode, bufferSize: bufferSize);
         }
 
         /// <summary>
-        /// Processes a new group of notes and returns the most stable chord detected.
+        /// Feeds the next batch of notes in.
         /// </summary>
-        /// <param name="newNotes">The new notes to add to the analysis buffer.</param>
-        /// <returns>A tuple containing the most stable chord name and its stability score (0.0 to 1.0).</returns>
+        /// <returns>The steadiest chord right now plus how sure we are, 0..1.</returns>
         public (string chord, float stability) ProcessNotes(List<Note> newNotes)
         {
             return _detector.ProcessNotes(newNotes);
