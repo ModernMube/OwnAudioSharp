@@ -317,18 +317,18 @@ await OwnaudioNet.ShutdownAsync();</code></pre>
       <div class="pkg-grid">
         <div class="pkg-card">
           <div class="pkg-card-name" style="color:var(--accent)">OwnAudioSharp</div>
-          <div class="pkg-card-desc">Desktop — full feature set: mixing, 17 effects, VST3, network sync, recording, mastering and analysis.</div>
+          <div class="pkg-card-desc">The complete edition: mixing, effects, VST3, network sync, recording and MIDI, plus mastering, analysis and the waveform display.</div>
           <div class="pkg-card-size">Windows · macOS · Linux</div>
         </div>
         <div class="pkg-card">
           <div class="pkg-card-name" style="color:var(--success)">OwnAudioSharp.Mobile</div>
-          <div class="pkg-card-desc">Android &amp; iOS build of the engine and API, tuned for mobile real-time constraints.</div>
-          <div class="pkg-card-size">Android ARM64 · iOS ARM64</div>
+          <div class="pkg-card-desc">The same feature set built for mobile, mastering and waveform display included — minus the ONNX-based analysis.</div>
+          <div class="pkg-card-size">Android ARM · ARM64 · x64 · iOS ARM64</div>
         </div>
         <div class="pkg-card">
           <div class="pkg-card-name" style="color:var(--warning)">OwnAudioSharp.Basic</div>
-          <div class="pkg-card-desc">Lightweight core — audio I/O, effects, VST3, sync and pitch/tempo. No AI/ML models.</div>
-          <div class="pkg-card-size">All platforms · minimal size</div>
+          <div class="pkg-card-desc">Audio in and out, and nothing that could be left out — no analysis features, no ONNX models, no UI dependency.</div>
+          <div class="pkg-card-size">Windows · macOS · Linux · minimal size</div>
         </div>
         <div class="pkg-card">
           <div class="pkg-card-name" style="color:var(--violet)">OwnVocalRemover <span class="pkg-badge pkg-addon">Add-on</span></div>
@@ -339,9 +339,9 @@ await OwnaudioNet.ShutdownAsync();</code></pre>
 
       <div class="code-block" style="margin-top:1.5rem; max-width:480px; margin-left:auto; margin-right:auto;">
         <div class="code-header"><span>Shell</span><button class="copy-btn">Copy</button></div>
-        <pre><code class="language-bash">dotnet add package OwnAudioSharp          # Desktop — full features
+        <pre><code class="language-bash">dotnet add package OwnAudioSharp          # Desktop — everything
 dotnet add package OwnAudioSharp.Mobile   # Android / iOS
-dotnet add package OwnAudioSharp.Basic    # Lightweight
+dotnet add package OwnAudioSharp.Basic    # Desktop — minimal engine
 dotnet add package OwnVocalRemover        # Optional vocal separation add-on</code></pre>
       </div>
 

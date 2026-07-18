@@ -1,33 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- Default: net10.0 only. Pass -p:BuildMobile=true to include Android + iOS TFMs. -->
     <TargetFrameworks>net10.0</TargetFrameworks>
-    <TargetFrameworks Condition="'$(BuildMobile)' == 'true'">net10.0;net10.0-android;net10.0-ios</TargetFrameworks>
+    <TargetFrameworks Condition="'$(BuildMobile)' == 'true'">net10.0-android;net10.0-ios</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <!-- Separate obj directory set in Directory.Build.props (must be before SDK import) -->
-    <!-- Exclude shared obj subdirectories from implicit Compile glob -->
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <DefaultItemExcludes>$(DefaultItemExcludes);obj\**</DefaultItemExcludes>
-    <!-- Suppress specific warnings for cleaner build output -->
-    <NoWarn>$(NoWarn);CS8618;CS8625;CS1570;CS1572;CS1574;CS1587;CS0419</NoWarn>
-
-    <!-- Android specific settings -->
     <SupportedOSPlatformVersion Condition="$(TargetFramework.StartsWith('net10.0-android'))">24.0</SupportedOSPlatformVersion>
-
-    <!-- iOS specific settings -->
     <SupportedOSPlatformVersion Condition="$(TargetFramework.StartsWith('net10.0-ios'))">12.2</SupportedOSPlatformVersion>
   </PropertyGroup>
 
   <PropertyGroup>
-    <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Mobile</PackageId>
-    <Version>4.0.0-preview.29</Version>
+    <Version>4.0.0-preview.31</Version>
     <Authors>ModernMube</Authors>
-    <Description>Cross-platform audio engine library for mobile platforms (Android and iOS)</Description>
+    <Description>Cross-platform audio engine for .NET mobile apps (Android, iOS), built on a native Rust core. Playback, recording, multi-track mixing, effects, VST3 hosting, matchering and the Avalonia waveform display, without the ONNX-based analysis features (no chord detection, no note transcription). AOT-compatible and trimmable.</Description>
     <PackageTags>audio;cross-platform;android;ios;mobile;sound;multitrack</PackageTags>
     <RepositoryUrl>https://github.com/ModernMube/OwnAudioSharp</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -36,45 +29,33 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
-  <!-- Common dependencies (including Avalonia for mobile) -->
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.0.4" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.300" PrivateAssets="All" />
     <PackageReference Include="OwnAudioVst" Version="1.6.7" />
   </ItemGroup>
 
-  <!-- Define MOBILE symbol for mobile platforms -->
-  <PropertyGroup Condition="$(TargetFramework.Contains('-android')) OR $(TargetFramework.Contains('-ios'))">
-    <DefineConstants>$(DefineConstants);MOBILE</DefineConstants>
-  </PropertyGroup>
-
-  <!-- Exclude ML/desktop-only features that require the ownaudio_ml native library -->
   <ItemGroup>
     <Compile Remove="Features\ChorDetect\**\*.cs" />
     <Compile Remove="Features\Extensions\AudioReaderNote.cs" />
     <Compile Remove="Features\Extensions\OrtInference.cs" />
   </ItemGroup>
 
-  <!-- Embedded resources -->
   <ItemGroup>
     <EmbeddedResource Include="basesample.bin" />
   </ItemGroup>
 
-  <!-- NuGet package files -->
   <ItemGroup>
     <None Include="..\..\ownaudio.png" Pack="true" PackagePath="\" />
     <None Include="README.Mobile.md" Pack="true" PackagePath="\README.md" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>
 
-  <!-- Platform-specific project references with private assets (embedded in this assembly) -->
   <ItemGroup>
-    <!-- Core (always included) -->
     <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" PrivateAssets="all" IncludeAssets="runtime" />
     <ProjectReference Include="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj" PrivateAssets="all" IncludeAssets="runtime" />
   </ItemGroup>
 
-  <!-- Ensure platform-specific projects are built before packing -->
   <Target Name="BuildAndroidProjects" BeforeTargets="GenerateNuspec" Condition="$(TargetFramework.StartsWith('net10.0-android'))">
     <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-android35.0;BuildingForMobile=true" />
     <MSBuild Projects="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-android35.0;BuildingForMobile=true" />
@@ -85,26 +66,17 @@
     <MSBuild Projects="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-ios18.0;BuildingForMobile=true" />
   </Target>
 
-  <!-- Include platform-specific assemblies in the NuGet package -->
   <ItemGroup>
-    <!-- Android assemblies - NativeAudioEngine only -->
     <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-android35.0\Ownaudio.Core.dll" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-android35.0\Ownaudio.Core.dll')" Pack="true" PackagePath="lib\net10.0-android35.0\" />
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\bin\$(Configuration)\net10.0-android35.0\OwnAudioRust.dll" Condition="Exists('..\..\OwnAudioEngine\OwnAudioRust\bin\$(Configuration)\net10.0-android35.0\OwnAudioRust.dll')" Pack="true" PackagePath="lib\net10.0-android35.0\" />
-
-    <!-- iOS assemblies - NativeAudioEngine only -->
     <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-ios18.0\Ownaudio.Core.dll" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-ios18.0\Ownaudio.Core.dll')" Pack="true" PackagePath="lib\net10.0-ios18.0\" />
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\bin\$(Configuration)\net10.0-ios18.0\OwnAudioRust.dll" Condition="Exists('..\..\OwnAudioEngine\OwnAudioRust\bin\$(Configuration)\net10.0-ios18.0\OwnAudioRust.dll')" Pack="true" PackagePath="lib\net10.0-ios18.0\" />
   </ItemGroup>
 
-  <!-- Include native runtime libraries in the NuGet package -->
   <ItemGroup>
-    <!-- Android native libraries (ARM) -->
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\android-arm\**\*.*" Pack="true" PackagePath="runtimes\android-arm" />
-    <!-- Android native libraries (ARM64) -->
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\android-arm64\**\*.*" Pack="true" PackagePath="runtimes\android-arm64" />
-    <!-- Android native libraries (x64) -->
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\android-x64\**\*.*" Pack="true" PackagePath="runtimes\android-x64" />
-    <!-- iOS native libraries - static archives linked via NativeReference (device + simulator) -->
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\ios-arm64\**\*.*" Pack="true" PackagePath="runtimes\ios-arm64" />
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\iossimulator-arm64\**\*.*" Pack="true" PackagePath="runtimes\iossimulator-arm64" />
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\iossimulator-x64\**\*.*" Pack="true" PackagePath="runtimes\iossimulator-x64" />

@@ -1,8 +1,8 @@
 # OwnAudioSharp
 
-**Cross-platform audio library for .NET desktop applications**
+**Complete cross-platform audio library for .NET desktop applications**
 
-OwnAudioSharp is a professional-grade audio engine providing high-performance audio playback, recording, and processing for Windows, Linux, and macOS with zero external dependencies.
+OwnAudioSharp is a professional-grade audio engine providing high-performance audio playback, recording, and processing for Windows, Linux, and macOS with zero external dependencies. This is the full edition: everything the library offers, including MIDI, the analysis features (chord detection, note transcription, matchering) and the Avalonia waveform display. For a lean playback/recording-only build see `OwnAudioSharp.Basic`; for Android and iOS see `OwnAudioSharp.Mobile`.
 
 ## Key Features
 

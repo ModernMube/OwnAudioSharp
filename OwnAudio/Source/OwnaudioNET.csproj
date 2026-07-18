@@ -1,39 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- Desktop platforms only (Windows, Linux, macOS) -->
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <!-- Prevent duplicate assembly attribute errors from Microsoft.SourceLink.GitHub -->
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <GenerateTargetFrameworkMonikerAttribute>false</GenerateTargetFrameworkMonikerAttribute>
-    <!-- AOT / trimming compatibility -->
     <IsAotCompatible>true</IsAotCompatible>
     <IsTrimmable>true</IsTrimmable>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
   </PropertyGroup>
 
-  <!-- Define MACOS symbol for macOS builds to enable CoreML code paths -->
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
-    <DefineConstants>$(DefineConstants);MACOS</DefineConstants>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-      <_Parameter1>Ownaudio.Test.OwnaudioNET</_Parameter1>
-    </AssemblyAttribute>
-  </ItemGroup>
-
   <PropertyGroup>
-    <!-- NuGet package properties -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp</PackageId>
-    <Version>4.0.0-preview.30</Version>
+    <Version>4.0.0-preview.31</Version>
     <Authors>ModernMube</Authors>
-    <Description>AOT-compatible cross-platform audio engine library for desktop platforms (Windows, Linux, macOS)</Description>
+    <Description>Complete cross-platform audio engine for .NET desktop apps (Windows, Linux, macOS), built on a native Rust core. Playback, recording, multi-track mixing, effects, VST3 hosting and MIDI, plus the analysis features (chord detection, note transcription, matchering) and the Avalonia waveform display. AOT-compatible and trimmable.</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;desktop;sound;multitrack</PackageTags>
     <RepositoryUrl>https://github.com/ModernMube/OwnAudioSharp</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -42,8 +25,12 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>Ownaudio.Test.OwnaudioNET</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 
-  <!-- Common dependencies (MathNet.Numerics removed – replaced by OwnAudioFft) -->
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.0.4" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.26.0" />
@@ -51,66 +38,40 @@
     <PackageReference Include="OwnAudioVst" Version="1.6.7" />
   </ItemGroup>
 
-  <!-- Embedded resources -->
   <ItemGroup>
     <EmbeddedResource Include="basesample.bin" />
     <EmbeddedResource Include="nmp.onnx" />
   </ItemGroup>
 
-  <!-- NuGet package files -->
   <ItemGroup>
     <None Include="..\..\ownaudio.png" Pack="true" PackagePath="\" />
     <None Include="README.Desktop.md" Pack="true" PackagePath="\README.md" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>
 
-  <!-- Platform-specific project references with private assets (embedded in this assembly) -->
   <ItemGroup>
-    <!-- Core (always included) -->
     <ProjectReference Include="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" PrivateAssets="all" IncludeAssets="runtime" />
     <ProjectReference Include="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj" PrivateAssets="all" IncludeAssets="runtime" Properties="TargetFramework=net10.0" />
     <ProjectReference Include="..\Midi\OwnAudio.Midi.csproj" />
   </ItemGroup>
 
-  <!-- Desktop platform references are no longer needed - NativeAudioEngine covers all platforms -->
-
-
-  <!-- Ensure platform-specific projects are built before packing -->
   <Target Name="BuildPlatformProjects" BeforeTargets="GenerateNuspec">
     <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0" />
     <MSBuild Projects="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0" />
   </Target>
 
-  <!-- Include platform-specific assemblies in the NuGet package -->
   <ItemGroup>
-    <!-- Desktop (.NET 10.0) assemblies -->
     <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0\Ownaudio.Core.dll" Pack="true" PackagePath="lib\net10.0\" />
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\bin\$(Configuration)\net10.0\OwnAudioRust.dll" Pack="true" PackagePath="lib\net10.0\" />
   </ItemGroup>
 
-  <!-- Include native runtime libraries in the NuGet package -->
   <ItemGroup>
-    <!-- Windows x64 native libraries -->
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\win-x64\**\*.*" Pack="true" PackagePath="runtimes\win-x64" />
-    <!-- Windows x86 native libraries -->
-    <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\win-x86\**\*.*" Pack="true" PackagePath="runtimes\win-x86" />
-    <!-- Windows ARM64 native libraries -->
-    <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\win-arm64\**\*.*" Condition="Exists('..\..\OwnAudioEngine\OwnAudioRust\runtimes\win-arm64\')" Pack="true" PackagePath="runtimes\win-arm64" />
-    <!-- Linux x64 native libraries -->
+    <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\win-arm64\**\*.*" Pack="true" PackagePath="runtimes\win-arm64" />
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\linux-x64\**\*.*" Pack="true" PackagePath="runtimes\linux-x64" />
-    <!-- Linux ARM native libraries -->
-    <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\linux-arm\**\*.*" Pack="true" PackagePath="runtimes\linux-arm" />
-    <!-- Linux ARM64 native libraries -->
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\linux-arm64\**\*.*" Pack="true" PackagePath="runtimes\linux-arm64" />
-    <!-- macOS x64 native libraries -->
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\osx-x64\**\*.*" Pack="true" PackagePath="runtimes\osx-x64" />
-    <!-- macOS ARM64 native libraries -->
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\osx-arm64\**\*.*" Pack="true" PackagePath="runtimes\osx-arm64" />
   </ItemGroup>
-
-  <!-- Ensure Presets folder exists after build -->
-  <Target Name="EnsurePresetsFolder" AfterTargets="Build">
-    <MakeDir Directories="$(OutputPath)Presets" Condition="!Exists('$(OutputPath)Presets')" />
-  </Target>
 
 </Project>

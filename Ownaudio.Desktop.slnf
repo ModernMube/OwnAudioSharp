@@ -3,20 +3,20 @@
     "path": "Ownaudio.sln",
     "projects": [
       "OwnAudioEngine\\Ownaudio.Core\\Ownaudio.Core.csproj",
-      "OwnAudioEngine\\Ownaudio.Native\\Ownaudio.Native.csproj",
+      "OwnAudioEngine\\OwnAudioRust\\OwnAudioRust.csproj",
+      "OwnAudio\\Midi\\OwnAudio.Midi.csproj",
+      "OwnAudio\\Source\\OwnaudioNET.csproj",
+      "OwnAudio\\Source\\OwnaudioNET.Basic.csproj",
       "OwnAudioTests\\Ownaudio.EngineTest\\Ownaudio.Test.Engine.csproj",
       "OwnAudioTests\\Ownaudio.OwnaudioNET\\Ownaudio.Test.OwnaudioNET.csproj",
+      "OwnAudioTests\\OwnAudio.MidiTest\\OwnAudio.MidiTest.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.ChordDetect\\Ownaudio.Example.ChordDetect.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.Desktop\\Ownaudio.Example.Desktop.csproj",
-      "OwnAudio\\Examples\\Ownaudio.Example.HTDemucs\\Ownaudio.Example.HTDemucs.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.Input\\Ownaudio.Example.Input.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.Matching\\Ownaudio.Example.Matching.csproj",
-      "OwnAudio\\Examples\\Ownaudio.Example.MultimodelSeparator\\Ownaudio.Example.MultimodelSeparator.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.MultitrackPlayer\\Ownaudio.Example.MultitrackPlayer.csproj",
       "OwnAudio\\Examples\\Ownaudio.Example.NetworkSyncClient\\Ownaudio.Example.NetworkSyncClient.csproj",
-      "OwnAudio\\Examples\\Ownaudio.Example.NetworkSyncServer\\Ownaudio.Example.NetworkSyncServer.csproj",
-      "OwnAudio\\Examples\\Ownaudio.Example.VocalRemover\\Ownaudio.Example.Vocalremover.csproj",
-      "OwnAudio\\Source\\OwnaudioNET.csproj"
+      "OwnAudio\\Examples\\Ownaudio.Example.NetworkSyncServer\\Ownaudio.Example.NetworkSyncServer.csproj"
     ]
   }
 }

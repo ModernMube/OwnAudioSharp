@@ -58,10 +58,16 @@ Decoding is pure Rust too — no external codecs, no FFmpeg, no system dependenc
 ## Installation
 
 ```bash
-dotnet add package OwnAudioSharp          # Desktop — full features
+dotnet add package OwnAudioSharp          # Desktop — everything
 dotnet add package OwnAudioSharp.Mobile   # Android / iOS
-dotnet add package OwnAudioSharp.Basic    # Lightweight
+dotnet add package OwnAudioSharp.Basic    # Desktop — minimal engine
 ```
+
+| Package | Platforms | What it is |
+|---|---|---|
+| `OwnAudioSharp` | Windows, Linux, macOS | The complete edition. Playback, recording, mixing, effects, VST3 and MIDI, plus the analysis features (chord detection, note transcription, matchering) and the waveform display. |
+| `OwnAudioSharp.Mobile` | Android, iOS | The same feature set built for mobile, including matchering and the waveform display — minus the ONNX-based analysis (no chord detection, no note transcription). |
+| `OwnAudioSharp.Basic` | Windows, Linux, macOS | Audio in and out, and nothing that could be left out. Playback, recording, mixing, effects and VST3 — no analysis features, no ONNX models, no UI dependency. |
 
 **Requirement:** .NET 10.0 or later. The native Rust engine — including the audio decoder — is bundled in the package. There is nothing else to install and no external codecs to configure.
 

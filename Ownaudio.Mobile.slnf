@@ -3,8 +3,7 @@
     "path": "Ownaudio.sln",
     "projects": [
       "OwnAudioEngine\\Ownaudio.Core\\Ownaudio.Core.csproj",
-      "OwnAudioEngine\\Ownaudio.Native\\Ownaudio.Native.csproj",
-      "OwnAudio\\Examples\\Ownaudio.Example.Android\\Ownaudio.Example.Android.csproj",
+      "OwnAudioEngine\\OwnAudioRust\\OwnAudioRust.csproj",
       "OwnAudio\\Source\\OwnaudioNET.Mobile.csproj"
     ]
   }

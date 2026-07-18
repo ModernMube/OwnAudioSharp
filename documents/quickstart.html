@@ -49,16 +49,16 @@
 <div class="table-wrap"><table>
   <thead><tr><th>Package</th><th>Platforms</th><th>What's included</th></tr></thead>
   <tbody>
-    <tr><td><code>OwnAudioSharp</code></td><td>Windows, Linux, macOS</td><td>Full desktop feature set — mixing, 17 effects, VST3, network sync, recording, mastering &amp; analysis</td></tr>
-    <tr><td><code>OwnAudioSharp.Mobile</code></td><td>Android, iOS</td><td>The engine and API tuned for mobile real-time constraints</td></tr>
-    <tr><td><code>OwnAudioSharp.Basic</code></td><td>All platforms</td><td>Lightweight core audio, effects, VST3, sync, pitch/tempo — no AI/ML models</td></tr>
+    <tr><td><code>OwnAudioSharp</code></td><td>Windows, Linux, macOS</td><td>The complete edition — mixing, effects, VST3, network sync, recording and MIDI, plus mastering and analysis (chord detection, note transcription) and the waveform display</td></tr>
+    <tr><td><code>OwnAudioSharp.Mobile</code></td><td>Android, iOS</td><td>The same feature set built for mobile, including matchering and the waveform display — minus the ONNX-based analysis (no chord detection, no note transcription)</td></tr>
+    <tr><td><code>OwnAudioSharp.Basic</code></td><td>Windows, Linux, macOS</td><td>Audio in and out, and nothing that could be left out — playback, recording, mixing, effects and VST3, with no analysis features, no ONNX models and no UI dependency</td></tr>
     <tr><td><code>OwnAudioSharp.Midi</code></td><td>Windows, Linux, macOS</td><td>Standalone AOT-compatible MIDI library</td></tr>
     <tr><td><code>OwnVocalRemover</code> <span class="pkg-badge pkg-addon">Add-on</span></td><td>Windows, Linux, macOS</td><td>Optional ONNX-based vocal separation, split out of the core API — reference only when needed</td></tr>
   </tbody>
 </table></div>
-<div class="code-block"><div class="code-header"><span>Shell</span><button class="copy-btn">Copy</button></div><pre><code class="language-bash">dotnet add package OwnAudioSharp          # Desktop — full features
+<div class="code-block"><div class="code-header"><span>Shell</span><button class="copy-btn">Copy</button></div><pre><code class="language-bash">dotnet add package OwnAudioSharp          # Desktop — everything
 dotnet add package OwnAudioSharp.Mobile   # Android / iOS
-dotnet add package OwnAudioSharp.Basic    # Lightweight
+dotnet add package OwnAudioSharp.Basic    # Desktop — minimal engine
 dotnet add package OwnVocalRemover        # Optional vocal separation add-on</code></pre></div>
 
 <div class="callout callout-success"><div class="callout-icon">🎵</div><p><strong>Formats out of the box:</strong> the pure-Rust decoder handles MP3, FLAC, WAV (PCM/ADPCM), AAC, MP4/M4A, OGG/Vorbis and AIFF on every platform — no FFmpeg, no system dependencies. FFmpeg 8+ remains supported as an optional legacy fallback for exotic formats; see <a href="api-reference.html#ffmpeg">FFmpeg Integration</a>.</p></div>

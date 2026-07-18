@@ -2,7 +2,7 @@
 
 **Cross-platform audio library for .NET mobile applications**
 
-OwnAudioSharp.Mobile is a professional-grade audio engine providing high-performance audio playback, recording, and processing for Android and iOS with zero external dependencies.
+OwnAudioSharp.Mobile is a professional-grade audio engine providing high-performance audio playback, recording, and processing for Android and iOS with zero external dependencies. It carries the same feature set as the full `OwnAudioSharp` package, including matchering and the Avalonia waveform display, minus the ONNX-based analysis features — there is no chord detection and no note transcription on mobile. For Windows, Linux and macOS use `OwnAudioSharp` or the minimal `OwnAudioSharp.Basic`.
 
 ## Key Features
 

@@ -1,8 +1,8 @@
 # OwnAudioSharp.Basic
 
-**Lightweight cross-platform audio library for .NET desktop and mobile applications**
+**Minimal cross-platform audio engine for .NET desktop applications**
 
-OwnAudioSharp.Basic is a professional-grade audio engine providing high-performance audio playback, recording, and processing for Windows, Linux, macOS, Android, and iOS — without AI/ML dependencies, making it significantly smaller and faster to install than the full `OwnAudioSharp` package.
+OwnAudioSharp.Basic is the stripped-down edition of `OwnAudioSharp` for Windows, Linux and macOS: audio in and out, and nothing that could be left out. Same native Rust engine, same API, without the analysis features, the ONNX models and the UI dependency.
 
 ## Why Basic?
 
@@ -14,13 +14,14 @@ OwnAudioSharp.Basic is a professional-grade audio engine providing high-performa
 | Network synchronization | ✅ | ✅ |
 | VST3 plugin support | ✅ | ✅ |
 | Pitch shift / time stretch | ✅ | ✅ |
-| AI vocal removal (ONNX) | ✅ | ❌ |
 | Chord detection | ✅ | ❌ |
+| Note transcription (ONNX) | ✅ | ❌ |
 | Audio matchering | ✅ | ❌ |
 | Wave visualization control | ✅ | ❌ |
-| Package size (models) | ~290 MB | < 5 MB |
+| MIDI (OwnAudioSharp.Midi) | ✅ | ❌ |
+| Package size | ~22 MB | ~8 MB |
 
-Use `OwnAudioSharp.Basic` when you need a lean audio engine without the overhead of large ONNX model files and AI inference dependencies.
+Use `OwnAudioSharp.Basic` when you want a lean playback/recording engine and none of the analysis machinery. For Android and iOS use `OwnAudioSharp.Mobile` instead — Basic is desktop only.
 
 ## Key Features
 
@@ -109,7 +110,7 @@ mixer.AddSource(pitchedSource);
 
 The following features from the full `OwnAudioSharp` package are **not available** in the Basic edition:
 
-- **VocalRemover** — AI-powered source separation using ONNX neural networks (`nmp.onnx`, `best.onnx`, `default.onnx`, `karaoke.onnx`, `htdemucs.onnx`)
+- **AudioReaderNote** — BasicPitch note/pitch transcription to MIDI, backed by the embedded `nmp.onnx` ONNX model
 - **ChordDetector** — Real-time and offline chord recognition
 - **Matchering** — Reference-based audio mastering
 - **WaveDisplayControl** — Avalonia-based waveform visualization UI control

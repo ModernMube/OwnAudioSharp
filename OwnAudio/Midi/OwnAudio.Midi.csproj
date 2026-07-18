@@ -12,11 +12,10 @@
 
     <DefaultItemExcludes>$(DefaultItemExcludes);rust-midi\**;runtimes\**</DefaultItemExcludes>
 
-    <!-- NuGet package -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Midi</PackageId>
-    <Version>4.0.0-preview.28</Version>
+    <Version>4.0.0-preview.31</Version>
     <Authors>ModernMube</Authors>
     <Description>AOT-compatible MIDI I/O and file handling for OwnAudioSharp. Supports real-time MIDI input/output (WinMM / CoreMIDI / ALSA), Standard MIDI File read/write, and a hardware-accurate MIDI clock.</Description>
     <PackageTags>midi;audio;aot;cross-platform;windows;linux;macos;android;ios;mobile</PackageTags>
@@ -33,54 +32,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="runtimes\win-x64\**\*.*">
-      <Link>runtimes\win-x64\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <PackagePath>runtimes\win-x64</PackagePath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Pack>true</Pack>
-    </None>
-    <None Include="runtimes\win-x86\**\*.*">
-      <Link>runtimes\win-x86\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <PackagePath>runtimes\win-x86</PackagePath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Pack>true</Pack>
-    </None>
-    <None Include="runtimes\win-arm64\**\*.*">
-      <Link>runtimes\win-arm64\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <PackagePath>runtimes\win-arm64</PackagePath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Pack>true</Pack>
-    </None>
-    <None Include="runtimes\linux-x64\**\*.*">
-      <Link>runtimes\linux-x64\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <PackagePath>runtimes\linux-x64</PackagePath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Pack>true</Pack>
-    </None>
-    <None Include="runtimes\linux-arm\**\*.*">
-      <Link>runtimes\linux-arm\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <PackagePath>runtimes\linux-arm</PackagePath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Pack>true</Pack>
-    </None>
-    <None Include="runtimes\linux-arm64\**\*.*">
-      <Link>runtimes\linux-arm64\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <PackagePath>runtimes\linux-arm64</PackagePath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Pack>true</Pack>
-    </None>
-    <None Include="runtimes\osx-x64\**\*.*">
-      <Link>runtimes\osx-x64\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <PackagePath>runtimes\osx-x64</PackagePath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Pack>true</Pack>
-    </None>
-    <None Include="runtimes\osx-arm64\**\*.*">
-      <Link>runtimes\osx-arm64\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      <PackagePath>runtimes\osx-arm64</PackagePath>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Pack>true</Pack>
-    </None>
+    <None Include="runtimes\win-x64\**\*.*" Link="runtimes\win-x64\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes\win-x64" />
+    <None Include="runtimes\win-arm64\**\*.*" Link="runtimes\win-arm64\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes\win-arm64" />
+    <None Include="runtimes\linux-x64\**\*.*" Link="runtimes\linux-x64\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes\linux-x64" />
+    <None Include="runtimes\linux-arm64\**\*.*" Link="runtimes\linux-arm64\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes\linux-arm64" />
+    <None Include="runtimes\osx-x64\**\*.*" Link="runtimes\osx-x64\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes\osx-x64" />
+    <None Include="runtimes\osx-arm64\**\*.*" Link="runtimes\osx-arm64\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes\osx-arm64" />
   </ItemGroup>
 
   <ItemGroup>
