@@ -5,74 +5,53 @@ using Ownaudio.Native.RustAudio.Interop;
 namespace Ownaudio.Safe.Exceptions;
 
 /// <summary>
-/// Central mapper from raw native error codes to typed managed exceptions.
-/// Every native call result must pass through <see cref="ThrowIfError"/> — direct
-/// <c>if (code != 0) throw</c> patterns at the call site are forbidden so that
-/// error messages and exception types remain consistent across the entire codebase.
+/// Single place where raw native codes turn into typed exceptions. Every FFI result goes
+/// through here — no ad-hoc "if (code != 0) throw" at the call sites, otherwise the
+/// messages and types drift apart.
 /// </summary>
 internal static class ErrorCodeMapper
 {
-    #region Public API
-
     /// <summary>
-    /// Throws the appropriate managed exception for <paramref name="rawCode"/> if it indicates
-    /// failure. Does nothing when <paramref name="rawCode"/> is zero (Success).
+    /// Throws for anything non-zero, no-op on Success. Pass nameof(caller) as operation,
+    /// that's what shows up in front of the message.
     /// </summary>
-    /// <param name="rawCode">The integer error code returned by the native function.</param>
-    /// <param name="operation">
-    /// Name of the operation that failed.
-    /// Pass <c>nameof(TheCallingMethod)</c> at every call site.
-    /// </param>
-    /// <exception cref="DeviceException">Thrown for device-related error codes.</exception>
-    /// <exception cref="StreamException">Thrown for stream-related error codes.</exception>
-    /// <exception cref="OwnAudioException">Thrown for all other non-zero codes.</exception>
     internal static void ThrowIfError(int rawCode, string operation)
     {
-        if (rawCode == (int)NativeErrorCode.Success)
-        {
-            return;
-        }
+        if (rawCode == (int)NativeErrorCode.Success) { return; }
 
-        var nativeCode = (NativeErrorCode)rawCode;
-        AudioEngineErrorCode publicCode = ToPublicCode(nativeCode);
+        var native = (NativeErrorCode)rawCode;
+        var code = _publicCode(native);
 
-        string detail = GetNativeErrorDetail();
-        string message = string.IsNullOrEmpty(detail)
-            ? $"{operation} failed: {DescribeCode(nativeCode)} (code {rawCode})"
-            : $"{operation} failed: {DescribeCode(nativeCode)} (code {rawCode}) — {detail}";
+        string detail = _lastNativeError();
+        string message = detail.Length == 0
+            ? $"{operation} failed: {_describe(native)} (code {rawCode})"
+            : $"{operation} failed: {_describe(native)} (code {rawCode}) — {detail}";
 
-        throw nativeCode switch
+        throw native switch
         {
             NativeErrorCode.DeviceNotFound
                 or NativeErrorCode.DeviceEnumerationFailed
-                    => new DeviceException(publicCode, message),
+                    => new DeviceException(code, message),
 
             NativeErrorCode.UnsupportedConfig
                 or NativeErrorCode.StreamBuildFailed
                 or NativeErrorCode.StreamControlFailed
-                    => new StreamException(publicCode, message),
+                    => new StreamException(code, message),
 
-            NativeErrorCode.HostApiNotAvailable
-                    => new HostApiNotAvailableException(message),
-
-            NativeErrorCode.AsioDriverNotFound
-                    => new AsioDriverNotFoundException(message),
+            NativeErrorCode.HostApiNotAvailable => new HostApiNotAvailableException(message),
+            NativeErrorCode.AsioDriverNotFound  => new AsioDriverNotFoundException(message),
 
             NativeErrorCode.DecoderOpenFailed
                 or NativeErrorCode.DecoderUnsupportedFormat
                 or NativeErrorCode.DecoderReadFailed
                 or NativeErrorCode.DecoderSeekFailed
-                    => new DecoderException(publicCode, message),
+                    => new DecoderException(code, message),
 
-            _ => new OwnAudioException(publicCode, message)
+            _ => new OwnAudioException(code, message)
         };
     }
 
-    #endregion
-
-    #region Private helpers
-
-    private static AudioEngineErrorCode ToPublicCode(NativeErrorCode code)
+    private static AudioEngineErrorCode _publicCode(NativeErrorCode code)
     {
         return code switch
         {
@@ -96,22 +75,16 @@ internal static class ErrorCodeMapper
         };
     }
 
-    private static string GetNativeErrorDetail()
+    /// <summary>
+    /// Extra context string the Rust side stashed away, empty if there's none.
+    /// </summary>
+    private static string _lastNativeError()
     {
-        try
-        {
-            IntPtr ptr = OwnAudioNative.ownaudio_v1_last_error_message();
-            return ptr == IntPtr.Zero
-                ? string.Empty
-                : Marshal.PtrToStringUTF8(ptr) ?? string.Empty;
-        }
-        catch
-        {
-            return string.Empty;
-        }
+        IntPtr ptr = OwnAudioNative.ownaudio_v1_last_error_message();
+        return ptr == IntPtr.Zero ? string.Empty : Marshal.PtrToStringUTF8(ptr) ?? string.Empty;
     }
 
-    private static string DescribeCode(NativeErrorCode code)
+    private static string _describe(NativeErrorCode code)
     {
         return code switch
         {
@@ -134,6 +107,4 @@ internal static class ErrorCodeMapper
             _                                       => $"unknown error code {(int)code}",
         };
     }
-
-    #endregion
 }

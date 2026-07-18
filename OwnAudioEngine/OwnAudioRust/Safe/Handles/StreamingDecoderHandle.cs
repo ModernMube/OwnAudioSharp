@@ -5,27 +5,15 @@ using Ownaudio.Native.RustAudio.Interop;
 namespace Ownaudio.Safe.Handles;
 
 /// <summary>
-/// Wraps the opaque native decoder handle returned by <c>ownaudio_v1_decoder_open</c>.
+/// Decoder pointer from ownaudio_v1_decoder_open. Releasing stops and joins the native
+/// prefetch thread, so it can block for a tick.
 /// </summary>
-/// <remarks>
-/// Guarantees release via <c>ownaudio_v1_decoder_destroy</c> even if <c>Dispose</c> is not
-/// called. Destroying the handle stops and joins the native prefetch thread.
-/// </remarks>
 public sealed class StreamingDecoderHandle : SafeHandle
 {
-    #region Construction
-
     /// <summary>
-    /// Initializes a new, invalid decoder handle.
-    /// The runtime fills in the actual handle value via P/Invoke <c>out</c> marshaling.
+    /// Invalid until P/Invoke fills it in.
     /// </summary>
-    public StreamingDecoderHandle() : base(IntPtr.Zero, ownsHandle: true)
-    {
-    }
-
-    #endregion
-
-    #region SafeHandle overrides
+    public StreamingDecoderHandle() : base(IntPtr.Zero, ownsHandle: true) { }
 
     /// <inheritdoc/>
     public override bool IsInvalid => handle == IntPtr.Zero;
@@ -36,6 +24,4 @@ public sealed class StreamingDecoderHandle : SafeHandle
         OwnAudioNative.ownaudio_v1_decoder_destroy(handle);
         return true;
     }
-
-    #endregion
 }

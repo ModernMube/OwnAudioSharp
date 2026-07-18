@@ -5,30 +5,16 @@ using Ownaudio.Native.RustAudio.Interop;
 namespace Ownaudio.Safe.Handles;
 
 /// <summary>
-/// Wraps the opaque native effect handle returned by <c>ownaudio_v1_track_add_effect</c>.
+/// Effect pointer handed back by ownaudio_v1_track_add_effect. Freeing it only drops the
+/// wrapper — it does NOT unhook the effect from the chain, so call
+/// ownaudio_v1_effect_remove before you dispose.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Guarantees release via <c>ownaudio_v1_effect_destroy</c> even if <c>Dispose</c> is not called.
-/// The handle releases the effect wrapper memory but does not remove the effect from the
-/// track chain; call <c>ownaudio_v1_effect_remove</c> before disposing.
-/// </para>
-/// </remarks>
 public sealed class EffectHandle : SafeHandle
 {
-    #region Construction
-
     /// <summary>
-    /// Initializes a new, invalid effect handle.
-    /// The runtime fills in the actual handle value via P/Invoke <c>out</c> marshaling.
+    /// Invalid until P/Invoke fills it in.
     /// </summary>
-    public EffectHandle() : base(IntPtr.Zero, ownsHandle: true)
-    {
-    }
-
-    #endregion
-
-    #region SafeHandle overrides
+    public EffectHandle() : base(IntPtr.Zero, ownsHandle: true) { }
 
     /// <inheritdoc/>
     public override bool IsInvalid => handle == IntPtr.Zero;
@@ -39,6 +25,4 @@ public sealed class EffectHandle : SafeHandle
         OwnAudioNative.ownaudio_v1_effect_destroy(handle);
         return true;
     }
-
-    #endregion
 }

@@ -3,62 +3,47 @@ using System.Runtime.InteropServices;
 namespace Ownaudio.Native.RustAudio.Structs;
 
 /// <summary>
-/// Mirrors the <c>OwnAudioSampleFormat</c> enum from <c>ownaudio_ffi.h</c>.
-/// Underlying type is <c>int</c> to match the Rust <c>#[repr(C)]</c> enum width.
+/// OwnAudioSampleFormat from ownaudio_ffi.h. int-backed to match the repr(C) width.
 /// </summary>
 internal enum NativeSampleFormat : int
 {
-    /// <summary>32-bit IEEE float — recommended for DSP work.</summary>
+    /// <summary>32-bit float, what we want for DSP.</summary>
     F32 = 0,
 
-    /// <summary>Signed 16-bit integer.</summary>
+    /// <summary>Signed 16-bit.</summary>
     I16 = 1,
 
-    /// <summary>Unsigned 16-bit integer.</summary>
+    /// <summary>Unsigned 16-bit.</summary>
     U16 = 2,
 
-    /// <summary>Signed 32-bit integer — the native wire format of many ASIO drivers.</summary>
+    /// <summary>
+    /// Signed 32-bit — most ASIO drivers talk this natively.
+    /// </summary>
     I32 = 3,
 }
 
 /// <summary>
-/// Mirrors <c>OwnAudioStreamConfig</c> from <c>ownaudio_ffi.h</c>.
-/// Field order and sizes must match exactly — verified by unit test against
-/// the cbindgen-generated layout.
+/// OwnAudioStreamConfig from ownaudio_ffi.h — 16 bytes, with 2 bytes of padding
+/// after Channels so the format enum lands 4-byte aligned. Layout test guards it.
 /// </summary>
-/// <remarks>
-/// Layout (natural C alignment):
-/// <code>
-/// Offset  0 : SampleRate       (4 bytes — u32)
-/// Offset  4 : Channels         (2 bytes — u16)
-/// Offset  6 : [2 bytes padding] (enum alignment)
-/// Offset  8 : SampleFormat     (4 bytes — i32 enum)
-/// Offset 12 : BufferSizeFrames (4 bytes — u32)
-/// Total  : 16 bytes
-/// </code>
-/// A value of zero for <see cref="BufferSizeFrames"/> tells the engine to
-/// use the platform default buffer size.
-/// </remarks>
 [StructLayout(LayoutKind.Sequential)]
 internal struct NativeStreamConfig
 {
-    /// <summary>Target sample rate in Hz (e.g. 44100, 48000).</summary>
+    /// <summary>
+    /// Wanted rate in Hz (44100, 48000, ...).
+    /// </summary>
     public uint SampleRate;
 
-    /// <summary>Number of channels (1 = mono, 2 = stereo).</summary>
+    /// <summary>1 = mono, 2 = stereo.</summary>
     public ushort Channels;
 
-    /// <summary>
-    /// Two bytes of implicit padding inserted by the C ABI to align
-    /// <see cref="SampleFormat"/> on a 4-byte boundary.
-    /// </summary>
     private ushort _pad;
 
     /// <summary>Sample data format.</summary>
     public NativeSampleFormat SampleFormat;
 
     /// <summary>
-    /// Requested buffer size in audio frames; 0 uses the platform default.
+    /// Buffer size in frames; 0 means "whatever the platform likes".
     /// </summary>
     public uint BufferSizeFrames;
 }

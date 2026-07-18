@@ -5,32 +5,16 @@ using Ownaudio.Native.RustAudio.Interop;
 namespace Ownaudio.Safe.Handles;
 
 /// <summary>
-/// Wraps the opaque native track-source write handle returned by
-/// <c>ownaudio_v1_track_set_ring_source</c>.
+/// Ring-buffer producer side of a track (ownaudio_v1_track_set_ring_source). Dropping it
+/// only kills the writer — the reader on the audio thread keeps going and underruns to
+/// silence once the buffered samples run out.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Guarantees release via <c>ownaudio_v1_track_source_destroy</c> even if
-/// <c>Dispose</c> is not called.  Destroying the handle drops the ring-buffer
-/// producer; the track's reader on the audio thread is undisturbed and simply
-/// underruns to silence once the buffered samples are consumed.
-/// </para>
-/// </remarks>
 public sealed class TrackSourceHandle : SafeHandle
 {
-    #region Construction
-
     /// <summary>
-    /// Initializes a new, invalid track-source handle.
-    /// The runtime fills in the actual handle value via P/Invoke <c>out</c> marshaling.
+    /// Invalid until P/Invoke fills it in.
     /// </summary>
-    public TrackSourceHandle() : base(IntPtr.Zero, ownsHandle: true)
-    {
-    }
-
-    #endregion
-
-    #region SafeHandle overrides
+    public TrackSourceHandle() : base(IntPtr.Zero, ownsHandle: true) { }
 
     /// <inheritdoc/>
     public override bool IsInvalid => handle == IntPtr.Zero;
@@ -41,6 +25,4 @@ public sealed class TrackSourceHandle : SafeHandle
         OwnAudioNative.ownaudio_v1_track_source_destroy(handle);
         return true;
     }
-
-    #endregion
 }

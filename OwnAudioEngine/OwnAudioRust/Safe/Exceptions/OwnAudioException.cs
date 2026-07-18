@@ -3,29 +3,18 @@ using System;
 namespace Ownaudio.Safe.Exceptions;
 
 /// <summary>
-/// Base exception type for all OwnAudioSharp errors originating from the native audio engine.
-/// Carry the <see cref="AudioEngineErrorCode"/> so callers can distinguish error categories
-/// without string parsing.
+/// Base for everything the native engine throws at us. Carries the error code so
+/// callers don't have to parse messages.
 /// </summary>
 public class OwnAudioException : Exception
 {
-    #region Properties
-
     /// <summary>
-    /// The error code returned by the native FFI layer that caused this exception.
+    /// Error code the FFI layer gave back.
     /// </summary>
     public AudioEngineErrorCode ErrorCode { get; }
 
-    #endregion
-
-    #region Construction
-
-    /// <summary>
-    /// Initializes a new instance of <see cref="OwnAudioException"/> with the given
-    /// error code and a descriptive message.
-    /// </summary>
-    /// <param name="errorCode">The error code identifying the failure category.</param>
-    /// <param name="message">Human-readable description of the failure.</param>
+    /// <param name="errorCode"></param>
+    /// <param name="message"></param>
     public OwnAudioException(AudioEngineErrorCode errorCode, string message)
         : base(message)
     {
@@ -33,17 +22,11 @@ public class OwnAudioException : Exception
     }
 
     /// <summary>
-    /// Initializes a new instance of <see cref="OwnAudioException"/> with the given
-    /// error code, a descriptive message, and an inner exception.
+    /// Same, but wraps whatever blew up underneath.
     /// </summary>
-    /// <param name="errorCode">The error code identifying the failure category.</param>
-    /// <param name="message">Human-readable description of the failure.</param>
-    /// <param name="innerException">The exception that caused this one.</param>
     public OwnAudioException(AudioEngineErrorCode errorCode, string message, Exception innerException)
         : base(message, innerException)
     {
         ErrorCode = errorCode;
     }
-
-    #endregion
 }

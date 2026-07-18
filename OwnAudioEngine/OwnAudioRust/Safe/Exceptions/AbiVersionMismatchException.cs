@@ -1,46 +1,23 @@
 namespace Ownaudio.Safe.Exceptions;
 
 /// <summary>
-/// Thrown when the ABI version reported by the native binary does not match the
-/// version the managed layer was compiled against.
+/// Native binary ABI doesn't match what the managed side was built against.
+/// Usually a hand-copied .dll/.so, or a half-finished deploy. Fix = reinstall the NuGet package.
 /// </summary>
-/// <remarks>
-/// <para>
-/// This exception is raised by <see cref="AudioEngine.Create()"/> immediately after
-/// the native library is loaded.  It indicates that the <c>ownaudio_ffi</c> binary
-/// on disk is from a different build than the managed wrapper — for example because
-/// someone manually copied a native file without updating the NuGet package, or
-/// because a deployment step was skipped.
-/// </para>
-/// <para>
-/// To resolve: reinstall the <c>OwnAudioSharp.Basic</c> (or Full/Mobile) NuGet
-/// package so that the native binary and the managed wrapper come from the same
-/// package version.
-/// </para>
-/// </remarks>
 public sealed class AbiVersionMismatchException : OwnAudioException
 {
-    #region Properties
-
     /// <summary>
-    /// The ABI version reported by the native binary that was loaded.
+    /// What the loaded native binary reported.
     /// </summary>
     public uint NativeBinaryAbiVersion { get; }
 
     /// <summary>
-    /// The ABI version the managed layer was compiled to expect.
+    /// What we expected it to report.
     /// </summary>
     public uint ExpectedAbiVersion { get; }
 
-    #endregion
-
-    #region Construction
-
-    /// <summary>
-    /// Initializes a new instance of <see cref="AbiVersionMismatchException"/>.
-    /// </summary>
-    /// <param name="nativeVersion">ABI version returned by the native binary.</param>
-    /// <param name="expectedVersion">ABI version expected by this managed assembly.</param>
+    /// <param name="nativeVersion"></param>
+    /// <param name="expectedVersion"></param>
     public AbiVersionMismatchException(uint nativeVersion, uint expectedVersion)
         : base(
             AudioEngineErrorCode.AbiVersionMismatch,
@@ -50,6 +27,4 @@ public sealed class AbiVersionMismatchException : OwnAudioException
         NativeBinaryAbiVersion = nativeVersion;
         ExpectedAbiVersion = expectedVersion;
     }
-
-    #endregion
 }

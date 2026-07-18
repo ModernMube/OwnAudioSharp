@@ -5,20 +5,14 @@ using Ownaudio.Native.RustAudio.Interop;
 namespace Ownaudio.Safe.Handles;
 
 /// <summary>
-/// Wraps the opaque native BPM detector handle returned by <c>ownaudio_v1_bpm_create</c>.
+/// BPM detector pointer from ownaudio_v1_bpm_create, freed by the finalizer if need be.
 /// </summary>
-/// <remarks>
-/// Guarantees release via <c>ownaudio_v1_bpm_destroy</c> even if <c>Dispose</c> is not called.
-/// </remarks>
 public sealed class BpmDetectHandle : SafeHandle
 {
     /// <summary>
-    /// Initializes a new, invalid detector handle. The runtime fills in the actual handle value via
-    /// P/Invoke <c>out</c> marshaling.
+    /// Invalid until the native side hands us a pointer.
     /// </summary>
-    public BpmDetectHandle() : base(IntPtr.Zero, ownsHandle: true)
-    {
-    }
+    public BpmDetectHandle() : base(IntPtr.Zero, ownsHandle: true) { }
 
     /// <inheritdoc/>
     public override bool IsInvalid => handle == IntPtr.Zero;
