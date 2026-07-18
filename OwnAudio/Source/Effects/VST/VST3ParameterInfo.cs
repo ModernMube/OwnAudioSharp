@@ -1,49 +1,45 @@
 namespace OwnaudioNET.Effects.VST
 {
     /// <summary>
-    /// Represents a VST3 plugin parameter with metadata.
+    /// One VST3 param plus its metadata.
     /// </summary>
     public sealed class VST3ParameterInfo
     {
         /// <summary>
-        /// Parameter ID used for Get/Set operations.
+        /// Param ID for Get/Set.
         /// </summary>
         public uint Id { get; }
 
         /// <summary>
-        /// Display name of the parameter.
+        /// Display name.
         /// </summary>
         public string Name { get; }
 
         /// <summary>
-        /// Current normalized value (typically 0.0 to 1.0).
+        /// Current value, normalized 0..1 in most plugins.
         /// </summary>
         public double Value { get; set; }
 
         /// <summary>
-        /// Minimum value in parameter's native range.
+        /// Low end of the native range.
         /// </summary>
         public double MinValue { get; }
 
         /// <summary>
-        /// Maximum value in parameter's native range.
+        /// High end of the native range.
         /// </summary>
         public double MaxValue { get; }
 
         /// <summary>
-        /// Default value of the parameter.
+        /// What the plugin ships with.
         /// </summary>
         public double DefaultValue { get; }
 
         /// <summary>
-        /// Creates a new VST3 parameter info instance.
+        /// Builds the info record. Ranges default to the usual normalized 0..1.
         /// </summary>
-        /// <param name="id">Parameter ID.</param>
-        /// <param name="name">Parameter display name.</param>
-        /// <param name="value">Current value.</param>
-        /// <param name="minValue">Minimum value.</param>
-        /// <param name="maxValue">Maximum value.</param>
-        /// <param name="defaultValue">Default value.</param>
+        /// <param name="id"></param>
+        /// <param name="name"></param>
         public VST3ParameterInfo(uint id, string name, double value,
             double minValue = 0.0, double maxValue = 1.0, double defaultValue = 0.0)
         {
@@ -56,11 +52,8 @@ namespace OwnaudioNET.Effects.VST
         }
 
         /// <summary>
-        /// Returns a string representation of the parameter.
+        /// Diagnostics only.
         /// </summary>
-        public override string ToString()
-        {
-            return $"{Name}: {Value:F3} (range: {MinValue:F3} - {MaxValue:F3})";
-        }
+        public override string ToString() => $"{Name}: {Value:F3} (range: {MinValue:F3} - {MaxValue:F3})";
     }
 }

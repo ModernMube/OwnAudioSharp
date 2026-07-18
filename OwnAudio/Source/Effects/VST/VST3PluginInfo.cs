@@ -3,52 +3,52 @@ using System;
 namespace OwnaudioNET.Effects.VST;
 
 /// <summary>
-/// Contains metadata information about a VST3 plugin.
+/// What we know about a VST3 plugin without hosting it.
 /// </summary>
 public sealed class VST3PluginInfo
 {
     /// <summary>
-    /// Gets the full path to the VST3 plugin file or bundle.
+    /// Full path of the .vst3 file or bundle.
     /// </summary>
     public required string Path { get; init; }
 
     /// <summary>
-    /// Gets the plugin name.
+    /// Plugin name.
     /// </summary>
     public required string Name { get; init; }
 
     /// <summary>
-    /// Gets the plugin vendor/manufacturer name.
+    /// Vendor / manufacturer.
     /// </summary>
     public required string Vendor { get; init; }
 
     /// <summary>
-    /// Gets the plugin version string, if available.
+    /// Version string, when the plugin bothers to report one.
     /// </summary>
     public string? Version { get; init; }
 
     /// <summary>
-    /// Gets whether this plugin is an audio effect.
+    /// True for audio effects.
     /// </summary>
     public required bool IsEffect { get; init; }
 
     /// <summary>
-    /// Gets whether this plugin is an instrument (synth).
+    /// True for instruments / synths.
     /// </summary>
     public required bool IsInstrument { get; init; }
 
     /// <summary>
-    /// Gets the number of parameters exposed by this plugin.
+    /// How many params the plugin exposes.
     /// </summary>
     public required int ParameterCount { get; init; }
 
     /// <summary>
-    /// Gets a formatted display name combining plugin name and vendor.
+    /// Name + vendor, ready for a combo box.
     /// </summary>
     public string DisplayName => $"{Name} ({Vendor})";
 
     /// <summary>
-    /// Returns a string representation of the plugin info.
+    /// Same as DisplayName.
     /// </summary>
     public override string ToString() => DisplayName;
 }

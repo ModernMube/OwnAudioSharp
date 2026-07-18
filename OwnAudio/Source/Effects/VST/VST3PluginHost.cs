@@ -7,23 +7,9 @@ using OwnVST3Host.NativeWindow;
 namespace OwnaudioNET.Effects.VST
 {
     /// <summary>
-    /// VST3 plugin host that manages the plugin lifecycle and editor window.
-    ///
-    /// Threading model:
-    ///   Plugin thread  – all native VST operations (load, init, parameter reads) run here
-    ///                    via ThreadedVst3Wrapper. Never blocks the UI thread.
-    ///   Audio thread   – ProcessAudio() is called directly; the ThreadedVst3Wrapper drains
-    ///                    the lock-free SPSC queue before each block (SetParameter, tempo, …).
-    ///   UI thread      – uses CreateAsync / OpenEditorAsync / SetParameter (lock-free enqueue).
-    ///   Editor thread  – native window + CreateEditor/CloseEditor on the caller (UI) thread
-    ///                    as required by VST3 and macOS Cocoa.
-    ///
-    /// Required usage sequence:
-    ///   1. var host = await VST3PluginHost.CreateAsync(path);      // load on plugin thread
-    ///   2. await host.InitializeAudioAsync(sampleRate, blockSize); // audio init on plugin thread
-    ///   3. var proc = host.GetProcessor();                         // only when IsReady == true
-    ///   4. mixer.AddMasterEffect(proc);
-    ///   5. mixer.Stop(); host.Dispose();                           // clean shutdown
+    /// Owns a VST3 plugin: loading, audio init, editor window, teardown.
+    /// Everything native runs on the dedicated plugin thread, the UI thread never blocks.
+    /// Usual order: CreateAsync -> InitializeAudioAsync -> GetProcessor -> add to mixer -> Dispose last.
     /// </summary>
     public sealed class VST3PluginHost : IDisposable, IAsyncDisposable
     {
@@ -32,7 +18,6 @@ namespace OwnaudioNET.Effects.VST
         private VstEditorController? _editorController;
         private bool _disposed;
 
-        // Properties cached after load on the plugin thread – safe to read from any thread.
         private readonly string _name;
         private readonly string _vendor;
         private readonly string? _version;
@@ -41,57 +26,55 @@ namespace OwnaudioNET.Effects.VST
         private readonly bool _hasEditor;
 
         /// <summary>
-        /// Gets the plugin name.
+        /// Plugin name.
         /// </summary>
         public string Name => _name;
 
         /// <summary>
-        /// Gets the plugin vendor/manufacturer.
+        /// Vendor / manufacturer.
         /// </summary>
         public string Vendor => _vendor;
 
         /// <summary>
-        /// Gets the plugin version.
+        /// Version string, may be null.
         /// </summary>
         public string? Version => _version;
 
         /// <summary>
-        /// Gets whether the plugin is an audio effect.
+        /// True for audio effects.
         /// </summary>
         public bool IsEffect => _isEffect;
 
         /// <summary>
-        /// Gets whether the plugin is an instrument.
+        /// True for instruments.
         /// </summary>
         public bool IsInstrument => _isInstrument;
 
         /// <summary>
-        /// Gets whether the plugin has a graphical editor.
+        /// Whether the plugin brings its own GUI.
         /// </summary>
         public bool HasEditor => _hasEditor;
 
         /// <summary>
-        /// Gets whether the editor window is currently open.
+        /// Is the editor window up right now.
         /// </summary>
         public bool IsEditorOpen => _editorController?.IsEditorOpen ?? false;
 
         /// <summary>
-        /// Gets the full path to the loaded VST3 plugin file.
+        /// Path we loaded the plugin from.
         /// </summary>
         public string PluginPath => _pluginPath;
 
         /// <summary>
-        /// Gets whether the plugin has been audio-initialized and is ready to process audio.
-        /// Must be true before calling <see cref="GetProcessor"/>.
-        /// Safe to read from any thread.
+        /// Audio init done and not disposed — must be true before GetProcessor().
         /// </summary>
         public bool IsReady => !_disposed && _threaded.IsReady;
 
         /// <summary>
-        /// Gets the current plugin state. Safe to read from any thread.
+        /// Current plugin state, readable from any thread.
         /// </summary>
         public VstPluginState State => _threaded.State;
-        
+
 
         private VST3PluginHost(
             string pluginPath,
@@ -112,15 +95,11 @@ namespace OwnaudioNET.Effects.VST
             _isInstrument = isInstrument;
             _hasEditor = hasEditor;
         }
-        
+
         /// <summary>
-        /// Creates a new VST3 plugin host and loads the plugin synchronously.
-        /// Blocks the calling thread during native library loading (may take 50–500 ms).
-        /// Prefer <see cref="CreateAsync"/> when called from a UI thread.
-        /// After construction call <see cref="InitializeAudioAsync"/> before <see cref="GetProcessor"/>.
+        /// Loads the plugin the blocking way — native loading can eat 50-500 ms, so from a UI
+        /// thread use CreateAsync instead. InitializeAudioAsync still has to follow.
         /// </summary>
-        /// <exception cref="ArgumentNullException">When pluginPath is null or empty.</exception>
-        /// <exception cref="InvalidOperationException">When plugin fails to load.</exception>
         public VST3PluginHost(string pluginPath)
         {
             if (string.IsNullOrEmpty(pluginPath))
@@ -146,12 +125,8 @@ namespace OwnaudioNET.Effects.VST
         }
 
         /// <summary>
-        /// Asynchronously loads a VST3 plugin on the dedicated plugin thread and returns a ready host.
-        /// The calling (UI) thread is never blocked. After this call invoke
-        /// <see cref="InitializeAudioAsync"/> before <see cref="GetProcessor"/>.
+        /// Same thing on the plugin thread, the caller stays responsive.
         /// </summary>
-        /// <exception cref="ArgumentNullException">When pluginPath is null or empty.</exception>
-        /// <exception cref="InvalidOperationException">When plugin fails to load.</exception>
         public static async Task<VST3PluginHost> CreateAsync(string pluginPath)
         {
             if (string.IsNullOrEmpty(pluginPath))
@@ -172,35 +147,25 @@ namespace OwnaudioNET.Effects.VST
             bool isEffect = await threaded.GetIsEffectAsync().ConfigureAwait(false);
             bool isInstrument = await threaded.GetIsInstrumentAsync().ConfigureAwait(false);
 
-            bool hasEditor = true;
-
-            return new VST3PluginHost(pluginPath, threaded, name, vendor, version,
-                                      isEffect, isInstrument, hasEditor);
+            return new VST3PluginHost(pluginPath, threaded, name, vendor, version, isEffect, isInstrument, true);
         }
 
         /// <summary>
-        /// Initializes the VST3 plugin for audio processing on the dedicated plugin thread.
-        /// Must be called and awaited before <see cref="GetProcessor"/>.
-        /// Sets <see cref="State"/> to <c>Ready</c> on success.
+        /// Preps the plugin for audio and flips State to Ready. Await this before GetProcessor().
         /// </summary>
-        /// <param name="sampleRate">Audio sample rate (e.g. 44100, 48000).</param>
-        /// <param name="maxBlockSize">Maximum number of frames per processing block.</param>
-        /// <returns>True if initialization succeeded; false otherwise.</returns>
-        /// <exception cref="ObjectDisposedException">When the host has been disposed.</exception>
+        /// <param name="maxBlockSize">Biggest frame count we will ever hand it.</param>
         public Task<bool> InitializeAudioAsync(int sampleRate, int maxBlockSize)
         {
-            ThrowIfDisposed();
+            _throwIfDisposed();
             return _threaded.InitializeAsync(sampleRate, maxBlockSize);
         }
 
         /// <summary>
-        /// Opens the plugin's graphical editor synchronously.
-        /// GetEditorSize is read from the cached InnerWrapper; CreateEditor runs on the UI thread.
+        /// Opens the plugin GUI. CreateEditor has to run on the caller (UI) thread, VST3/Cocoa rule.
         /// </summary>
-        /// <exception cref="InvalidOperationException">When the plugin has no editor.</exception>
         public void OpenEditor(string? title = null)
         {
-            ThrowIfDisposed();
+            _throwIfDisposed();
 
             if (!_hasEditor)
                 throw new InvalidOperationException($"Plugin '{_name}' does not have a graphical editor.");
@@ -212,14 +177,11 @@ namespace OwnaudioNET.Effects.VST
         }
 
         /// <summary>
-        /// Opens the plugin's graphical editor without blocking the UI thread.
-        /// GetEditorSize is fetched asynchronously on the plugin thread;
-        /// CreateEditor runs on the caller (UI) thread as required by VST3/macOS.
+        /// Same, but the size query goes to the plugin thread so the UI does not stall.
         /// </summary>
-        /// <exception cref="InvalidOperationException">When the plugin has no editor.</exception>
         public async Task OpenEditorAsync(string? title = null)
         {
-            ThrowIfDisposed();
+            _throwIfDisposed();
 
             if (!_hasEditor)
                 throw new InvalidOperationException($"Plugin '{_name}' does not have a graphical editor.");
@@ -230,24 +192,18 @@ namespace OwnaudioNET.Effects.VST
             await _editorController.OpenEditorAsync(title ?? _name ?? "VST3 Plugin").ConfigureAwait(true);
         }
 
-        /// <summary>Closes the plugin's graphical editor if it is open.</summary>
-        public void CloseEditor()
-        {
-            _editorController?.CloseEditor();
-        }
+        /// <summary>
+        /// Shuts the editor window if there is one.
+        /// </summary>
+        public void CloseEditor() => _editorController?.CloseEditor();
 
         /// <summary>
-        /// Returns a <see cref="VST3EffectProcessor"/> for use in an effect chain.
-        /// The plugin must be in <c>Ready</c> state — call and await
-        /// <see cref="InitializeAudioAsync"/> first.
-        /// The processor shares the same <see cref="ThreadedVst3Wrapper"/> and does NOT own it.
+        /// Hands out a processor for the effect chain. Plugin must be Ready.
+        /// The processor shares our wrapper and does not own it.
         /// </summary>
-        /// <exception cref="InvalidOperationException">
-        /// When the plugin is not audio-initialized. Call InitializeAudioAsync() first.
-        /// </exception>
         public VST3EffectProcessor GetProcessor()
         {
-            ThrowIfDisposed();
+            _throwIfDisposed();
 
             if (!_threaded.IsReady)
                 throw new InvalidOperationException(
@@ -259,21 +215,21 @@ namespace OwnaudioNET.Effects.VST
         }
 
         /// <summary>
-        /// Gets the preferred editor window size.
+        /// Editor size the plugin prefers.
         /// </summary>
         public async Task<(int Width, int Height)?> GetEditorSizeAsync()
         {
-            ThrowIfDisposed();
+            _throwIfDisposed();
             var size = await _threaded.GetEditorSizeAsync().ConfigureAwait(false);
             return size is null ? null : (size.Value.Width, size.Value.Height);
         }
 
         /// <summary>
-        /// Gets all parameter information from the VST3 plugin (plugin thread).
+        /// Every param, read on the plugin thread.
         /// </summary>
         public async Task<VST3ParameterInfo[]> GetParametersAsync()
         {
-            ThrowIfDisposed();
+            _throwIfDisposed();
             var vst3Params = await _threaded.GetAllParametersAsync().ConfigureAwait(false);
             var result = new VST3ParameterInfo[vst3Params.Count];
 
@@ -288,86 +244,78 @@ namespace OwnaudioNET.Effects.VST
         }
 
         /// <summary>
-        /// Gets the parameter count (plugin thread).
+        /// How many params the plugin has.
         /// </summary>
         public Task<int> GetParameterCountAsync()
         {
-            ThrowIfDisposed();
+            _throwIfDisposed();
             return _threaded.GetParameterCountAsync();
         }
 
         /// <summary>
-        /// Gets a parameter value (plugin thread).
+        /// One param value, read on the plugin thread.
         /// </summary>
         public Task<double> GetParameterAsync(int id)
         {
-            ThrowIfDisposed();
+            _throwIfDisposed();
             return _threaded.GetParameterAsync(id);
         }
 
         /// <summary>
-        /// Sets a parameter value. Lock-free enqueue to the UI→audio SPSC queue;
-        /// applied on the audio thread before the next block (~11 ms latency at 44100/512).
-        /// Safe to call from any thread.
+        /// Param change through the lock-free queue, applied on the audio thread before the next
+        /// block (~11 ms at 44100/512). Callable from anywhere.
         /// </summary>
         public void SetParameter(int id, double value)
         {
-            ThrowIfDisposed();
+            _throwIfDisposed();
             _threaded.SetParameter(id, value);
         }
 
         /// <summary>
-        /// Sets multiple parameter values synchronously on the dedicated plugin thread.
-        /// Unlike SetParameter (SPSC queue, audio thread), this method applies each parameter
-        /// directly via the plugin thread — the same thread used during initialization and
-        /// GetParametersAsync — so the native controller state is updated immediately.
-        /// Intended for non-realtime use such as project state restoration; do not call
-        /// during active audio processing.
+        /// Bulk set on the plugin thread so the native controller updates immediately.
+        /// For project load and such, not while audio is running.
         /// </summary>
         public async Task SetParametersAsync(IReadOnlyDictionary<int, double> parameters)
         {
-            ThrowIfDisposed();
+            _throwIfDisposed();
             foreach (var kv in parameters)
                 await _threaded.SetParameterAsync(kv.Key, kv.Value).ConfigureAwait(false);
         }
 
         /// <summary>
-        /// Returns the complete processor state as a byte array (plugin thread).
-        /// Returns null if the plugin does not support state serialization.
+        /// Full processor state blob, null when the plugin cannot serialize itself.
         /// </summary>
         public Task<byte[]?> GetStateAsync()
         {
-            ThrowIfDisposed();
+            _throwIfDisposed();
             return _threaded.GetStateAsync();
         }
 
         /// <summary>
-        /// Restores the complete processor state and syncs the controller display (plugin thread).
-        /// More reliable than SetParametersAsync for full state restoration.
+        /// Restores a state blob and syncs the GUI. More reliable than SetParametersAsync.
         /// </summary>
         public Task<bool> SetStateAsync(byte[] stateData)
         {
-            ThrowIfDisposed();
+            _throwIfDisposed();
             return _threaded.SetStateAsync(stateData);
         }
-        
+
 
         /// <summary>
-        /// Scans system directories for VST3 plugins.
+        /// Walks the system VST3 folders.
         /// </summary>
         public static List<string> FindPlugins(bool includeSubdirectories = true)
             => OwnVst3Wrapper.FindVst3Plugins(includeSubdirectories);
 
         /// <summary>
-        /// Scans custom directories for VST3 plugins.
+        /// Same, but with your own folders.
         /// </summary>
         public static List<string> FindPlugins(string[] searchDirectories, bool includeSubdirectories = true)
             => OwnVst3Wrapper.FindVst3Plugins(searchDirectories, includeSubdirectories);
 
         /// <summary>
-        /// Quickly builds a plugin list from the filesystem without loading any plugin.
-        /// Names come from the bundle/file name (macOS: Info.plist CFBundleName when available).
-        /// Use this on startup; call <see cref="ScanPlugins"/> only when full metadata is needed.
+        /// Cheap plugin list straight from the filesystem, nothing gets loaded. Names come from the
+        /// bundle (Info.plist on mac). Use this at startup, ScanPlugins only when you need metadata.
         /// </summary>
         public static List<VST3PluginInfo> ScanPluginsQuick(bool includeSubdirectories = true)
         {
@@ -376,11 +324,10 @@ namespace OwnaudioNET.Effects.VST
 
             foreach (var path in paths)
             {
-                string name = ReadPluginNameFromFilesystem(path);
                 results.Add(new VST3PluginInfo
                 {
                     Path = path,
-                    Name = name,
+                    Name = _readPluginName(path),
                     Vendor = string.Empty,
                     Version = null,
                     IsEffect = true,
@@ -392,23 +339,22 @@ namespace OwnaudioNET.Effects.VST
             return results;
         }
 
-        private static string ReadPluginNameFromFilesystem(string path)
+        private static string _readPluginName(string path)
         {
             if (OperatingSystem.IsMacOS())
             {
                 string plistPath = System.IO.Path.Combine(path, "Contents", "Info.plist");
                 if (System.IO.File.Exists(plistPath))
                 {
-                    string? plistName = ReadCFBundleNameFromPlist(plistPath);
-                    if (!string.IsNullOrEmpty(plistName))
-                        return plistName;
+                    string? plistName = _readBundleName(plistPath);
+                    if (!string.IsNullOrEmpty(plistName)) return plistName;
                 }
             }
 
             return System.IO.Path.GetFileNameWithoutExtension(path);
         }
 
-        private static string? ReadCFBundleNameFromPlist(string plistPath)
+        private static string? _readBundleName(string plistPath)
         {
             try
             {
@@ -431,9 +377,8 @@ namespace OwnaudioNET.Effects.VST
         }
 
         /// <summary>
-        /// Scans and returns detailed info about available VST3 plugins.
-        /// Loads each plugin briefly to read metadata — can be slow with many plugins.
-        /// Prefer <see cref="ScanPluginsQuick"/> for building the initial list.
+        /// Detailed scan — every plugin gets loaded briefly, so with a big folder this crawls.
+        /// Prefer ScanPluginsQuick for the initial list.
         /// </summary>
         public static List<VST3PluginInfo> ScanPlugins(bool includeSubdirectories = true)
         {
@@ -444,19 +389,21 @@ namespace OwnaudioNET.Effects.VST
             {
                 try
                 {
-                    using var wrapper = new OwnVst3Wrapper();
-                    if (wrapper.LoadPlugin(path))
+                    using (var wrapper = new OwnVst3Wrapper())
                     {
-                        results.Add(new VST3PluginInfo
+                        if (wrapper.LoadPlugin(path))
                         {
-                            Path = path,
-                            Name = wrapper.Name,
-                            Vendor = wrapper.Vendor,
-                            Version = wrapper.Version,
-                            IsEffect = wrapper.IsEffect,
-                            IsInstrument = wrapper.IsInstrument,
-                            ParameterCount = wrapper.GetParameterCount()
-                        });
+                            results.Add(new VST3PluginInfo
+                            {
+                                Path = path,
+                                Name = wrapper.Name,
+                                Vendor = wrapper.Vendor,
+                                Version = wrapper.Version,
+                                IsEffect = wrapper.IsEffect,
+                                IsInstrument = wrapper.IsInstrument,
+                                ParameterCount = wrapper.GetParameterCount()
+                            });
+                        }
                     }
                 }
                 catch {}
@@ -466,19 +413,16 @@ namespace OwnaudioNET.Effects.VST
         }
 
 
-        private void ThrowIfDisposed()
+        private void _throwIfDisposed()
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(VST3PluginHost));
         }
 
         /// <summary>
-        /// Preferred disposal path on macOS. Closes the editor, then yields the calling
-        /// thread for 200 ms so that any JUCE timer callbacks already queued in the
-        /// CFRunLoop (e.g. ModuleEditor::timerCallback) can execute and exit cleanly
-        /// before the native library is unloaded. Without this gap those callbacks
-        /// would access freed memory and produce SIGSEGV.
-        /// On other platforms this behaves identically to <see cref="Dispose"/>.
+        /// The good teardown on macOS. After closing the editor we let the CFRunLoop breathe for
+        /// 200 ms so already queued JUCE timer callbacks can finish — unload them underneath and
+        /// you get a SIGSEGV. Elsewhere it is just Dispose.
         /// </summary>
         public async ValueTask DisposeAsync()
         {
@@ -496,10 +440,8 @@ namespace OwnaudioNET.Effects.VST
         }
 
         /// <summary>
-        /// Stops the plugin, closes the editor, and releases all native resources.
-        /// On macOS this blocks the calling thread briefly to let JUCE RunLoop timer
-        /// callbacks drain before the native library is freed. Prefer
-        /// <see cref="DisposeAsync"/> when an async context is available.
+        /// Blocking teardown. On macOS it sleeps a bit for the same JUCE timer reason —
+        /// use DisposeAsync when you have an async context.
         /// </summary>
         public void Dispose()
         {
@@ -516,6 +458,9 @@ namespace OwnaudioNET.Effects.VST
             _threaded?.Dispose();
         }
 
+        /// <summary>
+        /// Diagnostics only.
+        /// </summary>
         public override string ToString() =>
             $"VST3PluginHost: {_name} ({_vendor}), State={_threaded.State}, HasEditor={_hasEditor}";
     }
