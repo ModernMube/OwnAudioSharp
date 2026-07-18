@@ -5,7 +5,8 @@
 #   ./verify-package.sh <path-to-nupkg> [--package-id <id>]
 #
 # Checks:
-#   1. Required native RID files are present under runtimes/ (desktop + android).
+#   1. Required native RID files are present under runtimes/ (desktop, or
+#      android + ios for the Mobile package).
 #   2. License, repository URL, and tags are not empty in the .nuspec.
 #   3. Package size is within expected range (warning only if outside bounds).
 #   4. Struct-size smoke test marker file (if produced by CI) is present.
@@ -86,11 +87,8 @@ else
     check_file "runtimes/linux-arm64/native/libownaudio_ffi.so"
     check_file "runtimes/osx-x64/native/libownaudio_ffi.dylib"
     check_file "runtimes/osx-arm64/native/libownaudio_ffi.dylib"
-    # The Full package (OwnAudioSharp) is desktop-only by design; only the
-    # cross-platform Basic package ships the android-arm64 native binary.
-    if [[ "${PKG_ID}" != "OwnAudioSharp" ]]; then
-        check_file "runtimes/android-arm64/native/libownaudio_ffi.so"
-    fi
+    # Both OwnAudioSharp and OwnAudioSharp.Basic are desktop-only by design.
+    # Android and iOS natives ship in OwnAudioSharp.Mobile only.
 fi
 
 # ---------------------------------------------------------------------------
