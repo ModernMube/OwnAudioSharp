@@ -9,19 +9,10 @@ using Ownaudio.Safe.Handles;
 namespace Ownaudio.Audio.Tracks;
 
 /// <summary>
-/// Manages the ordered list of native Rust-backed effects applied to the mixer's
-/// <b>master</b> bus — the fully summed mix, after every track has been rendered.
+/// The master-bus counterpart of <see cref="TrackEffectChain"/>: effects sitting on the
+/// fully summed mix, after every track is rendered. They belong to no track. Not
+/// thread-safe, serialize it yourself.
 /// </summary>
-/// <remarks>
-/// <para>
-/// The master counterpart of <see cref="TrackEffectChain"/>: effects are processed in the order
-/// they were added, and add/remove operations are forwarded immediately to the native mixer through
-/// the master effect FFI (the effects are not owned by any track).
-/// </para>
-/// <para>
-/// This class is not thread-safe; access must be serialized by the caller.
-/// </para>
-/// </remarks>
 public sealed class MasterEffectChain
 {
     #region Fields
@@ -29,6 +20,7 @@ public sealed class MasterEffectChain
     private readonly IntPtr _mixerHandle;
     private readonly List<object> _effects = new();
     private readonly List<EffectHandle> _handles = new();
+    private readonly IReadOnlyList<object> _effectsView;
 
     #endregion
 
@@ -37,6 +29,7 @@ public sealed class MasterEffectChain
     internal MasterEffectChain(IntPtr mixerHandle)
     {
         _mixerHandle = mixerHandle;
+        _effectsView = _effects.AsReadOnly();
     }
 
     #endregion
@@ -44,19 +37,13 @@ public sealed class MasterEffectChain
     #region Public API
 
     /// <summary>
-    /// Gets a read-only view of the current master effects in chain order.
+    /// Read-only view of the master chain, in order.
     /// </summary>
-    public IReadOnlyList<object> Effects => _effects.AsReadOnly();
+    public IReadOnlyList<object> Effects => _effectsView;
 
     /// <summary>
-    /// Adds a new effect of the given type to the end of the master chain.
+    /// Appends a new master effect. sampleRate sizes the DSP buffers.
     /// </summary>
-    /// <param name="effectType">Type of effect to create.</param>
-    /// <param name="sampleRate">Sample rate in Hz; used to size DSP buffers.</param>
-    /// <returns>The newly created effect instance.</returns>
-    /// <exception cref="Ownaudio.Safe.Exceptions.OwnAudioException">
-    /// Thrown when the native call fails.
-    /// </exception>
     public object Add(EffectType effectType, float sampleRate)
     {
         int code = OwnAudioNative.ownaudio_v1_mixer_add_master_effect(
@@ -70,24 +57,20 @@ public sealed class MasterEffectChain
         var handle = new EffectHandle();
         Marshal.InitHandle(handle, rawEffect);
 
-        object effect = CreateWrapper(effectType, handle);
+        object effect = _createWrapper(effectType, handle);
         _effects.Add(effect);
         _handles.Add(handle);
         return effect;
     }
 
     /// <summary>
-    /// Adds an external VST3 plugin to the end of the master chain as a native effect. The plugin is
-    /// created and controlled by the managed control plane; the audio thread only forwards each block
-    /// to <paramref name="processFn"/> with the opaque <paramref name="pluginHandle"/>.
+    /// Appends an external VST3 plugin onto the master bus. The audio thread just calls
+    /// processFn with the opaque pluginHandle, which has to outlive the effect.
+    /// latencySamples goes into the delay compensation.
     /// </summary>
-    /// <param name="pluginHandle">Opaque plugin instance handle; must outlive the effect.</param>
-    /// <param name="processFn">The host's <c>VST3Plugin_ProcessAudio</c> function pointer.</param>
-    /// <param name="maxChannels">Largest channel count the master bus will present.</param>
-    /// <param name="maxBlockSize">Largest block size in samples per channel.</param>
-    /// <param name="latencySamples">Plugin processing latency in frames, for delay compensation.</param>
-    /// <returns>An opaque token identifying the native effect (for <see cref="Remove(object)"/>).</returns>
-    /// <exception cref="Ownaudio.Safe.Exceptions.OwnAudioException">Thrown when the native call fails.</exception>
+    /// <param name="maxChannels">Widest channel count the master bus will show up with.</param>
+    /// <param name="maxBlockSize">Biggest block in samples per channel.</param>
+    /// <returns>An opaque token for Remove.</returns>
     public object AddVst(IntPtr pluginHandle, IntPtr processFn, ushort maxChannels, uint maxBlockSize, uint latencySamples)
     {
         int code = OwnAudioNative.ownaudio_v1_mixer_add_master_vst_effect(
@@ -111,40 +94,25 @@ public sealed class MasterEffectChain
     }
 
     /// <summary>
-    /// Adds a new effect to the end of the master chain, inferring its type from the requested
-    /// wrapper type and returning the strongly-typed instance.
+    /// Same as Add, type inferred from the wrapper so you get it back typed.
     /// </summary>
-    /// <typeparam name="T">The effect wrapper type (for example <see cref="ReverbEffect"/>).</typeparam>
-    /// <param name="sampleRate">Sample rate in Hz; used to size DSP buffers.</param>
-    /// <returns>The newly created, strongly-typed effect instance.</returns>
-    /// <exception cref="ArgumentException">Thrown when <typeparamref name="T"/> is not a known wrapper.</exception>
-    /// <exception cref="Ownaudio.Safe.Exceptions.OwnAudioException">Thrown when the native call fails.</exception>
     public T Add<T>(float sampleRate) where T : class
     {
         if (!EffectTypeByWrapper.TryGetValue(typeof(T), out EffectType effectType))
-        {
             throw new ArgumentException($"Unknown effect wrapper type: {typeof(T).Name}", nameof(T));
-        }
 
         return (T)Add(effectType, sampleRate);
     }
 
     /// <summary>
-    /// Sets a native parameter (by numeric id) on a master effect previously returned by
-    /// <see cref="Add(EffectType,float)"/>. Used to mirror a managed effect's parameters onto its
-    /// paired native effect on the master bus.
+    /// Sets a native parameter by numeric id, so a managed effect can mirror itself onto
+    /// its master-bus twin. Values are clamped natively.
     /// </summary>
-    /// <param name="effect">The effect instance returned by <c>Add</c>.</param>
-    /// <param name="paramId">Native parameter identifier (effect-specific).</param>
-    /// <param name="value">New parameter value; clamped silently to the valid range natively.</param>
-    /// <returns><see langword="true"/> when the effect is known and the parameter recognised.</returns>
+    /// <returns>false when we don't know that effect.</returns>
     public bool SetParam(object effect, uint paramId, float value)
     {
         int index = _effects.IndexOf(effect);
-        if (index < 0)
-        {
-            return false;
-        }
+        if (index < 0) { return false; }
 
         int code = OwnAudioNative.ownaudio_v1_effect_set_param(
             _mixerHandle,
@@ -155,19 +123,13 @@ public sealed class MasterEffectChain
     }
 
     /// <summary>
-    /// Reads a native parameter (by numeric id) back from a master effect. Returns the control-side
-    /// shadow value (what was last set). Mainly useful for verification.
+    /// Reads back what was last set. Mostly for verification.
     /// </summary>
-    /// <param name="effect">The effect instance returned by <c>Add</c>.</param>
-    /// <param name="paramId">Native parameter identifier.</param>
-    /// <returns>The current value, or <see langword="null"/> when the effect or parameter is unknown.</returns>
+    /// <returns>null when the effect or the param id is unknown.</returns>
     public float? GetParam(object effect, uint paramId)
     {
         int index = _effects.IndexOf(effect);
-        if (index < 0)
-        {
-            return null;
-        }
+        if (index < 0) { return null; }
 
         int code = OwnAudioNative.ownaudio_v1_effect_get_param(
             _mixerHandle,
@@ -178,46 +140,38 @@ public sealed class MasterEffectChain
     }
 
     /// <summary>
-    /// Removes a specific master effect instance (returned by <see cref="Add(EffectType,float)"/>)
-    /// from the native chain. No-op when the effect is not in this chain.
+    /// Pulls one specific master effect out of the native chain. No-op when it isn't ours.
     /// </summary>
-    /// <param name="effect">The effect instance to remove.</param>
     public void Remove(object effect)
     {
         int index = _effects.IndexOf(effect);
-        if (index < 0)
-        {
-            return;
-        }
+        if (index < 0) { return; }
 
-        RemoveHandleAt(index);
+        _removeHandleAt(index);
         _effects.RemoveAt(index);
     }
 
     /// <summary>
-    /// Removes the master effect at the given index from the native chain and invalidates its handle.
+    /// Drops the master effect at the given index.
     /// </summary>
-    /// <param name="index">Zero-based index of the effect to remove.</param>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="index"/> is out of range.</exception>
+    /// <param name="index"></param>
     public void RemoveAt(int index)
     {
         if (index < 0 || index >= _effects.Count)
-        {
             throw new ArgumentOutOfRangeException(nameof(index));
-        }
 
-        RemoveHandleAt(index);
+        _removeHandleAt(index);
         _effects.RemoveAt(index);
     }
 
     /// <summary>
-    /// Removes all master effects from the native chain.
+    /// Wipes the whole master chain.
     /// </summary>
     public void Clear()
     {
         for (int i = _effects.Count - 1; i >= 0; i--)
         {
-            RemoveHandleAt(i);
+            _removeHandleAt(i);
         }
 
         _effects.Clear();
@@ -228,10 +182,10 @@ public sealed class MasterEffectChain
     #region Private helpers
 
     /// <summary>
-    /// Removes the native master effect at <paramref name="index"/> and invalidates the managed
-    /// handle so it is not destroyed a second time (the native remove already freed it).
+    /// Native remove already freed the effect box, so we invalidate the SafeHandle
+    /// afterwards — otherwise it would destroy it a second time.
     /// </summary>
-    private void RemoveHandleAt(int index)
+    private void _removeHandleAt(int index)
     {
         EffectHandle handle = _handles[index];
         int code = OwnAudioNative.ownaudio_v1_mixer_remove_master_effect(
@@ -239,14 +193,12 @@ public sealed class MasterEffectChain
             handle.DangerousGetHandle());
         ErrorCodeMapper.ThrowIfError(code, nameof(RemoveAt));
 
-        // The native remove freed the effect box; stop the SafeHandle from destroying it again.
         handle.SetHandleAsInvalid();
         _handles.RemoveAt(index);
     }
 
     /// <summary>
-    /// Maps each effect wrapper type to its <see cref="EffectType"/> so the generic
-    /// <see cref="Add{T}"/> can resolve the native effect id.
+    /// Wrapper type → native effect id, so the generic Add can resolve it.
     /// </summary>
     private static readonly IReadOnlyDictionary<Type, EffectType> EffectTypeByWrapper =
         new Dictionary<Type, EffectType>
@@ -270,7 +222,7 @@ public sealed class MasterEffectChain
             [typeof(Equalizer30Effect)] = EffectType.Equalizer30,
         };
 
-    private object CreateWrapper(EffectType effectType, EffectHandle handle)
+    private object _createWrapper(EffectType effectType, EffectHandle handle)
     {
         return effectType switch
         {
@@ -291,8 +243,6 @@ public sealed class MasterEffectChain
             EffectType.PitchShift  => new PitchShiftEffect(handle, _mixerHandle),
             EffectType.DynamicAmp  => new DynamicAmpEffect(handle, _mixerHandle),
             EffectType.Equalizer30 => new Equalizer30Effect(handle, _mixerHandle),
-            // The SmartMaster composite has no strongly-typed managed wrapper; the managed
-            // SmartMasterEffect is the parameter model and mirrors onto this native effect by id.
             EffectType.SmartMaster => new NativeSmartMasterEffect(),
             _ => throw new ArgumentOutOfRangeException(nameof(effectType)),
         };

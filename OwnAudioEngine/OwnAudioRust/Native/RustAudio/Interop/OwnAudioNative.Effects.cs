@@ -4,22 +4,20 @@ using System.Runtime.InteropServices;
 namespace Ownaudio.Native.RustAudio.Interop;
 
 /// <summary>
-/// P/Invoke declarations for the native audio effect and track-effect-chain API.
+/// Effect and effect chain P/Invokes, track level and master level both. 0 is ok, anything else is an error code.
 /// </summary>
 internal static partial class OwnAudioNative
 {
     #region Effect lifecycle
 
     /// <summary>
-    /// Adds a new effect of the given type to the track's effect chain and
-    /// writes the resulting handle to <paramref name="outEffect"/>.
+    /// Hangs a new effect on the track chain, handle in outEffect.
     /// </summary>
-    /// <param name="mixer">Valid mixer handle.</param>
-    /// <param name="track">Valid track handle.</param>
-    /// <param name="effectType">Numeric effect type identifier (<see cref="Enums.NativeEffectType"/>).</param>
-    /// <param name="sampleRate">Sample rate in Hz; used to size internal DSP buffers.</param>
-    /// <param name="outEffect">Receives the new effect handle on success.</param>
-    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    /// <param name="mixer"></param>
+    /// <param name="track"></param>
+    /// <param name="effectType">numeric id, see Enums.NativeEffectType</param>
+    /// <param name="sampleRate">Hz, sizes the internal dsp buffers</param>
+    /// <param name="outEffect"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_track_add_effect(
         IntPtr mixer,
@@ -29,12 +27,11 @@ internal static partial class OwnAudioNative
         out IntPtr outEffect);
 
     /// <summary>
-    /// Removes the effect from the track chain and destroys the handle.
+    /// Pulls the effect out of the chain and destroys the handle too.
     /// </summary>
-    /// <param name="mixer">Valid mixer handle.</param>
-    /// <param name="track">Valid track handle.</param>
-    /// <param name="effect">Effect handle to remove and destroy.</param>
-    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    /// <param name="mixer"></param>
+    /// <param name="track"></param>
+    /// <param name="effect"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_effect_remove(
         IntPtr mixer,
@@ -42,21 +39,19 @@ internal static partial class OwnAudioNative
         IntPtr effect);
 
     /// <summary>
-    /// Destroys an effect handle without removing it from the chain.
+    /// Just the handle, chain stays as it is.
     /// </summary>
-    /// <param name="effect">Effect handle to destroy.</param>
+    /// <param name="effect"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial void ownaudio_v1_effect_destroy(IntPtr effect);
 
     /// <summary>
-    /// Adds a new effect of the given type to the mixer's master effect chain (applied once over
-    /// the fully summed mix) and writes the resulting handle to <paramref name="outEffect"/>.
+    /// Same but on the master chain, so it runs once over the summed mix.
     /// </summary>
-    /// <param name="mixer">Valid mixer handle.</param>
-    /// <param name="effectType">Numeric effect type identifier.</param>
-    /// <param name="sampleRate">Sample rate in Hz; used to size internal DSP buffers.</param>
-    /// <param name="outEffect">Receives the new master effect handle on success.</param>
-    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    /// <param name="mixer"></param>
+    /// <param name="effectType"></param>
+    /// <param name="sampleRate"></param>
+    /// <param name="outEffect"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_mixer_add_master_effect(
         IntPtr mixer,
@@ -65,31 +60,27 @@ internal static partial class OwnAudioNative
         out IntPtr outEffect);
 
     /// <summary>
-    /// Removes a master effect from the mixer's master chain and destroys the handle. The master
-    /// counterpart of <see cref="ownaudio_v1_effect_remove"/> (no track handle is required).
+    /// Master counterpart of effect_remove, no track handle needed here.
     /// </summary>
-    /// <param name="mixer">Valid mixer handle.</param>
-    /// <param name="effect">Master effect handle to remove and destroy.</param>
-    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    /// <param name="mixer"></param>
+    /// <param name="effect"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_mixer_remove_master_effect(
         IntPtr mixer,
         IntPtr effect);
 
     /// <summary>
-    /// Adds an external VST3 plugin to a track's effect chain as a native effect. The plugin is
-    /// created, loaded and parameter-controlled on the managed control plane; the audio thread only
-    /// forwards each block to <paramref name="processFn"/> with the opaque <paramref name="pluginHandle"/>.
+    /// Puts a vst3 plugin into the track chain as a native effect. Loading and params stay managed,
+    /// the audio thread only forwards each block to processFn with the opaque plugin handle.
     /// </summary>
-    /// <param name="mixer">Valid mixer handle.</param>
-    /// <param name="track">Valid track handle.</param>
-    /// <param name="pluginHandle">Opaque plugin instance handle; must outlive the effect.</param>
-    /// <param name="processFn">The host's <c>VST3Plugin_ProcessAudio</c> function pointer.</param>
-    /// <param name="maxChannels">Largest channel count the chain will present.</param>
-    /// <param name="maxBlockSize">Largest block size in samples per channel.</param>
-    /// <param name="latencySamples">Plugin processing latency in frames, for delay compensation.</param>
-    /// <param name="outEffect">Receives the new effect handle on success.</param>
-    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    /// <param name="mixer"></param>
+    /// <param name="track"></param>
+    /// <param name="pluginHandle">opaque instance, has to outlive the effect</param>
+    /// <param name="processFn">the host's VST3Plugin_ProcessAudio pointer</param>
+    /// <param name="maxChannels"></param>
+    /// <param name="maxBlockSize">samples per channel</param>
+    /// <param name="latencySamples">plugin latency in frames, for pdc</param>
+    /// <param name="outEffect"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_track_add_vst_effect(
         IntPtr mixer,
@@ -102,18 +93,15 @@ internal static partial class OwnAudioNative
         out IntPtr outEffect);
 
     /// <summary>
-    /// Adds an external VST3 plugin to the mixer's master effect chain (applied once over the fully
-    /// summed mix). The master counterpart of <see cref="ownaudio_v1_track_add_vst_effect"/>; the
-    /// returned handle is removed with <see cref="ownaudio_v1_mixer_remove_master_effect"/>.
+    /// Master version of the vst insert. Remove it with mixer_remove_master_effect.
     /// </summary>
-    /// <param name="mixer">Valid mixer handle.</param>
-    /// <param name="pluginHandle">Opaque plugin instance handle; must outlive the effect.</param>
-    /// <param name="processFn">The host's <c>VST3Plugin_ProcessAudio</c> function pointer.</param>
-    /// <param name="maxChannels">Largest channel count the chain will present.</param>
-    /// <param name="maxBlockSize">Largest block size in samples per channel.</param>
-    /// <param name="latencySamples">Plugin processing latency in frames, for delay compensation.</param>
-    /// <param name="outEffect">Receives the new master effect handle on success.</param>
-    /// <returns>Zero on success; non-zero error code otherwise.</returns>
+    /// <param name="mixer"></param>
+    /// <param name="pluginHandle"></param>
+    /// <param name="processFn"></param>
+    /// <param name="maxChannels"></param>
+    /// <param name="maxBlockSize"></param>
+    /// <param name="latencySamples"></param>
+    /// <param name="outEffect"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_mixer_add_master_vst_effect(
         IntPtr mixer,
@@ -129,13 +117,13 @@ internal static partial class OwnAudioNative
     #region Effect parameters
 
     /// <summary>
-    /// Sets a parameter on an effect by numeric identifier.
+    /// Sets one param by numeric id. Out of range values get clamped without a word, nonzero means
+    /// the effect didn't know the id.
     /// </summary>
-    /// <param name="mixer">Valid mixer handle.</param>
-    /// <param name="effect">Valid effect handle.</param>
-    /// <param name="paramId">Numeric parameter identifier (effect-specific).</param>
-    /// <param name="value">New parameter value; clamped silently to the valid range.</param>
-    /// <returns>Zero when the parameter is recognised; non-zero otherwise.</returns>
+    /// <param name="mixer"></param>
+    /// <param name="effect"></param>
+    /// <param name="paramId">effect specific</param>
+    /// <param name="value"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_effect_set_param(
         IntPtr mixer,
@@ -144,13 +132,12 @@ internal static partial class OwnAudioNative
         float value);
 
     /// <summary>
-    /// Reads the current value of an effect parameter.
+    /// Reads a param back.
     /// </summary>
-    /// <param name="mixer">Valid mixer handle.</param>
-    /// <param name="effect">Valid effect handle.</param>
-    /// <param name="paramId">Numeric parameter identifier.</param>
-    /// <param name="outValue">Receives the current value on success.</param>
-    /// <returns>Zero when the parameter is recognised; non-zero otherwise.</returns>
+    /// <param name="mixer"></param>
+    /// <param name="effect"></param>
+    /// <param name="paramId"></param>
+    /// <param name="outValue"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_effect_get_param(
         IntPtr mixer,

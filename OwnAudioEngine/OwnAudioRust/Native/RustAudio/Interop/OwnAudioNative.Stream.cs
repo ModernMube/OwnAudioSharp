@@ -4,38 +4,25 @@ using Ownaudio.Native.RustAudio.Structs;
 
 namespace Ownaudio.Native.RustAudio.Interop;
 
+/// <summary>
+/// Output and input stream P/Invokes. Streams always come back paused, play() gets them going.
+/// </summary>
 internal static unsafe partial class OwnAudioNative
 {
     #region Output stream
 
     /// <summary>
-    /// Opens an output stream and writes its handle to <paramref name="outStream"/>.
-    /// The stream starts in the paused state; call
-    /// <see cref="ownaudio_v1_output_stream_play"/> to begin audio output.
+    /// Opens an output stream, handle in outStream. Starts paused.
     /// </summary>
-    /// <param name="engine">Valid handle from <see cref="ownaudio_v1_engine_create"/>.</param>
-    /// <param name="deviceName">
-    /// Pointer to a null-terminated UTF-8 device name, or <see cref="IntPtr.Zero"/>
-    /// to use the system default output device.
-    /// </param>
-    /// <param name="config">Pointer to a filled <see cref="NativeStreamConfig"/>; must not be null.</param>
+    /// <param name="engine"></param>
+    /// <param name="deviceName">utf8 name, zero means system default</param>
+    /// <param name="config"></param>
     /// <param name="callback">
-    /// Native function pointer called on the audio thread for every buffer.
-    /// Obtain with <c>Marshal.GetFunctionPointerForDelegate</c> and keep the
-    /// delegate alive (pinned via <c>GCHandle</c>) for the entire stream lifetime.
+    /// From Marshal.GetFunctionPointerForDelegate. Keep the delegate pinned for the whole stream life
+    /// or the rt thread will call into collected memory.
     /// </param>
-    /// <param name="userData">
-    /// Opaque pointer passed back to <paramref name="callback"/> unchanged; may be null.
-    /// </param>
-    /// <param name="outStream">Receives the new stream handle on success.</param>
-    /// <returns>
-    /// <see cref="NativeErrorCode.Success"/> (0) on success;
-    /// a non-zero <see cref="NativeErrorCode"/> otherwise.
-    /// </returns>
-    /// <remarks>
-    /// Mirrors:
-    /// <c>ownaudio_v1_open_output_stream(engine, device_name, config, callback, user_data, out_stream) → i32</c>
-    /// </remarks>
+    /// <param name="userData">passed back to the callback untouched, may be null</param>
+    /// <param name="outStream"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_open_output_stream(
         IntPtr engine,
@@ -46,32 +33,15 @@ internal static unsafe partial class OwnAudioNative
         out IntPtr outStream);
 
     /// <summary>
-    /// Opens an output stream driven directly by a multi-track mixer and writes
-    /// its handle to <paramref name="outStream"/>.
+    /// Output stream driven by a mixer instead of a managed callback. The mixer moves onto the audio
+    /// thread and renders every buffer itself, so its rate/channels have to match config.
+    /// Destroy the stream before the mixer.
     /// </summary>
-    /// <param name="engine">Valid handle from <see cref="ownaudio_v1_engine_create"/>.</param>
-    /// <param name="mixer">
-    /// Valid handle from <see cref="ownaudio_v1_mixer_create"/>.  Its sample rate
-    /// and channel count must match <paramref name="config"/>.  The mixer is moved
-    /// onto the audio thread and renders every buffer itself, so no managed
-    /// callback is involved.
-    /// </param>
-    /// <param name="deviceName">
-    /// Pointer to a null-terminated UTF-8 device name, or <see cref="IntPtr.Zero"/>
-    /// to use the system default output device.
-    /// </param>
-    /// <param name="config">Pointer to a filled <see cref="NativeStreamConfig"/>; must not be null.</param>
-    /// <param name="outStream">Receives the new stream handle on success.</param>
-    /// <returns>
-    /// <see cref="NativeErrorCode.Success"/> (0) on success;
-    /// a non-zero <see cref="NativeErrorCode"/> otherwise.
-    /// </returns>
-    /// <remarks>
-    /// The stream starts paused; call <see cref="ownaudio_v1_output_stream_play"/>
-    /// to begin output.  Destroy the stream before destroying the mixer.
-    /// Mirrors:
-    /// <c>ownaudio_v1_mixer_open_output_stream(engine, mixer, device_name, config, out_stream) → i32</c>
-    /// </remarks>
+    /// <param name="engine"></param>
+    /// <param name="mixer"></param>
+    /// <param name="deviceName">utf8 name, zero means system default</param>
+    /// <param name="config"></param>
+    /// <param name="outStream"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_mixer_open_output_stream(
         IntPtr engine,
@@ -81,35 +51,25 @@ internal static unsafe partial class OwnAudioNative
         out IntPtr outStream);
 
     /// <summary>
-    /// Starts (or resumes) audio output on the given stream.
+    /// Starts or resumes output.
     /// </summary>
-    /// <param name="stream">Valid handle from <see cref="ownaudio_v1_open_output_stream"/>.</param>
-    /// <returns><see cref="NativeErrorCode.Success"/> (0) on success.</returns>
-    /// <remarks>Mirrors: <c>ownaudio_v1_output_stream_play(OwnAudioOutputStreamHandle*) → i32</c></remarks>
+    /// <param name="stream"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_output_stream_play(IntPtr stream);
 
     /// <summary>
-    /// Pauses audio output without destroying the stream.
+    /// Pauses, stream stays alive.
     /// </summary>
-    /// <param name="stream">Valid handle from <see cref="ownaudio_v1_open_output_stream"/>.</param>
-    /// <returns><see cref="NativeErrorCode.Success"/> (0) on success.</returns>
-    /// <remarks>Mirrors: <c>ownaudio_v1_output_stream_pause(OwnAudioOutputStreamHandle*) → i32</c></remarks>
+    /// <param name="stream"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_output_stream_pause(IntPtr stream);
 
     /// <summary>
-    /// Polls the output stream's error state: the most recent error kind
-    /// (<see cref="NativeStreamErrorKind"/>) and the monotonic total error count.
+    /// Polls the error state. The count only ever grows, so if it moved between two polls something fresh broke.
     /// </summary>
-    /// <param name="stream">Valid handle from <see cref="ownaudio_v1_open_output_stream"/>.</param>
-    /// <param name="outKind">Receives the latest error kind discriminant; may be null to skip.</param>
-    /// <param name="outCount">
-    /// Receives the total error count since the stream opened. An increase between
-    /// two polls signals a fresh error.
-    /// </param>
-    /// <returns><see cref="NativeErrorCode.Success"/> (0) on success.</returns>
-    /// <remarks>Mirrors: <c>ownaudio_v1_output_stream_get_error_state(stream, out_kind, out_count) → i32</c></remarks>
+    /// <param name="stream"></param>
+    /// <param name="outKind">latest NativeStreamErrorKind discriminant</param>
+    /// <param name="outCount"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_output_stream_get_error_state(
         IntPtr stream,
@@ -117,10 +77,9 @@ internal static unsafe partial class OwnAudioNative
         out ulong outCount);
 
     /// <summary>
-    /// Destroys an output stream and releases all associated resources.
+    /// Kills the output stream. Zero handle is fine.
     /// </summary>
-    /// <param name="stream">The handle to destroy.  Passing <see cref="IntPtr.Zero"/> is safe.</param>
-    /// <remarks>Mirrors: <c>ownaudio_v1_output_stream_destroy(OwnAudioOutputStreamHandle*) → void</c></remarks>
+    /// <param name="stream"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial void ownaudio_v1_output_stream_destroy(IntPtr stream);
 
@@ -129,30 +88,14 @@ internal static unsafe partial class OwnAudioNative
     #region Input stream
 
     /// <summary>
-    /// Opens an input stream and writes its handle to <paramref name="outStream"/>.
-    /// The stream starts in the paused state; call
-    /// <see cref="ownaudio_v1_input_stream_play"/> to begin capturing.
+    /// Opens a capture stream, starts paused. Callback pinning works like the output side.
     /// </summary>
-    /// <param name="engine">Valid handle from <see cref="ownaudio_v1_engine_create"/>.</param>
-    /// <param name="deviceName">
-    /// Pointer to a null-terminated UTF-8 device name, or <see cref="IntPtr.Zero"/>
-    /// to use the system default input device.
-    /// </param>
-    /// <param name="config">Pointer to a filled <see cref="NativeStreamConfig"/>; must not be null.</param>
-    /// <param name="callback">
-    /// Native function pointer called on the audio thread with each captured buffer.
-    /// Same lifetime and pinning requirements as the output callback.
-    /// </param>
-    /// <param name="userData">Opaque pointer passed back to <paramref name="callback"/>; may be null.</param>
-    /// <param name="outStream">Receives the new stream handle on success.</param>
-    /// <returns>
-    /// <see cref="NativeErrorCode.Success"/> (0) on success;
-    /// a non-zero <see cref="NativeErrorCode"/> otherwise.
-    /// </returns>
-    /// <remarks>
-    /// Mirrors:
-    /// <c>ownaudio_v1_open_input_stream(engine, device_name, config, callback, user_data, out_stream) → i32</c>
-    /// </remarks>
+    /// <param name="engine"></param>
+    /// <param name="deviceName">utf8 name, zero means system default</param>
+    /// <param name="config"></param>
+    /// <param name="callback"></param>
+    /// <param name="userData"></param>
+    /// <param name="outStream"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_open_input_stream(
         IntPtr engine,
@@ -163,32 +106,25 @@ internal static unsafe partial class OwnAudioNative
         out IntPtr outStream);
 
     /// <summary>
-    /// Starts (or resumes) audio capture on the given stream.
+    /// Starts or resumes capture.
     /// </summary>
-    /// <param name="stream">Valid handle from <see cref="ownaudio_v1_open_input_stream"/>.</param>
-    /// <returns><see cref="NativeErrorCode.Success"/> (0) on success.</returns>
-    /// <remarks>Mirrors: <c>ownaudio_v1_input_stream_play(OwnAudioInputStreamHandle*) → i32</c></remarks>
+    /// <param name="stream"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_input_stream_play(IntPtr stream);
 
     /// <summary>
-    /// Pauses audio capture without destroying the stream.
+    /// Pauses capture.
     /// </summary>
-    /// <param name="stream">Valid handle from <see cref="ownaudio_v1_open_input_stream"/>.</param>
-    /// <returns><see cref="NativeErrorCode.Success"/> (0) on success.</returns>
-    /// <remarks>Mirrors: <c>ownaudio_v1_input_stream_pause(OwnAudioInputStreamHandle*) → i32</c></remarks>
+    /// <param name="stream"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_input_stream_pause(IntPtr stream);
 
     /// <summary>
-    /// Polls the input stream's error state. See
-    /// <see cref="ownaudio_v1_output_stream_get_error_state"/> for semantics.
+    /// Same error polling as on the output stream.
     /// </summary>
-    /// <param name="stream">Valid handle from <see cref="ownaudio_v1_open_input_stream"/>.</param>
-    /// <param name="outKind">Receives the latest error kind discriminant; may be null to skip.</param>
-    /// <param name="outCount">Receives the total error count since the stream opened.</param>
-    /// <returns><see cref="NativeErrorCode.Success"/> (0) on success.</returns>
-    /// <remarks>Mirrors: <c>ownaudio_v1_input_stream_get_error_state(stream, out_kind, out_count) → i32</c></remarks>
+    /// <param name="stream"></param>
+    /// <param name="outKind"></param>
+    /// <param name="outCount"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_input_stream_get_error_state(
         IntPtr stream,
@@ -196,10 +132,9 @@ internal static unsafe partial class OwnAudioNative
         out ulong outCount);
 
     /// <summary>
-    /// Destroys an input stream and releases all associated resources.
+    /// Kills the input stream. Zero handle is fine.
     /// </summary>
-    /// <param name="stream">The handle to destroy.  Passing <see cref="IntPtr.Zero"/> is safe.</param>
-    /// <remarks>Mirrors: <c>ownaudio_v1_input_stream_destroy(OwnAudioInputStreamHandle*) → void</c></remarks>
+    /// <param name="stream"></param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial void ownaudio_v1_input_stream_destroy(IntPtr stream);
 

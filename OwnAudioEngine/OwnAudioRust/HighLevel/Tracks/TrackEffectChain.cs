@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Ownaudio.Audio.Effects;
 using Ownaudio.Native.RustAudio.Interop;
 using Ownaudio.Safe.Exceptions;
@@ -8,17 +9,10 @@ using Ownaudio.Safe.Handles;
 namespace Ownaudio.Audio.Tracks;
 
 /// <summary>
-/// Manages the ordered list of native Rust-backed effects attached to an <see cref="AudioTrack"/>.
+/// The ordered list of native effects hanging off an <see cref="AudioTrack"/>. Processed
+/// in insertion order, every add/remove goes straight to the native mixer. Not
+/// thread-safe, serialize it yourself.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Effects are processed in the order they were added (chain topology).
-/// All add/remove operations are forwarded immediately to the native mixer.
-/// </para>
-/// <para>
-/// This class is not thread-safe; access must be serialized by the caller.
-/// </para>
-/// </remarks>
 public sealed class TrackEffectChain
 {
     #region Fields
@@ -27,6 +21,7 @@ public sealed class TrackEffectChain
     private readonly IntPtr _trackHandle;
     private readonly List<object> _effects = new();
     private readonly List<EffectHandle> _handles = new();
+    private readonly IReadOnlyList<object> _effectsView;
 
     #endregion
 
@@ -36,6 +31,7 @@ public sealed class TrackEffectChain
     {
         _mixerHandle = mixerHandle;
         _trackHandle = trackHandle;
+        _effectsView = _effects.AsReadOnly();
     }
 
     #endregion
@@ -43,19 +39,15 @@ public sealed class TrackEffectChain
     #region Public API
 
     /// <summary>
-    /// Gets a read-only view of the current effects in chain order.
+    /// Read-only view of the chain, in order. Same instance every time, it just wraps
+    /// the live list.
     /// </summary>
-    public IReadOnlyList<object> Effects => _effects.AsReadOnly();
+    public IReadOnlyList<object> Effects => _effectsView;
 
     /// <summary>
-    /// Adds a new effect of the given type to the end of the chain.
+    /// Appends a new effect of the given type. sampleRate sizes the DSP buffers.
     /// </summary>
-    /// <param name="effectType">Type of effect to create.</param>
-    /// <param name="sampleRate">Sample rate in Hz; used to size DSP buffers.</param>
-    /// <returns>The newly created effect instance.</returns>
-    /// <exception cref="Ownaudio.Safe.Exceptions.OwnAudioException">
-    /// Thrown when the native call fails.
-    /// </exception>
+    /// <returns>The freshly built wrapper.</returns>
     public object Add(EffectType effectType, float sampleRate)
     {
         int code = OwnAudioNative.ownaudio_v1_track_add_effect(
@@ -68,26 +60,23 @@ public sealed class TrackEffectChain
         ErrorCodeMapper.ThrowIfError(code, nameof(Add));
 
         var handle = new EffectHandle();
-        System.Runtime.InteropServices.Marshal.InitHandle(handle, rawEffect);
+        Marshal.InitHandle(handle, rawEffect);
 
-        object effect = CreateWrapper(effectType, handle);
+        object effect = _createWrapper(effectType, handle);
         _effects.Add(effect);
         _handles.Add(handle);
         return effect;
     }
 
     /// <summary>
-    /// Adds an external VST3 plugin to the end of the track chain as a native effect. The plugin is
-    /// created and controlled by the managed control plane; the audio thread only forwards each block
-    /// to <paramref name="processFn"/> with the opaque <paramref name="pluginHandle"/>.
+    /// Appends an external VST3 plugin as a native effect. We only hand the audio thread
+    /// a function pointer plus the opaque plugin handle; the plugin itself is driven by
+    /// the managed host. pluginHandle must outlive the effect, latencySamples feeds the
+    /// delay compensation.
     /// </summary>
-    /// <param name="pluginHandle">Opaque plugin instance handle; must outlive the effect.</param>
-    /// <param name="processFn">The host's <c>VST3Plugin_ProcessAudio</c> function pointer.</param>
-    /// <param name="maxChannels">Largest channel count the track will present.</param>
-    /// <param name="maxBlockSize">Largest block size in samples per channel.</param>
-    /// <param name="latencySamples">Plugin processing latency in frames, for delay compensation.</param>
-    /// <returns>An opaque token identifying the native effect (for <see cref="Remove(object)"/>).</returns>
-    /// <exception cref="Ownaudio.Safe.Exceptions.OwnAudioException">Thrown when the native call fails.</exception>
+    /// <param name="maxChannels">Widest channel count the track will show up with.</param>
+    /// <param name="maxBlockSize">Biggest block in samples per channel.</param>
+    /// <returns>An opaque token for Remove.</returns>
     public object AddVst(IntPtr pluginHandle, IntPtr processFn, ushort maxChannels, uint maxBlockSize, uint latencySamples)
     {
         int code = OwnAudioNative.ownaudio_v1_track_add_vst_effect(
@@ -103,7 +92,7 @@ public sealed class TrackEffectChain
         ErrorCodeMapper.ThrowIfError(code, nameof(AddVst));
 
         var handle = new EffectHandle();
-        System.Runtime.InteropServices.Marshal.InitHandle(handle, rawEffect);
+        Marshal.InitHandle(handle, rawEffect);
 
         object token = new NativeVstEffect();
         _effects.Add(token);
@@ -112,51 +101,32 @@ public sealed class TrackEffectChain
     }
 
     /// <summary>
-    /// Adds a new effect to the end of the chain, inferring its type from the
-    /// requested wrapper type and returning the strongly-typed instance.
+    /// Same as Add, but figures out the type from the wrapper you asked for so you get
+    /// it back without a cast.
     /// </summary>
-    /// <typeparam name="T">
-    /// The effect wrapper type (for example <see cref="Ownaudio.Audio.Effects.ChorusEffect"/>),
-    /// so the caller can set its parameters without a cast.
-    /// </typeparam>
-    /// <param name="sampleRate">Sample rate in Hz; used to size DSP buffers.</param>
-    /// <returns>The newly created, strongly-typed effect instance.</returns>
-    /// <exception cref="ArgumentException">
-    /// Thrown when <typeparamref name="T"/> is not a known effect wrapper type.
-    /// </exception>
-    /// <exception cref="Ownaudio.Safe.Exceptions.OwnAudioException">
-    /// Thrown when the native call fails.
-    /// </exception>
     public T Add<T>(float sampleRate) where T : class
     {
         if (!EffectTypeByWrapper.TryGetValue(typeof(T), out EffectType effectType))
-        {
             throw new ArgumentException($"Unknown effect wrapper type: {typeof(T).Name}", nameof(T));
-        }
 
         return (T)Add(effectType, sampleRate);
     }
 
     /// <summary>
-    /// Removes and disposes the effect at the given index.
+    /// Drops the effect at the given index.
     /// </summary>
-    /// <param name="index">Zero-based index of the effect to remove.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// Thrown when <paramref name="index"/> is out of range.
-    /// </exception>
+    /// <param name="index"></param>
     public void RemoveAt(int index)
     {
         if (index < 0 || index >= _effects.Count)
-        {
             throw new ArgumentOutOfRangeException(nameof(index));
-        }
 
         _effects.RemoveAt(index);
         _handles.RemoveAt(index);
     }
 
     /// <summary>
-    /// Removes all effects from the chain.
+    /// Empties the chain.
     /// </summary>
     public void Clear()
     {
@@ -165,21 +135,14 @@ public sealed class TrackEffectChain
     }
 
     /// <summary>
-    /// Sets a native parameter (by numeric id) on an effect previously returned by
-    /// <see cref="Add(EffectType,float)"/>. Used to mirror a managed effect's parameters onto its
-    /// paired native track effect.
+    /// Sets a native parameter by numeric id — this is how a managed effect mirrors
+    /// itself onto its native twin. Out-of-range values get clamped down there.
     /// </summary>
-    /// <param name="effect">The effect instance returned by <c>Add</c>.</param>
-    /// <param name="paramId">Native parameter identifier (effect-specific).</param>
-    /// <param name="value">New parameter value; clamped silently natively.</param>
-    /// <returns><see langword="true"/> when the effect is known and the parameter recognised.</returns>
+    /// <returns>false when we don't know that effect.</returns>
     public bool SetParam(object effect, uint paramId, float value)
     {
         int index = _effects.IndexOf(effect);
-        if (index < 0)
-        {
-            return false;
-        }
+        if (index < 0) { return false; }
 
         int code = OwnAudioNative.ownaudio_v1_effect_set_param(
             _mixerHandle,
@@ -190,18 +153,13 @@ public sealed class TrackEffectChain
     }
 
     /// <summary>
-    /// Reads a native parameter (by numeric id) back from an effect (the control-side shadow value).
+    /// Reads a native parameter back — the control-side shadow value, mostly for checks.
     /// </summary>
-    /// <param name="effect">The effect instance returned by <c>Add</c>.</param>
-    /// <param name="paramId">Native parameter identifier.</param>
-    /// <returns>The current value, or <see langword="null"/> when the effect or parameter is unknown.</returns>
+    /// <returns>null when the effect or the param id is unknown.</returns>
     public float? GetParam(object effect, uint paramId)
     {
         int index = _effects.IndexOf(effect);
-        if (index < 0)
-        {
-            return null;
-        }
+        if (index < 0) { return null; }
 
         int code = OwnAudioNative.ownaudio_v1_effect_get_param(
             _mixerHandle,
@@ -212,17 +170,13 @@ public sealed class TrackEffectChain
     }
 
     /// <summary>
-    /// Removes a specific effect instance (returned by <see cref="Add(EffectType,float)"/>) from the
-    /// native track chain and invalidates its handle. No-op when the effect is not in this chain.
+    /// Pulls one specific effect instance out of the native chain. No-op when it isn't
+    /// ours.
     /// </summary>
-    /// <param name="effect">The effect instance to remove.</param>
     public void Remove(object effect)
     {
         int index = _effects.IndexOf(effect);
-        if (index < 0)
-        {
-            return;
-        }
+        if (index < 0) { return; }
 
         EffectHandle handle = _handles[index];
         int code = OwnAudioNative.ownaudio_v1_effect_remove(
@@ -231,7 +185,6 @@ public sealed class TrackEffectChain
             handle.DangerousGetHandle());
         ErrorCodeMapper.ThrowIfError(code, nameof(Remove));
 
-        // The native remove freed the effect box; stop the SafeHandle from destroying it again.
         handle.SetHandleAsInvalid();
         _effects.RemoveAt(index);
         _handles.RemoveAt(index);
@@ -242,8 +195,7 @@ public sealed class TrackEffectChain
     #region Private helpers
 
     /// <summary>
-    /// Maps each effect wrapper type to its <see cref="EffectType"/> so the
-    /// generic <see cref="Add{T}"/> can resolve the native effect id.
+    /// Wrapper type → native effect id, so the generic Add can resolve it.
     /// </summary>
     private static readonly IReadOnlyDictionary<Type, EffectType> EffectTypeByWrapper =
         new Dictionary<Type, EffectType>
@@ -267,7 +219,7 @@ public sealed class TrackEffectChain
             [typeof(Equalizer30Effect)] = EffectType.Equalizer30,
         };
 
-    private object CreateWrapper(EffectType effectType, EffectHandle handle)
+    private object _createWrapper(EffectType effectType, EffectHandle handle)
     {
         return effectType switch
         {
@@ -288,8 +240,6 @@ public sealed class TrackEffectChain
             EffectType.PitchShift => new PitchShiftEffect(handle, _mixerHandle),
             EffectType.DynamicAmp  => new DynamicAmpEffect(handle, _mixerHandle),
             EffectType.Equalizer30 => new Equalizer30Effect(handle, _mixerHandle),
-            // The SmartMaster composite has no strongly-typed managed wrapper; the managed
-            // SmartMasterEffect is the parameter model and mirrors onto this native effect by id.
             EffectType.SmartMaster => new NativeSmartMasterEffect(),
             _ => throw new ArgumentOutOfRangeException(nameof(effectType)),
         };

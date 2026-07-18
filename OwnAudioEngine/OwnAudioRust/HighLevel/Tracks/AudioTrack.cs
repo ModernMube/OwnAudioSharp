@@ -8,27 +8,16 @@ using Ownaudio.Safe.Handles;
 namespace Ownaudio.Audio.Tracks;
 
 /// <summary>
-/// Represents a single audio track within a <see cref="MultiTrackSession"/>.
+/// One track inside a <see cref="MultiTrackSession"/>. Feed it with Write, everything
+/// else (gain/pan/tempo/pitch) goes straight down to the Rust side.
 /// </summary>
-/// <remarks>
-/// <para>
-/// A track holds a lock-free ring buffer on the native side; fill it with decoded
-/// audio samples by calling <c>Write</c> from any thread.  Playback transport,
-/// tempo, and pitch are controlled via the properties below, all of which forward
-/// immediately to the native Rust layer.
-/// </para>
-/// <para>
-/// Effects are managed through the <see cref="Effects"/> chain property.
-/// </para>
-/// </remarks>
 public sealed class AudioTrack : IDisposable
 {
     #region Fields
 
     /// <summary>
-    /// Ring-buffer feed capacity expressed in seconds of audio; the native source
-    /// is sized to <c>sampleRate × channels × this</c> so producers can run ahead
-    /// of the audio thread without overflowing under normal scheduling.
+    /// Ring capacity in seconds of audio. Enough look-ahead that a producer can run
+    /// ahead of the audio thread without overflowing.
     /// </summary>
     public const float SourceBufferSeconds = 2.0f;
 
@@ -57,17 +46,13 @@ public sealed class AudioTrack : IDisposable
         _channels    = Math.Max((ushort)1, channels);
         Effects      = new TrackEffectChain(mixerHandle, handle.DangerousGetHandle());
 
-        // Install a lock-free ring buffer as the track's audio source so decoded
-        // samples can be pushed via Write from any thread; the audio thread owns
-        // the read side. Size it for a couple of seconds of look-ahead.
-        _sourceHandle = InstallRingSource();
+        _sourceHandle = _installRingSource();
     }
 
     /// <summary>
-    /// Installs a fresh lock-free ring buffer as this track's audio source and returns
-    /// the write handle for it.
+    /// Hangs a fresh lock-free ring on the track and hands back its write handle.
     /// </summary>
-    private TrackSourceHandle InstallRingSource()
+    private TrackSourceHandle _installRingSource()
     {
         nuint capacity = (nuint)Math.Max(1, (long)(_sampleRate * _channels * SourceBufferSeconds));
         int code = OwnAudioNative.ownaudio_v1_track_set_ring_source(
@@ -75,7 +60,7 @@ public sealed class AudioTrack : IDisposable
             _handle.DangerousGetHandle(),
             capacity,
             out IntPtr rawSource);
-        ErrorCodeMapper.ThrowIfError(code, nameof(InstallRingSource));
+        ErrorCodeMapper.ThrowIfError(code, nameof(_installRingSource));
 
         var handle = new TrackSourceHandle();
         Marshal.InitHandle(handle, rawSource);
@@ -84,15 +69,16 @@ public sealed class AudioTrack : IDisposable
 
     #endregion
 
-    #region Properties
+    #region Propertyes
 
     /// <summary>
-    /// Gets the effect chain for this track.
+    /// The track's effect chain.
     /// </summary>
     public TrackEffectChain Effects { get; }
 
     /// <summary>
-    /// Gets or sets the track gain (linear amplitude; 1.0 = unity, 0.0 = silence).
+    /// Linear gain, 1.0 = unity. The sync tick re-assigns this every tick, so we skip
+    /// the P/Invoke when nothing changed — the mirror starts at the native default.
     /// </summary>
     public float Gain
     {
@@ -100,26 +86,17 @@ public sealed class AudioTrack : IDisposable
         set
         {
             float clamped = MathF.Max(0f, value);
-            // Skip the native call when the value is unchanged. The mirror starts at the native
-            // default (1.0 = unity), so the two never drift. The control-rate sync tick re-assigns
-            // this every tick from the source volume; without this guard that is an unconditional
-            // P/Invoke per track per tick even when nothing changed.
-            if (clamped == _gain)
-            {
-                return;
-            }
+            if (clamped == _gain) { return; }
+
             _gain = clamped;
             if (!_disposed)
-            {
                 OwnAudioNative.ownaudio_v1_track_set_gain(_handle.DangerousGetHandle(), _gain);
-            }
         }
     }
 
     /// <summary>
-    /// Gets or sets the stereo pan position (-1.0 = hard left, 0.0 = center,
-    /// +1.0 = hard right). Applied under an equal-power law normalized to unity at
-    /// center, so a centered track passes through unchanged.
+    /// Stereo pan, -1..+1, equal-power law normalized at center so a centered track
+    /// passes through untouched. Same unchanged-value skip as Gain.
     /// </summary>
     public float Pan
     {
@@ -127,24 +104,16 @@ public sealed class AudioTrack : IDisposable
         set
         {
             float clamped = Math.Clamp(value, -1.0f, 1.0f);
-            // Skip the native call when the value is unchanged. The mirror starts at the native
-            // default (0.0 = center), so the two never drift. The control-rate sync tick re-assigns
-            // this every tick from the source pan; without this guard that is an unconditional
-            // P/Invoke per track per tick even when nothing changed.
-            if (clamped == _pan)
-            {
-                return;
-            }
+            if (clamped == _pan) { return; }
+
             _pan = clamped;
             if (!_disposed)
-            {
                 OwnAudioNative.ownaudio_v1_track_set_pan(_handle.DangerousGetHandle(), _pan);
-            }
         }
     }
 
     /// <summary>
-    /// Gets or sets the tempo ratio (1.0 = normal speed, 2.0 = double speed).
+    /// Tempo ratio, 1.0 = normal speed. Clamped to 0.25..4.
     /// </summary>
     public float Tempo
     {
@@ -152,20 +121,16 @@ public sealed class AudioTrack : IDisposable
         set
         {
             float clamped = Math.Clamp(value, 0.25f, 4.0f);
-            if (clamped == _tempo)
-            {
-                return;
-            }
+            if (clamped == _tempo) { return; }
+
             _tempo = clamped;
             if (!_disposed)
-            {
                 OwnAudioNative.ownaudio_v1_track_set_tempo(_handle.DangerousGetHandle(), _tempo);
-            }
         }
     }
 
     /// <summary>
-    /// Gets or sets the pitch shift in semitones (−24 to +24).
+    /// Pitch shift in semitones, -24..+24.
     /// </summary>
     public float PitchSemitones
     {
@@ -173,38 +138,23 @@ public sealed class AudioTrack : IDisposable
         set
         {
             float clamped = Math.Clamp(value, -24f, 24f);
-            if (clamped == _pitchSemitones)
-            {
-                return;
-            }
+            if (clamped == _pitchSemitones) { return; }
+
             _pitchSemitones = clamped;
             if (!_disposed)
-            {
                 OwnAudioNative.ownaudio_v1_track_set_pitch(_handle.DangerousGetHandle(), _pitchSemitones);
-            }
         }
     }
 
     /// <summary>
-    /// Pins the track's SoundTouch time-stretch stage on for its whole lifetime.
+    /// Pins the SoundTouch stretch stage on for the track's whole life. A tempo/pitch
+    /// capable source calls this once at bind time, so the first tempo change lands on
+    /// an already-warm FIFO instead of clicking its way in from bypass.
     /// </summary>
-    /// <remarks>
-    /// A pinned track routes through the stretch stage from its first rendered block — even at
-    /// unity tempo/pitch — and is never released back to the zero-latency bypass path. Call this
-    /// once from a tempo/pitch-capable source (a file source) when it binds the track, so the very
-    /// first tempo or pitch change lands on an already-warm FIFO with a constant, plugin-delay-
-    /// compensated latency. Without it the first change switches the stage in from bypass, which
-    /// clicks, comb-filters against the bypass tail, and desyncs the track from the others. A
-    /// bypass-only source (e.g. a metronome whose tempo is baked into its audio) leaves it off.
-    /// No-op when the track is disposed.
-    /// </remarks>
-    /// <param name="enabled"><see langword="true"/> to pin the stretch stage on.</param>
+    /// <param name="enabled">true = keep the stretch stage always in the path.</param>
     public void SetStretchAlwaysOn(bool enabled)
     {
-        if (_disposed)
-        {
-            return;
-        }
+        if (_disposed) { return; }
 
         int code = OwnAudioNative.ownaudio_v1_track_set_stretch_always_on(
             _handle.DangerousGetHandle(),
@@ -213,44 +163,31 @@ public sealed class AudioTrack : IDisposable
     }
 
     /// <summary>
-    /// Gets or sets a value indicating whether the track output is silenced.
+    /// Silences the track output.
     /// </summary>
     public bool Muted
     {
         get => _muted;
         set
         {
-            if (value == _muted)
-            {
-                return;
-            }
+            if (value == _muted) { return; }
+
             _muted = value;
             if (!_disposed)
-            {
                 OwnAudioNative.ownaudio_v1_track_set_mute(_handle.DangerousGetHandle(), value ? 1f : 0f);
-            }
         }
     }
 
     /// <summary>
-    /// Gets the number of output frames this track has actually rendered into the
-    /// mix since the last position reset (a seek or source swap).
+    /// Output frames actually rendered into the mix since the last reset. This is the
+    /// rendered position, it lags the fed one by the ring depth — that's why Position
+    /// rides on this and not on what Write accepted.
     /// </summary>
-    /// <remarks>
-    /// This is the <em>rendered</em> position, advanced on the audio thread as each
-    /// block is mixed. It lags the <em>fed</em> position by the native ring-buffer
-    /// depth, which is why it — not the amount written via <see cref="Write"/> — is
-    /// the authoritative source for <see cref="Position"/>. Returns zero when the
-    /// track is disposed.
-    /// </remarks>
     public ulong RenderedFrames
     {
         get
         {
-            if (_disposed)
-            {
-                return 0;
-            }
+            if (_disposed) { return 0; }
 
             int code = OwnAudioNative.ownaudio_v1_track_get_rendered_frames(
                 _handle.DangerousGetHandle(),
@@ -261,45 +198,27 @@ public sealed class AudioTrack : IDisposable
     }
 
     /// <summary>
-    /// Gets the track's current playback position, derived from <see cref="RenderedFrames"/>
-    /// and the session sample rate.
+    /// Wall-clock playback position: advances at the real rate no matter the tempo.
+    /// This is the one to drive a shared master clock with.
     /// </summary>
-    /// <remarks>
-    /// This is the <em>output</em> (wall-clock) position: it advances at the real playback
-    /// rate regardless of tempo, and is the right quantity to drive a shared multi-track
-    /// master clock. For the tempo-aware content-time position (where in the source the
-    /// audio actually is), use <see cref="ContentPosition"/>.
-    /// </remarks>
     public TimeSpan Position
     {
         get
         {
-            if (_sampleRate <= 0f)
-            {
-                return TimeSpan.Zero;
-            }
-
+            if (_sampleRate <= 0f) return TimeSpan.Zero;
             return TimeSpan.FromSeconds(RenderedFrames / _sampleRate);
         }
     }
 
     /// <summary>
-    /// Gets the number of content (source-timeline) frames this track has advanced through
-    /// since the last position reset (a seek or source swap).
+    /// Content-timeline frames advanced through since the last reset — the per-block
+    /// tempo integrated (Σ frames × tempo), so it follows a live time-stretch.
     /// </summary>
-    /// <remarks>
-    /// Unlike <see cref="RenderedFrames"/> (output frames, wall-clock time), this integrates
-    /// the per-block tempo (<c>Σ output_frames × tempo</c>), so it tracks the source content
-    /// actually rendered through a live time-stretch. Returns zero when the track is disposed.
-    /// </remarks>
     public double RenderedContentFrames
     {
         get
         {
-            if (_disposed)
-            {
-                return 0.0;
-            }
+            if (_disposed) { return 0.0; }
 
             int code = OwnAudioNative.ownaudio_v1_track_get_rendered_content_frames(
                 _handle.DangerousGetHandle(),
@@ -310,48 +229,27 @@ public sealed class AudioTrack : IDisposable
     }
 
     /// <summary>
-    /// Gets the track's current content-time playback position (where in the source the
-    /// rendered audio is), derived from <see cref="RenderedContentFrames"/> and the session
-    /// sample rate.
+    /// Tempo-aware position: where in the source the audio you hear actually is.
+    /// A file source reports this one, matching the old managed chain.
     /// </summary>
-    /// <remarks>
-    /// This is the tempo-aware position: at non-unity tempo it advances faster or slower than
-    /// <see cref="Position"/>, tracking the audio actually heard. It is the quantity a file
-    /// source reports as its content-time position, matching the legacy managed chain.
-    /// </remarks>
     public TimeSpan ContentPosition
     {
         get
         {
-            if (_sampleRate <= 0f)
-            {
-                return TimeSpan.Zero;
-            }
-
+            if (_sampleRate <= 0f) return TimeSpan.Zero;
             return TimeSpan.FromSeconds(RenderedContentFrames / _sampleRate);
         }
     }
 
     /// <summary>
-    /// Gets the track's most recently measured output peak levels — the absolute
-    /// peak of the track's own contribution to the mix, after its effect chain and
-    /// gain, for the last rendered block.
+    /// Last measured output peaks of this track's own contribution, post effects and
+    /// gain. Only updated while rendering, so a stopped track keeps its last value.
     /// </summary>
-    /// <remarks>
-    /// Values range from <c>0.0</c> (silence) upward, reaching <c>1.0</c> at full
-    /// scale. A mono track reports the same value on both channels. The peak is
-    /// updated on the audio thread only while the track is actually rendering, so a
-    /// stopped or paused track keeps its last value; gate the read on the transport
-    /// state if a decaying meter is desired. Returns <c>(0, 0)</c> when disposed.
-    /// </remarks>
     public (float Left, float Right) Peaks
     {
         get
         {
-            if (_disposed)
-            {
-                return (0f, 0f);
-            }
+            if (_disposed) { return (0f, 0f); }
 
             int code = OwnAudioNative.ownaudio_v1_track_get_peaks(
                 _handle.DangerousGetHandle(),
@@ -363,22 +261,13 @@ public sealed class AudioTrack : IDisposable
     }
 
     /// <summary>
-    /// Sets the track's start-offset silence: the number of output frames the track
-    /// emits as silence (without reading its source) before it begins contributing.
+    /// Start-offset silence: the track emits this many frames of nothing before it
+    /// starts contributing. Sample-accurate late entry without moving the source. 0 clears it.
     /// </summary>
-    /// <remarks>
-    /// Delays the track's entry against the mixer's shared clock sample-accurately,
-    /// realising a positive per-track start offset without moving the source position.
-    /// Pass <c>0</c> to clear any pending delay (the track enters immediately). No-op
-    /// when the track is disposed.
-    /// </remarks>
-    /// <param name="frames">Start-offset silence length in output frames (≥ 0).</param>
+    /// <param name="frames">Silence length in output frames.</param>
     public void SetStartDelayFrames(long frames)
     {
-        if (_disposed)
-        {
-            return;
-        }
+        if (_disposed) { return; }
 
         ulong value = frames <= 0 ? 0UL : (ulong)frames;
         int code = OwnAudioNative.ownaudio_v1_track_set_start_delay_frames(
@@ -388,24 +277,13 @@ public sealed class AudioTrack : IDisposable
     }
 
     /// <summary>
-    /// Installs a per-track output-channel routing map: source channel <c>i</c> is
-    /// summed into physical output channel <c>mapping[i]</c>, and every output channel
-    /// not named by the map receives no contribution from this track (silence). This
-    /// places the track onto a chosen subset of a multi-channel output bus.
+    /// Per-track output routing: source channel i lands on output mapping[i], every
+    /// other output gets nothing from us. Empty span clears the routing.
     /// </summary>
-    /// <remarks>
-    /// Passing an empty span clears any routing (equivalent to
-    /// <see cref="ClearOutputChannelMap"/>). Negative indices are invalid; out-of-range
-    /// destinations are ignored at render time. No-op when the track is disposed.
-    /// </remarks>
-    /// <param name="mapping">Zero-based output-channel index per source channel.</param>
-    /// <exception cref="ArgumentException">Thrown when any index is negative.</exception>
+    /// <param name="mapping">Zero-based output channel index per source channel.</param>
     public void SetOutputChannelMap(ReadOnlySpan<int> mapping)
     {
-        if (_disposed)
-        {
-            return;
-        }
+        if (_disposed) { return; }
 
         if (mapping.IsEmpty)
         {
@@ -416,12 +294,9 @@ public sealed class AudioTrack : IDisposable
         Span<uint> map = stackalloc uint[mapping.Length];
         for (int i = 0; i < mapping.Length; i++)
         {
-            if (mapping[i] < 0)
-            {
-                throw new ArgumentException(
-                    $"Output channel index at position {i} is negative ({mapping[i]}).",
-                    nameof(mapping));
-            }
+            if(mapping[i] < 0)
+                throw new ArgumentException($"Output channel index at position {i} is negative ({mapping[i]}).", nameof(mapping));
+
             map[i] = (uint)mapping[i];
         }
 
@@ -433,16 +308,11 @@ public sealed class AudioTrack : IDisposable
     }
 
     /// <summary>
-    /// Clears any per-track output-channel routing, returning the track to the
-    /// straight identity mix (source channel <c>i</c> → output channel <c>i</c>).
-    /// No-op when the track is disposed.
+    /// Back to the straight identity mix, channel i → output i.
     /// </summary>
     public void ClearOutputChannelMap()
     {
-        if (_disposed)
-        {
-            return;
-        }
+        if (_disposed) { return; }
 
         int code = OwnAudioNative.ownaudio_v1_track_clear_output_channel_map(
             _handle.DangerousGetHandle());
@@ -454,52 +324,43 @@ public sealed class AudioTrack : IDisposable
     #region Transport
 
     /// <summary>
-    /// Starts or resumes playback of this track.
+    /// Starts or resumes this track.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown when the track is disposed.</exception>
     public void Play()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
         int code = OwnAudioNative.ownaudio_v1_track_play(_handle.DangerousGetHandle());
         ErrorCodeMapper.ThrowIfError(code, nameof(Play));
     }
 
     /// <summary>
-    /// Pauses playback without resetting the position.
+    /// Pauses, position kept.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown when the track is disposed.</exception>
     public void Pause()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
         int code = OwnAudioNative.ownaudio_v1_track_pause(_handle.DangerousGetHandle());
         ErrorCodeMapper.ThrowIfError(code, nameof(Pause));
     }
 
     /// <summary>
-    /// Stops playback and resets the position to zero.
+    /// Stops and rewinds to zero.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown when the track is disposed.</exception>
     public void Stop()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
         int code = OwnAudioNative.ownaudio_v1_track_stop(_handle.DangerousGetHandle());
         ErrorCodeMapper.ThrowIfError(code, nameof(Stop));
     }
 
     /// <summary>
-    /// Seeks the track to the specified time position.
+    /// Seeks the track and resets the rendered counter, so Position restarts from the
+    /// target. The decoder seek itself happens on the feeder side.
     /// </summary>
-    /// <remarks>
-    /// Also resets the rendered-frame counter so <see cref="Position"/> restarts from
-    /// the seek target. In the intermediate phase the decoder seek itself happens on
-    /// the managed side (via the track feeder); this call keeps the native rendered
-    /// position consistent with that reset.
-    /// </remarks>
-    /// <param name="position">Target playback position.</param>
-    /// <exception cref="ObjectDisposedException">Thrown when the track is disposed.</exception>
+    /// <param name="position"></param>
     public void Seek(TimeSpan position)
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
         ulong sample = (ulong)(position.TotalSeconds * _sampleRate);
         int code = OwnAudioNative.ownaudio_v1_track_seek(_handle.DangerousGetHandle(), sample);
         ErrorCodeMapper.ThrowIfError(code, nameof(Seek));
@@ -513,67 +374,39 @@ public sealed class AudioTrack : IDisposable
     #region Source feed
 
     /// <summary>
-    /// Drops any samples currently buffered in the track's source ring, discarding
-    /// audio that was queued before a seek so the next reads start from fresh data.
+    /// Throws away whatever is sitting in the source ring. The feeder uses this on a
+    /// seek so the stale pre-seek look-ahead doesn't play out first.
     /// </summary>
-    /// <remarks>
-    /// Used by the track feeder when seeking: after the decoder jumps to a new
-    /// position the stale look-ahead already pushed via <see cref="Write"/> must be
-    /// cleared, otherwise the pre-seek audio would still play out first.
-    /// </remarks>
-    /// <exception cref="ObjectDisposedException">Thrown when the track is disposed.</exception>
     public void ClearSource()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
         int code = OwnAudioNative.ownaudio_v1_track_clear_source(_mixerHandle, _handle.DangerousGetHandle());
         ErrorCodeMapper.ThrowIfError(code, nameof(ClearSource));
     }
 
     /// <summary>
-    /// Discards everything currently queued in the feed and re-arms the track with a
-    /// fresh, empty ring buffer, so the next <see cref="Write"/> is the next audio heard.
+    /// Drops the queued feed and re-arms with a fresh empty ring, so the next Write is
+    /// the next thing heard. ClearSource alone detaches the ring for good, which is no
+    /// good for a producer that keeps feeding. Call it from the feeding thread.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Use this when a continuously fed track jumps position: <see cref="ClearSource"/>
-    /// alone detaches the ring for good, leaving later writes going nowhere, so a producer
-    /// that keeps feeding the same track must re-install a source rather than only clear it.
-    /// </para>
-    /// <para>
-    /// Not real-time safe and not thread-safe against a concurrent <see cref="Write"/>:
-    /// call it from the same thread that feeds the track.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ObjectDisposedException">Thrown when the track is disposed.</exception>
     public void ResetFeed()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
         TrackSourceHandle stale = _sourceHandle;
-        _sourceHandle = InstallRingSource();
+        _sourceHandle = _installRingSource();
         stale.Dispose();
     }
 
     /// <summary>
-    /// Pushes decoded interleaved <c>f32</c> samples into the track's lock-free
-    /// audio feed and returns the number of samples actually accepted.
+    /// Pushes interleaved f32 into the lock-free feed. Non-blocking: when the ring is
+    /// full fewer (or zero) samples land and the caller retries the rest later.
     /// </summary>
-    /// <remarks>
-    /// Real-time safe and non-blocking: when the native ring buffer is full, fewer
-    /// samples (or zero) are accepted and the caller should retry the remainder
-    /// later. Samples are interleaved per the session's channel count. Use
-    /// <see cref="FreeSampleCount"/> to size writes against the available space.
-    /// </remarks>
-    /// <param name="samples">Interleaved samples to push.</param>
-    /// <returns>The number of samples accepted into the buffer.</returns>
-    /// <exception cref="ObjectDisposedException">Thrown when the track is disposed.</exception>
+    /// <returns>How many samples actually landed there.</returns>
     public int Write(ReadOnlySpan<float> samples)
     {
-        ThrowIfDisposed();
-        if (samples.IsEmpty)
-        {
-            return 0;
-        }
+        _throwIfDisposed();
+        if (samples.IsEmpty) { return 0; }
 
         int code = OwnAudioNative.ownaudio_v1_track_source_write(
             _sourceHandle.DangerousGetHandle(),
@@ -585,14 +418,13 @@ public sealed class AudioTrack : IDisposable
     }
 
     /// <summary>
-    /// Gets the number of samples that can currently be written without overflow.
+    /// How many samples fit right now without overflowing.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown when the track is disposed.</exception>
     public int FreeSampleCount
     {
         get
         {
-            ThrowIfDisposed();
+            _throwIfDisposed();
             int code = OwnAudioNative.ownaudio_v1_track_source_free_samples(
                 _sourceHandle.DangerousGetHandle(),
                 out nuint free);
@@ -606,7 +438,7 @@ public sealed class AudioTrack : IDisposable
     #region IDisposable
 
     /// <summary>
-    /// Disposes the track handle and releases native resources.
+    /// Drops the source ring and the track handle.
     /// </summary>
     public void Dispose()
     {
@@ -620,15 +452,14 @@ public sealed class AudioTrack : IDisposable
 
     #region Internal helpers
 
-    /// <summary>Returns the raw native handle value for use by <see cref="MultiTrackSession"/>.</summary>
+    /// <summary>
+    /// Raw native handle for the session.
+    /// </summary>
     internal IntPtr GetNativeHandle() => _handle.DangerousGetHandle();
 
-    private void ThrowIfDisposed()
+    private void _throwIfDisposed()
     {
-        if (_disposed)
-        {
-            throw new ObjectDisposedException(nameof(AudioTrack));
-        }
+        if (_disposed) throw new ObjectDisposedException(nameof(AudioTrack));
     }
 
     #endregion

@@ -3,20 +3,17 @@ using System;
 namespace Ownaudio.Audio.Tracks;
 
 /// <summary>
-/// Carries the outcome of a <see cref="TrackFeeder"/> pump loop when it finishes.
+/// What came out of a <see cref="TrackFeeder"/> pump loop when it ended.
 /// </summary>
 public sealed class TrackFeedCompletedEventArgs : EventArgs
 {
     #region Construction
 
     /// <summary>
-    /// Initializes a new <see cref="TrackFeedCompletedEventArgs"/>.
+    /// error is only set when reason is Faulted.
     /// </summary>
-    /// <param name="reason">Why the pump loop terminated.</param>
-    /// <param name="error">
-    /// The exception that aborted feeding, or <see langword="null"/> unless
-    /// <paramref name="reason"/> is <see cref="TrackFeedEndReason.Faulted"/>.
-    /// </param>
+    /// <param name="reason"></param>
+    /// <param name="error"></param>
     public TrackFeedCompletedEventArgs(TrackFeedEndReason reason, Exception? error = null)
     {
         Reason = reason;
@@ -25,14 +22,15 @@ public sealed class TrackFeedCompletedEventArgs : EventArgs
 
     #endregion
 
-    #region Properties
+    #region Propertyes
 
-    /// <summary>Why the pump loop terminated.</summary>
+    /// <summary>
+    /// Why the loop terminated.
+    /// </summary>
     public TrackFeedEndReason Reason { get; }
 
     /// <summary>
-    /// The exception that aborted feeding when <see cref="Reason"/> is
-    /// <see cref="TrackFeedEndReason.Faulted"/>; otherwise <see langword="null"/>.
+    /// The exception that killed the feed, null otherwise.
     /// </summary>
     public Exception? Error { get; }
 

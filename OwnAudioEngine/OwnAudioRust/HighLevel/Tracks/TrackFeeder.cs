@@ -5,42 +5,17 @@ using Ownaudio.Safe;
 namespace Ownaudio.Audio.Tracks;
 
 /// <summary>
-/// Bridges a <see cref="StreamingAudioDecoder"/> to an <see cref="AudioTrack"/> by
-/// pumping decoded samples into the track's lock-free audio feed on a dedicated
-/// background thread.
+/// Pumps a <see cref="StreamingAudioDecoder"/> into an <see cref="AudioTrack"/> on its own
+/// background thread. Writes are non-blocking, so on a full ring or a starved decoder the
+/// pump just parks briefly instead of spinning. Filling the buffer doesn't start playback —
+/// that's the session's job. Decoder rate/channels must match the session.
 /// </summary>
-/// <remarks>
-/// <para>
-/// The pump reads interleaved <c>float</c> samples from the decoder and pushes them
-/// into the track via <see cref="AudioTrack.Write(ReadOnlySpan{float})"/>.  Writing is
-/// non-blocking: when the track's ring buffer is full the feeder applies back-pressure
-/// (it parks briefly and retries the unwritten remainder), and when the decoder is
-/// momentarily starved by its prefetch thread the feeder waits without busy-spinning.
-/// </para>
-/// <para>
-/// Feeding only fills the track's buffer; it does not start playback.  Drive transport
-/// through the owning <see cref="MultiTrackSession"/> (for example
-/// <see cref="MultiTrackSession.PlayAll"/>) — until then the buffer simply fills to
-/// capacity and the feeder back-pressures.
-/// </para>
-/// <para>
-/// The decoder's output channel count and sample rate must match the session the track
-/// belongs to; mismatched layouts produce misaligned audio.
-/// </para>
-/// <para>
-/// <b>Thread safety:</b> <see cref="Start"/>, <see cref="Stop"/> and
-/// <see cref="Dispose"/> are safe to call from any thread but must not run concurrently
-/// on the same instance.  <see cref="Completed"/> is raised on a
-/// <see cref="System.Threading.ThreadPool"/> thread.
-/// </para>
-/// </remarks>
 public sealed class TrackFeeder : IDisposable
 {
     #region Fields
 
     /// <summary>
-    /// How long the pump parks (milliseconds) when it cannot make progress because
-    /// the track buffer is full or the decoder is transiently starved.
+    /// Park time (ms) when we can't make progress either way.
     /// </summary>
     private const int IdlePollMilliseconds = 5;
 
@@ -57,21 +32,15 @@ public sealed class TrackFeeder : IDisposable
     private bool _disposed;
 
     /// <summary>
-    /// When <see langword="true"/>, the pump seeks the decoder back to the start on
-    /// end-of-stream and keeps feeding, so playback loops seamlessly.
+    /// Rewind on EOS and keep going instead of finishing.
     /// </summary>
     private volatile bool _loop;
 
     /// <summary>
-    /// Set by <see cref="Seek"/> to request a reposition; consumed on the pump thread
-    /// so the decoder is only ever touched by one thread. Guarded by <see cref="_sync"/>.
+    /// Seek request handed over to the pump thread — the decoder is only ever touched
+    /// from there. Both this and the target are guarded by _sync.
     /// </summary>
     private bool _seekRequested;
-
-    /// <summary>
-    /// The pending seek target in seconds, valid only while <see cref="_seekRequested"/>
-    /// is set. Guarded by <see cref="_sync"/>.
-    /// </summary>
     private double _seekTargetSeconds;
 
     #endregion
@@ -79,20 +48,9 @@ public sealed class TrackFeeder : IDisposable
     #region Construction
 
     /// <summary>
-    /// Creates a feeder that pumps <paramref name="decoder"/> output into
-    /// <paramref name="track"/>.
+    /// Builds a feeder draining decoder into track. leaveDecoderOpen keeps the decoder's
+    /// ownership with the caller, otherwise we dispose it with ourselves.
     /// </summary>
-    /// <param name="decoder">The source decoder to drain.</param>
-    /// <param name="track">The destination track to fill.</param>
-    /// <param name="leaveDecoderOpen">
-    /// When <see langword="false"/> (the default) the feeder disposes
-    /// <paramref name="decoder"/> together with itself; pass <see langword="true"/>
-    /// to keep ownership of the decoder with the caller.
-    /// </param>
-    /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="decoder"/> or <paramref name="track"/> is
-    /// <see langword="null"/>.
-    /// </exception>
     public TrackFeeder(StreamingAudioDecoder decoder, AudioTrack track, bool leaveDecoderOpen = false)
     {
         _decoder = decoder ?? throw new ArgumentNullException(nameof(decoder));
@@ -110,31 +68,27 @@ public sealed class TrackFeeder : IDisposable
     #region Events
 
     /// <summary>
-    /// Raised once when the pump loop terminates, whether by reaching the end of the
-    /// stream, being stopped, or faulting.
+    /// Fires once when the pump loop ends — EOS, stopped or faulted. Raised on a pool
+    /// thread, so a handler may call Stop or Dispose safely.
     /// </summary>
-    /// <remarks>
-    /// Fired on a <see cref="System.Threading.ThreadPool"/> thread, never on the
-    /// caller's thread or the pump thread.  Handlers may safely call
-    /// <see cref="Stop"/> or <see cref="Dispose"/>.
-    /// </remarks>
     public event EventHandler<TrackFeedCompletedEventArgs>? Completed;
 
     #endregion
 
-    #region Properties
+    #region Propertyes
 
-    /// <summary>Gets the track this feeder fills.</summary>
+    /// <summary>
+    /// The track we fill.
+    /// </summary>
     public AudioTrack Track => _track;
 
     /// <summary>
-    /// Gets a value indicating whether the pump thread is currently running.
+    /// True while the pump thread is alive.
     /// </summary>
     public bool IsRunning => _running;
 
     /// <summary>
-    /// Gets or sets whether playback loops: on end-of-stream the decoder is rewound to
-    /// the start and feeding continues seamlessly (no gap), instead of completing.
+    /// Loop playback: on EOS we rewind the decoder and keep feeding, no gap.
     /// </summary>
     public bool Loop
     {
@@ -147,15 +101,11 @@ public sealed class TrackFeeder : IDisposable
     #region Seeking
 
     /// <summary>
-    /// Requests a reposition of the underlying decoder to <paramref name="position"/>.
+    /// Asks for a reposition. Done on the pump thread, which also dumps the track's
+    /// stale look-ahead so the pre-seek audio doesn't play first. If the pump isn't
+    /// running it lands at the next start.
     /// </summary>
-    /// <remarks>
-    /// The seek is performed on the pump thread (the only thread that touches the
-    /// decoder), which also clears the track's buffered look-ahead so the stale
-    /// pre-seek audio does not play first. When the pump is not running the request is
-    /// applied at its next start.
-    /// </remarks>
-    /// <param name="position">The target playback position from the start of the stream.</param>
+    /// <param name="position"></param>
     public void Seek(TimeSpan position)
     {
         lock (_sync)
@@ -171,10 +121,8 @@ public sealed class TrackFeeder : IDisposable
     #region Control
 
     /// <summary>
-    /// Starts the background pump thread.
+    /// Fires up the pump thread.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown when the feeder is disposed.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when already started.</exception>
     public void Start()
     {
         lock (_sync)
@@ -182,12 +130,10 @@ public sealed class TrackFeeder : IDisposable
             ObjectDisposedException.ThrowIf(_disposed, this);
 
             if (_pumpThread is not null)
-            {
                 throw new InvalidOperationException("The feeder has already been started.");
-            }
 
             _running = true;
-            _pumpThread = new Thread(PumpLoop)
+            _pumpThread = new Thread(_pumpLoop)
             {
                 IsBackground = true,
                 Name = "OwnAudio.TrackFeeder",
@@ -197,7 +143,7 @@ public sealed class TrackFeeder : IDisposable
     }
 
     /// <summary>
-    /// Signals the pump thread to stop and waits for it to finish.  Idempotent.
+    /// Signals the pump to quit and waits it out. Idempotent.
     /// </summary>
     public void Stop()
     {
@@ -210,21 +156,16 @@ public sealed class TrackFeeder : IDisposable
         }
 
         if (thread is not null && thread != Thread.CurrentThread)
-        {
             thread.Join();
-        }
 
-        lock (_sync)
-        {
-            _pumpThread = null;
-        }
+        lock (_sync) { _pumpThread = null; }
     }
 
     #endregion
 
     #region Pump loop
 
-    private void PumpLoop()
+    private void _pumpLoop()
     {
         TrackFeedEndReason reason = TrackFeedEndReason.EndOfStream;
         Exception? error = null;
@@ -258,13 +199,10 @@ public sealed class TrackFeeder : IDisposable
                     {
                         if (_decoder.IsEndOfStream)
                         {
-                            if (_loop)
-                            {
-                                _decoder.Seek(TimeSpan.Zero);
-                                continue;
-                            }
+                            if (!_loop) break;
 
-                            break;
+                            _decoder.Seek(TimeSpan.Zero);
+                            continue;
                         }
 
                         _wake.Wait(IdlePollMilliseconds);
@@ -279,16 +217,10 @@ public sealed class TrackFeeder : IDisposable
                 offset += accepted;
                 pending -= accepted;
 
-                if (accepted == 0)
-                {
-                    _wake.Wait(IdlePollMilliseconds);
-                }
+                if (accepted == 0) _wake.Wait(IdlePollMilliseconds);
             }
 
-            if (_stopRequested)
-            {
-                reason = TrackFeedEndReason.Stopped;
-            }
+            if (_stopRequested) reason = TrackFeedEndReason.Stopped;
         }
         catch (Exception ex)
         {
@@ -300,16 +232,13 @@ public sealed class TrackFeeder : IDisposable
             _running = false;
         }
 
-        RaiseCompleted(reason, error);
+        _raiseCompleted(reason, error);
     }
 
-    private void RaiseCompleted(TrackFeedEndReason reason, Exception? error)
+    private void _raiseCompleted(TrackFeedEndReason reason, Exception? error)
     {
         EventHandler<TrackFeedCompletedEventArgs>? handler = Completed;
-        if (handler is null)
-        {
-            return;
-        }
+        if (handler is null) { return; }
 
         var args = new TrackFeedCompletedEventArgs(reason, error);
         ThreadPool.QueueUserWorkItem(_ => handler(this, args));
@@ -320,29 +249,21 @@ public sealed class TrackFeeder : IDisposable
     #region IDisposable
 
     /// <summary>
-    /// Stops the pump thread and, unless constructed with
-    /// <c>leaveDecoderOpen: true</c>, disposes the underlying decoder.  The track is
-    /// left intact (it is owned by the session).
+    /// Stops the pump and, unless told to leave it open, disposes the decoder too. The
+    /// track stays, it's the session's.
     /// </summary>
     public void Dispose()
     {
         lock (_sync)
         {
-            if (_disposed)
-            {
-                return;
-            }
-
+            if (_disposed) { return; }
             _disposed = true;
         }
 
         Stop();
         _wake.Dispose();
 
-        if (!_leaveDecoderOpen)
-        {
-            _decoder.Dispose();
-        }
+        if (!_leaveDecoderOpen) _decoder.Dispose();
     }
 
     #endregion
