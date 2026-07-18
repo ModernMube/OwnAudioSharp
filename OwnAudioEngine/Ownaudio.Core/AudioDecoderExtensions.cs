@@ -6,27 +6,22 @@ using Ownaudio.Decoders;
 namespace Ownaudio.Core;
 
 /// <summary>
-/// Provides efficient extension methods for IAudioDecoder.
+/// Handy bits bolted onto IAudioDecoder.
 /// </summary>
 public static class AudioDecoderExtensions
 {
     /// <summary>
-    /// Reads all audio samples from a decoder into a single float array.
-    /// This method is highly efficient and uses the zero-allocation ReadFrames method in a loop.
-    /// It replaces the old, inefficient DecodeAllFrames method.
+    /// Pulls the whole thing into one float array. Cold path, so the List growth is fine;
+    /// the read loop itself stays on the zero-alloc ReadFrames.
     /// </summary>
-    /// <param name="decoder">The decoder to read from.</param>
     /// <returns>A float array containing all the decoded audio samples.</returns>
     public static float[] ReadAllSamples(this IAudioDecoder decoder)
     {
-        int estimatedSamples = (int)(decoder.StreamInfo.Duration.TotalSeconds
-            * decoder.StreamInfo.SampleRate
-            * decoder.StreamInfo.Channels);
-        var allSamples = new List<float>(estimatedSamples > 0 ? estimatedSamples : 65536);
+        var info = decoder.StreamInfo;
+        int guess = (int)(info.Duration.TotalSeconds * info.SampleRate * info.Channels);
+        var all = new List<float>(guess > 0 ? guess : 65536);
 
-        int framesPerBuffer = 8192;
-        int bufferSizeInBytes = framesPerBuffer * decoder.StreamInfo.Channels * sizeof(float);
-        var buffer = new byte[bufferSizeInBytes];
+        var buffer = new byte[8192 * info.Channels * sizeof(float)];
 
         while (true)
         {
@@ -34,14 +29,13 @@ public static class AudioDecoderExtensions
 
             if (result.IsSucceeded && result.FramesRead > 0)
             {
-                int bytesRead = result.FramesRead * decoder.StreamInfo.Channels * sizeof(float);
-                var floatSpan = MemoryMarshal.Cast<byte, float>(buffer.AsSpan(0, bytesRead));
-                allSamples.AddRange(floatSpan);
+                int bytes = result.FramesRead * info.Channels * sizeof(float);
+                all.AddRange(MemoryMarshal.Cast<byte, float>(buffer.AsSpan(0, bytes)));
             }
 
-            if (result.IsEOF)
-                break;
+            if (result.IsEOF) break;
         }
-        return allSamples.ToArray();
+
+        return all.ToArray();
     }
 }

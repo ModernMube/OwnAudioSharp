@@ -1,172 +1,115 @@
 using System;
-using System.Collections.Generic;
 
 namespace Ownaudio.Core
 {
     /// <summary>
-    /// Configuration parameters for audio engine initialization.
+    /// What the engine gets handed at init time.
     /// </summary>
     public sealed class AudioConfig
     {
         /// <summary>
-        /// Sample rate in Hz (e.g., 44100, 48000).
-        /// Default: 48000 Hz.
+        /// Sample rate in Hz.
         /// </summary>
         public int SampleRate { get; set; } = 48000;
 
         /// <summary>
-        /// Number of audio channels (1 = mono, 2 = stereo).
-        /// Default: 2 (stereo).
+        /// 1 = mono, 2 = stereo.
         /// </summary>
         public int Channels { get; set; } = 2;
 
         /// <summary>
-        /// Desired buffer size in frames.
-        /// Actual buffer size may differ - check FramesPerBuffer after initialization.
-        /// Smaller = lower latency, higher CPU usage.
-        /// Default: 512 frames (~10.6ms at 48kHz).
+        /// Wanted buffer size in frames. The device may hand back something else,
+        /// check FramesPerBuffer after init. Smaller = less latency, more CPU.
         /// </summary>
         public int BufferSize { get; set; } = 512;
 
         /// <summary>
-        /// Enable input (recording) functionality.
-        /// Default: false (output only).
+        /// Recording on/off.
         /// </summary>
         public bool EnableInput { get; set; } = false;
 
         /// <summary>
-        /// Enable output (playback) functionality.
-        /// Default: true.
+        /// Playback on/off.
         /// </summary>
         public bool EnableOutput { get; set; } = true;
 
         /// <summary>
-        /// Output device ID (platform-specific, null = default output device).
-        /// Use <see cref="IDeviceEnumerator"/> to get available device IDs.
-        /// Default: null (use default audio output device).
+        /// Output device id, null = system default. Ids come from <see cref="IDeviceEnumerator"/>.
         /// </summary>
         public string? OutputDeviceId { get; set; } = null;
 
         /// <summary>
-        /// Input device ID (platform-specific, null = default input device).
-        /// Use <see cref="IDeviceEnumerator"/> to get available device IDs.
-        /// Default: null (use default audio input device).
+        /// Input device id, null = system default.
         /// </summary>
         public string? InputDeviceId { get; set; } = null;
 
         /// <summary>
-        /// Specifies the host API type to use for audio processing.
-        /// Only applicable when using PortAudio backend. MiniAudio ignores this setting.
-        /// Default: None (uses platform default host API).
+        /// Host API pick. PortAudio only, MiniAudio couldn't care less.
         /// </summary>
         public EngineHostType HostType { get; set; } = EngineHostType.None;
 
         /// <summary>
-        /// Specifies which input channels to use when the device has more input channels than needed.
-        /// Works on both MiniAudio and PortAudio backends, on all supported platforms.
-        /// For PortAudio with ASIO, native hardware channel selection is used (low overhead).
-        /// For all other backends, software channel routing is applied in the callback.
-        /// If null or empty, the first N channels will be used (where N = Channels property).
-        /// Example: [2, 3] will route physical input channels 2 and 3 to logical channels 0 and 1.
-        /// The array length must match the Channels property when specified.
-        /// Default: null (sequential channel mapping starting from channel 0).
+        /// Which physical input channels we actually want. ASIO does it in hw, everything
+        /// else routes in the callback. null/empty = first N channels. Length must equal Channels.
         /// </summary>
         public int[]? InputChannelSelectors { get; set; } = null;
 
         /// <summary>
-        /// Specifies which output channels to use when the device has more output channels than needed.
-        /// Works on both MiniAudio and PortAudio backends, on all supported platforms.
-        /// For PortAudio with ASIO, native hardware channel selection is used (low overhead).
-        /// For all other backends, software channel routing is applied in the callback.
-        /// If null or empty, the first N channels will be used (where N = Channels property).
-        /// Example: [4, 5] will route logical channels 0 and 1 to physical output channels 4 and 5.
-        /// The array length must match the Channels property when specified.
-        /// Default: null (sequential channel mapping starting from channel 0).
+        /// Same deal for output. [4, 5] sends logical 0/1 to physical 4/5.
         /// </summary>
         public int[]? OutputChannelSelectors { get; set; } = null;
 
         /// <summary>
-        /// When true, if the configured audio device disconnects unexpectedly, the engine
-        /// automatically switches to the current system default device and continues
-        /// playback/recording without interruption.
-        /// When the original device reconnects, the engine switches back to it automatically.
-        /// When false, the engine enters DeviceDisconnected state and waits for the
-        /// original device to reappear before resuming.
-        /// Default: true.
+        /// Device vanished mid-stream? true = hop to the system default and keep going,
+        /// then hop back when it returns. false = sit in DeviceDisconnected and wait.
         /// </summary>
         public bool FallbackToDefaultOnDisconnect { get; set; } = true;
 
         /// <summary>
-        /// Validates the configuration parameters.
+        /// Sanity check before we hand this to the engine.
         /// </summary>
         /// <returns>True if configuration is valid, false otherwise.</returns>
         public bool Validate()
         {
-            if (SampleRate <= 0 || SampleRate > 192000)
-                return false;
+            if (SampleRate <= 0 || SampleRate > 192000) return false;
+            if (Channels <= 0 || Channels > 256) return false;
+            if (BufferSize <= 0 || BufferSize > 16384) return false;
+            if (!EnableInput && !EnableOutput) return false;
 
-            if (Channels <= 0 || Channels > 256)
-                return false;
+            return _selectorsOk(InputChannelSelectors) && _selectorsOk(OutputChannelSelectors);
+        }
 
-            if (BufferSize <= 0 || BufferSize > 16384)
-                return false;
+        /// <summary>
+        /// Channel map has to be as long as Channels, in range, and no channel twice.
+        /// </summary>
+        private bool _selectorsOk(int[]? map)
+        {
+            if (map == null || map.Length == 0) return true;
+            if (map.Length != Channels) return false;
 
-            if (!EnableInput && !EnableOutput)
-                return false;
-
-            if (InputChannelSelectors != null && InputChannelSelectors.Length > 0)
+            for (int i = 0; i < map.Length; i++)
             {
-                if (InputChannelSelectors.Length != Channels)
-                    return false;
-
-                var seen = new HashSet<int>(InputChannelSelectors.Length);
-                foreach (var ch in InputChannelSelectors)
-                {
-                    if (ch < 0 || ch > 256) return false; // reasonable hardware maximum
-                    if (!seen.Add(ch)) return false;       // duplicate physical channel
-                }
-            }
-
-            if (OutputChannelSelectors != null && OutputChannelSelectors.Length > 0)
-            {
-                if (OutputChannelSelectors.Length != Channels)
-                    return false;
-
-                var seen = new HashSet<int>(OutputChannelSelectors.Length);
-                foreach (var ch in OutputChannelSelectors)
-                {
-                    if (ch < 0 || ch > 256) return false;
-                    if (!seen.Add(ch)) return false;
-                }
+                if (map[i] < 0 || map[i] > 256) return false;
+                for (int j = i + 1; j < map.Length; j++)
+                    if (map[i] == map[j]) return false;
             }
 
             return true;
         }
 
         /// <summary>
-        /// Creates a default audio configuration (48kHz, stereo, 512 frames).
+        /// 48kHz, stereo, 512 frames.
         /// </summary>
         public static AudioConfig Default => new AudioConfig();
 
         /// <summary>
-        /// Creates a low-latency configuration (48kHz, stereo, 128 frames).
+        /// Same, but 128 frames for the low latency crowd.
         /// </summary>
-        public static AudioConfig LowLatency => new AudioConfig
-        {
-            SampleRate = 48000,
-            Channels = 2,
-            BufferSize = 128
-        };
+        public static AudioConfig LowLatency => new AudioConfig { BufferSize = 128 };
 
         /// <summary>
-        /// Creates a high-latency configuration (48kHz, stereo, 2048 frames).
-        /// Useful for reducing CPU usage when latency is not critical.
+        /// 2048 frames — fat buffers, cheap CPU, latency doesn't matter here.
         /// </summary>
-        public static AudioConfig HighLatency => new AudioConfig
-        {
-            SampleRate = 48000,
-            Channels = 2,
-            BufferSize = 2048
-        };
+        public static AudioConfig HighLatency => new AudioConfig { BufferSize = 2048 };
     }
 }

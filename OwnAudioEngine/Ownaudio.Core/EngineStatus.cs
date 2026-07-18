@@ -1,29 +1,28 @@
 namespace Ownaudio.Core
 {
     /// <summary>
-    /// Represents the operational status of the audio engine.
+    /// Where the engine currently stands.
     /// </summary>
     public enum EngineStatus
     {
         /// <summary>
-        /// The engine is initialized but not yet started.
+        /// Initialized, not started yet.
         /// </summary>
         Idle = 0,
 
         /// <summary>
-        /// The engine is running and actively processing audio.
+        /// Chewing on audio right now.
         /// </summary>
         Running = 1,
 
         /// <summary>
-        /// The active audio device was unexpectedly disconnected (e.g. USB interface unplugged).
-        /// Audio data processing continues internally; the engine is monitoring for reconnection.
-        /// Playback and recording will automatically resume when the device is reconnected.
+        /// Device went away (USB yanked). We keep processing internally and watch for it
+        /// to come back, then playback/recording resumes on its own.
         /// </summary>
         DeviceDisconnected = 2,
 
         /// <summary>
-        /// The engine encountered a fatal error and cannot continue.
+        /// Dead, can't continue.
         /// </summary>
         Error = -1
     }

@@ -3,31 +3,27 @@ using System;
 namespace Ownaudio.Core
 {
     /// <summary>
-    /// Event arguments for audio device change events.
+    /// The default device swapped out from under us.
     /// </summary>
     public class AudioDeviceChangedEventArgs : EventArgs
     {
         /// <summary>
-        /// Gets the ID of the old device.
+        /// Device we were on.
         /// </summary>
         public string OldDeviceId { get; }
 
         /// <summary>
-        /// Gets the ID of the new device.
+        /// Device we're on now.
         /// </summary>
         public string NewDeviceId { get; }
 
         /// <summary>
-        /// Gets information about the new device.
+        /// Everything we know about the new one.
         /// </summary>
         public AudioDeviceInfo NewDeviceInfo { get; }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="AudioDeviceChangedEventArgs"/> class.
         /// </summary>
-        /// <param name="oldDeviceId">The ID of the old device.</param>
-        /// <param name="newDeviceId">The ID of the new device.</param>
-        /// <param name="newDeviceInfo">Information about the new device.</param>
         public AudioDeviceChangedEventArgs(string oldDeviceId, string newDeviceId, AudioDeviceInfo newDeviceInfo)
         {
             OldDeviceId = oldDeviceId;
@@ -37,31 +33,27 @@ namespace Ownaudio.Core
     }
 
     /// <summary>
-    /// Event arguments for audio device state change events.
+    /// A device got added, removed, enabled or disabled.
     /// </summary>
     public class AudioDeviceStateChangedEventArgs : EventArgs
     {
         /// <summary>
-        /// Gets the ID of the device whose state changed.
+        /// Which device changed.
         /// </summary>
         public string DeviceId { get; }
 
         /// <summary>
-        /// Gets the new state of the device.
+        /// Where it ended up.
         /// </summary>
         public AudioDeviceState NewState { get; }
 
         /// <summary>
-        /// Gets information about the device.
+        /// Details of that device.
         /// </summary>
         public AudioDeviceInfo DeviceInfo { get; }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="AudioDeviceStateChangedEventArgs"/> class.
         /// </summary>
-        /// <param name="deviceId">The ID of the device.</param>
-        /// <param name="newState">The new state of the device.</param>
-        /// <param name="deviceInfo">Information about the device.</param>
         public AudioDeviceStateChangedEventArgs(string deviceId, AudioDeviceState newState, AudioDeviceInfo deviceInfo)
         {
             DeviceId = deviceId;
@@ -71,43 +63,34 @@ namespace Ownaudio.Core
     }
 
     /// <summary>
-    /// Event arguments raised when a previously disconnected audio device reconnects.
-    /// The engine automatically resumes playback/recording from where it left off.
+    /// A device that had dropped out came back. The engine picks up where it stopped.
     /// </summary>
     public class AudioDeviceReconnectedEventArgs : EventArgs
     {
         /// <summary>
-        /// Gets the ID of the device that reconnected.
+        /// Id of the device that showed up again.
         /// </summary>
         public string DeviceId { get; }
 
         /// <summary>
-        /// Gets the name of the device that reconnected.
+        /// Its friendly name.
         /// </summary>
         public string DeviceName { get; }
 
         /// <summary>
-        /// Gets a value indicating whether it was an output device that reconnected.
+        /// True for output, false for input.
         /// </summary>
         public bool IsOutputDevice { get; }
 
         /// <summary>
-        /// Gets information about the reconnected device.
+        /// Details of the device.
         /// </summary>
         public AudioDeviceInfo DeviceInfo { get; }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="AudioDeviceReconnectedEventArgs"/> class.
+        /// isOutputDevice is true for render, false for capture.
         /// </summary>
-        /// <param name="deviceId">The ID of the reconnected device.</param>
-        /// <param name="deviceName">The name of the reconnected device.</param>
-        /// <param name="isOutputDevice">True if this is an output device; false for input.</param>
-        /// <param name="deviceInfo">Information about the reconnected device.</param>
-        public AudioDeviceReconnectedEventArgs(
-            string deviceId,
-            string deviceName,
-            bool isOutputDevice,
-            AudioDeviceInfo deviceInfo)
+        public AudioDeviceReconnectedEventArgs(string deviceId, string deviceName, bool isOutputDevice, AudioDeviceInfo deviceInfo)
         {
             DeviceId = deviceId;
             DeviceName = deviceName;

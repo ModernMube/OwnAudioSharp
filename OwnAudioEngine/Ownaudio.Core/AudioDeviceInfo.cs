@@ -3,68 +3,58 @@ using System;
 namespace Ownaudio.Core
 {
     /// <summary>
-    /// Represents information about an audio device.
+    /// One audio device as the platform sees it.
     /// </summary>
     public sealed class AudioDeviceInfo
     {
         /// <summary>
-        /// Gets the unique device identifier used by the platform API.
+        /// Platform-side unique id.
         /// </summary>
         public string DeviceId { get; }
 
         /// <summary>
-        /// Gets the human-readable device name.
+        /// Name a human would recognise.
         /// </summary>
         public string Name { get; }
 
         /// <summary>
-        /// Gets the name of the audio engine that manages this device.
-        /// Examples: "Wasapi", "CoreAudio", "PulseAudio", "Portaudio.Asio", "Portaudio.Wasapi", "Miniaudio"
+        /// Who owns the device: "Wasapi", "CoreAudio", "PulseAudio", "Portaudio.Asio", "Miniaudio"...
         /// </summary>
         public string EngineName { get; }
 
         /// <summary>
-        /// Gets a value indicating whether this is an input (capture) device.
+        /// Capture side.
         /// </summary>
         public bool IsInput { get; }
 
         /// <summary>
-        /// Gets a value indicating whether this is an output (render) device.
+        /// Render side.
         /// </summary>
         public bool IsOutput { get; }
 
         /// <summary>
-        /// Gets a value indicating whether this is the default device for its type.
+        /// System default for its type.
         /// </summary>
         public bool IsDefault { get; }
 
         /// <summary>
-        /// Gets the device state (enabled, disabled, unplugged, etc.).
+        /// Enabled, disabled, unplugged, whatever.
         /// </summary>
         public AudioDeviceState State { get; }
 
         /// <summary>
-        /// Gets the maximum number of input channels supported by this device.
-        /// Returns 0 if the device does not support input or if the information is unavailable.
+        /// Input channels the hw can do. 0 = no input, or we simply don't know.
         /// </summary>
         public int MaxInputChannels { get; }
 
         /// <summary>
-        /// Gets the maximum number of output channels supported by this device.
-        /// Returns 0 if the device does not support output or if the information is unavailable.
+        /// Output channels the hw can do. 0 = no output or unknown.
         /// </summary>
         public int MaxOutputChannels { get; }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="AudioDeviceInfo"/> class.
+        /// Short version, channel counts default to 0.
         /// </summary>
-        /// <param name="deviceId">The unique device identifier.</param>
-        /// <param name="name">The human-readable device name.</param>
-        /// <param name="engineName">The name of the audio engine managing this device.</param>
-        /// <param name="isInput">Indicates whether this is an input device.</param>
-        /// <param name="isOutput">Indicates whether this is an output device.</param>
-        /// <param name="isDefault">Indicates whether this is the default device.</param>
-        /// <param name="state">The device state.</param>
         public AudioDeviceInfo(
             string deviceId,
             string name,
@@ -78,17 +68,9 @@ namespace Ownaudio.Core
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="AudioDeviceInfo"/> class with channel count information.
+        /// Full version, with the channel counts filled in. engineName is who owns
+        /// the device (Wasapi, CoreAudio, Miniaudio...).
         /// </summary>
-        /// <param name="deviceId">The unique device identifier.</param>
-        /// <param name="name">The human-readable device name.</param>
-        /// <param name="engineName">The name of the audio engine managing this device.</param>
-        /// <param name="isInput">Indicates whether this is an input device.</param>
-        /// <param name="isOutput">Indicates whether this is an output device.</param>
-        /// <param name="isDefault">Indicates whether this is the default device.</param>
-        /// <param name="state">The device state.</param>
-        /// <param name="maxInputChannels">Maximum number of input channels supported.</param>
-        /// <param name="maxOutputChannels">Maximum number of output channels supported.</param>
         public AudioDeviceInfo(
             string deviceId,
             string name,
@@ -112,44 +94,42 @@ namespace Ownaudio.Core
         }
 
         /// <summary>
-        /// Returns a string representation of this audio device.
+        /// Name, engine and direction — for logs and device pickers.
         /// </summary>
-        /// <returns>A string containing the device name, engine, and type.</returns>
         public override string ToString()
         {
             string type = IsInput && IsOutput ? "Duplex" : IsInput ? "Input" : "Output";
-            string defaultMarker = IsDefault ? " [Default]" : "";
-            return $"{Name} [{EngineName}] ({type}){defaultMarker}";
+            return $"{Name} [{EngineName}] ({type}){(IsDefault ? " [Default]" : "")}";
         }
     }
 
     /// <summary>
-    /// Represents the state of an audio device.
+    /// Device state flags, values match the Windows ones.
     /// </summary>
     public enum AudioDeviceState
     {
         /// <summary>
-        /// The device is active and available.
+        /// Alive and usable.
         /// </summary>
         Active = 0x00000001,
 
         /// <summary>
-        /// The device is disabled.
+        /// Turned off.
         /// </summary>
         Disabled = 0x00000002,
 
         /// <summary>
-        /// The device is not present (unplugged).
+        /// Gone from the system.
         /// </summary>
         NotPresent = 0x00000004,
 
         /// <summary>
-        /// The device is unplugged.
+        /// Jack pulled.
         /// </summary>
         Unplugged = 0x00000008,
 
         /// <summary>
-        /// All device states.
+        /// Everything above.
         /// </summary>
         All = 0x0000000F
     }

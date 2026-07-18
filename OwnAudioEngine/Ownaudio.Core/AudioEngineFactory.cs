@@ -6,10 +6,8 @@ using Ownaudio.Core.Common;
 namespace Ownaudio.Core;
 
 /// <summary>
-/// AOT-compatible factory for creating platform-specific audio engine instances.
-/// Engine implementations register themselves via a <see cref="Func{IAudioEngine}"/> delegate,
-/// eliminating all reflection-based assembly loading. The Native project performs registration
-/// automatically through a <c>[ModuleInitializer]</c> attribute so callers need no setup code.
+/// Builds engine instances without a shred of reflection, so AOT stays happy.
+/// The native project registers its creator from a [ModuleInitializer], nobody has to call Register.
 /// </summary>
 public static class AudioEngineFactory
 {
@@ -18,9 +16,8 @@ public static class AudioEngineFactory
     private static Func<IAudioEngine>? _creator;
 
     /// <summary>
-    /// Registers the engine creator. Called automatically by the Native project at module load time.
+    /// Hooks up the creator delegate — it must return a fresh, uninitialized engine.
     /// </summary>
-    /// <param name="creator">Factory function that returns a new, uninitialized engine instance.</param>
     public static void Register(Func<IAudioEngine> creator)
         => _creator = creator ?? throw new ArgumentNullException(nameof(creator));
 
@@ -29,26 +26,18 @@ public static class AudioEngineFactory
     #region Public Factory Methods
 
     /// <summary>
-    /// Creates and initializes an engine with the supplied configuration.
+    /// Builds an engine and initializes it. Config has to pass <see cref="AudioConfig.Validate"/>.
     /// </summary>
-    /// <param name="config">Audio configuration; must pass <see cref="AudioConfig.Validate"/>.</param>
-    /// <returns>Initialized <see cref="IAudioEngine"/> ready for use.</returns>
-    /// <exception cref="AudioException">Thrown when no engine is registered, config is invalid,
-    /// or initialization returns a non-zero error code.</exception>
+    /// <exception cref="AudioException">Nothing registered, bad config, or init came back non-zero.</exception>
     public static IAudioEngine Create(AudioConfig config)
     {
-        if (config == null)
-            throw new AudioException("AudioEngineFactory ERROR: ",
-                new ArgumentNullException(nameof(config)));
-
-        if (!config.Validate())
+        if (config == null || !config.Validate())
             throw new AudioException("AudioEngineFactory ERROR: ",
                 new ArgumentException("Invalid audio configuration.", nameof(config)));
 
         if (_creator == null)
             throw new AudioException("AudioEngineFactory ERROR: ",
-                new InvalidOperationException(
-                    "No audio engine registered. Ensure the Ownaudio.Native assembly is loaded."));
+                new InvalidOperationException("No audio engine registered. Ensure the Ownaudio.Native assembly is loaded."));
 
         IAudioEngine engine;
 
@@ -59,11 +48,10 @@ public static class AudioEngineFactory
         catch (Exception ex)
         {
             throw new AudioException("AudioEngineFactory ERROR: ",
-                new PlatformNotSupportedException(
-                    $"Engine creation failed. Platform: {RuntimeInformation.OSDescription}", ex));
+                new PlatformNotSupportedException($"Engine creation failed. Platform: {RuntimeInformation.OSDescription}", ex));
         }
 
-        int result = InitializeEngine(engine, config);
+        int result = _initializeEngine(engine, config);
 
         if (result != 0)
         {
@@ -75,22 +63,22 @@ public static class AudioEngineFactory
     }
 
     /// <summary>
-    /// Creates an engine with <see cref="AudioConfig.Default"/> settings.
+    /// Engine on <see cref="AudioConfig.Default"/>.
     /// </summary>
     public static IAudioEngine CreateDefault() => Create(AudioConfig.Default);
 
     /// <summary>
-    /// Creates an engine optimized for low latency.
+    /// Small buffers, low latency.
     /// </summary>
     public static IAudioEngine CreateLowLatency() => Create(AudioConfig.LowLatency);
 
     /// <summary>
-    /// Creates an engine with larger buffers for stability.
+    /// Big buffers, boringly stable.
     /// </summary>
     public static IAudioEngine CreateHighLatency() => Create(AudioConfig.HighLatency);
 
     /// <summary>
-    /// Returns a human-readable summary of the current platform and engine.
+    /// Platform blurb for logs and bug reports.
     /// </summary>
     public static string GetPlatformInfo()
     {
@@ -113,10 +101,10 @@ public static class AudioEngineFactory
     #region Private Helpers
 
     /// <summary>
-    /// Runs engine initialization, using a dedicated MTA thread on Windows to satisfy
-    /// WASAPI COM requirements without depending on the calling thread's apartment state.
+    /// On Windows WASAPI wants MTA, and we can't trust whoever called us to be in it,
+    /// so init runs on our own thread there.
     /// </summary>
-    private static int InitializeEngine(IAudioEngine engine, AudioConfig config)
+    private static int _initializeEngine(IAudioEngine engine, AudioConfig config)
     {
         int result = 0;
 

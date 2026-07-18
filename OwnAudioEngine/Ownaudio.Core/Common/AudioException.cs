@@ -3,141 +3,113 @@ using System;
 namespace Ownaudio.Core.Common
 {
     /// <summary>
-    /// Categories of audio errors for structured error reporting.
+    /// What kind of audio error we are dealing with.
     /// </summary>
     public enum AudioErrorCategory
     {
         /// <summary>
-        /// Unknown or unspecified error.
+        /// We have no idea.
         /// </summary>
         Unknown,
 
         /// <summary>
-        /// Invalid or unsupported file format.
+        /// Bad or unsupported container/codec.
         /// </summary>
         FileFormat,
 
         /// <summary>
-        /// I/O operation failed (read/write/seek).
+        /// Read, write or seek blew up.
         /// </summary>
         IO,
 
         /// <summary>
-        /// Audio decoding failed.
+        /// Decoder failed on the stream.
         /// </summary>
         Decoding,
 
         /// <summary>
-        /// Seek operation failed.
+        /// Seek did not land where we wanted.
         /// </summary>
         Seeking,
 
         /// <summary>
-        /// Platform-specific API call failed.
+        /// A native/platform call returned an error.
         /// </summary>
         PlatformAPI,
 
         /// <summary>
-        /// Memory allocation or buffer management failed.
+        /// Ran out of memory or the buffer handling gave up.
         /// </summary>
         OutOfMemory,
 
         /// <summary>
-        /// Audio device operation failed.
+        /// Device open/start/stop trouble.
         /// </summary>
         Device,
 
         /// <summary>
-        /// Invalid configuration or parameters.
+        /// Config or parameters make no sense.
         /// </summary>
         Configuration
     }
 
     /// <summary>
-    /// Exception thrown when audio operations fail.
-    /// Provides structured error reporting with category, file path, and stream position.
+    /// Audio failure with a bit of context attached — category, file, stream position.
     /// </summary>
     public class AudioException : Exception
     {
         /// <summary>
-        /// Platform-specific error code.
+        /// Native error code, -1 when there is none.
         /// </summary>
         public int ErrorCode { get; }
 
         /// <summary>
-        /// Category of the audio error.
+        /// Rough bucket the failure falls into.
         /// </summary>
         public AudioErrorCategory Category { get; }
 
         /// <summary>
-        /// File path associated with the error (if applicable).
+        /// File we choked on, if any.
         /// </summary>
         public string? FilePath { get; set; }
 
         /// <summary>
-        /// Stream position where the error occurred (if applicable).
+        /// Where we were in the stream when it happened.
         /// </summary>
         public long? StreamPosition { get; set; }
 
         /// <summary>
-        /// Creates a new AudioException with the specified message.
+        /// Plain message, nothing else known.
         /// </summary>
-        public AudioException(string message) : base(message)
-        {
-            ErrorCode = -1;
-            Category = AudioErrorCategory.Unknown;
-        }
+        public AudioException(string message)
+            : this(AudioErrorCategory.Unknown, message, -1) { }
+
+        /// <summary></summary>
+        public AudioException(AudioErrorCategory category, string message)
+            : this(category, message, -1) { }
 
         /// <summary>
-        /// Creates a new AudioException with the specified category and message.
+        /// Message plus a native code.
         /// </summary>
-        public AudioException(AudioErrorCategory category, string message) : base(message)
-        {
-            ErrorCode = -1;
-            Category = category;
-        }
+        public AudioException(string message, int errorCode)
+            : this(AudioErrorCategory.Unknown, message, errorCode) { }
 
-        /// <summary>
-        /// Creates a new AudioException with the specified message and error code.
-        /// </summary>
-        public AudioException(string message, int errorCode) : base(message)
-        {
-            ErrorCode = errorCode;
-            Category = AudioErrorCategory.Unknown;
-        }
-
-        /// <summary>
-        /// Creates a new AudioException with the specified category, message, and inner exception.
-        /// </summary>
+        /// <summary></summary>
         public AudioException(AudioErrorCategory category, string message, Exception? innerException)
-            : base(message, innerException)
-        {
-            ErrorCode = -1;
-            Category = category;
-        }
+            : this(category, message, -1, innerException) { }
 
         /// <summary>
-        /// Creates a new AudioException with the specified message and inner exception.
+        /// Wraps whatever threw underneath.
         /// </summary>
         public AudioException(string message, Exception innerException)
-            : base(message, innerException)
-        {
-            ErrorCode = -1;
-            Category = AudioErrorCategory.Unknown;
-        }
+            : this(AudioErrorCategory.Unknown, message, -1, innerException) { }
 
-        /// <summary>
-        /// Creates a new AudioException with the specified message, error code, and inner exception.
-        /// </summary>
+        /// <summary></summary>
         public AudioException(string message, int errorCode, Exception innerException)
-            : base(message, innerException)
-        {
-            ErrorCode = errorCode;
-            Category = AudioErrorCategory.Unknown;
-        }
+            : this(AudioErrorCategory.Unknown, message, errorCode, innerException) { }
 
         /// <summary>
-        /// Creates a new AudioException with complete error information.
+        /// The one everything else funnels into.
         /// </summary>
         public AudioException(
             AudioErrorCategory category,

@@ -1,22 +1,14 @@
 using System;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Ownaudio.Core.Common;
 
 /// <summary>
-/// Zero-allocation pool for AudioFrame objects and their byte buffers.
-/// Eliminates per-frame allocations in decoder hot paths.
+/// Keeps a handful of frames + their byte buffers around so the decoder loop
+/// stops hammering the GC. Rent it, use it, hand it back.
 /// </summary>
-/// <remarks>
-/// Thread-safe pool implementation for reusing AudioFrame instances and their data buffers.
-/// Reduces GC pressure by reusing pre-allocated buffers across decode operations.
-///
-/// Usage pattern:
-/// 1. Rent() - Get a pooled frame with buffer
-/// 2. Use the frame
-/// 3. Return() - Return frame to pool for reuse
-/// </remarks>
 public sealed class AudioFramePool
 {
     private readonly ConcurrentBag<PooledAudioFrame> _frames;
@@ -25,20 +17,18 @@ public sealed class AudioFramePool
     private int _currentSize;
 
     /// <summary>
-    /// Creates a new AudioFrame pool.
+    /// bufferSize is per-frame bytes, maxPoolSize 0 means keep everything.
     /// </summary>
-    /// <param name="bufferSize">Size of each frame buffer in bytes.</param>
-    /// <param name="initialPoolSize">Number of frames to pre-allocate.</param>
-    /// <param name="maxPoolSize">Maximum number of frames to keep in pool (0 = unlimited).</param>
+    /// <param name="bufferSize"></param>
+    /// <param name="initialPoolSize"></param>
+    /// <param name="maxPoolSize"></param>
     public AudioFramePool(int bufferSize, int initialPoolSize = 4, int maxPoolSize = 16)
     {
-        if (bufferSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(bufferSize));
+        if (bufferSize <= 0) throw new ArgumentOutOfRangeException(nameof(bufferSize));
 
         _bufferSize = bufferSize;
         _maxPoolSize = maxPoolSize;
         _frames = new ConcurrentBag<PooledAudioFrame>();
-        _currentSize = 0;
 
         for (int i = 0; i < initialPoolSize; i++)
         {
@@ -48,20 +38,23 @@ public sealed class AudioFramePool
     }
 
     /// <summary>
-    /// Rents a pooled AudioFrame with pre-allocated buffer.
+    /// Buffer size every frame in this pool carries.
     /// </summary>
-    /// <param name="presentationTime">Presentation time for the frame.</param>
-    /// <param name="dataLength">Actual data length to use (must be &lt;= buffer size).</param>
-    /// <returns>A pooled AudioFrame ready for use.</returns>
+    public int BufferSize => _bufferSize;
+
+    /// <summary>
+    /// Grabs a frame. Pool empty? We just make a fresh one.
+    /// </summary>
+    /// <returns>A frame stamped with the given time and length.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public PooledAudioFrame Rent(double presentationTime, int dataLength)
     {
-        if (dataLength > _bufferSize)
+        if(dataLength > _bufferSize)
             throw new ArgumentException($"Data length {dataLength} exceeds buffer size {_bufferSize}");
 
         if (_frames.TryTake(out PooledAudioFrame frame))
         {
-            System.Threading.Interlocked.Decrement(ref _currentSize);
+            Interlocked.Decrement(ref _currentSize);
             frame.Reset(presentationTime, dataLength);
             return frame;
         }
@@ -70,49 +63,35 @@ public sealed class AudioFramePool
     }
 
     /// <summary>
-    /// Returns a frame to the pool for reuse.
+    /// Hands a frame back. Wrong-sized or surplus frames are dropped on the floor.
     /// </summary>
-    /// <param name="frame">Frame to return (can be null).</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Return(PooledAudioFrame frame)
     {
-        if (frame == null)
-            return;
+        if (frame == null || frame.BufferCapacity != _bufferSize) return;
 
-        if (frame.BufferCapacity != _bufferSize)
-            return; // Discard frames with wrong buffer size
-
-        int newSize = System.Threading.Interlocked.Increment(ref _currentSize);
-
-        if (_maxPoolSize > 0 && newSize > _maxPoolSize)
+        int _newSize = Interlocked.Increment(ref _currentSize);
+        if (_maxPoolSize > 0 && _newSize > _maxPoolSize)
         {
-            System.Threading.Interlocked.Decrement(ref _currentSize);
-            return; // Discard excess frames
+            Interlocked.Decrement(ref _currentSize);
+            return;
         }
 
         _frames.Add(frame);
     }
 
     /// <summary>
-    /// Gets the buffer size for this pool.
-    /// </summary>
-    public int BufferSize => _bufferSize;
-
-    /// <summary>
-    /// Clears the pool and releases all pooled frames.
+    /// Drops everything we are holding.
     /// </summary>
     public void Clear()
     {
         while (_frames.TryTake(out _))
-        {
-            System.Threading.Interlocked.Decrement(ref _currentSize);
-        }
+            Interlocked.Decrement(ref _currentSize);
     }
 }
 
 /// <summary>
-/// Pooled version of AudioFrame that reuses the same byte buffer.
-/// Provides zero-allocation frame data via spans.
+/// A frame that sits on a reused buffer — spans in, no copies, no garbage.
 /// </summary>
 public sealed class PooledAudioFrame
 {
@@ -121,41 +100,27 @@ public sealed class PooledAudioFrame
     private int _dataLength;
 
     /// <summary>
-    /// Gets frame presentation time in milliseconds.
+    /// Presentation time in milliseconds.
     /// </summary>
     public double PresentationTime => _presentationTime;
 
     /// <summary>
-    /// Gets the active data span (length = DataLength, not full buffer).
-    /// Use this for zero-copy access to frame data.
+    /// The live part of the buffer — this is what you read/write.
     /// </summary>
     public Span<byte> DataSpan => _buffer.AsSpan(0, _dataLength);
 
     /// <summary>
-    /// Gets the full buffer span for writing.
+    /// Whole buffer, for when you are filling it up.
     /// </summary>
     public Span<byte> BufferSpan => _buffer.AsSpan();
 
-    /// <summary>
-    /// Gets actual data length in bytes.
-    /// </summary>
+    /// <summary></summary>
     public int DataLength => _dataLength;
 
     /// <summary>
-    /// Gets total buffer capacity in bytes.
+    /// How much the buffer could hold.
     /// </summary>
     public int BufferCapacity => _buffer.Length;
-
-    /// <summary>
-    /// Converts to standard AudioFrame (allocates new byte array).
-    /// Use this only when AudioFrame is required by API.
-    /// </summary>
-    public AudioFrame ToAudioFrame()
-    {
-        byte[] data = new byte[_dataLength];
-        _buffer.AsSpan(0, _dataLength).CopyTo(data);
-        return new AudioFrame(_presentationTime, data);
-    }
 
     internal PooledAudioFrame(byte[] buffer, double presentationTime = 0.0, int dataLength = 0)
     {
@@ -164,11 +129,18 @@ public sealed class PooledAudioFrame
         _dataLength = dataLength;
     }
 
+    /// <summary>
+    /// Copies out into a plain AudioFrame. Allocates, so only where the API forces it.
+    /// </summary>
+    public AudioFrame ToAudioFrame()
+    {
+        byte[] _data = new byte[_dataLength];
+        _buffer.AsSpan(0, _dataLength).CopyTo(_data);
+        return new AudioFrame(_presentationTime, _data);
+    }
+
     internal void Reset(double presentationTime, int dataLength)
     {
-        if (dataLength > _buffer.Length)
-            throw new ArgumentException($"Data length {dataLength} exceeds buffer capacity {_buffer.Length}");
-
         _presentationTime = presentationTime;
         _dataLength = dataLength;
     }

@@ -1,176 +1,128 @@
 using System;
+using System.Collections.Generic;
 using Ownaudio.Core.Common;
 
 namespace Ownaudio.Core
 {
     /// <summary>
-    /// Cross-platform audio engine interface with zero-allocation guarantees.
-    /// All implementations must be real-time safe and GC-optimized.
+    /// The cross-platform engine contract. Implementations have to be RT safe — no allocations
+    /// anywhere near the audio thread.
     /// </summary>
     public interface IAudioEngine : IDisposable
     {
         /// <summary>
-        /// Gets the native audio stream handle (platform-specific).
-        /// Windows: IAudioClient pointer
-        /// macOS/iOS: AudioQueue/AudioUnit pointer
-        /// Linux: snd_pcm_t pointer
-        /// Android: AAudioStream pointer
+        /// Raw platform stream handle: IAudioClient on Windows, AudioQueue/AudioUnit on Apple,
+        /// snd_pcm_t on Linux, AAudioStream on Android.
         /// </summary>
         IntPtr GetStream();
 
         /// <summary>
-        /// Gets the actual frames per buffer size negotiated with the audio device.
-        /// May differ from the requested buffer size in AudioConfig.
+        /// What the device actually gave us, which may not be what AudioConfig asked for.
         /// </summary>
         int FramesPerBuffer { get; }
 
         /// <summary>
-        /// Gets the current operational status of the audio engine.
+        /// Idle / Running / DeviceDisconnected / Error.
         /// </summary>
-        /// <returns>
-        /// <see cref="EngineStatus.Idle"/> = initialized but not started
-        /// <see cref="EngineStatus.Running"/> = actively processing audio
-        /// <see cref="EngineStatus.DeviceDisconnected"/> = device unplugged; waiting for reconnection
-        /// <see cref="EngineStatus.Error"/> = fatal error
-        /// </returns>
         EngineStatus Status { get; }
 
         /// <summary>
-        /// Gets the activation state of the audio engine.
+        /// 1 = active, 0 = idle, negative = error.
         /// </summary>
-        /// <returns>
-        /// 1 = playing/recording (active)
-        /// 0 = idle (initialized but not running)
-        /// &lt;0 = error state
-        /// </returns>
         int OwnAudioEngineActivate();
 
         /// <summary>
-        /// Gets the stopped state of the audio engine.
+        /// 1 = stopped, 0 = running, negative = error.
         /// </summary>
-        /// <returns>
-        /// 1 = stopped
-        /// 0 = running
-        /// &lt;0 = error state
-        /// </returns>
         int OwnAudioEngineStopped();
 
         /// <summary>
-        /// Initializes the audio engine with the specified configuration.
-        /// Must be called before Start().
-        /// **DO NOT call from UI thread!** Use InitializeAsync() extension method instead:
+        /// Has to run before Start(). Blocks — never call it straight from a UI thread,
+        /// use InitializeAsync(). Returns 0 on success, negative error code otherwise.
         /// </summary>
-        /// <param name="config">Audio configuration parameters.</param>
-        /// <returns>0 on success, negative error code on failure.</returns>
         int Initialize(AudioConfig config);
 
         /// <summary>
-        /// Starts the audio engine. This method is thread-safe and idempotent.
+        /// Kicks the engine off. Thread safe and idempotent.
         /// </summary>
-        /// <returns>0 on success, negative error code on failure.</returns>
         int Start();
 
         /// <summary>
-        /// Stops the audio engine gracefully. This method is thread-safe and idempotent.
+        /// Winds it down. Thread safe and idempotent.
         /// </summary>
-        /// <returns>0 on success, negative error code on failure.</returns>
         int Stop();
 
         /// <summary>
-        /// Sends audio samples to the output device in a blocking manner.
-        /// This method is zero-allocation and real-time safe.
+        /// Pushes interleaved Float32 samples to the device. Zero-alloc, but it blocks
+        /// until the device buffer has room — figure 10-50ms depending on buffer and platform.
         /// </summary>
-        /// <param name="samples">Audio samples in Float32 format, interleaved.</param>
         /// <exception cref="AudioException">Thrown when device write fails.</exception>
-        /// <remarks>
-        /// This call blocks until the device buffer has space available.
-        /// Expected latency: 10-50ms depending on buffer size and platform.
-        /// </remarks>
         void Send(Span<float> samples);
 
         /// <summary>
-        /// Receives audio samples from the input device into a caller-provided buffer.
-        /// Zero-allocation: the caller owns and reuses the destination buffer.
+        /// Pulls captured samples into the caller's own buffer.
         /// </summary>
-        /// <param name="destination">Caller-allocated span to write captured samples into.</param>
-        /// <returns>Number of samples written on success, negative error code on failure.</returns>
+        /// <returns>Samples written, or a negative error code.</returns>
         int Receives(Span<float> destination);
 
         /// <summary>
-        /// Gets a list of all available output devices.
+        /// Every output device we can see.
         /// </summary>
-        /// <returns>List of output device information.</returns>
-        System.Collections.Generic.List<AudioDeviceInfo> GetOutputDevices();
+        List<AudioDeviceInfo> GetOutputDevices();
 
         /// <summary>
-        /// Gets a list of all available input devices.
+        /// Every input device we can see.
         /// </summary>
-        /// <returns>List of input device information.</returns>
-        System.Collections.Generic.List<AudioDeviceInfo> GetInputDevices();
+        List<AudioDeviceInfo> GetInputDevices();
 
         /// <summary>
-        /// Changes the output device by device name.
-        /// The engine must be stopped before changing devices.
+        /// Switch output by friendly name. Engine has to be stopped first.
         /// </summary>
-        /// <param name="deviceName">The friendly name of the device.</param>
-        /// <returns>0 on success, negative error code on failure.</returns>
         int SetOutputDeviceByName(string deviceName);
 
         /// <summary>
-        /// Changes the output device by index in the device list.
-        /// The engine must be stopped before changing devices.
+        /// Switch output by zero-based index into the output device list. Stop first.
         /// </summary>
-        /// <param name="deviceIndex">The zero-based index of the device in the output device list.</param>
-        /// <returns>0 on success, negative error code on failure.</returns>
         int SetOutputDeviceByIndex(int deviceIndex);
 
         /// <summary>
-        /// Changes the input device by device name.
-        /// The engine must be stopped before changing devices.
+        /// Switch input by friendly name. Stop first.
         /// </summary>
-        /// <param name="deviceName">The friendly name of the device.</param>
-        /// <returns>0 on success, negative error code on failure.</returns>
         int SetInputDeviceByName(string deviceName);
 
         /// <summary>
-        /// Changes the input device by index in the device list.
-        /// The engine must be stopped before changing devices.
+        /// Switch input by zero-based index into the input device list. Stop first.
         /// </summary>
-        /// <param name="deviceIndex">The zero-based index of the device in the input device list.</param>
-        /// <returns>0 on success, negative error code on failure.</returns>
         int SetInputDeviceByIndex(int deviceIndex);
 
         /// <summary>
-        /// Event raised when the default output device changes.
+        /// Default output device changed under us.
         /// </summary>
         event EventHandler<AudioDeviceChangedEventArgs> OutputDeviceChanged;
 
         /// <summary>
-        /// Event raised when the default input device changes.
+        /// Default input device changed under us.
         /// </summary>
         event EventHandler<AudioDeviceChangedEventArgs> InputDeviceChanged;
 
         /// <summary>
-        /// Event raised when a device state changes (added, removed, enabled, disabled).
+        /// Some device was added, removed, enabled or disabled.
         /// </summary>
         event EventHandler<AudioDeviceStateChangedEventArgs> DeviceStateChanged;
 
         /// <summary>
-        /// Event raised when a previously disconnected audio device reconnects.
-        /// The engine automatically resumes playback and recording.
+        /// A dropped device came back and we picked playback/recording up again.
         /// </summary>
         event EventHandler<AudioDeviceReconnectedEventArgs> DeviceReconnected;
 
         /// <summary>
-        /// Pauses the background device monitoring task.
-        /// This prevents device enumeration and change detection from interfering with UI operations.
-        /// Recommended to call when opening VST editor windows or during critical UI operations.
+        /// Freezes the device watcher task. Worth doing while a VST editor window opens,
+        /// enumeration likes to fight with the UI thread.
         /// </summary>
         void PauseDeviceMonitoring();
 
         /// <summary>
-        /// Resumes the background device monitoring task.
-        /// Should be called after closing VST editor windows or when critical UI operations complete.
+        /// Lets the watcher run again.
         /// </summary>
         void ResumeDeviceMonitoring();
     }

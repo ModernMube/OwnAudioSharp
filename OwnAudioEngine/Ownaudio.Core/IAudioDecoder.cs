@@ -3,31 +3,23 @@ using System;
 namespace Ownaudio.Decoders;
 
 /// <summary>
-/// An interface for decoding audio frames from given audio source.
-/// <para>Implements: <see cref="IDisposable"/>.</para>
+/// Anything that can hand us audio frames from some source.
 /// </summary>
 public interface IAudioDecoder : IDisposable
 {
     /// <summary>
-    /// Gets the information about loaded audio source.
+    /// Channels, rate, duration of the loaded source.
     /// </summary>
     AudioStreamInfo StreamInfo { get; }
 
-
     /// <summary>
-    /// Reads the next block of audio frames into the provided buffer.
-    /// This is the recommended zero-allocation method for reading audio data.
+    /// Fills buffer with the next block of Float32 samples. This is the zero-alloc read path.
     /// </summary>
-    /// <param name="buffer">The buffer to write the decoded audio data into. The data is in 32-bit floating point format.</param>
-    /// <returns>An <see cref="AudioDecoderResult"/> indicating the number of frames read.</returns>
+    /// <returns>Result carrying how many frames landed in the buffer.</returns>
     AudioDecoderResult ReadFrames(byte[] buffer);
 
     /// <summary>
-    /// Try to seeks audio stream to the specified position and returns <c>true</c> if successfully seeks,
-    /// otherwise, <c>false</c>.
+    /// Jumps to position; false plus an error message if it couldn't.
     /// </summary>
-    /// <param name="position">Desired seek position.</param>
-    /// <param name="error">An error message while seeking audio stream.</param>
-    /// <returns><c>true</c> if successfully seeks, otherwise, <c>false</c>.</returns>
     bool TrySeek(TimeSpan position, out string error);
 }

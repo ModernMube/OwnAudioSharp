@@ -5,41 +5,40 @@ using System.Threading;
 namespace Ownaudio.Core.Common
 {
     /// <summary>
-    /// Lock-free single-producer single-consumer ring buffer for real-time audio.
-    /// Zero allocation after construction. Thread-safe for one reader and one writer.
+    /// SPSC ring buffer for the RT path. One reader, one writer, no locks,
+    /// no allocation once it is built. Capacity is rounded to a power of 2.
     /// </summary>
-    /// <typeparam name="T">Element type (use float for audio samples).</typeparam>
+    /// <typeparam name="T">Element type, float for samples.</typeparam>
     public sealed class LockFreeRingBuffer<T> where T : struct
     {
         private readonly T[] _buffer;
         private readonly int _capacity;
-        private readonly int _capacityMask; // For power-of-2 optimization
+        private readonly int _capacityMask;
 
-        // Use explicit Volatile access instead of volatile keyword for better control
         private int _writeIndex;
         private int _readIndex;
 
         /// <summary>
-        /// Gets the capacity of the ring buffer.
+        /// Slots in the buffer after the power-of-2 rounding.
         /// </summary>
         public int Capacity => _capacity;
 
         /// <summary>
-        /// Gets the number of elements available to read.
+        /// Elements sitting there waiting to be read.
         /// </summary>
         public int Available
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get
             {
-                int write = Volatile.Read(ref _writeIndex);
-                int read = Volatile.Read(ref _readIndex);
-                return (write - read + _capacity) & _capacityMask;
+                int _write = Volatile.Read(ref _writeIndex);
+                int _read = Volatile.Read(ref _readIndex);
+                return (_write - _read + _capacity) & _capacityMask;
             }
         }
 
         /// <summary>
-        /// Gets the number of elements available to read (alias for monitoring).
+        /// Same as Available, kept for the monitoring code.
         /// </summary>
         public int AvailableRead
         {
@@ -48,94 +47,72 @@ namespace Ownaudio.Core.Common
         }
 
         /// <summary>
-        /// Gets the number of elements available to write.
+        /// Room left for writing. One slot is burned to tell full from empty.
         /// </summary>
         public int WritableCount
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => _capacity - Available - 1; // -1 to avoid full/empty ambiguity
+            get => _capacity - Available - 1;
         }
 
-        /// <summary>
-        /// Creates a lock-free ring buffer with the specified capacity.
-        /// Capacity must be a power of 2 for optimal performance.
-        /// </summary>
-        /// <param name="capacity">Buffer capacity (will be rounded up to next power of 2).</param>
+        /// <summary></summary>
+        /// <param name="capacity"></param>
         public LockFreeRingBuffer(int capacity)
         {
             if (capacity <= 0)
                 throw new ArgumentException("Capacity must be positive", nameof(capacity));
 
-            _capacity = RoundUpToPowerOf2(capacity);
+            _capacity = _roundUpToPowerOf2(capacity);
             _capacityMask = _capacity - 1;
             _buffer = new T[_capacity];
-            _writeIndex = 0;
-            _readIndex = 0;
         }
 
         /// <summary>
-        /// Writes elements to the ring buffer.
-        /// This method is real-time safe (zero allocation).
+        /// Pushes what fits, wrapping around the end.
         /// </summary>
-        /// <param name="data">Data to write.</param>
-        /// <returns>Number of elements actually written.</returns>
+        /// <returns>How many elements actually landed in there.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int Write(ReadOnlySpan<T> data)
         {
-            int available = WritableCount;
-            int toWrite = Math.Min(data.Length, available);
+            int _toWrite = Math.Min(data.Length, WritableCount);
+            if (_toWrite == 0) return 0;
 
-            if (toWrite == 0)
-                return 0;
+            int _writeIdx = Volatile.Read(ref _writeIndex);
+            int _firstChunk = Math.Min(_toWrite, _capacity - _writeIdx);
 
-            int writeIdx = Volatile.Read(ref _writeIndex);
-            int firstChunk = Math.Min(toWrite, _capacity - writeIdx);
+            data.Slice(0, _firstChunk).CopyTo(_buffer.AsSpan(_writeIdx, _firstChunk));
 
-            data.Slice(0, firstChunk).CopyTo(_buffer.AsSpan(writeIdx, firstChunk));
+            if (_toWrite > _firstChunk)
+                data.Slice(_firstChunk, _toWrite - _firstChunk).CopyTo(_buffer.AsSpan(0, _toWrite - _firstChunk));
 
-            if (toWrite > firstChunk)
-            {
-                int remaining = toWrite - firstChunk;
-                data.Slice(firstChunk, remaining).CopyTo(_buffer.AsSpan(0, remaining));
-            }
-
-            Volatile.Write(ref _writeIndex, (writeIdx + toWrite) & _capacityMask);
-            return toWrite;
+            Volatile.Write(ref _writeIndex, (_writeIdx + _toWrite) & _capacityMask);
+            return _toWrite;
         }
 
         /// <summary>
-        /// Reads elements from the ring buffer.
-        /// This method is real-time safe (zero allocation).
+        /// Pulls what it can into destination, wrapping the same way.
         /// </summary>
-        /// <param name="destination">Destination buffer.</param>
-        /// <returns>Number of elements actually read.</returns>
+        /// <returns>How many elements we managed to read.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int Read(Span<T> destination)
         {
-            int available = Available;
-            int toRead = Math.Min(destination.Length, available);
+            int _toRead = Math.Min(destination.Length, Available);
+            if(_toRead == 0) return 0;
 
-            if (toRead == 0)
-                return 0;
+            int _readIdx = Volatile.Read(ref _readIndex);
+            int _firstChunk = Math.Min(_toRead, _capacity - _readIdx);
 
-            int readIdx = Volatile.Read(ref _readIndex);
-            int firstChunk = Math.Min(toRead, _capacity - readIdx);
+            _buffer.AsSpan(_readIdx, _firstChunk).CopyTo(destination.Slice(0, _firstChunk));
 
-            _buffer.AsSpan(readIdx, firstChunk).CopyTo(destination.Slice(0, firstChunk));
+            if (_toRead > _firstChunk)
+                _buffer.AsSpan(0, _toRead - _firstChunk).CopyTo(destination.Slice(_firstChunk, _toRead - _firstChunk));
 
-            if (toRead > firstChunk)
-            {
-                int remaining = toRead - firstChunk;
-                _buffer.AsSpan(0, remaining).CopyTo(destination.Slice(firstChunk, remaining));
-            }
-
-            Volatile.Write(ref _readIndex, (readIdx + toRead) & _capacityMask);
-            return toRead;
+            Volatile.Write(ref _readIndex, (_readIdx + _toRead) & _capacityMask);
+            return _toRead;
         }
 
         /// <summary>
-        /// Clears the ring buffer (resets read/write indices).
-        /// Not thread-safe - call only when no concurrent access occurs.
+        /// Rewinds both indices. Not safe while anyone is reading or writing.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Clear()
@@ -145,10 +122,10 @@ namespace Ownaudio.Core.Common
         }
 
         /// <summary>
-        /// Rounds up to the next power of 2.
+        /// Next power of 2 at or above value.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int RoundUpToPowerOf2(int value)
+        private static int _roundUpToPowerOf2(int value)
         {
             value--;
             value |= value >> 1;
@@ -156,8 +133,7 @@ namespace Ownaudio.Core.Common
             value |= value >> 4;
             value |= value >> 8;
             value |= value >> 16;
-            value++;
-            return value;
+            return value + 1;
         }
     }
 }

@@ -7,43 +7,29 @@ using Ownaudio.Core.Common;
 namespace Ownaudio.Decoders;
 
 /// <summary>
-/// Factory for creating audio decoders.
+/// Hands out decoders. Since 4.0 there is exactly one: the native Rust/Symphonia one,
+/// registered by the OwnaudioNET layer at module init. It eats mp3, flac, wav, aac,
+/// m4a, ogg and aiff on its own — the old managed decoders and the FFmpeg fallback are gone.
 /// </summary>
-/// <remarks>
-/// As of 4.0 all decoding is handled by the native Rust (Symphonia) decoder, registered by the
-/// OwnaudioNET engine layer at module-init time. The built-in managed WAV/MP3/FLAC decoders and the
-/// optional FFmpeg fallback were removed; the native decoder reads MP3, FLAC, WAV (PCM/ADPCM), AAC,
-/// MP4/M4A, OGG/Vorbis and AIFF out of the box.
-/// </remarks>
 public static class AudioDecoderFactory
 {
     /// <summary>
-    /// The native decoder factory registered by the OwnaudioNET engine layer, or
-    /// <see langword="null"/> when that assembly has not been loaded.
+    /// The native factory, or null while the engine assembly isn't loaded yet.
     /// </summary>
     private static Func<string, int, int, IAudioDecoder>? _nativeDecoderFactory;
 
     /// <summary>
-    /// Registers the native decoder factory. Called from the OwnaudioNET engine layer at module-init
-    /// time so callers of this factory receive the native decoder without any setup code.
+    /// Called from the engine layer's module initializer, so nobody has to wire this up by hand.
+    /// The delegate takes file path, target sample rate and target channel count.
     /// </summary>
-    /// <param name="factory">A delegate that opens a decoder for a file path, target sample rate and
-    /// target channel count.</param>
     public static void RegisterNativeDecoder(Func<string, int, int, IAudioDecoder> factory)
         => _nativeDecoderFactory = factory;
 
     /// <summary>
-    /// Creates a native audio decoder for the specified file. The format is auto-detected from the
-    /// file content by the native decoder.
+    /// Opens a decoder for a file — format is sniffed natively from the content.
+    /// targetSampleRate/targetChannels of 0 mean "leave it as the source has it".
     /// </summary>
-    /// <param name="filePath">Path to the audio file.</param>
-    /// <param name="targetSampleRate">Target sample rate in Hz (0 = use source rate, no resampling).</param>
-    /// <param name="targetChannels">Target channel count (0 = use source channels, no conversion).</param>
-    /// <returns>A native decoder instance for the file.</returns>
-    /// <exception cref="AudioException">
-    /// Thrown when the path is null/empty, the file does not exist, the native decoder is not
-    /// available, or the file cannot be decoded.
-    /// </exception>
+    /// <exception cref="AudioException">Bad path, missing file, no native decoder, or it choked.</exception>
     public static IAudioDecoder Create(string filePath, int targetSampleRate = 0, int targetChannels = 0)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -70,21 +56,10 @@ public static class AudioDecoderFactory
     }
 
     /// <summary>
-    /// Creates a native audio decoder for the specified stream.
+    /// Stream flavour. The native side is file-based, so we spill the stream into a temp
+    /// file and nuke it when the decoder gets disposed. format is only an extension hint.
     /// </summary>
-    /// <remarks>
-    /// The native decoder is file-based, so the stream is buffered to a temporary file that is
-    /// deleted when the returned decoder is disposed.
-    /// </remarks>
-    /// <param name="stream">Stream containing audio data. Must support reading.</param>
-    /// <param name="format">Audio format of the stream, used only as the temporary file's extension
-    /// hint; the native decoder auto-detects the actual format from the content.</param>
-    /// <param name="targetSampleRate">Target sample rate in Hz (0 = use source rate, no resampling).</param>
-    /// <param name="targetChannels">Target channel count (0 = use source channels, no conversion).</param>
-    /// <returns>A native decoder instance backed by a temporary file.</returns>
-    /// <exception cref="AudioException">
-    /// Thrown when the stream is null or not readable, or when the buffered content cannot be decoded.
-    /// </exception>
+    /// <exception cref="AudioException">Null/unreadable stream, or the content won't decode.</exception>
     public static IAudioDecoder Create(Stream stream, AudioFormat format, int targetSampleRate = 0, int targetChannels = 0)
     {
         if (stream == null)
@@ -93,33 +68,29 @@ public static class AudioDecoderFactory
         if (!stream.CanRead)
             throw new AudioException("AudioDecoderFactory ERROR: ", new ArgumentException("Stream must support reading.", nameof(stream)));
 
-        string tempPath = Path.Combine(Path.GetTempPath(), $"ownaudio_stream_{Guid.NewGuid():N}{ExtensionFor(format)}");
+        string tempPath = Path.Combine(Path.GetTempPath(), $"ownaudio_stream_{Guid.NewGuid():N}{_extensionFor(format)}");
 
         try
         {
             using (var file = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
             {
-                if (stream.CanSeek)
-                    stream.Position = 0;
+                if (stream.CanSeek) stream.Position = 0;
                 stream.CopyTo(file);
             }
 
-            var inner = Create(tempPath, targetSampleRate, targetChannels);
-            return new TempFileDecoder(inner, tempPath);
+            return new TempFileDecoder(Create(tempPath, targetSampleRate, targetChannels), tempPath);
         }
         catch
         {
-            try { File.Delete(tempPath); } catch { /* best effort */ }
+            try { File.Delete(tempPath); } catch { }
             throw;
         }
     }
 
     /// <summary>
-    /// Detects the audio format from a stream's header (magic bytes), restoring the stream position.
+    /// Magic-byte sniffing. Stream position is put back where we found it.
     /// </summary>
-    /// <param name="stream">Stream to read from. The position is restored after detection.</param>
     /// <returns>The detected format, or <see cref="AudioFormat.Unknown"/>.</returns>
-    /// <exception cref="AudioException">Thrown when the stream is null.</exception>
     public static AudioFormat DetectFormat(Stream stream)
     {
         if (stream == null)
@@ -133,9 +104,7 @@ public static class AudioDecoderFactory
         try
         {
             Span<byte> header = stackalloc byte[12];
-            int bytesRead = stream.Read(header);
-
-            if (bytesRead < 12)
+            if (stream.Read(header) < 12)
                 return AudioFormat.Unknown;
 
             if (header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F' &&
@@ -162,11 +131,9 @@ public static class AudioDecoderFactory
     }
 
     /// <summary>
-    /// Maps an <see cref="AudioFormat"/> to a temporary-file extension hint for stream decoding.
+    /// Extension hint for the temp file, dot included.
     /// </summary>
-    /// <param name="format">The format to map.</param>
-    /// <returns>A file extension including the leading dot.</returns>
-    private static string ExtensionFor(AudioFormat format) => format switch
+    private static string _extensionFor(AudioFormat format) => format switch
     {
         AudioFormat.Wav => ".wav",
         AudioFormat.Mp3 => ".mp3",
@@ -175,26 +142,17 @@ public static class AudioDecoderFactory
     };
 
     /// <summary>
-    /// Wraps a file-based native decoder created from a buffered stream, deleting the temporary file
-    /// when disposed.
+    /// Passthrough decoder that owns the temp file behind it.
     /// </summary>
     private sealed class TempFileDecoder : IAudioDecoder
     {
-        /// <summary>The underlying native decoder reading the temporary file.</summary>
         private readonly IAudioDecoder _inner;
-
-        /// <summary>The temporary file to delete on dispose.</summary>
         private readonly string _tempPath;
-
-        /// <summary>Whether this wrapper has been disposed.</summary>
         private bool _disposed;
 
         /// <summary>
-        /// Initializes a new wrapper over <paramref name="inner"/>, taking ownership of the temporary
-        /// file at <paramref name="tempPath"/>.
+        /// Takes over the temp file at tempPath, deletes it on dispose.
         /// </summary>
-        /// <param name="inner">The native decoder to wrap.</param>
-        /// <param name="tempPath">The temporary file to delete on dispose.</param>
         public TempFileDecoder(IAudioDecoder inner, string tempPath)
         {
             _inner = inner;
@@ -213,13 +171,12 @@ public static class AudioDecoderFactory
         /// <inheritdoc/>
         public void Dispose()
         {
-            if (_disposed)
-                return;
+            if (_disposed) return;
 
             _disposed = true;
             _inner.Dispose();
 
-            try { File.Delete(_tempPath); } catch { /* best effort */ }
+            try { File.Delete(_tempPath); } catch { }
         }
     }
 }
