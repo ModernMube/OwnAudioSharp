@@ -6,73 +6,69 @@ using System.Runtime.CompilerServices;
 namespace OwnaudioNET.Effects
 {
     /// <summary>
-    /// Phaser presets for different audio processing scenarios
+    /// Phaser setups from gentle shimmer to full psychedelic sweep.
     /// </summary>
     public enum PhaserPreset
     {
         /// <summary>
-        /// Default phaser settings - balanced parameters for general use
-        /// Medium rate, moderate depth, balanced feedback and mix
+        /// Balanced starting point.
         /// </summary>
         Default,
 
         /// <summary>
-        /// Classic vintage phaser - warm, musical sweep reminiscent of 70s rock
-        /// Moderate rate, deep modulation, medium feedback for that classic "swoosh"
+        /// Phase 90 flavour, warm 70s sweep.
         /// </summary>
         Vintage,
 
         /// <summary>
-        /// Subtle ambient phaser - gentle movement for atmospheric textures
-        /// Slow rate, shallow depth, minimal feedback for background ambience
+        /// Slow and shallow, background movement only.
         /// </summary>
         Ambient,
 
         /// <summary>
-        /// Fast tremolo-like phaser - rapid modulation for rhythmic effects
-        /// High rate, moderate depth, low feedback for pulsing rhythmic texture
+        /// Fast pulse, phaser used as a tremolo.
         /// </summary>
         Tremolo,
 
         /// <summary>
-        /// Deep space phaser - dramatic sweeps for psychedelic and experimental sounds
-        /// Slow rate, maximum depth, high feedback for dramatic swooshes
+        /// Slow, maximum depth and resonance.
         /// </summary>
         DeepSpace,
 
         /// <summary>
-        /// Guitar solo phaser - classic lead guitar phasing effect
-        /// Medium-fast rate, good depth, moderate feedback for cutting through mix
+        /// Cutting lead sound.
         /// </summary>
         GuitarSolo,
 
         /// <summary>
-        /// Vocal phaser - gentle enhancement for vocal tracks
-        /// Slow rate, light depth, minimal feedback to add character without distraction
+        /// Light colouring, doesn't bury the voice.
         /// </summary>
         Vocal,
 
         /// <summary>
-        /// Synth pad phaser - lush modulation for synthesizer pads and strings
-        /// Medium rate, deep modulation, high feedback for evolving textures
+        /// Lush evolving pad modulation.
         /// </summary>
         SynthPad
     }
 
     /// <summary>
-    /// Phaser effect with all-pass filter stages
+    /// Phaser: a chain of all-pass stages swept by an LFO, mixed back with the dry signal.
     /// </summary>
     public sealed class PhaserEffect : IEffectProcessor
     {
         private readonly int _sampleRate;
-        private readonly AllPassFilter[] _allPassFilters;
+
+        /// <summary>
+        /// All-pass state, x[n-1] and y[n-1] for the 8 possible stages.
+        /// </summary>
+        private readonly float[] _apX1 = new float[8];
+        private readonly float[] _apY1 = new float[8];
 
         private float _rate = 0.5f;
         private float _depth = 0.7f;
         private float _feedback = 0.5f;
         private float _mix = 0.5f;
         private int _stages = 4;
-
         private float _lfoPhase = 0.0f;
 
         private readonly Guid _id;
@@ -82,17 +78,17 @@ namespace OwnaudioNET.Effects
         private AudioConfig? _config;
 
         /// <summary>
-        /// Gets the unique identifier for this effect instance
+        /// Instance id.
         /// </summary>
         public Guid Id => _id;
 
         /// <summary>
-        /// Gets the name of this effect
+        /// Effect name.
         /// </summary>
         public string Name => _name;
 
         /// <summary>
-        /// Gets or sets whether this effect is enabled
+        /// On/off switch.
         /// </summary>
         public bool Enabled
         {
@@ -101,7 +97,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// LFO rate in Hz (0.1 - 10.0).
+        /// LFO speed in Hz, 0.1 - 10.
         /// </summary>
         public float Rate
         {
@@ -110,7 +106,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Modulation depth (0.0 - 1.0).
+        /// Sweep depth, 0 - 1.
         /// </summary>
         public float Depth
         {
@@ -119,7 +115,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Feedback amount (0.0 - 0.95).
+        /// Feedback, capped at 0.95.
         /// </summary>
         public float Feedback
         {
@@ -128,7 +124,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Mix between dry and wet signal (0.0 - 1.0).
+        /// Dry to wet balance.
         /// </summary>
         public float Mix
         {
@@ -137,7 +133,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Number of all-pass filter stages (2 - 8).
+        /// How many all-pass stages are in the chain, 2 - 8.
         /// </summary>
         public int Stages
         {
@@ -146,19 +142,13 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Gets the sample rate in Hz (set at construction time).
+        /// Sample rate this instance was built for.
         /// </summary>
         public int SampleRate => _sampleRate;
 
         /// <summary>
-        /// Initialize Phaser Processor with all parameters.
+        /// Builds the phaser with hand picked values.
         /// </summary>
-        /// <param name="rate">LFO rate in Hz (0.1 - 10.0)</param>
-        /// <param name="depth">Modulation depth (0.0 - 1.0)</param>
-        /// <param name="feedback">Feedback amount (0.0 - 0.95)</param>
-        /// <param name="mix">Dry/wet mix (0.0 - 1.0)</param>
-        /// <param name="stages">Number of stages (2 - 8)</param>
-        /// <param name="sampleRate">Sample rate</param>
         public PhaserEffect(float rate = 0.5f, float depth = 0.7f, float feedback = 0.5f, float mix = 0.5f, int stages = 4, int sampleRate = 44100)
         {
             _id = Guid.NewGuid();
@@ -174,19 +164,13 @@ namespace OwnaudioNET.Effects
             Feedback = feedback;
             Mix = mix;
             Stages = stages;
-
-            _allPassFilters = new AllPassFilter[8]; // Maximum stages
-            for (int i = 0; i < _allPassFilters.Length; i++)
-            {
-                _allPassFilters[i] = new AllPassFilter();
-            }
         }
 
         /// <summary>
-        /// Initialize Phaser Processor with preset selection.
+        /// Builds the phaser from a preset.
         /// </summary>
-        /// <param name="preset">Preset to use</param>
-        /// <param name="sampleRate">Sample rate</param>
+        /// <param name="preset"></param>
+        /// <param name="sampleRate"></param>
         public PhaserEffect(PhaserPreset preset, int sampleRate = 44100)
         {
             _id = Guid.NewGuid();
@@ -197,145 +181,126 @@ namespace OwnaudioNET.Effects
                 throw new ArgumentException("Sample rate must be positive.", nameof(sampleRate));
 
             _sampleRate = sampleRate;
-
-            _allPassFilters = new AllPassFilter[8]; // Maximum stages
-            for (int i = 0; i < _allPassFilters.Length; i++)
-            {
-                _allPassFilters[i] = new AllPassFilter();
-            }
-
             SetPreset(preset);
         }
 
         /// <summary>
-        /// Initializes the effect with the given audio configuration
+        /// Stores the engine config.
         /// </summary>
-        /// <param name="config">Audio configuration</param>
         public void Initialize(AudioConfig config)
         {
             _config = config;
         }
 
         /// <summary>
-        /// Set phaser parameters using predefined presets
+        /// Loads one of the canned setups.
         /// </summary>
+        /// <param name="preset"></param>
         public void SetPreset(PhaserPreset preset)
         {
             switch (preset)
             {
-                case PhaserPreset.Default:
-                    Rate = 0.5f; Depth = 0.65f; Feedback = 0.45f; Mix = 0.45f; Stages = 4;
-                    break;
-
                 case PhaserPreset.Vintage:
-                    // MXR Phase 90 style – warm, musical 70s character
                     Rate = 0.6f; Depth = 0.75f; Feedback = 0.62f; Mix = 0.60f; Stages = 4;
                     break;
 
                 case PhaserPreset.Ambient:
-                    // Slow evolving texture – barely perceptible movement
                     Rate = 0.2f; Depth = 0.40f; Feedback = 0.28f; Mix = 0.28f; Stages = 6;
                     break;
 
                 case PhaserPreset.Tremolo:
-                    // Fast rhythmic pulse – phaser as tremolo substitute
                     Rate = 4.0f; Depth = 0.58f; Feedback = 0.18f; Mix = 0.70f; Stages = 3;
                     break;
 
                 case PhaserPreset.DeepSpace:
-                    // Slow, extreme psychedelic sweep – maximum resonance
                     Rate = 0.3f; Depth = 1.0f; Feedback = 0.85f; Mix = 0.82f; Stages = 8;
                     break;
 
                 case PhaserPreset.GuitarSolo:
-                    // Medium-fast cutting phaser for lead – EVH/script logo style
                     Rate = 1.2f; Depth = 0.72f; Feedback = 0.52f; Mix = 0.55f; Stages = 4;
                     break;
 
                 case PhaserPreset.Vocal:
-                    // Very gentle vocal coloring – adds shimmer without drowning the voice
                     Rate = 0.4f; Depth = 0.45f; Feedback = 0.30f; Mix = 0.22f; Stages = 6;
                     break;
 
                 case PhaserPreset.SynthPad:
-                    // Rich evolving pad modulation – lush but controlled
                     Rate = 0.8f; Depth = 0.80f; Feedback = 0.65f; Mix = 0.68f; Stages = 6;
+                    break;
+
+                default:
+                    Rate = 0.5f; Depth = 0.65f; Feedback = 0.45f; Mix = 0.45f; Stages = 4;
                     break;
             }
         }
 
         /// <summary>
-        /// Process samples with phaser effect.
+        /// Sweeps the notch between 200Hz and 2kHz and runs the chain per sample.
         /// </summary>
-        /// <param name="buffer">Input samples</param>
-        /// <param name="frameCount">Number of frames to process</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
             if (_config == null)
                 throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
 
-            if (!_enabled)
-                return;
+            if (!_enabled) return;
 
             int sampleCount = frameCount * _config.Channels;
+            int stages = _stages;
+            float depth = _depth;
+            float fb = _feedback;
+            float mx = _mix;
 
-            float lfoIncrement = (float)(2.0 * Math.PI * Rate / _sampleRate);
+            float lfoIncrement = (float)(2.0 * Math.PI * _rate / _sampleRate);
 
             for (int i = 0; i < sampleCount; i++)
             {
                 float input = buffer[i];
 
-                float lfoValue = (float)Math.Sin(_lfoPhase);
-
-                float minFreq = 200.0f;  // Hz
-                float maxFreq = 2000.0f; // Hz
-                float frequency = minFreq + (maxFreq - minFreq) * (0.5f + 0.5f * lfoValue * Depth);
-                float coefficient = CalculateAllPassCoefficient(frequency);
+                float lfo = MathF.Sin(_lfoPhase);
+                float freq = 200.0f + 1800.0f * (0.5f + 0.5f * lfo * depth);
+                float coeff = _allPassCoeff(freq);
 
                 float processed = input;
-                for (int stage = 0; stage < Stages; stage++)
+                for (int s = 0; s < stages; s++)
                 {
-                    processed = _allPassFilters[stage].Process(processed, coefficient);
+                    float output = -coeff * processed + _apX1[s] + coeff * _apY1[s];
+                    _apX1[s] = processed;
+                    _apY1[s] = output;
+                    processed = output;
                 }
 
-                processed += input * Feedback;
-
-                buffer[i] = (input * (1.0f - Mix)) + (processed * Mix);
+                processed += input * fb;
+                buffer[i] = input * (1.0f - mx) + processed * mx;
 
                 _lfoPhase += lfoIncrement;
-
-                if (_lfoPhase >= 2.0 * Math.PI)
-                    _lfoPhase -= (float)(2.0 * Math.PI);
+                if (_lfoPhase >= 2.0 * Math.PI) _lfoPhase -= (float)(2.0 * Math.PI);
             }
         }
 
         /// <summary>
-        /// Reset phaser effect state.
+        /// Clears every stage and parks the LFO.
         /// </summary>
         public void Reset()
         {
             _lfoPhase = 0.0f;
-            foreach (var filter in _allPassFilters)
-            {
-                filter.Reset();
-            }
+            Array.Clear(_apX1, 0, _apX1.Length);
+            Array.Clear(_apY1, 0, _apY1.Length);
         }
 
         /// <summary>
-        /// Disposes of the effect and releases any resources
+        /// Nothing unmanaged here.
         /// </summary>
         public void Dispose()
         {
-            if (_disposed)
-                return;
+            if (_disposed) return;
 
             Reset();
             _disposed = true;
         }
 
         /// <summary>
-        /// Returns a string representation of this effect
+        /// Short state dump for logs.
         /// </summary>
         public override string ToString()
         {
@@ -343,36 +308,13 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Calculate all-pass filter coefficient from frequency
+        /// Bilinear all-pass coefficient for the given corner frequency.
         /// </summary>
-        private float CalculateAllPassCoefficient(float frequency)
+        private float _allPassCoeff(float frequency)
         {
             float omega = (float)(2.0 * Math.PI * frequency / _sampleRate);
-            float tanHalfOmega = (float)Math.Tan(omega * 0.5);
-            return (tanHalfOmega - 1.0f) / (tanHalfOmega + 1.0f);
-        }
-
-        /// <summary>
-        /// All-pass filter implementation
-        /// </summary>
-        private class AllPassFilter
-        {
-            private float _x1 = 0.0f;
-            private float _y1 = 0.0f;
-
-            public float Process(float input, float coefficient)
-            {
-                float output = -coefficient * input + _x1 + coefficient * _y1;
-                _x1 = input;
-                _y1 = output;
-                return output;
-            }
-
-            public void Reset()
-            {
-                _x1 = 0.0f;
-                _y1 = 0.0f;
-            }
+            float t = MathF.Tan(omega * 0.5f);
+            return (t - 1.0f) / (t + 1.0f);
         }
     }
 }

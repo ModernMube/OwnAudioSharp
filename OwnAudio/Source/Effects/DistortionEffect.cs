@@ -6,77 +6,65 @@ using OwnaudioNET.Interfaces;
 namespace OwnaudioNET.Effects
 {
     /// <summary>
-    /// Distortion presets for different audio processing scenarios
+    /// Drive setups from gentle saturation to fuzz.
     /// </summary>
     public enum DistortionPreset
     {
         /// <summary>
-        /// Default preset with basic distortion settings
-        /// Standard moderate drive and mix values for general use
+        /// Moderate drive with some dry left in.
         /// </summary>
         Default,
 
         /// <summary>
-        /// Subtle warm overdrive - gentle saturation for adding character
-        /// Low drive, balanced mix for musical warmth without harshness
+        /// Just harmonics, barely sounds distorted.
         /// </summary>
         WarmOverdrive,
 
         /// <summary>
-        /// Classic rock distortion - medium drive with balanced output
-        /// Moderate drive and mix for classic rock guitar tones
+        /// Classic rock guitar amount.
         /// </summary>
         ClassicRock,
 
         /// <summary>
-        /// Heavy metal distortion - aggressive saturation for modern metal
-        /// High drive, full wet signal for maximum distortion impact
+        /// High drive, fully wet.
         /// </summary>
         HeavyMetal,
 
         /// <summary>
-        /// Vintage tube saturation - emulates warm analog tube distortion
-        /// Low to medium drive with subtle mix for vintage character
+        /// Tube flavoured, blended with the clean.
         /// </summary>
         VintageTube,
 
         /// <summary>
-        /// Bass drive - controlled distortion optimized for bass frequencies
-        /// Medium drive with careful output gain to maintain low-end presence
+        /// Keeps the low end while it grinds.
         /// </summary>
         BassDrive,
 
         /// <summary>
-        /// Fuzz box - extreme vintage-style fuzzy distortion
-        /// Very high drive with unique output characteristics for psychedelic sounds
+        /// Extreme fuzz, low output to compensate.
         /// </summary>
         FuzzBox,
 
         /// <summary>
-        /// Vocal saturation - gentle distortion for adding vocal character
-        /// Very subtle drive perfect for vocal processing and character
+        /// Very light, only adds character to vocals.
         /// </summary>
         VocalSaturation,
 
         /// <summary>
-        /// Bitcrusher style - harsh digital-style distortion
-        /// High drive with reduced output gain for lo-fi digital artifacts
+        /// Harsh lo-fi grind.
         /// </summary>
         DigitalCrush
     }
 
     /// <summary>
-    /// Distortion effect with overdrive and soft clipping
+    /// Drive plus soft clipping, blended back over the dry signal.
     /// </summary>
     public sealed class DistortionEffect : IEffectProcessor
     {
-        // IEffectProcessor implementation
         private Guid _id;
         private string _name;
         private bool _enabled;
         private bool _disposed;
-
-        // Audio configuration
         private AudioConfig? _config;
 
         private float _drive = 2.0f;
@@ -84,12 +72,12 @@ namespace OwnaudioNET.Effects
         private float _outputGain = 0.5f;
 
         /// <summary>
-        /// Gets the unique identifier for this effect.
+        /// Instance id.
         /// </summary>
         public Guid Id => _id;
 
         /// <summary>
-        /// Gets or sets the name of the effect.
+        /// Effect name.
         /// </summary>
         public string Name
         {
@@ -98,7 +86,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Gets or sets whether the effect is enabled.
+        /// On/off switch.
         /// </summary>
         public bool Enabled
         {
@@ -107,7 +95,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Mix between dry and wet signal (0.0 - 1.0).
+        /// Dry to wet balance.
         /// </summary>
         public float Mix
         {
@@ -116,7 +104,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Drive amount (1.0 - 10.0). Higher values create more distortion.
+        /// Input drive, 1 - 10. More means more grind.
         /// </summary>
         public float Drive
         {
@@ -125,7 +113,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Output gain compensation (0.1 - 1.0).
+        /// Output trim to pull the level back after the drive.
         /// </summary>
         public float OutputGain
         {
@@ -134,11 +122,8 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Initialize Distortion Processor with all parameters.
+        /// Builds the effect with hand picked values.
         /// </summary>
-        /// <param name="drive">Drive amount (1.0 - 10.0)</param>
-        /// <param name="mix">Dry/wet mix (0.0 - 1.0)</param>
-        /// <param name="outputGain">Output gain (0.1 - 1.0)</param>
         public DistortionEffect(float drive = 2.0f, float mix = 1.0f, float outputGain = 0.5f)
         {
             _id = Guid.NewGuid();
@@ -151,9 +136,9 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Initialize Distortion Processor with preset selection.
+        /// Builds the effect from a preset.
         /// </summary>
-        /// <param name="preset">Distortion preset to use</param>
+        /// <param name="preset"></param>
         public DistortionEffect(DistortionPreset preset)
         {
             _id = Guid.NewGuid();
@@ -164,7 +149,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Initializes the effect with the specified audio configuration.
+        /// Stores the engine config, nothing else to set up here.
         /// </summary>
         public void Initialize(AudioConfig config)
         {
@@ -172,140 +157,93 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Set distortion parameters using predefined presets
+        /// Loads one of the canned setups.
         /// </summary>
+        /// <param name="preset"></param>
         public void SetPreset(DistortionPreset preset)
         {
             switch (preset)
             {
                 case DistortionPreset.Default:
-                    // Moderate distortion with dry blend to retain source character
-                    Drive = 2.0f;         // Basic drive amount
-                    Mix = 0.82f;          // Was 1.0 – 18% dry preserves original transients
-                    OutputGain = 0.55f;   // Slightly higher than before to compensate mix
+                    Drive = 2.0f; Mix = 0.82f; OutputGain = 0.55f;
                     break;
 
                 case DistortionPreset.WarmOverdrive:
-                    // Gentle saturation – adds harmonic richness without obvious distortion
-                    Drive = 1.8f;         // Gentle overdrive
-                    Mix = 0.68f;          // 68% wet – warm but transparent blend
-                    OutputGain = 0.82f;   // Compensate for mild processing
+                    Drive = 1.8f; Mix = 0.68f; OutputGain = 0.82f;
                     break;
 
                 case DistortionPreset.ClassicRock:
-                    // Balanced rock distortion for classic guitar tones
-                    // Medium drive with full wet signal for traditional rock sound
-                    Drive = 3.5f;         // Classic rock drive level
-                    Mix = 0.9f;           // 90% wet - mostly distorted with slight clean blend
-                    OutputGain = 0.6f;    // Balanced output level
+                    Drive = 3.5f; Mix = 0.9f; OutputGain = 0.6f;
                     break;
 
                 case DistortionPreset.HeavyMetal:
-                    // Aggressive saturation for modern metal tones
-                    // High drive with full wet signal for maximum impact
-                    Drive = 6.5f;         // High drive for heavy saturation
-                    Mix = 1.0f;           // 100% wet - full distortion
-                    OutputGain = 0.4f;    // Lower output due to high drive level
+                    Drive = 6.5f; Mix = 1.0f; OutputGain = 0.4f;
                     break;
 
                 case DistortionPreset.VintageTube:
-                    // Warm analog tube emulation
-                    // Medium-low drive with subtle mix for vintage warmth
-                    Drive = 2.2f;         // Tube-style gentle saturation
-                    Mix = 0.6f;           // 60% wet - warm blend with clean signal
-                    OutputGain = 0.75f;   // Warm, present output level
+                    Drive = 2.2f; Mix = 0.6f; OutputGain = 0.75f;
                     break;
 
                 case DistortionPreset.BassDrive:
-                    // Controlled distortion optimized for bass frequencies
-                    // Medium drive with careful output management for low-end
-                    Drive = 2.8f;         // Bass-friendly drive amount
-                    Mix = 0.8f;           // 80% wet - maintains some clean low-end
-                    OutputGain = 0.7f;    // Preserves bass presence
+                    Drive = 2.8f; Mix = 0.8f; OutputGain = 0.7f;
                     break;
 
                 case DistortionPreset.FuzzBox:
-                    // Extreme vintage-style fuzzy distortion
-                    // Very high drive for classic fuzz box characteristics
-                    Drive = 8.5f;         // Extreme fuzz saturation
-                    Mix = 1.0f;           // 100% wet - full fuzz effect
-                    OutputGain = 0.3f;    // Low output due to extreme drive
+                    Drive = 8.5f; Mix = 1.0f; OutputGain = 0.3f;
                     break;
 
                 case DistortionPreset.VocalSaturation:
-                    // Gentle saturation for vocal processing
-                    // Very subtle drive perfect for adding vocal character
-                    Drive = 1.4f;         // Very gentle saturation
-                    Mix = 0.4f;           // 40% wet - subtle character enhancement
-                    OutputGain = 0.9f;    // High output to maintain vocal presence
+                    Drive = 1.4f; Mix = 0.4f; OutputGain = 0.9f;
                     break;
 
                 case DistortionPreset.DigitalCrush:
-                    // Harsh digital-style distortion for lo-fi effects
-                    // High drive with specific output characteristics
-                    Drive = 7.8f;         // High drive for digital artifacts
-                    Mix = 0.95f;          // 95% wet - almost full digital processing
-                    OutputGain = 0.35f;   // Lower output for harsh digital character
+                    Drive = 7.8f; Mix = 0.95f; OutputGain = 0.35f;
                     break;
             }
         }
 
         /// <summary>
-        /// Process samples with distortion effect.
+        /// Drives, clips and blends every sample in place.
         /// </summary>
-        /// <param name="buffer">Input samples</param>
-        /// <param name="frameCount">The number of frames in the buffer.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
             if (_config == null)
                 throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
 
-            if (!_enabled)
-                return;
-
-            if (_mix < 0.001f)
-                return;
+            if (!_enabled || _mix < 0.001f) return;
 
             int sampleCount = frameCount * _config.Channels;
+            float dry = 1.0f - _mix;
 
             for (int i = 0; i < sampleCount; i++)
             {
                 float input = buffer[i];
-
-                float driven = input * Drive;
-
-                float distorted = SoftClip(driven);
-
-                distorted *= OutputGain;
-
-                buffer[i] = (input * (1.0f - Mix)) + (distorted * Mix);
+                float wet = SoftClip(input * _drive) * _outputGain;
+                buffer[i] = input * dry + wet * _mix;
             }
         }
 
         /// <summary>
-        /// Reset distortion effect (no internal state to clear).
+        /// No state to clear, this one is memoryless.
         /// </summary>
         public void Reset()
         {
-            // No internal state to reset
         }
 
         /// <summary>
-        /// Disposes the distortion effect and releases resources.
+        /// Nothing unmanaged here.
         /// </summary>
         public void Dispose()
         {
-            if (_disposed)
-                return;
+            if (_disposed) return;
 
             Reset();
-
             _disposed = true;
         }
 
         /// <summary>
-        /// Returns a string representation of the effect's state.
+        /// Short state dump for logs.
         /// </summary>
         public override string ToString()
         {
@@ -313,12 +251,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Soft clipping function for smooth distortion
+        /// Rounded clipping curve, leaves everything under unity alone.
         /// </summary>
         private static float SoftClip(float input)
         {
-            if (Math.Abs(input) <= 1.0f)
-                return input;
+            if (Math.Abs(input) <= 1.0f) return input;
 
             return Math.Sign(input) * (2.0f - 2.0f / (Math.Abs(input) + 1.0f));
         }

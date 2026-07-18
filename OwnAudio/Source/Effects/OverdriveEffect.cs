@@ -6,61 +6,53 @@ using System.Runtime.CompilerServices;
 namespace OwnaudioNET.Effects
 {
     /// <summary>
-    /// Overdrive presets for different musical styles and instruments
+    /// Overdrive setups per instrument and style.
     /// </summary>
     public enum OverdrivePreset
     {
         /// <summary>
-        /// Default overdrive settings - balanced parameters for general use
-        /// Medium gain, neutral tone, standard mix and output levels
+        /// Balanced starting point.
         /// </summary>
         Default,
 
         /// <summary>
-        /// Clean boost - subtle warmth and presence without heavy distortion
-        /// Low gain, balanced tone, maintains natural character
+        /// Barely any grit, just warmth and presence.
         /// </summary>
         CleanBoost,
 
         /// <summary>
-        /// Blues overdrive - warm, musical saturation for blues and classic rock
-        /// Medium gain, warm tone, vintage tube-like character
+        /// Warm and woody, blues sweet spot.
         /// </summary>
         Blues,
 
         /// <summary>
-        /// Rock crunch - aggressive midrange punch for rock rhythm guitar
-        /// Higher gain, bright tone, cutting through mix
+        /// Bright and aggressive rhythm crunch.
         /// </summary>
         RockCrunch,
 
         /// <summary>
-        /// Lead guitar - sustained overdrive for solos and lead parts
-        /// High gain, bright tone, enhanced sustain
+        /// High gain with sustain, for solos.
         /// </summary>
         Lead,
 
         /// <summary>
-        /// Vintage tube - emulates classic tube amplifier breakup
-        /// Medium gain, warm tone, natural tube saturation
+        /// Classic tube breakup.
         /// </summary>
         VintugeTube,
 
         /// <summary>
-        /// Bass overdrive - tailored for bass instruments
-        /// Lower gain, darker tone, maintains low-end definition
+        /// Dark and gentle, keeps the bottom end.
         /// </summary>
         Bass,
 
         /// <summary>
-        /// Screamer - inspired by classic tube screamer pedals
-        /// Medium-high gain, mid-focused tone, tight response
+        /// Tube screamer flavour, mid focused.
         /// </summary>
         Screamer
     }
 
     /// <summary>
-    /// Overdrive effect with tube-like saturation
+    /// Overdrive with asymmetric tube-ish saturation and a simple tone control.
     /// </summary>
     public sealed class OverdriveEffect : IEffectProcessor
     {
@@ -75,22 +67,24 @@ namespace OwnaudioNET.Effects
         private float _mix = 1.0f;
         private float _outputLevel = 0.7f;
 
-        // Tone control filters
+        /// <summary>
+        /// The two one-pole states behind the tone knob.
+        /// </summary>
         private float _lowPassState = 0.0f;
         private float _highPassState = 0.0f;
 
         /// <summary>
-        /// Gets the unique identifier for this effect instance
+        /// Instance id.
         /// </summary>
         public Guid Id => _id;
 
         /// <summary>
-        /// Gets the name of this effect
+        /// Effect name.
         /// </summary>
         public string Name => _name;
 
         /// <summary>
-        /// Gets or sets whether this effect is enabled
+        /// On/off switch.
         /// </summary>
         public bool Enabled
         {
@@ -99,7 +93,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Input gain (1.0 - 5.0). Controls the amount of overdrive.
+        /// Input gain, 1 - 5.
         /// </summary>
         public float Gain
         {
@@ -108,7 +102,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Tone control (0.0 - 1.0). 0.0 = dark, 1.0 = bright.
+        /// Tone knob, 0 is dark and 1 is bright.
         /// </summary>
         public float Tone
         {
@@ -117,7 +111,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Mix between dry and wet signal (0.0 - 1.0).
+        /// Dry to wet balance.
         /// </summary>
         public float Mix
         {
@@ -126,7 +120,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Output level (0.1 - 1.0).
+        /// Output trim, 0.1 - 1.
         /// </summary>
         public float OutputLevel
         {
@@ -135,12 +129,8 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Initialize Overdrive Processor with individual parameters.
+        /// Builds the effect with hand picked values.
         /// </summary>
-        /// <param name="gain">Input gain (1.0 - 5.0)</param>
-        /// <param name="tone">Tone control (0.0 - 1.0)</param>
-        /// <param name="mix">Dry/wet mix (0.0 - 1.0)</param>
-        /// <param name="outputLevel">Output level (0.1 - 1.0)</param>
         public OverdriveEffect(float gain = 2.0f, float tone = 0.5f, float mix = 1.0f, float outputLevel = 0.7f)
         {
             _id = Guid.NewGuid();
@@ -154,9 +144,9 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Initialize Overdrive Processor with a preset.
+        /// Builds the effect from a preset.
         /// </summary>
-        /// <param name="preset">Preset to use for initialization</param>
+        /// <param name="preset"></param>
         public OverdriveEffect(OverdrivePreset preset)
         {
             _id = Guid.NewGuid();
@@ -167,133 +157,80 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Initialize the effect with audio configuration
+        /// Stores the engine config.
         /// </summary>
-        /// <param name="config">Audio configuration</param>
         public void Initialize(AudioConfig config)
         {
             _config = config;
         }
 
         /// <summary>
-        /// Set overdrive parameters using predefined presets
+        /// Loads one of the canned setups.
         /// </summary>
-        /// <param name="preset">The preset to apply</param>
+        /// <param name="preset"></param>
         public void SetPreset(OverdrivePreset preset)
         {
             switch (preset)
             {
-                case OverdrivePreset.Default:
-                    // Default overdrive settings - balanced parameters for general use
-                    // Medium gain, neutral tone, standard mix and output levels
-                    Gain = 2.0f;        // Default medium gain
-                    Tone = 0.5f;        // Neutral tone
-                    Mix = 1.0f;         // Full wet signal
-                    OutputLevel = 0.7f; // Standard output level
-                    break;
-
                 case OverdrivePreset.CleanBoost:
-                    // Subtle warmth and presence boost without heavy distortion
-                    // Low gain for transparency, balanced tone, full mix
-                    Gain = 1.3f;        // Minimal overdrive, just adding warmth
-                    Tone = 0.6f;        // Slightly bright for presence
-                    Mix = 0.7f;         // Blend with dry signal for naturalness
-                    OutputLevel = 0.9f; // Higher output to compensate for low gain
+                    Gain = 1.3f; Tone = 0.6f; Mix = 0.7f; OutputLevel = 0.9f;
                     break;
 
                 case OverdrivePreset.Blues:
-                    // Warm, musical saturation for blues and classic rock
-                    // Medium gain, warm tone for vintage tube character
-                    Gain = 2.2f;        // Sweet spot for blues overdrive
-                    Tone = 0.35f;       // Warm, woody tone
-                    Mix = 1.0f;         // Full wet signal for classic sound
-                    OutputLevel = 0.75f; // Moderate output level
+                    Gain = 2.2f; Tone = 0.35f; Mix = 1.0f; OutputLevel = 0.75f;
                     break;
 
                 case OverdrivePreset.RockCrunch:
-                    // Aggressive midrange punch for rock rhythm guitar
-                    // Higher gain, bright tone for cutting through mix
-                    Gain = 3.2f;        // Aggressive drive for rock crunch
-                    Tone = 0.75f;       // Bright and cutting
-                    Mix = 1.0f;         // Full overdrive sound
-                    OutputLevel = 0.7f; // Standard output level
+                    Gain = 3.2f; Tone = 0.75f; Mix = 1.0f; OutputLevel = 0.7f;
                     break;
 
                 case OverdrivePreset.Lead:
-                    // Sustained overdrive for solos and lead parts
-                    // High gain, bright tone, enhanced sustain
-                    Gain = 4.2f;        // High gain for sustain and saturation
-                    Tone = 0.8f;        // Bright for lead cut-through
-                    Mix = 1.0f;         // Pure overdrive signal
-                    OutputLevel = 0.65f; // Slightly lower to prevent clipping
+                    Gain = 4.2f; Tone = 0.8f; Mix = 1.0f; OutputLevel = 0.65f;
                     break;
 
                 case OverdrivePreset.VintugeTube:
-                    // Classic tube amplifier breakup emulation
-                    // Medium gain, warm tone, natural tube saturation
-                    Gain = 2.8f;        // Natural tube breakup level
-                    Tone = 0.4f;        // Warm vintage character
-                    Mix = 0.9f;         // Mostly overdriven with hint of dry
-                    OutputLevel = 0.8f; // Vintage-appropriate level
+                    Gain = 2.8f; Tone = 0.4f; Mix = 0.9f; OutputLevel = 0.8f;
                     break;
 
                 case OverdrivePreset.Bass:
-                    // Tailored for bass instruments
-                    // Lower gain, darker tone, maintains low-end definition
-                    Gain = 1.8f;        // Gentle overdrive preserving fundamentals
-                    Tone = 0.25f;       // Dark tone to maintain bass character
-                    Mix = 0.8f;         // Blend to preserve clean low-end
-                    OutputLevel = 0.85f; // Higher output for bass presence
+                    Gain = 1.8f; Tone = 0.25f; Mix = 0.8f; OutputLevel = 0.85f;
                     break;
 
                 case OverdrivePreset.Screamer:
-                    // Classic tube screamer style overdrive
-                    // Medium-high gain, mid-focused tone, tight response
-                    Gain = 3.5f;        // Classic screamer drive level
-                    Tone = 0.65f;       // Mid-focused, slightly bright
-                    Mix = 1.0f;         // Full effect for classic screamer sound
-                    OutputLevel = 0.7f; // Balanced output level
+                    Gain = 3.5f; Tone = 0.65f; Mix = 1.0f; OutputLevel = 0.7f;
+                    break;
+
+                default:
+                    Gain = 2.0f; Tone = 0.5f; Mix = 1.0f; OutputLevel = 0.7f;
                     break;
             }
         }
 
         /// <summary>
-        /// Process samples with overdrive effect.
+        /// Drives, saturates, shapes the tone and blends back over the dry.
         /// </summary>
-        /// <param name="buffer">Input buffer</param>
-        /// <param name="frameCount">Number of frames to process</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
             if (_config == null)
                 throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
 
-            if (!_enabled)
-                return;
-
-            if (_mix < 0.001f)
-                return;
+            if (!_enabled || _mix < 0.001f) return;
 
             int sampleCount = frameCount * _config.Channels;
+            float dry = 1.0f - _mix;
 
             for (int i = 0; i < sampleCount; i++)
             {
                 float input = buffer[i];
+                float wet = _toneShape(TubeSaturation(input * _gain)) * _outputLevel;
 
-                float gained = input * Gain;
-
-                float overdriven = TubeSaturation(gained);
-
-                overdriven = ApplyToneControl(overdriven);
-
-                overdriven *= OutputLevel;
-
-                buffer[i] = (input * (1.0f - Mix)) + (overdriven * Mix);
+                buffer[i] = input * dry + wet * _mix;
             }
         }
 
         /// <summary>
-        /// Reset overdrive effect state.
+        /// Clears the tone filter memory.
         /// </summary>
         public void Reset()
         {
@@ -302,18 +239,17 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Dispose of resources
+        /// Nothing unmanaged here.
         /// </summary>
         public void Dispose()
         {
-            if (_disposed)
-                return;
+            if (_disposed) return;
 
             _disposed = true;
         }
 
         /// <summary>
-        /// Returns a string representation of this effect
+        /// Short state dump for logs.
         /// </summary>
         public override string ToString()
         {
@@ -321,32 +257,28 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Tube-like asymmetric saturation
+        /// Asymmetric soft clip, the positive half gets a different curve than the negative one.
         /// </summary>
         private static float TubeSaturation(float input)
         {
-            if (input >= 0)
-            {
-                return (float)(Math.Tanh(input * 0.7) * 1.2);
-            }
-            else
-            {
-                return (float)(Math.Tanh(input * 0.9) * 0.9);
-            }
+            if (input >= 0) return MathF.Tanh(input * 0.7f) * 1.2f;
+
+            return MathF.Tanh(input * 0.9f) * 0.9f;
         }
 
         /// <summary>
-        /// Simple tone control using low-pass and high-pass filtering
+        /// Tone knob: an LP and an HP running in parallel, the knob decides how much
+        /// of the high part gets subtracted.
         /// </summary>
-        private float ApplyToneControl(float input)
+        private float _toneShape(float input)
         {
-            float lowPassCutoff = 0.1f + (Tone * 0.4f);
-            float highPassCutoff = 0.05f + ((1.0f - Tone) * 0.2f);
+            float lpCut = 0.1f + _tone * 0.4f;
+            float hpCut = 0.05f + (1.0f - _tone) * 0.2f;
 
-            _lowPassState += lowPassCutoff * (input - _lowPassState);
-            _highPassState += highPassCutoff * (input - _highPassState);
+            _lowPassState += lpCut * (input - _lowPassState);
+            _highPassState += hpCut * (input - _highPassState);
 
-            return _lowPassState - _highPassState * (1.0f - Tone);
+            return _lowPassState - _highPassState * (1.0f - _tone);
         }
     }
 }

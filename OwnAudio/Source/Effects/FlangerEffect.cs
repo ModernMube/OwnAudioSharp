@@ -6,64 +6,59 @@ using System.Runtime.CompilerServices;
 namespace OwnaudioNET.Effects
 {
     /// <summary>
-    /// Flanger presets for different audio processing scenarios
+    /// Flanger setups from subtle thickening to jet sweep.
     /// </summary>
     public enum FlangerPreset
     {
         /// <summary>
-        /// Default flanger settings - balanced all-purpose flanging effect
-        /// Moderate rate and depth with controlled feedback for general use
+        /// All purpose, audible but not in your face.
         /// </summary>
         Default,
 
         /// <summary>
-        /// Classic flanger - vintage tape-style flanging effect
-        /// Moderate rate and depth with balanced feedback for that classic swoosh
+        /// Tape style swoosh.
         /// </summary>
         Classic,
 
         /// <summary>
-        /// Jet plane - fast, dramatic flanging reminiscent of aircraft sounds
-        /// High rate and depth with strong feedback for aggressive modulation
+        /// Fast and deep with lots of feedback.
         /// </summary>
         JetPlane,
 
         /// <summary>
-        /// Subtle chorus - gentle modulation for thickening without obvious effect
-        /// Slow rate, shallow depth, minimal feedback for transparent enhancement
+        /// Slow and shallow, more like a chorus.
         /// </summary>
         SubtleChorus,
 
         /// <summary>
-        /// Vocal doubling - creates natural vocal doubling effect
-        /// Medium-slow rate, moderate depth, low feedback for vocal enhancement
+        /// Natural doubling for vocals.
         /// </summary>
         VocalDoubling,
 
         /// <summary>
-        /// Guitar lead - dramatic lead guitar flanging for solos
-        /// Variable rate, deep modulation, high feedback for cutting through mix
+        /// Cutting lead sound for solos.
         /// </summary>
         GuitarLead,
 
         /// <summary>
-        /// Ambient wash - slow, ethereal flanging for atmospheric effects
-        /// Very slow rate, deep modulation, moderate feedback for dreamy textures
+        /// Very slow, deep and dreamy.
         /// </summary>
         AmbientWash,
 
         /// <summary>
-        /// Percussive flanger - tight, rhythmic flanging for drums and percussion
-        /// Fast rate, moderate depth, low feedback to preserve transients
+        /// Fast and tight, keeps the drum attack.
         /// </summary>
         Percussive
     }
 
     /// <summary>
-    /// Flanger effect with variable delay modulation
+    /// Flanger: short LFO swept delay fed back into itself.
     /// </summary>
     public sealed class FlangerEffect : IEffectProcessor
     {
+        /// <summary>
+        /// 20ms delay line, sized once at construction.
+        /// </summary>
         private readonly float[] _delayBuffer;
         private readonly int _sampleRate;
         private int _bufferIndex;
@@ -72,7 +67,6 @@ namespace OwnaudioNET.Effects
         private float _depth = 0.8f;
         private float _feedback = 0.6f;
         private float _mix = 0.5f;
-
         private float _lfoPhase = 0.0f;
 
         private readonly Guid _id;
@@ -82,17 +76,17 @@ namespace OwnaudioNET.Effects
         private AudioConfig? _config;
 
         /// <summary>
-        /// Gets the unique identifier for this effect instance
+        /// Instance id.
         /// </summary>
         public Guid Id => _id;
 
         /// <summary>
-        /// Gets the name of this effect
+        /// Effect name.
         /// </summary>
         public string Name => _name;
 
         /// <summary>
-        /// Gets or sets whether this effect is enabled
+        /// On/off switch.
         /// </summary>
         public bool Enabled
         {
@@ -101,7 +95,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// LFO rate in Hz (0.1 - 5.0).
+        /// LFO speed in Hz, 0.1 - 5.
         /// </summary>
         public float Rate
         {
@@ -110,7 +104,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Modulation depth (0.0 - 1.0).
+        /// Sweep depth, 0 - 1.
         /// </summary>
         public float Depth
         {
@@ -119,7 +113,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Feedback amount (0.0 - 0.95).
+        /// Feedback, capped at 0.95 so it doesn't run away.
         /// </summary>
         public float Feedback
         {
@@ -128,7 +122,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Mix between dry and wet signal (0.0 - 1.0).
+        /// Dry to wet balance.
         /// </summary>
         public float Mix
         {
@@ -137,18 +131,13 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Gets the sample rate in Hz (set at construction time).
+        /// Sample rate this instance was built for.
         /// </summary>
         public int SampleRate => _sampleRate;
 
         /// <summary>
-        /// Initialize Flanger Processor with specific parameters.
+        /// Builds the flanger with hand picked values.
         /// </summary>
-        /// <param name="rate">LFO rate in Hz (0.1 - 5.0)</param>
-        /// <param name="depth">Modulation depth (0.0 - 1.0)</param>
-        /// <param name="feedback">Feedback amount (0.0 - 0.95)</param>
-        /// <param name="mix">Dry/wet mix (0.0 - 1.0)</param>
-        /// <param name="sampleRate">Sample rate</param>
         public FlangerEffect(float rate = 0.5f, float depth = 0.8f, float feedback = 0.6f, float mix = 0.5f, int sampleRate = 44100)
         {
             _id = Guid.NewGuid();
@@ -164,16 +153,14 @@ namespace OwnaudioNET.Effects
             Feedback = feedback;
             Mix = mix;
 
-            int maxDelaySamples = (int)(0.02 * sampleRate);
-            _delayBuffer = new float[maxDelaySamples];
-            _bufferIndex = 0;
+            _delayBuffer = new float[(int)(0.02 * sampleRate)];
         }
 
         /// <summary>
-        /// Initialize Flanger Processor with a preset.
+        /// Builds the flanger from a preset.
         /// </summary>
-        /// <param name="preset">Flanger preset to use</param>
-        /// <param name="sampleRate">Sample rate</param>
+        /// <param name="preset"></param>
+        /// <param name="sampleRate"></param>
         public FlangerEffect(FlangerPreset preset, int sampleRate = 44100)
         {
             _id = Guid.NewGuid();
@@ -184,150 +171,104 @@ namespace OwnaudioNET.Effects
                 throw new ArgumentException("Sample rate must be positive.", nameof(sampleRate));
 
             _sampleRate = sampleRate;
-
-            int maxDelaySamples = (int)(0.02 * sampleRate);
-            _delayBuffer = new float[maxDelaySamples];
-            _bufferIndex = 0;
+            _delayBuffer = new float[(int)(0.02 * sampleRate)];
 
             SetPreset(preset);
         }
 
         /// <summary>
-        /// Initializes the effect with the given audio configuration
+        /// Stores the engine config.
         /// </summary>
-        /// <param name="config">Audio configuration</param>
         public void Initialize(AudioConfig config)
         {
             _config = config;
         }
 
         /// <summary>
-        /// Set flanger parameters using predefined presets
+        /// Loads one of the canned setups.
         /// </summary>
+        /// <param name="preset"></param>
         public void SetPreset(FlangerPreset preset)
         {
             switch (preset)
             {
                 case FlangerPreset.Default:
-                    // Moderate all-purpose flanging – noticeable but not overwhelming
-                    Rate = 0.5f;         // Moderate sweep speed
-                    Depth = 0.65f;       // Was 0.8 – less aggressive for a starting point
-                    Feedback = 0.55f;    // Balanced resonance
-                    Mix = 0.48f;         // Slightly dry-biased
+                    Rate = 0.5f; Depth = 0.65f; Feedback = 0.55f; Mix = 0.48f;
                     break;
 
                 case FlangerPreset.Classic:
-                    // Classic tape flanger sound - balanced and musical
-                    // Medium rate for classic swoosh, good depth for character
-                    Rate = 0.7f;         // Classic moderate sweep speed
-                    Depth = 0.75f;       // Strong but not overwhelming modulation
-                    Feedback = 0.65f;    // Characteristic resonance without harshness
-                    Mix = 0.45f;         // Slightly dry-focused for musical balance
+                    Rate = 0.7f; Depth = 0.75f; Feedback = 0.65f; Mix = 0.45f;
                     break;
 
                 case FlangerPreset.JetPlane:
-                    // Aggressive jet plane flanging - dramatic and intense
-                    // Fast rate and deep modulation with strong feedback
-                    Rate = 2.8f;         // Fast sweep for aircraft-like effect
-                    Depth = 0.95f;       // Maximum modulation depth
-                    Feedback = 0.85f;    // High feedback for dramatic resonance
-                    Mix = 0.65f;         // Wet-focused for obvious effect
+                    Rate = 2.8f; Depth = 0.95f; Feedback = 0.85f; Mix = 0.65f;
                     break;
 
                 case FlangerPreset.SubtleChorus:
-                    // Gentle thickening effect - transparent and natural
-                    // Slow rate with shallow depth for chorus-like enhancement
-                    Rate = 0.25f;        // Slow, gentle modulation
-                    Depth = 0.35f;       // Shallow depth for subtlety
-                    Feedback = 0.25f;    // Minimal feedback to avoid obvious flanging
-                    Mix = 0.30f;         // Light wet signal for transparency
+                    Rate = 0.25f; Depth = 0.35f; Feedback = 0.25f; Mix = 0.30f;
                     break;
 
                 case FlangerPreset.VocalDoubling:
-                    // Natural vocal doubling - enhances without distraction
-                    // Medium-slow rate with controlled depth and feedback
-                    Rate = 0.4f;         // Slow enough to feel natural
-                    Depth = 0.55f;       // Moderate depth for presence
-                    Feedback = 0.35f;    // Low feedback to maintain clarity
-                    Mix = 0.35f;         // Balanced but dry-focused
+                    Rate = 0.4f; Depth = 0.55f; Feedback = 0.35f; Mix = 0.35f;
                     break;
 
                 case FlangerPreset.GuitarLead:
-                    // Cutting lead guitar flanger - dramatic and present
-                    // Variable rate with deep modulation for solos
-                    Rate = 1.5f;         // Medium-fast for movement without blur
-                    Depth = 0.85f;       // Deep modulation for character
-                    Feedback = 0.75f;    // Strong feedback for cutting through mix
-                    Mix = 0.55f;         // Wet-focused for effect prominence
+                    Rate = 1.5f; Depth = 0.85f; Feedback = 0.75f; Mix = 0.55f;
                     break;
 
                 case FlangerPreset.AmbientWash:
-                    // Ethereal atmospheric flanging - dreamy and spacious
-                    // Very slow rate with deep modulation for texture
-                    Rate = 0.15f;        // Very slow for dreamy movement
-                    Depth = 0.90f;       // Deep modulation for texture
-                    Feedback = 0.55f;    // Moderate feedback for richness
-                    Mix = 0.60f;         // Wet-focused for atmospheric effect
+                    Rate = 0.15f; Depth = 0.90f; Feedback = 0.55f; Mix = 0.60f;
                     break;
 
                 case FlangerPreset.Percussive:
-                    // Tight percussive flanging - preserves transients
-                    // Fast rate with controlled depth to maintain punch
-                    Rate = 3.5f;         // Fast rate for rhythmic effect
-                    Depth = 0.60f;       // Moderate depth to preserve attack
-                    Feedback = 0.40f;    // Low feedback to maintain clarity
-                    Mix = 0.40f;         // Balanced but preserving dry signal
+                    Rate = 3.5f; Depth = 0.60f; Feedback = 0.40f; Mix = 0.40f;
                     break;
             }
         }
 
         /// <summary>
-        /// Process samples with flanger effect.
+        /// Sweeps the read tap with the LFO and blends the delayed signal back in.
         /// </summary>
-        /// <param name="buffer">Input samples</param>
-        /// <param name="frameCount">Number of frames to process</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
             if (_config == null)
                 throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
 
-            if (!_enabled)
-                return;
+            if (!_enabled) return;
 
             int sampleCount = frameCount * _config.Channels;
+            int bufLen = _delayBuffer.Length;
 
-            float lfoIncrement = (float)(2.0 * Math.PI * Rate / _sampleRate);
+            float lfoIncrement = (float)(2.0 * Math.PI * _rate / _sampleRate);
+            float depth = _depth;
+            float fb = _feedback;
+            float mx = _mix;
 
             for (int i = 0; i < sampleCount; i++)
             {
                 float input = buffer[i];
 
-                float lfoValue = (float)Math.Sin(_lfoPhase);
+                float lfo = MathF.Sin(_lfoPhase);
+                float delayTime = 0.001f + 0.009f * (1.0f + lfo * depth) * 0.5f;
+                int delaySamples = Math.Clamp((int)(delayTime * _sampleRate), 1, bufLen - 1);
 
-                float delayTime = 0.001f + (0.009f * (1.0f + lfoValue * Depth) * 0.5f);
-                int delaySamples = (int)(delayTime * _sampleRate);
-                delaySamples = Math.Clamp(delaySamples, 1, _delayBuffer.Length - 1);
+                int readIndex = (_bufferIndex - delaySamples + bufLen) % bufLen;
+                float delayed = _delayBuffer[readIndex];
 
-                int readIndex = (_bufferIndex - delaySamples + _delayBuffer.Length) % _delayBuffer.Length;
-                float delayedSample = _delayBuffer[readIndex];
+                _delayBuffer[_bufferIndex] = Math.Clamp(input + delayed * fb, -1.0f, 1.0f);
+                buffer[i] = input * (1.0f - mx) + delayed * mx;
 
-                float feedbackSample = input + (delayedSample * Feedback);
+                _bufferIndex++;
+                if (_bufferIndex >= bufLen) _bufferIndex = 0;
 
-                _delayBuffer[_bufferIndex] = Math.Clamp(feedbackSample, -1.0f, 1.0f);
-
-                buffer[i] = (input * (1.0f - Mix)) + (delayedSample * Mix);
-
-                _bufferIndex = (_bufferIndex + 1) % _delayBuffer.Length;
                 _lfoPhase += lfoIncrement;
-
-                if (_lfoPhase >= 2.0 * Math.PI)
-                    _lfoPhase -= (float)(2.0 * Math.PI);
+                if (_lfoPhase >= 2.0 * Math.PI) _lfoPhase -= (float)(2.0 * Math.PI);
             }
         }
 
         /// <summary>
-        /// Reset flanger effect state.
+        /// Empties the delay line and parks the LFO.
         /// </summary>
         public void Reset()
         {
@@ -337,19 +278,18 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Disposes of the effect and releases any resources
+        /// Nothing unmanaged here.
         /// </summary>
         public void Dispose()
         {
-            if (_disposed)
-                return;
+            if (_disposed) return;
 
             Reset();
             _disposed = true;
         }
 
         /// <summary>
-        /// Returns a string representation of this effect
+        /// Short state dump for logs.
         /// </summary>
         public override string ToString()
         {

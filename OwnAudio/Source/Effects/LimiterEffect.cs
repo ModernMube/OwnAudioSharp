@@ -6,72 +6,59 @@ using System.Runtime.CompilerServices;
 namespace OwnaudioNET.Effects
 {
     /// <summary>
-    /// Limiter presets for different audio processing scenarios
+    /// Limiter setups per job.
     /// </summary>
     public enum LimiterPreset
     {
         /// <summary>
-        /// Default preset with balanced settings
+        /// Balanced starting point.
         /// </summary>
         Default,
 
         /// <summary>
-        /// Mastering limiter - transparent peak control for final mix
-        /// Conservative threshold, brick wall ceiling, medium release for transparent limiting
+        /// Transparent, only catches the true peaks.
         /// </summary>
         Mastering,
 
         /// <summary>
-        /// Broadcast limiter - aggressive peak control for radio/streaming
-        /// Lower threshold, tight ceiling, fast release for consistent loudness
+        /// Tighter and faster, consistent on-air level.
         /// </summary>
         Broadcast,
 
         /// <summary>
-        /// Live performance - reliable peak protection for live audio
-        /// Medium threshold, safe ceiling, fast response for real-time protection
+        /// Peak protection for a live rig.
         /// </summary>
         Live,
 
         /// <summary>
-        /// Drum bus limiter - punchy transient limiting for drum groups
-        /// High threshold, quick response, short lookahead to maintain punch
+        /// Short lookahead so the drums keep their punch.
         /// </summary>
         DrumBus,
 
         /// <summary>
-        /// Vocal safety - gentle limiting for vocal recordings
-        /// High threshold, soft ceiling, longer release for natural vocal sound
+        /// Gentle with a long release, natural on vocals.
         /// </summary>
         VocalSafety,
 
         /// <summary>
-        /// Bass limiting - specialized limiting for low-frequency content
-        /// Medium threshold, controlled release to avoid pumping on bass content
+        /// Controlled release so the low end doesn't pump.
         /// </summary>
         Bass,
 
         /// <summary>
-        /// Podcast/dialog - optimized for spoken word content
-        /// Conservative settings with smooth response for speech intelligibility
+        /// Slow and smooth, speech stays intelligible.
         /// </summary>
         Podcast,
 
         /// <summary>
-        /// Aggressive style - heavy limiting for electronic/dance music
-        /// Low threshold, tight ceiling, fast response for loud, consistent output
+        /// Heavy limiting for loud electronic material.
         /// </summary>
         Aggressive
     }
 
     /// <summary>
-    /// Professional audio limiter with look-ahead and smooth gain reduction
-    ///
-    /// ZERO-ALLOCATION DESIGN:
-    /// - Buffers are pre-allocated at maximum size (MAX_LOOKAHEAD) during construction
-    /// - Dynamic lookahead changes only modify _activeBufferSize, never reallocate
-    /// - No heap allocations during Process() or parameter changes
-    /// - Safe for real-time audio with multiple effects chaining
+    /// Lookahead peak limiter. Every buffer is allocated up front at max lookahead size,
+    /// changing the lookahead only moves the active length, so Process never allocates.
     /// </summary>
     public sealed class LimiterEffect : IEffectProcessor
     {
@@ -89,17 +76,21 @@ namespace OwnaudioNET.Effects
         private float _targetGain;
         private readonly float _sampleRate;
         private readonly int _maxBufferSize;
-        
+
+        /// <summary>
+        /// Monotonic deque for the sliding window maximum, array based so it stays GC free.
+        /// </summary>
         private readonly long[] _dequeIndices;
         private readonly float[] _dequeValues;
         private int _dequeHead;
         private int _dequeTail;
         private int _dequeSize;
 
-        // Absolute sample index counter to track position correctly across buffer wraps
+        /// <summary>
+        /// Keeps counting past the ring wrap, that's how the deque knows what expired.
+        /// </summary>
         private long _absoluteSampleIndex;
 
-        // Limiter parameters
         private float _threshold;
         private float _ceiling;
         private float _release;
@@ -107,34 +98,32 @@ namespace OwnaudioNET.Effects
         private int _lookAheadSamples;
         private int _activeBufferSize;
 
-        // Constants
-        private const float DEFAULT_THRESHOLD = -3.0f;  // dB
-        private const float DEFAULT_CEILING = -0.1f;    // dB
-        private const float DEFAULT_RELEASE = 50.0f;    // ms
-        private const float DEFAULT_LOOKAHEAD = 5.0f;   // ms
+        private const float DEFAULT_THRESHOLD = -3.0f;
+        private const float DEFAULT_CEILING = -0.1f;
+        private const float DEFAULT_RELEASE = 50.0f;
+        private const float DEFAULT_LOOKAHEAD = 5.0f;
 
-        // Parameter limits
-        private const float MIN_THRESHOLD = -20.0f;     // dB
-        private const float MAX_THRESHOLD = 0.0f;       // dB
-        private const float MIN_CEILING = -2.0f;        // dB
-        private const float MAX_CEILING = 0.0f;         // dB
-        private const float MIN_RELEASE = 1.0f;         // ms
-        private const float MAX_RELEASE = 1000.0f;      // ms
-        private const float MIN_LOOKAHEAD = 1.0f;       // ms
-        private const float MAX_LOOKAHEAD = 20.0f;      // ms
+        private const float MIN_THRESHOLD = -20.0f;
+        private const float MAX_THRESHOLD = 0.0f;
+        private const float MIN_CEILING = -2.0f;
+        private const float MAX_CEILING = 0.0f;
+        private const float MIN_RELEASE = 1.0f;
+        private const float MAX_RELEASE = 1000.0f;
+        private const float MIN_LOOKAHEAD = 1.0f;
+        private const float MAX_LOOKAHEAD = 20.0f;
 
         /// <summary>
-        /// Gets the unique identifier for this effect instance
+        /// Instance id.
         /// </summary>
         public Guid Id => _id;
 
         /// <summary>
-        /// Gets the name of this effect
+        /// Effect name.
         /// </summary>
         public string Name => _name;
 
         /// <summary>
-        /// Gets or sets whether this effect is enabled
+        /// On/off switch.
         /// </summary>
         public bool Enabled
         {
@@ -143,34 +132,24 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Mix property for interface compliance (always 1.0 for limiters)
+        /// A limiter is always fully wet, so this stays at 1.0.
         /// </summary>
         public float Mix
         {
             get => 1.0f;
-            set { /* Limiters don't use mix - always 100% */ }
+            set { }
         }
 
         /// <summary>
-        /// Gets the processing latency introduced by the lookahead buffer in samples.
+        /// Lookahead latency in samples, the mixer uses this for PDC.
+        /// 5ms is 240 samples at 48k, 20ms is 960.
         /// </summary>
-        /// <remarks>
-        /// The limiter uses a configurable lookahead window (1–20 ms, default 5 ms)
-        /// to detect upcoming peaks before they arrive. The field <c>_lookAheadSamples</c>
-        /// is recalculated whenever <see cref="LookAheadMs"/> changes.
-        /// Example values at 48 000 Hz: 5 ms → 240 samples, 20 ms → 960 samples.
-        /// Reported to <see cref="OwnaudioNET.Mixing.AudioMixer.ApplyPluginDelayCompensation"/> for PDC alignment.
-        /// </remarks>
         public int LatencySamples => _lookAheadSamples;
 
         /// <summary>
-        /// Professional limiter constructor with all parameters
+        /// Builds the limiter with hand picked values. Threshold and ceiling are in dB,
+        /// release and lookahead in ms.
         /// </summary>
-        /// <param name="sampleRate">Sample rate</param>
-        /// <param name="threshold">Threshold in dB (default: -3dB)</param>
-        /// <param name="ceiling">Output ceiling in dB (default: -0.1dB)</param>
-        /// <param name="release">Release time in ms (default: 50ms)</param>
-        /// <param name="lookAheadMs">Look-ahead time in ms (default: 5ms)</param>
         public LimiterEffect(float sampleRate, float threshold = DEFAULT_THRESHOLD,
             float ceiling = DEFAULT_CEILING, float release = DEFAULT_RELEASE,
             float lookAheadMs = DEFAULT_LOOKAHEAD)
@@ -180,191 +159,118 @@ namespace OwnaudioNET.Effects
             _enabled = true;
 
             _sampleRate = sampleRate;
-
             _maxBufferSize = (int)(MAX_LOOKAHEAD * sampleRate / 1000.0f);
 
-            // Set parameters with validation
             Threshold = threshold;
             Ceiling = ceiling;
             Release = release;
 
-            // Calculate initial lookahead samples
             _lookAheadMs = Math.Clamp(lookAheadMs, MIN_LOOKAHEAD, MAX_LOOKAHEAD);
             _lookAheadSamples = (int)(_lookAheadMs * sampleRate / 1000.0f);
             _activeBufferSize = _lookAheadSamples;
 
-            // Allocate buffers at maximum size to prevent reallocation
             _delayBuffer = new float[_maxBufferSize];
             _envelopeBuffer = new float[_maxBufferSize];
-            
-            // Initialize envelope buffer to 1.0 (unity gain)
             Array.Fill(_envelopeBuffer, 1.0f);
 
             _currentGain = 1.0f;
             _targetGain = 1.0f;
-            _delayIndex = 0;
-            _envelopeIndex = 0;
-            
-            // Initialize sliding window deque (array-based for zero allocation)
+
             _dequeIndices = new long[_maxBufferSize];
             _dequeValues = new float[_maxBufferSize];
-            _dequeHead = 0;
-            _dequeTail = 0;
-            _dequeSize = 0;
         }
 
         /// <summary>
-        /// Professional limiter constructor with preset selection
+        /// Builds the limiter from a preset.
         /// </summary>
-        /// <param name="sampleRate">Sample rate</param>
-        /// <param name="preset">Preset to use</param>
+        /// <param name="sampleRate"></param>
+        /// <param name="preset"></param>
         public LimiterEffect(float sampleRate, LimiterPreset preset)
+            : this(sampleRate)
         {
-            _id = Guid.NewGuid();
-            _name = "Limiter";
-            _enabled = true;
-
-            _sampleRate = sampleRate;
-
-            _maxBufferSize = (int)(MAX_LOOKAHEAD * sampleRate / 1000.0f);
-
-            // Initialize with default values first
-            _threshold = DbToLinear(DEFAULT_THRESHOLD);
-            _ceiling = DbToLinear(DEFAULT_CEILING);
-            _release = CalculateReleaseCoeff(DEFAULT_RELEASE, sampleRate);
-            _lookAheadMs = DEFAULT_LOOKAHEAD;
-            _lookAheadSamples = (int)(DEFAULT_LOOKAHEAD * sampleRate / 1000.0f);
-            _activeBufferSize = _lookAheadSamples;
-
-            // Allocate buffers at maximum size to prevent reallocation
-            _delayBuffer = new float[_maxBufferSize];
-            _envelopeBuffer = new float[_maxBufferSize];
-            
-            // Initialize envelope buffer to 1.0 (unity gain)
-            Array.Fill(_envelopeBuffer, 1.0f);
-
-            _currentGain = 1.0f;
-            _targetGain = 1.0f;
-            _delayIndex = 0;
-            _envelopeIndex = 0;
-            
-            // Initialize sliding window deque (array-based for zero allocation)
-            _dequeIndices = new long[_maxBufferSize];
-            _dequeValues = new float[_maxBufferSize];
-            _dequeHead = 0;
-            _dequeTail = 0;
-            _dequeSize = 0;
-
-            // Apply preset
             SetPreset(preset);
         }
 
         /// <summary>
-        /// Initialize the effect with audio configuration
+        /// Stores the engine config.
         /// </summary>
-        /// <param name="config">Audio configuration</param>
         public void Initialize(AudioConfig config)
         {
             _config = config;
         }
 
         /// <summary>
-        /// Gets or sets the threshold in dB
+        /// Threshold in dB, -20 to 0.
         /// </summary>
         public float Threshold
         {
-            get => LinearToDb(_threshold);
-            set
-            {
-                float clampedValue = Math.Clamp(value, MIN_THRESHOLD, MAX_THRESHOLD);
-                _threshold = DbToLinear(clampedValue);
-            }
+            get => _linearToDb(_threshold);
+            set => _threshold = _dbToLinear(Math.Clamp(value, MIN_THRESHOLD, MAX_THRESHOLD));
         }
 
         /// <summary>
-        /// Gets or sets the ceiling in dB
+        /// Output ceiling in dB, -2 to 0.
         /// </summary>
         public float Ceiling
         {
-            get => LinearToDb(_ceiling);
-            set
-            {
-                float clampedValue = Math.Clamp(value, MIN_CEILING, MAX_CEILING);
-                _ceiling = DbToLinear(clampedValue);
-            }
+            get => _linearToDb(_ceiling);
+            set => _ceiling = _dbToLinear(Math.Clamp(value, MIN_CEILING, MAX_CEILING));
         }
 
         /// <summary>
-        /// Gets or sets the release time in ms
+        /// Release in ms, 1 to 1000.
         /// </summary>
         public float Release
         {
             get => -1000.0f / MathF.Log(1.0f - _release) / _sampleRate;
-            set
-            {
-                float clampedValue = Math.Clamp(value, MIN_RELEASE, MAX_RELEASE);
-                _release = CalculateReleaseCoeff(clampedValue, _sampleRate);
-            }
+            set => _release = _releaseCoeff(Math.Clamp(value, MIN_RELEASE, MAX_RELEASE), _sampleRate);
         }
 
         /// <summary>
-        /// Gets or sets the look-ahead time in ms
-        /// ZERO-ALLOCATION: Uses pre-allocated buffer, only changes active size
-        /// </summary>
-        /// <summary>
-        /// Gets the sample rate in Hz (set at construction time).
+        /// Sample rate this instance was built for.
         /// </summary>
         public float SampleRate => _sampleRate;
 
+        /// <summary>
+        /// Lookahead in ms, 1 to 20. Only the active length moves, no reallocation,
+        /// but the state gets reset because the window changed.
+        /// </summary>
         public float LookAheadMs
         {
             get => _lookAheadMs;
             set
             {
-                float clampedValue = Math.Clamp(value, MIN_LOOKAHEAD, MAX_LOOKAHEAD);
-                _lookAheadMs = clampedValue;
-                int newLookAheadSamples = (int)(clampedValue * _sampleRate / 1000.0f);
+                _lookAheadMs = Math.Clamp(value, MIN_LOOKAHEAD, MAX_LOOKAHEAD);
+                int newSamples = (int)(_lookAheadMs * _sampleRate / 1000.0f);
 
-                if (newLookAheadSamples != _lookAheadSamples)
+                if (newSamples != _lookAheadSamples)
                 {
-                    _lookAheadSamples = newLookAheadSamples;
-                    _activeBufferSize = newLookAheadSamples;
-
+                    _lookAheadSamples = newSamples;
+                    _activeBufferSize = newSamples;
                     Reset();
                 }
             }
         }
 
         /// <summary>
-        /// Process audio samples with professional limiting
+        /// Delays the signal by the lookahead, then applies the gain the upcoming peaks call for.
         /// </summary>
-        /// <param name="buffer">Audio buffer to process</param>
-        /// <param name="frameCount">Number of frames to process</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
             if (_config == null)
                 throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
 
-            if (!_enabled)
-                return;
+            if (!_enabled) return;
 
             int sampleCount = frameCount * _config.Channels;
 
             for (int i = 0; i < sampleCount; i++)
             {
-                float inputSample = buffer[i];
+                _delayBuffer[_delayIndex] = buffer[i];
+                _envelopeBuffer[_envelopeIndex] = _gainReduction(_peakLevel());
 
-                _delayBuffer[_delayIndex] = inputSample;
-
-                float peakLevel = GetPeakLevel();
-
-                float requiredGain = CalculateGainReduction(peakLevel);
-
-                _envelopeBuffer[_envelopeIndex] = requiredGain;
-
-                float smoothGain = GetSmoothedGain();
-                
+                float smoothGain = _smoothedGain();
                 if (!float.IsFinite(smoothGain))
                 {
                     smoothGain = 1.0f;
@@ -372,54 +278,46 @@ namespace OwnaudioNET.Effects
                     _targetGain = 1.0f;
                 }
 
-                float delayedSample = _delayBuffer[(_delayIndex - _lookAheadSamples + _activeBufferSize) % _activeBufferSize];
-                float processedSample = delayedSample * smoothGain;
-
-                processedSample = ApplyCeiling(processedSample);
-
-                buffer[i] = processedSample;
+                float delayed = _delayBuffer[(_delayIndex - _lookAheadSamples + _activeBufferSize) % _activeBufferSize];
+                buffer[i] = _applyCeiling(delayed * smoothGain);
 
                 _delayIndex = (_delayIndex + 1) % _activeBufferSize;
                 _envelopeIndex = (_envelopeIndex + 1) % _activeBufferSize;
-                
                 _absoluteSampleIndex++;
             }
         }
 
         /// <summary>
-        /// Reset limiter state
-        /// ZERO-ALLOCATION: Only clears active buffer portion
+        /// Empties the active part of the ring and opens the gain back up.
         /// </summary>
         public void Reset()
         {
             Array.Clear(_delayBuffer, 0, _activeBufferSize);
-            
             Array.Fill(_envelopeBuffer, 1.0f, 0, _activeBufferSize);
-            
+
             _currentGain = 1.0f;
             _targetGain = 1.0f;
             _delayIndex = 0;
             _envelopeIndex = 0;
             _absoluteSampleIndex = 0;
-            
+
             _dequeHead = 0;
             _dequeTail = 0;
             _dequeSize = 0;
         }
 
         /// <summary>
-        /// Dispose of resources
+        /// Nothing unmanaged here.
         /// </summary>
         public void Dispose()
         {
-            if (_disposed)
-                return;
+            if (_disposed) return;
 
             _disposed = true;
         }
 
         /// <summary>
-        /// Returns a string representation of this effect
+        /// Short state dump for logs.
         /// </summary>
         public override string ToString()
         {
@@ -427,165 +325,117 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Set limiter parameters using predefined presets
+        /// Loads one of the canned setups.
         /// </summary>
+        /// <param name="preset"></param>
         public void SetPreset(LimiterPreset preset)
         {
             switch (preset)
             {
-                case LimiterPreset.Default:
-                    // Default balanced settings
-                    Threshold = DEFAULT_THRESHOLD;
-                    Ceiling = DEFAULT_CEILING;
-                    Release = DEFAULT_RELEASE;
-                    LookAheadMs = DEFAULT_LOOKAHEAD;
-                    break;
-
                 case LimiterPreset.Mastering:
-                    // Transparent mastering limiting - catches only the peaks
-                    // High threshold for minimal processing, conservative ceiling
-                    Threshold = -1.0f;    // -1 dB - only catches true peaks
-                    Ceiling = -0.1f;      // -0.1 dB - safe digital ceiling
-                    Release = 100f;       // 100ms - smooth, transparent release
-                    LookAheadMs = 8.0f;   // Longer lookahead for transparency
+                    Threshold = -1.0f; Ceiling = -0.1f; Release = 100f; LookAheadMs = 8.0f;
                     break;
 
                 case LimiterPreset.Broadcast:
-                    // Aggressive broadcast limiting for consistent loudness
-                    // Lower threshold for tighter control, fast release to avoid pumping
-                    Threshold = -6.0f;    // -6 dB - catches more of the signal
-                    Ceiling = -0.3f;      // -0.3 dB - extra safety margin for broadcast
-                    Release = 25f;        // 25ms - fast release for consistency
-                    LookAheadMs = 5.0f;   // Standard lookahead
+                    Threshold = -6.0f; Ceiling = -0.3f; Release = 25f; LookAheadMs = 5.0f;
                     break;
 
                 case LimiterPreset.Live:
-                    // Live performance protection - reliable peak limiting
-                    // Balanced settings for real-time protection without artifacts
-                    Threshold = -3.0f;    // -3 dB - good balance of control and transparency
-                    Ceiling = -0.5f;      // -0.5 dB - extra safety for live systems
-                    Release = 50f;        // 50ms - medium release for stability
-                    LookAheadMs = 3.0f;   // Shorter lookahead for live use
+                    Threshold = -3.0f; Ceiling = -0.5f; Release = 50f; LookAheadMs = 3.0f;
                     break;
 
                 case LimiterPreset.DrumBus:
-                    // Drum bus limiting - preserves transient punch
-                    // Higher threshold to preserve drum transients, quick response
-                    Threshold = -2.0f;    // -2 dB - allows drum punch through
-                    Ceiling = -0.1f;      // -0.1 dB - standard ceiling
-                    Release = 15f;        // 15ms - fast release to avoid sustain limiting
-                    LookAheadMs = 2.0f;   // Short lookahead to maintain punch
+                    Threshold = -2.0f; Ceiling = -0.1f; Release = 15f; LookAheadMs = 2.0f;
                     break;
 
                 case LimiterPreset.VocalSafety:
-                    // Vocal safety limiting - gentle peak control for vocals
-                    // High threshold for natural sound, longer release for smoothness
-                    Threshold = -4.0f;    // -4 dB - gentle vocal limiting
-                    Ceiling = -0.2f;      // -0.2 dB - safe ceiling
-                    Release = 200f;       // 200ms - smooth, natural release for vocals
-                    LookAheadMs = 10.0f;  // Longer lookahead for smooth vocal processing
+                    Threshold = -4.0f; Ceiling = -0.2f; Release = 200f; LookAheadMs = 10.0f;
                     break;
 
                 case LimiterPreset.Bass:
-                    // Bass limiting - specialized for low-frequency content
-                    // Prevents bass from causing system overload, controlled release
-                    Threshold = -5.0f;    // -5 dB - controls bass dynamics
-                    Ceiling = -0.1f;      // -0.1 dB - standard ceiling
-                    Release = 150f;       // 150ms - prevents pumping on bass content
-                    LookAheadMs = 6.0f;   // Medium lookahead for bass control
+                    Threshold = -5.0f; Ceiling = -0.1f; Release = 150f; LookAheadMs = 6.0f;
                     break;
 
                 case LimiterPreset.Podcast:
-                    // Podcast/dialog limiting - optimized for speech
-                    // Conservative settings that maintain speech intelligibility
-                    Threshold = -8.0f;    // -8 dB - gentle limiting for speech
-                    Ceiling = -0.5f;      // -0.5 dB - extra safety for dialog
-                    Release = 300f;       // 300ms - slow, smooth release for natural speech
-                    LookAheadMs = 12.0f;  // Longer lookahead for smooth speech processing
+                    Threshold = -8.0f; Ceiling = -0.5f; Release = 300f; LookAheadMs = 12.0f;
                     break;
 
                 case LimiterPreset.Aggressive:
-                    // Aggressive limiting for electronic/dance music
-                    // Heavy limiting for maximum loudness and consistency
-                    Threshold = -10.0f;   // -10 dB - heavy limiting
-                    Ceiling = -0.1f;      // -0.1 dB - standard ceiling
-                    Release = 10f;        // 10ms - very fast release for aggressive sound
-                    LookAheadMs = 3.0f;   // Short lookahead for aggressive response
+                    Threshold = -10.0f; Ceiling = -0.1f; Release = 10f; LookAheadMs = 3.0f;
+                    break;
+
+                default:
+                    Threshold = DEFAULT_THRESHOLD; Ceiling = DEFAULT_CEILING;
+                    Release = DEFAULT_RELEASE; LookAheadMs = DEFAULT_LOOKAHEAD;
                     break;
             }
         }
 
         /// <summary>
-        /// Convert linear amplitude to decibels
+        /// Amplitude to dB.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float LinearToDb(float linear)
+        private static float _linearToDb(float linear)
         {
             return 20.0f * MathF.Log10(Math.Max(linear, 1e-6f));
         }
 
         /// <summary>
-        /// Get peak level from look-ahead buffer using Sliding Window Maximum
-        /// OPTIMIZED: O(1) amortized complexity using monotonic deque (array-based, ZERO-ALLOCATION)
+        /// Biggest absolute value inside the lookahead window, amortized O(1) from the deque.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private float GetPeakLevel()
+        private float _peakLevel()
         {
-            long expireThreshold = _absoluteSampleIndex - _activeBufferSize;
-            
-            while (_dequeSize > 0 && _dequeIndices[_dequeHead] <= expireThreshold)
+            long expire = _absoluteSampleIndex - _activeBufferSize;
+
+            while (_dequeSize > 0 && _dequeIndices[_dequeHead] <= expire)
             {
                 _dequeHead = (_dequeHead + 1) % _maxBufferSize;
                 _dequeSize--;
             }
-            
+
             float currentAbs = Math.Abs(_delayBuffer[_delayIndex]);
-            
+
             while (_dequeSize > 0)
             {
                 int backIdx = (_dequeTail - 1 + _maxBufferSize) % _maxBufferSize;
-                if (_dequeValues[backIdx] >= currentAbs)
-                    break;
-                    
+                if (_dequeValues[backIdx] >= currentAbs) break;
+
                 _dequeTail = backIdx;
                 _dequeSize--;
             }
-            
+
             _dequeIndices[_dequeTail] = _absoluteSampleIndex;
             _dequeValues[_dequeTail] = currentAbs;
             _dequeTail = (_dequeTail + 1) % _maxBufferSize;
             _dequeSize++;
-            
-            return _dequeSize > 0 ? _dequeValues[_dequeHead] : 0.0f;
+
+            return _dequeValues[_dequeHead];
         }
 
         /// <summary>
-        /// Calculate required gain reduction based on peak level
+        /// Gain the given peak needs, never pulls below 10%.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private float CalculateGainReduction(float peakLevel)
+        private float _gainReduction(float peakLevel)
         {
-            if (peakLevel <= _threshold)
-                return 1.0f;
+            if (peakLevel <= _threshold) return 1.0f;
 
             float excess = peakLevel / _threshold;
-            float targetLevel = _threshold / excess;
-
-            return Math.Max(targetLevel / peakLevel, 0.1f); // Minimum 10% gain
+            return Math.Max((_threshold / excess) / peakLevel, 0.1f);
         }
 
         /// <summary>
-        /// Get smoothed gain from envelope buffer with adaptive release
-        /// ZERO-ALLOCATION: Only scans active buffer portion
+        /// Smallest gain in the window, grabbed instantly on the way down and eased back
+        /// on the way up. The release speeds up or slows down with how deep we are.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private float GetSmoothedGain()
+        private float _smoothedGain()
         {
             float minGain = 1.0f;
             for (int i = 0; i < _activeBufferSize; i++)
             {
-                if (_envelopeBuffer[i] < minGain)
-                    minGain = _envelopeBuffer[i];
+                if (_envelopeBuffer[i] < minGain) minGain = _envelopeBuffer[i];
             }
 
             _targetGain = minGain;
@@ -593,68 +443,53 @@ namespace OwnaudioNET.Effects
             if (_targetGain < _currentGain)
             {
                 _currentGain = _targetGain;
+                return _currentGain;
             }
-            else
-            {
-                float gainDiff = 1.0f - _currentGain;
-                float adaptiveRelease = _release;
 
-                if (gainDiff > 0.3f) // >3dB reduction
-                {
-                    adaptiveRelease *= 1.5f; 
-                }
-                else if (gainDiff < 0.1f) // <1dB reduction
-                {
-                    adaptiveRelease *= 0.5f;
-                }
+            float gainDiff = 1.0f - _currentGain;
+            float rel = _release;
 
-                 adaptiveRelease = Math.Clamp(adaptiveRelease, 0.0001f, 0.9999f);
+            if (gainDiff > 0.3f) rel *= 1.5f;
+            else if (gainDiff < 0.1f) rel *= 0.5f;
 
-                _currentGain += (_targetGain - _currentGain) * adaptiveRelease;
-                
-                if (Math.Abs(_targetGain - _currentGain) < 0.0001f)
-                {
-                    _currentGain = _targetGain;
-                }
-            }
+            rel = Math.Clamp(rel, 0.0001f, 0.9999f);
+            _currentGain += (_targetGain - _currentGain) * rel;
+
+            if (Math.Abs(_targetGain - _currentGain) < 0.0001f) _currentGain = _targetGain;
 
             return _currentGain;
         }
 
         /// <summary>
-        /// Apply final ceiling limit
+        /// Hard stop at the ceiling.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private float ApplyCeiling(float sample)
+        private float _applyCeiling(float sample)
         {
-            float abs = Math.Abs(sample);
-            if (abs > _ceiling)
-            {
-                return sample > 0 ? _ceiling : -_ceiling;
-            }
+            if (Math.Abs(sample) > _ceiling) return sample > 0 ? _ceiling : -_ceiling;
             return sample;
         }
 
         /// <summary>
-        /// Convert dB to linear scale
+        /// dB to amplitude.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float DbToLinear(float db)
+        private static float _dbToLinear(float db)
         {
             return MathF.Pow(10.0f, db / 20.0f);
         }
 
         /// <summary>
-        /// Calculate release coefficient from time in ms
+        /// One-pole release coefficient from a time in ms.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float CalculateReleaseCoeff(float timeMs, float sampleRate)
+        private static float _releaseCoeff(float timeMs, float sampleRate)
         {
             return 1.0f - MathF.Exp(-1.0f / (timeMs * sampleRate / 1000.0f));
         }
 
         /// <summary>
-        /// Get current gain reduction in dB for metering
+        /// Current gain reduction in dB, for meters.
         /// </summary>
         public float GetGainReductionDb()
         {
@@ -662,7 +497,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Check if limiter is currently reducing gain
+        /// True while the limiter is pulling the level down.
         /// </summary>
         public bool IsLimiting => _currentGain < 0.99f;
     }

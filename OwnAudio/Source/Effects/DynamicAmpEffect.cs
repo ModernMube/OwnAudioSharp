@@ -6,49 +6,48 @@ using System.Runtime.CompilerServices;
 namespace OwnaudioNET.Effects
 {
     /// <summary>
-    /// Preset configurations for the DynamicAmpEffect.
+    /// DynamicAmp setups from speech to mastering glue.
     /// </summary>
     public enum DynamicAmpPreset
     {
         /// <summary>
-        /// Balanced settings suitable for general use.
+        /// Transparent general purpose AGC.
         /// </summary>
         Default,
-        
+
         /// <summary>
-        /// Quick response optimized for speech clarity with higher noise gate.
+        /// Quick, with a higher gate so room noise stays down.
         /// </summary>
         Speech,
-        
+
         /// <summary>
-        /// Gentle, musical settings that preserve natural dynamics.
+        /// Slow attack, keeps the transients.
         /// </summary>
         Music,
-        
+
         /// <summary>
-        /// Tight control for consistent broadcast levels.
+        /// Tight and consistent, on-air levels.
         /// </summary>
         Broadcast,
-        
+
         /// <summary>
-        /// Subtle, transparent mastering-grade dynamics processing.
+        /// Very slow glue, no audible pumping.
         /// </summary>
         Mastering,
-        
+
         /// <summary>
-        /// Fast response for live performance with feedback prevention.
+        /// Fast for stage monitoring.
         /// </summary>
         Live,
-        
+
         /// <summary>
-        /// Minimal processing maintaining natural dynamics.
+        /// Barely does anything, just catches the drift.
         /// </summary>
         Transparent
     }
 
     /// <summary>
-    /// Professional adaptive volume control with intelligent dynamics processing.
-    /// Uses dual-window RMS detection, smart noise gating, and gain change limiting.
+    /// Block based adaptive level control. RMS detector, gated, with a dB/sec limit on how fast the gain may move.
     /// </summary>
     public sealed class DynamicAmpEffect : IEffectProcessor
     {
@@ -57,146 +56,134 @@ namespace OwnaudioNET.Effects
         private bool _enabled;
         private AudioConfig? _config;
 
-        private float targetRmsLevelDb;
-        private float attackTime;
-        private float releaseTime;
-        private float noiseGateThresholdDb;
-        private float maxGain;
-        private float maxGainReductionDb;
-        private float currentGain = 1.0f;
-        private float sampleRate;
-        private float rmsWindowSeconds;
-        private float maxGainChangePerSecondDb;
-
-        // Dual IIR RMS State (fast for detection, slow for musical tracking)
-        private float _rmsFastState;
-        private float _rmsSlowState;
-        private float _rmsFastCoeff;
-        private float _rmsSlowCoeff;
-
-        // Dynamics State
-        private float _lastDetectLevel;
-        private float _lastGainDb;
-        private bool _isAboveNoiseGate; 
+        private float _targetRmsLevelDb;
+        private float _attackTime;
+        private float _releaseTime;
+        private float _noiseGateThresholdDb;
+        private float _maxGain;
+        private float _maxGainReductionDb;
+        private float _currentGain = 1.0f;
+        private float _sampleRate;
+        private float _rmsWindowSeconds;
+        private float _maxGainChangePerSecondDb;
 
         /// <summary>
-        /// Gets the unique identifier for this effect instance.
+        /// Smoothed mean square of the input, this is what we ride.
+        /// </summary>
+        private float _rmsState;
+
+        private float _lastGainDb;
+
+        /// <summary>
+        /// Gate state, kept between blocks so the hysteresis works.
+        /// </summary>
+        private bool _isAboveNoiseGate;
+
+        /// <summary>
+        /// Instance id.
         /// </summary>
         public Guid Id => _id;
-        
+
         /// <summary>
-        /// Gets the name of this effect instance.
+        /// Effect name.
         /// </summary>
         public string Name => _name;
-        
+
         /// <summary>
-        /// Gets or sets whether this effect is enabled.
+        /// On/off switch.
         /// </summary>
         public bool Enabled
         {
             get => _enabled;
             set => _enabled = value;
         }
-        
+
         /// <summary>
-        /// Gets or sets the wet/dry mix. Always 1.0 for DynamicAmp (no dry signal mixing).
+        /// No dry path here, this stays at 1.0.
         /// </summary>
         public float Mix { get; set; } = 1.0f;
 
         /// <summary>
-        /// Gets or sets the target RMS level in dB (-60.0 to -3.0).
+        /// Level we aim for in dB, -60 to -3.
         /// </summary>
         public float TargetRmsLevelDb
         {
-            get => targetRmsLevelDb;
-            set => ValidateAndSetTargetLevel(value);
+            get => _targetRmsLevelDb;
+            set => _targetRmsLevelDb = Math.Clamp(value, -60.0f, -3.0f);
         }
 
         /// <summary>
-        /// Gets or sets the attack time in seconds (minimum 0.05).
+        /// Attack in seconds, at least 0.05.
         /// </summary>
         public float AttackTime
         {
-            get => attackTime;
-            set => ValidateAndSetAttackTime(value);
+            get => _attackTime;
+            set => _attackTime = Math.Max(0.05f, value);
         }
 
         /// <summary>
-        /// Gets or sets the release time in seconds (minimum 0.2).
+        /// Release in seconds, at least 0.2.
         /// </summary>
         public float ReleaseTime
         {
-            get => releaseTime;
-            set => ValidateAndSetReleaseTime(value);
+            get => _releaseTime;
+            set => _releaseTime = Math.Max(0.2f, value);
         }
 
         /// <summary>
-        /// Gets or sets the noise gate threshold in dB (-80.0 to -30.0).
+        /// Gate threshold in dB, -80 to -30.
         /// </summary>
         public float NoiseGateThresholdDb
         {
-            get => noiseGateThresholdDb;
-            set => ValidateAndSetNoiseGateDb(value);
+            get => _noiseGateThresholdDb;
+            set => _noiseGateThresholdDb = Math.Clamp(value, -80.0f, -30.0f);
         }
 
         /// <summary>
-        /// Gets or sets the maximum gain multiplier (1.0 to 20.0).
+        /// Gain ceiling as a multiplier, 1 - 20.
         /// </summary>
         public float MaxGain
         {
-            get => maxGain;
-            set => ValidateAndSetMaxGain(value);
+            get => _maxGain;
+            set => _maxGain = Math.Clamp(value, 1.0f, 20.0f);
         }
 
         /// <summary>
-        /// Gets or sets the maximum gain reduction in dB (3.0 to 40.0).
+        /// How far down we are allowed to pull, in dB.
         /// </summary>
         public float MaxGainReductionDb
         {
-            get => maxGainReductionDb;
-            set => ValidateAndSetMaxGainReduction(value);
+            get => _maxGainReductionDb;
+            set => _maxGainReductionDb = Math.Clamp(value, 3.0f, 40.0f);
         }
 
         /// <summary>
-        /// Gets or sets the RMS averaging window in seconds. Recalculates IIR coefficients on change.
+        /// RMS averaging window in seconds.
         /// </summary>
         public float RmsWindowSeconds
         {
-            get => rmsWindowSeconds;
-            set
-            {
-                rmsWindowSeconds = Math.Max(0.01f, value);
-                CalculateRmsCoeffs();
-            }
+            get => _rmsWindowSeconds;
+            set => _rmsWindowSeconds = Math.Max(0.01f, value);
         }
 
         /// <summary>
-        /// Gets or sets the maximum gain change rate in dB per second (minimum 1.0).
+        /// Slew limit for the gain, dB per second.
         /// </summary>
         public float MaxGainChangePerSecondDb
         {
-            get => maxGainChangePerSecondDb;
-            set => maxGainChangePerSecondDb = Math.Max(1.0f, value);
+            get => _maxGainChangePerSecondDb;
+            set => _maxGainChangePerSecondDb = Math.Max(1.0f, value);
         }
 
         /// <summary>
-        /// Gets the current gain value (read-only, managed internally).
+        /// Gain we are applying right now.
         /// </summary>
-        public float CurrentGain => currentGain;
+        public float CurrentGain => _currentGain;
 
         /// <summary>
-        /// Initializes a new instance of the DynamicAmpEffect with custom parameters.
+        /// Builds the effect with hand picked values. The noise threshold takes dB, but a
+        /// 0-1 value is accepted too and read as linear, for older callers.
         /// </summary>
-        /// <param name="targetLevel">Target RMS level in dB (default: -12.0).</param>
-        /// <param name="attackTimeSeconds">Attack time in seconds (default: 0.5).</param>
-        /// <param name="releaseTimeSeconds">Release time in seconds (default: 2.0).</param>
-        /// <param name="noiseThresholdDbOrLinear">Noise gate threshold in dB or linear (0-1 for legacy compatibility) (default: -50.0).</param>
-        /// <param name="maxGainValue">Maximum gain multiplier (default: 6.0).</param>
-        /// <param name="sampleRateHz">Sample rate in Hz (default: 44100.0).</param>
-        /// <param name="rmsWindowSeconds">RMS averaging window in seconds (default: 0.5).</param>
-        /// <param name="initialGain">Initial gain value (default: 1.0).</param>
-        /// <param name="maxGainChangePerSecondDb">Maximum gain change rate in dB/second (default: 12.0).</param>
-        /// <param name="maxGainReductionDb">Maximum gain reduction in dB (default: 12.0).</param>
         public DynamicAmpEffect(float targetLevel = -12.0f, float attackTimeSeconds = 0.5f,
                          float releaseTimeSeconds = 2.0f, float noiseThresholdDbOrLinear = -50.0f,
                          float maxGainValue = 6.0f, float sampleRateHz = 44100.0f,
@@ -207,134 +194,65 @@ namespace OwnaudioNET.Effects
             _name = "DynamicAmp";
             _enabled = true;
 
-            ValidateAndSetTargetLevel(targetLevel);
-            ValidateAndSetAttackTime(attackTimeSeconds);
-            ValidateAndSetReleaseTime(releaseTimeSeconds);
+            TargetRmsLevelDb = targetLevel;
+            AttackTime = attackTimeSeconds;
+            ReleaseTime = releaseTimeSeconds;
 
-            float noiseThresholdDb;
             if (noiseThresholdDbOrLinear >= 0.0f && noiseThresholdDbOrLinear <= 1.0f)
-            {
-                noiseThresholdDb = noiseThresholdDbOrLinear < 0.000001f
-                    ? -80.0f
-                    : LinearToDb(noiseThresholdDbOrLinear);
-            }
+                NoiseGateThresholdDb = noiseThresholdDbOrLinear < 0.000001f ? -80.0f : LinearToDb(noiseThresholdDbOrLinear);
             else
-            {
-                noiseThresholdDb = noiseThresholdDbOrLinear;
-            }
+                NoiseGateThresholdDb = noiseThresholdDbOrLinear;
 
-            ValidateAndSetNoiseGateDb(noiseThresholdDb);
-            ValidateAndSetMaxGain(maxGainValue);
-            ValidateAndSetSampleRate(sampleRateHz);
-            ValidateAndSetMaxGainReduction(maxGainReductionDb);
+            MaxGain = maxGainValue;
+            MaxGainReductionDb = maxGainReductionDb;
+            RmsWindowSeconds = rmsWindowSeconds;
+            MaxGainChangePerSecondDb = maxGainChangePerSecondDb;
+            _sampleRate = Math.Max(8000.0f, sampleRateHz);
 
-            this.rmsWindowSeconds = rmsWindowSeconds;
-            this.maxGainChangePerSecondDb = Math.Max(1.0f, maxGainChangePerSecondDb);
-            CalculateRmsCoeffs();
-
-            // Init state
-            this.currentGain = initialGain;
-            _rmsFastState = 0.0f;
-            _rmsSlowState = 0.0f;
-            _lastDetectLevel = 0.0f;
+            _currentGain = initialGain;
+            _rmsState = 0.0f;
             _lastGainDb = LinearToDb(initialGain);
             _isAboveNoiseGate = false;
         }
 
         /// <summary>
-        /// Initializes a new instance of the DynamicAmpEffect using a preset configuration.
+        /// Builds the effect from a preset.
         /// </summary>
-        /// <param name="preset">The preset configuration to use.</param>
-        /// <param name="sampleRateHz">Sample rate in Hz (default: 44100.0).</param>
-        /// <param name="rmsWindowSeconds">RMS averaging window in seconds (default: 0.5).</param>
+        /// <param name="preset"></param>
+        /// <param name="sampleRateHz"></param>
+        /// <param name="rmsWindowSeconds"></param>
         public DynamicAmpEffect(DynamicAmpPreset preset, float sampleRateHz = 44100.0f, float rmsWindowSeconds = 0.5f)
         {
             _id = Guid.NewGuid();
             _name = "DynamicAmp";
             _enabled = true;
 
-            ValidateAndSetSampleRate(sampleRateHz);
-            this.rmsWindowSeconds = rmsWindowSeconds;
-            this.maxGainChangePerSecondDb = 12.0f;
-            CalculateRmsCoeffs();
+            _sampleRate = Math.Max(8000.0f, sampleRateHz);
+            RmsWindowSeconds = rmsWindowSeconds;
+            _maxGainChangePerSecondDb = 12.0f;
             SetPreset(preset);
 
-            // Initialize with reasonable starting values
-            currentGain = 1.0f;
+            _currentGain = 1.0f;
             _lastGainDb = 0.0f;
-            float initRmsLinear = DbToLinear(-20.0f);
-            _rmsFastState = initRmsLinear * initRmsLinear;
-            _rmsSlowState = _rmsFastState;
+
+            float startRms = DbToLinear(-20.0f);
+            _rmsState = startRms * startRms;
             _isAboveNoiseGate = false;
         }
 
         /// <summary>
-        /// Initializes the effect with the specified audio configuration.
+        /// Takes the engine config and the sample rate with it.
         /// </summary>
-        /// <param name="config">The audio configuration.</param>
         public void Initialize(AudioConfig config)
         {
             _config = config;
-            if (config != null && Math.Abs(sampleRate - config.SampleRate) > 1.0f)
-            {
-                sampleRate = config.SampleRate;
-                CalculateRmsCoeffs();
-            }
+            if (config != null && Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
+                _sampleRate = config.SampleRate;
         }
 
         /// <summary>
-        /// Calculates dual-window IIR coefficients for RMS averaging.
-        /// Fast window is 1/10 of main window for quick peak reaction.
+        /// One gain value per block: measure, gate, move the gain, then apply it with a soft ceiling.
         /// </summary>
-        private void CalculateRmsCoeffs()
-        {
-            float fastWindow = Math.Max(0.01f, rmsWindowSeconds * 0.1f);
-            float slowWindow = Math.Max(0.1f, rmsWindowSeconds);
-
-            _rmsFastCoeff = MathF.Exp(-1.0f / (fastWindow * sampleRate));
-            _rmsSlowCoeff = MathF.Exp(-1.0f / (slowWindow * sampleRate));
-        }
-
-        /// <summary>
-        /// Validates and sets the target RMS level in dB (-60.0 to -3.0).
-        /// </summary>
-        private void ValidateAndSetTargetLevel(float levelDb) { targetRmsLevelDb = Math.Clamp(levelDb, -60.0f, -3.0f); }
-        
-        /// <summary>
-        /// Validates and sets the attack time in seconds (minimum 0.05).
-        /// </summary>
-        private void ValidateAndSetAttackTime(float t) { attackTime = Math.Max(0.05f, t); }
-        
-        /// <summary>
-        /// Validates and sets the release time in seconds (minimum 0.2).
-        /// </summary>
-        private void ValidateAndSetReleaseTime(float t) { releaseTime = Math.Max(0.2f, t); }
-        
-        /// <summary>
-        /// Validates and sets the noise gate threshold in dB (-80.0 to -30.0).
-        /// </summary>
-        private void ValidateAndSetNoiseGateDb(float db) { noiseGateThresholdDb = Math.Clamp(db, -80.0f, -30.0f); }
-        
-        /// <summary>
-        /// Validates and sets the maximum gain (1.0 to 20.0).
-        /// </summary>
-        private void ValidateAndSetMaxGain(float g) { maxGain = Math.Clamp(g, 1.0f, 20.0f); }
-        
-        /// <summary>
-        /// Validates and sets the maximum gain reduction in dB (3.0 to 40.0).
-        /// </summary>
-        private void ValidateAndSetMaxGainReduction(float db) { maxGainReductionDb = Math.Clamp(db, 3.0f, 40.0f); }
-        
-        /// <summary>
-        /// Validates and sets the sample rate in Hz (minimum 8000.0).
-        /// </summary>
-        private void ValidateAndSetSampleRate(float r) { sampleRate = Math.Max(8000.0f, r); }
-
-        /// <summary>
-        /// Processes the audio buffer with adaptive dynamics control.
-        /// </summary>
-        /// <param name="buffer">The audio buffer to process.</param>
-        /// <param name="frameCount">The number of frames in the buffer.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
@@ -343,107 +261,74 @@ namespace OwnaudioNET.Effects
             int totalSamples = frameCount * _config.Channels;
             if (totalSamples == 0) return;
 
-            // 1. Calculate block RMS energy
-            float blockSumSq = 0.0f;
+            float sumSq = 0.0f;
             for (int i = 0; i < totalSamples; i++)
             {
                 float s = buffer[i];
-                blockSumSq += s * s;
+                sumSq += s * s;
             }
-            float blockMeanSq = blockSumSq / totalSamples;
 
-            // 2. Update dual RMS detectors with proper time constant adjustment
-            float blockTime = (float)frameCount / sampleRate;
-            float fastAlpha = MathF.Exp(-blockTime / (rmsWindowSeconds * 0.1f));
-            float slowAlpha = MathF.Exp(-blockTime / rmsWindowSeconds);
+            float blockTime = (float)frameCount / _sampleRate;
+            float alphaRms = MathF.Exp(-blockTime / _rmsWindowSeconds);
 
-            _rmsFastState = fastAlpha * _rmsFastState + (1.0f - fastAlpha) * blockMeanSq;
-            _rmsSlowState = slowAlpha * _rmsSlowState + (1.0f - slowAlpha) * blockMeanSq;
+            _rmsState = alphaRms * _rmsState + (1.0f - alphaRms) * (sumSq / totalSamples);
 
-            float rmsFast = MathF.Sqrt(Math.Max(0, _rmsFastState));
-            float rmsSlow = MathF.Sqrt(Math.Max(0, _rmsSlowState));
+            float rms = MathF.Sqrt(Math.Max(0, _rmsState));
+            if (float.IsNaN(rms)) { rms = 0f; _rmsState = 0f; }
 
-            if (float.IsNaN(rmsFast)) { rmsFast = 0f; _rmsFastState = 0f; }
-            if (float.IsNaN(rmsSlow)) { rmsSlow = 0f; _rmsSlowState = 0f; }
-
-            // 3. Intelligent noise gate with hysteresis
-            float noiseGateLinear = DbToLinear(noiseGateThresholdDb);
-            float hysteresisRatio = 1.5f; // 3dB hysteresis
+            float gateLinear = DbToLinear(_noiseGateThresholdDb);
 
             if (!_isAboveNoiseGate)
             {
-                if (rmsSlow > noiseGateLinear * hysteresisRatio)
-                {
-                    _isAboveNoiseGate = true;
-                }
+                if (rms > gateLinear * 1.5f) _isAboveNoiseGate = true;
             }
-            else
+            else if (rms < gateLinear)
             {
-                if (rmsSlow < noiseGateLinear)
-                {
-                    _isAboveNoiseGate = false;
-                }
+                _isAboveNoiseGate = false;
             }
 
-            // 4. Calculate desired gain
-            float desiredGainDb = _lastGainDb; // Hold by default
-
+            float desiredGainDb = _lastGainDb;
             if (_isAboveNoiseGate)
             {
-                float currentLevelDb = LinearToDb(Math.Max(rmsSlow, 1e-6f));
-                float gainErrorDb = targetRmsLevelDb - currentLevelDb;
-
-                gainErrorDb = Math.Clamp(gainErrorDb, -maxGainReductionDb, LinearToDb(maxGain));
-
-                desiredGainDb = gainErrorDb;
+                float levelDb = LinearToDb(Math.Max(rms, 1e-6f));
+                desiredGainDb = Math.Clamp(_targetRmsLevelDb - levelDb, -_maxGainReductionDb, LinearToDb(_maxGain));
             }
 
-            // 5. Apply attack/release with gain change limiting
-            float maxChangeThisBlock = maxGainChangePerSecondDb * blockTime;
-            float gainChangeDb = desiredGainDb - _lastGainDb;
+            float changeDb = desiredGainDb - _lastGainDb;
+            float alpha = MathF.Exp(-blockTime / (changeDb < 0 ? _attackTime : _releaseTime));
+            float maxChange = _maxGainChangePerSecondDb * blockTime;
 
-            float timeConst = (gainChangeDb < 0) ? attackTime : releaseTime;
-            float alpha = MathF.Exp(-blockTime / timeConst);
-            float smoothedChangeDb = (1.0f - alpha) * gainChangeDb;
+            float step = Math.Clamp((1.0f - alpha) * changeDb, -maxChange, maxChange);
+            _currentGain = Math.Clamp(DbToLinear(_lastGainDb + step), 0.1f, _maxGain);
 
-            smoothedChangeDb = Math.Clamp(smoothedChangeDb, -maxChangeThisBlock, maxChangeThisBlock);
-
-            float newGainDb = _lastGainDb + smoothedChangeDb;
-            currentGain = DbToLinear(newGainDb);
-
-            currentGain = Math.Clamp(currentGain, 0.1f, maxGain);
-
-            float finalGain = currentGain;
+            float gain = _currentGain;
             for (int i = 0; i < totalSamples; i++)
             {
-                float val = buffer[i] * finalGain;
-
+                float val = buffer[i] * gain;
                 float absVal = MathF.Abs(val);
+
                 if (absVal > 0.95f)
                 {
                     float excess = absVal - 0.95f;
-                    float limited = 0.95f + excess / (1.0f + excess * 20.0f); // Soft knee
+                    float limited = 0.95f + excess / (1.0f + excess * 20.0f);
                     val = val > 0 ? limited : -limited;
                 }
 
                 buffer[i] = Math.Clamp(val, -1.0f, 1.0f);
             }
 
-            // 7. Update state
-            _lastDetectLevel = rmsSlow;
-            _lastGainDb = LinearToDb(currentGain);
+            _lastGainDb = LinearToDb(_currentGain);
         }
 
         /// <summary>
-        /// Applies a preset configuration to the effect.
+        /// Loads one of the canned setups.
         /// </summary>
-        /// <param name="preset">The preset to apply.</param>
+        /// <param name="preset"></param>
         public void SetPreset(DynamicAmpPreset preset)
         {
             switch (preset)
             {
                 case DynamicAmpPreset.Default:
-                    // -12dBFS target, moderate speed – transparent general-purpose AGC
                     TargetRmsLevelDb = -12.0f;
                     AttackTime = 0.30f;
                     ReleaseTime = 1.50f;
@@ -454,7 +339,6 @@ namespace OwnaudioNET.Effects
                     break;
 
                 case DynamicAmpPreset.Speech:
-                    // -15dBFS, faster response, higher gate – clean intelligibility
                     TargetRmsLevelDb = -15.0f;
                     AttackTime = 0.18f;
                     ReleaseTime = 0.80f;
@@ -465,7 +349,6 @@ namespace OwnaudioNET.Effects
                     break;
 
                 case DynamicAmpPreset.Music:
-                    // -14dBFS, slow attack preserves transients and dynamics
                     TargetRmsLevelDb = -14.0f;
                     AttackTime = 0.80f;
                     ReleaseTime = 2.50f;
@@ -476,18 +359,16 @@ namespace OwnaudioNET.Effects
                     break;
 
                 case DynamicAmpPreset.Broadcast:
-                    // -16dBFS, consistent loudness, limited max gain to avoid pumping
                     TargetRmsLevelDb = -16.0f;
                     AttackTime = 0.28f;
                     ReleaseTime = 1.40f;
                     NoiseGateThresholdDb = -48.0f;
-                    MaxGain = 6.0f;       // Was 10 – too much, caused pumping artifacts
+                    MaxGain = 6.0f;
                     MaxGainReductionDb = 18.0f;
                     MaxGainChangePerSecondDb = 14.0f;
                     break;
 
                 case DynamicAmpPreset.Mastering:
-                    // -10dBFS, very slow – glue without audible pumping
                     TargetRmsLevelDb = -10.0f;
                     AttackTime = 2.00f;
                     ReleaseTime = 5.00f;
@@ -498,10 +379,9 @@ namespace OwnaudioNET.Effects
                     break;
 
                 case DynamicAmpPreset.Live:
-                    // -12dBFS, fast enough for live monitoring, longer release to avoid pumping
                     TargetRmsLevelDb = -12.0f;
                     AttackTime = 0.15f;
-                    ReleaseTime = 0.80f;  // Was 0.6 – too short caused pumping on stage
+                    ReleaseTime = 0.80f;
                     NoiseGateThresholdDb = -42.0f;
                     MaxGain = 5.0f;
                     MaxGainReductionDb = 12.0f;
@@ -509,7 +389,6 @@ namespace OwnaudioNET.Effects
                     break;
 
                 case DynamicAmpPreset.Transparent:
-                    // Very slow, gentle – barely perceptible level management
                     TargetRmsLevelDb = -16.0f;
                     AttackTime = 3.00f;
                     ReleaseTime = 8.00f;
@@ -520,19 +399,15 @@ namespace OwnaudioNET.Effects
                     break;
             }
         }
-        
+
         /// <summary>
-        /// Converts decibels to linear gain.
+        /// dB to amplitude.
         /// </summary>
-        /// <param name="db">Value in decibels.</param>
-        /// <returns>Linear gain value.</returns>
         private static float DbToLinear(float db) => MathF.Pow(10.0f, db / 20.0f);
 
         /// <summary>
-        /// Converts linear gain to decibels.
+        /// Amplitude to dB, floored at -120.
         /// </summary>
-        /// <param name="linear">Linear gain value.</param>
-        /// <returns>Value in decibels.</returns>
         private static float LinearToDb(float linear)
         {
             if (linear <= 1e-6f) return -120.0f;
@@ -540,29 +415,26 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Resets the effect state to initial values.
+        /// Back to unity gain with a closed gate.
         /// </summary>
         public void Reset()
         {
-            currentGain = 1.0f;
-            _rmsFastState = 0.0f;
-            _rmsSlowState = 0.0f;
-            _lastDetectLevel = 0.0f;
+            _currentGain = 1.0f;
+            _rmsState = 0.0f;
             _lastGainDb = 0.0f;
             _isAboveNoiseGate = false;
         }
 
         /// <summary>
-        /// Disposes the effect and releases resources.
+        /// Nothing to release.
         /// </summary>
         public void Dispose()
         {
         }
-        
+
         /// <summary>
-        /// Returns a string representation of the effect's current state.
+        /// Short state dump for logs.
         /// </summary>
-        /// <returns>A string describing the effect state.</returns>
         public override string ToString() => $"{_name} (ID: {_id}, Enabled: {_enabled})";
     }
 }

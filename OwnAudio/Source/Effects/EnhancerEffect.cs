@@ -6,80 +6,71 @@ using OwnaudioNET.Interfaces;
 namespace OwnaudioNET.Effects
 {
     /// <summary>
-    /// Preset configurations for the enhancer effect
+    /// Enhancer setups per source type.
     /// </summary>
     public enum EnhancerPreset
     {
         /// <summary>
-        /// Default preset with balanced settings for general use
+        /// Balanced, works on most material.
         /// </summary>
         Default,
 
         /// <summary>
-        /// Subtle enhancement for vocals - adds gentle presence without harshness
-        /// Uses moderate gain (2.0x) and higher cutoff (5kHz) to enhance vocal clarity
-        /// Low mix (15%) maintains naturalness while adding definition
+        /// Air above 4.5k, no harshness.
         /// </summary>
         VocalClarity,
 
         /// <summary>
-        /// Aggressive enhancement for rock/metal music - adds bite and edge
-        /// Higher gain (4.0x) and lower cutoff (3kHz) for more pronounced effect
-        /// Moderate mix (25%) provides noticeable enhancement without overpowering
+        /// Upper mid bite for guitars.
         /// </summary>
         RockEdge,
 
         /// <summary>
-        /// Clean enhancement for acoustic instruments - preserves natural tone
-        /// Moderate gain (2.5x) with high cutoff (6kHz) for gentle sparkle
-        /// Very low mix (10%) maintains instrument authenticity
+        /// Barely there sparkle, keeps the instrument natural.
         /// </summary>
         AcousticSparkle,
 
         /// <summary>
-        /// Heavy enhancement for dense mixes - cuts through busy arrangements
-        /// High gain (3.5x) with moderate cutoff (4kHz) for presence boost
-        /// Higher mix (30%) ensures audibility in complex arrangements
+        /// Presence push so the track cuts through a busy mix.
         /// </summary>
         MixCutter,
 
         /// <summary>
-        /// Broadcast-ready enhancement - professional radio/podcast processing
-        /// Balanced gain (3.0x) with speech-optimized cutoff (4.5kHz)
-        /// Moderate mix (20%) provides clarity without fatigue
+        /// Speech clarity without listening fatigue.
         /// </summary>
         Broadcast
     }
 
     /// <summary>
-    /// Enhancer effect
+    /// Exciter: takes the high band out with a one pole HP, saturates it and adds it back on top.
     /// </summary>
     public sealed class EnhancerEffect : IEffectProcessor
     {
-        // IEffectProcessor implementation
         private Guid _id;
         private string _name;
         private bool _enabled;
         private bool _disposed;
-
-        // Audio configuration
         private AudioConfig? _config;
 
         private float _mix;
         private float _gain;
         private float _cutFreq;
         private float _sampleRate;
+
+        /// <summary>
+        /// HP filter coefficient, rebuilt from cutoff and rate.
+        /// </summary>
         private float _alpha;
         private float _xPrev;
         private float _yPrev;
 
         /// <summary>
-        /// Gets the unique identifier for this effect.
+        /// Instance id.
         /// </summary>
         public Guid Id => _id;
 
         /// <summary>
-        /// Gets or sets the name of the effect.
+        /// Effect name.
         /// </summary>
         public string Name
         {
@@ -88,7 +79,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Gets or sets whether the effect is enabled.
+        /// On/off switch.
         /// </summary>
         public bool Enabled
         {
@@ -97,7 +88,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Gets or sets the mix amount (0-1). Controls the amount of processed signal blended with the original.
+        /// How much of the excited band we add on top, 0 - 1.
         /// </summary>
         public float Mix
         {
@@ -106,7 +97,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Gets or sets the gain amount (0.1-10). Pre-saturation amplification.
+        /// Pre saturation gain, 0.1 - 10.
         /// </summary>
         public float Gain
         {
@@ -115,7 +106,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Gets or sets the cutoff frequency (100-20000 Hz). High-pass filter cutoff frequency.
+        /// High-pass corner, everything above this gets excited.
         /// </summary>
         public float CutoffFrequency
         {
@@ -123,12 +114,12 @@ namespace OwnaudioNET.Effects
             set
             {
                 _cutFreq = Math.Clamp(value, 100.0f, 20000.0f);
-                UpdateFilterCoefficient();
+                _updateAlpha();
             }
         }
 
         /// <summary>
-        /// Gets or sets the sample rate (8000-192000 Hz). Audio system sample rate.
+        /// Working sample rate.
         /// </summary>
         public float SampleRate
         {
@@ -136,17 +127,13 @@ namespace OwnaudioNET.Effects
             set
             {
                 _sampleRate = Math.Clamp(value, 8000.0f, 192000.0f);
-                UpdateFilterCoefficient();
+                _updateAlpha();
             }
         }
 
         /// <summary>
-        /// Constructor with all parameters
+        /// Builds the effect. Cutoff is usually 2-6k, gain 2-4x.
         /// </summary>
-        /// <param name="mix">mix(0-1) : Controls the amount of processed signal blended with the original</param>
-        /// <param name="cutFreq">cutoffFrequency: High-pass filter cutoff(typical 2-6kHz)</param>
-        /// <param name="gain">gain: Pre-saturation amplification(typically 2-4x)</param>
-        /// <param name="sampleRate">sampleRate: Audio system sample rate(typically 44.1kHz)</param>
         public EnhancerEffect(float mix = 0.2f, float cutFreq = 4000f, float gain = 2.5f, float sampleRate = 44100f)
         {
             _id = Guid.NewGuid();
@@ -161,10 +148,10 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Constructor with preset selection
+        /// Builds the effect from a preset.
         /// </summary>
-        /// <param name="preset">Preset configuration to apply</param>
-        /// <param name="sampleRate">sampleRate: Audio system sample rate(typically 44.1kHz)</param>
+        /// <param name="preset"></param>
+        /// <param name="sampleRate"></param>
         public EnhancerEffect(EnhancerPreset preset, float sampleRate = 44100f)
         {
             _id = Guid.NewGuid();
@@ -177,7 +164,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Initializes the effect with the specified audio configuration.
+        /// Stores the engine config.
         /// </summary>
         public void Initialize(AudioConfig config)
         {
@@ -185,35 +172,27 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Updates the filter coefficient based on current cutoff frequency and sample rate
+        /// RC/(RC+dt) with RC = 1/(2pi*fc).
         /// </summary>
-        private void UpdateFilterCoefficient()
+        private void _updateAlpha()
         {
-            if (_cutFreq > 0 && _sampleRate > 0)
+            if(_cutFreq > 0 && _sampleRate > 0)
             {
-                // alpha = RC / (RC + dt)  where RC = 1/(2π·fc), dt = 1/fs
                 float rc = 1f / (2f * MathF.PI * _cutFreq);
-                float dt = 1f / _sampleRate;
-                _alpha = rc / (rc + dt);
+                _alpha = rc / (rc + 1f / _sampleRate);
             }
         }
 
         /// <summary>
-        /// Enhancer process
+        /// Filters, saturates and adds the high band back sample by sample.
         /// </summary>
-        /// <param name="buffer">Input samples</param>
-        /// <param name="frameCount">The number of frames in the buffer.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
             if (_config == null)
                 throw new InvalidOperationException("Effect not initialized. Call Initialize() first.");
 
-            if (!_enabled)
-                return;
-
-            if (_mix < 0.001f)
-                return;
+            if (!_enabled || _mix < 0.001f) return;
 
             int sampleCount = frameCount * _config.Channels;
 
@@ -221,61 +200,47 @@ namespace OwnaudioNET.Effects
             {
                 float original = buffer[i];
 
-                float highFreq = _alpha * (_yPrev + original - _xPrev);
+                float high = _alpha * (_yPrev + original - _xPrev);
                 _xPrev = original;
-                _yPrev = highFreq;
+                _yPrev = high;
 
-                float processed = highFreq * _gain;
-                processed = MathF.Tanh(processed * 0.5f) * 2f; // Gentle saturation
-
-                buffer[i] = original + processed * _mix;
+                buffer[i] = original + MathF.Tanh(high * _gain * 0.5f) * 2f * _mix;
             }
         }
 
         /// <summary>
-        /// Apply a preset configuration optimized for specific use cases
+        /// Loads one of the canned setups.
         /// </summary>
-        /// <param name="preset">The preset configuration to apply</param>
+        /// <param name="preset"></param>
         public void SetPreset(EnhancerPreset preset)
         {
             switch (preset)
             {
-                case EnhancerPreset.Default:
-                    Mix = 0.15f;
-                    CutoffFrequency = 3500f;
-                    Gain = 1.8f;
-                    break;
-
                 case EnhancerPreset.VocalClarity:
-                    // Gentle presence boost above 4.5kHz – adds air without harshness
                     Mix = 0.12f;
                     CutoffFrequency = 4500f;
                     Gain = 1.8f;
                     break;
 
                 case EnhancerPreset.RockEdge:
-                    // Bite and upper-midrange saturation for guitars/full mix
                     Mix = 0.22f;
                     CutoffFrequency = 2800f;
                     Gain = 2.8f;
                     break;
 
                 case EnhancerPreset.AcousticSparkle:
-                    // Very subtle air enhancement above 5.5kHz – natural sparkle
                     Mix = 0.08f;
                     CutoffFrequency = 5500f;
                     Gain = 1.5f;
                     break;
 
                 case EnhancerPreset.MixCutter:
-                    // Presence and definition boost for cutting through dense arrangements
                     Mix = 0.25f;
                     CutoffFrequency = 3200f;
                     Gain = 2.8f;
                     break;
 
                 case EnhancerPreset.Broadcast:
-                    // Speech intelligibility enhancement – clarity without listening fatigue
                     Mix = 0.18f;
                     CutoffFrequency = 4000f;
                     Gain = 2.2f;
@@ -290,8 +255,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Resets the enhancer's internal filter state by clearing previous sample values.
-        /// Does not modify any settings or parameters.
+        /// Clears the filter memory, leaves the settings alone.
         /// </summary>
         public void Reset()
         {
@@ -300,20 +264,18 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Disposes the enhancer effect and releases resources.
+        /// Nothing unmanaged here.
         /// </summary>
         public void Dispose()
         {
-            if (_disposed)
-                return;
+            if (_disposed) return;
 
             Reset();
-
             _disposed = true;
         }
 
         /// <summary>
-        /// Returns a string representation of the effect's state.
+        /// Short state dump for logs.
         /// </summary>
         public override string ToString()
         {

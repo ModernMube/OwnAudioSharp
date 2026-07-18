@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.CompilerServices;
 using Ownaudio.Core;
 using OwnaudioNET.Interfaces;
@@ -6,58 +6,58 @@ using OwnaudioNET.Interfaces;
 namespace OwnaudioNET.Effects
 {
     /// <summary>
-    /// Preset configurations for the DelayEffect.
+    /// Delay setups from slapback to dub.
     /// </summary>
     public enum DelayPreset
     {
         /// <summary>
-        /// Balanced delay suitable for general use.
+        /// Dotted 8th around 120 BPM, musical everywhere.
         /// </summary>
         Default,
-        
+
         /// <summary>
-        /// Short delay (80ms) for slapback echo effect.
+        /// 85ms rockabilly slap.
         /// </summary>
         SlapBack,
-        
+
         /// <summary>
-        /// Classic echo with moderate delay and feedback.
+        /// Quarter note echo, clearly audible repeats.
         /// </summary>
         ClassicEcho,
-        
+
         /// <summary>
-        /// Long delay with high feedback for ambient soundscapes.
+        /// Long and dense, almost reverb.
         /// </summary>
         Ambient,
-        
+
         /// <summary>
-        /// Rhythmic delay synchronized to musical timing.
+        /// 8th note, groove locked.
         /// </summary>
         Rhythmic,
-        
+
         /// <summary>
-        /// Ping-pong delay bouncing between left and right channels.
+        /// Repeats bounce between the two sides.
         /// </summary>
         PingPong,
-        
+
         /// <summary>
-        /// Warm tape echo emulation with high damping.
+        /// Warm tape flavour, darker repeats.
         /// </summary>
         TapeEcho,
-        
+
         /// <summary>
-        /// Dub-style delay with long time and high feedback.
+        /// Long and high feedback, close to self oscillation.
         /// </summary>
         Dub,
-        
+
         /// <summary>
-        /// Very short delay for thickening/doubling effect.
+        /// ADT style doubling, you don't hear it as an echo.
         /// </summary>
         Thickening
     }
 
     /// <summary>
-    /// Professional stereo delay effect with ping-pong capability and damping control.
+    /// Stereo delay with damped feedback and optional ping-pong. Stereo only.
     /// </summary>
     public sealed class DelayEffect : IEffectProcessor
     {
@@ -69,6 +69,10 @@ namespace OwnaudioNET.Effects
         private float[]? _delayBufferL;
         private float[]? _delayBufferR;
         private int _writeIndex;
+
+        /// <summary>
+        /// One-pole damping filter state per side.
+        /// </summary>
         private float _lastOutputL;
         private float _lastOutputR;
         private float _sampleRate;
@@ -82,31 +86,31 @@ namespace OwnaudioNET.Effects
         private float _delaySamples;
 
         /// <summary>
-        /// Gets the unique identifier for this effect instance.
+        /// Instance id.
         /// </summary>
         public Guid Id => _id;
 
         /// <summary>
-        /// Gets or sets the name of this effect instance.
+        /// Effect name.
         /// </summary>
         public string Name { get => _name; set => _name = value ?? "Delay"; }
 
         /// <summary>
-        /// Gets or sets whether this effect is enabled.
+        /// On/off switch.
         /// </summary>
         public bool Enabled { get => _enabled; set => _enabled = value; }
 
         /// <summary>
-        /// Gets or sets the delay time in milliseconds (1 to 5000ms).
+        /// Delay time in ms, 1 - 5000.
         /// </summary>
         public int Time
         {
             get => _timeMs;
-            set { _timeMs = Math.Clamp(value, 1, 5000); UpdateDelaySamples(); }
+            set { _timeMs = Math.Clamp(value, 1, 5000); _updateDelaySamples(); }
         }
 
         /// <summary>
-        /// Gets or sets the feedback/repeat amount (0.0 to 1.0).
+        /// Feedback amount, 0 - 1.
         /// </summary>
         public float Repeat
         {
@@ -115,7 +119,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Gets or sets the wet/dry mix (0.0 = dry, 1.0 = wet).
+        /// Dry to wet balance.
         /// </summary>
         public float Mix
         {
@@ -124,8 +128,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Gets or sets the damping amount for feedback low-pass filtering (0.0 to 1.0).
-        /// Higher values create darker, warmer repeats.
+        /// Low-pass in the feedback path, higher = darker repeats.
         /// </summary>
         public float Damping
         {
@@ -134,7 +137,7 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Gets or sets whether ping-pong mode is enabled (feedback crosses channels).
+        /// Cross feeds the sides so the repeats bounce.
         /// </summary>
         public bool PingPong
         {
@@ -143,67 +146,63 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Gets or sets the sample rate and reinitializes buffers if changed.
+        /// Working sample rate, setting it reallocates the delay lines.
         /// </summary>
         public int SampleRate
         {
             get => (int)_sampleRate;
-            set { _sampleRate = Math.Clamp(value, 8000, 192000); UpdateDelaySamples(); InitializeBuffer(); }
+            set { _sampleRate = Math.Clamp(value, 8000, 192000); _updateDelaySamples(); _initBuffer(); }
         }
 
         /// <summary>
-        /// Initializes a new instance of the DelayEffect with custom parameters.
+        /// Builds the delay with hand picked values.
         /// </summary>
-        /// <param name="time">Delay time in milliseconds (default: 375).</param>
-        /// <param name="repeat">Feedback amount (default: 0.35).</param>
-        /// <param name="mix">Wet/dry mix (default: 0.3).</param>
-        /// <param name="damping">Damping amount (default: 0.25).</param>
-        /// <param name="sampleRate">Sample rate (default: 44100).</param>
-        /// <param name="pingPong">Enable ping-pong mode (default: false).</param>
+        /// <param name="repeat">Feedback amount.</param>
+        /// <param name="damping">How dark the repeats get.</param>
         public DelayEffect(int time = 375, float repeat = 0.35f, float mix = 0.3f, float damping = 0.25f, int sampleRate = 44100, bool pingPong = false)
         {
             _id = Guid.NewGuid();
             _name = "Delay";
             _enabled = true;
-            
+
             _sampleRate = sampleRate;
             _timeMs = time;
             _repeat = repeat;
             _mix = mix;
             _damping = damping;
             _pingPong = pingPong;
-            
-            UpdateDelaySamples();
-            InitializeBuffer();
+
+            _updateDelaySamples();
+            _initBuffer();
         }
 
         /// <summary>
-        /// Initializes a new instance of the DelayEffect using a preset configuration.
+        /// Builds the delay from a preset.
         /// </summary>
-        /// <param name="preset">The preset configuration to use.</param>
+        /// <param name="preset"></param>
         public DelayEffect(DelayPreset preset) : this()
         {
             SetPreset(preset);
         }
 
         /// <summary>
-        /// Updates the delay time in samples based on current time and sample rate.
+        /// ms to samples.
         /// </summary>
-        private void UpdateDelaySamples()
+        private void _updateDelaySamples()
         {
             _delaySamples = (_timeMs / 1000.0f) * _sampleRate;
         }
 
         /// <summary>
-        /// Initializes or clears the delay buffers.
+        /// Allocates the 5s delay lines, or just wipes them if the size already fits.
         /// </summary>
-        private void InitializeBuffer()
-        {          
-            int needed = (int)(5.0f * _sampleRate); // Max 5s capacity
-            if (_delayBufferL == null || _delayBufferL.Length != needed)
+        private void _initBuffer()
+        {
+            int _needed = (int)(5.0f * _sampleRate);
+            if (_delayBufferL == null || _delayBufferL.Length != _needed)
             {
-                _delayBufferL = new float[needed];
-                _delayBufferR = new float[needed];
+                _delayBufferL = new float[_needed];
+                _delayBufferR = new float[_needed];
             }
             else
             {
@@ -216,136 +215,107 @@ namespace OwnaudioNET.Effects
             _lastOutputL = 0.0f;
             _lastOutputR = 0.0f;
         }
-        
+
         /// <summary>
-        /// Initializes the effect with the specified audio configuration.
+        /// Takes the engine config, rebuilds the lines on a rate change.
         /// </summary>
-        /// <param name="config">The audio configuration.</param>
-        /// <exception cref="ArgumentNullException">Thrown when config is null.</exception>
         public void Initialize(AudioConfig config)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
             if (Math.Abs(_sampleRate - config.SampleRate) > 1.0f)
-            {
                 SampleRate = config.SampleRate;
-            }
         }
 
         /// <summary>
-        /// Processes the audio buffer with delay effect.
+        /// Reads back the delayed signal with interpolation, damps the feedback and mixes it in.
         /// </summary>
-        /// <param name="buffer">The interleaved stereo audio buffer to process.</param>
-        /// <param name="frameCount">The number of frames in the buffer.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
             if (_config == null || !_enabled || _mix < 0.001f || _delayBufferL == null || _delayBufferR == null) return;
+            if (_config.Channels != 2) return;
 
-            int channels = _config.Channels;
-            if (channels != 2) return; // Only stereo supported
-            
             int bufLen = _delayBufferL.Length;
-            
+
             float rep = _repeat;
             float mx = _mix;
             float damp = _damping;
             float ds = _delaySamples;
             bool pp = _pingPong;
-            
+
             float lastL = _lastOutputL;
             float lastR = _lastOutputR;
-            
+
             for (int frame = 0; frame < frameCount; frame++)
             {
                 int idxL = frame * 2;
-                int idxR = frame * 2 + 1;
-                
+                int idxR = idxL + 1;
+
                 float inputL = buffer[idxL];
                 float inputR = buffer[idxR];
-                
-                // Calculate read position with interpolation
+
                 float readPos = _writeIndex - ds;
                 if (readPos < 0) readPos += bufLen;
-                
+
                 int readIdxA = (int)readPos;
                 int readIdxB = readIdxA + 1;
                 if (readIdxB >= bufLen) readIdxB = 0;
-                
+
                 float frac = readPos - readIdxA;
-                
-                // Read delayed samples with linear interpolation
+
                 float delayedL = _delayBufferL[readIdxA] + frac * (_delayBufferL[readIdxB] - _delayBufferL[readIdxA]);
                 float delayedR = _delayBufferR[readIdxA] + frac * (_delayBufferR[readIdxB] - _delayBufferR[readIdxA]);
-                
-                // Apply damping (one-pole low-pass filter)
-                float dampedL = lastL + damp * (delayedL - lastL);
-                float dampedR = lastR + damp * (delayedR - lastR);
-                lastL = dampedL;
-                lastR = dampedR;
-                
-                // Calculate feedback
-                float feedbackL = dampedL * rep;
-                float feedbackR = dampedR * rep;
-                
-                // Hard limit feedback to prevent runaway
-                feedbackL = Math.Clamp(feedbackL, -1.0f, 1.0f);
-                feedbackR = Math.Clamp(feedbackR, -1.0f, 1.0f);
-                
-                // Write to buffers (with ping-pong cross-feeding if enabled)
+
+                lastL += damp * (delayedL - lastL);
+                lastR += damp * (delayedR - lastR);
+
+                float fbL = Math.Clamp(lastL * rep, -1.0f, 1.0f);
+                float fbR = Math.Clamp(lastR * rep, -1.0f, 1.0f);
+
                 if (pp)
                 {
-                    _delayBufferL[_writeIndex] = inputL + feedbackR; // Right feedback to left
-                    _delayBufferR[_writeIndex] = inputR + feedbackL; // Left feedback to right
+                    _delayBufferL[_writeIndex] = inputL + fbR;
+                    _delayBufferR[_writeIndex] = inputR + fbL;
                 }
                 else
                 {
-                    _delayBufferL[_writeIndex] = inputL + feedbackL;
-                    _delayBufferR[_writeIndex] = inputR + feedbackR;
+                    _delayBufferL[_writeIndex] = inputL + fbL;
+                    _delayBufferR[_writeIndex] = inputR + fbR;
                 }
-                
-                // Mix dry and wet signals
-                buffer[idxL] = inputL * (1.0f - mx) + dampedL * mx;
-                buffer[idxR] = inputR * (1.0f - mx) + dampedR * mx;
-                
+
+                buffer[idxL] = inputL * (1.0f - mx) + lastL * mx;
+                buffer[idxR] = inputR * (1.0f - mx) + lastR * mx;
+
                 _writeIndex++;
                 if (_writeIndex >= bufLen) _writeIndex = 0;
             }
-            
+
             _lastOutputL = lastL;
             _lastOutputR = lastR;
         }
-        
+
         /// <summary>
-        /// Applies a preset configuration to the effect.
+        /// Loads one of the canned setups.
         /// </summary>
-        /// <param name="preset">The preset to apply.</param>
+        /// <param name="preset"></param>
         public void SetPreset(DelayPreset preset)
         {
             switch (preset)
             {
-                // Default: dotted-8th at ~120 BPM – universally musical
                 case DelayPreset.Default:     Time=375; Repeat=0.35f; Mix=0.28f; Damping=0.20f; PingPong=false; break;
-                // Slapback: vintage rockabilly/country tape feel
                 case DelayPreset.SlapBack:    Time=85;  Repeat=0.12f; Mix=0.22f; Damping=0.08f; PingPong=false; break;
-                // ClassicEcho: quarter-note echo at 120 BPM – distinct from Default
                 case DelayPreset.ClassicEcho: Time=500; Repeat=0.42f; Mix=0.32f; Damping=0.22f; PingPong=false; break;
-                // Ambient: long, dense, reverb-like echo for soundscapes
                 case DelayPreset.Ambient:     Time=680; Repeat=0.60f; Mix=0.50f; Damping=0.35f; PingPong=false; break;
-                // Rhythmic: 8th-note at 120 BPM – tight, groove-locked
                 case DelayPreset.Rhythmic:    Time=250; Repeat=0.40f; Mix=0.33f; Damping=0.18f; PingPong=false; break;
-                // PingPong: dotted-8th bouncing stereo – wide, immersive
                 case DelayPreset.PingPong:    Time=320; Repeat=0.48f; Mix=0.42f; Damping=0.12f; PingPong=true;  break;
-                // TapeEcho: warm but not too dark – EMT 50 character
                 case DelayPreset.TapeEcho:    Time=420; Repeat=0.52f; Mix=0.38f; Damping=0.42f; PingPong=false; break;
-                // Dub: long high-feedback echo – self-oscillation territory
                 case DelayPreset.Dub:         Time=520; Repeat=0.72f; Mix=0.52f; Damping=0.40f; PingPong=false; break;
-                // Thickening: ADT-style double-tracking, imperceptible delay
                 case DelayPreset.Thickening:  Time=18;  Repeat=0.04f; Mix=0.18f; Damping=0.03f; PingPong=false; break;
             }
         }
 
         /// <summary>
-        /// Resets the effect state to initial values.
+        /// Empties the lines and the filter state.
         /// </summary>
         public void Reset()
         {
@@ -357,16 +327,15 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Disposes the effect and releases resources.
+        /// Nothing to release.
         /// </summary>
         public void Dispose()
         {
         }
 
         /// <summary>
-        /// Returns a string representation of the effect's current state.
+        /// Short state dump for logs.
         /// </summary>
-        /// <returns>A string describing the effect state.</returns>
         public override string ToString()
         {
             return $"Delay: Time={_timeMs}ms, Repeats={_repeat:F2}, PingPong={_pingPong}, Enabled={_enabled}";
