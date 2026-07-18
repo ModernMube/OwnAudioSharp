@@ -5,20 +5,13 @@ namespace OwnaudioNET.Mixing;
 public sealed partial class AudioMixer
 {
     /// <summary>
-    /// Adds a master effect to the end of the processing chain.
-    /// Effects are processed in insertion order during each mix cycle.
-    /// The effect must report <see cref="IEffectProcessor.IsReady"/> before it can be added;
-    /// for VST3 plug-ins this means <c>VST3PluginHost.InitializeAudioAsync()</c> must have completed.
+    /// Appends a master effect to the chain. VST3 needs InitializeAudioAsync done first,
+    /// otherwise IsReady is false and we bail.
     /// </summary>
-    /// <param name="effect">The effect processor to add.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="effect"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when the effect is not yet ready for audio processing.
-    /// </exception>
-    /// <exception cref="ObjectDisposedException">Thrown if the mixer has been disposed.</exception>
+    /// <param name="effect"></param>
     public void AddMasterEffect(IEffectProcessor effect)
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
         if (effect == null)
             throw new ArgumentNullException(nameof(effect));
@@ -34,73 +27,48 @@ public sealed partial class AudioMixer
             _masterEffects.Add(effect);
         }
 
-        // In the Rust-native chain the managed effect's DSP is inert (no MixThread); route it onto
-        // the native master bus so it actually processes the mix.
+        //The managed DSP is inert without a MixThread, so route it onto the native master bus
         AttachMasterEffectToRust(effect);
     }
 
     /// <summary>
-    /// Removes the specified master effect from the processing chain.
-    /// The paired native master effect is detached from the Rust master bus after removal,
-    /// so the audio thread stops processing the effect promptly.
+    /// Drops a master effect and its native twin off the bus.
     /// </summary>
-    /// <param name="effect">The effect processor to remove.</param>
-    /// <returns>
-    /// <see langword="true"/> if the effect was found and removed;
-    /// <see langword="false"/> if it was not in the chain.
-    /// </returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="effect"/> is null.</exception>
-    /// <exception cref="ObjectDisposedException">Thrown if the mixer has been disposed.</exception>
+    /// <param name="effect"></param>
+    /// <returns></returns>
     public bool RemoveMasterEffect(IEffectProcessor effect)
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
         if (effect == null)
             throw new ArgumentNullException(nameof(effect));
 
-        bool removed;
-        lock (_effectsLock)
-        {
-            removed = _masterEffects.Remove(effect);
-        }
+        bool _removed;
+        lock (_effectsLock) { _removed = _masterEffects.Remove(effect); }
 
-        if (removed)
-        {
-            DetachMasterEffectFromRust(effect);
-        }
+        if (_removed) DetachMasterEffectFromRust(effect);
 
-        return removed;
+        return _removed;
     }
 
     /// <summary>
-    /// Removes all effects from the master processing chain.
-    /// Every paired native master effect is removed from the Rust master bus after clearing,
-    /// so the audio thread stops processing them promptly.
+    /// Wipes the whole master chain, native side included.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown if the mixer has been disposed.</exception>
     public void ClearMasterEffects()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
-        lock (_effectsLock)
-        {
-            _masterEffects.Clear();
-        }
+        lock (_effectsLock) { _masterEffects.Clear(); }
 
         ClearRustMasterEffects();
     }
 
     /// <summary>
-    /// Returns a point-in-time snapshot array of all currently registered master effects.
-    /// Each call allocates a new array under the effects lock; do not call from the real-time audio thread.
+    /// Snapshot of the registered master effects. Allocates, so keep it off the audio thread.
     /// </summary>
-    /// <returns>A new array containing the registered <see cref="IEffectProcessor"/> instances in order.</returns>
+    /// <returns></returns>
     public IEffectProcessor[] GetMasterEffects()
     {
-        lock (_effectsLock)
-        {
-            return _masterEffects.ToArray();
-        }
+        lock (_effectsLock) return _masterEffects.ToArray();
     }
-
 }

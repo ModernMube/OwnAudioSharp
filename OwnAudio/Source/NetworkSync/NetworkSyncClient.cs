@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using OwnaudioNET.Synchronization;
@@ -7,8 +6,8 @@ using OwnaudioNET.Synchronization;
 namespace OwnaudioNET.NetworkSync;
 
 /// <summary>
-/// Network synchronization client with automatic fallback and latency compensation.
-/// Receives commands from server and synchronizes local MasterClock.
+/// Client side of the sync. Listens for the server's commands, tracks latency and
+/// drives the local MasterClock. Falls back to local control when the link drops.
 /// </summary>
 public sealed class NetworkSyncClient : IDisposable
 {
@@ -19,66 +18,62 @@ public sealed class NetworkSyncClient : IDisposable
     private readonly bool _allowOfflinePlayback;
     private readonly ArrayPool<byte> _bufferPool = ArrayPool<byte>.Shared;
 
-    // Network
     private UdpClient? _udpClient;
     private Thread? _receiveThread;
     private Thread? _pingThread;
     private volatile bool _isRunning;
     private bool _disposed;
 
-    // Connection state
     private volatile NetworkSyncProtocol.ConnectionState _connectionState = NetworkSyncProtocol.ConnectionState.Disconnected;
     private DateTime _lastServerMessageTime = DateTime.MinValue;
     private IPEndPoint? _serverEndpoint;
 
-    // Latency measurement
     private double _averageLatency = 0.0;
-    private readonly Queue<double> _latencyHistory = new(100);
-    private readonly object _latencyLock = new();
+    private readonly Queue<double> _latencyHistory = new Queue<double>(100);
+    private readonly object _latencyLock = new object();
     private int _pingSequence = 0;
 
-    // Reconnection
     private int _reconnectAttempts = 0;
     private const int MaxReconnectAttempts = 10;
     private const int ReconnectBaseDelayMs = 1000;
 
     /// <summary>
-    /// Gets the current connection state.
+    /// Current spot in the connect/sync lifecycle.
     /// </summary>
     public NetworkSyncProtocol.ConnectionState ConnectionState => _connectionState;
 
     /// <summary>
-    /// Gets the average network latency in seconds.
+    /// Rolling average round-trip latency in seconds.
     /// </summary>
     public double AverageLatency => _averageLatency;
 
     /// <summary>
-    /// Gets whether the client is running.
+    /// True while the receive/ping threads are up.
     /// </summary>
     public bool IsRunning => _isRunning;
 
     /// <summary>
-    /// Gets whether local control is allowed (disconnected state).
+    /// Local transport controls are only free while we're disconnected.
     /// </summary>
     public bool IsLocalControlAllowed => _connectionState == NetworkSyncProtocol.ConnectionState.Disconnected;
 
     /// <summary>
-    /// Event raised when connection state changes.
+    /// Fires whenever the connection state flips.
     /// </summary>
     public event EventHandler<ConnectionStateChangedEventArgs>? ConnectionStateChanged;
 
     /// <summary>
-    /// Event raised when a command is received.
+    /// Fires on each transport command coming off the wire.
     /// </summary>
     public event EventHandler<CommandReceivedEventArgs>? CommandReceived;
 
     /// <summary>
-    /// Initializes a new instance of the NetworkSyncClient class.
+    /// New client bound to a master clock. Null server address means auto-discovery.
     /// </summary>
-    /// <param name="masterClock">Master clock to synchronize.</param>
-    /// <param name="serverAddress">Server address (null for auto-discovery).</param>
-    /// <param name="port">UDP port.</param>
-    /// <param name="allowOfflinePlayback">Allow playback to continue when disconnected.</param>
+    /// <param name="masterClock"></param>
+    /// <param name="serverAddress"></param>
+    /// <param name="port"></param>
+    /// <param name="allowOfflinePlayback"></param>
     public NetworkSyncClient(
         MasterClock masterClock,
         string? serverAddress = null,
@@ -93,7 +88,7 @@ public sealed class NetworkSyncClient : IDisposable
     }
 
     /// <summary>
-    /// Starts the network sync client.
+    /// Opens the socket, resolves the server and spins up the worker threads.
     /// </summary>
     public async Task StartAsync()
     {
@@ -108,18 +103,14 @@ public sealed class NetworkSyncClient : IDisposable
             {
                 var addresses = await Dns.GetHostAddressesAsync(_serverAddress);
                 if (addresses.Length > 0)
-                {
                     _serverEndpoint = new IPEndPoint(addresses[0], _port);
-                }
             }
 
             if (_serverEndpoint != null)
-            {
                 await _timeProvider.TrySyncAsync(_serverEndpoint);
-            }
 
             _isRunning = true;
-            
+
             _receiveThread = new Thread(ReceiveThreadLoop)
             {
                 Name = "NetworkSyncClient.Receive",
@@ -147,7 +138,7 @@ public sealed class NetworkSyncClient : IDisposable
     }
 
     /// <summary>
-    /// Stops the network sync client.
+    /// Flags the threads to quit, waits for them, tears down the socket.
     /// </summary>
     public void Stop()
     {
@@ -167,7 +158,7 @@ public sealed class NetworkSyncClient : IDisposable
     }
 
     /// <summary>
-    /// Receive thread loop - processes incoming commands.
+    /// Receive loop - blocks on the socket and pushes decoded commands through.
     /// </summary>
     private void ReceiveThreadLoop()
     {
@@ -189,15 +180,10 @@ public sealed class NetworkSyncClient : IDisposable
 
                         NetworkSyncProtocol.Command cmd = default;
                         if (NetworkSyncProtocol.DeserializeCommand(buffer.AsSpan(0, bytesReceived), ref cmd))
-                        {
                             ProcessCommand(ref cmd, (IPEndPoint)remoteEndpoint);
-                        }
                     }
                 }
-                catch (SocketException)
-                {
-                    CheckConnectionTimeout();
-                }
+                catch (SocketException) { CheckConnectionTimeout(); }
                 catch {}
             }
         }
@@ -208,7 +194,7 @@ public sealed class NetworkSyncClient : IDisposable
     }
 
     /// <summary>
-    /// Ping thread loop - measures latency periodically.
+    /// Ping loop - pokes the server every 5s so we keep a latency estimate.
     /// </summary>
     private void PingThreadLoop()
     {
@@ -216,29 +202,27 @@ public sealed class NetworkSyncClient : IDisposable
         {
             try
             {
-                if (_serverEndpoint != null && 
+                if (_serverEndpoint != null &&
                     _connectionState != NetworkSyncProtocol.ConnectionState.Disconnected)
                 {
                     SendPing();
                 }
 
-                Thread.Sleep(5000);  // Ping every 5 seconds
+                Thread.Sleep(5000);
             }
             catch {}
         }
     }
 
     /// <summary>
-    /// Sends a ping to the server for latency measurement.
+    /// Sends one ping stamped with the current tick.
     /// </summary>
     private void SendPing()
     {
         if (_udpClient == null || _serverEndpoint == null)
             return;
 
-        var pingCmd = NetworkSyncProtocol.CreatePingCommand(
-            DateTime.UtcNow.Ticks,
-            _pingSequence++);
+        var pingCmd = NetworkSyncProtocol.CreatePingCommand(DateTime.UtcNow.Ticks, _pingSequence++);
 
         byte[] buffer = _bufferPool.Rent(NetworkSyncProtocol.MaxPacketSize);
         try
@@ -254,14 +238,14 @@ public sealed class NetworkSyncClient : IDisposable
     }
 
     /// <summary>
-    /// Processes a received command (zero-allocation).
+    /// Routes a decoded command to the right handler.
     /// </summary>
+    /// <param name="cmd"></param>
+    /// <param name="remoteEndpoint"></param>
     private void ProcessCommand(ref NetworkSyncProtocol.Command cmd, IPEndPoint remoteEndpoint)
     {
         if (_serverEndpoint == null)
-        {
             _serverEndpoint = remoteEndpoint;
-        }
 
         switch (cmd.Type)
         {
@@ -284,8 +268,9 @@ public sealed class NetworkSyncClient : IDisposable
     }
 
     /// <summary>
-    /// Processes clock synchronization command.
+    /// Clock tick from the server - snap the master clock and mark us synced.
     /// </summary>
+    /// <param name="cmd"></param>
     private void ProcessClockSync(ref NetworkSyncProtocol.Command cmd)
     {
         if (_connectionState == NetworkSyncProtocol.ConnectionState.Connecting ||
@@ -298,12 +283,12 @@ public sealed class NetworkSyncClient : IDisposable
     }
 
     /// <summary>
-    /// Processes pong response for latency measurement.
+    /// Pong came back - half the round trip, feed it into the average.
     /// </summary>
+    /// <param name="cmd"></param>
     private void ProcessPong(ref NetworkSyncProtocol.Command cmd)
     {
-        var now = DateTime.UtcNow.Ticks;
-        var roundTripTime = (now - cmd.ClientSendTime) / (double)TimeSpan.TicksPerSecond;
+        var roundTripTime = (DateTime.UtcNow.Ticks - cmd.ClientSendTime) / (double)TimeSpan.TicksPerSecond;
         var latency = roundTripTime / 2.0;
 
         lock (_latencyLock)
@@ -317,7 +302,7 @@ public sealed class NetworkSyncClient : IDisposable
     }
 
     /// <summary>
-    /// Checks for connection timeout and handles reconnection.
+    /// No traffic for 30s - drop to disconnected and back off before retrying.
     /// </summary>
     private void CheckConnectionTimeout()
     {
@@ -335,43 +320,45 @@ public sealed class NetworkSyncClient : IDisposable
                 _reconnectAttempts++;
                 int delay = ReconnectBaseDelayMs * (int)Math.Pow(2, Math.Min(_reconnectAttempts, 5));
                 Thread.Sleep(delay);
-                
+
                 SetConnectionState(NetworkSyncProtocol.ConnectionState.Connecting);
             }
         }
     }
 
     /// <summary>
-    /// Sets the connection state and raises event.
+    /// Swaps the state and raises the change event; a fresh sync resets the retry counter.
     /// </summary>
+    /// <param name="newState"></param>
     private void SetConnectionState(NetworkSyncProtocol.ConnectionState newState)
     {
         var oldState = _connectionState;
-        if (oldState != newState)
-        {
-            _connectionState = newState;
-            ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(oldState, newState));
+        if (oldState == newState)
+            return;
 
-            if (newState == NetworkSyncProtocol.ConnectionState.Synced)
-            {
-                _reconnectAttempts = 0;
-            }
-        }
+        _connectionState = newState;
+        ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(oldState, newState));
+
+        if (newState == NetworkSyncProtocol.ConnectionState.Synced)
+            _reconnectAttempts = 0;
     }
 
+    /// <summary>
+    /// Stops the threads and disposes the time provider.
+    /// </summary>
     public void Dispose()
     {
-        if (!_disposed)
-        {
-            Stop();
-            _timeProvider?.Dispose();
-            _disposed = true;
-        }
+        if (_disposed)
+            return;
+
+        Stop();
+        _timeProvider?.Dispose();
+        _disposed = true;
     }
 }
 
 /// <summary>
-/// Event args for connection state changed event.
+/// Old/new state pair for the connection change event.
 /// </summary>
 public class ConnectionStateChangedEventArgs : EventArgs
 {
@@ -388,7 +375,7 @@ public class ConnectionStateChangedEventArgs : EventArgs
 }
 
 /// <summary>
-/// Event args for command received event.
+/// Carries a decoded command up to the listeners.
 /// </summary>
 public class CommandReceivedEventArgs : EventArgs
 {

@@ -8,13 +8,11 @@ namespace OwnaudioNET.Mixing;
 public sealed partial class AudioMixer
 {
     /// <summary>
-    /// Starts or resumes the audio mixer.
-    /// Sources can be added dynamically after starting.
+    /// Starts or resumes the mixer. Sources may still be added afterwards.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown if mixer is disposed.</exception>
     public void Start()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
         if (_isRunning)
             return;
@@ -33,53 +31,44 @@ public sealed partial class AudioMixer
         _isRunning = true;
         _pauseEvent.Set();
 
-        StartRustOutput();
-        StartRustSyncTick();
+        _startRustOutput();
+        _startRustSyncTick();
     }
 
     /// <summary>
-    /// Pauses the audio mixer without stopping the thread.
-    /// Use <see cref="Start"/> to resume.
+    /// Pauses playback without tearing anything down. Start() resumes.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown if mixer is disposed.</exception>
     public void Pause()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
         if (!_isRunning)
             return;
 
-        if (_rustNative)
-            PauseRustOutput();
+        if (_rustNative) _pauseRustOutput();
 
         _isRunning = false;
         _pauseEvent.Reset();
     }
 
     /// <summary>
-    /// Stops the audio mixer.
-    /// All sources will be stopped but not removed.
+    /// Stops the mixer. Sources are stopped but stay registered.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown if mixer is disposed.</exception>
     public void Stop()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
         if (!_isRunning)
             return;
 
         _pauseEvent.Reset();
 
-        StopRustOutput();
-        StopRustSyncTick();
+        _stopRustOutput();
+        _stopRustSyncTick();
 
-        // Stop all sources
         foreach (var source in _sources.Values)
         {
-            try
-            {
-                source.Stop();
-            }
+            try { source.Stop(); }
             catch {}
         }
 
@@ -87,7 +76,7 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Disposes the mixer and releases all resources.
+    /// Tears the mixer down and releases everything it owns.
     /// </summary>
     public void Dispose()
     {
@@ -98,96 +87,71 @@ public sealed partial class AudioMixer
 
         if (_isRunning)
         {
-            try
-            {
-                Stop();
-            }
+            try { Stop(); }
             catch {}
         }
 
         StopRecording();
-
         ClearSources();
 
-        if (_rustNative)
-            DisposeRustSession();
+        if (_rustNative) _disposeRustSession();
 
         lock (_effectsLock)
         {
             foreach (var effect in _masterEffects)
             {
-                try
-                {
-                    effect?.Dispose();
-                }
+                try { effect?.Dispose(); }
                 catch {}
             }
             _masterEffects.Clear();
         }
 
         _pauseEvent?.Dispose();
-
         _disposed = true;
     }
 
     /// <summary>
-    /// Seeks the mixer to the specified position.
-    /// Advances the MasterClock and automatically reactivates any EndOfStream sources
-    /// whose content covers the new position.
-    /// Sources attached to the MasterClock that are still playing self-correct via
-    /// their built-in Three-Zone drift correction — no explicit seek needed for them.
+    /// Jumps the mixer to a position. Playing sources riding the clock pull themselves
+    /// back via drift correction; EndOfStream ones covering the new spot get revived.
     /// </summary>
-    /// <param name="positionInSeconds">Target position in seconds (clamped to 0 if negative).</param>
-    /// <exception cref="ObjectDisposedException">Thrown if mixer is disposed.</exception>
+    /// <param name="positionInSeconds"></param>
     public void Seek(double positionInSeconds)
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
-        if (positionInSeconds < 0)
-            positionInSeconds = 0;
+        if (positionInSeconds < 0) positionInSeconds = 0;
 
-        // In Rust-native mode the managed MixThread / soft-sync path (which legacy Playing sources
-        // rely on to self-correct toward the clock) does not run, so the seek must be applied to each
-        // native track explicitly.
+        //No managed MixThread on the rust chain, so every native track has to be moved by hand
         if (_rustNative)
         {
             SeekRustNative(positionInSeconds);
             return;
         }
 
-        // 1. Move the master clock — Playing sources self-correct via Three-Zone drift correction.
         _masterClock.SeekTo(positionInSeconds);
 
-        // 2. Reactivate EndOfStream sources that have content at the new position.
-        var sources = _sources.Values.ToArray();
-        foreach (var source in sources)
+        foreach (var source in _sources.Values.ToArray())
         {
             if (source.State != AudioState.EndOfStream)
                 continue;
 
-            double targetPos = positionInSeconds;
-            double sourceDuration = source.Duration;
+            double _target = positionInSeconds;
+            double _duration = source.Duration;
 
             if (source is IMasterClockSource mcs)
             {
-                double tempo = 1.0;
-                if (source is FileSource fs)
-                    tempo = fs.Tempo;
+                float _tempo = source is FileSource fs ? fs.Tempo : 1.0f;
 
-                if (positionInSeconds >= mcs.StartOffset + sourceDuration / tempo)
+                if (positionInSeconds >= mcs.StartOffset + _duration / _tempo)
                     continue;
 
-                targetPos = Math.Max(0.0, (positionInSeconds - mcs.StartOffset) * tempo);
+                _target = Math.Max(0.0, (positionInSeconds - mcs.StartOffset) * _tempo);
             }
-            else
-            {
-                if (positionInSeconds >= sourceDuration)
-                    continue;
-            }
+            else if (positionInSeconds >= _duration) continue;
 
             try
             {
-                source.Seek(targetPos);
+                source.Seek(_target);
                 source.Play();
             }
             catch {}
@@ -195,23 +159,17 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Seeks the MasterClock to <paramref name="startPosition"/> and simultaneously
-    /// starts all sources that are not yet in Playing state.
-    /// Call this after adding sources via <see cref="AddSourcePrepared"/> and
-    /// pre-buffering them with <see cref="FileSource.PreBuffer"/>.
+    /// Parks the clock at startPosition and kicks off every source that isn't playing yet.
+    /// Pair it with AddSourcePrepared + PreBuffer for a drift-free multitrack start.
     /// </summary>
-    /// <param name="startPosition">The clock position (in seconds) to start from. Default: 0.0</param>
-    /// <exception cref="ObjectDisposedException">Thrown if mixer is disposed.</exception>
+    /// <param name="startPosition"></param>
     public void StartPreparedSources(double startPosition = 0.0)
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
-        // 1. Reset clock to ensure all sources start from the same reference point
         _masterClock.SeekTo(startPosition);
 
-        // 2. Start all non-playing sources atomically (sequential loop is fast: no blocking)
-        var sources = _sources.Values.ToArray();
-        foreach (var source in sources)
+        foreach (var source in _sources.Values.ToArray())
         {
             if (source.State != AudioState.Playing)
             {
@@ -222,10 +180,10 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Throws ObjectDisposedException if disposed.
+    /// Guard at the top of the public methods.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ThrowIfDisposed()
+    private void _throwIfDisposed()
     {
         if (_disposed)
             throw new ObjectDisposedException(nameof(AudioMixer));

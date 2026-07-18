@@ -6,116 +6,110 @@ using OwnaudioNET.Events;
 namespace OwnaudioNET.Interfaces;
 
 /// <summary>
-/// Represents a source of audio data that can be played, paused, and controlled.
+/// One playable audio source: play, pause, seek, volume/pan.
 /// </summary>
 public interface IAudioSource : IDisposable
 {
     /// <summary>
-    /// Gets the unique identifier for this audio source.
+    /// Unique id for this source.
     /// </summary>
     Guid Id { get; }
 
     /// <summary>
-    /// Gets the current playback state.
+    /// Current playback state.
     /// </summary>
     AudioState State { get; }
 
     /// <summary>
-    /// Gets the audio configuration (sample rate, channels, buffer size).
+    /// Sample rate, channels, buffer size.
     /// </summary>
     AudioConfig Config { get; }
 
     /// <summary>
-    /// Gets the stream information (duration, channels, sample rate).
+    /// Duration, channels, sample rate.
     /// </summary>
     AudioStreamInfo StreamInfo { get; }
 
     /// <summary>
-    /// Gets or sets the volume (0.0 to 1.0).
+    /// Volume, 0..1.
     /// </summary>
     float Volume { get; set; }
 
     /// <summary>
-    /// Gets or sets the stereo pan position (-1.0 = hard left, 0.0 = center,
-    /// +1.0 = hard right). Applied under an equal-power law normalized to unity at
-    /// center, so a centered source is unaffected.
+    /// Stereo pan, -1 left .. +1 right. Equal-power, so centered is untouched.
     /// </summary>
     float Pan { get; set; }
 
     /// <summary>
-    /// Gets or sets whether the source should loop when reaching the end.
+    /// Loop back to the start at the end.
     /// </summary>
     bool Loop { get; set; }
 
     /// <summary>
-    /// Gets the current playback position in seconds.
+    /// Playback position in seconds.
     /// </summary>
     double Position { get; }
 
     /// <summary>
-    /// Gets the duration of the audio in seconds.
+    /// Length in seconds.
     /// </summary>
     double Duration { get; }
 
     /// <summary>
-    /// Gets whether the source has reached the end of the audio.
+    /// True once we ran out of audio.
     /// </summary>
     bool IsEndOfStream { get; }
 
     /// <summary>
-    /// Gets or sets the playback speed multiplier (1.0 = normal speed).
-    /// Only available if SoundTouch processing is enabled.
+    /// Speed multiplier, 1.0 = normal. Needs SoundTouch.
     /// </summary>
     float Tempo { get; set; }
 
     /// <summary>
-    /// Gets or sets the pitch shift in semitones (0 = no shift).
-    /// Only available if SoundTouch processing is enabled.
+    /// Pitch shift in semitones, 0 = none. Needs SoundTouch.
     /// </summary>
     float PitchShift { get; set; }
 
     /// <summary>
-    /// Reads audio samples into the provided buffer.
+    /// Fills buffer with up to frameCount frames, returns frames actually read.
     /// </summary>
-    /// <param name="buffer">The buffer to fill with audio data.</param>
-    /// <param name="frameCount">The number of frames to read.</param>
-    /// <returns>The actual number of frames read.</returns>
+    /// <param name="buffer"></param>
+    /// <param name="frameCount"></param>
     int ReadSamples(Span<float> buffer, int frameCount);
 
     /// <summary>
-    /// Seeks to a specific position in the audio.
+    /// Jump to a position (seconds), false if it didn't take.
     /// </summary>
-    /// <param name="positionInSeconds">The target position in seconds.</param>
-    /// <returns>True if seek was successful, false otherwise.</returns>
+    /// <param name="positionInSeconds"></param>
     bool Seek(double positionInSeconds);
 
     /// <summary>
-    /// Starts or resumes playback.
+    /// Start or resume.
     /// </summary>
     void Play();
 
     /// <summary>
-    /// Pauses playback.
+    /// Pause.
     /// </summary>
     void Pause();
 
     /// <summary>
-    /// Stops playback and resets position to the beginning.
+    /// Stop and rewind to the start.
     /// </summary>
     void Stop();
 
     /// <summary>
-    /// Occurs when the playback state changes.
+    /// Fires when the playback state flips.
     /// </summary>
     event EventHandler<AudioStateChangedEventArgs>? StateChanged;
 
     /// <summary>
-    /// Occurs when a buffer underrun is detected.
+    /// Fires on a buffer underrun.
     /// </summary>
     event EventHandler<BufferUnderrunEventArgs>? BufferUnderrun;
 
     /// <summary>
-    /// Occurs when an error occurs during playback.
+    /// Fires when playback blows up.
     /// </summary>
     event EventHandler<AudioErrorEventArgs>? Error;
 }

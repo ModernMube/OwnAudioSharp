@@ -5,20 +5,18 @@ using System.Net.Sockets;
 namespace OwnaudioNET.NetworkSync;
 
 /// <summary>
-/// Local network time provider with fallback tiers (no internet required).
-/// Tier 1: Local NTP server (router)
-/// Tier 2: Peer-to-peer sync with network sync server
-/// Tier 3: System time with drift compensation
+/// Grabs a network time reference without needing the internet.
+/// Tries router NTP first, then a sync peer, then just falls back to system time.
 /// </summary>
 public sealed class LocalTimeProvider : IDisposable
 {
-    private readonly object _lock = new();
-    private double _timeOffset = 0.0;  // Local time - Reference time
+    private readonly object _lock = new object();
+    private double _timeOffset = 0.0;
     private DateTime _lastSyncTime = DateTime.MinValue;
     private TimeSyncTier _currentTier = TimeSyncTier.SystemTime;
     private bool _disposed;
 
-    private static readonly string[] LocalNtpServers = new[]
+    private static readonly string[] LocalNtpServers = new string[]
     {
         "192.168.1.1",
         "192.168.0.1",
@@ -27,65 +25,48 @@ public sealed class LocalTimeProvider : IDisposable
     };
 
     /// <summary>
-    /// Time synchronization tier.
+    /// Which source the current time is coming from.
     /// </summary>
     public enum TimeSyncTier
     {
-        /// <summary>
-        /// System time only (no synchronization).
-        /// </summary>
         SystemTime = 0,
-
-        /// <summary>
-        /// Peer-to-peer sync with network sync server.
-        /// </summary>
         PeerToPeer = 1,
-
-        /// <summary>
-        /// Local NTP server (router).
-        /// </summary>
         LocalNtp = 2
     }
 
     /// <summary>
-    /// Gets the current time synchronization tier.
+    /// Source tier we last synced from.
     /// </summary>
     public TimeSyncTier CurrentTier => _currentTier;
 
     /// <summary>
-    /// Gets the time offset in seconds (local time - reference time).
+    /// Offset in seconds between local and reference time.
     /// </summary>
     public double TimeOffset => _timeOffset;
 
     /// <summary>
-    /// Gets the last successful sync time.
+    /// When we last pulled a good sync.
     /// </summary>
     public DateTime LastSyncTime => _lastSyncTime;
 
     /// <summary>
-    /// Gets the synchronized time (UTC).
+    /// UTC now, corrected by the measured offset.
     /// </summary>
     public DateTime GetSynchronizedTime()
     {
-        lock (_lock)
-        {
-            return DateTime.UtcNow.AddSeconds(-_timeOffset);
-        }
+        lock (_lock) { return DateTime.UtcNow.AddSeconds(-_timeOffset); }
     }
 
     /// <summary>
-    /// Gets the synchronized time in ticks.
+    /// Same as GetSynchronizedTime but as ticks.
     /// </summary>
-    public long GetSynchronizedTimeTicks()
-    {
-        return GetSynchronizedTime().Ticks;
-    }
+    public long GetSynchronizedTimeTicks() => GetSynchronizedTime().Ticks;
 
     /// <summary>
-    /// Attempts to synchronize with local NTP server (Tier 1).
+    /// Tier 1 - ask the local router's NTP server, first one that answers wins.
     /// </summary>
-    /// <param name="timeout">Timeout in milliseconds.</param>
-    /// <returns>True if successful, false otherwise.</returns>
+    /// <param name="timeout"></param>
+    /// <returns></returns>
     public async Task<bool> TrySyncWithLocalNtpAsync(int timeout = 200)
     {
         foreach (var server in LocalNtpServers)
@@ -111,11 +92,11 @@ public sealed class LocalTimeProvider : IDisposable
     }
 
     /// <summary>
-    /// Synchronizes with peer (network sync server) using Cristian's algorithm (Tier 2).
+    /// Tier 2 - Cristian's algorithm against a sync peer, half the round trip is the latency.
     /// </summary>
-    /// <param name="serverEndpoint">Server endpoint.</param>
-    /// <param name="timeout">Timeout in milliseconds.</param>
-    /// <returns>True if successful, false otherwise.</returns>
+    /// <param name="serverEndpoint"></param>
+    /// <param name="timeout"></param>
+    /// <returns></returns>
     public async Task<bool> TrySyncWithPeerAsync(IPEndPoint serverEndpoint, int timeout = 1000)
     {
         try
@@ -125,10 +106,10 @@ public sealed class LocalTimeProvider : IDisposable
 
             var t0 = DateTime.UtcNow;
             var pingCmd = NetworkSyncProtocol.CreatePingCommand(t0.Ticks, 0);
-            
+
             Span<byte> buffer = stackalloc byte[NetworkSyncProtocol.MaxPacketSize];
             int bytesWritten = NetworkSyncProtocol.SerializeCommand(ref pingCmd, buffer);
-            
+
             await udpClient.SendAsync(buffer.Slice(0, bytesWritten).ToArray(), bytesWritten, serverEndpoint);
 
             var receiveTask = udpClient.ReceiveAsync();
@@ -144,8 +125,7 @@ public sealed class LocalTimeProvider : IDisposable
                     pongCmd.Type == NetworkSyncProtocol.CommandType.Pong)
                 {
                     var serverTime = new DateTime(pongCmd.NtpTimestamp, DateTimeKind.Utc);
-                    var roundTripTime = (t1 - t0).TotalSeconds;
-                    var estimatedLatency = roundTripTime / 2.0;
+                    var estimatedLatency = (t1 - t0).TotalSeconds / 2.0;
                     var synchronizedTime = serverTime.AddSeconds(estimatedLatency);
 
                     lock (_lock)
@@ -164,21 +144,18 @@ public sealed class LocalTimeProvider : IDisposable
     }
 
     /// <summary>
-    /// Attempts to synchronize using all available tiers.
+    /// Walk the tiers top-down and return whichever one stuck.
     /// </summary>
-    /// <param name="peerEndpoint">Optional peer endpoint for Tier 2.</param>
-    /// <returns>The tier that succeeded.</returns>
+    /// <param name="peerEndpoint"></param>
+    /// <returns></returns>
     public async Task<TimeSyncTier> TrySyncAsync(IPEndPoint? peerEndpoint = null)
     {
-        // Tier 1: Local NTP
         if (await TrySyncWithLocalNtpAsync())
             return TimeSyncTier.LocalNtp;
 
-        // Tier 2: Peer-to-peer
         if (peerEndpoint != null && await TrySyncWithPeerAsync(peerEndpoint))
             return TimeSyncTier.PeerToPeer;
 
-        // Tier 3: System time (no sync)
         lock (_lock)
         {
             _timeOffset = 0.0;
@@ -188,20 +165,19 @@ public sealed class LocalTimeProvider : IDisposable
     }
 
     /// <summary>
-    /// Gets NTP time from a server.
+    /// Bare-bones SNTP request - build a mode 3 packet, read back the transmit timestamp.
     /// </summary>
+    /// <param name="server"></param>
+    /// <param name="timeout"></param>
+    /// <returns></returns>
     private async Task<DateTime?> GetNtpTimeAsync(string server, int timeout)
     {
         try
         {
             var dnsTask = Dns.GetHostAddressesAsync(server);
-            var timeoutTask = Task.Delay(timeout);
-            
-            if (await Task.WhenAny(dnsTask, timeoutTask) == timeoutTask)
-            {
+            if (await Task.WhenAny(dnsTask, Task.Delay(timeout)) != dnsTask)
                 return null;
-            }
-            
+
             var addresses = await dnsTask;
             if (addresses.Length == 0)
                 return null;
@@ -213,11 +189,11 @@ public sealed class LocalTimeProvider : IDisposable
             socket.SendTimeout = timeout;
 
             byte[] ntpData = new byte[48];
-            ntpData[0] = 0x1B; // LI = 0, VN = 3, Mode = 3 (Client)
+            ntpData[0] = 0x1B;
 
             await socket.ConnectAsync(endpoint);
             await socket.SendAsync(ntpData, SocketFlags.None);
-            
+
             int received = await socket.ReceiveAsync(ntpData, SocketFlags.None);
             if (received < 48)
                 return null;
@@ -226,10 +202,8 @@ public sealed class LocalTimeProvider : IDisposable
             ulong fractPart = BinaryPrimitives.ReadUInt32BigEndian(ntpData.AsSpan(44));
 
             var milliseconds = (intPart * 1000) + ((fractPart * 1000) / 0x100000000L);
-            var ntpTime = new DateTime(1900, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            return new DateTime(1900, 1, 1, 0, 0, 0, DateTimeKind.Utc)
                 .AddMilliseconds((long)milliseconds);
-
-            return ntpTime;
         }
         catch
         {
@@ -237,11 +211,12 @@ public sealed class LocalTimeProvider : IDisposable
         }
     }
 
+    /// <summary>
+    /// Nothing native to free, just flip the flag.
+    /// </summary>
     public void Dispose()
     {
-        if (!_disposed)
-        {
-            _disposed = true;
-        }
+        if (_disposed) return;
+        _disposed = true;
     }
 }

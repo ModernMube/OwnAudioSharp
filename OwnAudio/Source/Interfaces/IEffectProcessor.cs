@@ -3,65 +3,58 @@ using Ownaudio.Core;
 namespace OwnaudioNET.Interfaces;
 
 /// <summary>
-/// Represents an audio effect processor that can modify audio samples in real-time.
+/// A real-time effect that chews on audio samples in place.
 /// </summary>
 public interface IEffectProcessor : IDisposable
 {
     /// <summary>
-    /// Gets the unique identifier for this effect.
+    /// Unique id for this effect.
     /// </summary>
     Guid Id { get; }
 
     /// <summary>
-    /// Gets the name of the effect.
+    /// Effect name.
     /// </summary>
     string Name { get; }
 
     /// <summary>
-    /// Gets or sets whether the effect is enabled.
+    /// On/off.
     /// </summary>
     bool Enabled { get; set; }
 
     /// <summary>
-    /// Gets or sets the wet/dry mix (0.0 = fully dry, 1.0 = fully wet).
+    /// Wet/dry mix, 0 = dry .. 1 = wet.
     /// </summary>
     float Mix { get; set; }
 
     /// <summary>
-    /// Initializes the effect with the specified audio configuration.
+    /// Spin up with the given audio config.
     /// </summary>
-    /// <param name="config">The audio configuration to process.</param>
+    /// <param name="config"></param>
     void Initialize(AudioConfig config);
 
     /// <summary>
-    /// Processes audio samples in-place.
+    /// Process frameCount frames in the buffer, in-place.
     /// </summary>
-    /// <param name="buffer">The buffer containing audio samples to process.</param>
-    /// <param name="frameCount">The number of frames in the buffer.</param>
+    /// <param name="buffer"></param>
+    /// <param name="frameCount"></param>
     void Process(Span<float> buffer, int frameCount);
 
     /// <summary>
-    /// Resets the effect's internal state.
+    /// Drop internal state.
     /// </summary>
     void Reset();
 
     /// <summary>
-    /// Gets whether this effect is ready to process audio.
-    /// Always true for built-in effects; VST3 effects return false until
-    /// the plugin has been audio-initialized via VST3PluginHost.InitializeAudioAsync().
+    /// Ready to process? Built-ins are always ready; VST3 stays false until
+    /// the native plugin is audio-initialized.
     /// </summary>
     bool IsReady => true;
 
     /// <summary>
-    /// Gets the processing latency introduced by this effect in samples.
+    /// Latency this effect adds, in samples. Zero-latency stuff (EQ, comp,
+    /// reverb) is 0; lookahead effects report their lookahead. Used by the
+    /// mixer's plugin delay compensation to keep tracks aligned.
     /// </summary>
-    /// <remarks>
-    /// Zero-latency effects such as equalizers, compressors, and reverbs return 0.
-    /// Lookahead-based effects such as <see cref="AutoGainEffect"/> and
-    /// <see cref="LimiterEffect"/> return their actual lookahead buffer size.
-    /// VST3 plugins query the value from the native plugin after audio initialization.
-    /// This value is used by <see cref="AudioMixer.ApplyPluginDelayCompensation"/>
-    /// to align all tracks sample-accurately in the mixed output.
-    /// </remarks>
     int LatencySamples => 0;
 }

@@ -4,8 +4,7 @@ using System.Collections.Generic;
 namespace OwnaudioNET.Monitoring
 {
     /// <summary>
-    /// Tracks performance metrics for individual audio tracks in the mixer.
-    /// Provides CPU usage tracking, buffer fill monitoring, and dropout statistics.
+    /// Per-track health counters for the mixer: rolling CPU average, buffer fill and dropout log.
     /// </summary>
     public class TrackPerformanceMetrics
     {
@@ -20,79 +19,54 @@ namespace OwnaudioNET.Monitoring
         private double _averageCpuUsage;
 
         /// <summary>
-        /// Gets the unique identifier of the track being monitored.
+        /// Which track this belongs to.
         /// </summary>
         public Guid TrackId { get; }
 
         /// <summary>
-        /// Gets the name of the track being monitored.
+        /// Track name, handy for the ToString dump.
         /// </summary>
         public string TrackName { get; }
 
         /// <summary>
-        /// Gets the current buffer fill percentage (0.0 to 100.0).
-        /// Higher values indicate better buffering.
+        /// How full the track buffer is, 0..100. Higher is healthier.
         /// </summary>
         public double BufferFillPercentage
         {
-            get
-            {
-                lock (_lock)
-                {
-                    return _bufferFillPercentage;
-                }
-            }
+            get { lock (_lock) { return _bufferFillPercentage; } }
         }
 
         /// <summary>
-        /// Gets the average CPU usage percentage (0.0 to 100.0) based on recent samples.
+        /// Moving average CPU load over the recent samples, 0..100.
         /// </summary>
         public double AverageCpuUsage
         {
-            get
-            {
-                lock (_lock)
-                {
-                    return _averageCpuUsage;
-                }
-            }
+            get { lock (_lock) { return _averageCpuUsage; } }
         }
 
         /// <summary>
-        /// Gets the total number of dropouts that have occurred.
+        /// How many dropouts we've seen in total.
         /// </summary>
         public int TotalDropoutCount
         {
-            get
-            {
-                lock (_lock)
-                {
-                    return _totalDropoutCount;
-                }
-            }
+            get { lock (_lock) { return _totalDropoutCount; } }
         }
 
         /// <summary>
-        /// Gets a copy of the dropout history.
+        /// Snapshot copy of the dropout log.
         /// </summary>
         public IReadOnlyList<DropoutRecord> DropoutHistory
         {
-            get
-            {
-                lock (_lock)
-                {
-                    return _dropoutHistory.ToArray();
-                }
-            }
+            get { lock (_lock) { return _dropoutHistory.ToArray(); } }
         }
 
         /// <summary>
-        /// Initializes a new instance of the TrackPerformanceMetrics class.
+        /// New metrics bucket for a track. The two caps bound the CPU window and dropout log size.
         /// </summary>
-        /// <param name="trackId">The unique identifier of the track</param>
-        /// <param name="trackName">The name of the track</param>
-        /// <param name="maxCpuSamples">Maximum number of CPU samples to keep for averaging (default: 100)</param>
-        /// <param name="maxDropoutHistory">Maximum number of dropout records to keep (default: 50)</param>
+        /// <param name="trackId"></param>
+        /// <param name="trackName"></param>
+        /// <param name="maxCpuSamples"></param>
+        /// <param name="maxDropoutHistory"></param>
         public TrackPerformanceMetrics(
             Guid trackId,
             string trackName,
@@ -106,16 +80,12 @@ namespace OwnaudioNET.Monitoring
 
             _cpuSamples = new Queue<double>(maxCpuSamples);
             _dropoutHistory = new List<DropoutRecord>(maxDropoutHistory);
-            _bufferFillPercentage = 0.0;
-            _totalDropoutCount = 0;
-            _averageCpuUsage = 0.0;
         }
 
         /// <summary>
-        /// Records a CPU usage sample.
-        /// Maintains a moving average based on recent samples.
+        /// Pushes a CPU sample and recomputes the moving average.
         /// </summary>
-        /// <param name="cpuPercentage">CPU usage percentage (0.0 to 100.0)</param>
+        /// <param name="cpuPercentage"></param>
         public void RecordCpuSample(double cpuPercentage)
         {
             lock (_lock)
@@ -123,62 +93,52 @@ namespace OwnaudioNET.Monitoring
                 _cpuSamples.Enqueue(cpuPercentage);
 
                 while (_cpuSamples.Count > _maxCpuSamples)
-                {
                     _cpuSamples.Dequeue();
-                }
-                
+
                 double sum = 0.0;
                 foreach (var sample in _cpuSamples)
-                {
                     sum += sample;
-                }
+
                 _averageCpuUsage = _cpuSamples.Count > 0 ? sum / _cpuSamples.Count : 0.0;
             }
         }
 
         /// <summary>
-        /// Updates the buffer fill percentage.
+        /// Sets the buffer fill, clamped into 0..100.
         /// </summary>
-        /// <param name="fillPercentage">Fill percentage (0.0 to 100.0)</param>
+        /// <param name="fillPercentage"></param>
         public void UpdateBufferFill(double fillPercentage)
         {
-            lock (_lock)
-            {
-                _bufferFillPercentage = Math.Clamp(fillPercentage, 0.0, 100.0);
-            }
+            lock (_lock) { _bufferFillPercentage = Math.Clamp(fillPercentage, 0.0, 100.0); }
         }
 
         /// <summary>
-        /// Records a dropout event.
+        /// Logs a dropout and trims the history back to the cap.
         /// </summary>
-        /// <param name="timestamp">The master clock timestamp when the dropout occurred</param>
-        /// <param name="missedFrames">The number of frames that were dropped</param>
-        /// <param name="reason">The reason for the dropout</param>
+        /// <param name="timestamp"></param>
+        /// <param name="missedFrames"></param>
+        /// <param name="reason"></param>
         public void RecordDropout(double timestamp, int missedFrames, string? reason = null)
         {
             lock (_lock)
             {
                 _totalDropoutCount++;
 
-                var record = new DropoutRecord
+                _dropoutHistory.Add(new DropoutRecord
                 {
                     Timestamp = timestamp,
                     MissedFrames = missedFrames,
                     Reason = reason ?? "Unknown",
                     EventTime = DateTime.UtcNow
-                };
-
-                _dropoutHistory.Add(record);
+                });
 
                 while (_dropoutHistory.Count > _maxDropoutHistory)
-                {
                     _dropoutHistory.RemoveAt(0);
-                }
             }
         }
 
         /// <summary>
-        /// Resets all metrics to their initial state.
+        /// Wipes everything back to zero.
         /// </summary>
         public void Reset()
         {
@@ -193,7 +153,7 @@ namespace OwnaudioNET.Monitoring
         }
 
         /// <summary>
-        /// Returns a summary string of the current metrics.
+        /// Quick one-glance dump of the current numbers.
         /// </summary>
         public override string ToString()
         {
@@ -208,32 +168,17 @@ namespace OwnaudioNET.Monitoring
     }
 
     /// <summary>
-    /// Represents a single dropout event record.
+    /// One logged dropout - when it hit, how many frames went missing and why.
     /// </summary>
     public struct DropoutRecord
     {
-        /// <summary>
-        /// The master clock timestamp when the dropout occurred.
-        /// </summary>
         public double Timestamp { get; set; }
-
-        /// <summary>
-        /// The number of frames that were missed.
-        /// </summary>
         public int MissedFrames { get; set; }
-
-        /// <summary>
-        /// The reason for the dropout.
-        /// </summary>
         public string Reason { get; set; }
-
-        /// <summary>
-        /// The UTC time when this event was recorded.
-        /// </summary>
         public DateTime EventTime { get; set; }
 
         /// <summary>
-        /// Returns a string representation of the dropout record.
+        /// Human-readable one-liner for the record.
         /// </summary>
         public override string ToString()
         {

@@ -273,6 +273,9 @@ internal sealed class RustAudioEngine : IAudioEngine
     /// <inheritdoc />
     public int Receives(Span<float> destination)
     {
+        if (_disposed || !_running)
+            return -1;
+
         LockFreeRingBuffer<float>? ring = _inputRing;
         if (ring == null || destination.IsEmpty)
             return 0;

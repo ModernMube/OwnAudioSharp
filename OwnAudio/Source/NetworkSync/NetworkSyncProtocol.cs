@@ -4,90 +4,46 @@ using System.Runtime.InteropServices;
 namespace OwnaudioNET.NetworkSync;
 
 /// <summary>
-/// Network synchronization protocol with zero-GC guarantees.
-/// Defines command types, packet structures, and serialization methods.
-/// All hot-path operations are allocation-free using Span and stackalloc.
+/// Wire format for the network sync. Command types, the packet layout and its
+/// serialize/deserialize. Hot path stays allocation-free via Span/stackalloc.
 /// </summary>
 public static class NetworkSyncProtocol
 {
     /// <summary>
-    /// Protocol version for compatibility checking.
+    /// Bumped whenever the packet layout changes; mismatched versions get dropped.
     /// </summary>
     public const int ProtocolVersion = 1;
 
     /// <summary>
-    /// Maximum packet size in bytes (256 bytes for all command types).
+    /// Fixed packet size, every command pads to this.
     /// </summary>
     public const int MaxPacketSize = 256;
 
     /// <summary>
-    /// Magic number for packet validation (0x4F574E41 = "OWNA").
+    /// "OWNA" as a uint, first thing we check on a packet.
     /// </summary>
     public const uint MagicNumber = 0x4F574E41;
 
     /// <summary>
-    /// Command types for network synchronization.
+    /// What kind of command a packet carries.
     /// </summary>
     public enum CommandType : int
     {
-        /// <summary>
-        /// Clock synchronization update (sent continuously at 100Hz).
-        /// </summary>
         ClockSync = 0,
-
-        /// <summary>
-        /// Play command with optional start position.
-        /// </summary>
         Play = 1,
-
-        /// <summary>
-        /// Pause command.
-        /// </summary>
         Pause = 2,
-
-        /// <summary>
-        /// Stop command.
-        /// </summary>
         Stop = 3,
-
-        /// <summary>
-        /// Seek to specific position.
-        /// </summary>
         Seek = 4,
-
-        /// <summary>
-        /// Set tempo/pitch.
-        /// </summary>
         Tempo = 5,
-
-        /// <summary>
-        /// Ping request for latency measurement.
-        /// </summary>
         Ping = 6,
-
-        /// <summary>
-        /// Pong response for latency measurement.
-        /// </summary>
         Pong = 7,
-
-        /// <summary>
-        /// Server announcement for discovery.
-        /// </summary>
         ServerAnnouncement = 8,
-
-        /// <summary>
-        /// Client handshake request.
-        /// </summary>
         ClientHandshake = 9,
-
-        /// <summary>
-        /// Server handshake response.
-        /// </summary>
         ServerHandshake = 10
     }
 
     /// <summary>
-    /// Connection state for clients.
+    /// Where a client sits in the connect/sync lifecycle.
     /// </summary>
     public enum ConnectionState : int
     {
@@ -98,73 +54,30 @@ public static class NetworkSyncProtocol
     }
 
     /// <summary>
-    /// Network synchronization command (value type for zero-GC).
+    /// The command payload. Plain value type so it never touches the heap.
     /// </summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct Command
     {
-        /// <summary>
-        /// Command type.
-        /// </summary>
         public CommandType Type;
-
-        /// <summary>
-        /// NTP timestamp when command was sent (ticks).
-        /// </summary>
         public long NtpTimestamp;
-
-        /// <summary>
-        /// Scheduled execution time (NTP ticks) - for latency compensation.
-        /// </summary>
         public long ScheduledExecutionTime;
-
-        /// <summary>
-        /// Master clock timestamp in seconds.
-        /// </summary>
         public double MasterClockTimestamp;
-
-        /// <summary>
-        /// Master clock sample position.
-        /// </summary>
         public long MasterClockSamplePosition;
-
-        /// <summary>
-        /// Sample rate (for clock sync).
-        /// </summary>
         public int SampleRate;
-
-        /// <summary>
-        /// Target position in seconds (for Seek command).
-        /// </summary>
         public double TargetPosition;
-
-        /// <summary>
-        /// Tempo value (for Tempo command).
-        /// </summary>
         public float TempoValue;
-
-        /// <summary>
-        /// Use smooth tempo change (for Tempo command).
-        /// </summary>
         public bool UseSmooth;
-
-        /// <summary>
-        /// Sequence number for ping/pong.
-        /// </summary>
         public int SequenceNumber;
-
-        /// <summary>
-        /// Client send timestamp for latency measurement.
-        /// </summary>
         public long ClientSendTime;
     }
 
     /// <summary>
-    /// Serializes a command to a byte buffer (zero-allocation).
+    /// Packs a command into buffer (needs to be at least MaxPacketSize), returns bytes written.
     /// </summary>
-    /// <param name="cmd">Command to serialize (passed by reference).</param>
-    /// <param name="buffer">Pre-allocated buffer (must be at least MaxPacketSize bytes).</param>
-    /// <returns>Number of bytes written.</returns>
+    /// <param name="cmd"></param>
+    /// <param name="buffer"></param>
+    /// <returns></returns>
     public static int SerializeCommand(ref Command cmd, Span<byte> buffer)
     {
         if (buffer.Length < MaxPacketSize)
@@ -172,55 +85,30 @@ public static class NetworkSyncProtocol
 
         int offset = 0;
 
-        // Magic number (4 bytes)
         BinaryPrimitives.WriteUInt32LittleEndian(buffer.Slice(offset), MagicNumber);
         offset += 4;
-
-        // Protocol version (4 bytes)
         BinaryPrimitives.WriteInt32LittleEndian(buffer.Slice(offset), ProtocolVersion);
         offset += 4;
-
-        // Command type (4 bytes)
         BinaryPrimitives.WriteInt32LittleEndian(buffer.Slice(offset), (int)cmd.Type);
         offset += 4;
-
-        // NTP timestamp (8 bytes)
         BinaryPrimitives.WriteInt64LittleEndian(buffer.Slice(offset), cmd.NtpTimestamp);
         offset += 8;
-
-        // Scheduled execution time (8 bytes)
         BinaryPrimitives.WriteInt64LittleEndian(buffer.Slice(offset), cmd.ScheduledExecutionTime);
         offset += 8;
-
-        // Master clock timestamp (8 bytes)
         BinaryPrimitives.WriteDoubleLittleEndian(buffer.Slice(offset), cmd.MasterClockTimestamp);
         offset += 8;
-
-        // Master clock sample position (8 bytes)
         BinaryPrimitives.WriteInt64LittleEndian(buffer.Slice(offset), cmd.MasterClockSamplePosition);
         offset += 8;
-
-        // Sample rate (4 bytes)
         BinaryPrimitives.WriteInt32LittleEndian(buffer.Slice(offset), cmd.SampleRate);
         offset += 4;
-
-        // Target position (8 bytes)
         BinaryPrimitives.WriteDoubleLittleEndian(buffer.Slice(offset), cmd.TargetPosition);
         offset += 8;
-
-        // Tempo value (4 bytes)
         BinaryPrimitives.WriteSingleLittleEndian(buffer.Slice(offset), cmd.TempoValue);
         offset += 4;
-
-        // Use smooth (1 byte)
         buffer[offset] = cmd.UseSmooth ? (byte)1 : (byte)0;
         offset += 1;
-
-        // Sequence number (4 bytes)
         BinaryPrimitives.WriteInt32LittleEndian(buffer.Slice(offset), cmd.SequenceNumber);
         offset += 4;
-
-        // Client send time (8 bytes)
         BinaryPrimitives.WriteInt64LittleEndian(buffer.Slice(offset), cmd.ClientSendTime);
         offset += 8;
 
@@ -228,11 +116,11 @@ public static class NetworkSyncProtocol
     }
 
     /// <summary>
-    /// Deserializes a command from a byte buffer (zero-allocation).
+    /// Reads a command back out. False if the magic or version don't line up.
     /// </summary>
-    /// <param name="buffer">Buffer containing serialized command.</param>
-    /// <param name="cmd">Output command (passed by reference).</param>
-    /// <returns>True if deserialization succeeded, false otherwise.</returns>
+    /// <param name="buffer"></param>
+    /// <param name="cmd"></param>
+    /// <returns></returns>
     public static bool DeserializeCommand(ReadOnlySpan<byte> buffer, ref Command cmd)
     {
         if (buffer.Length < MaxPacketSize)
@@ -240,68 +128,46 @@ public static class NetworkSyncProtocol
 
         int offset = 0;
 
-        // Validate magic number
-        uint magic = BinaryPrimitives.ReadUInt32LittleEndian(buffer.Slice(offset));
-        if (magic != MagicNumber)
+        if (BinaryPrimitives.ReadUInt32LittleEndian(buffer.Slice(offset)) != MagicNumber)
+            return false;
+        offset += 4;
+        if (BinaryPrimitives.ReadInt32LittleEndian(buffer.Slice(offset)) != ProtocolVersion)
             return false;
         offset += 4;
 
-        // Validate protocol version
-        int version = BinaryPrimitives.ReadInt32LittleEndian(buffer.Slice(offset));
-        if (version != ProtocolVersion)
-            return false;
-        offset += 4;
-
-        // Command type
         cmd.Type = (CommandType)BinaryPrimitives.ReadInt32LittleEndian(buffer.Slice(offset));
         offset += 4;
-
-        // NTP timestamp
         cmd.NtpTimestamp = BinaryPrimitives.ReadInt64LittleEndian(buffer.Slice(offset));
         offset += 8;
-
-        // Scheduled execution time
         cmd.ScheduledExecutionTime = BinaryPrimitives.ReadInt64LittleEndian(buffer.Slice(offset));
         offset += 8;
-
-        // Master clock timestamp
         cmd.MasterClockTimestamp = BinaryPrimitives.ReadDoubleLittleEndian(buffer.Slice(offset));
         offset += 8;
-
-        // Master clock sample position
         cmd.MasterClockSamplePosition = BinaryPrimitives.ReadInt64LittleEndian(buffer.Slice(offset));
         offset += 8;
-
-        // Sample rate
         cmd.SampleRate = BinaryPrimitives.ReadInt32LittleEndian(buffer.Slice(offset));
         offset += 4;
-
-        // Target position
         cmd.TargetPosition = BinaryPrimitives.ReadDoubleLittleEndian(buffer.Slice(offset));
         offset += 8;
-
-        // Tempo value
         cmd.TempoValue = BinaryPrimitives.ReadSingleLittleEndian(buffer.Slice(offset));
         offset += 4;
-
-        // Use smooth
         cmd.UseSmooth = buffer[offset] != 0;
         offset += 1;
-
-        // Sequence number
         cmd.SequenceNumber = BinaryPrimitives.ReadInt32LittleEndian(buffer.Slice(offset));
         offset += 4;
-
-        // Client send time
         cmd.ClientSendTime = BinaryPrimitives.ReadInt64LittleEndian(buffer.Slice(offset));
-        offset += 8;
 
         return true;
     }
 
     /// <summary>
-    /// Creates a clock sync command.
+    /// Clock tick the server keeps firing at the clients.
     /// </summary>
+    /// <param name="ntpTimestamp"></param>
+    /// <param name="masterClockTimestamp"></param>
+    /// <param name="masterClockSamplePosition"></param>
+    /// <param name="sampleRate"></param>
+    /// <returns></returns>
     public static Command CreateClockSyncCommand(
         long ntpTimestamp,
         double masterClockTimestamp,
@@ -319,8 +185,12 @@ public static class NetworkSyncProtocol
     }
 
     /// <summary>
-    /// Creates a play command.
+    /// Play, optionally from a start position.
     /// </summary>
+    /// <param name="ntpTimestamp"></param>
+    /// <param name="scheduledExecutionTime"></param>
+    /// <param name="startPosition"></param>
+    /// <returns></returns>
     public static Command CreatePlayCommand(
         long ntpTimestamp,
         long scheduledExecutionTime,
@@ -336,11 +206,12 @@ public static class NetworkSyncProtocol
     }
 
     /// <summary>
-    /// Creates a pause command.
+    /// Pause.
     /// </summary>
-    public static Command CreatePauseCommand(
-        long ntpTimestamp,
-        long scheduledExecutionTime)
+    /// <param name="ntpTimestamp"></param>
+    /// <param name="scheduledExecutionTime"></param>
+    /// <returns></returns>
+    public static Command CreatePauseCommand(long ntpTimestamp, long scheduledExecutionTime)
     {
         return new Command
         {
@@ -351,20 +222,22 @@ public static class NetworkSyncProtocol
     }
 
     /// <summary>
-    /// Creates a stop command.
+    /// Stop.
     /// </summary>
+    /// <param name="ntpTimestamp"></param>
+    /// <returns></returns>
     public static Command CreateStopCommand(long ntpTimestamp)
     {
-        return new Command
-        {
-            Type = CommandType.Stop,
-            NtpTimestamp = ntpTimestamp
-        };
+        return new Command { Type = CommandType.Stop, NtpTimestamp = ntpTimestamp };
     }
 
     /// <summary>
-    /// Creates a seek command.
+    /// Seek to a target position.
     /// </summary>
+    /// <param name="ntpTimestamp"></param>
+    /// <param name="scheduledExecutionTime"></param>
+    /// <param name="targetPosition"></param>
+    /// <returns></returns>
     public static Command CreateSeekCommand(
         long ntpTimestamp,
         long scheduledExecutionTime,
@@ -380,12 +253,13 @@ public static class NetworkSyncProtocol
     }
 
     /// <summary>
-    /// Creates a tempo command.
+    /// Tempo change, smooth flag decides if it ramps.
     /// </summary>
-    public static Command CreateTempoCommand(
-        long ntpTimestamp,
-        float tempoValue,
-        bool useSmooth)
+    /// <param name="ntpTimestamp"></param>
+    /// <param name="tempoValue"></param>
+    /// <param name="useSmooth"></param>
+    /// <returns></returns>
+    public static Command CreateTempoCommand(long ntpTimestamp, float tempoValue, bool useSmooth)
     {
         return new Command
         {
@@ -397,11 +271,12 @@ public static class NetworkSyncProtocol
     }
 
     /// <summary>
-    /// Creates a ping command.
+    /// Ping for measuring latency, carries the client send time.
     /// </summary>
-    public static Command CreatePingCommand(
-        long clientSendTime,
-        int sequenceNumber)
+    /// <param name="clientSendTime"></param>
+    /// <param name="sequenceNumber"></param>
+    /// <returns></returns>
+    public static Command CreatePingCommand(long clientSendTime, int sequenceNumber)
     {
         return new Command
         {
@@ -412,11 +287,12 @@ public static class NetworkSyncProtocol
     }
 
     /// <summary>
-    /// Creates a pong command.
+    /// Pong bounced back at the client, echoes the ping's send time.
     /// </summary>
-    public static Command CreatePongCommand(
-        long clientSendTime,
-        int sequenceNumber)
+    /// <param name="clientSendTime"></param>
+    /// <param name="sequenceNumber"></param>
+    /// <returns></returns>
+    public static Command CreatePongCommand(long clientSendTime, int sequenceNumber)
     {
         return new Command
         {

@@ -5,15 +5,8 @@ using Ownaudio.Core;
 namespace OwnaudioNET.Mixing;
 
 /// <summary>
-/// Writes audio samples to a WAV file.
-/// Supports Float32 PCM format for high-quality recording.
-///
-/// WAV File Format:
-/// - RIFF header (12 bytes): "RIFF" + file_size + "WAVE"
-/// - fmt chunk (24 bytes): Format info (Float32 PCM)
-/// - data chunk (8 bytes + samples): "data" + data_size + samples
-///
-/// Thread Safety: NOT thread-safe - caller must synchronize access.
+/// Dumps float samples into a WAV file as Float32 PCM (IEEE float). The RIFF and
+/// data chunk sizes are patched in on Dispose. Not thread-safe — sync it yourself.
 /// </summary>
 public sealed class WaveFileWriter : IDisposable
 {
@@ -25,45 +18,42 @@ public sealed class WaveFileWriter : IDisposable
     private bool _disposed;
 
     /// <summary>
-    /// Gets the audio configuration being used.
+    /// Audio config we're writing with.
     /// </summary>
     public AudioConfig Config => _config;
 
     /// <summary>
-    /// Gets the total number of samples written.
+    /// Samples written so far.
     /// </summary>
     public long TotalSamplesWritten => _totalSamplesWritten;
 
     /// <summary>
-    /// Gets the total number of frames written.
+    /// Frames written so far.
     /// </summary>
     public long TotalFramesWritten => _totalSamplesWritten / _config.Channels;
 
     /// <summary>
-    /// Gets the current duration in seconds.
+    /// Current length in seconds.
     /// </summary>
     public double Duration => (double)TotalFramesWritten / _config.SampleRate;
 
     /// <summary>
-    /// Initializes a new instance of the WaveFileWriter class.
+    /// Creates the file and lays down the header.
     /// </summary>
-    /// <param name="filePath">Path to the output WAV file.</param>
-    /// <param name="config">Audio configuration specification.</param>
-    /// <exception cref="ArgumentException">Thrown when filePath is invalid.</exception>
-    /// <exception cref="IOException">Thrown when file cannot be created.</exception>
+    /// <param name="filePath"></param>
+    /// <param name="config"></param>
     public WaveFileWriter(string filePath, AudioConfig config)
     {
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
 
         _config = config ?? throw new ArgumentNullException(nameof(config));
-        _totalSamplesWritten = 0;
 
         try
         {
             _stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
             _writer = new BinaryWriter(_stream, Encoding.UTF8, leaveOpen: false);
-            WriteWavHeader();
+            _writeWavHeader();
         }
         catch
         {
@@ -74,21 +64,17 @@ public sealed class WaveFileWriter : IDisposable
     }
 
     /// <summary>
-    /// Writes audio samples to the WAV file.
+    /// Appends interleaved Float32 samples.
     /// </summary>
     /// <remarks>
-    /// The WAV data chunk stores little-endian Float32, which is the in-memory layout of
-    /// <see langword="float"/> on every supported platform, so the whole block is written in one
-    /// stream call instead of one <see cref="BinaryWriter"/> call per sample. A big-endian
-    /// platform would need the per-sample fallback path; none of the supported runtimes are
-    /// big-endian.
+    /// float is already little-endian Float32 in memory on every supported runtime,
+    /// so we blit the whole span in one write. The per-sample loop is only there for
+    /// a hypothetical big-endian box.
     /// </remarks>
-    /// <param name="samples">Audio samples in Float32 format, interleaved.</param>
-    /// <exception cref="ObjectDisposedException">Thrown if writer is disposed.</exception>
-    /// <exception cref="IOException">Thrown if write operation fails.</exception>
+    /// <param name="samples"></param>
     public void WriteSamples(ReadOnlySpan<float> samples)
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
         if (samples.IsEmpty)
             return;
@@ -103,9 +89,7 @@ public sealed class WaveFileWriter : IDisposable
             else
             {
                 for (int i = 0; i < samples.Length; i++)
-                {
                     _writer.Write(samples[i]);
-                }
             }
 
             _totalSamplesWritten += samples.Length;
@@ -117,42 +101,40 @@ public sealed class WaveFileWriter : IDisposable
     }
 
     /// <summary>
-    /// Writes the WAV file header.
-    /// Format: Float32 PCM (IEEE Float)
+    /// Lays down the RIFF/fmt/data header, Float32 PCM, sizes as placeholders.
     /// </summary>
-    private void WriteWavHeader()
+    private void _writeWavHeader()
     {
         // RIFF header
-        _writer.Write(Encoding.ASCII.GetBytes("RIFF")); // ChunkID
-        _writer.Write(0); // ChunkSize (placeholder, will be updated in Dispose)
-        _writer.Write(Encoding.ASCII.GetBytes("WAVE")); // Format
+        _writer.Write(Encoding.ASCII.GetBytes("RIFF"));
+        _writer.Write(0);
+        _writer.Write(Encoding.ASCII.GetBytes("WAVE"));
 
         // fmt chunk
-        _writer.Write(Encoding.ASCII.GetBytes("fmt ")); // Subchunk1ID
-        _writer.Write(16); // Subchunk1Size (16 for PCM)
-        _writer.Write((ushort)3); // AudioFormat (3 = IEEE Float)
-        _writer.Write((ushort)_config.Channels); // NumChannels
-        _writer.Write(_config.SampleRate); // SampleRate
-        _writer.Write(_config.SampleRate * _config.Channels * 4); // ByteRate (SampleRate * Channels * BytesPerSample)
-        _writer.Write((ushort)(_config.Channels * 4)); // BlockAlign (Channels * BytesPerSample)
-        _writer.Write((ushort)32); // BitsPerSample (32 for Float32)
+        _writer.Write(Encoding.ASCII.GetBytes("fmt "));
+        _writer.Write(16);
+        _writer.Write((ushort)3);
+        _writer.Write((ushort)_config.Channels);
+        _writer.Write(_config.SampleRate);
+        _writer.Write(_config.SampleRate * _config.Channels * 4);
+        _writer.Write((ushort)(_config.Channels * 4));
+        _writer.Write((ushort)32);
 
         // data chunk
-        _writer.Write(Encoding.ASCII.GetBytes("data")); // Subchunk2ID
+        _writer.Write(Encoding.ASCII.GetBytes("data"));
         _dataChunkSizePosition = _stream.Position;
-        _writer.Write(0); // Subchunk2Size (placeholder, will be updated in Dispose)
+        _writer.Write(0);
     }
 
     /// <summary>
-    /// Updates the WAV header with final sizes.
-    /// Called during disposal to finalize the file.
+    /// Patches the RIFF and data sizes into the header on close.
     /// </summary>
-    private void UpdateWavHeader()
+    private void _updateWavHeader()
     {
         try
         {
-            long dataChunkSize = _totalSamplesWritten * 4; // 4 bytes per Float32 sample
-            long fileSize = 36 + dataChunkSize; // 36 = header size without RIFF header (8 bytes)
+            long dataChunkSize = _totalSamplesWritten * 4;
+            long fileSize = 36 + dataChunkSize;
 
             _stream.Seek(4, SeekOrigin.Begin);
             _writer.Write((int)(fileSize - 8));
@@ -161,20 +143,20 @@ public sealed class WaveFileWriter : IDisposable
             _writer.Flush();
             _stream.Flush();
         }
-        catch {}
+        catch { }
     }
 
     /// <summary>
-    /// Throws ObjectDisposedException if disposed.
+    /// Barks if we're already disposed.
     /// </summary>
-    private void ThrowIfDisposed()
+    private void _throwIfDisposed()
     {
         if (_disposed)
             throw new ObjectDisposedException(nameof(WaveFileWriter));
     }
 
     /// <summary>
-    /// Disposes the writer and finalizes the WAV file.
+    /// Finalizes the header and closes the file.
     /// </summary>
     public void Dispose()
     {
@@ -183,7 +165,7 @@ public sealed class WaveFileWriter : IDisposable
 
         try
         {
-            UpdateWavHeader();
+            _updateWavHeader();
         }
         finally
         {
@@ -194,7 +176,7 @@ public sealed class WaveFileWriter : IDisposable
     }
 
     /// <summary>
-    /// Returns a string representation of the writer's state.
+    /// One-line state dump.
     /// </summary>
     public override string ToString()
     {

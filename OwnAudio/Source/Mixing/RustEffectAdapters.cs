@@ -8,71 +8,59 @@ using EffectType = Ownaudio.Audio.Effects.EffectType;
 namespace OwnaudioNET.Mixing;
 
 /// <summary>
-/// Maps managed <see cref="IEffectProcessor"/> effects to their native Rust
-/// counterparts and mirrors their parameters onto the native effect (plan E.3/E.4).
+/// Pairs a managed effect with its native Rust twin and shoves the managed
+/// parameters onto the native side. In the rust-native chain the managed
+/// Process never runs — the managed object is just the parameter model the UI
+/// binds to; the control-rate tick pushes its values across via Mirror.
+/// VST3 isn't routed here (own native bridge); effects without an adapter get
+/// no native processing.
 /// </summary>
-/// <remarks>
-/// <para>
-/// In the Rust-native chain the managed effect's <see cref="IEffectProcessor.Process"/> never runs;
-/// the native effect does the audio. The managed effect object remains the parameter model (the UI
-/// binds to it), and its parameters are pushed onto the paired native effect by the control-rate
-/// sync tick through <see cref="Mirror"/>. The managed public properties are designed to expose the
-/// same units as the native effect parameters (dB, ms, Hz, 0–1), so the mirror is a direct
-/// pass-through per parameter — the linear↔dB / ms↔seconds conversions live inside the managed
-/// properties themselves.
-/// </para>
-/// <para>
-/// Only the effect types with a registered adapter are routed to native. This includes the composite
-/// <c>SmartMasterEffect</c>, which maps to the single native <see cref="EffectType.SmartMaster"/>
-/// effect (its whole DSP chain runs natively, with <see cref="MirrorSmartMaster"/> pushing the managed
-/// <c>SmartMasterConfig</c> onto the native parameters). VST3 is not routed through this registry — it
-/// is hosted natively through its own dedicated bridge (plan E.6). Any other effect without a
-/// registered adapter is skipped and produces no native processing.
-/// </para>
-/// </remarks>
 internal static class RustEffectAdapters
 {
-    /// <summary>Native parameter id shared by every effect: enable/bypass (0 = bypass).</summary>
+    /// <summary>Shared id: enable/bypass (0 = bypass).</summary>
     private const uint ParamEnabled = 0;
 
-    /// <summary>Native parameter id shared by most effects: wet/dry mix (ignored where unsupported).</summary>
+    /// <summary>Shared id: wet/dry mix (ignored where the native effect has none).</summary>
     private const uint ParamMix = 1;
 
-    /// <summary>Receives one native parameter change (id + value) for the paired effect.</summary>
+    /// <summary>One native param change (id + value) for the paired effect.</summary>
     internal delegate void ParamSink(uint paramId, float value);
 
+    /// <summary>
+    /// Managed effect type → native type + the mirror that pushes its params.
+    /// </summary>
     private sealed record Adapter(EffectType Type, Action<IEffectProcessor, ParamSink> Mirror);
 
     /// <summary>
-    /// Registry keyed by the concrete managed effect type → native effect type + parameter mirror.
+    /// Keyed by concrete managed effect type.
     /// </summary>
-    private static readonly IReadOnlyDictionary<Type, Adapter> Adapters =
+    private static readonly IReadOnlyDictionary<Type, Adapter> _adapters =
         new Dictionary<Type, Adapter>
         {
-            [typeof(ME.ReverbEffect)]           = new Adapter(EffectType.Reverb, MirrorReverb),
-            [typeof(ME.EqualizerEffect)]        = new Adapter(EffectType.Equalizer, MirrorEqualizer),
-            [typeof(ME.Equalizer30BandEffect)]  = new Adapter(EffectType.Equalizer30, MirrorEqualizer30),
-            [typeof(ME.CompressorEffect)]       = new Adapter(EffectType.Compressor, MirrorCompressor),
-            [typeof(ME.LimiterEffect)]          = new Adapter(EffectType.Limiter, MirrorLimiter),
-            [typeof(ME.DelayEffect)]            = new Adapter(EffectType.Delay, MirrorDelay),
-            [typeof(ME.ChorusEffect)]           = new Adapter(EffectType.Chorus, MirrorChorus),
-            [typeof(ME.DistortionEffect)]       = new Adapter(EffectType.Distortion, MirrorDistortion),
-            [typeof(ME.OverdriveEffect)]        = new Adapter(EffectType.Overdrive, MirrorOverdrive),
-            [typeof(ME.FlangerEffect)]          = new Adapter(EffectType.Flanger, MirrorFlanger),
-            [typeof(ME.PhaserEffect)]           = new Adapter(EffectType.Phaser, MirrorPhaser),
-            [typeof(ME.RotaryEffect)]           = new Adapter(EffectType.Rotary, MirrorRotary),
-            [typeof(ME.AutoGainEffect)]         = new Adapter(EffectType.AutoGain, MirrorAutoGain),
-            [typeof(ME.EnhancerEffect)]         = new Adapter(EffectType.Enhancer, MirrorEnhancer),
-            [typeof(ME.DynamicAmpEffect)]       = new Adapter(EffectType.DynamicAmp, MirrorDynamicAmp),
-            [typeof(SM.SmartMasterEffect)]      = new Adapter(EffectType.SmartMaster, MirrorSmartMaster),
+            [typeof(ME.ReverbEffect)]           = new Adapter(EffectType.Reverb, _mirrorReverb),
+            [typeof(ME.EqualizerEffect)]        = new Adapter(EffectType.Equalizer, _mirrorEqualizer),
+            [typeof(ME.Equalizer30BandEffect)]  = new Adapter(EffectType.Equalizer30, _mirrorEqualizer30),
+            [typeof(ME.CompressorEffect)]       = new Adapter(EffectType.Compressor, _mirrorCompressor),
+            [typeof(ME.LimiterEffect)]          = new Adapter(EffectType.Limiter, _mirrorLimiter),
+            [typeof(ME.DelayEffect)]            = new Adapter(EffectType.Delay, _mirrorDelay),
+            [typeof(ME.ChorusEffect)]           = new Adapter(EffectType.Chorus, _mirrorChorus),
+            [typeof(ME.DistortionEffect)]       = new Adapter(EffectType.Distortion, _mirrorDistortion),
+            [typeof(ME.OverdriveEffect)]        = new Adapter(EffectType.Overdrive, _mirrorOverdrive),
+            [typeof(ME.FlangerEffect)]          = new Adapter(EffectType.Flanger, _mirrorFlanger),
+            [typeof(ME.PhaserEffect)]           = new Adapter(EffectType.Phaser, _mirrorPhaser),
+            [typeof(ME.RotaryEffect)]           = new Adapter(EffectType.Rotary, _mirrorRotary),
+            [typeof(ME.AutoGainEffect)]         = new Adapter(EffectType.AutoGain, _mirrorAutoGain),
+            [typeof(ME.EnhancerEffect)]         = new Adapter(EffectType.Enhancer, _mirrorEnhancer),
+            [typeof(ME.DynamicAmpEffect)]       = new Adapter(EffectType.DynamicAmp, _mirrorDynamicAmp),
+            [typeof(SM.SmartMasterEffect)]      = new Adapter(EffectType.SmartMaster, _mirrorSmartMaster),
         };
 
     /// <summary>
-    /// Resolves the native <see cref="EffectType"/> for a managed effect, when an adapter exists.
+    /// Native effect type for a managed effect, if we have an adapter for it.
     /// </summary>
     internal static bool TryGetEffectType(IEffectProcessor effect, out EffectType effectType)
     {
-        if (effect is not null && Adapters.TryGetValue(effect.GetType(), out Adapter? adapter))
+        if (effect is not null && _adapters.TryGetValue(effect.GetType(), out Adapter? adapter))
         {
             effectType = adapter.Type;
             return true;
@@ -83,44 +71,36 @@ internal static class RustEffectAdapters
     }
 
     /// <summary>
-    /// Pushes the managed effect's current parameters onto its paired native effect via
-    /// <paramref name="sink"/>. Always mirrors the common enable and mix parameters (mix is ignored
-    /// natively where the effect has none), then the effect-specific parameters.
+    /// Pushes the managed effect's current params onto its native twin: always
+    /// the common enable + mix, then the effect-specific ones.
     /// </summary>
     internal static void Mirror(IEffectProcessor effect, ParamSink sink)
     {
-        if (effect is null)
-        {
-            return;
-        }
+        if (effect is null) return;
 
         sink(ParamEnabled, effect.Enabled ? 1f : 0f);
         sink(ParamMix, effect.Mix);
 
-        if (Adapters.TryGetValue(effect.GetType(), out Adapter? adapter))
-        {
+        if (_adapters.TryGetValue(effect.GetType(), out Adapter? adapter))
             adapter.Mirror(effect, sink);
-        }
     }
 
-    // -- Per-effect parameter adapters --------------------------------------
-    // The managed public properties already expose native-compatible units, so each parameter is a
-    // direct pass-through to the matching native parameter id.
+    // Per-effect mirrors. Managed props already speak native units, so every
+    // param is a straight pass-through to its native id.
 
-    private static void MirrorReverb(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorReverb(IEffectProcessor e, ParamSink sink)
     {
         var r = (ME.ReverbEffect)e;
-        sink(2, r.RoomSize);   // 0–1
-        sink(3, r.Damping);    // 0–1
-        sink(4, r.Width);      // stereo width
-        sink(5, r.WetLevel);   // 0–1
-        sink(6, r.DryLevel);   // 0–1
+        sink(2, r.RoomSize);
+        sink(3, r.Damping);
+        sink(4, r.Width);
+        sink(5, r.WetLevel);
+        sink(6, r.DryLevel);
     }
 
-    private static void MirrorEqualizer(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorEqualizer(IEffectProcessor e, ParamSink sink)
     {
         var q = (ME.EqualizerEffect)e;
-        // Native band params: Band0=2 … Band9=11 (gain in dB).
         sink(2, q.Band0Gain);
         sink(3, q.Band1Gain);
         sink(4, q.Band2Gain);
@@ -133,61 +113,57 @@ internal static class RustEffectAdapters
         sink(11, q.Band9Gain);
     }
 
-    private static void MirrorEqualizer30(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorEqualizer30(IEffectProcessor e, ParamSink sink)
     {
         var q = (ME.Equalizer30BandEffect)e;
-        // Native band params: Band0=2 … Band29=31 (gain in dB); managed exposes bands via indexer.
         for (int i = 0; i < 30; i++)
-        {
             sink((uint)(2 + i), q[i]);
-        }
     }
 
-    private static void MirrorCompressor(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorCompressor(IEffectProcessor e, ParamSink sink)
     {
         var c = (ME.CompressorEffect)e;
-        sink(2, c.Threshold);    // dB (managed property is dB; ctor arg is linear)
-        sink(3, c.Ratio);        // N:1
-        sink(4, c.AttackTime);   // ms
-        sink(5, c.ReleaseTime);  // ms
-        sink(6, c.MakeupGain);   // dB
+        sink(2, c.Threshold);
+        sink(3, c.Ratio);
+        sink(4, c.AttackTime);
+        sink(5, c.ReleaseTime);
+        sink(6, c.MakeupGain);
     }
 
-    private static void MirrorLimiter(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorLimiter(IEffectProcessor e, ParamSink sink)
     {
         var l = (ME.LimiterEffect)e;
-        // Native limiter has no mix param; threshold/ceiling in dB, release/lookahead in ms.
         sink(2, l.Threshold);
         sink(3, l.Ceiling);
         sink(4, l.Release);
         sink(5, l.LookAheadMs);
     }
 
-    private static void MirrorDelay(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorDelay(IEffectProcessor e, ParamSink sink)
     {
         var d = (ME.DelayEffect)e;
-        sink(2, d.Time);                  // ms
-        sink(3, d.Repeat);                // feedback amount
-        sink(4, d.Damping);               // 0–1
+        sink(2, d.Time);
+        sink(3, d.Repeat);
+        sink(4, d.Damping);
         sink(5, d.PingPong ? 1f : 0f);
     }
 
-    private static void MirrorChorus(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorChorus(IEffectProcessor e, ParamSink sink)
     {
         var c = (ME.ChorusEffect)e;
-        sink(2, c.Rate);       // Hz
-        sink(3, c.Depth);      // 0–1
-        sink(4, c.Voices);     // count
+        sink(2, c.Rate);
+        sink(3, c.Depth);
+        sink(4, c.Voices);
     }
 
-    private static void MirrorDistortion(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorDistortion(IEffectProcessor e, ParamSink sink)
     {
         var d = (ME.DistortionEffect)e;
         sink(2, d.Drive);
         sink(3, d.OutputGain);
     }
 
-    private static void MirrorOverdrive(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorOverdrive(IEffectProcessor e, ParamSink sink)
     {
         var o = (ME.OverdriveEffect)e;
         sink(2, o.Gain);
@@ -195,24 +171,24 @@ internal static class RustEffectAdapters
         sink(4, o.OutputLevel);
     }
 
-    private static void MirrorFlanger(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorFlanger(IEffectProcessor e, ParamSink sink)
     {
         var f = (ME.FlangerEffect)e;
-        sink(2, f.Rate);       // Hz
-        sink(3, f.Depth);      // 0–1
-        sink(4, f.Feedback);   // 0–1
+        sink(2, f.Rate);
+        sink(3, f.Depth);
+        sink(4, f.Feedback);
     }
 
-    private static void MirrorPhaser(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorPhaser(IEffectProcessor e, ParamSink sink)
     {
         var p = (ME.PhaserEffect)e;
-        sink(2, p.Rate);       // Hz
-        sink(3, p.Depth);      // 0–1
-        sink(4, p.Feedback);   // 0–1
-        sink(5, p.Stages);     // count
+        sink(2, p.Rate);
+        sink(3, p.Depth);
+        sink(4, p.Feedback);
+        sink(5, p.Stages);
     }
 
-    private static void MirrorRotary(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorRotary(IEffectProcessor e, ParamSink sink)
     {
         var r = (ME.RotaryEffect)e;
         sink(2, r.HornSpeed);
@@ -221,10 +197,9 @@ internal static class RustEffectAdapters
         sink(5, r.IsFast ? 1f : 0f);
     }
 
-    private static void MirrorAutoGain(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorAutoGain(IEffectProcessor e, ParamSink sink)
     {
         var a = (ME.AutoGainEffect)e;
-        // Native auto-gain has no mix param.
         sink(2, a.TargetLevel);
         sink(3, a.AttackCoefficient);
         sink(4, a.ReleaseCoefficient);
@@ -233,66 +208,55 @@ internal static class RustEffectAdapters
         sink(7, a.GateThreshold);
     }
 
-    private static void MirrorEnhancer(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorEnhancer(IEffectProcessor e, ParamSink sink)
     {
         var h = (ME.EnhancerEffect)e;
         sink(2, h.Gain);
-        sink(3, h.CutoffFrequency);   // Hz
+        sink(3, h.CutoffFrequency);
     }
 
-    private static void MirrorDynamicAmp(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorDynamicAmp(IEffectProcessor e, ParamSink sink)
     {
         var d = (ME.DynamicAmpEffect)e;
-        sink(2, d.TargetRmsLevelDb);            // dB
-        sink(3, d.AttackTime);                  // ms/s per managed property
+        sink(2, d.TargetRmsLevelDb);
+        sink(3, d.AttackTime);
         sink(4, d.ReleaseTime);
-        sink(5, d.NoiseGateThresholdDb);        // dB
+        sink(5, d.NoiseGateThresholdDb);
         sink(6, d.MaxGain);
-        sink(7, d.MaxGainReductionDb);          // dB
-        sink(8, d.RmsWindowSeconds);            // s
-        sink(9, d.MaxGainChangePerSecondDb);    // dB/s
+        sink(7, d.MaxGainReductionDb);
+        sink(8, d.RmsWindowSeconds);
+        sink(9, d.MaxGainChangePerSecondDb);
     }
 
     /// <summary>
-    /// Mirrors the composite <see cref="SM.SmartMasterEffect"/>'s current configuration onto its
-    /// single native <see cref="EffectType.SmartMaster"/> effect. The managed effect stays the
-    /// parameter model (UI / preset owner); the whole DSP chain runs natively.
+    /// Mirrors the composite SmartMaster config onto its single native effect.
+    /// Param layout matches the Rust smartmaster module: EQ gains 2–31 (dB),
+    /// subharmonic 32–33, compressor 34–38, crossover 39, phase align 40–45,
+    /// limiter 46–48. Enable/mix (0–1) come from the base Mirror.
     /// </summary>
-    /// <remarks>
-    /// The parameter ids and units match the native composite's contract (see the Rust
-    /// <c>smartmaster</c> module): EQ band gains occupy ids 2–31 (dB), then subharmonic (32–33),
-    /// compressor (34–38, threshold kept as the config's linear 0–1 value and converted to dB
-    /// natively), crossover frequency (39), phase-alignment delays/inversions (40–45) and the limiter
-    /// (46–48). The common enable/mix (ids 0–1) are pushed by the base <see cref="Mirror"/>.
-    /// </remarks>
-    private static void MirrorSmartMaster(IEffectProcessor e, ParamSink sink)
+    private static void _mirrorSmartMaster(IEffectProcessor e, ParamSink sink)
     {
         var sm = (SM.SmartMasterEffect)e;
         SM.SmartMasterConfig cfg = sm.GetConfiguration();
 
-        // Graphic EQ: 30 band gains in dB (ids 2..31). GraphicEQGains is oversized (31); use the
-        // first 30, matching the native 30-band equalizer.
+        // GraphicEQGains is oversized (31); take the first 30 for the native 30-band EQ.
         float[] eqGains = cfg.GraphicEQGains;
         for (int i = 0; i < 30; i++)
-        {
             sink((uint)(2 + i), (eqGains is not null && i < eqGains.Length) ? eqGains[i] : 0f);
-        }
 
-        // Subharmonic synthesizer.
         sink(32, cfg.SubharmonicEnabled ? 1f : 0f);
-        sink(33, cfg.SubharmonicMix);           // 0–1
+        sink(33, cfg.SubharmonicMix);
 
-        // Compressor. Threshold is the config's linear 0–1 value; the native effect converts it to dB.
+        // Compressor — threshold stays linear 0–1, native turns it into dB.
         sink(34, cfg.CompressorEnabled ? 1f : 0f);
-        sink(35, cfg.CompressorThreshold);      // linear 0–1
-        sink(36, cfg.CompressorRatio);          // N:1
-        sink(37, cfg.CompressorAttack);         // ms
-        sink(38, cfg.CompressorRelease);        // ms
+        sink(35, cfg.CompressorThreshold);
+        sink(36, cfg.CompressorRatio);
+        sink(37, cfg.CompressorAttack);
+        sink(38, cfg.CompressorRelease);
 
-        // Crossover split frequency.
-        sink(39, cfg.CrossoverFrequency);       // Hz
+        sink(39, cfg.CrossoverFrequency);
 
-        // Phase alignment: per-channel delays (ms) and polarity flips for L, R, Sub.
+        // Phase align: per-channel delay (ms) + polarity flip for L, R, Sub.
         float[] delays = cfg.TimeDelays;
         bool[] invert = cfg.PhaseInvert;
         sink(40, (delays is not null && delays.Length > 0) ? delays[0] : 0f);
@@ -302,9 +266,8 @@ internal static class RustEffectAdapters
         sink(44, (invert is not null && invert.Length > 1 && invert[1]) ? 1f : 0f);
         sink(45, (invert is not null && invert.Length > 2 && invert[2]) ? 1f : 0f);
 
-        // Brick-wall limiter.
-        sink(46, cfg.LimiterThreshold);         // dBFS
-        sink(47, cfg.LimiterCeiling);           // dBFS
-        sink(48, cfg.LimiterRelease);           // ms
+        sink(46, cfg.LimiterThreshold);
+        sink(47, cfg.LimiterCeiling);
+        sink(48, cfg.LimiterRelease);
     }
 }
