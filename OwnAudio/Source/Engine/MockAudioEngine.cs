@@ -7,56 +7,45 @@ using OwnaudioNET.Exceptions;
 namespace OwnaudioNET.Engine;
 
 /// <summary>
-/// Mock implementation of IAudioEngine for testing without audio hardware.
-/// Simulates audio I/O timing and provides test hooks for validation.
+/// Fake IAudioEngine for tests and boxes without audio hardware. Fakes the callback timing and counts calls,
+/// optionally spits out a 440 Hz sine.
 /// </summary>
-/// <remarks>
-/// This mock engine is useful for:
-/// - Unit testing audio processing logic
-/// - Developing on platforms without audio hardware
-/// - Testing on unsupported platforms
-/// - Continuous integration environments
-///
-/// The mock engine simulates realistic timing based on buffer size and sample rate,
-/// and can optionally generate a 440Hz sine wave for testing.
-/// </remarks>
 public sealed class MockAudioEngine : IAudioEngine
 {
     private readonly object _lock = new object();
     private readonly bool _generateTestSignal;
     private AudioConfig? _config;
     private Timer? _simulationTimer;
-    private volatile int _state; // 0 = stopped, 1 = running, -1 = error
+    private volatile int _state;
     private volatile int _sendCallCount;
-    private long _totalSamplesSent; // Use Interlocked.Read for thread-safe access
+    private long _totalSamplesSent;
     private volatile int _receiveCallCount;
-    private long _totalSamplesReceived; // Use Interlocked.Read for thread-safe access
+    private long _totalSamplesReceived;
     private bool _disposed;
-    private double _sinePhase; // Phase accumulator for sine wave generation
+    private double _sinePhase;
 
     /// <summary>
-    /// Gets the number of times Send() has been called.
+    /// Send() call count.
     /// </summary>
     public int SendCallCount => _sendCallCount;
 
     /// <summary>
-    /// Gets the total number of samples sent through Send().
+    /// Samples that went through Send().
     /// </summary>
     public long TotalSamplesSent => Interlocked.Read(ref _totalSamplesSent);
 
     /// <summary>
-    /// Gets the number of times Receives() has been called.
+    /// Receives() call count.
     /// </summary>
     public int ReceiveCallCount => _receiveCallCount;
 
     /// <summary>
-    /// Gets the total number of samples received through Receives().
+    /// Samples that came back through Receives().
     /// </summary>
     public long TotalSamplesReceived => Interlocked.Read(ref _totalSamplesReceived);
 
     /// <summary>
-    /// Event raised periodically to simulate audio callback timing.
-    /// Useful for testing components that need to respond to audio timing events.
+    /// Ticks at the fake callback interval, for testing things that hang off audio timing.
     /// </summary>
     public event EventHandler? SimulatedCallback;
 
@@ -70,9 +59,6 @@ public sealed class MockAudioEngine : IAudioEngine
     public event EventHandler<AudioDeviceStateChangedEventArgs>? DeviceStateChanged;
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// The mock engine can fire this event via <see cref="SimulateDeviceReconnected"/>.
-    /// </remarks>
 #pragma warning disable CS0067
     public event EventHandler<AudioDeviceReconnectedEventArgs>? DeviceReconnected;
 #pragma warning restore CS0067
@@ -90,20 +76,16 @@ public sealed class MockAudioEngine : IAudioEngine
     }
 
     /// <summary>
-    /// Initializes a new instance of the MockAudioEngine class.
+    /// Creates the mock. Turn the flag on to get a 440 Hz sine written into the buffers.
     /// </summary>
-    /// <param name="generateTestSignal">If true, generates a 440Hz sine wave in Send() calls for testing.</param>
+    /// <param name="generateTestSignal"></param>
     public MockAudioEngine(bool generateTestSignal = false)
     {
         _generateTestSignal = generateTestSignal;
-        _sinePhase = 0.0;
     }
 
     /// <inheritdoc/>
-    public IntPtr GetStream()
-    {
-        return IntPtr.Zero;
-    }
+    public IntPtr GetStream() => IntPtr.Zero;
 
     /// <inheritdoc/>
     public int FramesPerBuffer
@@ -120,21 +102,19 @@ public sealed class MockAudioEngine : IAudioEngine
     /// <inheritdoc/>
     public int OwnAudioEngineActivate()
     {
-        int currentState = _state;
-        if (currentState < 0)
-            return -1; // Error state
+        int _s = _state;
+        if (_s < 0) return -1;
 
-        return currentState == 1 ? 1 : 0;
+        return _s == 1 ? 1 : 0;
     }
 
     /// <inheritdoc/>
     public int OwnAudioEngineStopped()
     {
-        int currentState = _state;
-        if (currentState < 0)
-            return -1; // Error state
+        int _s = _state;
+        if (_s < 0) return -1;
 
-        return currentState == 0 ? 1 : 0;
+        return _s == 0 ? 1 : 0;
     }
 
     /// <inheritdoc/>
@@ -148,21 +128,18 @@ public sealed class MockAudioEngine : IAudioEngine
 
         lock (_lock)
         {
-            if (_disposed)
-                return -3;
-
-            if (_config != null)
-                return -4; // Already initialized
+            if (_disposed) return -3;
+            if (_config != null) return -4;
 
             _config = config;
-            _state = 0; // Stopped/idle state
+            _state = 0;
             _sendCallCount = 0;
             _totalSamplesSent = 0;
             _receiveCallCount = 0;
             _totalSamplesReceived = 0;
             _sinePhase = 0.0;
 
-            return 0; // Success
+            return 0;
         }
     }
 
@@ -171,25 +148,20 @@ public sealed class MockAudioEngine : IAudioEngine
     {
         lock (_lock)
         {
-            if (_disposed)
-                return -1;
+            if (_disposed) return -1;
+            if (_config == null) return -2;
+            if (_state == 1) return 0;
 
-            if (_config == null)
-                return -2; // Not initialized
-
-            if (_state == 1)
-                return 0; // Already running (idempotent)
-
-            double intervalMs = (_config.BufferSize / (double)_config.SampleRate) * 1000.0;
+            double _intervalMs = (_config.BufferSize / (double)_config.SampleRate) * 1000.0;
 
             _simulationTimer = new Timer(
-                SimulationCallback,
+                _simulationCallback,
                 null,
-                TimeSpan.FromMilliseconds(intervalMs),
-                TimeSpan.FromMilliseconds(intervalMs));
+                TimeSpan.FromMilliseconds(_intervalMs),
+                TimeSpan.FromMilliseconds(_intervalMs));
 
-            _state = 1; // Running state
-            return 0; // Success
+            _state = 1;
+            return 0;
         }
     }
 
@@ -198,17 +170,14 @@ public sealed class MockAudioEngine : IAudioEngine
     {
         lock (_lock)
         {
-            if (_disposed)
-                return -1;
-
-            if (_state == 0)
-                return 0; // Already stopped (idempotent)
+            if (_disposed) return -1;
+            if (_state == 0) return 0;
 
             _simulationTimer?.Dispose();
             _simulationTimer = null;
 
-            _state = 0; // Stopped state
-            return 0; // Success
+            _state = 0;
+            return 0;
         }
     }
 
@@ -227,10 +196,8 @@ public sealed class MockAudioEngine : IAudioEngine
         Interlocked.Increment(ref _sendCallCount);
         Interlocked.Add(ref _totalSamplesSent, samples.Length);
 
-        if (_generateTestSignal && _config != null)
-        {
-            GenerateSineWave(samples, _config.SampleRate, _config.Channels);
-        }
+        if (_generateTestSignal)
+            _generateSineWave(samples, _config.SampleRate, _config.Channels);
 
         Thread.SpinWait(100);
     }
@@ -246,7 +213,7 @@ public sealed class MockAudioEngine : IAudioEngine
         Interlocked.Increment(ref _receiveCallCount);
 
         if (_generateTestSignal)
-            GenerateSineWave(destination, _config.SampleRate, _config.Channels);
+            _generateSineWave(destination, _config.SampleRate, _config.Channels);
 
         Interlocked.Add(ref _totalSamplesReceived, destination.Length);
 
@@ -304,78 +271,55 @@ public sealed class MockAudioEngine : IAudioEngine
     /// <inheritdoc/>
     public int SetOutputDeviceByName(string deviceName)
     {
-        if (_disposed)
-            return -1;
+        if (_disposed) return -1;
+        if (_state == 1) return -2;
+        if (string.IsNullOrWhiteSpace(deviceName)) return -3;
 
-        if (_state == 1)
-            return -2; // Cannot change device while running
-
-        if (string.IsNullOrWhiteSpace(deviceName))
-            return -3; // Invalid device name
-
-        return 0; // Success
+        return 0;
     }
 
     /// <inheritdoc/>
     public int SetOutputDeviceByIndex(int deviceIndex)
     {
-        if (_disposed)
-            return -1;
+        if (_disposed) return -1;
+        if (_state == 1) return -2;
+        if (deviceIndex < 0) return -3;
 
-        if (_state == 1)
-            return -2; // Cannot change device while running
-
-        if (deviceIndex < 0)
-            return -3; // Invalid device index
-
-        return 0; // Success
+        return 0;
     }
 
     /// <inheritdoc/>
     public int SetInputDeviceByName(string deviceName)
     {
-        if (_disposed)
-            return -1;
+        if (_disposed) return -1;
+        if (_state == 1) return -2;
+        if (string.IsNullOrWhiteSpace(deviceName)) return -3;
 
-        if (_state == 1)
-            return -2; // Cannot change device while running
-
-        if (string.IsNullOrWhiteSpace(deviceName))
-            return -3; // Invalid device name
-
-        return 0; // Success
+        return 0;
     }
 
     /// <inheritdoc/>
     public int SetInputDeviceByIndex(int deviceIndex)
     {
-        if (_disposed)
-            return -1;
+        if (_disposed) return -1;
+        if (_state == 1) return -2;
+        if (deviceIndex < 0) return -3;
 
-        if (_state == 1)
-            return -2; // Cannot change device while running
-
-        if (deviceIndex < 0)
-            return -3; // Invalid device index
-
-        return 0; // Success
+        return 0;
     }
 
     /// <inheritdoc/>
     public void PauseDeviceMonitoring()
     {
-        // Mock implementation: no device monitoring to pause
     }
 
     /// <inheritdoc/>
     public void ResumeDeviceMonitoring()
     {
-        // Mock implementation: no device monitoring to resume
     }
 
     /// <summary>
-    /// Resets all statistics counters to zero.
-    /// Useful for testing scenarios that need clean state.
+    /// Zeroes the counters so a test can start from a clean slate.
     /// </summary>
     public void ResetStatistics()
     {
@@ -389,13 +333,13 @@ public sealed class MockAudioEngine : IAudioEngine
     }
 
     /// <summary>
-    /// Simulates an output device change event for testing.
+    /// Fires an output device change event on demand.
     /// </summary>
-    /// <param name="oldDeviceId">The ID of the old device.</param>
-    /// <param name="newDeviceId">The ID of the new device.</param>
+    /// <param name="oldDeviceId"></param>
+    /// <param name="newDeviceId"></param>
     public void SimulateOutputDeviceChange(string oldDeviceId, string newDeviceId)
     {
-        var newDevice = new AudioDeviceInfo(
+        var _device = new AudioDeviceInfo(
             newDeviceId,
             $"Mock Output Device ({newDeviceId})",
             "Mock",
@@ -404,17 +348,17 @@ public sealed class MockAudioEngine : IAudioEngine
             isDefault: true,
             AudioDeviceState.Active);
 
-        OutputDeviceChanged?.Invoke(this, new AudioDeviceChangedEventArgs(oldDeviceId, newDeviceId, newDevice));
+        OutputDeviceChanged?.Invoke(this, new AudioDeviceChangedEventArgs(oldDeviceId, newDeviceId, _device));
     }
 
     /// <summary>
-    /// Simulates an input device change event for testing.
+    /// Fires an input device change event on demand.
     /// </summary>
-    /// <param name="oldDeviceId">The ID of the old device.</param>
-    /// <param name="newDeviceId">The ID of the new device.</param>
+    /// <param name="oldDeviceId"></param>
+    /// <param name="newDeviceId"></param>
     public void SimulateInputDeviceChange(string oldDeviceId, string newDeviceId)
     {
-        var newDevice = new AudioDeviceInfo(
+        var _device = new AudioDeviceInfo(
             newDeviceId,
             $"Mock Input Device ({newDeviceId})",
             "Mock",
@@ -423,17 +367,17 @@ public sealed class MockAudioEngine : IAudioEngine
             isDefault: true,
             AudioDeviceState.Active);
 
-        InputDeviceChanged?.Invoke(this, new AudioDeviceChangedEventArgs(oldDeviceId, newDeviceId, newDevice));
+        InputDeviceChanged?.Invoke(this, new AudioDeviceChangedEventArgs(oldDeviceId, newDeviceId, _device));
     }
 
     /// <summary>
-    /// Simulates a device state change event for testing.
+    /// Fires a device state change event on demand.
     /// </summary>
-    /// <param name="deviceId">The ID of the device.</param>
-    /// <param name="newState">The new state of the device.</param>
+    /// <param name="deviceId"></param>
+    /// <param name="newState"></param>
     public void SimulateDeviceStateChange(string deviceId, AudioDeviceState newState)
     {
-        var device = new AudioDeviceInfo(
+        var _device = new AudioDeviceInfo(
             deviceId,
             $"Mock Device ({deviceId})",
             "Mock",
@@ -442,7 +386,7 @@ public sealed class MockAudioEngine : IAudioEngine
             isDefault: true,
             newState);
 
-        DeviceStateChanged?.Invoke(this, new AudioDeviceStateChangedEventArgs(deviceId, newState, device));
+        DeviceStateChanged?.Invoke(this, new AudioDeviceStateChangedEventArgs(deviceId, newState, _device));
     }
 
     /// <inheritdoc/>
@@ -455,46 +399,44 @@ public sealed class MockAudioEngine : IAudioEngine
 
             Stop();
             _config = null;
-            _state = -1; // Error state
+            _state = -1;
             _disposed = true;
         }
     }
 
     /// <summary>
-    /// Timer callback that simulates periodic audio processing timing.
+    /// Timer tick standing in for the audio callback.
     /// </summary>
-    private void SimulationCallback(object? state)
+    /// <param name="state"></param>
+    private void _simulationCallback(object? state)
     {
         SimulatedCallback?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
-    /// Generates a 440Hz sine wave in the provided buffer.
+    /// Fills the buffer with a 440 Hz sine at 25% to stay clear of clipping, phase carries over between calls.
     /// </summary>
-    /// <param name="buffer">The buffer to fill with sine wave samples.</param>
-    /// <param name="sampleRate">The sample rate in Hz.</param>
-    /// <param name="channels">The number of channels.</param>
-    private void GenerateSineWave(Span<float> buffer, int sampleRate, int channels)
+    /// <param name="buffer"></param>
+    /// <param name="sampleRate"></param>
+    /// <param name="channels"></param>
+    private void _generateSineWave(Span<float> buffer, int sampleRate, int channels)
     {
-        const double frequency = 440.0; // A4 note
-        const double amplitude = 0.25; // 25% volume to avoid clipping
-        double phaseIncrement = 2.0 * Math.PI * frequency / sampleRate;
+        const double frequency = 440.0;
+        const double amplitude = 0.25;
+        double _step = 2.0 * Math.PI * frequency / sampleRate;
 
-        int frameCount = buffer.Length / channels;
+        int _frames = buffer.Length / channels;
 
-        for (int frame = 0; frame < frameCount; frame++)
+        for (int frame = 0; frame < _frames; frame++)
         {
-            float sample = (float)(amplitude * Math.Sin(_sinePhase));
+            float _sample = (float)(amplitude * Math.Sin(_sinePhase));
 
             for (int ch = 0; ch < channels; ch++)
-            {
-                buffer[frame * channels + ch] = sample;
-            }
+                buffer[frame * channels + ch] = _sample;
 
-            _sinePhase += phaseIncrement;
+            _sinePhase += _step;
 
-            if (_sinePhase >= 2.0 * Math.PI)
-                _sinePhase -= 2.0 * Math.PI;
+            if (_sinePhase >= 2.0 * Math.PI) _sinePhase -= 2.0 * Math.PI;
         }
     }
 }

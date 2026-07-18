@@ -184,3 +184,16 @@ alignment.
 3. Add to your mixer/effect chain; audio flows through `Process`.
 4. On playback stop call `OnPlaybackStopped()` (or `Reset()`) to clear IIR state.
 5. `Dispose()` when done (also disposes the mic monitor).
+
+---
+
+## Development Tools
+
+This project is developed with the following tools:
+
+| | |
+|:--:|:--|
+| ![Claude Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/claude.svg) | **Anthropic** — Claude Code |
+| ![Visual Studio Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/vscode.svg) | **Microsoft** — Visual Studio Code |
+| ![Visual Studio 2022](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/visualstudio.svg) | **Microsoft** — Visual Studio 2022 |
+| ![Rider](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/rider.svg) | **JetBrains** — Rider |

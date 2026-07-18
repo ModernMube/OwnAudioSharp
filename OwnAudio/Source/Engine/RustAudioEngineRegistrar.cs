@@ -4,19 +4,13 @@ using Ownaudio.Core;
 namespace OwnaudioNET.Engine;
 
 /// <summary>
-/// Registers the Rust-backed <see cref="RustAudioEngine"/> as the creator for
-/// <see cref="Ownaudio.Core.AudioEngineFactory"/> and the Rust-backed
-/// <see cref="RustNativeDecoder"/> as the native decoder for
-/// <see cref="Ownaudio.Decoders.AudioDecoderFactory"/> at module load time, so callers of the
-/// low-level factories receive the cpal-driven engine and the Symphonia decoder without any
-/// setup code. This mirrors the registration the deleted PortAudio/MiniAudio layer performed,
-/// now pointing at the Rust engine and decoder.
+/// Wires the Rust engine and the Symphonia decoder into the core factories at module load, so the low level
+/// factories hand back the native stuff with no setup code. Same trick the old PortAudio/MiniAudio layer did.
 /// </summary>
 internal static class RustAudioEngineRegistrar
 {
     /// <summary>
-    /// Runs automatically when the assembly is loaded and wires the Rust engine and decoder
-    /// creators into the core factories.
+    /// Runs on assembly load and registers both creators.
     /// </summary>
     [ModuleInitializer]
     [System.Diagnostics.CodeAnalysis.SuppressMessage(

@@ -531,3 +531,16 @@ The audio callback runs on a high-priority OS thread. Violating these rules caus
 - `SampleClock` uses `AtomicU64` — no locks.
 - `ring_buffer` is backed by `rtrb` — lock-free SPSC.
 - Effect `process()` implementations must follow the same rules; user-provided effects must not allocate or block.
+
+---
+
+## Development Tools
+
+This project is developed with the following tools:
+
+| | |
+|:--:|:--|
+| ![Claude Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/claude.svg) | **Anthropic** — Claude Code |
+| ![Visual Studio Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/vscode.svg) | **Microsoft** — Visual Studio Code |
+| ![Visual Studio 2022](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/visualstudio.svg) | **Microsoft** — Visual Studio 2022 |
+| ![Rider](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/rider.svg) | **JetBrains** — Rider |

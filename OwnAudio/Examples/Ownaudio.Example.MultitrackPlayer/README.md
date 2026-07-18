@@ -249,3 +249,16 @@ This example is part of the OwnAudioSharp project.
 
 ## Contributing
 This example demonstrates best practices for building a professional multitrack audio application with OwnAudioSharp. It showcases the new MasterClock synchronization system introduced in v2.4.0. Feel free to use it as a starting point for your own projects!
+
+---
+
+## Development Tools
+
+This project is developed with the following tools:
+
+| | |
+|:--:|:--|
+| ![Claude Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/claude.svg) | **Anthropic** — Claude Code |
+| ![Visual Studio Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/vscode.svg) | **Microsoft** — Visual Studio Code |
+| ![Visual Studio 2022](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/visualstudio.svg) | **Microsoft** — Visual Studio 2022 |
+| ![Rider](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/rider.svg) | **JetBrains** — Rider |

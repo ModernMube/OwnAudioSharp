@@ -21,7 +21,7 @@
 <nav id="sidebar" class="sidebar">
   <div class="sidebar-section"><span class="sidebar-label">Getting Started</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">High-Level API</span><ul class="sidebar-nav"><li><a href="api-core.html">OwnaudioNet</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-mixer.html">AudioMixer</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Audio Sources</span><ul class="sidebar-nav"><li><a href="api-sources.html">Source Overview</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#sourcewitheffects" class="sub">SourceWithEffects</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel Routing</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Audio Sources</span><ul class="sidebar-nav"><li><a href="api-sources.html">Source Overview</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#streamingsource" class="sub">StreamingSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#sourcewitheffects" class="sub">SourceWithEffects</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel Routing</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Processing</span><ul class="sidebar-nav"><li><a href="api-sync.html">Synchronization</a></li><li><a href="api-effects.html">Built-in Effects</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 Plugins</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">MIDI</span><ul class="sidebar-nav"><li><a href="api-midi.html">MIDI Overview</a></li><li><a href="api-midi.html#port-management" class="sub">Port Management</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI File</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI Clock</a></li></ul></div>
@@ -147,6 +147,66 @@ synth.AllowDynamicUpdate = true;
 // Submit new samples as they are generated
 synth.SubmitSamples(newSamples); // ReadOnlySpan&lt;float&gt;
 synth.Clear();                   // flush buffer</code></pre></div>
+
+<!-- StreamingSource -->
+<h2 id="streamingsource">StreamingSource</h2>
+<p>An endless source whose audio is produced by your own callback. Where <code>SampleSource</code> serves a fixed buffer, <code>StreamingSource</code> generates audio continuously — ideal for synthesizers, metronomes, test tones, procedural audio, or streaming from a network buffer. A parameter change takes effect within the look-ahead window (~120 ms) without reloading or restarting anything.</p>
+
+<h3>Constructor</h3>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var source = new StreamingSource(
+    render: MyGenerator,                    // AudioRenderCallback
+    config: OwnaudioNet.CreateDefaultConfig()
+);</code></pre></div>
+
+<h3>The Render Callback</h3>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">public delegate void AudioRenderCallback(
+    Span&lt;float&gt; buffer,    // interleaved destination, exactly frameCount × Config.Channels long
+    int frameCount,        // frames to produce
+    long framePosition     // absolute frame index of the first requested frame
+);</code></pre></div>
+<p><code>framePosition</code> counts from the start of the timeline and is reset by <code>Seek()</code> and <code>Stop()</code>. Generators that must stay locked to a grid — a metronome, an LFO — should derive their phase from it rather than from an internal counter, so a seek repositions them exactly.</p>
+
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>The callback runs on the source's own pump thread, never on the audio thread, so taking a lock is safe. Keep it <strong>allocation-free</strong> so the feed stays ahead of playback.</p></div>
+
+<h3>Behaviour</h3>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Member</th><th>Value</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>Duration</code></td><td><code>double.PositiveInfinity</code></td><td>A generator has no end.</td></tr>
+    <tr><td><code>IsEndOfStream</code></td><td><code>false</code></td><td>Never runs out of audio.</td></tr>
+    <tr><td><code>Position</code></td><td><code>double</code></td><td>Seconds since the last seek target.</td></tr>
+    <tr><td><code>Seek(seconds)</code></td><td><code>true</code></td><td>Drops the queued look-ahead and moves the render cursor. Negatives clamp to 0.</td></tr>
+    <tr><td><code>Stop()</code></td><td>—</td><td>Stops and rewinds the render cursor to frame 0.</td></tr>
+  </tbody>
+</table></div>
+<p>The callback is not invoked until <code>Play()</code> is called, so constructing a source is cheap. While paused or stopped the pump thread sleeps on a wake handle and costs no CPU.</p>
+
+<h3>Complete Example — sine generator</h3>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var config = OwnaudioNet.CreateDefaultConfig();
+float frequency = 440f;   // live-adjustable from the UI thread
+
+void RenderSine(Span&lt;float&gt; buffer, int frameCount, long framePosition)
+{
+    int ch = config.Channels;
+    double step = 2.0 * Math.PI * frequency / config.SampleRate;
+
+    for (int f = 0; f &lt; frameCount; f++)
+    {
+        // phase comes from the absolute position — a seek stays in phase
+        float sample = (float)Math.Sin((framePosition + f) * step) * 0.2f;
+        for (int c = 0; c &lt; ch; c++)
+            buffer[f * ch + c] = sample;
+    }
+}
+
+var tone = new StreamingSource(RenderSine, config);
+tone.Volume = 0.8f;
+mixer.AddSource(tone);
+tone.Play();
+
+frequency = 880f;   // takes effect within ~120 ms, no restart needed</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><code>StreamingSource</code> works with <a href="#sourcewitheffects">SourceWithEffects</a> and <a href="#channel-routing">Channel Routing</a> exactly like every other source.</p></div>
 
 <!-- InputSource -->
 <h2 id="inputsource">InputSource</h2>

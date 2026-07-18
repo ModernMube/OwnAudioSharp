@@ -8,20 +8,16 @@ using CoreStreamInfo = Ownaudio.AudioStreamInfo;
 namespace OwnaudioNET.Engine;
 
 /// <summary>
-/// Adapts the Rust-backed <see cref="StreamingAudioDecoder"/> to the core
-/// <see cref="IAudioDecoder"/> contract, so the pure-Rust Symphonia backend
-/// (WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, AIFF) becomes the primary decoder used by
-/// <see cref="Ownaudio.Decoders.AudioDecoderFactory"/>. FFmpeg is only used as a
-/// fallback for formats the native backend cannot decode.
+/// Puts the Rust StreamingAudioDecoder behind IAudioDecoder, so the Symphonia backend (WAV, MP3, FLAC,
+/// OGG, AAC/M4A, AIFF) is the primary decoder. FFmpeg only steps in for what it can't handle.
 /// </summary>
 internal sealed class RustNativeDecoder : IAudioDecoder
 {
     #region Fields
 
     /// <summary>
-    /// Upper bound on the number of 1 ms idle waits tolerated during a transient
-    /// native prefetch underrun before a read is reported as end-of-stream. This
-    /// prevents an unbounded hang if the prefetch thread stops making progress.
+    /// Max 1 ms idle waits we tolerate on a prefetch underrun before calling it EOF, so a stalled
+    /// prefetch thread can't hang us forever.
     /// </summary>
     private const int MaxUnderrunWaits = 5000;
 
@@ -36,19 +32,19 @@ internal sealed class RustNativeDecoder : IAudioDecoder
     #region Construction
 
     /// <summary>
-    /// Opens <paramref name="filePath"/> with the native Rust decoder.
+    /// Opens the file with the native decoder. Zero target rate or channels means keep the source values.
     /// </summary>
-    /// <param name="filePath">Path to the audio file.</param>
-    /// <param name="targetSampleRate">Output sample rate in Hz (0 = source rate).</param>
-    /// <param name="targetChannels">Output channel count (0 = source channels).</param>
+    /// <param name="filePath"></param>
+    /// <param name="targetSampleRate"></param>
+    /// <param name="targetChannels"></param>
     public RustNativeDecoder(string filePath, int targetSampleRate, int targetChannels)
     {
         _inner = new StreamingAudioDecoder(filePath, targetSampleRate, targetChannels);
 
-        var info = _inner.StreamInfo;
-        _channels = info.Channels > 0 ? info.Channels : 1;
-        _sampleRate = info.SampleRate > 0 ? info.SampleRate : 48_000;
-        StreamInfo = new CoreStreamInfo(info.Channels, info.SampleRate, info.Duration, info.BitDepth);
+        var _info = _inner.StreamInfo;
+        _channels = _info.Channels > 0 ? _info.Channels : 1;
+        _sampleRate = _info.SampleRate > 0 ? _info.SampleRate : 48_000;
+        StreamInfo = new CoreStreamInfo(_info.Channels, _info.SampleRate, _info.Duration, _info.BitDepth);
     }
 
     #endregion
@@ -67,42 +63,38 @@ internal sealed class RustNativeDecoder : IAudioDecoder
         if (buffer is null)
             return AudioDecoderResult.CreateError("Output buffer is null.");
 
-        Span<float> floats = MemoryMarshal.Cast<byte, float>(buffer.AsSpan());
+        Span<float> _floats = MemoryMarshal.Cast<byte, float>(buffer.AsSpan());
 
-        int capacityFrames = floats.Length / _channels;
-        if (capacityFrames == 0)
+        int _capacityFrames = _floats.Length / _channels;
+        if (_capacityFrames == 0)
             return AudioDecoderResult.CreateSuccess(0, _currentPts);
 
-        Span<float> frameAligned = floats.Slice(0, capacityFrames * _channels);
+        Span<float> _aligned = _floats.Slice(0, _capacityFrames * _channels);
 
-        int written;
-        int waits = 0;
+        int _written;
+        int _waits = 0;
         while (true)
         {
             try
             {
-                written = _inner.Read(frameAligned);
+                _written = _inner.Read(_aligned);
             }
             catch (Exception ex)
             {
                 return AudioDecoderResult.CreateError(ex.Message);
             }
 
-            if (written > 0)
-                break;
+            if (_written > 0) break;
 
-            if (_inner.IsEndOfStream)
-                return AudioDecoderResult.CreateEOF();
-
-            if (++waits > MaxUnderrunWaits)
-                return AudioDecoderResult.CreateEOF();
+            if (_inner.IsEndOfStream) return AudioDecoderResult.CreateEOF();
+            if (++_waits > MaxUnderrunWaits) return AudioDecoderResult.CreateEOF();
 
             Thread.Sleep(1);
         }
 
-        int framesRead = written / _channels;
-        _currentPts += framesRead * 1000.0 / _sampleRate;
-        return AudioDecoderResult.CreateSuccess(framesRead, _currentPts);
+        int _frames = _written / _channels;
+        _currentPts += _frames * 1000.0 / _sampleRate;
+        return AudioDecoderResult.CreateSuccess(_frames, _currentPts);
     }
 
     /// <inheritdoc />

@@ -5,21 +5,20 @@ using Ownaudio.Core;
 namespace OwnaudioNET.Engine;
 
 /// <summary>
-/// Manages the audio pump thread that transfers data from the buffer to the audio engine.
-/// Provides high-priority background thread for continuous audio streaming.
+/// High priority background thread that keeps shovelling samples from the buffer controller into the engine.
 /// </summary>
-/// <remarks>
-/// This class is responsible for:
-/// - Managing the pump thread lifecycle (start, stop, restart)
-/// - Reading from the buffer controller and sending to the engine
-/// - Tracking pumping statistics (frames pumped)
-/// - Handling thread synchronization and graceful shutdown
-/// 
-/// Thread Safety: All public methods are thread-safe.
-/// Performance: Runs at ThreadPriority.Highest to minimize audio glitches.
-/// </remarks>
 internal sealed class AudioPump : IDisposable
 {
+   /// <summary>
+   /// How often a repeating loop error gets re-logged.
+   /// </summary>
+   private const int PumpErrorReportInterval = 1000;
+
+   /// <summary>
+   /// Consecutive errors after which we call it persistent and give up.
+   /// </summary>
+   private const int PumpErrorFaultThreshold = 500;
+
    private readonly IAudioEngine _engine;
    private readonly AudioBufferController _bufferController;
    private readonly int _engineBufferSize;
@@ -33,25 +32,23 @@ internal sealed class AudioPump : IDisposable
    private bool _disposed;
 
    /// <summary>
-   /// Gets whether the pump thread is currently running.
+   /// True while the pump thread is alive.
    /// </summary>
    public bool IsRunning => _isRunning;
 
    /// <summary>
-   /// Gets the total number of frames pumped to the audio engine.
+   /// Frame count handed to the engine so far.
    /// </summary>
    public long TotalPumpedFrames => Interlocked.Read(ref _pumpedFrames);
 
    /// <summary>
-   /// Initializes a new instance of the AudioPump class.
+   /// Sets up the pump. Sleep interval comes out of half a buffer worth of time at the given sample rate.
    /// </summary>
-   /// <param name="engine">The audio engine to pump data to.</param>
-   /// <param name="bufferController">The buffer controller to read data from.</param>
-   /// <param name="engineBufferSize">The engine buffer size in samples (frames * channels).</param>
-   /// <param name="framesPerBuffer">The number of frames per buffer.</param>
-   /// <param name="sampleRate">The audio sample rate in Hz.</param>
-   /// <exception cref="ArgumentNullException">Thrown if engine or bufferController is null.</exception>
-   /// <exception cref="ArgumentOutOfRangeException">Thrown if engineBufferSize, framesPerBuffer, or sampleRate is invalid.</exception>
+   /// <param name="engine"></param>
+   /// <param name="bufferController"></param>
+   /// <param name="engineBufferSize"></param>
+   /// <param name="framesPerBuffer"></param>
+   /// <param name="sampleRate"></param>
    public AudioPump(
        IAudioEngine engine,
        AudioBufferController bufferController,
@@ -66,89 +63,65 @@ internal sealed class AudioPump : IDisposable
          throw new ArgumentOutOfRangeException(nameof(engineBufferSize), "Engine buffer size must be positive.");
       if (framesPerBuffer <= 0)
          throw new ArgumentOutOfRangeException(nameof(framesPerBuffer), "Frames per buffer must be positive.");
-      if (sampleRate <= 0)
+      if(sampleRate <= 0)
          throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
 
       _engineBufferSize = engineBufferSize;
       _framesPerBuffer = framesPerBuffer;
 
-      double halfBufferTimeMs = (framesPerBuffer / 2.0) / sampleRate * 1000.0;
-      _sleepIntervalMs = Math.Max(1, (int)Math.Round(halfBufferTimeMs));
-
-      _pumpedFrames = 0;
-      _stopRequested = false;
-      _isRunning = false;
+      double _halfBufferMs = (framesPerBuffer / 2.0) / sampleRate * 1000.0;
+      _sleepIntervalMs = Math.Max(1, (int)Math.Round(_halfBufferMs));
    }
 
    /// <summary>
-   /// Starts the pump thread.
-   /// This method is thread-safe and idempotent.
+   /// Spins up the pump thread. Idempotent.
    /// </summary>
-   /// <exception cref="ObjectDisposedException">Thrown if the pump has been disposed.</exception>
    public void Start()
    {
-      ThrowIfDisposed();
+      _throwIfDisposed();
 
-      if (_isRunning)
-         return; // Already running
+      if (_isRunning) return;
 
       _stopRequested = false;
       _isRunning = true;
 
-      _pumpThread = new Thread(PumpThreadLoop)
+      _pumpThread = new Thread(_pumpLoop)
       {
          Name = "AudioPump.PumpThread",
          IsBackground = true,
-         Priority = ThreadPriority.Highest // High priority for audio pumping
+         Priority = ThreadPriority.Highest
       };
       _pumpThread.Start();
    }
 
    /// <summary>
-   /// Stops the pump thread gracefully.
-   /// This method is thread-safe and idempotent.
+   /// Signals the loop and waits for it to leave. Blocks up to timeoutMs, so call it off the UI thread.
    /// </summary>
-   /// <param name="timeoutMs">Maximum time to wait for the thread to exit, in milliseconds (default: 2000ms).</param>
-   /// <exception cref="ObjectDisposedException">Thrown if the pump has been disposed.</exception>
-   /// <remarks>
-   /// WARNING: This method BLOCKS for up to the specified timeout waiting for the pump thread to exit.
-   /// For UI applications, consider using StopAsync() instead to prevent UI freezing.
-   /// </remarks>
+   /// <param name="timeoutMs"></param>
    public void Stop(int timeoutMs = 2000)
    {
-      ThrowIfDisposed();
+      _throwIfDisposed();
 
-      if (!_isRunning)
-         return; // Already stopped
+      if (!_isRunning) return;
 
       _stopRequested = true;
 
-      // Wait for the pump loop to actually exit before returning. The caller
-      // typically disposes the engine and buffer controller right after Stop();
-      // a still-running loop calling _engine.Send(...) into those disposed
-      // resources is a use-after-dispose race (the sporadic exception the loop's
-      // catch silently swallows). Joining here closes that window. The bounded
-      // wait never blocks the UI because StopAsync() runs Stop() on a background
-      // thread. Never Abort() — it is unsafe in modern .NET; on timeout we fall
-      // through and let the background thread finish on its own.
-      Thread? thread = _pumpThread;
-      if (thread is not null && thread != Thread.CurrentThread && thread.IsAlive)
-      {
-         thread.Join(TimeSpan.FromMilliseconds(timeoutMs));
-      }
+      // We wait for the loop to actually exit, the caller usually disposes the engine right after us
+      // and a live loop still calling Send() into it is a use-after-dispose race. Never Abort().
+      Thread? _thread = _pumpThread;
+      if (_thread is not null && _thread != Thread.CurrentThread && _thread.IsAlive)
+         _thread.Join(TimeSpan.FromMilliseconds(timeoutMs));
 
       _pumpThread = null;
       _isRunning = false;
    }
 
    /// <summary>
-   /// Stops the pump thread asynchronously.
-   /// This method prevents UI thread blocking by running the stop operation on a background thread.
+   /// Stop on a background thread so the UI does not freeze.
    /// </summary>
-   /// <param name="timeoutMs">Maximum time to wait for the thread to exit, in milliseconds (default: 2000ms).</param>
-   /// <param name="cancellationToken">Cancellation token to abort the wait (not the stop itself).</param>
-   /// <exception cref="ObjectDisposedException">Thrown if the pump has been disposed.</exception>
-   /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
+   /// <param name="timeoutMs"></param>
+   /// <param name="cancellationToken"></param>
+   /// <returns></returns>
    public async Task StopAsync(int timeoutMs = 2000, CancellationToken cancellationToken = default)
    {
       await Task.Run(() =>
@@ -159,35 +132,31 @@ internal sealed class AudioPump : IDisposable
    }
 
    /// <summary>
-   /// Pump thread loop - reads from buffer and sends to engine.
-   /// This runs at high priority to minimize audio glitches.
+   /// The loop itself, reads a buffer worth and pushes it to the engine, otherwise naps.
    /// </summary>
-   private void PumpThreadLoop()
+   private void _pumpLoop()
    {
-      float[] tempBuffer = new float[_engineBufferSize];
-      int consecutiveErrors = 0;
+      float[] _temp = new float[_engineBufferSize];
+      int _errors = 0;
 
       while (!_stopRequested)
       {
          try
          {
-            int available = _bufferController.OutputBufferAvailable;
-
-            if (available >= _engineBufferSize)
+            if (_bufferController.OutputBufferAvailable >= _engineBufferSize)
             {
-               Span<float> bufferSpan = tempBuffer.AsSpan();
-               int read = _bufferController.Read(bufferSpan);
+               Span<float> _span = _temp.AsSpan();
+               int _read = _bufferController.Read(_span);
 
-               if (read == _engineBufferSize)
+               if (_read == _engineBufferSize)
                {
-                  _engine.Send(bufferSpan);
-
+                  _engine.Send(_span);
                   Interlocked.Add(ref _pumpedFrames, _framesPerBuffer);
                }
-               else if (read > 0)
+               else if (_read > 0)
                {
-                  _engine.Send(bufferSpan.Slice(0, read));
-                  Interlocked.Add(ref _pumpedFrames, read / (_engineBufferSize / _framesPerBuffer));
+                  _engine.Send(_span.Slice(0, _read));
+                  Interlocked.Add(ref _pumpedFrames, _read / (_engineBufferSize / _framesPerBuffer));
                }
             }
             else
@@ -195,26 +164,17 @@ internal sealed class AudioPump : IDisposable
                Thread.Sleep(_sleepIntervalMs);
             }
 
-            // A clean iteration clears the consecutive-error run.
-            consecutiveErrors = 0;
+            _errors = 0;
          }
          catch (Exception ex)
          {
-            consecutiveErrors++;
+            _errors++;
 
-            // Surface the failure instead of swallowing it silently: on the first occurrence and
-            // every PumpErrorReportInterval thereafter. A deterministic, repeating fault (e.g. the
-            // engine was disposed under the pump) would otherwise throw hundreds of times a second
-            // with no diagnostic.
-            if (consecutiveErrors == 1 || consecutiveErrors % PumpErrorReportInterval == 0)
-            {
-               Console.Error.WriteLine(
-                  $"[AudioPump] Send loop error (occurrence #{consecutiveErrors}): {ex.Message}");
-            }
+            // Don't swallow it silently, a stuck fault would otherwise throw hundreds of times a second.
+            if (_errors == 1 || _errors % PumpErrorReportInterval == 0)
+               Console.Error.WriteLine($"[AudioPump] Send loop error (occurrence #{_errors}): {ex.Message}");
 
-            // Past the fault threshold the failure is clearly persistent, not transient; stop
-            // pumping rather than spin on it indefinitely.
-            if (consecutiveErrors >= PumpErrorFaultThreshold)
+            if (_errors >= PumpErrorFaultThreshold)
             {
                _stopRequested = true;
                _isRunning = false;
@@ -227,26 +187,16 @@ internal sealed class AudioPump : IDisposable
    }
 
    /// <summary>
-   /// How often (in consecutive occurrences) a repeating pump-loop error is re-logged.
+   /// Guard for calls after dispose.
    /// </summary>
-   private const int PumpErrorReportInterval = 1000;
-
-   /// <summary>
-   /// Consecutive pump-loop errors after which the pump treats the fault as persistent and stops.
-   /// </summary>
-   private const int PumpErrorFaultThreshold = 500;
-
-   /// <summary>
-   /// Throws ObjectDisposedException if the pump has been disposed.
-   /// </summary>
-   private void ThrowIfDisposed()
+   private void _throwIfDisposed()
    {
       if (_disposed)
          throw new ObjectDisposedException(nameof(AudioPump));
    }
 
    /// <summary>
-   /// Disposes the audio pump and releases all resources.
+   /// Stops the thread and marks us dead.
    /// </summary>
    public void Dispose()
    {
@@ -255,10 +205,7 @@ internal sealed class AudioPump : IDisposable
 
       if (_isRunning)
       {
-         try
-         {
-            Stop();
-         }
+         try { Stop(); }
          catch {}
       }
 
@@ -266,7 +213,7 @@ internal sealed class AudioPump : IDisposable
    }
 
    /// <summary>
-   /// Returns a string representation of the pump's current state.
+   /// Short state dump for logs.
    /// </summary>
    public override string ToString()
    {

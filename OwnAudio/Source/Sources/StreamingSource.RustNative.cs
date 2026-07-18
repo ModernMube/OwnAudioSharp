@@ -98,10 +98,10 @@ public sealed partial class StreamingSource : IRustNativeChainSource
     }
 
     /// <summary>
-    /// Attaches us to a track living in a mixer's shared session. We reference but don't own
-    /// it, so we never dispose it.
+    /// Hooks us onto a track owned by a mixer's shared session. We only borrow it, so we
+    /// never dispose it.
     /// </summary>
-    /// <param name="track">The shared-session track to feed.</param>
+    /// <param name="track"></param>
     internal void AttachRustTrack(AudioTrack track)
     {
         lock (_rustBackendLock)
@@ -189,23 +189,21 @@ public sealed partial class StreamingSource : IRustNativeChainSource
     }
 
     /// <summary>
-    /// Re-anchors the reported position after the pump has re-armed the feed.
-    /// Re-installing the ring source resets the track's rendered-frame counter, so the base
-    /// is simply the seek target; calling this before the reset would double-count the
-    /// frames already rendered.
+    /// Re-anchors the reported position after the pump re-armed the feed. A fresh ring
+    /// source zeroes the track's frame counter, so the base is just the seek target -
+    /// calling this before the reset would double-count.
     /// </summary>
-    /// <param name="target">The position the source should report from this moment on.</param>
+    /// <param name="target"></param>
     private void _rustRebaseAfterFeedReset(double target)
     {
         lock (_rustBackendLock) _rustPositionBase = target;
     }
 
     /// <summary>
-    /// Re-anchors <see cref="_rustPositionBase"/> so <see cref="_rustPosition"/> reads
-    /// <paramref name="target"/> right now and keeps advancing with the track's own
-    /// monotonic rendered-frame counter. Call under the backend lock.
+    /// Shifts the base so position reads target right now and keeps ticking with the
+    /// track's own counter. Call under the backend lock.
     /// </summary>
-    /// <param name="target">The position the source should report from this moment on.</param>
+    /// <param name="target"></param>
     private void _rebasePosition(double target)
     {
         _rustPositionBase = target - (_rustTrack?.Position.TotalSeconds ?? 0.0);

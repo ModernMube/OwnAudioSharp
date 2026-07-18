@@ -239,3 +239,16 @@ matchering *target* rather than overdriving the source, and
 - Output is always **24-bit WAV**.
 - Progress and detailed diagnostics are emitted through the `Logger` (`Log.Info`
   / `Log.Warning` / `Log.Error`); some legacy diagnostics still use `Console`.
+
+---
+
+## Development Tools
+
+This project is developed with the following tools:
+
+| | |
+|:--:|:--|
+| ![Claude Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/claude.svg) | **Anthropic** — Claude Code |
+| ![Visual Studio Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/vscode.svg) | **Microsoft** — Visual Studio Code |
+| ![Visual Studio 2022](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/visualstudio.svg) | **Microsoft** — Visual Studio 2022 |
+| ![Rider](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/rider.svg) | **JetBrains** — Rider |

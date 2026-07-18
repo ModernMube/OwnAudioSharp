@@ -592,3 +592,16 @@ Pass a null pointer (or `IntPtr.Zero` in C#) as `device_name` to select the OS d
 
 **Buffer sizes are in frames, not samples:**
 `OwnAudioStreamConfig.buffer_size_frames` is per-channel frame count. Total float values in the callback buffer = `frame_count × channels`.
+
+---
+
+## Development Tools
+
+This project is developed with the following tools:
+
+| | |
+|:--:|:--|
+| ![Claude Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/claude.svg) | **Anthropic** — Claude Code |
+| ![Visual Studio Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/vscode.svg) | **Microsoft** — Visual Studio Code |
+| ![Visual Studio 2022](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/visualstudio.svg) | **Microsoft** — Visual Studio 2022 |
+| ![Rider](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/rider.svg) | **JetBrains** — Rider |

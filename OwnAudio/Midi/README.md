@@ -628,3 +628,16 @@ The library is fully compatible with .NET Native AOT and trimming:
 - No `Assembly.Load`, `Activator.CreateInstance`, or `GetType()` calls
 - `IsAotCompatible=true` and `IsTrimmable=true` are set in the `.csproj`
 - `0 IL2026 / IL2072 / IL3050` warnings on `dotnet publish --self-contained`
+
+---
+
+## Development Tools
+
+This project is developed with the following tools:
+
+| | |
+|:--:|:--|
+| ![Claude Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/claude.svg) | **Anthropic** — Claude Code |
+| ![Visual Studio Code](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/vscode.svg) | **Microsoft** — Visual Studio Code |
+| ![Visual Studio 2022](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/visualstudio.svg) | **Microsoft** — Visual Studio 2022 |
+| ![Rider](https://raw.githubusercontent.com/ModernMube/OwnAudioSharp/master/assets/tools/rider.svg) | **JetBrains** — Rider |

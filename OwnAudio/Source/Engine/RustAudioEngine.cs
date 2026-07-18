@@ -9,30 +9,12 @@ using RustSafe = Ownaudio.Safe;
 namespace OwnaudioNET.Engine;
 
 /// <summary>
-/// <see cref="IAudioEngine"/> implementation backed by the native Rust audio engine
-/// (<see cref="RustSafe.AudioEngine"/>).
+/// IAudioEngine on top of the native Rust engine. Bridges the blocking push/pull contract the wrapper wants
+/// to the callback driven Rust streams through two SPSC ring buffers.
 /// </summary>
 /// <remarks>
-/// <para>
-/// This adapter is the foundation of the phase-3 <c>OwnaudioNET</c> clone: it
-/// presents the exact blocking push/pull contract that the existing
-/// <see cref="OwnaudioNET.Mixing.AudioEngineWrapper"/> expects
-/// (<see cref="Send"/> blocks until buffer space is available, <see cref="Receives"/>
-/// pulls captured samples) while internally driving the callback-based Rust streams.
-/// </para>
-/// <para>
-/// The blocking-push world of <see cref="IAudioEngine"/> and the callback-pull world of
-/// the Rust streams are bridged by two single-producer/single-consumer
-/// <see cref="LockFreeRingBuffer{T}"/> instances: the pump thread writes interleaved
-/// output samples through <see cref="Send"/> while the real-time audio callback drains
-/// them; for capture the audio callback writes and <see cref="Receives"/> drains.
-/// </para>
-/// <para>
-/// <b>Threading:</b> <see cref="Send"/> must be called from a single producer thread
-/// (the wrapper pump thread) and <see cref="Receives"/> from a single consumer thread.
-/// <see cref="Initialize"/>, <see cref="Start"/>, <see cref="Stop"/> and
-/// <see cref="Dispose"/> are expected to be serialized by the caller.
-/// </para>
+/// Send() must come from a single producer (the pump thread) and Receives() from a single consumer.
+/// Initialize / Start / Stop / Dispose are expected to be serialized by the caller.
 /// </remarks>
 internal sealed class RustAudioEngine : IAudioEngine
 {
@@ -71,9 +53,8 @@ internal sealed class RustAudioEngine : IAudioEngine
     public EngineStatus Status => _status;
 
     /// <summary>
-    /// Gets the underlying native engine, or <see langword="null"/> before initialization or after
-    /// disposal. Used by the Rust-native <c>AudioMixer</c> facade to drive a shared
-    /// <c>MultiTrackSession</c> output directly on this engine's device.
+    /// The native engine, null before init and after dispose. The Rust-native mixer facade uses it to drive a
+    /// shared MultiTrackSession output on this engine's device.
     /// </summary>
     internal RustSafe.AudioEngine? NativeEngine
     {
@@ -87,8 +68,7 @@ internal sealed class RustAudioEngine : IAudioEngine
     }
 
     /// <summary>
-    /// Pauses this engine's own push-based output stream so it does not compete with a
-    /// session-driven output opened on the same device (Rust-native mixer facade).
+    /// Parks our own push output stream so it doesn't fight a session driven one on the same device.
     /// </summary>
     internal void SuspendOutput()
     {
@@ -99,17 +79,13 @@ internal sealed class RustAudioEngine : IAudioEngine
     }
 
     /// <summary>
-    /// Resumes this engine's own push-based output stream previously paused by
-    /// <see cref="SuspendOutput"/>, if the engine is running.
+    /// Puts back what SuspendOutput parked, if we are running.
     /// </summary>
     internal void ResumeOutput()
     {
         lock (_stateLock)
         {
-            if (_running)
-            {
-                _outputStream?.Play();
-            }
+            if (_running) { _outputStream?.Play(); }
         }
     }
 
@@ -143,20 +119,20 @@ internal sealed class RustAudioEngine : IAudioEngine
                 _outputEnabled = config.EnableOutput;
                 _inputEnabled = config.EnableInput;
 
-                _engine = RustSafe.AudioEngine.Create(MapHostApi(config.HostType));
+                _engine = RustSafe.AudioEngine.Create(_mapHostApi(config.HostType));
 
                 if (_outputEnabled)
                 {
-                    _selectedOutputDevice = FindDevice(_engine.EnumerateOutputDevices(), config.OutputDeviceId, preferOutput: true);
-                    _outputRing = new LockFreeRingBuffer<float>(RingCapacity(config));
-                    OpenOutputStream(config);
+                    _selectedOutputDevice = _findDevice(_engine.EnumerateOutputDevices(), config.OutputDeviceId, preferOutput: true);
+                    _outputRing = new LockFreeRingBuffer<float>(_ringCapacity(config));
+                    _openOutputStream(config);
                 }
 
                 if (_inputEnabled)
                 {
-                    _selectedInputDevice = FindDevice(_engine.EnumerateInputDevices(), config.InputDeviceId, preferOutput: false);
-                    _inputRing = new LockFreeRingBuffer<float>(RingCapacity(config));
-                    OpenInputStream(config);
+                    _selectedInputDevice = _findDevice(_engine.EnumerateInputDevices(), config.InputDeviceId, preferOutput: false);
+                    _inputRing = new LockFreeRingBuffer<float>(_ringCapacity(config));
+                    _openInputStream(config);
                 }
 
                 _status = EngineStatus.Idle;
@@ -164,12 +140,12 @@ internal sealed class RustAudioEngine : IAudioEngine
             }
             catch (AudioEngineException)
             {
-                DisposeNative();
+                _disposeNative();
                 throw;
             }
             catch (Exception ex)
             {
-                DisposeNative();
+                _disposeNative();
                 _status = EngineStatus.Error;
                 throw new AudioEngineException($"Failed to initialize Rust audio engine: {ex.Message}", ex);
             }
@@ -181,12 +157,8 @@ internal sealed class RustAudioEngine : IAudioEngine
     {
         lock (_stateLock)
         {
-            if (_disposed)
-                return -1;
-            if (_engine == null)
-                return -1;
-            if (_running)
-                return 0;
+            if (_disposed || _engine == null) return -1;
+            if (_running) return 0;
 
             try
             {
@@ -209,10 +181,8 @@ internal sealed class RustAudioEngine : IAudioEngine
     {
         lock (_stateLock)
         {
-            if (_disposed || _engine == null)
-                return 0;
-            if (!_running)
-                return 0;
+            if (_disposed || _engine == null) return 0;
+            if (!_running) return 0;
 
             try
             {
@@ -242,31 +212,24 @@ internal sealed class RustAudioEngine : IAudioEngine
         if (samples.IsEmpty)
             return;
 
-        LockFreeRingBuffer<float>? ring = _outputRing;
-        if (ring == null)
+        LockFreeRingBuffer<float>? _ring = _outputRing;
+        if (_ring == null)
             return;
 
-        int offset = 0;
-        var spinner = new SpinWait();
+        int _offset = 0;
+        var _spinner = new SpinWait();
 
-        while (offset < samples.Length)
+        while (_offset < samples.Length)
         {
             if (_disposed || !_running || !_outputEnabled)
                 return;
 
-            int written = ring.Write(samples.Slice(offset));
-            offset += written;
+            _offset += _ring.Write(samples.Slice(_offset));
 
-            if (offset < samples.Length)
-            {
-                // Ring is full; the audio callback has not drained it yet. Back off
-                // briefly and retry — this is the blocking semantics IAudioEngine promises.
-                spinner.SpinOnce();
-            }
-            else
-            {
-                spinner.Reset();
-            }
+            // Ring full, the callback hasn't drained it yet. Back off and retry, this is the
+            // blocking behaviour IAudioEngine promises.
+            if (_offset < samples.Length) _spinner.SpinOnce();
+            else _spinner.Reset();
         }
     }
 
@@ -276,23 +239,28 @@ internal sealed class RustAudioEngine : IAudioEngine
         if (_disposed || !_running)
             return -1;
 
-        LockFreeRingBuffer<float>? ring = _inputRing;
-        if (ring == null || destination.IsEmpty)
+        LockFreeRingBuffer<float>? _ring = _inputRing;
+        if (_ring == null || destination.IsEmpty)
             return 0;
 
-        return ring.Read(destination);
+        return _ring.Read(destination);
     }
 
-    private void OutputCallback(in RustSafe.Callbacks.AudioOutputCallbackArgs args)
+    /// <summary>
+    /// RT callback pulling playback samples. The native buffer comes zeroed, so an underrun just leaves silence.
+    /// </summary>
+    /// <param name="args"></param>
+    private void _outputCallback(in RustSafe.Callbacks.AudioOutputCallbackArgs args)
     {
-        // The native buffer is zeroed before the callback, so an underrun simply
-        // leaves silence in the unfilled tail.
         _outputRing?.Read(args.Buffer);
     }
 
-    private void InputCallback(in RustSafe.Callbacks.AudioInputCallbackArgs args)
+    /// <summary>
+    /// RT callback pushing captured samples. On overflow we drop rather than block the audio thread.
+    /// </summary>
+    /// <param name="args"></param>
+    private void _inputCallback(in RustSafe.Callbacks.AudioInputCallbackArgs args)
     {
-        // Drop captured samples on overflow rather than blocking the audio thread.
         _inputRing?.Write(args.Buffer);
     }
 
@@ -316,35 +284,33 @@ internal sealed class RustAudioEngine : IAudioEngine
     /// <inheritdoc />
     public List<AudioDeviceInfo> GetOutputDevices()
     {
-        RustSafe.AudioEngine? engine = _engine;
-        if (engine == null)
+        RustSafe.AudioEngine? _eng = _engine;
+        if (_eng == null)
             return new List<AudioDeviceInfo>();
 
-        var result = new List<AudioDeviceInfo>();
-        foreach (var device in engine.EnumerateOutputDevices())
+        var _result = new List<AudioDeviceInfo>();
+        foreach (var device in _eng.EnumerateOutputDevices())
         {
-            if (device.MaxOutputChannels <= 0)
-                continue;
-            result.Add(ToDeviceInfo(device, asOutput: true));
+            if (device.MaxOutputChannels <= 0) continue;
+            _result.Add(_toDeviceInfo(device, asOutput: true));
         }
-        return result;
+        return _result;
     }
 
     /// <inheritdoc />
     public List<AudioDeviceInfo> GetInputDevices()
     {
-        RustSafe.AudioEngine? engine = _engine;
-        if (engine == null)
+        RustSafe.AudioEngine? _eng = _engine;
+        if (_eng == null)
             return new List<AudioDeviceInfo>();
 
-        var result = new List<AudioDeviceInfo>();
-        foreach (var device in engine.EnumerateInputDevices())
+        var _result = new List<AudioDeviceInfo>();
+        foreach (var device in _eng.EnumerateInputDevices())
         {
-            if (device.MaxInputChannels <= 0)
-                continue;
-            result.Add(ToDeviceInfo(device, asOutput: false));
+            if (device.MaxInputChannels <= 0) continue;
+            _result.Add(_toDeviceInfo(device, asOutput: false));
         }
-        return result;
+        return _result;
     }
 
     /// <inheritdoc />
@@ -355,17 +321,15 @@ internal sealed class RustAudioEngine : IAudioEngine
 
         lock (_stateLock)
         {
-            if (_engine == null || !_outputEnabled || _config == null)
-                return -1;
-            if (_running)
+            if (_engine == null || !_outputEnabled || _config == null) return -1;
+            if (_running) return -1;
+
+            RustSafe.AudioDevice? _device = _findDeviceByName(_engine.EnumerateOutputDevices(), deviceName, preferOutput: true);
+            if (_device == null)
                 return -1;
 
-            RustSafe.AudioDevice? device = FindDeviceByName(_engine.EnumerateOutputDevices(), deviceName, preferOutput: true);
-            if (device == null)
-                return -1;
-
-            _selectedOutputDevice = device;
-            ReopenOutputStream(_config);
+            _selectedOutputDevice = _device;
+            _reopenOutputStream(_config);
             return 0;
         }
     }
@@ -375,16 +339,14 @@ internal sealed class RustAudioEngine : IAudioEngine
     {
         lock (_stateLock)
         {
-            if (_engine == null || !_outputEnabled || _config == null)
-                return -1;
-            if (_running)
+            if (_engine == null || !_outputEnabled || _config == null) return -1;
+            if (_running) return -1;
+
+            var _devices = GetOutputDevices();
+            if (deviceIndex < 0 || deviceIndex >= _devices.Count)
                 return -1;
 
-            var devices = GetOutputDevices();
-            if (deviceIndex < 0 || deviceIndex >= devices.Count)
-                return -1;
-
-            return SetOutputDeviceByName(devices[deviceIndex].Name);
+            return SetOutputDeviceByName(_devices[deviceIndex].Name);
         }
     }
 
@@ -396,17 +358,15 @@ internal sealed class RustAudioEngine : IAudioEngine
 
         lock (_stateLock)
         {
-            if (_engine == null || !_inputEnabled || _config == null)
-                return -1;
-            if (_running)
+            if (_engine == null || !_inputEnabled || _config == null) return -1;
+            if (_running) return -1;
+
+            RustSafe.AudioDevice? _device = _findDeviceByName(_engine.EnumerateInputDevices(), deviceName, preferOutput: false);
+            if (_device == null)
                 return -1;
 
-            RustSafe.AudioDevice? device = FindDeviceByName(_engine.EnumerateInputDevices(), deviceName, preferOutput: false);
-            if (device == null)
-                return -1;
-
-            _selectedInputDevice = device;
-            ReopenInputStream(_config);
+            _selectedInputDevice = _device;
+            _reopenInputStream(_config);
             return 0;
         }
     }
@@ -416,16 +376,14 @@ internal sealed class RustAudioEngine : IAudioEngine
     {
         lock (_stateLock)
         {
-            if (_engine == null || !_inputEnabled || _config == null)
-                return -1;
-            if (_running)
+            if (_engine == null || !_inputEnabled || _config == null) return -1;
+            if (_running) return -1;
+
+            var _devices = GetInputDevices();
+            if (deviceIndex < 0 || deviceIndex >= _devices.Count)
                 return -1;
 
-            var devices = GetInputDevices();
-            if (deviceIndex < 0 || deviceIndex >= devices.Count)
-                return -1;
-
-            return SetInputDeviceByName(devices[deviceIndex].Name);
+            return SetInputDeviceByName(_devices[deviceIndex].Name);
         }
     }
 
@@ -433,9 +391,7 @@ internal sealed class RustAudioEngine : IAudioEngine
 
     #region IAudioEngine — device events / monitoring
 
-    // The native Rust backend does not yet surface hot-plug events; these are declared
-    // to satisfy the interface contract and are never raised. Device monitoring is a
-    // no-op for the same reason.
+    // The Rust backend has no hot-plug events yet, these are here for the interface and never fire.
 #pragma warning disable CS0067
     /// <inheritdoc />
     public event EventHandler<AudioDeviceChangedEventArgs>? OutputDeviceChanged;
@@ -474,7 +430,7 @@ internal sealed class RustAudioEngine : IAudioEngine
 
             _disposed = true;
             _running = false;
-            DisposeNative();
+            _disposeNative();
         }
     }
 
@@ -482,49 +438,68 @@ internal sealed class RustAudioEngine : IAudioEngine
 
     #region Private helpers
 
-    private void OpenOutputStream(AudioConfig config)
+    /// <summary>
+    /// Opens the playback stream on the selected device.
+    /// </summary>
+    /// <param name="config"></param>
+    private void _openOutputStream(AudioConfig config)
     {
-        var streamConfig = new RustSafe.AudioStreamConfig(
+        var _cfg = new RustSafe.AudioStreamConfig(
             config.SampleRate,
             config.Channels,
             RustSafe.SampleFormat.F32,
-            ClampStreamBuffer(config.BufferSize));
+            _clampStreamBuffer(config.BufferSize));
 
-        _outputStream = _engine!.OpenOutputStream(_selectedOutputDevice, streamConfig, OutputCallback);
+        _outputStream = _engine!.OpenOutputStream(_selectedOutputDevice, _cfg, _outputCallback);
     }
 
-    private void OpenInputStream(AudioConfig config)
+    /// <summary>
+    /// Opens the capture stream on the selected device.
+    /// </summary>
+    /// <param name="config"></param>
+    private void _openInputStream(AudioConfig config)
     {
-        var streamConfig = new RustSafe.AudioStreamConfig(
+        var _cfg = new RustSafe.AudioStreamConfig(
             config.SampleRate,
             config.Channels,
             RustSafe.SampleFormat.F32,
-            ClampStreamBuffer(config.BufferSize));
+            _clampStreamBuffer(config.BufferSize));
 
-        _inputStream = _engine!.OpenInputStream(_selectedInputDevice, streamConfig, InputCallback);
+        _inputStream = _engine!.OpenInputStream(_selectedInputDevice, _cfg, _inputCallback);
     }
 
-    private void ReopenOutputStream(AudioConfig config)
+    /// <summary>
+    /// Tears the playback stream down and opens it again after a device switch.
+    /// </summary>
+    /// <param name="config"></param>
+    private void _reopenOutputStream(AudioConfig config)
     {
         _outputStream?.Dispose();
         _outputStream = null;
         _outputRing?.Clear();
-        OpenOutputStream(config);
+        _openOutputStream(config);
     }
 
-    private void ReopenInputStream(AudioConfig config)
+    /// <summary>
+    /// Tears the capture stream down and opens it again after a device switch.
+    /// </summary>
+    /// <param name="config"></param>
+    private void _reopenInputStream(AudioConfig config)
     {
         _inputStream?.Dispose();
         _inputStream = null;
         _inputRing?.Clear();
-        OpenInputStream(config);
+        _openInputStream(config);
     }
 
-    private void DisposeNative()
+    /// <summary>
+    /// Best effort teardown of everything native we hold.
+    /// </summary>
+    private void _disposeNative()
     {
-        try { _outputStream?.Dispose(); } catch { /* best effort */ }
-        try { _inputStream?.Dispose(); } catch { /* best effort */ }
-        try { _engine?.Dispose(); } catch { /* best effort */ }
+        try { _outputStream?.Dispose(); } catch { }
+        try { _inputStream?.Dispose(); } catch { }
+        try { _engine?.Dispose(); } catch { }
 
         _outputStream = null;
         _inputStream = null;
@@ -533,23 +508,33 @@ internal sealed class RustAudioEngine : IAudioEngine
         _inputRing = null;
     }
 
-    private int RingCapacity(AudioConfig config)
+    /// <summary>
+    /// Ring size in samples. Eight engine buffers of headroom keeps the blocking producer off the RT
+    /// consumer without piling up latency, capped at 1M.
+    /// </summary>
+    /// <param name="config"></param>
+    /// <returns></returns>
+    private int _ringCapacity(AudioConfig config)
     {
-        // Eight engine buffers of head-room decouples the blocking producer from the
-        // real-time consumer without unbounded latency.
-        long capacity = (long)Math.Max(config.BufferSize, 64) * Math.Max(config.Channels, 1) * 8L;
-        return (int)Math.Min(capacity, 1 << 20);
+        long _capacity = (long)Math.Max(config.BufferSize, 64) * Math.Max(config.Channels, 1) * 8L;
+        return (int)Math.Min(_capacity, 1 << 20);
     }
 
-    private static int ClampStreamBuffer(int bufferSize)
-    {
-        // AudioStreamConfig accepts [16, 8192] frames or 0 (device default). Out-of-range
-        // requests fall back to the device default; the ring buffer decouples sizing so
-        // the negotiated device buffer need not equal the reported FramesPerBuffer.
-        return (bufferSize >= 16 && bufferSize <= 8192) ? bufferSize : 0;
-    }
+    /// <summary>
+    /// AudioStreamConfig takes [16, 8192] frames or 0 for the device default. Anything else falls back to 0,
+    /// the ring decouples sizing so the device buffer need not match FramesPerBuffer.
+    /// </summary>
+    /// <param name="bufferSize"></param>
+    /// <returns></returns>
+    private static int _clampStreamBuffer(int bufferSize)
+        => (bufferSize >= 16 && bufferSize <= 8192) ? bufferSize : 0;
 
-    private static Ownaudio.Audio.HostApi? MapHostApi(EngineHostType hostType) => hostType switch
+    /// <summary>
+    /// Maps our host enum onto the Rust one, null means let cpal decide.
+    /// </summary>
+    /// <param name="hostType"></param>
+    /// <returns></returns>
+    private static Ownaudio.Audio.HostApi? _mapHostApi(EngineHostType hostType) => hostType switch
     {
         EngineHostType.ASIO => Ownaudio.Audio.HostApi.Asio,
         EngineHostType.COREAUDIO => Ownaudio.Audio.HostApi.CoreAudio,
@@ -558,44 +543,57 @@ internal sealed class RustAudioEngine : IAudioEngine
         _ => null,
     };
 
-    private static RustSafe.AudioDevice? FindDevice(
+    /// <summary>
+    /// Looks up the configured device id, null result means the Rust layer picks the system default.
+    /// preferOutput decides which channel count has to be non-zero.
+    /// </summary>
+    /// <param name="devices"></param>
+    /// <param name="deviceId"></param>
+    /// <param name="preferOutput"></param>
+    /// <returns></returns>
+    private static RustSafe.AudioDevice? _findDevice(
         IReadOnlyList<RustSafe.AudioDevice> devices, string? deviceId, bool preferOutput)
     {
-        if (!string.IsNullOrEmpty(deviceId))
-        {
-            RustSafe.AudioDevice? byName = FindDeviceByName(devices, deviceId, preferOutput);
-            if (byName != null)
-                return byName;
-        }
+        if (string.IsNullOrEmpty(deviceId))
+            return null;
 
-        return null; // null selects the system default device in the Rust layer.
+        return _findDeviceByName(devices, deviceId, preferOutput);
     }
 
-    private static RustSafe.AudioDevice? FindDeviceByName(
+    /// <summary>
+    /// Exact name match among the usable devices. preferOutput picks which direction counts as usable.
+    /// </summary>
+    /// <param name="devices"></param>
+    /// <param name="deviceName"></param>
+    /// <param name="preferOutput"></param>
+    /// <returns></returns>
+    private static RustSafe.AudioDevice? _findDeviceByName(
         IReadOnlyList<RustSafe.AudioDevice> devices, string deviceName, bool preferOutput)
     {
         foreach (var device in devices)
         {
-            bool usable = preferOutput ? device.MaxOutputChannels > 0 : device.MaxInputChannels > 0;
-            if (usable && string.Equals(device.Name, deviceName, StringComparison.Ordinal))
+            bool _usable = preferOutput ? device.MaxOutputChannels > 0 : device.MaxInputChannels > 0;
+            if (_usable && string.Equals(device.Name, deviceName, StringComparison.Ordinal))
                 return device;
         }
         return null;
     }
 
-    private static AudioDeviceInfo ToDeviceInfo(RustSafe.AudioDevice device, bool asOutput)
+    /// <summary>
+    /// Converts a Rust device into the core info record. asOutput tells which default flag to report.
+    /// </summary>
+    /// <param name="device"></param>
+    /// <param name="asOutput"></param>
+    /// <returns></returns>
+    private static AudioDeviceInfo _toDeviceInfo(RustSafe.AudioDevice device, bool asOutput)
     {
-        bool isInput = device.MaxInputChannels > 0;
-        bool isOutput = device.MaxOutputChannels > 0;
-        bool isDefault = asOutput ? device.IsDefaultOutput : device.IsDefaultInput;
-
         return new AudioDeviceInfo(
             deviceId: device.Name,
             name: device.Name,
             engineName: "RustAudio",
-            isInput: isInput,
-            isOutput: isOutput,
-            isDefault: isDefault,
+            isInput: device.MaxInputChannels > 0,
+            isOutput: device.MaxOutputChannels > 0,
+            isDefault: asOutput ? device.IsDefaultOutput : device.IsDefaultInput,
             state: AudioDeviceState.Active,
             maxInputChannels: device.MaxInputChannels,
             maxOutputChannels: device.MaxOutputChannels);

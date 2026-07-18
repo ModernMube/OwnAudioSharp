@@ -8,92 +8,65 @@ using OwnaudioNET.Exceptions;
 namespace OwnaudioNET.Engine;
 
 /// <summary>
-/// Central wrapper class that bridges OwnaudioNET with the external IAudioEngine implementation.
-/// Provides simplified interface for audio engine lifecycle, device management, and event forwarding.
+/// Bridge between OwnaudioNET and the IAudioEngine implementation: lifecycle, devices, event forwarding.
+/// Send() only writes the circular buffer, the pump thread does the blocking work towards the engine.
 /// </summary>
-/// <remarks>
-/// Architecture:
-/// - Main Thread: User API calls (Send, Receive, Start, Stop, device management)
-/// - AudioBufferController: Manages circular buffer and buffer pool
-/// - AudioPump: Manages pump thread that transfers data to engine
-/// - Engine RT Thread: Managed by external IAudioEngine
-///
-/// Thread Safety:
-/// - All public methods are thread-safe
-/// - Internal components use lock-free or thread-safe operations
-///
-/// Performance:
-/// - Send() latency: &lt; 1ms (CircularBuffer write only)
-/// - Total pipeline latency: ~21ms (2x buffer) + engine buffer (~10ms) = ~31ms @ 512 frames, 48kHz
-/// - Zero allocations in Send() hot path
-/// </remarks>
 public sealed class AudioEngineWrapper : IDisposable
 {
-    // External engine instance
     /// <summary>
-    /// Serializes concurrent producers on the <see cref="Send(ReadOnlySpan{float})"/> path. The
-    /// underlying buffer is single-producer/single-consumer, so this lock upholds the documented
-    /// "safe to call from any thread" contract by admitting one writer at a time; the pump thread
-    /// remains the sole consumer and never contends for it.
+    /// Keeps concurrent producers apart on the Send path. The buffer is single producer, this makes the
+    /// "safe from any thread" promise hold; the pump is the only consumer and never touches this.
     /// </summary>
     private readonly object _sendLock = new();
 
     private readonly IAudioEngine _engine;
-
-    // Component instances
     private readonly AudioBufferController _bufferController;
     private readonly AudioPump _pump;
-
-    // Configuration
     private readonly AudioConfig _config;
 
-    // Event forwarding subscriptions
     private EventHandler<AudioDeviceChangedEventArgs>? _engineOutputDeviceChanged;
     private EventHandler<AudioDeviceChangedEventArgs>? _engineInputDeviceChanged;
     private EventHandler<AudioDeviceStateChangedEventArgs>? _engineDeviceStateChanged;
 
-    // Dispose flag
     private bool _disposed;
 
     /// <summary>
-    /// Gets the actual frames per buffer negotiated with the audio device.
-    /// This may differ from the requested buffer size in AudioEngineConfig.
+    /// Frames per buffer the device actually gave us, may differ from what we asked for.
     /// </summary>
     public int FramesPerBuffer { get; }
 
     /// <summary>
-    /// Gets the audio configuration being used.
+    /// The config we run with.
     /// </summary>
     public AudioConfig Config => _config;
 
     /// <summary>
-    /// Gets whether the audio engine is currently running.
+    /// True while the pump is going.
     /// </summary>
     public bool IsRunning => _pump.IsRunning;
 
     /// <summary>
-    /// Gets the number of samples currently available in the output buffer.
+    /// Samples queued for output.
     /// </summary>
     public int OutputBufferAvailable => _bufferController.OutputBufferAvailable;
 
     /// <summary>
-    /// Gets the total number of buffer underrun events that have occurred.
+    /// Dropped buffer count so far.
     /// </summary>
     public long TotalUnderruns => _bufferController.TotalUnderruns;
 
     /// <summary>
-    /// Gets the total number of frames pumped to the audio engine.
+    /// Frames handed to the engine so far.
     /// </summary>
     public long TotalPumpedFrames => _pump.TotalPumpedFrames;
 
     /// <summary>
-    /// Gets the underlying IAudioEngine instance.
-    /// Useful for advanced scenarios like passing to AudioMixer directly.
+    /// The raw engine, for cases like passing it straight to AudioMixer.
     /// </summary>
     public IAudioEngine UnderlyingEngine => _engine;
 
     /// <summary>
-    /// Event raised when the output buffer is full and incoming audio is dropped.
+    /// Fires when the out buffer is full and audio gets dropped.
     /// </summary>
     public event EventHandler<BufferUnderrunEventArgs>? BufferUnderrun
     {
@@ -102,34 +75,27 @@ public sealed class AudioEngineWrapper : IDisposable
     }
 
     /// <summary>
-    /// Event raised when the output device changes.
+    /// Output device swapped under us.
     /// </summary>
     public event EventHandler<AudioDeviceChangedEventArgs>? OutputDeviceChanged;
 
     /// <summary>
-    /// Event raised when the input device changes.
+    /// Input device swapped under us.
     /// </summary>
     public event EventHandler<AudioDeviceChangedEventArgs>? InputDeviceChanged;
 
     /// <summary>
-    /// Event raised when a device state changes (added, removed, enabled, disabled).
+    /// Device added, removed, enabled or disabled.
     /// </summary>
     public event EventHandler<AudioDeviceStateChangedEventArgs>? DeviceStateChanged;
 
     /// <summary>
-    /// Initializes a new instance of the AudioEngineWrapper class.
+    /// Wraps an already initialized engine. bufferMultiplier is the headroom over one engine buffer,
+    /// bump it to 16 or 32 for a mixer with lots of sources or heavy DSP. Default 8 is ~85ms at 48k/512.
     /// </summary>
-    /// <param name="engine">The external audio engine instance (must be initialized).</param>
-    /// <param name="config">The audio configuration.</param>
-    /// <param name="bufferMultiplier">
-    /// Multiplier applied to the engine buffer size when creating the internal circular buffer.
-    /// Higher values provide more headroom at the cost of increased latency.
-    /// Increase to 16 or 32 when using <see cref="AudioMixer"/> with many sources or heavy DSP.
-    /// Default is 8 (approximately 85ms headroom at 48 kHz / 512 frames).
-    /// </param>
-    /// <exception cref="ArgumentNullException">Thrown if engine or config is null.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown if bufferMultiplier is not positive.</exception>
-    /// <exception cref="AudioEngineException">Thrown if engine initialization parameters are invalid.</exception>
+    /// <param name="engine"></param>
+    /// <param name="config"></param>
+    /// <param name="bufferMultiplier"></param>
     public AudioEngineWrapper(IAudioEngine engine, AudioConfig config, int bufferMultiplier = 8)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
@@ -142,45 +108,29 @@ public sealed class AudioEngineWrapper : IDisposable
         if (FramesPerBuffer <= 0)
             throw new AudioEngineException("Engine FramesPerBuffer must be positive.", -1);
 
-        int engineBufferSize = FramesPerBuffer * _config.Channels;
+        int _engineBufferSize = FramesPerBuffer * _config.Channels;
 
-        _bufferController = new AudioBufferController(
-            engineBufferSize,
-            _config.Channels,
-            bufferMultiplier: bufferMultiplier);
+        _bufferController = new AudioBufferController(_engineBufferSize, _config.Channels, bufferMultiplier);
+        _pump = new AudioPump(_engine, _bufferController, _engineBufferSize, FramesPerBuffer, _config.SampleRate);
 
-        _pump = new AudioPump(
-            _engine,
-            _bufferController,
-            engineBufferSize,
-            FramesPerBuffer,
-            _config.SampleRate);
-
-        // Subscribe to engine events
-        SubscribeToEngineEvents();
+        _subscribeEngineEvents();
     }
 
     /// <summary>
-    /// Starts the audio engine and pump thread.
-    /// This method is thread-safe and idempotent.
+    /// Starts the engine then the pump. Idempotent.
     /// </summary>
-    /// <exception cref="AudioEngineException">Thrown if the engine fails to start.</exception>
-    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
     public void Start()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
-        if (IsRunning)
-            return; // Already running
+        if (IsRunning) return;
 
         try
         {
-            // Start the external audio engine
-            int result = _engine.Start();
-            if (result < 0)
-                throw new AudioEngineException($"Failed to start audio engine. Error code: {result}", result);
+            int _result = _engine.Start();
+            if (_result < 0)
+                throw new AudioEngineException($"Failed to start audio engine. Error code: {_result}", _result);
 
-            // Start pump thread
             _pump.Start();
         }
         catch (Exception ex) when (ex is not AudioEngineException)
@@ -190,33 +140,24 @@ public sealed class AudioEngineWrapper : IDisposable
     }
 
     /// <summary>
-    /// Stops the audio engine and pump thread gracefully.
-    /// This method is thread-safe and idempotent.
-    /// **WARNING:** This method BLOCKS for up to 2 seconds waiting for the pump thread to exit!
-    /// For UI applications, use StopAsync() instead to prevent UI freezing.
+    /// Pump down, buffer flushed, engine stopped. Blocks up to 2s on the pump join, use StopAsync from UI.
     /// </summary>
-    /// <exception cref="AudioEngineException">Thrown if the engine fails to stop.</exception>
-    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
     public void Stop()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
-        if (!IsRunning)
-            return; // Already stopped
+        if (!IsRunning) return;
 
         try
         {
-            // Stop pump thread first
             _pump.Stop();
 
-            // Clear residual audio from the circular buffer so that the next Start()
-            // does not immediately play back stale samples from the previous session.
+            // Flush leftovers, otherwise the next Start() replays stale samples from the old session.
             _bufferController.ClearOutputBuffer();
 
-            // Stop the external audio engine
-            int result = _engine.Stop();
-            if (result < 0)
-                throw new AudioEngineException($"Failed to stop audio engine. Error code: {result}", result);
+            int _result = _engine.Stop();
+            if (_result < 0)
+                throw new AudioEngineException($"Failed to stop audio engine. Error code: {_result}", _result);
         }
         catch (Exception ex) when (ex is not AudioEngineException)
         {
@@ -225,17 +166,10 @@ public sealed class AudioEngineWrapper : IDisposable
     }
 
     /// <summary>
-    /// Stops the audio engine and pump thread asynchronously.
-    /// This method prevents UI thread blocking by running the stop operation on a background thread.
-    /// Recommended for UI applications (WPF, WinForms, MAUI, Avalonia).
-    /// <code>
-    /// await wrapper.StopAsync();
-    /// </code>
+    /// Stop on a background thread, the one to use from WPF/WinForms/MAUI/Avalonia.
     /// </summary>
-    /// <param name="cancellationToken">Cancellation token to abort the wait (not the stop itself).</param>
-    /// <exception cref="AudioEngineException">Thrown if the engine fails to stop.</exception>
-    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
-    /// <exception cref="OperationCanceledException">Thrown if cancelled.</exception>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
         await Task.Run(() =>
@@ -246,27 +180,17 @@ public sealed class AudioEngineWrapper : IDisposable
     }
 
     /// <summary>
-    /// Sends audio samples to the output device in a zero-allocation manner.
-    /// This method writes to the internal CircularBuffer; the pump thread reads from the buffer
-    /// and calls the engine's Send() method.
-    ///
-    /// Performance: &lt; 1ms latency (CircularBuffer write only).
-    /// Thread Safety: Safe to call from any thread.
-    /// Allocation: Zero allocations (uses Span&lt;T&gt;).
+    /// Writes interleaved float samples into the circular buffer, no allocation, sub-ms. Any thread is fine.
     /// </summary>
-    /// <param name="samples">Audio samples in Float32 format, interleaved (e.g., L R L R for stereo).</param>
-    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if the engine is not running.</exception>
+    /// <param name="samples"></param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Send(ReadOnlySpan<float> samples)
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
         if (!IsRunning)
             throw new InvalidOperationException("Cannot send audio when engine is not running. Call Start() first.");
 
-        // Serialize concurrent producers: the buffer is single-producer, so honor the documented
-        // any-thread contract by admitting one writer at a time (the pump is the sole consumer).
         lock (_sendLock)
         {
             _bufferController.Send(samples);
@@ -274,75 +198,48 @@ public sealed class AudioEngineWrapper : IDisposable
     }
 
     /// <summary>
-    /// Receives audio samples from the input device.
-    /// Returns a buffer rented from the internal AudioBufferPool — zero heap allocation on the hot path.
+    /// Pulls captured audio. The returned array comes from the pool, hand it back with ReturnInputBuffer.
+    /// Null means nothing was available.
     /// </summary>
-    /// <param name="sampleCount">The number of samples received (output parameter).</param>
-    /// <returns>
-    /// A pooled buffer containing captured audio samples, or null if no data is available.
-    /// The caller should return the buffer to the pool when done to avoid allocations:
-    /// <code>
-    /// var buffer = wrapper.Receive(out int count);
-    /// if (buffer != null)
-    /// {
-    ///     try { /* process buffer[0..count] */ }
-    ///     finally { wrapper.ReturnInputBuffer(buffer); }
-    /// }
-    /// </code>
-    /// </returns>
-    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if the engine is not running.</exception>
+    /// <param name="sampleCount"></param>
+    /// <returns></returns>
     public float[]? Receive(out int sampleCount)
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
         if (!IsRunning)
             throw new InvalidOperationException("Cannot receive audio when engine is not running. Call Start() first.");
 
-        try
+        float[] _buffer = _bufferController.RentInputBuffer()!;
+        int _result = _engine.Receives(_buffer.AsSpan());
+
+        if (_result <= 0)
         {
-            float[] buffer = _bufferController.RentInputBuffer()!;
-
-            int result = _engine.Receives(buffer.AsSpan());
-
-            if (result <= 0)
-            {
-                _bufferController.ReturnInputBuffer(buffer);
-                sampleCount = 0;
-                return null;
-            }
-
-            sampleCount = result;
-            return buffer;
-        }
-        catch
-        {
+            _bufferController.ReturnInputBuffer(_buffer);
             sampleCount = 0;
             return null;
         }
+
+        sampleCount = _result;
+        return _buffer;
     }
 
     /// <summary>
-    /// Returns an input buffer to the pool for reuse (optional but recommended).
+    /// Gives a capture buffer back to the pool. Optional, but skipping it means GC pressure.
     /// </summary>
-    /// <param name="buffer">The buffer to return.</param>
-    /// <remarks>
-    /// This method is optional - buffers will be garbage collected if not returned.
-    /// However, returning buffers to the pool reduces GC pressure.
-    /// </remarks>
+    /// <param name="buffer"></param>
     public void ReturnInputBuffer(float[] buffer)
     {
         _bufferController.ReturnInputBuffer(buffer);
     }
 
     /// <summary>
-    /// Gets a list of all available output devices.
+    /// Every output device we can see.
     /// </summary>
-    /// <returns>List of output device information.</returns>
-    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
+    /// <returns></returns>
     public List<AudioDeviceInfo> GetOutputDevices()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
         try
         {
@@ -355,13 +252,12 @@ public sealed class AudioEngineWrapper : IDisposable
     }
 
     /// <summary>
-    /// Gets a list of all available input devices.
+    /// Every input device we can see.
     /// </summary>
-    /// <returns>List of input device information.</returns>
-    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
+    /// <returns></returns>
     public List<AudioDeviceInfo> GetInputDevices()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
         try
         {
@@ -374,24 +270,20 @@ public sealed class AudioEngineWrapper : IDisposable
     }
 
     /// <summary>
-    /// Changes the output device by device name.
-    /// The engine must be stopped before changing devices.
+    /// Picks an output device by its friendly name. Engine has to be stopped.
     /// </summary>
-    /// <param name="deviceName">The friendly name of the device.</param>
-    /// <returns>True if successful, false otherwise.</returns>
-    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if the engine is running.</exception>
+    /// <param name="deviceName"></param>
+    /// <returns></returns>
     public bool SetOutputDeviceByName(string deviceName)
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
         if (IsRunning)
             throw new InvalidOperationException("Cannot change output device while engine is running. Call Stop() first.");
 
         try
         {
-            int result = _engine.SetOutputDeviceByName(deviceName);
-            return result == 0;
+            return _engine.SetOutputDeviceByName(deviceName) == 0;
         }
         catch (Exception ex)
         {
@@ -400,24 +292,20 @@ public sealed class AudioEngineWrapper : IDisposable
     }
 
     /// <summary>
-    /// Changes the input device by device name.
-    /// The engine must be stopped before changing devices.
+    /// Picks an input device by its friendly name. Engine has to be stopped.
     /// </summary>
-    /// <param name="deviceName">The friendly name of the device.</param>
-    /// <returns>True if successful, false otherwise.</returns>
-    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if the engine is running.</exception>
+    /// <param name="deviceName"></param>
+    /// <returns></returns>
     public bool SetInputDeviceByName(string deviceName)
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
 
         if (IsRunning)
             throw new InvalidOperationException("Cannot change input device while engine is running. Call Stop() first.");
 
         try
         {
-            int result = _engine.SetInputDeviceByName(deviceName);
-            return result == 0;
+            return _engine.SetInputDeviceByName(deviceName) == 0;
         }
         catch (Exception ex)
         {
@@ -426,47 +314,36 @@ public sealed class AudioEngineWrapper : IDisposable
     }
 
     /// <summary>
-    /// Clears the output buffer, discarding all pending audio data.
+    /// Dumps everything still queued for output. Not safe next to a running Send(), use it around seeks.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
-    /// <remarks>
-    /// WARNING: This method is NOT thread-safe with Send() operations.
-    /// Only call this when you're certain no Send() calls are in progress.
-    /// Typically used during seek operations or after stopping playback.
-    /// </remarks>
     public void ClearOutputBuffer()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
         _bufferController.ClearOutputBuffer();
     }
 
     /// <summary>
-    /// Pauses the background device monitoring task.
-    /// This prevents device enumeration and change detection from interfering with UI operations.
-    /// Recommended to call when opening VST editor windows or during critical UI operations.
+    /// Parks the device watcher, handy before opening a VST editor window.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
     public void PauseDeviceMonitoring()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
         _engine.PauseDeviceMonitoring();
     }
 
     /// <summary>
-    /// Resumes the background device monitoring task.
-    /// Should be called after closing VST editor windows or when critical UI operations complete.
+    /// Wakes the device watcher back up.
     /// </summary>
-    /// <exception cref="ObjectDisposedException">Thrown if the wrapper has been disposed.</exception>
     public void ResumeDeviceMonitoring()
     {
-        ThrowIfDisposed();
+        _throwIfDisposed();
         _engine.ResumeDeviceMonitoring();
     }
 
     /// <summary>
-    /// Subscribes to engine events and forwards them to wrapper events.
+    /// Hooks the engine events and re-raises them as ours.
     /// </summary>
-    private void SubscribeToEngineEvents()
+    private void _subscribeEngineEvents()
     {
         _engineOutputDeviceChanged = (sender, e) => OutputDeviceChanged?.Invoke(this, e);
         _engineInputDeviceChanged = (sender, e) => InputDeviceChanged?.Invoke(this, e);
@@ -478,32 +355,27 @@ public sealed class AudioEngineWrapper : IDisposable
     }
 
     /// <summary>
-    /// Unsubscribes from engine events.
+    /// Unhooks what we subscribed above.
     /// </summary>
-    private void UnsubscribeFromEngineEvents()
+    private void _unsubscribeEngineEvents()
     {
-        if (_engineOutputDeviceChanged != null)
-            _engine.OutputDeviceChanged -= _engineOutputDeviceChanged;
-
-        if (_engineInputDeviceChanged != null)
-            _engine.InputDeviceChanged -= _engineInputDeviceChanged;
-
-        if (_engineDeviceStateChanged != null)
-            _engine.DeviceStateChanged -= _engineDeviceStateChanged;
+        if (_engineOutputDeviceChanged != null) _engine.OutputDeviceChanged -= _engineOutputDeviceChanged;
+        if (_engineInputDeviceChanged != null) _engine.InputDeviceChanged -= _engineInputDeviceChanged;
+        if (_engineDeviceStateChanged != null) _engine.DeviceStateChanged -= _engineDeviceStateChanged;
     }
 
     /// <summary>
-    /// Throws ObjectDisposedException if the wrapper has been disposed.
+    /// Guard for calls after dispose.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ThrowIfDisposed()
+    private void _throwIfDisposed()
     {
         if (_disposed)
             throw new ObjectDisposedException(nameof(AudioEngineWrapper));
     }
 
     /// <summary>
-    /// Disposes the audio engine wrapper and releases all resources.
+    /// Stops if needed, unhooks, then tears down pump, buffers and engine.
     /// </summary>
     public void Dispose()
     {
@@ -512,25 +384,21 @@ public sealed class AudioEngineWrapper : IDisposable
 
         if (IsRunning)
         {
-            try
-            {
-                Stop();
-            }
+            try { Stop(); }
             catch {}
         }
 
-        UnsubscribeFromEngineEvents();
+        _unsubscribeEngineEvents();
 
         _pump.Dispose();
         _bufferController.Dispose();
-
         _engine?.Dispose();
 
         _disposed = true;
     }
 
     /// <summary>
-    /// Returns a string representation of the wrapper's current state.
+    /// Short state dump for logs.
     /// </summary>
     public override string ToString()
     {

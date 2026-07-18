@@ -6,19 +6,8 @@ using OwnaudioNET.Events;
 namespace OwnaudioNET.Engine;
 
 /// <summary>
-/// Manages audio buffer operations for input and output.
-/// Provides lock-free circular buffering for output and pooled buffers for input.
+/// Output circular buffer + input buffer pool behind the engine wrapper. Send path is lock-free and alloc-free.
 /// </summary>
-/// <remarks>
-/// This class is responsible for:
-/// - Managing the output circular buffer for Send operations
-/// - Managing the input buffer pool for Receive operations
-/// - Tracking buffer statistics (underruns, available space)
-/// - Raising buffer-related events
-/// 
-/// Thread Safety: All public methods are thread-safe.
-/// Performance: Send operations are lock-free and zero-allocation.
-/// </remarks>
 internal sealed class AudioBufferController : IDisposable
 {
    private readonly CircularBuffer _outputBuffer;
@@ -31,89 +20,70 @@ internal sealed class AudioBufferController : IDisposable
    private bool _disposed;
 
    /// <summary>
-   /// Event raised when the output buffer is full and incoming audio is dropped.
+   /// Fires when the out buffer is full and we had to drop samples.
    /// </summary>
    public event EventHandler<BufferUnderrunEventArgs>? BufferUnderrun;
 
    /// <summary>
-   /// Gets the number of samples currently available in the output buffer.
+   /// Samples waiting in the output buffer.
    /// </summary>
    public int OutputBufferAvailable => _outputBuffer.Available;
 
    /// <summary>
-   /// Gets the total capacity of the output buffer in samples.
+   /// Output buffer size in samples.
    /// </summary>
    public int OutputBufferCapacity => _outputBuffer.Capacity;
 
    /// <summary>
-   /// Gets the total number of buffer underrun events that have occurred.
+   /// How many times we ran out of room so far.
    /// </summary>
    public long TotalUnderruns => Interlocked.Read(ref _totalUnderruns);
 
    /// <summary>
-   /// Gets the total number of samples sent through this controller.
+   /// Sample count pushed through since construction.
    /// </summary>
    public long TotalSamplesSent => Interlocked.Read(ref _totalSamplesSent);
 
    /// <summary>
-   /// Initializes a new instance of the AudioBufferController class.
+   /// Builds the circular buffer and the input pool. The multiplier is the headroom over one engine buffer.
    /// </summary>
-   /// <param name="engineBufferSize">The engine buffer size in samples (frames * channels).</param>
-   /// <param name="channels">The number of audio channels.</param>
-   /// <param name="bufferMultiplier">Multiplier for the circular buffer size (default: 8x engine buffer).</param>
-   /// <exception cref="ArgumentOutOfRangeException">Thrown if engineBufferSize or channels is less than or equal to zero.</exception>
    public AudioBufferController(int engineBufferSize, int channels, int bufferMultiplier = 8)
    {
       if (engineBufferSize <= 0)
          throw new ArgumentOutOfRangeException(nameof(engineBufferSize), "Engine buffer size must be positive.");
       if (channels <= 0)
          throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be positive.");
-      if (bufferMultiplier <= 0)
+      if(bufferMultiplier <= 0)
          throw new ArgumentOutOfRangeException(nameof(bufferMultiplier), "Buffer multiplier must be positive.");
 
       _engineBufferSize = engineBufferSize;
       _channels = channels;
 
-      // Create output circular buffer
-      // Increased from 2x to 8x to accommodate large mixer buffers (4096 frames) and heavy DSP.
-      int circularBufferSize = engineBufferSize * bufferMultiplier;
-      _outputBuffer = new CircularBuffer(circularBufferSize);
-
-      // Create input buffer pool
+      _outputBuffer = new CircularBuffer(engineBufferSize * bufferMultiplier);
       _inputBufferPool = new AudioBufferPool(engineBufferSize, initialPoolSize: 4, maxPoolSize: 16);
-
-      _totalUnderruns = 0;
-      _totalSamplesSent = 0;
    }
 
    /// <summary>
-   /// Sends audio samples to the output buffer in a zero-allocation manner.
+   /// Pushes interleaved float samples into the out buffer.
    /// </summary>
-   /// <param name="samples">Audio samples in Float32 format, interleaved (e.g., L R L R for stereo).</param>
-   /// <returns>The number of samples actually written to the buffer.</returns>
-   /// <exception cref="ObjectDisposedException">Thrown if the controller has been disposed.</exception>
-   /// </remarks>
+   /// <returns>How many samples actually landed there.</returns>
    [MethodImpl(MethodImplOptions.AggressiveInlining)]
    public int Send(ReadOnlySpan<float> samples)
    {
-      ThrowIfDisposed();
+      _throwIfDisposed();
 
-      if (samples.IsEmpty)
-         return 0;
+      if (samples.IsEmpty) { return 0; }
 
       int written = _outputBuffer.Write(samples);
-
       Interlocked.Add(ref _totalSamplesSent, written);
 
       if (written < samples.Length)
       {
-         int droppedSamples = samples.Length - written;
-         int droppedFrames = droppedSamples / _channels;
-
+         int _dropped = (samples.Length - written) / _channels;
          Interlocked.Increment(ref _totalUnderruns);
 
          BufferUnderrun?.Invoke(this, new BufferUnderrunEventArgs(
-             missedFrames: droppedFrames,
+             missedFrames: _dropped,
              position: Interlocked.Read(ref _totalSamplesSent) / _channels
          ));
       }
@@ -122,73 +92,52 @@ internal sealed class AudioBufferController : IDisposable
    }
 
    /// <summary>
-   /// Reads audio samples from the output buffer.
-   /// Used by the pump thread to retrieve data for sending to the engine.
+   /// Pulls samples out for the pump thread.
    /// </summary>
-   /// <param name="buffer">The buffer to read samples into.</param>
-   /// <returns>The number of samples actually read from the buffer.</returns>
-   /// <exception cref="ObjectDisposedException">Thrown if the controller has been disposed.</exception>
    [MethodImpl(MethodImplOptions.AggressiveInlining)]
    public int Read(Span<float> buffer)
    {
-      ThrowIfDisposed();
+      _throwIfDisposed();
       return _outputBuffer.Read(buffer);
    }
 
    /// <summary>
-   /// Returns an input buffer from the pool.
-   /// Used when receiving audio from the engine.
+   /// Grabs a capture buffer from the pool.
    /// </summary>
-   /// <returns>A buffer from the pool, or null if the pool is empty.</returns>
-   /// <exception cref="ObjectDisposedException">Thrown if the controller has been disposed.</exception>
    public float[]? RentInputBuffer()
    {
-      ThrowIfDisposed();
+      _throwIfDisposed();
       return _inputBufferPool.Rent();
    }
 
    /// <summary>
-   /// Returns an input buffer to the pool for reuse.
+   /// Hands a capture buffer back. Wrong sized or late buffers are just dropped.
    /// </summary>
-   /// <param name="buffer">The buffer to return.</param>
-   /// <exception cref="ObjectDisposedException">Thrown if the controller has been disposed.</exception>
    public void ReturnInputBuffer(float[] buffer)
    {
-      if (buffer == null || buffer.Length != _engineBufferSize)
-         return; // Invalid buffer - discard
+      if (_disposed || buffer == null || buffer.Length != _engineBufferSize) return;
 
-      if (_disposed)
-         return; // Already disposed, don't throw
-
-      try
-      {
-         _inputBufferPool.Return(buffer);
-      }
-      catch {}
+      _inputBufferPool.Return(buffer);
    }
 
    /// <summary>
-   /// Clears the output buffer, discarding all pending audio data.
+   /// Throws away everything still queued for output.
    /// </summary>
-   /// <exception cref="ObjectDisposedException">Thrown if the controller has been disposed.</exception>
    public void ClearOutputBuffer()
    {
-      ThrowIfDisposed();
+      _throwIfDisposed();
       _outputBuffer.Clear();
    }
 
-   /// <summary>
-   /// Throws ObjectDisposedException if the controller has been disposed.
-   /// </summary>
    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-   private void ThrowIfDisposed()
+   private void _throwIfDisposed()
    {
       if (_disposed)
          throw new ObjectDisposedException(nameof(AudioBufferController));
    }
 
    /// <summary>
-   /// Disposes the audio buffer controller and releases all resources.
+   /// Drops the buffer content and the pool.
    /// </summary>
    public void Dispose()
    {
@@ -202,7 +151,7 @@ internal sealed class AudioBufferController : IDisposable
    }
 
    /// <summary>
-   /// Returns a string representation of the controller's current state.
+   /// State dump for logs.
    /// </summary>
    public override string ToString()
    {

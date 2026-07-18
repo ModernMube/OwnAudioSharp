@@ -7,22 +7,17 @@ using Logger;
 namespace OwnaudioNET.Engine;
 
 /// <summary>
-/// AOT-compatible factory that creates and initializes <see cref="IAudioEngine"/> instances
-/// without any reflection or dynamic type loading. All platforms share a single
-/// Rust-backed engine (<c>RustAudioEngine</c>, driven by the native cpal audio backend).
-/// A <see cref="MockAudioEngine"/> is also available for unit testing without audio hardware.
+/// AOT friendly factory, no reflection. Every platform gets the same Rust/cpal engine, plus a mock for tests.
 /// </summary>
 public static class AudioEngineFactory
 {
     #region Public Factory Methods
 
     /// <summary>
-    /// Creates and initializes the Rust-backed audio engine for the current platform.
+    /// Creates and inits the Rust engine for this platform.
     /// </summary>
-    /// <param name="config">Audio configuration; must pass <see cref="AudioConfig.Validate"/>.</param>
-    /// <returns>Initialized engine ready for playback or recording.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="config"/> is null.</exception>
-    /// <exception cref="AudioEngineException">Thrown on initialization failure.</exception>
+    /// <param name="config"></param>
+    /// <returns></returns>
     public static IAudioEngine CreateEngine(AudioConfig config)
     {
         if (config == null)
@@ -36,13 +31,13 @@ public static class AudioEngineFactory
 
         try
         {
-            int result = InitializeEngine(engine, config);
+            int _result = _initializeEngine(engine, config);
 
-            if (result < 0)
+            if (_result < 0)
             {
                 engine.Dispose();
                 throw new AudioEngineException(
-                    $"Audio engine initialization failed with error code: {result}", result);
+                    $"Audio engine initialization failed with error code: {_result}", _result);
             }
 
             return engine;
@@ -59,13 +54,11 @@ public static class AudioEngineFactory
     }
 
     /// <summary>
-    /// Creates and initializes a <see cref="MockAudioEngine"/> for testing without hardware.
+    /// Same thing without hardware, for tests. The flag turns on a 440 Hz sine on the output.
     /// </summary>
-    /// <param name="config">Audio configuration parameters.</param>
-    /// <param name="generateTestSignal">When true, generates a 440 Hz sine wave on output.</param>
-    /// <returns>Initialized mock engine.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="config"/> is null.</exception>
-    /// <exception cref="AudioEngineException">Thrown on initialization failure.</exception>
+    /// <param name="config"></param>
+    /// <param name="generateTestSignal"></param>
+    /// <returns></returns>
     public static MockAudioEngine CreateMockEngine(AudioConfig config, bool generateTestSignal = false)
     {
         if (config == null)
@@ -79,13 +72,13 @@ public static class AudioEngineFactory
 
         try
         {
-            int result = engine.Initialize(config);
+            int _result = engine.Initialize(config);
 
-            if (result < 0)
+            if (_result < 0)
             {
                 engine.Dispose();
                 throw new AudioEngineException(
-                    $"Mock engine initialization failed with error code: {result}", result);
+                    $"Mock engine initialization failed with error code: {_result}", _result);
             }
 
             return engine;
@@ -102,8 +95,9 @@ public static class AudioEngineFactory
     }
 
     /// <summary>
-    /// Returns true when the Rust-backed audio engine can be created on this platform.
+    /// True when the native engine can be spun up here.
     /// </summary>
+    /// <returns></returns>
     public static bool IsNativeEngineAvailable()
     {
         try
@@ -118,8 +112,9 @@ public static class AudioEngineFactory
     }
 
     /// <summary>
-    /// Returns the display name of the engine used on the current platform.
+    /// Display name of the engine in use.
     /// </summary>
+    /// <returns></returns>
     public static string GetPlatformEngineName()
         => "RustAudioEngine (cpal)";
 
@@ -128,27 +123,29 @@ public static class AudioEngineFactory
     #region Private Helpers
 
     /// <summary>
-    /// Runs engine initialization; uses a dedicated MTA thread on Windows to satisfy
-    /// WASAPI COM requirements without depending on the calling thread's apartment.
+    /// Runs init. On Windows it goes to a dedicated MTA thread, WASAPI COM wants that regardless of the caller.
     /// </summary>
-    private static int InitializeEngine(IAudioEngine engine, AudioConfig config)
+    /// <param name="engine"></param>
+    /// <param name="config"></param>
+    /// <returns></returns>
+    private static int _initializeEngine(IAudioEngine engine, AudioConfig config)
     {
-        int result = 0;
+        int _result = 0;
 
 #if WINDOWS
-        var thread = new Thread(() => result = engine.Initialize(config), 256 * 1024)
+        var _thread = new Thread(() => _result = engine.Initialize(config), 256 * 1024)
         {
             Name = "OwnAudio-WasapiInit",
             IsBackground = true
         };
-        thread.SetApartmentState(ApartmentState.MTA);
-        thread.Start();
-        thread.Join();
+        _thread.SetApartmentState(ApartmentState.MTA);
+        _thread.Start();
+        _thread.Join();
 #else
-        result = engine.Initialize(config);
+        _result = engine.Initialize(config);
 #endif
 
-        return result;
+        return _result;
     }
 
     #endregion

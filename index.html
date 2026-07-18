@@ -17,6 +17,17 @@
     body { display: flex; flex-direction: column; min-height: 100vh; }
     .page-wrap { flex: 1; }
     .topnav { padding: 0 1.75rem; }
+
+    /* Home page only: card grids read as centered blocks, not left-aligned columns */
+    .page-wrap .card,
+    .page-wrap .api-card,
+    .page-wrap .pkg-card,
+    .page-wrap .value-card,
+    .page-wrap .tool-card { text-align: center; align-items: center; }
+    .page-wrap .api-card-title { justify-content: center; }
+    .page-wrap .tool-card { flex-direction: column; gap: .6rem; }
+    .page-wrap .card-icon,
+    .page-wrap .value-card-icon { margin-left: auto; margin-right: auto; }
   </style>
 </head>
 <body>
@@ -390,6 +401,32 @@ dotnet add package OwnVocalRemover        # Optional vocal separation add-on</co
         <div class="api-card-title">📋 Reference</div>
         <div class="api-card-desc">Events, enumerations, threading rules, and best practices.</div>
       </a>
+    </div>
+  </section>
+
+  <!-- ─── DEVELOPMENT TOOLS ────────────────────────────────────────────── -->
+  <section class="section section-narrow">
+    <p class="section-eyebrow">Behind the code</p>
+    <h2 class="section-title">Development tools.</h2>
+    <p class="section-lead">OwnAudioSharp is developed with the following tools.</p>
+
+    <div class="tool-grid">
+      <div class="tool-card">
+        <img src="assets/tools/claude.svg" alt="Claude Code" width="28" height="28">
+        <div><span class="tool-vendor">Anthropic</span><span class="tool-name">Claude Code</span></div>
+      </div>
+      <div class="tool-card">
+        <img src="assets/tools/vscode.svg" alt="Visual Studio Code" width="28" height="28">
+        <div><span class="tool-vendor">Microsoft</span><span class="tool-name">Visual Studio Code</span></div>
+      </div>
+      <div class="tool-card">
+        <img src="assets/tools/visualstudio.svg" alt="Visual Studio 2022" width="28" height="28">
+        <div><span class="tool-vendor">Microsoft</span><span class="tool-name">Visual Studio 2022</span></div>
+      </div>
+      <div class="tool-card">
+        <img src="assets/tools/rider.svg" alt="Rider" width="28" height="28">
+        <div><span class="tool-vendor">JetBrains</span><span class="tool-name">Rider</span></div>
+      </div>
     </div>
   </section>
 

@@ -785,3 +785,24 @@ h2:hover .anchor-link, h3:hover .anchor-link { opacity: .5; }
   z-index: 140;
 }
 .sidebar-overlay.show { display: block; }
+
+/* ─── Development tool cards ─────────────────────────────────────────────── */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 1rem;
+  margin-top: 1.75rem;
+}
+.tool-card {
+  display: flex; align-items: center; gap: .85rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.15rem;
+  text-align: left;
+  transition: border-color .2s, transform .2s;
+}
+.tool-card:hover { border-color: var(--accent-border); transform: translateY(-2px); }
+.tool-card img { flex: none; }
+.tool-vendor { display: block; font-size: .72rem; color: var(--text-muted); letter-spacing: .02em; }
+.tool-name   { display: block; font-size: .9rem; font-weight: 600; letter-spacing: -.01em; }
