@@ -6,48 +6,44 @@ using OwnAudio.Midi.IO;
 namespace OwnAudio.Midi.Clock;
 
 /// <summary>
-/// High-resolution MIDI clock that generates 24 PPQN timing pulses and optionally
-/// forwards them to a MIDI output port via the standard 0xF8 Timing Clock message.
-/// The timing thread runs in the native MIDI core; each pulse is delivered to this
-/// instance through an unmanaged callback, which sends the 0xF8 message to the
-/// configured output port. This keeps the clock compatible with any
-/// <see cref="IMidiOutputPort"/>, including managed test doubles.
+/// 24 PPQN clock ticking on the native timing thread. Every pulse comes back
+/// through an unmanaged callback and goes out as 0xF8, so any IMidiOutputPort
+/// works here — test doubles included.
 /// </summary>
 public sealed class MidiClock : IDisposable
 {
     /// <summary>
-    /// Optional output port that receives Start, Stop, Continue, and Timing Clock messages.
+    /// Gets Start / Stop / Continue and the pulses, if we were given one.
     /// </summary>
     private readonly IMidiOutputPort? _outputPort;
 
     /// <summary>
-    /// Native timing clock handle.
+    /// The native clock.
     /// </summary>
     private readonly MidiClockHandle _handle;
 
     /// <summary>
-    /// Pins this instance so the unmanaged pulse callback can recover it;
-    /// allocated while the clock is running.
+    /// Pin so the pulse callback can find us; alive while we run.
     /// </summary>
     private GCHandle _selfPin;
 
     /// <summary>
-    /// Indicates whether the clock is currently running.
+    /// Running or not.
     /// </summary>
     private volatile bool _isRunning;
 
     /// <summary>
-    /// Guards against double-disposal.
+    /// Double-dispose guard.
     /// </summary>
     private volatile bool _disposed;
 
     /// <summary>
-    /// Current tempo in beats per minute.
+    /// Tempo backing field.
     /// </summary>
     private double _bpm;
 
     /// <summary>
-    /// Gets or sets the tempo in beats per minute, clamped to the range [20, 300].
+    /// Tempo in BPM, clamped to 20..300. Setting it retunes a running clock too.
     /// </summary>
     public double Bpm
     {
@@ -55,20 +51,17 @@ public sealed class MidiClock : IDisposable
         set
         {
             _bpm = Math.Clamp(value, 20.0, 300.0);
-            if (!_handle.IsInvalid)
-            {
-                MidiNativeMethods.ownaudio_midi_v1_clock_set_bpm(_handle, _bpm);
-            }
+            if (!_handle.IsInvalid) { MidiNativeMethods.ownaudio_midi_v1_clock_set_bpm(_handle, _bpm); }
         }
     }
 
     /// <summary>
-    /// Gets a value indicating whether the clock is currently running.
+    /// True while the timing thread is up.
     /// </summary>
     public bool IsRunning => _isRunning;
 
     /// <summary>
-    /// Initializes a new <see cref="MidiClock"/> with the specified tempo and optional output port.
+    /// Creates a stopped clock. The output port is optional.
     /// </summary>
     public MidiClock(double bpm = 120.0, IMidiOutputPort? outputPort = null)
     {
@@ -80,35 +73,28 @@ public sealed class MidiClock : IDisposable
     }
 
     /// <summary>
-    /// Starts the clock thread and sends the MIDI Start message (0xFA) to the output port.
+    /// Starts from the top and sends Start (0xFA).
     /// </summary>
-    public void Start() => StartInternal(0xFA);
+    public void Start() => _startInternal(0xFA);
 
     /// <summary>
-    /// Resumes a stopped clock and sends the MIDI Continue message (0xFB) to the output port.
+    /// Picks up where we stopped and sends Continue (0xFB).
     /// </summary>
-    public void Continue() => StartInternal(0xFB);
+    public void Continue() => _startInternal(0xFB);
 
     /// <summary>
-    /// Starts the native timing thread and sends the given transport message.
+    /// Spins up the native thread, then sends the transport byte (0xFA or 0xFB).
     /// </summary>
-    /// <param name="transportMessage">
-    /// The transport status byte to send after starting (0xFA Start or 0xFB Continue).
-    /// </param>
-    private void StartInternal(byte transportMessage)
+    private void _startInternal(byte transportMessage)
     {
-        if (_isRunning)
-        {
-            return;
-        }
+        if (_isRunning) return;
 
         _selfPin = GCHandle.Alloc(this);
 
         int code;
         unsafe
         {
-            code = MidiNativeMethods.ownaudio_midi_v1_clock_start(
-                _handle, &OnPulse, GCHandle.ToIntPtr(_selfPin));
+            code = MidiNativeMethods.ownaudio_midi_v1_clock_start(_handle, &_onPulse, GCHandle.ToIntPtr(_selfPin));
         }
 
         if (code != (int)MidiErrorCode.Success)
@@ -122,62 +108,43 @@ public sealed class MidiClock : IDisposable
     }
 
     /// <summary>
-    /// Stops the clock thread and sends the MIDI Stop message (0xFC) to the output port.
+    /// Kills the timing thread and sends Stop (0xFC).
     /// </summary>
     public void Stop()
     {
-        if (!_isRunning)
-        {
-            return;
-        }
+        if (!_isRunning) return;
 
         MidiNativeMethods.ownaudio_midi_v1_clock_stop(_handle);
-        if (_selfPin.IsAllocated)
-        {
-            _selfPin.Free();
-        }
+        if (_selfPin.IsAllocated) { _selfPin.Free(); }
         _isRunning = false;
 
         _outputPort?.Send(new MidiMessage(0xFC, 0, 0));
     }
 
     /// <summary>
-    /// Unmanaged callback invoked by the native clock for each timing pulse.
-    /// Sends the 0xF8 Timing Clock message to the configured output port.
+    /// Pulse callback off the native thread; userData is the pinned clock.
     /// </summary>
-    /// <param name="userData">
-    /// Pointer to the pinned <see cref="MidiClock"/> instance.
-    /// </param>
     [UnmanagedCallersOnly]
-    private static void OnPulse(IntPtr userData)
+    private static void _onPulse(IntPtr userData)
     {
-        if (GCHandle.FromIntPtr(userData).Target is not MidiClock clock)
-        {
-            return;
-        }
-        clock._outputPort?.Send(new MidiMessage(0xF8, 0, 0));
+        if (GCHandle.FromIntPtr(userData).Target is not MidiClock _clock) return;
+        _clock._outputPort?.Send(new MidiMessage(0xF8, 0, 0));
     }
 
     /// <summary>
-    /// Stops the clock if running and releases all native resources.
+    /// Stops if needed, then lets the native clock go.
     /// </summary>
     public void Dispose()
     {
-        if (_disposed)
-        {
-            return;
-        }
+        if (_disposed) return;
         _disposed = true;
-        if (_isRunning)
-        {
-            Stop();
-        }
+        if (_isRunning) Stop();
         _handle.Dispose();
         GC.SuppressFinalize(this);
     }
 
     /// <summary>
-    /// Finalizer that ensures resources are released if <see cref="Dispose"/> was not called.
+    /// Last resort if nobody called Dispose.
     /// </summary>
     ~MidiClock() => Dispose();
 }

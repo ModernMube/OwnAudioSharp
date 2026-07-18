@@ -4,20 +4,18 @@ using OwnAudio.Midi.Internal;
 namespace OwnAudio.Midi.Interop;
 
 /// <summary>
-/// Single point of entry for every native <c>ownaudio_midi_ffi</c> call. All
-/// declarations use source-generated <c>LibraryImport</c> for AOT compatibility.
-/// Each function returns an <c>int</c> error code (see <see cref="MidiErrorCode"/>)
-/// unless it has no failure mode.
+/// Every ownaudio_midi_ffi call lives here. Source-generated LibraryImport so it
+/// survives AOT. Return value is a MidiErrorCode unless the call can't fail.
 /// </summary>
 internal static unsafe partial class MidiNativeMethods
 {
     /// <summary>
-    /// Logical native library name resolved by <see cref="MidiNativeLibraryLoader"/>.
+    /// Library name the loader resolves.
     /// </summary>
     private const string LibName = MidiNativeLibraryLoader.LogicalName;
 
     /// <summary>
-    /// Registers the native library resolver before the first P/Invoke call.
+    /// Gets the resolver in place before anything calls into native.
     /// </summary>
     static MidiNativeMethods()
     {
@@ -27,21 +25,21 @@ internal static unsafe partial class MidiNativeMethods
     #region Port Enumeration
 
     /// <summary>
-    /// Retrieves the list of MIDI input port names as a native array of UTF-8 strings.
+    /// Input port names as a native array of UTF-8 strings.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_list_input_ports(
         out IntPtr outNames, out nuint outCount);
 
     /// <summary>
-    /// Retrieves the list of MIDI output port names as a native array of UTF-8 strings.
+    /// Output port names as a native array of UTF-8 strings.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_list_output_ports(
         out IntPtr outNames, out nuint outCount);
 
     /// <summary>
-    /// Releases a port-name array previously returned by an enumeration call.
+    /// Frees a name array we got from the two calls above.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial void ownaudio_midi_v1_free_port_names(
@@ -52,21 +50,22 @@ internal static unsafe partial class MidiNativeMethods
     #region Input Port
 
     /// <summary>
-    /// Opens a hardware MIDI input port by name.
+    /// Opens a hardware input port by name.
     /// </summary>
     [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
     internal static partial int ownaudio_midi_v1_input_port_open(
         string portName, out MidiInputPortHandle outHandle);
 
     /// <summary>
-    /// Creates a virtual MIDI input port.
+    /// Creates a virtual input port.
     /// </summary>
     [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
     internal static partial int ownaudio_midi_v1_create_virtual_input(
         string name, out MidiInputPortHandle outHandle);
 
     /// <summary>
-    /// Starts delivering short messages and SysEx data to the supplied callbacks.
+    /// Starts pumping short messages and SysEx into the two callbacks; userData
+    /// comes back untouched on every call.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_input_port_start_with_sysex(
@@ -76,14 +75,14 @@ internal static unsafe partial class MidiNativeMethods
         IntPtr userData);
 
     /// <summary>
-    /// Stops delivery of incoming messages, closing the active connection.
+    /// Stops delivery and drops the connection.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_input_port_stop(
         MidiInputPortHandle handle);
 
     /// <summary>
-    /// Destroys an input port handle. Called from the SafeHandle release path.
+    /// Destroys the port, called from the SafeHandle release.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial void ownaudio_midi_v1_input_port_destroy(IntPtr handle);
@@ -93,35 +92,35 @@ internal static unsafe partial class MidiNativeMethods
     #region Output Port
 
     /// <summary>
-    /// Opens a hardware MIDI output port by name.
+    /// Opens a hardware output port by name.
     /// </summary>
     [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
     internal static partial int ownaudio_midi_v1_output_port_open(
         string portName, out MidiOutputPortHandle outHandle);
 
     /// <summary>
-    /// Creates a virtual MIDI output port.
+    /// Creates a virtual output port.
     /// </summary>
     [LibraryImport(LibName, StringMarshalling = StringMarshalling.Utf8)]
     internal static partial int ownaudio_midi_v1_create_virtual_output(
         string name, out MidiOutputPortHandle outHandle);
 
     /// <summary>
-    /// Sends a short MIDI message to the output port.
+    /// Sends one short message.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_output_port_send(
         MidiOutputPortHandle handle, NativeMidiMessage msg);
 
     /// <summary>
-    /// Sends a raw SysEx byte sequence to the output port.
+    /// Sends a raw SysEx blob.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_output_port_send_sysex(
         MidiOutputPortHandle handle, byte* data, nuint len);
 
     /// <summary>
-    /// Destroys an output port handle. Called from the SafeHandle release path.
+    /// Destroys the port, called from the SafeHandle release.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial void ownaudio_midi_v1_output_port_destroy(IntPtr handle);
@@ -131,21 +130,21 @@ internal static unsafe partial class MidiNativeMethods
     #region Clock
 
     /// <summary>
-    /// Creates a stopped MIDI timing clock at the given tempo.
+    /// Creates a stopped clock at the given tempo.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_clock_create(
         double bpm, out MidiClockHandle outHandle);
 
     /// <summary>
-    /// Sets the clock tempo in beats per minute.
+    /// Retunes the clock on the fly.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_clock_set_bpm(
         MidiClockHandle handle, double bpm);
 
     /// <summary>
-    /// Starts the clock thread, invoking the pulse callback for each timing pulse.
+    /// Spins up the timing thread; the callback fires on every pulse with userData.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_clock_start(
@@ -154,13 +153,13 @@ internal static unsafe partial class MidiNativeMethods
         IntPtr userData);
 
     /// <summary>
-    /// Stops the clock thread and waits for it to exit.
+    /// Stops the thread and joins it.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_clock_stop(MidiClockHandle handle);
 
     /// <summary>
-    /// Destroys a clock handle. Called from the SafeHandle release path.
+    /// Destroys the clock, called from the SafeHandle release.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial void ownaudio_midi_v1_clock_destroy(IntPtr handle);
@@ -170,42 +169,42 @@ internal static unsafe partial class MidiNativeMethods
     #region File Parsing
 
     /// <summary>
-    /// Parses a Standard MIDI File from a byte buffer.
+    /// Parses an SMF out of a byte buffer.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_file_parse(
         byte* data, nuint len, out MidiFileHandle outHandle);
 
     /// <summary>
-    /// Reads the parsed file's SMF format word.
+    /// SMF format word.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_file_get_format(
         MidiFileHandle handle, out ushort outFormat);
 
     /// <summary>
-    /// Reads the parsed file's ticks-per-beat resolution.
+    /// Ticks-per-beat resolution.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_file_get_ticks_per_beat(
         MidiFileHandle handle, out ushort outTpb);
 
     /// <summary>
-    /// Reads the parsed file's track count.
+    /// Track count.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_file_get_track_count(
         MidiFileHandle handle, out nuint outCount);
 
     /// <summary>
-    /// Reads the number of events in the given track.
+    /// Event count of one track.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_file_get_event_count(
         MidiFileHandle handle, nuint trackIndex, out nuint outCount);
 
     /// <summary>
-    /// Reads a single event from the given track.
+    /// One event out of a track.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_file_get_event(
@@ -213,7 +212,7 @@ internal static unsafe partial class MidiNativeMethods
         out NativeMidiEvent outEvent);
 
     /// <summary>
-    /// Destroys a parsed file handle. Called from the SafeHandle release path.
+    /// Destroys the parsed file, called from the SafeHandle release.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial void ownaudio_midi_v1_file_destroy(IntPtr handle);
@@ -223,40 +222,40 @@ internal static unsafe partial class MidiNativeMethods
     #region File Serialization
 
     /// <summary>
-    /// Creates a MIDI file writer with the given format and timing resolution.
+    /// New writer with the given format and resolution.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_writer_create(
         ushort format, ushort ticksPerBeat, out MidiWriterHandle outHandle);
 
     /// <summary>
-    /// Begins a new, empty track in the writer.
+    /// Opens a fresh empty track.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_writer_begin_track(MidiWriterHandle handle);
 
     /// <summary>
-    /// Appends an event to the writer's current track.
+    /// Appends an event to the current track.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_writer_add_event(
         MidiWriterHandle handle, NativeMidiEvent evt);
 
     /// <summary>
-    /// Serializes all added tracks to a native SMF byte buffer.
+    /// Bakes everything into a native SMF byte buffer.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_writer_serialize(
         MidiWriterHandle handle, out IntPtr outData, out nuint outLen);
 
     /// <summary>
-    /// Destroys a writer handle. Called from the SafeHandle release path.
+    /// Destroys the writer, called from the SafeHandle release.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial void ownaudio_midi_v1_writer_destroy(IntPtr handle);
 
     /// <summary>
-    /// Releases a byte buffer returned by <see cref="ownaudio_midi_v1_writer_serialize"/>.
+    /// Frees the buffer serialize handed back.
     /// </summary>
     [LibraryImport(LibName)]
     internal static partial void ownaudio_midi_v1_free_bytes(IntPtr data, nuint len);

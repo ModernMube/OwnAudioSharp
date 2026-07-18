@@ -5,31 +5,28 @@ using OwnAudio.Midi.IO;
 namespace OwnAudio.Midi.Internal;
 
 /// <summary>
-/// <see cref="IMidiInputPort"/> implementation backed by a native MIDI input
-/// port. The same class serves hardware and virtual ports; the distinction is
-/// captured entirely by the native handle. Incoming messages are delivered from
-/// the backend thread through unmanaged callbacks.
+/// Input port on top of the native backend. Hardware and virtual ports both land
+/// here, only the handle differs. Messages arrive on the backend thread.
 /// </summary>
 internal sealed class RustMidiInputPort : IMidiInputPort
 {
     /// <summary>
-    /// Native input port handle.
+    /// The native port.
     /// </summary>
     private readonly MidiInputPortHandle _handle;
 
     /// <summary>
-    /// Pins this instance so the unmanaged callbacks can recover it from the user
-    /// data pointer; allocated on <see cref="Start"/> and freed on <see cref="Stop"/>.
+    /// Pin so the unmanaged callbacks can find us again. Alive between Start and Stop.
     /// </summary>
     private GCHandle _selfPin;
 
     /// <summary>
-    /// Guards against double-disposal.
+    /// Double-dispose guard.
     /// </summary>
     private bool _disposed;
 
     /// <summary>
-    /// Indicates whether listening is currently active.
+    /// Are we listening?
     /// </summary>
     private bool _started;
 
@@ -46,14 +43,8 @@ internal sealed class RustMidiInputPort : IMidiInputPort
     public event SysExReceivedHandler? SysExReceived;
 
     /// <summary>
-    /// Wraps an already-opened native input port handle.
+    /// Takes over an already opened native handle.
     /// </summary>
-    /// <param name="name">
-    /// Display name of the port.
-    /// </param>
-    /// <param name="handle">
-    /// Native handle returned by the FFI open call.
-    /// </param>
     internal RustMidiInputPort(string name, MidiInputPortHandle handle)
     {
         Name = name;
@@ -61,19 +52,14 @@ internal sealed class RustMidiInputPort : IMidiInputPort
     }
 
     /// <summary>
-    /// No-op — the native port is already opened by the factory.
+    /// Nothing to do, the factory opened it already.
     /// </summary>
-    public void Open()
-    {
-    }
+    public void Open() { }
 
     /// <inheritdoc />
     public void Start()
     {
-        if (_started)
-        {
-            return;
-        }
+        if (_started) return;
 
         _selfPin = GCHandle.Alloc(this);
 
@@ -81,10 +67,7 @@ internal sealed class RustMidiInputPort : IMidiInputPort
         unsafe
         {
             code = MidiNativeMethods.ownaudio_midi_v1_input_port_start_with_sysex(
-                _handle,
-                &OnNativeMidiMessage,
-                &OnNativeSysEx,
-                GCHandle.ToIntPtr(_selfPin));
+                _handle, &_onNativeMidiMessage, &_onNativeSysEx, GCHandle.ToIntPtr(_selfPin));
         }
 
         if (code != (int)MidiErrorCode.Success)
@@ -99,16 +82,10 @@ internal sealed class RustMidiInputPort : IMidiInputPort
     /// <inheritdoc />
     public void Stop()
     {
-        if (!_started)
-        {
-            return;
-        }
+        if (!_started) return;
 
         MidiNativeMethods.ownaudio_midi_v1_input_port_stop(_handle);
-        if (_selfPin.IsAllocated)
-        {
-            _selfPin.Free();
-        }
+        if (_selfPin.IsAllocated) { _selfPin.Free(); }
         _started = false;
     }
 
@@ -116,54 +93,30 @@ internal sealed class RustMidiInputPort : IMidiInputPort
     public void Close() => Dispose();
 
     /// <summary>
-    /// Unmanaged callback invoked by the native layer for each short MIDI message.
+    /// Short message callback from the backend thread; userData is the pinned port.
     /// </summary>
-    /// <param name="msg">
-    /// The received message with a microsecond timestamp.
-    /// </param>
-    /// <param name="userData">
-    /// Pointer to the pinned <see cref="RustMidiInputPort"/> instance.
-    /// </param>
     [UnmanagedCallersOnly]
-    private static void OnNativeMidiMessage(NativeMidiMessage msg, IntPtr userData)
+    private static void _onNativeMidiMessage(NativeMidiMessage msg, IntPtr userData)
     {
-        if (GCHandle.FromIntPtr(userData).Target is not RustMidiInputPort port)
-        {
-            return;
-        }
-        port.MessageReceived?.Invoke(new MidiMessage(msg.Status, msg.Data1, msg.Data2, msg.TimestampUs));
+        if (GCHandle.FromIntPtr(userData).Target is not RustMidiInputPort _port) return;
+        _port.MessageReceived?.Invoke(new MidiMessage(msg.Status, msg.Data1, msg.Data2, msg.TimestampUs));
     }
 
     /// <summary>
-    /// Unmanaged callback invoked by the native layer for each complete SysEx message.
+    /// Full SysEx blob callback. The bytes only live for the length of this call,
+    /// userData is the pinned port.
     /// </summary>
-    /// <param name="data">
-    /// Pointer to the SysEx bytes, valid only for the duration of the call.
-    /// </param>
-    /// <param name="len">
-    /// Number of SysEx bytes.
-    /// </param>
-    /// <param name="userData">
-    /// Pointer to the pinned <see cref="RustMidiInputPort"/> instance.
-    /// </param>
     [UnmanagedCallersOnly]
-    private static unsafe void OnNativeSysEx(IntPtr data, nuint len, IntPtr userData)
+    private static unsafe void _onNativeSysEx(IntPtr data, nuint len, IntPtr userData)
     {
-        if (GCHandle.FromIntPtr(userData).Target is not RustMidiInputPort port)
-        {
-            return;
-        }
-        var span = new ReadOnlySpan<byte>((void*)data, (int)len);
-        port.SysExReceived?.Invoke(span);
+        if (GCHandle.FromIntPtr(userData).Target is not RustMidiInputPort _port) return;
+        _port.SysExReceived?.Invoke(new ReadOnlySpan<byte>((void*)data, (int)len));
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
-        if (_disposed)
-        {
-            return;
-        }
+        if (_disposed) return;
         Stop();
         _handle.Dispose();
         _disposed = true;
@@ -171,7 +124,7 @@ internal sealed class RustMidiInputPort : IMidiInputPort
     }
 
     /// <summary>
-    /// Finalizer that releases the native handle if <see cref="Dispose"/> was not called.
+    /// Last resort if nobody called Dispose.
     /// </summary>
     ~RustMidiInputPort() => Dispose();
 }

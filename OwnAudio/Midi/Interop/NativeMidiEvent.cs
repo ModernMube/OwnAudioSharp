@@ -3,22 +3,19 @@ using System.Runtime.InteropServices;
 namespace OwnAudio.Midi.Interop;
 
 /// <summary>
-/// Blittable mirror of the native <c>NativeMidiEvent</c> struct used by both the
-/// file parser query API (the native side fills it) and the writer API (the
-/// managed side fills it). The explicit padding bytes keep the layout (size 32,
-/// 8-byte aligned) identical to the Rust <c>#[repr(C)]</c> definition; a parity
-/// test verifies both sides agree.
+/// File event across the FFI — the parser fills it, the writer reads it. Pad bytes
+/// keep it at size 32 / align 8 like the Rust repr(C); a parity test watches it.
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct NativeMidiEvent
 {
     /// <summary>
-    /// Ticks since the previous event in the track.
+    /// Ticks since the previous event.
     /// </summary>
     public int DeltaTime;
 
     /// <summary>
-    /// Event category: 0 = MIDI, 1 = Meta, 2 = SysEx.
+    /// 0 = MIDI, 1 = Meta, 2 = SysEx.
     /// </summary>
     public byte EventType;
 
@@ -38,32 +35,32 @@ internal struct NativeMidiEvent
     public byte Data2;
 
     /// <summary>
-    /// Meta event sub-type byte.
+    /// Meta sub-type.
     /// </summary>
     public byte MetaType;
 
     /// <summary>
-    /// Alignment padding; always zero.
+    /// Padding, always zero.
     /// </summary>
     public byte Pad0;
 
     /// <summary>
-    /// Alignment padding; always zero.
+    /// Padding, always zero.
     /// </summary>
     public byte Pad1;
 
     /// <summary>
-    /// Alignment padding; always zero.
+    /// Padding, always zero.
     /// </summary>
     public byte Pad2;
 
     /// <summary>
-    /// Pointer to the payload bytes, or <see cref="IntPtr.Zero"/> when there is none.
+    /// Payload bytes, or zero if there aren't any.
     /// </summary>
     public IntPtr MetaData;
 
     /// <summary>
-    /// Number of payload bytes referenced by <see cref="MetaData"/>.
+    /// How many bytes MetaData points at.
     /// </summary>
     public nuint MetaDataLen;
 }

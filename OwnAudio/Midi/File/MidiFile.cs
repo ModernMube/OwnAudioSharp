@@ -1,27 +1,27 @@
 namespace OwnAudio.Midi.File;
 
 /// <summary>
-/// Represents a complete MIDI file with its format, timing resolution, and track list.
+/// A whole MIDI file: format, resolution, tracks.
 /// </summary>
 public sealed class MidiFile
 {
     /// <summary>
-    /// Gets the MIDI file format: 0 (single track), 1 (multi-track sync), or 2 (multi-track async).
+    /// 0 = single track, 1 = multi-track sync, 2 = multi-track async.
     /// </summary>
     public ushort Format { get; }
 
     /// <summary>
-    /// Gets the number of MIDI ticks that represent one quarter note (PPQ resolution).
+    /// Ticks per quarter note (PPQ).
     /// </summary>
     public ushort TicksPerBeat { get; }
 
     /// <summary>
-    /// Gets the ordered list of tracks contained in the file.
+    /// The tracks, in file order.
     /// </summary>
     public IReadOnlyList<MidiTrack> Tracks { get; }
 
     /// <summary>
-    /// Initializes a new <see cref="MidiFile"/> with the specified format, resolution, and tracks.
+    /// Builds a file from the pieces.
     /// </summary>
     public MidiFile(ushort format, ushort ticksPerBeat, MidiTrack[] tracks)
     {
@@ -32,17 +32,17 @@ public sealed class MidiFile
 }
 
 /// <summary>
-/// A sequence of timed MIDI events forming one track within a MIDI file.
+/// One track — a run of timed events.
 /// </summary>
 public sealed class MidiTrack
 {
     /// <summary>
-    /// Gets the ordered list of events in this track.
+    /// The events, in order.
     /// </summary>
     public IReadOnlyList<MidiEvent> Events { get; }
 
     /// <summary>
-    /// Initializes a new <see cref="MidiTrack"/> with the given event list.
+    /// Wraps an event list as a track.
     /// </summary>
     public MidiTrack(List<MidiEvent> events)
     {
@@ -51,47 +51,47 @@ public sealed class MidiTrack
 }
 
 /// <summary>
-/// A single timed event within a MIDI track: either a MIDI message, a meta event, or a SysEx block.
+/// One timed event in a track: plain MIDI, meta, or SysEx.
 /// </summary>
 public readonly struct MidiEvent
 {
     /// <summary>
-    /// Number of MIDI ticks since the previous event in the track.
+    /// Ticks since the previous event.
     /// </summary>
     public readonly int DeltaTime;
 
     /// <summary>
-    /// Classifies the event as MIDI, Meta, or SysEx.
+    /// Which of the three flavours this is.
     /// </summary>
     public readonly MidiEventType Type;
 
     /// <summary>
-    /// MIDI status byte (or 0xFF for meta events, 0xF0 for SysEx).
+    /// Status byte — 0xFF for meta, 0xF0 for SysEx.
     /// </summary>
     public readonly byte Status;
 
     /// <summary>
-    /// First MIDI data byte (unused for meta and SysEx events).
+    /// First data byte, unused on meta / SysEx.
     /// </summary>
     public readonly byte Data1;
 
     /// <summary>
-    /// Second MIDI data byte (unused for meta and SysEx events).
+    /// Second data byte, unused on meta / SysEx.
     /// </summary>
     public readonly byte Data2;
 
     /// <summary>
-    /// Meta event sub-type byte (e.g., 0x51 for tempo, 0x2F for end-of-track).
+    /// Meta sub-type, e.g. 0x51 tempo, 0x2F end of track.
     /// </summary>
     public readonly byte MetaType;
 
     /// <summary>
-    /// Payload bytes for meta and SysEx events; null for plain MIDI events.
+    /// Meta / SysEx payload, null on a plain MIDI event.
     /// </summary>
     public readonly byte[]? MetaData;
 
     /// <summary>
-    /// Initializes a standard MIDI channel event with status and two data bytes.
+    /// Plain channel event.
     /// </summary>
     public MidiEvent(int deltaTime, byte status, byte data1, byte data2)
     {
@@ -105,7 +105,7 @@ public readonly struct MidiEvent
     }
 
     /// <summary>
-    /// Initializes a meta event with the given sub-type and payload data.
+    /// Meta event with sub-type and payload.
     /// </summary>
     public MidiEvent(int deltaTime, byte metaType, byte[] metaData)
     {
@@ -119,7 +119,7 @@ public readonly struct MidiEvent
     }
 
     /// <summary>
-    /// Initializes a SysEx event with the raw byte payload (including the 0xF0 prefix).
+    /// SysEx event, payload includes the leading 0xF0.
     /// </summary>
     public MidiEvent(int deltaTime, byte[] sysexData)
     {
@@ -133,18 +133,18 @@ public readonly struct MidiEvent
     }
 
     /// <summary>
-    /// Gets a value indicating whether this event marks the end of the track (meta type 0x2F).
+    /// End-of-track marker (meta 0x2F).
     /// </summary>
     public bool IsEndOfTrack => Type == MidiEventType.Meta && MetaType == 0x2F;
 
     /// <summary>
-    /// Gets a value indicating whether this event carries a tempo change (meta type 0x51).
+    /// Tempo change (meta 0x51).
     /// </summary>
     public bool IsTempoChange => Type == MidiEventType.Meta && MetaType == 0x51;
 
     /// <summary>
-    /// Returns the tempo in microseconds per quarter note from a tempo meta event.
-    /// Returns 500 000 (120 BPM) if the event is not a valid tempo event.
+    /// Microseconds per quarter note. Falls back to 500000 (120 BPM) if this
+    /// isn't a usable tempo event.
     /// </summary>
     public int GetTempoMicroseconds()
     {
@@ -155,22 +155,22 @@ public readonly struct MidiEvent
 }
 
 /// <summary>
-/// Classifies the content type of a <see cref="MidiEvent"/>.
+/// What kind of thing a MidiEvent holds.
 /// </summary>
 public enum MidiEventType : byte
 {
     /// <summary>
-    /// Standard MIDI channel message (Note On/Off, CC, etc.).
+    /// Ordinary channel message — note on/off, CC, and friends.
     /// </summary>
     Midi,
 
     /// <summary>
-    /// Meta event carrying file-level information such as tempo, time signature, or track name.
+    /// File-level info: tempo, time signature, track name, etc.
     /// </summary>
     Meta,
 
     /// <summary>
-    /// System Exclusive message containing manufacturer-specific data.
+    /// System Exclusive, vendor specific payload.
     /// </summary>
     SysEx
 }

@@ -5,14 +5,13 @@ using OwnAudio.Midi.Interop;
 namespace OwnAudio.Midi.File;
 
 /// <summary>
-/// Writes a <see cref="MidiFile"/> to a file path or stream in Standard MIDI File
-/// (SMF) format. Serialization is performed by the native MIDI core, which applies
-/// running-status compression and appends an End-of-Track meta event when missing.
+/// Dumps a MidiFile back out as SMF. The native core does the serializing — it
+/// also handles running-status compression and tacks on End-of-Track if missing.
 /// </summary>
 public static class MidiFileWriter
 {
     /// <summary>
-    /// Writes the <see cref="MidiFile"/> to the file at the specified path, creating or overwriting it.
+    /// Writes to the given path, creating or overwriting.
     /// </summary>
     public static void Write(MidiFile file, string path)
     {
@@ -21,95 +20,70 @@ public static class MidiFileWriter
     }
 
     /// <summary>
-    /// Writes the <see cref="MidiFile"/> to the given stream in SMF binary format.
+    /// Writes SMF bytes into the stream.
     /// </summary>
     public static void Write(MidiFile file, Stream stream)
     {
-        int code = MidiNativeMethods.ownaudio_midi_v1_writer_create(
-            file.Format, file.TicksPerBeat, out var writer);
+        int code = MidiNativeMethods.ownaudio_midi_v1_writer_create(file.Format, file.TicksPerBeat, out var writer);
         MidiErrorCodeMapper.ThrowIfError(code, nameof(Write));
 
         using (writer)
         {
-            foreach (var track in file.Tracks)
+            foreach (var _track in file.Tracks)
             {
                 code = MidiNativeMethods.ownaudio_midi_v1_writer_begin_track(writer);
                 MidiErrorCodeMapper.ThrowIfError(code, nameof(Write));
 
-                foreach (var evt in track.Events)
-                {
-                    AddEvent(writer, evt);
-                }
+                foreach (var _evt in _track.Events)
+                    _addEvent(writer, _evt);
             }
 
-            Serialize(writer, stream);
+            _serialize(writer, stream);
         }
     }
 
     /// <summary>
-    /// Appends a single event to the native writer's current track, pinning any
-    /// payload bytes for the duration of the native call.
+    /// Pushes one event into the writer's current track, payload pinned for the call.
     /// </summary>
-    /// <param name="writer">
-    /// The native writer handle.
-    /// </param>
-    /// <param name="evt">
-    /// The managed event to serialize.
-    /// </param>
-    private static void AddEvent(MidiWriterHandle writer, MidiEvent evt)
+    private static unsafe void _addEvent(MidiWriterHandle writer, MidiEvent evt)
     {
-        byte[]? payload = evt.MetaData;
-        int length = payload?.Length ?? 0;
+        byte[]? _payload = evt.MetaData;
 
         int code;
-        unsafe
+        fixed (byte* ptr = _payload)
         {
-            fixed (byte* ptr = payload)
+            var _native = new NativeMidiEvent
             {
-                var native = new NativeMidiEvent
-                {
-                    DeltaTime = evt.DeltaTime,
-                    EventType = EventTypeToByte(evt.Type),
-                    Status = evt.Status,
-                    Data1 = evt.Data1,
-                    Data2 = evt.Data2,
-                    MetaType = evt.MetaType,
-                    MetaData = (IntPtr)ptr,
-                    MetaDataLen = (nuint)length
-                };
-                code = MidiNativeMethods.ownaudio_midi_v1_writer_add_event(writer, native);
-            }
+                DeltaTime = evt.DeltaTime,
+                EventType = _eventTypeToByte(evt.Type),
+                Status = evt.Status,
+                Data1 = evt.Data1,
+                Data2 = evt.Data2,
+                MetaType = evt.MetaType,
+                MetaData = (IntPtr)ptr,
+                MetaDataLen = (nuint)(_payload?.Length ?? 0)
+            };
+            code = MidiNativeMethods.ownaudio_midi_v1_writer_add_event(writer, _native);
         }
         MidiErrorCodeMapper.ThrowIfError(code, nameof(Write));
     }
 
     /// <summary>
-    /// Serializes the writer to SMF bytes and copies them into <paramref name="stream"/>,
-    /// releasing the native buffer afterwards.
+    /// Bakes the SMF bytes, copies them to the stream, then frees the native buffer.
     /// </summary>
-    /// <param name="writer">
-    /// The native writer handle.
-    /// </param>
-    /// <param name="stream">
-    /// The destination stream.
-    /// </param>
-    private static void Serialize(MidiWriterHandle writer, Stream stream)
+    private static void _serialize(MidiWriterHandle writer, Stream stream)
     {
-        int code = MidiNativeMethods.ownaudio_midi_v1_writer_serialize(
-            writer, out IntPtr data, out nuint len);
+        int code = MidiNativeMethods.ownaudio_midi_v1_writer_serialize(writer, out IntPtr data, out nuint len);
         MidiErrorCodeMapper.ThrowIfError(code, nameof(Write));
 
-        if (data == IntPtr.Zero || len == 0)
-        {
-            return;
-        }
+        if (data == IntPtr.Zero || len == 0) return;
 
         try
         {
-            int length = (int)len;
-            var buffer = new byte[length];
-            Marshal.Copy(data, buffer, 0, length);
-            stream.Write(buffer, 0, length);
+            int _len = (int)len;
+            var _buffer = new byte[_len];
+            Marshal.Copy(data, _buffer, 0, _len);
+            stream.Write(_buffer, 0, _len);
         }
         finally
         {
@@ -118,12 +92,9 @@ public static class MidiFileWriter
     }
 
     /// <summary>
-    /// Maps a managed <see cref="MidiEventType"/> to the native event-type discriminant.
+    /// Managed event type to the native discriminant.
     /// </summary>
-    /// <param name="type">
-    /// The managed event type.
-    /// </param>
-    private static byte EventTypeToByte(MidiEventType type) => type switch
+    private static byte _eventTypeToByte(MidiEventType type) => type switch
     {
         MidiEventType.Meta => 1,
         MidiEventType.SysEx => 2,

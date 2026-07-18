@@ -5,14 +5,13 @@ using OwnAudio.Midi.Interop;
 namespace OwnAudio.Midi.File;
 
 /// <summary>
-/// Reads Standard MIDI Files (SMF) from a file path or stream and returns a
-/// <see cref="MidiFile"/> object. Parsing is performed by the native MIDI core;
-/// this class rebuilds the managed model from the parsed native representation.
+/// Loads Standard MIDI Files. The native core does the parsing, we just rebuild
+/// the managed model out of what it hands back.
 /// </summary>
 public static class MidiFileReader
 {
     /// <summary>
-    /// Reads a MIDI file from the specified path and returns the parsed <see cref="MidiFile"/>.
+    /// Reads the SMF at the given path.
     /// </summary>
     public static MidiFile Read(string path)
     {
@@ -21,107 +20,88 @@ public static class MidiFileReader
     }
 
     /// <summary>
-    /// Reads a MIDI file from a stream and returns the parsed <see cref="MidiFile"/>.
-    /// Throws <see cref="InvalidDataException"/> if the stream does not contain a valid SMF.
+    /// Reads an SMF off a stream. Throws InvalidDataException on garbage input.
     /// </summary>
-    public static MidiFile Read(Stream stream)
+    public static unsafe MidiFile Read(Stream stream)
     {
-        byte[] data = ReadAllBytes(stream);
+        byte[] _data = _readAllBytes(stream);
 
-        unsafe
+        fixed (byte* ptr = _data)
         {
-            fixed (byte* ptr = data)
+            int code = MidiNativeMethods.ownaudio_midi_v1_file_parse(ptr, (nuint)_data.Length, out var _file);
+            MidiErrorCodeMapper.ThrowIfError(code, nameof(Read));
+            using (_file)
             {
-                int code = MidiNativeMethods.ownaudio_midi_v1_file_parse(
-                    ptr, (nuint)data.Length, out var fileHandle);
-                MidiErrorCodeMapper.ThrowIfError(code, nameof(Read));
-                using (fileHandle)
-                {
-                    return BuildMidiFile(fileHandle);
-                }
+                return _buildMidiFile(_file);
             }
         }
     }
 
     /// <summary>
-    /// Reads the entire stream contents into a byte array.
+    /// Slurps the whole stream into one array.
     /// </summary>
-    private static byte[] ReadAllBytes(Stream stream)
+    private static byte[] _readAllBytes(Stream stream)
     {
-        if (stream is MemoryStream existing)
-        {
-            return existing.ToArray();
-        }
+        if (stream is MemoryStream _existing) return _existing.ToArray();
 
-        using var memory = new MemoryStream();
-        stream.CopyTo(memory);
-        return memory.ToArray();
+        using (var _memory = new MemoryStream())
+        {
+            stream.CopyTo(_memory);
+            return _memory.ToArray();
+        }
     }
 
     /// <summary>
-    /// Builds the managed <see cref="MidiFile"/> by querying the parsed native file.
+    /// Walks the parsed native file and puts the managed objects together.
     /// </summary>
-    /// <param name="handle">
-    /// Handle to the parsed native MIDI file.
-    /// </param>
-    private static MidiFile BuildMidiFile(MidiFileHandle handle)
+    private static MidiFile _buildMidiFile(MidiFileHandle handle)
     {
-        MidiNativeMethods.ownaudio_midi_v1_file_get_format(handle, out ushort format);
-        MidiNativeMethods.ownaudio_midi_v1_file_get_ticks_per_beat(handle, out ushort ticksPerBeat);
-        MidiNativeMethods.ownaudio_midi_v1_file_get_track_count(handle, out nuint trackCount);
+        MidiNativeMethods.ownaudio_midi_v1_file_get_format(handle, out ushort _format);
+        MidiNativeMethods.ownaudio_midi_v1_file_get_ticks_per_beat(handle, out ushort _tpb);
+        MidiNativeMethods.ownaudio_midi_v1_file_get_track_count(handle, out nuint _trackCount);
 
-        var tracks = new MidiTrack[(int)trackCount];
-        for (nuint t = 0; t < trackCount; t++)
+        var _tracks = new MidiTrack[(int)_trackCount];
+        for (nuint t = 0; t < _trackCount; t++)
         {
-            MidiNativeMethods.ownaudio_midi_v1_file_get_event_count(handle, t, out nuint eventCount);
-            var events = new List<MidiEvent>((int)eventCount);
-            for (nuint e = 0; e < eventCount; e++)
+            MidiNativeMethods.ownaudio_midi_v1_file_get_event_count(handle, t, out nuint _eventCount);
+            var _events = new List<MidiEvent>((int)_eventCount);
+            for (nuint e = 0; e < _eventCount; e++)
             {
-                MidiNativeMethods.ownaudio_midi_v1_file_get_event(handle, t, e, out var nativeEvent);
-                events.Add(ConvertNativeEvent(nativeEvent));
+                MidiNativeMethods.ownaudio_midi_v1_file_get_event(handle, t, e, out var _native);
+                _events.Add(_convertNativeEvent(_native));
             }
-            tracks[(int)t] = new MidiTrack(events);
+            _tracks[(int)t] = new MidiTrack(_events);
         }
 
-        return new MidiFile(format, ticksPerBeat, tracks);
+        return new MidiFile(_format, _tpb, _tracks);
     }
 
     /// <summary>
-    /// Converts a native event struct into the corresponding managed <see cref="MidiEvent"/>.
+    /// Native event struct to managed MidiEvent.
     /// </summary>
-    /// <param name="nativeEvent">
-    /// The native event read from the parsed file.
-    /// </param>
-    private static MidiEvent ConvertNativeEvent(NativeMidiEvent nativeEvent)
+    private static MidiEvent _convertNativeEvent(NativeMidiEvent nativeEvent)
     {
         switch (nativeEvent.EventType)
         {
             case 1:
-                return new MidiEvent(nativeEvent.DeltaTime, nativeEvent.MetaType, ReadPayload(nativeEvent));
+                return new MidiEvent(nativeEvent.DeltaTime, nativeEvent.MetaType, _readPayload(nativeEvent));
             case 2:
-                return new MidiEvent(nativeEvent.DeltaTime, ReadPayload(nativeEvent));
+                return new MidiEvent(nativeEvent.DeltaTime, _readPayload(nativeEvent));
             default:
-                return new MidiEvent(
-                    nativeEvent.DeltaTime, nativeEvent.Status, nativeEvent.Data1, nativeEvent.Data2);
+                return new MidiEvent(nativeEvent.DeltaTime, nativeEvent.Status, nativeEvent.Data1, nativeEvent.Data2);
         }
     }
 
     /// <summary>
-    /// Copies a native event payload into a managed byte array.
+    /// Copies the payload out of native memory before the file handle dies.
     /// </summary>
-    /// <param name="nativeEvent">
-    /// The native event whose <see cref="NativeMidiEvent.MetaData"/> is copied.
-    /// </param>
-    private static byte[] ReadPayload(NativeMidiEvent nativeEvent)
+    private static byte[] _readPayload(NativeMidiEvent nativeEvent)
     {
-        int length = (int)nativeEvent.MetaDataLen;
-        if (length == 0 || nativeEvent.MetaData == IntPtr.Zero)
-        {
-            return Array.Empty<byte>();
-        }
+        int _len = (int)nativeEvent.MetaDataLen;
+        if(_len == 0 || nativeEvent.MetaData == IntPtr.Zero) return Array.Empty<byte>();
 
-        var payload = new byte[length];
-        Marshal.Copy(nativeEvent.MetaData, payload, 0, length);
-        return payload;
+        var _payload = new byte[_len];
+        Marshal.Copy(nativeEvent.MetaData, _payload, 0, _len);
+        return _payload;
     }
 }

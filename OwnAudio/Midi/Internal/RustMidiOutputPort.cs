@@ -4,19 +4,18 @@ using OwnAudio.Midi.IO;
 namespace OwnAudio.Midi.Internal;
 
 /// <summary>
-/// <see cref="IMidiOutputPort"/> implementation backed by a native MIDI output
-/// port. The same class serves hardware and virtual ports; the distinction is
-/// captured entirely by the native handle.
+/// Output port on top of the native backend. Hardware and virtual ports both
+/// land here, only the handle differs.
 /// </summary>
 internal sealed class RustMidiOutputPort : IMidiOutputPort
 {
     /// <summary>
-    /// Native output port handle.
+    /// The native port.
     /// </summary>
     private readonly MidiOutputPortHandle _handle;
 
     /// <summary>
-    /// Guards against double-disposal.
+    /// Double-dispose guard.
     /// </summary>
     private bool _disposed;
 
@@ -27,14 +26,8 @@ internal sealed class RustMidiOutputPort : IMidiOutputPort
     public bool IsOpen => !_handle.IsInvalid;
 
     /// <summary>
-    /// Wraps an already-opened native output port handle.
+    /// Takes over an already opened native handle.
     /// </summary>
-    /// <param name="name">
-    /// Display name of the port.
-    /// </param>
-    /// <param name="handle">
-    /// Native handle returned by the FFI open call.
-    /// </param>
     internal RustMidiOutputPort(string name, MidiOutputPortHandle handle)
     {
         Name = name;
@@ -42,11 +35,9 @@ internal sealed class RustMidiOutputPort : IMidiOutputPort
     }
 
     /// <summary>
-    /// No-op — the native port is already opened by the factory.
+    /// Nothing to do, the factory opened it already.
     /// </summary>
-    public void Open()
-    {
-    }
+    public void Open() { }
 
     /// <inheritdoc />
     public void Close() => Dispose();
@@ -54,7 +45,7 @@ internal sealed class RustMidiOutputPort : IMidiOutputPort
     /// <inheritdoc />
     public void Send(in MidiMessage message)
     {
-        var native = new NativeMidiMessage
+        var _native = new NativeMidiMessage
         {
             Status = message.Status,
             Data1 = message.Data1,
@@ -63,21 +54,17 @@ internal sealed class RustMidiOutputPort : IMidiOutputPort
             TimestampUs = message.Timestamp
         };
 
-        int code = MidiNativeMethods.ownaudio_midi_v1_output_port_send(_handle, native);
+        int code = MidiNativeMethods.ownaudio_midi_v1_output_port_send(_handle, _native);
         MidiErrorCodeMapper.ThrowIfError(code, nameof(Send));
     }
 
     /// <inheritdoc />
-    public void SendSysEx(ReadOnlySpan<byte> data)
+    public unsafe void SendSysEx(ReadOnlySpan<byte> data)
     {
         int code;
-        unsafe
+        fixed (byte* ptr = data)
         {
-            fixed (byte* ptr = data)
-            {
-                code = MidiNativeMethods.ownaudio_midi_v1_output_port_send_sysex(
-                    _handle, ptr, (nuint)data.Length);
-            }
+            code = MidiNativeMethods.ownaudio_midi_v1_output_port_send_sysex(_handle, ptr, (nuint)data.Length);
         }
         MidiErrorCodeMapper.ThrowIfError(code, nameof(SendSysEx));
     }
@@ -85,17 +72,14 @@ internal sealed class RustMidiOutputPort : IMidiOutputPort
     /// <inheritdoc />
     public void Dispose()
     {
-        if (_disposed)
-        {
-            return;
-        }
+        if (_disposed) return;
         _handle.Dispose();
         _disposed = true;
         GC.SuppressFinalize(this);
     }
 
     /// <summary>
-    /// Finalizer that releases the native handle if <see cref="Dispose"/> was not called.
+    /// Last resort if nobody called Dispose.
     /// </summary>
     ~RustMidiOutputPort() => Dispose();
 }

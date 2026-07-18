@@ -4,17 +4,14 @@ using OwnAudio.Midi.Interop;
 namespace OwnAudio.Midi.Internal;
 
 /// <summary>
-/// Safe wrapper around a native MIDI output port pointer. Releases the native
-/// port through <c>ownaudio_midi_v1_output_port_destroy</c> when disposed.
+/// Native MIDI output port pointer, destroyed on dispose.
 /// </summary>
 internal sealed class MidiOutputPortHandle : SafeHandle
 {
     /// <summary>
-    /// Creates an invalid handle; the native layer fills it via an out parameter.
+    /// Starts out invalid, the FFI out param fills it in.
     /// </summary>
-    public MidiOutputPortHandle() : base(IntPtr.Zero, ownsHandle: true)
-    {
-    }
+    public MidiOutputPortHandle() : base(IntPtr.Zero, ownsHandle: true) { }
 
     /// <inheritdoc />
     public override bool IsInvalid => handle == IntPtr.Zero;

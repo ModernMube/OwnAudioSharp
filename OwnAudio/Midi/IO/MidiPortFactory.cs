@@ -4,67 +4,55 @@ using OwnAudio.Midi.Internal;
 namespace OwnAudio.Midi.IO;
 
 /// <summary>
-/// Cross-platform factory for enumerating, opening, and creating virtual MIDI
-/// ports. All operations are routed to the native MIDI core (built on the
-/// platform's WinMM, CoreMIDI or ALSA backend), so no platform branching is
-/// required in managed code. The public surface is unchanged from earlier
-/// versions for binary compatibility.
+/// Everything port related: list them, open them, make virtual ones. It all goes
+/// down to the native core (WinMM / CoreMIDI / ALSA), so there is no platform
+/// branching up here.
 /// </summary>
 public static class MidiPortFactory
 {
     /// <summary>
-    /// Raised when the set of available MIDI input or output ports changes,
-    /// for example when a device is plugged in or removed. The event is driven
-    /// by background polling that must be enabled with
-    /// <see cref="StartMonitoring"/>; until then it is never raised.
+    /// Fires when a device shows up or disappears. Only ever fires while
+    /// StartMonitoring is active — the polling is what drives it.
     /// </summary>
     public static event Action? PortsChanged;
 
     /// <summary>
-    /// Synchronizes access to the monitoring timer and the last-seen port
-    /// snapshots between callers and the polling callback.
+    /// Guards the timer and the two snapshots against the polling callback.
     /// </summary>
-    private static readonly object MonitorLock = new();
+    private static readonly object _monitorLock = new object();
 
     /// <summary>
-    /// Interval between hot-plug polling passes. Chosen to detect device
-    /// changes promptly without measurable load.
+    /// Hot-plug poll rate. Fast enough to feel instant, slow enough to not matter.
     /// </summary>
-    private static readonly TimeSpan MonitorInterval = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan _monitorInterval = TimeSpan.FromMilliseconds(1500);
 
     /// <summary>
-    /// Background timer that periodically polls the available ports while
-    /// monitoring is active; <c>null</c> when monitoring is stopped.
+    /// The polling timer, null while we're not monitoring.
     /// </summary>
     private static System.Threading.Timer? _monitorTimer;
 
     /// <summary>
-    /// Snapshot of the input port names seen on the previous polling pass, used
-    /// to detect changes. <c>null</c> while monitoring is stopped.
+    /// Input names from the previous pass; null while stopped.
     /// </summary>
     private static IReadOnlyList<string>? _lastInputNames;
 
     /// <summary>
-    /// Snapshot of the output port names seen on the previous polling pass, used
-    /// to detect changes. <c>null</c> while monitoring is stopped.
+    /// Output names from the previous pass; null while stopped.
     /// </summary>
     private static IReadOnlyList<string>? _lastOutputNames;
 
     /// <summary>
-    /// Returns the names of all available MIDI input ports.
+    /// Every input port name we can see.
     /// </summary>
-    public static IReadOnlyList<string> GetInputPortNames()
-        => MidiNativeHelper.ListInputPortNames();
+    public static IReadOnlyList<string> GetInputPortNames() => MidiNativeHelper.ListInputPortNames();
 
     /// <summary>
-    /// Returns the names of all available MIDI output ports.
+    /// Every output port name we can see.
     /// </summary>
-    public static IReadOnlyList<string> GetOutputPortNames()
-        => MidiNativeHelper.ListOutputPortNames();
+    public static IReadOnlyList<string> GetOutputPortNames() => MidiNativeHelper.ListOutputPortNames();
 
     /// <summary>
-    /// Opens a MIDI input port by name and returns it ready for listening.
-    /// Throws <see cref="ArgumentException"/> if the port name is not found.
+    /// Opens an input port by name, ready to Start(). Unknown name gives ArgumentException.
     /// </summary>
     public static IMidiInputPort OpenInput(string portName)
     {
@@ -74,8 +62,7 @@ public static class MidiPortFactory
     }
 
     /// <summary>
-    /// Opens a MIDI output port by name and returns it ready for sending messages.
-    /// Throws <see cref="ArgumentException"/> if the port name is not found.
+    /// Opens an output port by name. Unknown name gives ArgumentException.
     /// </summary>
     public static IMidiOutputPort OpenOutput(string portName)
     {
@@ -85,13 +72,10 @@ public static class MidiPortFactory
     }
 
     /// <summary>
-    /// Creates a virtual MIDI input port with the given name.
-    /// Throws <see cref="PlatformNotSupportedException"/> on platforms without
-    /// virtual port support (for example Windows under WinMM).
+    /// Publishes a virtual input port under the given name, which is what other
+    /// apps will see. Throws PlatformNotSupportedException where there is no
+    /// virtual port support (Windows / WinMM).
     /// </summary>
-    /// <param name="name">
-    /// Display name for the virtual port as it will appear to other applications.
-    /// </param>
     public static IMidiInputPort CreateVirtualInput(string name)
     {
         int code = MidiNativeMethods.ownaudio_midi_v1_create_virtual_input(name, out var handle);
@@ -100,13 +84,8 @@ public static class MidiPortFactory
     }
 
     /// <summary>
-    /// Creates a virtual MIDI output port with the given name.
-    /// Throws <see cref="PlatformNotSupportedException"/> on platforms without
-    /// virtual port support (for example Windows under WinMM).
+    /// Same for an output port; the name is what other apps will see.
     /// </summary>
-    /// <param name="name">
-    /// Display name for the virtual port as it will appear to other applications.
-    /// </param>
     public static IMidiOutputPort CreateVirtualOutput(string name)
     {
         int code = MidiNativeMethods.ownaudio_midi_v1_create_virtual_output(name, out var handle);
@@ -115,33 +94,26 @@ public static class MidiPortFactory
     }
 
     /// <summary>
-    /// Begins monitoring the system for MIDI port arrival and removal. While
-    /// active, the set of available input and output ports is polled in the
-    /// background and <see cref="PortsChanged"/> is raised whenever it differs
-    /// from the previous pass. Calling this while already monitoring is a no-op.
+    /// Starts watching for devices coming and going. Calling it twice is a no-op.
     /// </summary>
     public static void StartMonitoring()
     {
-        lock (MonitorLock)
+        lock (_monitorLock)
         {
-            if (_monitorTimer is not null)
-            {
-                return;
-            }
+            if (_monitorTimer is not null) return;
 
             _lastInputNames = GetInputPortNames();
             _lastOutputNames = GetOutputPortNames();
-            _monitorTimer = new System.Threading.Timer(PollPorts, null, MonitorInterval, MonitorInterval);
+            _monitorTimer = new System.Threading.Timer(_pollPorts, null, _monitorInterval, _monitorInterval);
         }
     }
 
     /// <summary>
-    /// Stops background monitoring for MIDI port changes and releases the
-    /// polling timer. Calling this while not monitoring is a no-op.
+    /// Stops watching and drops the timer. No-op if we weren't watching.
     /// </summary>
     public static void StopMonitoring()
     {
-        lock (MonitorLock)
+        lock (_monitorLock)
         {
             _monitorTimer?.Dispose();
             _monitorTimer = null;
@@ -151,72 +123,51 @@ public static class MidiPortFactory
     }
 
     /// <summary>
-    /// Polling callback invoked by the monitoring timer. Compares the current
-    /// input and output port names against the previous snapshot and raises
-    /// <see cref="PortsChanged"/> when either set has changed. Transient native
-    /// enumeration failures are ignored so the next pass can retry.
+    /// Timer tick. Re-enumerates and fires PortsChanged if anything moved. A
+    /// failed enumeration is swallowed on purpose — this runs on a pool thread
+    /// and the next pass can just try again.
     /// </summary>
-    /// <param name="state">
-    /// Unused timer state; required by the <see cref="System.Threading.TimerCallback"/> signature.
-    /// </param>
-    private static void PollPorts(object? state)
+    private static void _pollPorts(object? state)
     {
-        IReadOnlyList<string> inputs;
-        IReadOnlyList<string> outputs;
+        IReadOnlyList<string> _inputs;
+        IReadOnlyList<string> _outputs;
         try
         {
-            inputs = GetInputPortNames();
-            outputs = GetOutputPortNames();
+            _inputs = GetInputPortNames();
+            _outputs = GetOutputPortNames();
         }
         catch
         {
             return;
         }
 
-        bool changed;
-        lock (MonitorLock)
+        bool _changed;
+        lock (_monitorLock)
         {
-            if (_monitorTimer is null)
-            {
-                return;
-            }
+            if (_monitorTimer is null) return;
 
-            changed = !PortNamesEqual(_lastInputNames, inputs)
-                || !PortNamesEqual(_lastOutputNames, outputs);
-
-            if (changed)
+            _changed = !_portNamesEqual(_lastInputNames, _inputs) || !_portNamesEqual(_lastOutputNames, _outputs);
+            if (_changed)
             {
-                _lastInputNames = inputs;
-                _lastOutputNames = outputs;
+                _lastInputNames = _inputs;
+                _lastOutputNames = _outputs;
             }
         }
 
-        if (changed)
-        {
-            PortsChanged?.Invoke();
-        }
+        if (_changed) { PortsChanged?.Invoke(); }
     }
 
     /// <summary>
-    /// Returns true if both port-name lists are non-null and contain the same
-    /// names in the same order. A null previous snapshot counts as not equal so
-    /// the first pass after a state reset is treated as a change.
+    /// Same names in the same order? A null previous snapshot counts as changed,
+    /// so the first pass after a reset always reports.
     /// </summary>
-    /// <param name="previous">The previously recorded port names, or null.</param>
-    /// <param name="current">The freshly enumerated port names.</param>
-    private static bool PortNamesEqual(IReadOnlyList<string>? previous, IReadOnlyList<string> current)
+    private static bool _portNamesEqual(IReadOnlyList<string>? previous, IReadOnlyList<string> current)
     {
-        if (previous is null || previous.Count != current.Count)
-        {
-            return false;
-        }
+        if (previous is null || previous.Count != current.Count) return false;
 
         for (int i = 0; i < previous.Count; i++)
         {
-            if (!string.Equals(previous[i], current[i], StringComparison.Ordinal))
-            {
-                return false;
-            }
+            if (!string.Equals(previous[i], current[i], StringComparison.Ordinal)) return false;
         }
 
         return true;

@@ -3,16 +3,14 @@ using System.Runtime.InteropServices;
 namespace OwnAudio.Midi.Interop;
 
 /// <summary>
-/// Blittable mirror of the native <c>NativeMidiMessage</c> struct used to carry a
-/// short MIDI message across the FFI boundary. The explicit padding byte keeps
-/// the layout (size 16, 8-byte aligned) identical to the Rust <c>#[repr(C)]</c>
-/// definition; a parity test verifies both sides agree.
+/// Short MIDI message as it crosses the FFI. The pad byte is there to keep the
+/// layout at size 16 / align 8 like the Rust repr(C); a parity test watches it.
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct NativeMidiMessage
 {
     /// <summary>
-    /// Status byte (message type in the high nibble, channel in the low nibble).
+    /// Type in the high nibble, channel in the low one.
     /// </summary>
     public byte Status;
 
@@ -27,12 +25,12 @@ internal struct NativeMidiMessage
     public byte Data2;
 
     /// <summary>
-    /// Alignment padding; always zero.
+    /// Padding, always zero.
     /// </summary>
     public byte Pad;
 
     /// <summary>
-    /// Arrival timestamp in microseconds.
+    /// When it arrived, in microseconds.
     /// </summary>
     public long TimestampUs;
 }

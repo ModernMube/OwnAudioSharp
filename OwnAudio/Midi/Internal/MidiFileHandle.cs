@@ -4,18 +4,15 @@ using OwnAudio.Midi.Interop;
 namespace OwnAudio.Midi.Internal;
 
 /// <summary>
-/// Safe wrapper around a parsed native MIDI file pointer. Releases the native
-/// file (and the event payload memory it owns) through
-/// <c>ownaudio_midi_v1_file_destroy</c> when disposed.
+/// Parsed native MIDI file. It owns the event payload memory as well, so don't
+/// hold on to any MetaData pointer past the dispose.
 /// </summary>
 internal sealed class MidiFileHandle : SafeHandle
 {
     /// <summary>
-    /// Creates an invalid handle; the native layer fills it via an out parameter.
+    /// Starts out invalid, the FFI out param fills it in.
     /// </summary>
-    public MidiFileHandle() : base(IntPtr.Zero, ownsHandle: true)
-    {
-    }
+    public MidiFileHandle() : base(IntPtr.Zero, ownsHandle: true) { }
 
     /// <inheritdoc />
     public override bool IsInvalid => handle == IntPtr.Zero;

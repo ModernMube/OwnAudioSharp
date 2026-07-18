@@ -1,79 +1,76 @@
 namespace OwnAudio.Midi.IO;
 
 /// <summary>
-/// Delegate for receiving System Exclusive (SysEx) MIDI messages.
-/// The <paramref name="data"/> span is only valid for the duration of the callback.
+/// Handler for incoming SysEx. The data span holds the whole message, 0xF0 and
+/// 0xF7 included, and only stays valid for the length of the call.
 /// </summary>
-/// <param name="data">
-/// The complete SysEx byte sequence including the leading 0xF0 and trailing 0xF7 bytes.
-/// </param>
 public delegate void SysExReceivedHandler(ReadOnlySpan<byte> data);
 
 /// <summary>
-/// Base interface for all MIDI ports providing open/close lifecycle management.
+/// What every MIDI port can do — open, close, tell you its name.
 /// </summary>
 public interface IMidiPort : IDisposable
 {
     /// <summary>
-    /// Gets the display name of the MIDI port.
+    /// Port name as the system reports it.
     /// </summary>
     string Name { get; }
 
     /// <summary>
-    /// Gets a value indicating whether the port is currently open.
+    /// Open right now?
     /// </summary>
     bool IsOpen { get; }
 
     /// <summary>
-    /// Opens the MIDI port for communication.
+    /// Opens the port.
     /// </summary>
     void Open();
 
     /// <summary>
-    /// Closes the MIDI port and releases its native resources.
+    /// Closes it and drops the native resources.
     /// </summary>
     void Close();
 }
 
 /// <summary>
-/// MIDI input port that receives messages from a hardware or virtual device.
+/// Input side — messages coming in from a hardware or virtual device.
 /// </summary>
 public interface IMidiInputPort : IMidiPort
 {
     /// <summary>
-    /// Raised when a MIDI message is received from the connected device.
+    /// Fires on every short message from the device.
     /// </summary>
     event Action<MidiMessage>? MessageReceived;
 
     /// <summary>
-    /// Raised when a complete SysEx message (0xF0 ... 0xF7) has been received.
-    /// The span passed to the handler is only valid for the duration of the callback invocation.
+    /// Fires once a whole SysEx (0xF0 ... 0xF7) is in. The span dies when the
+    /// handler returns, so copy it if you need to keep it.
     /// </summary>
     event SysExReceivedHandler? SysExReceived;
 
     /// <summary>
-    /// Starts listening for incoming MIDI messages.
+    /// Starts listening.
     /// </summary>
     void Start();
 
     /// <summary>
-    /// Stops listening for incoming MIDI messages.
+    /// Stops listening.
     /// </summary>
     void Stop();
 }
 
 /// <summary>
-/// MIDI output port that sends messages to a hardware or virtual device.
+/// Output side — messages going out to a hardware or virtual device.
 /// </summary>
 public interface IMidiOutputPort : IMidiPort
 {
     /// <summary>
-    /// Sends a short MIDI message to the output device.
+    /// Sends one short message.
     /// </summary>
     void Send(in MidiMessage message);
 
     /// <summary>
-    /// Sends a SysEx (System Exclusive) byte sequence to the output device.
+    /// Sends a SysEx blob.
     /// </summary>
     void SendSysEx(ReadOnlySpan<byte> data);
 }

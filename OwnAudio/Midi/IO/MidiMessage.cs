@@ -1,32 +1,32 @@
 namespace OwnAudio.Midi.IO;
 
 /// <summary>
-/// Immutable representation of a single MIDI message with status, data bytes, and timestamp.
+/// One short MIDI message — status, two data bytes, timestamp. Immutable.
 /// </summary>
 public readonly struct MidiMessage
 {
     /// <summary>
-    /// MIDI status byte encoding the message type and channel number.
+    /// Type in the high nibble, channel in the low one.
     /// </summary>
     public readonly byte Status;
 
     /// <summary>
-    /// First data byte, such as note number or controller number.
+    /// Note number, CC number, that sort of thing.
     /// </summary>
     public readonly byte Data1;
 
     /// <summary>
-    /// Second data byte, such as velocity or controller value.
+    /// Velocity, CC value, that sort of thing.
     /// </summary>
     public readonly byte Data2;
 
     /// <summary>
-    /// Message arrival timestamp in microseconds.
+    /// Arrival time in microseconds.
     /// </summary>
     public readonly long Timestamp;
 
     /// <summary>
-    /// Initializes a new MIDI message with the given status, data bytes, and optional timestamp.
+    /// Builds a message; timestamp is optional and defaults to zero.
     /// </summary>
     public MidiMessage(byte status, byte data1, byte data2, long timestamp = 0)
     {
@@ -37,95 +37,93 @@ public readonly struct MidiMessage
     }
 
     /// <summary>
-    /// Gets the message type derived from the upper nibble of the status byte.
+    /// Message type off the upper nibble.
     /// </summary>
     public MidiMessageType Type => (MidiMessageType)(Status & 0xF0);
 
     /// <summary>
-    /// Gets the zero-based MIDI channel number (0–15).
+    /// Channel, 0-15.
     /// </summary>
     public int Channel => Status & 0x0F;
 
     /// <summary>
-    /// Gets a value indicating whether this message is a Note On event with non-zero velocity.
+    /// Note On with a real velocity behind it.
     /// </summary>
     public bool IsNoteOn => Type == MidiMessageType.NoteOn && Data2 > 0;
 
     /// <summary>
-    /// Gets a value indicating whether this message represents a Note Off event,
-    /// including Note On with velocity zero.
+    /// Note Off — the zero-velocity Note On counts too.
     /// </summary>
     public bool IsNoteOff => Type == MidiMessageType.NoteOff || (Type == MidiMessageType.NoteOn && Data2 == 0);
 
     /// <summary>
-    /// Gets a value indicating whether this is a Control Change message.
+    /// Control Change?
     /// </summary>
     public bool IsControlChange => Type == MidiMessageType.ControlChange;
 
     /// <summary>
-    /// Gets a value indicating whether this is a Program Change message.
+    /// Program Change?
     /// </summary>
     public bool IsProgramChange => Type == MidiMessageType.ProgramChange;
 
     /// <summary>
-    /// Gets a value indicating whether this is a Pitch Bend message.
+    /// Pitch Bend?
     /// </summary>
     public bool IsPitchBend => Type == MidiMessageType.PitchBend;
 
     /// <summary>
-    /// Returns a human-readable string representation of the MIDI message.
+    /// Readable form for logs.
     /// </summary>
-    public override string ToString() =>
-        $"[{Type} Ch={Channel} D1={Data1} D2={Data2}]";
+    public override string ToString() => $"[{Type} Ch={Channel} D1={Data1} D2={Data2}]";
 }
 
 /// <summary>
-/// MIDI message type encoded in the upper nibble of the status byte.
+/// Message type, i.e. the upper nibble of the status byte.
 /// </summary>
 public enum MidiMessageType : byte
 {
     /// <summary>
-    /// Note Off event — stops a sounding note.
+    /// Kills a sounding note.
     /// </summary>
     NoteOff         = 0x80,
 
     /// <summary>
-    /// Note On event — starts a note; velocity zero acts as Note Off.
+    /// Starts a note; velocity 0 means note off.
     /// </summary>
     NoteOn          = 0x90,
 
     /// <summary>
-    /// Polyphonic key pressure (per-note aftertouch).
+    /// Per-note aftertouch.
     /// </summary>
     Aftertouch      = 0xA0,
 
     /// <summary>
-    /// Control Change message carrying a controller number and value.
+    /// Controller number + value.
     /// </summary>
     ControlChange   = 0xB0,
 
     /// <summary>
-    /// Program Change — selects a patch or instrument.
+    /// Patch select.
     /// </summary>
     ProgramChange   = 0xC0,
 
     /// <summary>
-    /// Channel Pressure — mono aftertouch applied to all notes on the channel.
+    /// Mono aftertouch for the whole channel.
     /// </summary>
     ChannelPressure = 0xD0,
 
     /// <summary>
-    /// Pitch Bend Change — adjusts pitch up or down on the channel.
+    /// Pitch up or down on the channel.
     /// </summary>
     PitchBend       = 0xE0,
 
     /// <summary>
-    /// System Exclusive — manufacturer-specific variable-length message.
+    /// Vendor specific, variable length.
     /// </summary>
     SysEx           = 0xF0,
 
     /// <summary>
-    /// Meta event — used only inside MIDI files, not transmitted over the wire.
+    /// File-only, never goes over the wire.
     /// </summary>
     Meta            = 0xFF
 }
