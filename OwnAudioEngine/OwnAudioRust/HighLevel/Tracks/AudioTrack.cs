@@ -30,10 +30,11 @@ public sealed class AudioTrack : IDisposable
     /// is sized to <c>sampleRate × channels × this</c> so producers can run ahead
     /// of the audio thread without overflowing under normal scheduling.
     /// </summary>
-    private const float SourceBufferSeconds = 2.0f;
+    public const float SourceBufferSeconds = 2.0f;
 
     private readonly TrackHandle _handle;
-    private readonly TrackSourceHandle _sourceHandle;
+    private readonly ushort _channels;
+    private TrackSourceHandle _sourceHandle;
     private readonly IntPtr _mixerHandle;
     private readonly float _sampleRate;
     private bool _disposed;
@@ -53,21 +54,32 @@ public sealed class AudioTrack : IDisposable
         _handle      = handle;
         _mixerHandle = mixerHandle;
         _sampleRate  = sampleRate;
+        _channels    = Math.Max((ushort)1, channels);
         Effects      = new TrackEffectChain(mixerHandle, handle.DangerousGetHandle());
 
         // Install a lock-free ring buffer as the track's audio source so decoded
         // samples can be pushed via Write from any thread; the audio thread owns
         // the read side. Size it for a couple of seconds of look-ahead.
-        nuint capacity = (nuint)Math.Max(1, (long)(sampleRate * Math.Max((ushort)1, channels) * SourceBufferSeconds));
+        _sourceHandle = InstallRingSource();
+    }
+
+    /// <summary>
+    /// Installs a fresh lock-free ring buffer as this track's audio source and returns
+    /// the write handle for it.
+    /// </summary>
+    private TrackSourceHandle InstallRingSource()
+    {
+        nuint capacity = (nuint)Math.Max(1, (long)(_sampleRate * _channels * SourceBufferSeconds));
         int code = OwnAudioNative.ownaudio_v1_track_set_ring_source(
-            mixerHandle,
-            handle.DangerousGetHandle(),
+            _mixerHandle,
+            _handle.DangerousGetHandle(),
             capacity,
             out IntPtr rawSource);
-        ErrorCodeMapper.ThrowIfError(code, nameof(AudioTrack));
+        ErrorCodeMapper.ThrowIfError(code, nameof(InstallRingSource));
 
-        _sourceHandle = new TrackSourceHandle();
-        Marshal.InitHandle(_sourceHandle, rawSource);
+        var handle = new TrackSourceHandle();
+        Marshal.InitHandle(handle, rawSource);
+        return handle;
     }
 
     #endregion
@@ -510,11 +522,36 @@ public sealed class AudioTrack : IDisposable
     /// cleared, otherwise the pre-seek audio would still play out first.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">Thrown when the track is disposed.</exception>
-    internal void ClearSource()
+    public void ClearSource()
     {
         ThrowIfDisposed();
         int code = OwnAudioNative.ownaudio_v1_track_clear_source(_mixerHandle, _handle.DangerousGetHandle());
         ErrorCodeMapper.ThrowIfError(code, nameof(ClearSource));
+    }
+
+    /// <summary>
+    /// Discards everything currently queued in the feed and re-arms the track with a
+    /// fresh, empty ring buffer, so the next <see cref="Write"/> is the next audio heard.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this when a continuously fed track jumps position: <see cref="ClearSource"/>
+    /// alone detaches the ring for good, leaving later writes going nowhere, so a producer
+    /// that keeps feeding the same track must re-install a source rather than only clear it.
+    /// </para>
+    /// <para>
+    /// Not real-time safe and not thread-safe against a concurrent <see cref="Write"/>:
+    /// call it from the same thread that feeds the track.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ObjectDisposedException">Thrown when the track is disposed.</exception>
+    public void ResetFeed()
+    {
+        ThrowIfDisposed();
+
+        TrackSourceHandle stale = _sourceHandle;
+        _sourceHandle = InstallRingSource();
+        stale.Dispose();
     }
 
     /// <summary>

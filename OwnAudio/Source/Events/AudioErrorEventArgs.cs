@@ -1,25 +1,30 @@
 namespace OwnaudioNET.Events;
 
 /// <summary>
-/// Event arguments for audio error events.
+/// What we hand out when something went wrong in the audio path.
 /// </summary>
 public sealed class AudioErrorEventArgs : EventArgs
 {
     /// <summary>
-    /// Gets the error message.
+    /// Short text about what broke.
     /// </summary>
     public string Message { get; }
 
     /// <summary>
-    /// Gets the exception that caused the error, if available.
+    /// The exception behind it, if we had one.
     /// </summary>
     public Exception? Exception { get; }
 
     /// <summary>
-    /// Gets the timestamp when the error occurred.
+    /// When it happened, UTC.
     /// </summary>
     public DateTime Timestamp { get; }
 
+    /// <summary>
+    /// Stamps the time on creation.
+    /// </summary>
+    /// <param name="message"></param>
+    /// <param name="exception"></param>
     public AudioErrorEventArgs(string message, Exception? exception = null)
     {
         Message = message;
@@ -27,10 +32,12 @@ public sealed class AudioErrorEventArgs : EventArgs
         Timestamp = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// One line for the log.
+    /// </summary>
     public override string ToString()
     {
-        return Exception != null
-            ? $"Audio error at {Timestamp:HH:mm:ss.fff}: {Message} - {Exception.Message}"
-            : $"Audio error at {Timestamp:HH:mm:ss.fff}: {Message}";
+        if (Exception != null) { return $"Audio error at {Timestamp:HH:mm:ss.fff}: {Message} - {Exception.Message}"; }
+        return $"Audio error at {Timestamp:HH:mm:ss.fff}: {Message}";
     }
 }

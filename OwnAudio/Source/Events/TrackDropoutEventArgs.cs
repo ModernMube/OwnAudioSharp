@@ -3,62 +3,56 @@ using System;
 namespace OwnaudioNET.Events
 {
     /// <summary>
-    /// Event arguments for track dropout events.
-    /// Provides detailed information about audio dropouts in master clock synchronized playback.
+    /// One track fell behind the master clock. Carries enough to tell which and why.
     /// </summary>
     public class TrackDropoutEventArgs : EventArgs
     {
         /// <summary>
-        /// Gets the unique identifier of the track that experienced the dropout.
+        /// Id of the track that dropped.
         /// </summary>
         public Guid TrackId { get; }
 
         /// <summary>
-        /// Gets the name/type of the track that experienced the dropout.
+        /// Track name or type, whatever the caller passed.
         /// </summary>
         public string TrackName { get; }
 
         /// <summary>
-        /// Gets the master clock timestamp (in seconds) when the dropout occurred.
+        /// Master clock time in seconds at the drop.
         /// </summary>
         public double MasterTimestamp { get; }
 
         /// <summary>
-        /// Gets the master clock sample position when the dropout occurred.
+        /// Master clock sample pos at the drop.
         /// </summary>
         public long MasterSamplePosition { get; }
 
         /// <summary>
-        /// Gets the number of frames that were missed/dropped.
+        /// How many frames we lost.
         /// </summary>
         public int MissedFrames { get; }
 
         /// <summary>
-        /// Gets the reason/cause of the dropout (e.g., "Buffer underrun", "Seek failed").
+        /// Why it happened, e.g. "Buffer underrun" or "Seek failed".
         /// </summary>
         public string Reason { get; }
 
         /// <summary>
-        /// Gets the timestamp when this event was created.
+        /// When we built this event, UTC.
         /// </summary>
         public DateTime EventTimestamp { get; }
 
         /// <summary>
-        /// Initializes a new instance of the TrackDropoutEventArgs class.
+        /// Stamps the time on creation, null name/reason become empty.
         /// </summary>
-        /// <param name="trackId">The unique identifier of the affected track</param>
-        /// <param name="trackName">The name/type of the affected track</param>
-        /// <param name="masterTimestamp">The master clock timestamp in seconds</param>
-        /// <param name="masterSamplePosition">The master clock sample position</param>
-        /// <param name="missedFrames">The number of frames that were dropped</param>
-        /// <param name="reason">The reason for the dropout</param>
-        public TrackDropoutEventArgs(
-            Guid trackId,
-            string trackName,
-            double masterTimestamp,
-            long masterSamplePosition,
-            int missedFrames,
-            string reason)
+        /// <param name="trackId"></param>
+        /// <param name="trackName"></param>
+        /// <param name="masterTimestamp"></param>
+        /// <param name="masterSamplePosition"></param>
+        /// <param name="missedFrames"></param>
+        /// <param name="reason"></param>
+        public TrackDropoutEventArgs(Guid trackId, string trackName, double masterTimestamp,
+            long masterSamplePosition, int missedFrames, string reason)
         {
             TrackId = trackId;
             TrackName = trackName ?? string.Empty;
@@ -70,7 +64,7 @@ namespace OwnaudioNET.Events
         }
 
         /// <summary>
-        /// Returns a string representation of the dropout event.
+        /// One line for the log.
         /// </summary>
         public override string ToString()
         {

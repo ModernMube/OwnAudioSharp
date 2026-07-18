@@ -1,25 +1,30 @@
 namespace OwnaudioNET.Events;
 
 /// <summary>
-/// Event arguments for buffer underrun events.
+/// We ran dry, the callback wanted samples we did not have.
 /// </summary>
 public sealed class BufferUnderrunEventArgs : EventArgs
 {
     /// <summary>
-    /// Gets the number of frames that were missed due to underrun.
+    /// How many frames we lost.
     /// </summary>
     public int MissedFrames { get; }
 
     /// <summary>
-    /// Gets the timestamp when the underrun occurred.
+    /// When it happened, UTC.
     /// </summary>
     public DateTime Timestamp { get; }
 
     /// <summary>
-    /// Gets the position in the audio stream where the underrun occurred (in frames).
+    /// Stream position in frames where we dropped out.
     /// </summary>
     public long Position { get; }
 
+    /// <summary>
+    /// Stamps the time on creation.
+    /// </summary>
+    /// <param name="missedFrames"></param>
+    /// <param name="position"></param>
     public BufferUnderrunEventArgs(int missedFrames, long position)
     {
         MissedFrames = missedFrames;
@@ -27,6 +32,9 @@ public sealed class BufferUnderrunEventArgs : EventArgs
         Timestamp = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// One line for the log.
+    /// </summary>
     public override string ToString()
     {
         return $"Buffer underrun: {MissedFrames} frames missed at position {Position} ({Timestamp:HH:mm:ss.fff})";

@@ -268,6 +268,14 @@ public sealed partial class AudioMixer
         source as InputSource ?? (source as SourceWithEffects)?.InnerSource as InputSource;
 
     /// <summary>
+    /// Digs out the StreamingSource behind a mixer source, unwrapping SourceWithEffects.
+    /// </summary>
+    /// <param name="source"></param>
+    /// <returns></returns>
+    private static StreamingSource? _resolveStreamingSource(IAudioSource source) =>
+        source as StreamingSource ?? (source as SourceWithEffects)?.InnerSource as StreamingSource;
+
+    /// <summary>
     /// Hooks a source onto the shared session: file to a native file track, samples to a
     /// memory track, input to a capture track. Anything else is ignored.
     /// </summary>
@@ -289,7 +297,36 @@ public sealed partial class AudioMixer
         }
 
         InputSource? _ins = _resolveInputSource(source);
-        if (_ins is not null) _attachInputSource(source, _ins);
+        if (_ins is not null)
+        {
+            _attachInputSource(source, _ins);
+            return;
+        }
+
+        StreamingSource? _sts = _resolveStreamingSource(source);
+        if (_sts is not null) _attachStreamingSource(source, _sts);
+    }
+
+    /// <summary>
+    /// Attaches a streaming source to a bare native track: the track is created with a
+    /// ring-buffer feed, which the source's own pump thread fills from its generator.
+    /// </summary>
+    /// <param name="source"></param>
+    /// <param name="sts"></param>
+    private void _attachStreamingSource(IAudioSource source, StreamingSource sts)
+    {
+        lock (_rustSessionLock)
+        {
+            _rustSession ??= new MultiTrackSession((float)_config.SampleRate, (ushort)_config.Channels);
+
+            AudioTrack _track = _rustSession.AddTrack();
+            sts.AttachRustTrack(_track);
+
+            _applyChannelMap(source, sts.Id, sts.RustTrack);
+
+            if (source is SourceWithEffects swe)
+                _rustEffectSources.Add(new RustTrackEffectRouting(swe, sts));
+        }
     }
 
     /// <summary>
@@ -384,7 +421,14 @@ public sealed partial class AudioMixer
         }
 
         InputSource? _ins = _resolveInputSource(source);
-        if (_ins is not null) _detachBackedSource(source, _ins.Id, _ins.RustTrack, _ins.DetachRustTrack);
+        if (_ins is not null)
+        {
+            _detachBackedSource(source, _ins.Id, _ins.RustTrack, _ins.DetachRustTrack);
+            return;
+        }
+
+        StreamingSource? _sts = _resolveStreamingSource(source);
+        if (_sts is not null) _detachBackedSource(source, _sts.Id, _sts.RustTrack, _sts.DetachRustTrack);
     }
 
     /// <summary>
@@ -454,6 +498,16 @@ public sealed partial class AudioMixer
                 _track.Pan = ins.Pan;
 
                 ins.SetOutputLevels(ins.State == AudioState.Playing ? _track.Peaks : (0f, 0f));
+            }
+            else if (source is StreamingSource sts)
+            {
+                AudioTrack? _track = sts.RustTrack;
+                if (_track is null) continue;
+
+                _track.Gain = sts.Volume;
+                _track.Pan = sts.Pan;
+
+                sts.SetOutputLevels(sts.State == AudioState.Playing ? _track.Peaks : (0f, 0f));
             }
         }
     }

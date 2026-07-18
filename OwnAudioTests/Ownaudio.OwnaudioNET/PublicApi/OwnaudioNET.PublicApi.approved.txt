@@ -1632,6 +1632,7 @@ namespace OwnaudioNET.Recording
 }
 namespace OwnaudioNET.Sources
 {
+    public delegate void AudioRenderCallback(System.Span<float> buffer, int frameCount, long framePosition);
     public abstract class BaseAudioSource : OwnaudioNET.Interfaces.IAudioSource, OwnaudioNET.Interfaces.ISynchronizable, System.IDisposable
     {
         protected BaseAudioSource() { }
@@ -1794,6 +1795,21 @@ namespace OwnaudioNET.Sources
         public void SetDelayCompensation(int samples) { }
         public void Stop() { }
         public override string ToString() { }
+    }
+    public sealed class StreamingSource : OwnaudioNET.Sources.BaseAudioSource
+    {
+        public StreamingSource(OwnaudioNET.Sources.AudioRenderCallback render, Ownaudio.Core.AudioConfig config) { }
+        public override Ownaudio.Core.AudioConfig Config { get; }
+        public override double Duration { get; }
+        public override bool IsEndOfStream { get; }
+        public override double Position { get; }
+        public override Ownaudio.AudioStreamInfo StreamInfo { get; }
+        protected override void Dispose(bool disposing) { }
+        public override void Pause() { }
+        public override void Play() { }
+        public override int ReadSamples(System.Span<float> buffer, int frameCount) { }
+        public override bool Seek(double positionInSeconds) { }
+        public override void Stop() { }
     }
     public readonly struct SyncDiagnosticsSnapshot
     {
