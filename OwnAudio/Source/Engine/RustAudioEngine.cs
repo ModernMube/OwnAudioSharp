@@ -190,16 +190,18 @@ internal sealed class RustAudioEngine : IAudioEngine
                 if (_outputEnabled) _outputDeviceSnapshot = _engine.EnumerateOutputDevices();
                 if (_inputEnabled) _inputDeviceSnapshot = _engine.EnumerateInputDevices();
 
+                (string? _outputId, string? _inputId) = _resolveDeviceIds(config);
+
                 if (_outputEnabled)
                 {
-                    _selectedOutputDevice = _findDevice(_outputDeviceSnapshot, config.OutputDeviceId, preferOutput: true);
+                    _selectedOutputDevice = _findDevice(_outputDeviceSnapshot, _outputId, preferOutput: true);
                     _outputRing = new LockFreeRingBuffer<float>(_ringCapacity(config));
                     _openOutputStream(config);
                 }
 
                 if (_inputEnabled)
                 {
-                    _selectedInputDevice = _findDevice(_inputDeviceSnapshot, config.InputDeviceId, preferOutput: false);
+                    _selectedInputDevice = _findDevice(_inputDeviceSnapshot, _inputId, preferOutput: false);
                     _inputRing = new LockFreeRingBuffer<float>(_ringCapacity(config));
                     _openInputStream(config);
                 }
@@ -354,6 +356,29 @@ internal sealed class RustAudioEngine : IAudioEngine
     /// ASIO drivers are exclusive
     /// </summary>
     private bool _isAsioHost() => _config?.HostType == EngineHostType.ASIO;
+
+    /// <summary>
+    /// Device ids to open with. ASIO loads one driver per process, so both directions
+    /// must name the same device; an empty side follows the named one.
+    /// </summary>
+    private (string? outputId, string? inputId) _resolveDeviceIds(AudioConfig config)
+    {
+        string? _outputId = config.OutputDeviceId;
+        string? _inputId = config.InputDeviceId;
+
+        if (config.HostType != EngineHostType.ASIO || !_outputEnabled || !_inputEnabled)
+            return (_outputId, _inputId);
+
+        if (string.IsNullOrEmpty(_outputId)) return (_inputId, _inputId);
+        if (string.IsNullOrEmpty(_inputId)) return (_outputId, _outputId);
+
+        if (!string.Equals(_outputId, _inputId, StringComparison.Ordinal))
+            throw new AudioEngineException(
+                $"ASIO cannot run capture on '{_inputId}' and playback on '{_outputId}': only one "
+                + "ASIO driver can be loaded per process. Use the same device for both.");
+
+        return (_outputId, _inputId);
+    }
 
     /// <inheritdoc />
     public List<AudioDeviceInfo> GetOutputDevices()

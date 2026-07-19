@@ -24,7 +24,7 @@ namespace OwnaudioInput
             // Initialize the OwnAudio engine
             var config = OwnaudioNet.CreateDefaultConfig();
             config.EnableInput = true;
-            config.HostType = Ownaudio.Core.EngineHostType.None; // Force WASAPI for better compatibility
+            config.HostType = Ownaudio.Core.EngineHostType.ASIO; // Force WASAPI for better compatibility
             OwnaudioNet.Initialize(config);
 
             if (!OwnaudioNet.IsInitialized)
@@ -69,9 +69,7 @@ namespace OwnaudioInput
                     var selectedDevice = inputDevices[deviceIndex];
                     Console.WriteLine($"Selecting device: {selectedDevice.Name}");
 
-                    // Rebuild the engine with the chosen device baked into the config rather than
-                    // switching it live. ASIO cannot change the device of a running engine at all,
-                    // and re-initializing works the same on every host, so there is no special case.
+                    // Rebuild with the device in the config; ASIO can't switch a running engine.
                     OwnaudioNet.Stop();
                     OwnaudioNet.Shutdown();
 
