@@ -20,7 +20,7 @@ asio = ["cpal/asio"]
 [dependencies]
 ownaudio-core = { path = "../ownaudio-core" }
 ownaudio-soundtouch = { path = "../ownaudio-soundtouch" }
-cpal = "0.18"
+cpal = { workspace = true }
 
 [build-dependencies]
 cbindgen = "0.27"
