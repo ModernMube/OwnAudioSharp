@@ -1,10 +1,13 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use cpal::traits::DeviceTrait;
 
 use crate::{
     config::{validate_input_config_adaptive, validate_output_config, StreamConfig},
-    device::{resolve_input_device, resolve_output_device, AudioDeviceInfo},
+    device::{
+        collect_input_devices, collect_output_devices, resolve_input_device, resolve_output_device,
+        AudioDeviceInfo,
+    },
     error::{AudioError, Result},
     stream::{InputStream, OutputStream},
     stream_error::StreamErrorState,
@@ -18,6 +21,11 @@ use crate::{
 /// or [`AudioEngine::new_with_host`] to select a specific host explicitly.
 pub struct AudioEngine {
     host: cpal::Host,
+    /// Devices kept from the last enumeration, so opening a stream by name can skip the
+    /// re-enumeration that ASIO cannot serve once a stream is open. A `cpal::Device` is
+    /// only metadata — it holds no driver open — so caching it costs nothing.
+    output_cache: Mutex<Vec<(String, cpal::Device)>>,
+    input_cache: Mutex<Vec<(String, cpal::Device)>>,
 }
 
 impl AudioEngine {
@@ -25,9 +33,7 @@ impl AudioEngine {
     ///
     /// This call is cheap and does not open any audio device.
     pub fn new() -> Result<Self> {
-        Ok(AudioEngine {
-            host: cpal::default_host(),
-        })
+        Ok(AudioEngine::with_host(cpal::default_host()))
     }
 
     /// Creates a new engine instance using an explicitly provided `cpal::Host`.
@@ -35,7 +41,33 @@ impl AudioEngine {
     /// This is used by the FFI layer to select non-default host APIs such as ASIO
     /// on Windows.  Prefer [`AudioEngine::new`] unless a specific host is required.
     pub fn new_with_host(host: cpal::Host) -> Result<Self> {
-        Ok(AudioEngine { host })
+        Ok(AudioEngine::with_host(host))
+    }
+
+    fn with_host(host: cpal::Host) -> Self {
+        AudioEngine {
+            host,
+            output_cache: Mutex::new(Vec::new()),
+            input_cache: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Looks up a previously enumerated output device by name.
+    fn cached_output_device(&self, name: &str) -> Option<cpal::Device> {
+        let cache = self.output_cache.lock().ok()?;
+        cache
+            .iter()
+            .find(|(cached, _)| cached == name)
+            .map(|(_, device)| device.clone())
+    }
+
+    /// Capture side counterpart of [`AudioEngine::cached_output_device`].
+    fn cached_input_device(&self, name: &str) -> Option<cpal::Device> {
+        let cache = self.input_cache.lock().ok()?;
+        cache
+            .iter()
+            .find(|(cached, _)| cached == name)
+            .map(|(_, device)| device.clone())
     }
 
     /// Returns a list of all available output devices on this engine's host.
@@ -44,7 +76,16 @@ impl AudioEngine {
     /// platform default host, this respects the host the engine was created
     /// with, so an ASIO engine lists ASIO devices rather than WASAPI endpoints.
     pub fn list_output_devices(&self) -> Result<Vec<AudioDeviceInfo>> {
-        crate::device::list_output_devices_on(&self.host)
+        let collected = collect_output_devices(&self.host)?;
+
+        if let Ok(mut cache) = self.output_cache.lock() {
+            *cache = collected
+                .iter()
+                .map(|(device, info)| (info.name.clone(), device.clone()))
+                .collect();
+        }
+
+        Ok(collected.into_iter().map(|(_, info)| info).collect())
     }
 
     /// Returns a list of all available input devices on this engine's host.
@@ -53,7 +94,16 @@ impl AudioEngine {
     /// platform default host, this respects the host the engine was created
     /// with, so an ASIO engine lists ASIO devices rather than WASAPI endpoints.
     pub fn list_input_devices(&self) -> Result<Vec<AudioDeviceInfo>> {
-        crate::device::list_input_devices_on(&self.host)
+        let collected = collect_input_devices(&self.host)?;
+
+        if let Ok(mut cache) = self.input_cache.lock() {
+            *cache = collected
+                .iter()
+                .map(|(device, info)| (info.name.clone(), device.clone()))
+                .collect();
+        }
+
+        Ok(collected.into_iter().map(|(_, info)| info).collect())
     }
 
     /// Opens an output stream on the given device (or the system default if
@@ -74,7 +124,13 @@ impl AudioEngine {
         config: &StreamConfig,
         mut callback: impl FnMut(&mut [f32]) + Send + 'static,
     ) -> Result<OutputStream> {
-        let cpal_device = resolve_output_device(&self.host, device.map(|d| d.name.as_str()))?;
+        let cpal_device = match device.map(|d| d.name.as_str()) {
+            Some(name) => match self.cached_output_device(name) {
+                Some(cached) => cached,
+                None => resolve_output_device(&self.host, Some(name))?,
+            },
+            None => resolve_output_device(&self.host, None)?,
+        };
         let (stream_config, sample_format) = validate_output_config(&cpal_device, config)?;
 
         // Shared error state: the cpal error callback records device-lost /
@@ -198,7 +254,13 @@ impl AudioEngine {
         config: &StreamConfig,
         mut callback: impl FnMut(&[f32]) + Send + 'static,
     ) -> Result<InputStream> {
-        let cpal_device = resolve_input_device(&self.host, device.map(|d| d.name.as_str()))?;
+        let cpal_device = match device.map(|d| d.name.as_str()) {
+            Some(name) => match self.cached_input_device(name) {
+                Some(cached) => cached,
+                None => resolve_input_device(&self.host, Some(name))?,
+            },
+            None => resolve_input_device(&self.host, None)?,
+        };
         let (stream_config, sample_format, device_channels) =
             validate_input_config_adaptive(&cpal_device, config)?;
 
@@ -321,8 +383,6 @@ impl AudioEngine {
 
 impl Default for AudioEngine {
     fn default() -> Self {
-        AudioEngine {
-            host: cpal::default_host(),
-        }
+        AudioEngine::with_host(cpal::default_host())
     }
 }

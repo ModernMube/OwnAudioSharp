@@ -38,6 +38,21 @@ pub fn list_input_devices() -> Result<Vec<AudioDeviceInfo>> {
 /// created for a non-default host API (e.g. ASIO on Windows) enumerates the
 /// devices of that host instead of the platform default one.
 pub fn list_output_devices_on(host: &cpal::Host) -> Result<Vec<AudioDeviceInfo>> {
+    Ok(collect_output_devices(host)?
+        .into_iter()
+        .map(|(_, info)| info)
+        .collect())
+}
+
+/// Same enumeration, but hands back the `cpal::Device` next to each snapshot.
+///
+/// [`crate::AudioEngine`] keeps those devices so that opening a stream by name later does not
+/// have to enumerate again. On ASIO that is the difference between working and not: enumeration
+/// loads every driver to read its properties, and a driver will not load while another one is
+/// in use, so the list comes back short — or empty — once any stream is open.
+pub(crate) fn collect_output_devices(
+    host: &cpal::Host,
+) -> Result<Vec<(cpal::Device, AudioDeviceInfo)>> {
     let default_name = host
         .default_output_device()
         .and_then(|d| d.description().map(|desc| desc.name().to_owned()).ok());
@@ -45,7 +60,7 @@ pub fn list_output_devices_on(host: &cpal::Host) -> Result<Vec<AudioDeviceInfo>>
     let mut devices = Vec::new();
     for device in host.output_devices()? {
         if let Ok(info) = device_to_output_info(&device, default_name.as_deref()) {
-            devices.push(info);
+            devices.push((device, info));
         }
     }
     Ok(devices)
@@ -57,6 +72,16 @@ pub fn list_output_devices_on(host: &cpal::Host) -> Result<Vec<AudioDeviceInfo>>
 /// created for a non-default host API (e.g. ASIO on Windows) enumerates the
 /// devices of that host instead of the platform default one.
 pub fn list_input_devices_on(host: &cpal::Host) -> Result<Vec<AudioDeviceInfo>> {
+    Ok(collect_input_devices(host)?
+        .into_iter()
+        .map(|(_, info)| info)
+        .collect())
+}
+
+/// Capture side counterpart of [`collect_output_devices`].
+pub(crate) fn collect_input_devices(
+    host: &cpal::Host,
+) -> Result<Vec<(cpal::Device, AudioDeviceInfo)>> {
     let default_name = host
         .default_input_device()
         .and_then(|d| d.description().map(|desc| desc.name().to_owned()).ok());
@@ -64,7 +89,7 @@ pub fn list_input_devices_on(host: &cpal::Host) -> Result<Vec<AudioDeviceInfo>> 
     let mut devices = Vec::new();
     for device in host.input_devices()? {
         if let Ok(info) = device_to_input_info(&device, default_name.as_deref()) {
-            devices.push(info);
+            devices.push((device, info));
         }
     }
     Ok(devices)
