@@ -285,6 +285,11 @@ public sealed class AudioEngineWrapper : IDisposable
         {
             return _engine.SetOutputDeviceByName(deviceName) == 0;
         }
+        catch (NotSupportedException)
+        {
+            // The engine explains why the host can't do this; wrapping would bury that message.
+            throw;
+        }
         catch (Exception ex)
         {
             throw new AudioEngineException($"Failed to set output device to '{deviceName}'.", ex);
@@ -306,6 +311,11 @@ public sealed class AudioEngineWrapper : IDisposable
         try
         {
             return _engine.SetInputDeviceByName(deviceName) == 0;
+        }
+        catch (NotSupportedException)
+        {
+            // The engine explains why the host can't do this; wrapping would bury that message.
+            throw;
         }
         catch (Exception ex)
         {

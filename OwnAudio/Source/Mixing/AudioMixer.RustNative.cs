@@ -226,9 +226,9 @@ public sealed partial class AudioMixer
     private ulong _rustLastStreamErrorCount;
 
     /// <summary>
-    /// Engine whose own push output we suspended while the session drives the device.
+    /// Engine whose own push output we closed while the session drives the device.
     /// </summary>
-    private RustAudioEngine? _rustSuspendedEngine;
+    private RustAudioEngine? _rustReleasedEngine;
 
     /// <summary>
     /// Does this mixer run on the rust-native chain?
@@ -389,8 +389,10 @@ public sealed partial class AudioMixer
 
             _rustSession ??= new MultiTrackSession((float)_config.SampleRate, (ushort)_config.Channels);
 
+            _rustEngine!.ReleaseInput();
+
             InputTrack _track = _rustSession.AddInputTrack(
-                _nativeEngine, device: null, bufferFrames: (uint)_config.BufferSize);
+                _nativeEngine, _rustEngine.SelectedInputDevice, bufferFrames: (uint)_config.BufferSize);
             ins.AttachRustTrack(_track.Track, _track);
 
             _applyChannelMap(source, ins.Id, ins.RustTrack);
@@ -1053,10 +1055,10 @@ public sealed partial class AudioMixer
         if (_rustEngine is null || _nativeEngine is null)
             return;
 
-        _rustOutputStream = _rustSession.OpenOutput(_nativeEngine);
+        _rustOutputStream = _rustSession.OpenOutput(_nativeEngine, _rustEngine.SelectedOutputDevice);
         _rustLastStreamErrorCount = 0;
-        _rustEngine.SuspendOutput();
-        _rustSuspendedEngine = _rustEngine;
+        _rustEngine.ReleaseOutput();
+        _rustReleasedEngine = _rustEngine;
     }
 
     /// <summary>
@@ -1156,8 +1158,8 @@ public sealed partial class AudioMixer
             _rustSession = null;
             _rustOutputStream = null;
 
-            _rustSuspendedEngine?.ResumeOutput();
-            _rustSuspendedEngine = null;
+            _rustReleasedEngine?.RestoreOutput();
+            _rustReleasedEngine = null;
         }
     }
 }

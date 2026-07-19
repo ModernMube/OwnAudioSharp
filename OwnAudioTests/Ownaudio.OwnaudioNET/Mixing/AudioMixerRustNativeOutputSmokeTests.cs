@@ -15,7 +15,7 @@ namespace Ownaudio.OwnaudioNET.Tests.Mixing;
 /// D.2.d (plan 14 / WS2, output wiring) device smoke for the Rust-native <see cref="AudioMixer"/>:
 /// with the shared-engine approach, starting the mixer opens the shared session's native output on
 /// the underlying engine's device and suspends the engine's own push output. This exercises the
-/// real <c>OpenOutput</c>/<c>SuspendOutput</c> path end-to-end.
+/// real <c>OpenOutput</c>/<c>ReleaseOutput</c> path end-to-end.
 /// </summary>
 /// <remarks>
 /// Requires a working native engine and output device; when none is available the test returns

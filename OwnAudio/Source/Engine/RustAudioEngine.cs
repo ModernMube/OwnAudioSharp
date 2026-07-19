@@ -42,6 +42,9 @@ internal sealed class RustAudioEngine : IAudioEngine
     private RustSafe.AudioDevice? _selectedOutputDevice;
     private RustSafe.AudioDevice? _selectedInputDevice;
 
+    private IReadOnlyList<RustSafe.AudioDevice> _outputDeviceSnapshot = Array.Empty<RustSafe.AudioDevice>();
+    private IReadOnlyList<RustSafe.AudioDevice> _inputDeviceSnapshot = Array.Empty<RustSafe.AudioDevice>();
+
     #endregion
 
     #region Properties
@@ -68,24 +71,87 @@ internal sealed class RustAudioEngine : IAudioEngine
     }
 
     /// <summary>
-    /// Parks our own push output stream so it doesn't fight a session driven one on the same device.
+    /// The capture device this engine was pointed at, null when the host default is in use.
+    /// The Rust-native mixer opens its own capture and has to land on the same device, which on
+    /// ASIO is not optional: a second driver cannot be loaded next to the one already running.
     /// </summary>
-    internal void SuspendOutput()
+    internal RustSafe.AudioDevice? SelectedInputDevice
     {
-        lock (_stateLock)
+        get
         {
-            _outputStream?.Pause();
+            lock (_stateLock)
+            {
+                return _selectedInputDevice;
+            }
         }
     }
 
     /// <summary>
-    /// Puts back what SuspendOutput parked, if we are running.
+    /// The playback device this engine was pointed at, null when the host default is in use.
+    /// Same story as <see cref="SelectedInputDevice"/>: the session opens its own output and has
+    /// to land on the device the engine already chose.
     /// </summary>
-    internal void ResumeOutput()
+    internal RustSafe.AudioDevice? SelectedOutputDevice
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _selectedOutputDevice;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Closes our own capture so a session driven one can take the device over.
+    /// </summary>
+    /// <remarks>
+    /// The output side only parks its stream, but capture has to be closed outright: a second
+    /// capture on a device that already has one gets silence on ASIO4ALL and takes the process
+    /// down with FlexASIO. Nothing reads the engine's input ring in rust-native mode anyway.
+    /// </remarks>
+    internal void ReleaseInput()
     {
         lock (_stateLock)
         {
-            if (_running) { _outputStream?.Play(); }
+            _inputStream?.Dispose();
+            _inputStream = null;
+            _inputRing?.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Closes our own playback stream instead of merely parking it, for the same reason
+    /// <see cref="ReleaseInput"/> exists: a paused stream still holds its callback registered
+    /// with the driver. On ASIO every extra registered callback is another one walking the
+    /// driver's channel buffers, and cpal's silencing step overruns them.
+    /// </summary>
+    internal void ReleaseOutput()
+    {
+        lock (_stateLock)
+        {
+            _outputStream?.Dispose();
+            _outputStream = null;
+            _outputRing?.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Reopens what <see cref="ReleaseOutput"/> closed, so the engine can drive its own push
+    /// output again once the session hands the device back. No-op if it was never closed.
+    /// </summary>
+    internal void RestoreOutput()
+    {
+        lock (_stateLock)
+        {
+            if (_disposed || _engine == null || _config == null) return;
+            if (!_outputEnabled || _outputStream != null) return;
+
+            if (_isAsioHost()) return;
+
+            _outputRing ??= new LockFreeRingBuffer<float>(_ringCapacity(_config));
+            _openOutputStream(_config);
+            if (_running) _outputStream?.Play();
         }
     }
 
@@ -121,16 +187,19 @@ internal sealed class RustAudioEngine : IAudioEngine
 
                 _engine = RustSafe.AudioEngine.Create(_mapHostApi(config.HostType));
 
+                if (_outputEnabled) _outputDeviceSnapshot = _engine.EnumerateOutputDevices();
+                if (_inputEnabled) _inputDeviceSnapshot = _engine.EnumerateInputDevices();
+
                 if (_outputEnabled)
                 {
-                    _selectedOutputDevice = _findDevice(_engine.EnumerateOutputDevices(), config.OutputDeviceId, preferOutput: true);
+                    _selectedOutputDevice = _findDevice(_outputDeviceSnapshot, config.OutputDeviceId, preferOutput: true);
                     _outputRing = new LockFreeRingBuffer<float>(_ringCapacity(config));
                     _openOutputStream(config);
                 }
 
                 if (_inputEnabled)
                 {
-                    _selectedInputDevice = _findDevice(_engine.EnumerateInputDevices(), config.InputDeviceId, preferOutput: false);
+                    _selectedInputDevice = _findDevice(_inputDeviceSnapshot, config.InputDeviceId, preferOutput: false);
                     _inputRing = new LockFreeRingBuffer<float>(_ringCapacity(config));
                     _openInputStream(config);
                 }
@@ -281,6 +350,11 @@ internal sealed class RustAudioEngine : IAudioEngine
 
     #region IAudioEngine — device enumeration
 
+    /// <summary>
+    /// ASIO drivers are exclusive
+    /// </summary>
+    private bool _isAsioHost() => _config?.HostType == EngineHostType.ASIO;
+
     /// <inheritdoc />
     public List<AudioDeviceInfo> GetOutputDevices()
     {
@@ -288,8 +362,10 @@ internal sealed class RustAudioEngine : IAudioEngine
         if (_eng == null)
             return new List<AudioDeviceInfo>();
 
+        var _devices = _isAsioHost() ? _outputDeviceSnapshot : _eng.EnumerateOutputDevices();
+
         var _result = new List<AudioDeviceInfo>();
-        foreach (var device in _eng.EnumerateOutputDevices())
+        foreach (var device in _devices)
         {
             if (device.MaxOutputChannels <= 0) continue;
             _result.Add(_toDeviceInfo(device, asOutput: true));
@@ -304,8 +380,10 @@ internal sealed class RustAudioEngine : IAudioEngine
         if (_eng == null)
             return new List<AudioDeviceInfo>();
 
+        var _devices = _isAsioHost() ? _inputDeviceSnapshot : _eng.EnumerateInputDevices();
+
         var _result = new List<AudioDeviceInfo>();
-        foreach (var device in _eng.EnumerateInputDevices())
+        foreach (var device in _devices)
         {
             if (device.MaxInputChannels <= 0) continue;
             _result.Add(_toDeviceInfo(device, asOutput: false));
@@ -324,7 +402,11 @@ internal sealed class RustAudioEngine : IAudioEngine
             if (_engine == null || !_outputEnabled || _config == null) return -1;
             if (_running) return -1;
 
-            RustSafe.AudioDevice? _device = _findDeviceByName(_engine.EnumerateOutputDevices(), deviceName, preferOutput: true);
+            if (_isAsioHost())
+                throw _asioSwitchNotSupported(nameof(AudioConfig.OutputDeviceId));
+
+            RustSafe.AudioDevice? _device = _findDeviceByName(
+                _engine.EnumerateOutputDevices(), deviceName, preferOutput: true);
             if (_device == null)
                 return -1;
 
@@ -361,7 +443,11 @@ internal sealed class RustAudioEngine : IAudioEngine
             if (_engine == null || !_inputEnabled || _config == null) return -1;
             if (_running) return -1;
 
-            RustSafe.AudioDevice? _device = _findDeviceByName(_engine.EnumerateInputDevices(), deviceName, preferOutput: false);
+            if (_isAsioHost())
+                throw _asioSwitchNotSupported(nameof(AudioConfig.InputDeviceId));
+
+            RustSafe.AudioDevice? _device = _findDeviceByName(
+                _engine.EnumerateInputDevices(), deviceName, preferOutput: false);
             if (_device == null)
                 return -1;
 
@@ -370,6 +456,14 @@ internal sealed class RustAudioEngine : IAudioEngine
             return 0;
         }
     }
+
+    /// <summary>
+    /// Why picking a different ASIO device on a live engine is turned down instead of attempted.
+    /// </summary>
+    private static NotSupportedException _asioSwitchNotSupported(string configProperty) =>
+        new($"Changing the device of a running ASIO engine is not supported — the driver teardown "
+            + $"it needs corrupts process memory. Set AudioConfig.{configProperty} before "
+            + "Initialize and build a new engine instead.");
 
     /// <inheritdoc />
     public int SetInputDeviceByIndex(int deviceIndex)
