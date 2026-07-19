@@ -1,27 +1,7 @@
 [workspace]
 members = [
     "ownaudio-core",
-    "ownaudio-cpal",
     "ownaudio-ffi",
     "ownaudio-soundtouch",
 ]
-
-# Note: `ownaudio-cpal/asio-sys` is a member too, and there is no way to opt out.
-# Cargo auto-promotes path dependencies living inside the workspace directory;
-# omitting it from `members` does nothing, `exclude` does nothing, and giving it its
-# own `[workspace]` table fails with "multiple workspace roots". Since members are
-# built by a plain `cargo build` even when no enabled dependency wants them, and
-# `asio-sys`'s build script fetches the Steinberg ASIO SDK over the network, the
-# problem is defused inside that crate instead: the SDK sits behind its `sdk`
-# feature (enabled by `cpal/asio`), and without it the build script emits stub
-# bindings. A plain build therefore needs no SDK and no network, on any platform.
-
 resolver = "2"
-
-[workspace.dependencies]
-# Vendored fork of cpal 0.18.1 (upstream commit 0ecb418).
-#
-# Forked because the ASIO host wrote past the end of driver-owned channel buffers,
-# corrupting the host process heap. See ownaudio-cpal/ASIO_OUTPUT_BUFFER_OVERRUN.md
-# for the analysis and ownaudio-cpal/OWNAUDIO_PATCHES.md for what we changed.
-cpal = { path = "ownaudio-cpal" }

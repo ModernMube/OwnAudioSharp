@@ -10,7 +10,7 @@ license = "MIT"
 crate-type = ["lib"]
 
 [dependencies]
-cpal = { workspace = true }
+cpal = "0.18"
 thiserror = "1.0"
 rtrb = "0.3"
 rubato = { version = "0.15", features = ["fft_resampler"] }
