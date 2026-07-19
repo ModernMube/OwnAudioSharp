@@ -15,8 +15,7 @@
 //! allocation behaviour is not something this test can meaningfully assert.
 
 use std::alloc::{GlobalAlloc, Layout, System};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Mutex;
+use std::cell::Cell;
 
 use ownaudio_core::effects::{
     AutoGain, Chorus, Compressor, Delay, Distortion, DynamicAmp, Effect, Enhancer, Equalizer,
@@ -25,17 +24,30 @@ use ownaudio_core::effects::{
 };
 use ownaudio_core::multitrack::{MultiTrackMixer, TrackSource, TrackState};
 
-/// Counts allocations that happen while [`ARMED`] is set; otherwise a pass-through
-/// to the system allocator.
+/// Counts allocations made by the armed thread; otherwise a pass-through to the
+/// system allocator.
 struct CountingAllocator;
 
-static ALLOC_COUNT: AtomicUsize = AtomicUsize::new(0);
-static ARMED: AtomicBool = AtomicBool::new(false);
+// The allocator is process-wide but the arm/count state is per-thread, so a
+// measurement only ever sees its own thread's allocations.  With global state
+// here, libtest's own bookkeeping — spawning test threads, capturing output,
+// reporting results — allocates on other threads outside any lock this file
+// could hold, and those allocations landed on whichever test happened to be
+// armed at the time.  The shortest test lost that race most often.
+//
+// `Cell` has no destructor and the initialiser is `const`, so `with` neither
+// allocates nor recurses back into the allocator; `try_with` keeps a late
+// allocation during thread teardown from panicking.
+thread_local! {
+    static ALLOC_COUNT: Cell<usize> = const { Cell::new(0) };
+    static ARMED: Cell<bool> = const { Cell::new(false) };
+}
 
 #[inline]
 fn note_alloc() {
-    if ARMED.load(Ordering::Relaxed) {
-        ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
+    let armed = ARMED.try_with(|a| a.get()).unwrap_or(false);
+    if armed {
+        let _ = ALLOC_COUNT.try_with(|c| c.set(c.get() + 1));
     }
 }
 
@@ -63,32 +75,18 @@ unsafe impl GlobalAlloc for CountingAllocator {
 #[global_allocator]
 static ALLOCATOR: CountingAllocator = CountingAllocator;
 
-/// Runs `f` with the allocator armed and returns the number of allocations it made.
+/// Runs `f` with this thread's allocator armed and returns the number of
+/// allocations it made.
 fn count_allocs(f: impl FnOnce()) -> usize {
-    ALLOC_COUNT.store(0, Ordering::Relaxed);
-    ARMED.store(true, Ordering::SeqCst);
+    ALLOC_COUNT.with(|c| c.set(0));
+    ARMED.with(|a| a.set(true));
     f();
-    ARMED.store(false, Ordering::SeqCst);
-    ALLOC_COUNT.load(Ordering::Relaxed)
-}
-
-/// Serialises the three tests in this binary.  The `ARMED`/`ALLOC_COUNT` state and
-/// the process-wide allocator are global, so if these tests ran concurrently (the
-/// default under `cargo test`) one test's setup allocations would be counted while
-/// another test has the allocator armed — a cross-test race that misattributed
-/// those allocations (e.g. to whichever effect happened to be measured at the
-/// time).  Holding this lock for each test's whole body guarantees only one test
-/// arms/measures at a time.  `into_inner` ignores poisoning so one failing test
-/// does not cascade into the others.
-static SERIAL: Mutex<()> = Mutex::new(());
-
-fn serial_guard() -> std::sync::MutexGuard<'static, ()> {
-    SERIAL.lock().unwrap_or_else(|e| e.into_inner())
+    ARMED.with(|a| a.set(false));
+    ALLOC_COUNT.with(|c| c.get())
 }
 
 #[test]
 fn effect_process_is_allocation_free_in_steady_state() {
-    let _serial = serial_guard();
     const SAMPLE_RATE: f32 = 48_000.0;
     const CHANNELS: u16 = 2;
     const FRAMES: usize = 512;
@@ -171,7 +169,6 @@ unsafe extern "C" fn vst_passthrough(
 
 #[test]
 fn vst_effect_process_is_allocation_free_in_steady_state() {
-    let _serial = serial_guard();
     // The VST bridge deinterleaves into pre-allocated planar scratch, calls the
     // (non-allocating) plugin stub, and reinterleaves — none of which may touch
     // the allocator on the audio thread once the scratch is sized in `new`.
@@ -215,7 +212,6 @@ impl TrackSource for SilenceSource {
 
 #[test]
 fn mixer_mix_is_allocation_free_in_steady_state() {
-    let _serial = serial_guard();
     // The top-level real-time render call: draining the (empty) command queue,
     // clearing the output, and additively mixing every active track must not touch
     // the allocator once the per-track scratch has been sized on the first blocks.
