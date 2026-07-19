@@ -68,9 +68,15 @@ namespace OwnaudioInput
                 {
                     var selectedDevice = inputDevices[deviceIndex];
                     Console.WriteLine($"Selecting device: {selectedDevice.Name}");
-                    
+
+                    // Rebuild the engine with the chosen device baked into the config rather than
+                    // switching it live. ASIO cannot change the device of a running engine at all,
+                    // and re-initializing works the same on every host, so there is no special case.
                     OwnaudioNet.Stop();
-                    OwnaudioNet.Engine.SetInputDeviceByName(selectedDevice.Name);
+                    OwnaudioNet.Shutdown();
+
+                    config.InputDeviceId = selectedDevice.Name;
+                    OwnaudioNet.Initialize(config);
                     OwnaudioNet.Start();
                 }
                 else
