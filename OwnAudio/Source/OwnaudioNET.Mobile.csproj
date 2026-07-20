@@ -18,7 +18,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Mobile</PackageId>
-    <Version>4.0.0-preview.32</Version>
+    <Version>4.0.0-preview.33</Version>
     <Authors>ModernMube</Authors>
     <Description>Cross-platform audio engine for .NET mobile apps (Android, iOS), built on a native Rust core. Playback, recording, multi-track mixing, effects, VST3 hosting, matchering and the Avalonia waveform display, without the ONNX-based analysis features (no chord detection, no note transcription). AOT-compatible and trimmable.</Description>
     <PackageTags>audio;cross-platform;android;ios;mobile;sound;multitrack</PackageTags>

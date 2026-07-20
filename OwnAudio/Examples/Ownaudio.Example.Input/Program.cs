@@ -24,7 +24,7 @@ namespace OwnaudioInput
             // Initialize the OwnAudio engine
             var config = OwnaudioNet.CreateDefaultConfig();
             config.EnableInput = true;
-            config.HostType = Ownaudio.Core.EngineHostType.ASIO; // Force WASAPI for better compatibility
+            config.HostType = Ownaudio.Core.EngineHostType.None; // Force WASAPI for better compatibility
             OwnaudioNet.Initialize(config);
 
             if (!OwnaudioNet.IsInitialized)
