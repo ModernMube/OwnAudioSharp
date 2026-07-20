@@ -14,7 +14,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
     <PackageId>OwnAudioSharp</PackageId>
-    <Version>4.0.0-preview.33</Version>
+    <Version>4.0.0-preview.35</Version>
     <Authors>ModernMube</Authors>
     <Description>Complete cross-platform audio engine for .NET desktop apps (Windows, Linux, macOS), built on a native Rust core. Playback, recording, multi-track mixing, effects, VST3 hosting and MIDI, plus the analysis features (chord detection, note transcription, matchering) and the Avalonia waveform display. AOT-compatible and trimmable.</Description>
     <PackageTags>audio;cross-platform;windows;linux;macos;desktop;sound;multitrack</PackageTags>

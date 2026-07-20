@@ -259,36 +259,10 @@ public sealed partial class StreamingSource : BaseAudioSource
         {
             if (_consumeSeekRequest()) continue;
 
-            var _track = RustTrack;
-            if (_track == null || State != AudioState.Playing)
-            {
-                _wake.Wait();
-                _wake.Reset();
-                continue;
-            }
-
-            int _accepted;
+            PumpStep _step;
             try
             {
-                if (_pendingSamples == 0)
-                {
-                    int _free = _track.FreeSampleCount;
-                    int _room = Math.Min(_targetSamples - (FeedCapacitySamples - _free), _free);
-                    if (_room < _channels)
-                    {
-                        _wake.Wait(IdlePollMilliseconds);
-                        _wake.Reset();
-                        continue;
-                    }
-
-                    int _frames = Math.Min(_chunkFrames, _room / _channels);
-                    _render(_chunk.AsSpan(0, _frames * _channels), _frames, _renderFrame);
-                    _renderFrame += _frames;
-                    _pendingSamples = _frames * _channels;
-                    _pendingOffset = 0;
-                }
-
-                _accepted = _track.Write(_chunk.AsSpan(_pendingOffset, _pendingSamples));
+                _step = _feedStep(_targetSamples, _channels);
             }
             catch (Exception ex)
             {
@@ -296,14 +270,57 @@ public sealed partial class StreamingSource : BaseAudioSource
                 return;
             }
 
+            switch (_step)
+            {
+                case PumpStep.Idle:
+                    _wake.Wait(); _wake.Reset();
+                    break;
+                case PumpStep.Throttle:
+                    _wake.Wait(IdlePollMilliseconds); _wake.Reset();
+                    break;
+                //Progress: stuff landed, straight back for the next chunk
+            }
+        }
+    }
+
+    /// <summary>What one feed attempt did - tells the pump how long to wait before the next.</summary>
+    private enum PumpStep
+    {
+        Idle,       //nothing to feed, park on the wake handle
+        Throttle,   //feed's full for now, short poll then retry
+        Progress    //samples went in, loop again now
+    }
+
+    /// <summary>
+    /// Renders + writes one chunk under the backend lock, so a detach on another thread can't
+    /// free the track between the null check and the native Write. Detach nulls the track under
+    /// the same lock, so after that we just see null here and back off.
+    /// </summary>
+    private PumpStep _feedStep(int targetSamples, int channels)
+    {
+        lock (_rustBackendLock)
+        {
+            var _track = _rustTrack;
+            if(_track == null || State != AudioState.Playing) return PumpStep.Idle;
+
+            if (_pendingSamples == 0)
+            {
+                int _free = _track.FreeSampleCount;
+                int _room = Math.Min(targetSamples - (FeedCapacitySamples - _free), _free);
+                if (_room < channels) return PumpStep.Throttle;
+
+                int _frames = Math.Min(_chunkFrames, _room / channels);
+                _render(_chunk.AsSpan(0, _frames * channels), _frames, _renderFrame);
+                _renderFrame += _frames;
+                _pendingSamples = _frames * channels;
+                _pendingOffset = 0;
+            }
+
+            int _accepted = _track.Write(_chunk.AsSpan(_pendingOffset, _pendingSamples));
             _pendingOffset += _accepted;
             _pendingSamples -= _accepted;
 
-            if (_accepted == 0)
-            {
-                _wake.Wait(IdlePollMilliseconds);
-                _wake.Reset();
-            }
+            return _accepted > 0 ? PumpStep.Progress : PumpStep.Throttle;
         }
     }
 
@@ -326,12 +343,15 @@ public sealed partial class StreamingSource : BaseAudioSource
         _pendingSamples = 0;
         _pendingOffset = 0;
 
-        try
+        lock (_rustBackendLock)
         {
-            RustTrack?.ResetFeed();
-            if (_rustNative) _rustRebaseAfterFeedReset(_target / (double)_config.SampleRate);
+            try
+            {
+                _rustTrack?.ResetFeed();
+                if (_rustNative) _rustRebaseAfterFeedReset(_target / (double)_config.SampleRate);
+            }
+            catch { }
         }
-        catch { }
 
         return true;
     }
