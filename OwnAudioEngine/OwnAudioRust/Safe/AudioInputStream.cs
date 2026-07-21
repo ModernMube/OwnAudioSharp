@@ -97,6 +97,25 @@ public sealed class AudioInputStream : IDisposable
     }
 
     /// <summary>
+    /// Hardware capture latency in frames — how long ago the samples in the buffer hit the ADC.
+    /// Zero until the stream has actually captured a buffer, or when the backend keeps quiet about
+    /// it. Subtract it from the capture position to line a recording up with the real timeline.
+    /// </summary>
+    public uint LatencyFrames
+    {
+        get
+        {
+            Guard.NotDisposed(_disposed, nameof(AudioInputStream));
+
+            int code = OwnAudioNative.ownaudio_v1_input_stream_get_latency_frames(
+                _handle.DangerousGetHandle(), out uint frames);
+            ErrorCodeMapper.ThrowIfError(code, nameof(LatencyFrames));
+
+            return frames;
+        }
+    }
+
+    /// <summary>
     /// Native stream goes first so the callback is quiet before we drop the delegate pin.
     /// Idempotent.
     /// </summary>

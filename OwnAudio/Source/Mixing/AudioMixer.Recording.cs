@@ -1,4 +1,5 @@
 using Ownaudio.Audio.Tracks;
+using Ownaudio.Core;
 
 namespace OwnaudioNET.Mixing;
 
@@ -35,11 +36,29 @@ public sealed partial class AudioMixer
     private volatile bool _recorderDrainRunning;
 
     /// <summary>
+    /// Leading interleaved samples still to drop for latency compensation. Set once at start,
+    /// counted down by the single writer (drain thread, then the stop-flush), so no lock.
+    /// </summary>
+    private int _recordingSkipSamples;
+
+    /// <summary>
+    /// Frames trimmed off the front of the last recording for latency compensation. 0 when
+    /// compensation was off or the backend reported no latency. Handy for logging / verifying.
+    /// </summary>
+    public int LastRecordingLatencyOffsetFrames { get; private set; }
+
+    /// <summary>
     /// Starts capturing the master output into a WAV file. The mix is rendered natively,
     /// a background thread does the disk I/O so the audio thread never waits on it.
     /// </summary>
     /// <param name="filePath"></param>
-    public void StartRecording(string filePath)
+    /// <param name="compensateInputLatency">
+    /// When true, drops the input hardware latency (<see cref="IAudioEngine.InputLatencyFrames"/>)
+    /// worth of frames off the front, so the take lines up with the moment recording started
+    /// instead of trailing the capture pipeline. No-op when input isn't running or the backend
+    /// reports no latency. Check <see cref="LastRecordingLatencyOffsetFrames"/> for what was applied.
+    /// </param>
+    public void StartRecording(string filePath, bool compensateInputLatency = false)
     {
         _throwIfDisposed();
 
@@ -51,7 +70,7 @@ public sealed partial class AudioMixer
             if (_isRecording)
                 throw new InvalidOperationException("Already recording. Call StopRecording() first.");
 
-            _startRustCaptureRecording(filePath);
+            _startRustCaptureRecording(filePath, compensateInputLatency);
         }
     }
 
@@ -59,7 +78,8 @@ public sealed partial class AudioMixer
     /// Turns on native master capture and spins up the drain thread. Call under _recorderLock.
     /// </summary>
     /// <param name="filePath"></param>
-    private void _startRustCaptureRecording(string filePath)
+    /// <param name="compensateInputLatency"></param>
+    private void _startRustCaptureRecording(string filePath, bool compensateInputLatency)
     {
         MultiTrackSession? _session;
         lock (_rustSessionLock) { _session = _rustSession; }
@@ -67,6 +87,11 @@ public sealed partial class AudioMixer
         if (_session is null)
             throw new InvalidOperationException(
                 "Cannot record before audio is playing. Add a source and start the mixer, then start recording.");
+
+        // Grab the latency now, while the stream is live and the number is real.
+        int _skipFrames = compensateInputLatency ? _engine.InputLatencyFrames : 0;
+        LastRecordingLatencyOffsetFrames = _skipFrames;
+        _recordingSkipSamples = _skipFrames * _config.Channels;
 
         try
         {
@@ -132,7 +157,7 @@ public sealed partial class AudioMixer
                 float[] _tail = new float[4096];
                 int _read;
                 while ((_read = _session.ReadCapture(_tail)) > 0)
-                    _recorder.WriteSamples(_tail.AsSpan(0, _read));
+                    _writeCapturedSamples(_tail.AsSpan(0, _read));
             }
 
             _session?.StopCapture();
@@ -173,7 +198,7 @@ public sealed partial class AudioMixer
 
             try
             {
-                _recorder?.WriteSamples(_drain.AsSpan(0, _read));
+                _writeCapturedSamples(_drain.AsSpan(0, _read));
             }
             catch
             {
@@ -182,5 +207,27 @@ public sealed partial class AudioMixer
                 break;
             }
         }
+    }
+
+    /// <summary>
+    /// Writes captured samples to the WAV, eating the latency-compensation pre-roll first.
+    /// Single writer at a time (drain thread, then the stop-flush), so the counter needs no lock.
+    /// </summary>
+    /// <param name="samples"></param>
+    private void _writeCapturedSamples(ReadOnlySpan<float> samples)
+    {
+        if (_recordingSkipSamples > 0)
+        {
+            if (_recordingSkipSamples >= samples.Length)
+            {
+                _recordingSkipSamples -= samples.Length;
+                return;
+            }
+
+            samples = samples.Slice(_recordingSkipSamples);
+            _recordingSkipSamples = 0;
+        }
+
+        _recorder?.WriteSamples(samples);
     }
 }

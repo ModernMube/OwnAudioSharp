@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 use cpal::traits::StreamTrait;
@@ -17,6 +18,10 @@ pub struct OutputStream {
     /// Shared error state written by the cpal error callback; the control side
     /// polls it (via [`OutputStream::error_state`]) to detect device loss.
     pub(crate) error_state: Arc<StreamErrorState>,
+    /// Hardware playback latency in frames, refreshed by the data callback from
+    /// the cpal timestamp (`playback - callback`). 0 until the first callback
+    /// fires, or when the backend does not report a latency.
+    pub(crate) latency_frames: Arc<AtomicU32>,
 }
 
 impl OutputStream {
@@ -36,6 +41,14 @@ impl OutputStream {
     pub fn error_state(&self) -> &Arc<StreamErrorState> {
         &self.error_state
     }
+
+    /// Hardware playback latency in frames — how far ahead of the DAC the
+    /// callback runs. 0 means not yet known (no callback fired) or the backend
+    /// does not report one. Read it after playback has started for a live value.
+    #[inline]
+    pub fn latency_frames(&self) -> u32 {
+        self.latency_frames.load(Ordering::Relaxed)
+    }
 }
 
 /// A running or paused audio input stream.
@@ -48,6 +61,10 @@ pub struct InputStream {
     /// Shared error state written by the cpal error callback; the control side
     /// polls it (via [`InputStream::error_state`]) to detect device loss.
     pub(crate) error_state: Arc<StreamErrorState>,
+    /// Hardware capture latency in frames, refreshed by the data callback from
+    /// the cpal timestamp (`callback - capture`). 0 until the first callback
+    /// fires, or when the backend does not report a latency.
+    pub(crate) latency_frames: Arc<AtomicU32>,
 }
 
 impl InputStream {
@@ -66,5 +83,14 @@ impl InputStream {
     #[inline]
     pub fn error_state(&self) -> &Arc<StreamErrorState> {
         &self.error_state
+    }
+
+    /// Hardware capture latency in frames — how long ago the samples in each
+    /// buffer actually hit the ADC. 0 means not yet known (no callback fired) or
+    /// the backend does not report one. Subtract it from the capture position to
+    /// line a recording up with the real timeline.
+    #[inline]
+    pub fn latency_frames(&self) -> u32 {
+        self.latency_frames.load(Ordering::Relaxed)
     }
 }

@@ -397,6 +397,38 @@ pub extern "C" fn ownaudio_v1_output_stream_get_error_state(
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
 }
 
+/// Writes the stream's hardware playback latency (in frames) to `*out_frames`.
+///
+/// This is how far ahead of the DAC the audio callback runs — add it to a
+/// playback position to know when a sample will actually be heard. cpal folds
+/// the backend latency into its timestamps and the core reads it back each
+/// callback, so the value is `0` until playback has started (no callback fired
+/// yet) or when the backend does not report a latency.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success, `NullPointer` (6) if
+/// `out_frames` is null, or `InvalidHandle` if `stream` is null / invalid.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_output_stream_get_latency_frames(
+    stream: *mut OwnAudioOutputStreamHandle,
+    out_frames: *mut u32,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_frames.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let wrapper = match unsafe { output_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        unsafe {
+            *out_frames = wrapper.inner.latency_frames();
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
 /// Destroys an output stream and releases all associated resources.
 ///
 /// Passing `null` is safe and has no effect.
@@ -552,6 +584,38 @@ pub extern "C" fn ownaudio_v1_input_stream_get_error_state(
             unsafe {
                 *out_count = state.count();
             }
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+}
+
+/// Writes the stream's hardware capture latency (in frames) to `*out_frames`.
+///
+/// This is how long ago the samples in each buffer actually hit the ADC —
+/// subtract it from the capture position to line a recording up with the real
+/// timeline. cpal folds the backend latency into its timestamps and the core
+/// reads it back each callback, so the value is `0` until capture has started
+/// (no callback fired yet) or when the backend does not report a latency.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success, `NullPointer` (6) if
+/// `out_frames` is null, or `InvalidHandle` if `stream` is null / invalid.
+#[no_mangle]
+pub extern "C" fn ownaudio_v1_input_stream_get_latency_frames(
+    stream: *mut OwnAudioInputStreamHandle,
+    out_frames: *mut u32,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_frames.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let wrapper = match unsafe { input_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        unsafe {
+            *out_frames = wrapper.inner.latency_frames();
         }
         OwnAudioErrorCode::Success as i32
     }));

@@ -184,7 +184,8 @@ namespace OwnaudioInput
                                 if (!isRecording)
                                 {
                                     Console.WriteLine("Starting recording...");
-                                    mixer.StartRecording(recordFilePath);
+                                    // Live input: trim the capture delay so the take starts where we hit record.
+                                    mixer.StartRecording(recordFilePath, compensateInputLatency: true);
                                     isRecording = true;
                                 }
                                 else
@@ -192,6 +193,7 @@ namespace OwnaudioInput
                                     Console.WriteLine("Stopping recording...");
                                     mixer.StopRecording();
                                     isRecording = false;
+                                    Console.WriteLine($"Trimmed {mixer.LastRecordingLatencyOffsetFrames} frames of input latency.");
                                 }
                                 break;
 

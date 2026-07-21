@@ -192,18 +192,20 @@ internal sealed class RustAudioEngine : IAudioEngine
 
                 (string? _outputId, string? _inputId) = _resolveDeviceIds(config);
 
-                if (_outputEnabled)
-                {
-                    _selectedOutputDevice = _findDevice(_outputDeviceSnapshot, _outputId, preferOutput: true);
-                    _outputRing = new LockFreeRingBuffer<float>(_ringCapacity(config));
-                    _openOutputStream(config);
-                }
-
+                // Capture first, always. One ASIO driver feeds both ways, and if output opens
+                // ahead of it the buffers come up render-only: callback fires, no error, dead air.
                 if (_inputEnabled)
                 {
                     _selectedInputDevice = _findDevice(_inputDeviceSnapshot, _inputId, preferOutput: false);
                     _inputRing = new LockFreeRingBuffer<float>(_ringCapacity(config));
                     _openInputStream(config);
+                }
+
+                if (_outputEnabled)
+                {
+                    _selectedOutputDevice = _findDevice(_outputDeviceSnapshot, _outputId, preferOutput: true);
+                    _outputRing = new LockFreeRingBuffer<float>(_ringCapacity(config));
+                    _openOutputStream(config);
                 }
 
                 _status = EngineStatus.Idle;
@@ -378,6 +380,26 @@ internal sealed class RustAudioEngine : IAudioEngine
                 + "ASIO driver can be loaded per process. Use the same device for both.");
 
         return (_outputId, _inputId);
+    }
+
+    /// <inheritdoc />
+    public int OutputLatencyFrames
+    {
+        get
+        {
+            lock (_stateLock)
+                return _outputStream is { } _s ? (int)_s.LatencyFrames : 0;
+        }
+    }
+
+    /// <inheritdoc />
+    public int InputLatencyFrames
+    {
+        get
+        {
+            lock (_stateLock)
+                return _inputStream is { } _s ? (int)_s.LatencyFrames : 0;
+        }
     }
 
     /// <inheritdoc />

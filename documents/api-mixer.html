@@ -133,7 +133,15 @@ IEffectProcessor[] fx = mixer.GetMasterEffects();</code></pre></div>
 <p>Records the final mixed output — post master-effects — to a WAV file.</p>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">mixer.StartRecording("session.wav"); // start capturing
 // ... playback ...
-mixer.StopRecording();               // finalize and close the WAV file</code></pre></div>
+mixer.StopRecording();               // finalize and close the WAV file
+
+// Recording live input? Trim the capture delay so the take starts
+// where you hit record, not a few ms late.
+mixer.StartRecording("take.wav", compensateInputLatency: true);
+// ...
+mixer.StopRecording();
+int trimmed = mixer.LastRecordingLatencyOffsetFrames; // frames dropped off the front</code></pre></div>
+<div class="callout callout-info"><div class="callout-icon">💡</div><p><code>compensateInputLatency</code> drops <a href="api-core.html#latency">InputLatencyFrames</a> worth of frames off the start, so a live take lines up with the moment you pressed record. Off by default (samples untouched); a no-op when input isn't running or the backend reports no latency.</p></div>
 
 <h2 id="vu-metering">VU Metering</h2>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Update at ~10Hz (100ms timer)

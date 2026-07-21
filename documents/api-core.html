@@ -39,6 +39,8 @@
     <tr><td><code>IsInitialized</code></td><td><code>bool</code></td><td>Whether the audio system has been initialized.</td></tr>
     <tr><td><code>IsRunning</code></td><td><code>bool</code></td><td>Whether the audio engine is actively processing.</td></tr>
     <tr><td><code>Engine</code></td><td><code>AudioEngineWrapper?</code></td><td>The active engine wrapper. <code>null</code> before initialization. Access <code>UnderlyingEngine</code> for the <code>IAudioEngine</code>.</td></tr>
+    <tr><td><code>InputLatencyFrames</code></td><td><code>int</code></td><td>Hardware capture latency in frames. <code>0</code> before capture starts. See <a href="#latency">Hardware Latency</a>.</td></tr>
+    <tr><td><code>OutputLatencyFrames</code></td><td><code>int</code></td><td>Hardware playback latency in frames. <code>0</code> before playback starts. See <a href="#latency">Hardware Latency</a>.</td></tr>
     <tr><td><code>Version</code></td><td><code>Version</code></td><td>Library version (4.0.0).</td></tr>
   </tbody>
 </table></div>
@@ -126,6 +128,19 @@ OwnaudioNet.ResumeDeviceMonitoring();</code></pre></div>
     <tr><td><code>State</code></td><td><code>AudioDeviceState</code></td><td><code>Active</code>, <code>Disabled</code>, <code>NotPresent</code>, <code>Unplugged</code>.</td></tr>
   </tbody>
 </table></div>
+
+<h2 id="latency">Hardware Latency</h2>
+<p>The samples you capture were grabbed a bit <em>before</em> the callback saw them, and what you send out won't hit the speaker until a bit <em>after</em>. That gap is the driver's hardware latency. The engine reads it back from the backend once audio is flowing and hands it to you in frames — divide by the sample rate for seconds. It's <code>0</code> until the first buffer runs, or when the backend doesn't report one.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Frames, live once the engine is running
+int inFrames  = OwnaudioNet.InputLatencyFrames;
+int outFrames = OwnaudioNet.OutputLatencyFrames;
+
+double inMs = inFrames * 1000.0 / config.SampleRate;
+
+// Line a recording up with the real timeline: the buffer you just
+// got was actually captured inFrames earlier, so shift it back.
+long trueCapturePosition = playbackPosition - inFrames;</code></pre></div>
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>Mainly useful when you line captured audio up against a timeline or a backing track — recording and overdub work. Pure playback doesn't need it. On ASIO the driver reports real figures; some WASAPI/CoreAudio setups report <code>0</code> when the number isn't available.</p></div>
 
 <h2 id="direct-io">Direct Audio I/O</h2>
 <p>These methods bypass the mixer. Prefer <a href="api-mixer.html">AudioMixer</a> + sources for most use cases.</p>

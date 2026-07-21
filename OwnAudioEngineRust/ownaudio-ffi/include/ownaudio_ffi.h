@@ -1267,6 +1267,21 @@ int32_t ownaudio_v1_output_stream_get_error_state(struct OwnAudioOutputStreamHan
                                                   uint64_t *out_count);
 
 /**
+ * Writes the stream's hardware playback latency (in frames) to `*out_frames`.
+ *
+ * This is how far ahead of the DAC the audio callback runs — add it to a
+ * playback position to know when a sample will actually be heard. cpal folds
+ * the backend latency into its timestamps and the core reads it back each
+ * callback, so the value is `0` until playback has started (no callback fired
+ * yet) or when the backend does not report a latency.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success, `NullPointer` (6) if
+ * `out_frames` is null, or `InvalidHandle` if `stream` is null / invalid.
+ */
+int32_t ownaudio_v1_output_stream_get_latency_frames(struct OwnAudioOutputStreamHandle *stream,
+                                                     uint32_t *out_frames);
+
+/**
  * Destroys an output stream and releases all associated resources.
  *
  * Passing `null` is safe and has no effect.
@@ -1314,6 +1329,21 @@ int32_t ownaudio_v1_input_stream_pause(struct OwnAudioInputStreamHandle *stream)
 int32_t ownaudio_v1_input_stream_get_error_state(struct OwnAudioInputStreamHandle *stream,
                                                  uint32_t *out_kind,
                                                  uint64_t *out_count);
+
+/**
+ * Writes the stream's hardware capture latency (in frames) to `*out_frames`.
+ *
+ * This is how long ago the samples in each buffer actually hit the ADC —
+ * subtract it from the capture position to line a recording up with the real
+ * timeline. cpal folds the backend latency into its timestamps and the core
+ * reads it back each callback, so the value is `0` until capture has started
+ * (no callback fired yet) or when the backend does not report a latency.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success, `NullPointer` (6) if
+ * `out_frames` is null, or `InvalidHandle` if `stream` is null / invalid.
+ */
+int32_t ownaudio_v1_input_stream_get_latency_frames(struct OwnAudioInputStreamHandle *stream,
+                                                    uint32_t *out_frames);
 
 /**
  * Destroys an input stream and releases all associated resources.

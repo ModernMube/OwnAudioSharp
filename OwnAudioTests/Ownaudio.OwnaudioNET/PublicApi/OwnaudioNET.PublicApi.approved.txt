@@ -778,8 +778,10 @@ namespace OwnaudioNET.Engine
         public AudioEngineWrapper(Ownaudio.Core.IAudioEngine engine, Ownaudio.Core.AudioConfig config, int bufferMultiplier = 8) { }
         public Ownaudio.Core.AudioConfig Config { get; }
         public int FramesPerBuffer { get; }
+        public int InputLatencyFrames { get; }
         public bool IsRunning { get; }
         public int OutputBufferAvailable { get; }
+        public int OutputLatencyFrames { get; }
         public long TotalPumpedFrames { get; }
         public long TotalUnderruns { get; }
         public Ownaudio.Core.IAudioEngine UnderlyingEngine { get; }
@@ -807,6 +809,8 @@ namespace OwnaudioNET.Engine
     {
         public MockAudioEngine(bool generateTestSignal = false) { }
         public int FramesPerBuffer { get; }
+        public int InputLatencyFrames { get; }
+        public int OutputLatencyFrames { get; }
         public int ReceiveCallCount { get; }
         public int SendCallCount { get; }
         public Ownaudio.Core.EngineStatus Status { get; }
@@ -1358,6 +1362,7 @@ namespace OwnaudioNET.Mixing
         public Ownaudio.Core.AudioConfig Config { get; }
         public bool IsRecording { get; }
         public bool IsRunning { get; }
+        public int LastRecordingLatencyOffsetFrames { get; }
         public float LeftPeak { get; }
         public OwnaudioNET.Synchronization.MasterClock MasterClock { get; }
         public float MasterPan { get; set; }
@@ -1389,7 +1394,7 @@ namespace OwnaudioNET.Mixing
         public void Seek(double positionInSeconds) { }
         public void Start() { }
         public void StartPreparedSources(double startPosition = 0) { }
-        public void StartRecording(string filePath) { }
+        public void StartRecording(string filePath, bool compensateInputLatency = false) { }
         public void Stop() { }
         public void StopRecording() { }
         public override string ToString() { }
@@ -1572,8 +1577,10 @@ namespace OwnaudioNET
     public static class OwnaudioNet
     {
         public static OwnaudioNET.Engine.AudioEngineWrapper? Engine { get; }
+        public static int InputLatencyFrames { get; }
         public static bool IsInitialized { get; }
         public static bool IsRunning { get; }
+        public static int OutputLatencyFrames { get; }
         public static System.Version Version { get; }
         public static event System.EventHandler<OwnaudioNET.NetworkSync.ConnectionStateChangedEventArgs>? NetworkSyncConnectionChanged;
         public static bool BroadcastCommand(ref OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command command) { }

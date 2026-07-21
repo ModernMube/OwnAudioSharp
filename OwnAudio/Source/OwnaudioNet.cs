@@ -207,6 +207,19 @@ public static partial class OwnaudioNet
     }
 
     /// <summary>
+    /// Hardware playback latency in frames — how far ahead of the DAC the engine runs. 0 before
+    /// Initialize or until playback has started. Divide by SampleRate for seconds.
+    /// </summary>
+    public static int OutputLatencyFrames => _engineWrapper?.OutputLatencyFrames ?? 0;
+
+    /// <summary>
+    /// Hardware capture latency in frames — how long ago the samples now arriving hit the ADC.
+    /// 0 before Initialize or until capture has started. Subtract it from the capture position to
+    /// line a recording up with the real timeline.
+    /// </summary>
+    public static int InputLatencyFrames => _engineWrapper?.InputLatencyFrames ?? 0;
+
+    /// <summary>
     /// 48k stereo presets, only the buf size differs.
     /// </summary>
     /// <returns></returns>

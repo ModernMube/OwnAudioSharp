@@ -66,6 +66,20 @@ namespace Ownaudio.Core
         int Receives(Span<float> destination);
 
         /// <summary>
+        /// Hardware playback latency in frames — how far ahead of the DAC the engine runs.
+        /// 0 until output has started, or when the backend does not report one. Add it to a
+        /// playback position to know when a sample is actually heard.
+        /// </summary>
+        int OutputLatencyFrames { get; }
+
+        /// <summary>
+        /// Hardware capture latency in frames — how long ago the samples now arriving hit the ADC.
+        /// 0 until capture has started, or when the backend does not report one. Subtract it from
+        /// the capture position to line a recording up with the real timeline.
+        /// </summary>
+        int InputLatencyFrames { get; }
+
+        /// <summary>
         /// Every output device we can see.
         /// </summary>
         List<AudioDeviceInfo> GetOutputDevices();

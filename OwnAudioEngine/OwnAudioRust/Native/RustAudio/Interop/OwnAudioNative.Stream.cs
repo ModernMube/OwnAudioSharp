@@ -77,6 +77,17 @@ internal static unsafe partial class OwnAudioNative
         out ulong outCount);
 
     /// <summary>
+    /// Hardware playback latency in frames — how far ahead of the DAC the callback runs.
+    /// Zero until the stream has actually played a buffer, or when the backend stays quiet about it.
+    /// </summary>
+    /// <param name="stream"></param>
+    /// <param name="outFrames">receives the latency in frames</param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_output_stream_get_latency_frames(
+        IntPtr stream,
+        out uint outFrames);
+
+    /// <summary>
     /// Kills the output stream. Zero handle is fine.
     /// </summary>
     /// <param name="stream"></param>
@@ -130,6 +141,17 @@ internal static unsafe partial class OwnAudioNative
         IntPtr stream,
         out uint outKind,
         out ulong outCount);
+
+    /// <summary>
+    /// Hardware capture latency in frames — how long ago the samples in the buffer hit the ADC.
+    /// Zero until the stream has actually captured a buffer, or when the backend stays quiet about it.
+    /// </summary>
+    /// <param name="stream"></param>
+    /// <param name="outFrames">receives the latency in frames</param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_input_stream_get_latency_frames(
+        IntPtr stream,
+        out uint outFrames);
 
     /// <summary>
     /// Kills the input stream. Zero handle is fine.

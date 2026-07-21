@@ -221,6 +221,12 @@ public sealed class MockAudioEngine : IAudioEngine
     }
 
     /// <inheritdoc/>
+    public int OutputLatencyFrames => 0;
+
+    /// <inheritdoc/>
+    public int InputLatencyFrames => 0;
+
+    /// <inheritdoc/>
     public List<AudioDeviceInfo> GetOutputDevices()
     {
         return new List<AudioDeviceInfo>

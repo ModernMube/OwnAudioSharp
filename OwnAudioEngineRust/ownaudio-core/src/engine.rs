@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::DeviceTrait;
@@ -157,6 +158,13 @@ impl AudioEngine {
         let pre_alloc =
             config.buffer_size_frames.unwrap_or(4096) as usize * config.channels as usize;
 
+        // Hardware playback latency, refreshed from the cpal timestamp on every
+        // callback (`playback - callback`). The Arc is cloned into whichever
+        // sample-format arm below actually runs, and the same Arc is handed to
+        // the returned stream so the control side can read it.
+        let latency_frames = Arc::new(AtomicU32::new(0));
+        let sample_rate = config.sample_rate;
+
         // cpal 0.18: build_*_stream takes StreamConfig by value (it is Copy).
         //
         // Every data callback body is wrapped in `rt_guard::guard_output` so a
@@ -164,19 +172,25 @@ impl AudioEngine {
         // never unwind across the cpal/C audio-thread frame (UB).  On panic the
         // device buffer is filled with per-format silence.
         let stream = match sample_format {
-            cpal::SampleFormat::F32 => cpal_device.build_output_stream(
-                stream_config,
-                move |data: &mut [f32], _| {
-                    crate::rt_guard::guard_output(data, 0.0, |buf| callback(buf));
-                },
-                err_fn,
-                None,
-            )?,
-            cpal::SampleFormat::I16 => {
-                let mut tmp = vec![0f32; pre_alloc];
+            cpal::SampleFormat::F32 => {
+                let lat = Arc::clone(&latency_frames);
                 cpal_device.build_output_stream(
                     stream_config,
-                    move |data: &mut [i16], _| {
+                    move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
+                        store_output_latency(&lat, info, sample_rate);
+                        crate::rt_guard::guard_output(data, 0.0, |buf| callback(buf));
+                    },
+                    err_fn,
+                    None,
+                )?
+            }
+            cpal::SampleFormat::I16 => {
+                let mut tmp = vec![0f32; pre_alloc];
+                let lat = Arc::clone(&latency_frames);
+                cpal_device.build_output_stream(
+                    stream_config,
+                    move |data: &mut [i16], info: &cpal::OutputCallbackInfo| {
+                        store_output_latency(&lat, info, sample_rate);
                         crate::rt_guard::guard_output(data, 0i16, |data| {
                             if data.len() > tmp.len() {
                                 tmp.resize(data.len(), 0.0);
@@ -192,9 +206,11 @@ impl AudioEngine {
             }
             cpal::SampleFormat::I32 => {
                 let mut tmp = vec![0f32; pre_alloc];
+                let lat = Arc::clone(&latency_frames);
                 cpal_device.build_output_stream(
                     stream_config,
-                    move |data: &mut [i32], _| {
+                    move |data: &mut [i32], info: &cpal::OutputCallbackInfo| {
+                        store_output_latency(&lat, info, sample_rate);
                         crate::rt_guard::guard_output(data, 0i32, |data| {
                             if data.len() > tmp.len() {
                                 tmp.resize(data.len(), 0.0);
@@ -210,9 +226,11 @@ impl AudioEngine {
             }
             cpal::SampleFormat::U16 => {
                 let mut tmp = vec![0f32; pre_alloc];
+                let lat = Arc::clone(&latency_frames);
                 cpal_device.build_output_stream(
                     stream_config,
-                    move |data: &mut [u16], _| {
+                    move |data: &mut [u16], info: &cpal::OutputCallbackInfo| {
+                        store_output_latency(&lat, info, sample_rate);
                         // u16 silence is the mid-point (32768), not 0.
                         crate::rt_guard::guard_output(data, 32768u16, |data| {
                             if data.len() > tmp.len() {
@@ -237,6 +255,7 @@ impl AudioEngine {
         Ok(OutputStream {
             stream,
             error_state,
+            latency_frames,
         })
     }
 
@@ -301,23 +320,35 @@ impl AudioEngine {
             }
         };
 
+        // Hardware capture latency, refreshed from the cpal timestamp on every
+        // callback (`callback - capture`). Cloned into whichever sample-format
+        // arm runs; the same Arc is handed to the returned stream.
+        let latency_frames = Arc::new(AtomicU32::new(0));
+        let sample_rate = config.sample_rate;
+
         // Each input callback body is wrapped in `rt_guard::guard_input` so a
         // panic cannot unwind across the cpal/C audio-thread frame (UB).  Input
         // has no output buffer to sanitise, so the panic is simply swallowed.
         let stream = match sample_format {
-            cpal::SampleFormat::F32 => cpal_device.build_input_stream(
-                stream_config,
-                move |data: &[f32], _| {
-                    crate::rt_guard::guard_input(|| adapted(data));
-                },
-                err_fn,
-                None,
-            )?,
-            cpal::SampleFormat::I16 => {
-                let mut tmp = vec![0f32; pre_alloc];
+            cpal::SampleFormat::F32 => {
+                let lat = Arc::clone(&latency_frames);
                 cpal_device.build_input_stream(
                     stream_config,
-                    move |data: &[i16], _| {
+                    move |data: &[f32], info: &cpal::InputCallbackInfo| {
+                        store_input_latency(&lat, info, sample_rate);
+                        crate::rt_guard::guard_input(|| adapted(data));
+                    },
+                    err_fn,
+                    None,
+                )?
+            }
+            cpal::SampleFormat::I16 => {
+                let mut tmp = vec![0f32; pre_alloc];
+                let lat = Arc::clone(&latency_frames);
+                cpal_device.build_input_stream(
+                    stream_config,
+                    move |data: &[i16], info: &cpal::InputCallbackInfo| {
+                        store_input_latency(&lat, info, sample_rate);
                         crate::rt_guard::guard_input(|| {
                             if data.len() > tmp.len() {
                                 tmp.resize(data.len(), 0.0);
@@ -333,9 +364,11 @@ impl AudioEngine {
             }
             cpal::SampleFormat::I32 => {
                 let mut tmp = vec![0f32; pre_alloc];
+                let lat = Arc::clone(&latency_frames);
                 cpal_device.build_input_stream(
                     stream_config,
-                    move |data: &[i32], _| {
+                    move |data: &[i32], info: &cpal::InputCallbackInfo| {
+                        store_input_latency(&lat, info, sample_rate);
                         crate::rt_guard::guard_input(|| {
                             if data.len() > tmp.len() {
                                 tmp.resize(data.len(), 0.0);
@@ -351,9 +384,11 @@ impl AudioEngine {
             }
             cpal::SampleFormat::U16 => {
                 let mut tmp = vec![0f32; pre_alloc];
+                let lat = Arc::clone(&latency_frames);
                 cpal_device.build_input_stream(
                     stream_config,
-                    move |data: &[u16], _| {
+                    move |data: &[u16], info: &cpal::InputCallbackInfo| {
+                        store_input_latency(&lat, info, sample_rate);
                         crate::rt_guard::guard_input(|| {
                             if data.len() > tmp.len() {
                                 tmp.resize(data.len(), 0.0);
@@ -377,8 +412,40 @@ impl AudioEngine {
         Ok(InputStream {
             stream,
             error_state,
+            latency_frames,
         })
     }
+}
+
+/// Turns the gap between two cpal stream instants (the later one first) into a
+/// frame count. cpal already folds the hardware latency into the capture/playback
+/// timestamps, so this just reads it back out. Saturates to 0 if the order flips.
+#[inline]
+fn latency_frames_between(
+    later: cpal::StreamInstant,
+    earlier: cpal::StreamInstant,
+    sample_rate: u32,
+) -> u32 {
+    let secs = later.duration_since(earlier).as_secs_f64();
+    (secs * sample_rate as f64).round() as u32
+}
+
+/// Store the capture-side hardware latency: how far behind the callback the ADC
+/// sat when these samples were grabbed (`callback - capture`).
+#[inline]
+fn store_input_latency(slot: &AtomicU32, info: &cpal::InputCallbackInfo, sample_rate: u32) {
+    let ts = info.timestamp();
+    let frames = latency_frames_between(ts.callback, ts.capture, sample_rate);
+    slot.store(frames, Ordering::Relaxed);
+}
+
+/// Store the playback-side hardware latency: how far ahead of the DAC the
+/// callback runs (`playback - callback`).
+#[inline]
+fn store_output_latency(slot: &AtomicU32, info: &cpal::OutputCallbackInfo, sample_rate: u32) {
+    let ts = info.timestamp();
+    let frames = latency_frames_between(ts.playback, ts.callback, sample_rate);
+    slot.store(frames, Ordering::Relaxed);
 }
 
 impl Default for AudioEngine {
