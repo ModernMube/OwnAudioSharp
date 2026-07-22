@@ -97,9 +97,8 @@ public sealed class AudioInputStream : IDisposable
     }
 
     /// <summary>
-    /// Hardware capture latency in frames — how long ago the samples in the buffer hit the ADC.
-    /// Zero until the stream has actually captured a buffer, or when the backend keeps quiet about
-    /// it. Subtract it from the capture position to line a recording up with the real timeline.
+    /// How long ago the samples in the buffer hit the ADC, in frames. Subtract it from the capture
+    /// position to line a take up with the real timeline. 0 before the first buffer arrives.
     /// </summary>
     public uint LatencyFrames
     {
@@ -108,10 +107,10 @@ public sealed class AudioInputStream : IDisposable
             Guard.NotDisposed(_disposed, nameof(AudioInputStream));
 
             int code = OwnAudioNative.ownaudio_v1_input_stream_get_latency_frames(
-                _handle.DangerousGetHandle(), out uint frames);
+                _handle.DangerousGetHandle(), out uint _frames);
             ErrorCodeMapper.ThrowIfError(code, nameof(LatencyFrames));
 
-            return frames;
+            return _frames;
         }
     }
 

@@ -151,9 +151,7 @@ public sealed class AudioOutputStream : IDisposable
     }
 
     /// <summary>
-    /// Hardware playback latency in frames — how far ahead of the DAC the callback runs. Zero
-    /// until the stream has actually played a buffer, or when the backend keeps quiet about it.
-    /// Divide by the sample rate for seconds.
+    /// How far ahead of the DAC the callback runs, in frames. 0 before the first buffer plays.
     /// </summary>
     public uint LatencyFrames
     {
@@ -162,10 +160,10 @@ public sealed class AudioOutputStream : IDisposable
             Guard.NotDisposed(_disposed, nameof(AudioOutputStream));
 
             int code = OwnAudioNative.ownaudio_v1_output_stream_get_latency_frames(
-                _handle.DangerousGetHandle(), out uint frames);
+                _handle.DangerousGetHandle(), out uint _frames);
             ErrorCodeMapper.ThrowIfError(code, nameof(LatencyFrames));
 
-            return frames;
+            return _frames;
         }
     }
 

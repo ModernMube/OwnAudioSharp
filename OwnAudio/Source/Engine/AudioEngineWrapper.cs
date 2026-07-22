@@ -66,15 +66,12 @@ public sealed class AudioEngineWrapper : IDisposable
     public IAudioEngine UnderlyingEngine => _engine;
 
     /// <summary>
-    /// Hardware playback latency in frames — how far ahead of the DAC the engine runs. 0 until
-    /// output has started or when the backend keeps quiet. Divide by the sample rate for seconds.
+    /// Playback latency in frames, straight off the engine.
     /// </summary>
     public int OutputLatencyFrames => _engine.OutputLatencyFrames;
 
     /// <summary>
-    /// Hardware capture latency in frames — how long ago the samples now arriving hit the ADC.
-    /// 0 until capture has started or when the backend keeps quiet. Subtract it from the capture
-    /// position to line a recording up with the real timeline.
+    /// Capture latency in frames, straight off the engine.
     /// </summary>
     public int InputLatencyFrames => _engine.InputLatencyFrames;
 
