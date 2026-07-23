@@ -125,7 +125,7 @@ OwnaudioNet.ResumeDeviceMonitoring();</code></pre></div>
     <tr><td><code>IsInput</code> / <code>IsOutput</code></td><td><code>bool</code></td><td>Device direction.</td></tr>
     <tr><td><code>IsDefault</code></td><td><code>bool</code></td><td>System default device for its type.</td></tr>
     <tr><td><code>MaxInputChannels</code> / <code>MaxOutputChannels</code></td><td><code>int</code></td><td>Hardware channel limits.</td></tr>
-    <tr><td><code>State</code></td><td><code>AudioDeviceState</code></td><td><code>Active</code>, <code>Disabled</code>, <code>NotPresent</code>, <code>Unplugged</code>.</td></tr>
+    <tr><td><code>State</code></td><td><code>AudioDeviceState</code></td><td><code>Active</code>, <code>Disabled</code>, <code>NotPresent</code>, <code>Unplugged</code>. <span class="badge-compat">Compat only</span> The current Rust enumerator only ever reports <code>Active</code>; the other states exist for backward compatibility.</td></tr>
   </tbody>
 </table></div>
 
@@ -179,9 +179,9 @@ AudioMixer? active = OwnaudioNet.GetRegisteredAudioMixer();</code></pre></div>
     <tr><td><code>OutputDeviceId</code></td><td><code>string?</code></td><td><code>null</code></td><td>Output device ID from <code>AudioDeviceInfo.DeviceId</code>. <code>null</code> = system default.</td></tr>
     <tr><td><code>InputDeviceId</code></td><td><code>string?</code></td><td><code>null</code></td><td>Input device ID. <code>null</code> = system default.</td></tr>
     <tr><td><code>HostType</code></td><td><code>EngineHostType</code></td><td><code>None</code></td><td>Audio backend: <code>WASAPI</code>, <code>ASIO</code>, <code>CoreAudio</code>, <code>ALSA</code>, <code>Miniaudio</code>, <code>Portaudio</code>.</td></tr>
-    <tr><td><code>OutputChannelSelectors</code></td><td><code>int[]?</code></td><td><code>null</code></td><td>Physical output channels to use. <code>null</code> = sequential from 0.</td></tr>
-    <tr><td><code>InputChannelSelectors</code></td><td><code>int[]?</code></td><td><code>null</code></td><td>Physical input channels to use.</td></tr>
-    <tr><td><code>FallbackToDefaultOnDisconnect</code></td><td><code>bool</code></td><td><code>true</code></td><td>When the configured device disconnects, automatically switch to the system default device and continue playback. Switches back when the original device reconnects. Set <code>false</code> to wait for the original device instead.</td></tr>
+    <tr><td><code>OutputChannelSelectors</code></td><td><code>int[]?</code></td><td><code>null</code></td><td>Physical output channels to use. <code>null</code> = sequential from 0. <span class="badge-compat">Compat only</span> Currently validated but not applied by the Rust engine — kept for backward compatibility. For per-source routing use <a href="api-sources.html#channel-routing"><code>OutputChannelMapping</code></a>.</td></tr>
+    <tr><td><code>InputChannelSelectors</code></td><td><code>int[]?</code></td><td><code>null</code></td><td>Physical input channels to use. <span class="badge-compat">Compat only</span> Currently validated but not applied by the Rust engine — kept for backward compatibility.</td></tr>
+    <tr><td><code>FallbackToDefaultOnDisconnect</code></td><td><code>bool</code></td><td><code>true</code></td><td>When the configured device disconnects, automatically switch to the system default device and continue playback. Switches back when the original device reconnects. Set <code>false</code> to wait for the original device instead. <span class="badge-compat">Compat only</span> The flag is not read by the current Rust engine — the described auto-fallback is not active. Kept for backward compatibility.</td></tr>
   </tbody>
 </table></div>
 

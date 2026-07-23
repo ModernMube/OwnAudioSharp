@@ -166,6 +166,19 @@ hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
   letter-spacing: .02em;
 }
 
+.badge-compat {
+  display: inline-block;
+  font-size: .62rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em;
+  background: rgba(255,214,10,.1);
+  color: var(--warning);
+  border: 1px solid rgba(255,214,10,.3);
+  padding: .08rem .4rem;
+  border-radius: var(--radius-sm);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 .btn-icon {
   width: 34px; height: 34px;
   border: 1px solid var(--border);
