@@ -41,7 +41,15 @@ fn write_track(track: &MidiTrackData, out: &mut Vec<u8>) {
                 running_status = 0;
             }
             MidiEventKind::SysEx => {
-                body.extend_from_slice(&event.meta_data);
+                // meta_data is [marker (F0/F7), ..payload incl. the trailing F7],
+                // mirroring what the parser produces. SMF wants the marker, then a
+                // var-len payload length, then the payload — write it that way so a
+                // parse of our output round-trips back to the same bytes.
+                if let Some((&marker, payload)) = event.meta_data.split_first() {
+                    body.push(marker);
+                    write_var_len(&mut body, payload.len() as i32);
+                    body.extend_from_slice(payload);
+                }
                 running_status = 0;
             }
             MidiEventKind::Midi => {
@@ -201,5 +209,34 @@ mod tests {
         let tempo = &parsed.tracks[0].events[0];
         assert_eq!(tempo.meta_type, 0x51);
         assert_eq!(tempo.meta_data, vec![0x07, 0xA1, 0x20]);
+    }
+
+    #[test]
+    fn sysex_event_round_trips() {
+        // meta_data carries the F0 marker and the trailing F7, as the parser emits.
+        let sysex = vec![0xF0, 0x43, 0x12, 0x00, 0x01, 0x02, 0xF7];
+        let track = MidiTrackData {
+            events: vec![MidiEventData {
+                delta_time: 0,
+                kind: MidiEventKind::SysEx,
+                status: 0xF0,
+                data1: 0,
+                data2: 0,
+                meta_type: 0,
+                meta_data: sysex.clone(),
+            }],
+        };
+        let original = MidiFileData {
+            format: 0,
+            ticks_per_beat: 480,
+            tracks: vec![track],
+        };
+
+        let bytes = write_midi_file(&original).unwrap();
+        let parsed = parse_midi_file(&bytes).unwrap();
+
+        let event = &parsed.tracks[0].events[0];
+        assert_eq!(event.kind, MidiEventKind::SysEx);
+        assert_eq!(event.meta_data, sysex);
     }
 }

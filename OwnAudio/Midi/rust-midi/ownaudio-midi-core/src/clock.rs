@@ -24,6 +24,13 @@ const SPIN_THRESHOLD_US: f64 = 1_000.0;
 /// running flag at least this often even at very slow tempos.
 const MAX_SLEEP_US: u64 = 5_000;
 
+/// How many whole pulses of backlog we're willing to replay back-to-back after
+/// the thread was descheduled. A small backlog is kept and drained on the next
+/// iterations so the clock drifts back onto the grid on its own; anything past
+/// this is dropped and the schedule resynced to *now*, trading a bit of tempo
+/// drift for not clumping a burst of 0xF8 onto the wire. See `resync_after_pulse`.
+const MAX_CATCHUP_PULSES: f64 = 2.0;
+
 /// Standard MIDI timing resolution: 24 pulses per quarter note.
 const PULSES_PER_QUARTER_NOTE: f64 = 24.0;
 
@@ -120,6 +127,21 @@ pub fn pulse_interval_us(bpm: f64) -> f64 {
     (60_000_000.0 / bpm) / PULSES_PER_QUARTER_NOTE
 }
 
+/// Decides the next scheduled pulse time right after a pulse fired and
+/// `next_pulse_us` was advanced by one interval. If the thread is still lagging
+/// by more than `MAX_CATCHUP_PULSES` intervals — it got descheduled long enough
+/// to pile up a backlog — we drop the backlog and resync to `elapsed_us + one
+/// interval` so the caller doesn't get a clump of 0xF8 messages. Otherwise the
+/// small backlog is left in place and drained on the following iterations.
+fn resync_after_pulse(next_pulse_us: f64, elapsed_us: f64, interval_us: f64) -> f64 {
+    let lag_us = elapsed_us - next_pulse_us;
+    if lag_us > interval_us * MAX_CATCHUP_PULSES {
+        elapsed_us + interval_us
+    } else {
+        next_pulse_us
+    }
+}
+
 /// Clock thread body: fires `on_pulse` at the interval derived from the current
 /// tempo, re-reading the tempo each iteration so changes take effect promptly.
 fn run_clock(state: Arc<SharedState>, on_pulse: Box<PulseCallback>) {
@@ -136,6 +158,7 @@ fn run_clock(state: Arc<SharedState>, on_pulse: Box<PulseCallback>) {
         if diff_us <= 0.0 {
             on_pulse();
             next_pulse_us += interval_us;
+            next_pulse_us = resync_after_pulse(next_pulse_us, elapsed_us, interval_us);
         } else if diff_us > SPIN_THRESHOLD_US {
             let sleep_us = ((diff_us - SPIN_THRESHOLD_US) as u64).min(MAX_SLEEP_US);
             std::thread::sleep(Duration::from_micros(sleep_us));
@@ -180,6 +203,28 @@ mod tests {
         clock.stop();
         assert!(!clock.is_running());
         assert!(counter.load(Ordering::Relaxed) > 0);
+    }
+
+    #[test]
+    fn small_backlog_is_kept_and_drained() {
+        // Behind by less than MAX_CATCHUP_PULSES intervals: leave the schedule
+        // alone so the next iterations drain it and the clock drifts back on grid.
+        let interval = pulse_interval_us(120.0);
+        let next = 100.0; // just advanced by one interval
+        let elapsed = next + interval * 1.5; // 1.5 intervals behind
+        assert_eq!(resync_after_pulse(next, elapsed, interval), next);
+    }
+
+    #[test]
+    fn large_backlog_resyncs_instead_of_bursting() {
+        // Descheduled for ~5 intervals worth of time: dropping the backlog and
+        // resyncing to now keeps a burst of pulses off the wire.
+        let interval = pulse_interval_us(120.0);
+        let next = 100.0;
+        let elapsed = next + interval * 5.0;
+        let resynced = resync_after_pulse(next, elapsed, interval);
+        assert_eq!(resynced, elapsed + interval);
+        assert!(resynced > next);
     }
 
     #[test]

@@ -52,9 +52,11 @@ public static class MidiFileReader
     }
 
     /// <summary>
-    /// Walks the parsed native file and puts the managed objects together.
+    /// Walks the parsed native file and puts the managed objects together. Each
+    /// track's events come back in a single batch call — on a big SMF that's the
+    /// difference between one FFI crossing per track and tens of thousands.
     /// </summary>
-    private static MidiFile _buildMidiFile(MidiFileHandle handle)
+    private static unsafe MidiFile _buildMidiFile(MidiFileHandle handle)
     {
         MidiNativeMethods.ownaudio_midi_v1_file_get_format(handle, out ushort _format);
         MidiNativeMethods.ownaudio_midi_v1_file_get_ticks_per_beat(handle, out ushort _tpb);
@@ -64,16 +66,33 @@ public static class MidiFileReader
         for (nuint t = 0; t < _trackCount; t++)
         {
             MidiNativeMethods.ownaudio_midi_v1_file_get_event_count(handle, t, out nuint _eventCount);
-            var _events = new List<MidiEvent>((int)_eventCount);
-            for (nuint e = 0; e < _eventCount; e++)
-            {
-                MidiNativeMethods.ownaudio_midi_v1_file_get_event(handle, t, e, out var _native);
-                _events.Add(_convertNativeEvent(_native));
-            }
-            _tracks[(int)t] = new MidiTrack(_events);
+            _tracks[(int)t] = new MidiTrack(_readTrackEvents(handle, t, (int)_eventCount));
         }
 
         return new MidiFile(_format, _tpb, _tracks);
+    }
+
+    /// <summary>
+    /// Batch-reads one track's events into managed MidiEvents. The native
+    /// meta_data pointers stay valid until the file handle is destroyed, so the
+    /// payload copies below are safe as long as we're still inside its using block.
+    /// </summary>
+    private static unsafe List<MidiEvent> _readTrackEvents(MidiFileHandle handle, nuint trackIndex, int eventCount)
+    {
+        var _events = new List<MidiEvent>(eventCount);
+        if (eventCount == 0) return _events;
+
+        var _native = new NativeMidiEvent[eventCount];
+        fixed (NativeMidiEvent* ptr = _native)
+        {
+            int code = MidiNativeMethods.ownaudio_midi_v1_file_get_events(
+                handle, trackIndex, ptr, (nuint)eventCount, out nuint _written);
+            MidiErrorCodeMapper.ThrowIfError(code, nameof(Read));
+
+            for (nuint e = 0; e < _written; e++)
+                _events.Add(_convertNativeEvent(_native[e]));
+        }
+        return _events;
     }
 
     /// <summary>

@@ -34,8 +34,7 @@ public static class MidiFileWriter
                 code = MidiNativeMethods.ownaudio_midi_v1_writer_begin_track(writer);
                 MidiErrorCodeMapper.ThrowIfError(code, nameof(Write));
 
-                foreach (var _evt in _track.Events)
-                    _addEvent(writer, _evt);
+                _addTrackEvents(writer, _track.Events);
             }
 
             _serialize(writer, stream);
@@ -43,27 +42,57 @@ public static class MidiFileWriter
     }
 
     /// <summary>
-    /// Pushes one event into the writer's current track, payload pinned for the call.
+    /// Pushes a whole track's events into the writer's current track in one call.
+    /// Every payload goes into a single pinned blob and each native event points
+    /// into it, so a big track costs one FFI crossing instead of one per event.
     /// </summary>
-    private static unsafe void _addEvent(MidiWriterHandle writer, MidiEvent evt)
+    private static unsafe void _addTrackEvents(MidiWriterHandle writer, IReadOnlyList<MidiEvent> events)
     {
-        byte[]? _payload = evt.MetaData;
+        int _count = events.Count;
+        if (_count == 0) return;
+
+        var _native = new NativeMidiEvent[_count];
+        var _offsets = new int[_count];
+        int _blobLen = 0;
+
+        for (int i = 0; i < _count; i++)
+        {
+            var _evt = events[i];
+            byte[]? _payload = _evt.MetaData;
+            int _payloadLen = _payload?.Length ?? 0;
+
+            _offsets[i] = _payloadLen > 0 ? _blobLen : -1;
+            _blobLen += _payloadLen;
+
+            _native[i] = new NativeMidiEvent
+            {
+                DeltaTime = _evt.DeltaTime,
+                EventType = _eventTypeToByte(_evt.Type),
+                Status = _evt.Status,
+                Data1 = _evt.Data1,
+                Data2 = _evt.Data2,
+                MetaType = _evt.MetaType,
+                MetaDataLen = (nuint)_payloadLen
+            };
+        }
+
+        var _blob = new byte[_blobLen];
+        for (int i = 0; i < _count; i++)
+        {
+            if (_offsets[i] < 0) continue;
+            byte[] _payload = events[i].MetaData!;
+            Buffer.BlockCopy(_payload, 0, _blob, _offsets[i], _payload.Length);
+        }
 
         int code;
-        fixed (byte* ptr = _payload)
+        fixed (byte* _blobPtr = _blob)
+        fixed (NativeMidiEvent* _evPtr = _native)
         {
-            var _native = new NativeMidiEvent
-            {
-                DeltaTime = evt.DeltaTime,
-                EventType = _eventTypeToByte(evt.Type),
-                Status = evt.Status,
-                Data1 = evt.Data1,
-                Data2 = evt.Data2,
-                MetaType = evt.MetaType,
-                MetaData = (IntPtr)ptr,
-                MetaDataLen = (nuint)(_payload?.Length ?? 0)
-            };
-            code = MidiNativeMethods.ownaudio_midi_v1_writer_add_event(writer, _native);
+            for (int i = 0; i < _count; i++)
+                if (_offsets[i] >= 0)
+                    _evPtr[i].MetaData = (IntPtr)(_blobPtr + _offsets[i]);
+
+            code = MidiNativeMethods.ownaudio_midi_v1_writer_add_events(writer, _evPtr, (nuint)_count);
         }
         MidiErrorCodeMapper.ThrowIfError(code, nameof(Write));
     }

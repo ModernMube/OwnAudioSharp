@@ -122,6 +122,57 @@ fn list_ports(
     result.unwrap_or(MidiErrorCode::InternalPanic as i32)
 }
 
+/// Cheap fingerprint of the current MIDI port topology — the input and output
+/// port counts plus a hash over their names, all in one call. The C# hot-plug
+/// poller compares this against the previous tick and only pays for the full
+/// name lists (and the managed string allocations that go with them) when the
+/// fingerprint actually moved. Any of the out-pointers may be null if the caller
+/// only wants some of the fields.
+///
+/// The enumeration itself still allocates on the native heap, but nothing here
+/// touches the managed GC, which is the whole point of polling through it.
+#[no_mangle]
+pub extern "C" fn ownaudio_midi_v1_port_fingerprint(
+    out_input_count: *mut usize,
+    out_output_count: *mut usize,
+    out_fingerprint: *mut u64,
+) -> i32 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let inputs = list_input_port_names();
+        let outputs = list_output_port_names();
+
+        // DefaultHasher has fixed keys, so the same port layout always hashes to
+        // the same value — no per-process randomness to trip the comparison.
+        let mut hasher = DefaultHasher::new();
+        inputs.len().hash(&mut hasher);
+        for name in &inputs {
+            name.hash(&mut hasher);
+        }
+        outputs.len().hash(&mut hasher);
+        for name in &outputs {
+            name.hash(&mut hasher);
+        }
+
+        unsafe {
+            if !out_input_count.is_null() {
+                *out_input_count = inputs.len();
+            }
+            if !out_output_count.is_null() {
+                *out_output_count = outputs.len();
+            }
+            if !out_fingerprint.is_null() {
+                *out_fingerprint = hasher.finish();
+            }
+        }
+        MidiErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(MidiErrorCode::InternalPanic as i32)
+}
+
 /// Releases a port-name array previously returned by one of the enumeration
 /// exports. Passing `null` is safe.
 #[no_mangle]

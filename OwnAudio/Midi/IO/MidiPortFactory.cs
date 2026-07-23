@@ -32,14 +32,10 @@ public static class MidiPortFactory
     private static System.Threading.Timer? _monitorTimer;
 
     /// <summary>
-    /// Input names from the previous pass; null while stopped.
+    /// Topology fingerprint from the previous pass. No value means we haven't
+    /// taken a baseline yet (fresh start), so the first tick won't spuriously fire.
     /// </summary>
-    private static IReadOnlyList<string>? _lastInputNames;
-
-    /// <summary>
-    /// Output names from the previous pass; null while stopped.
-    /// </summary>
-    private static IReadOnlyList<string>? _lastOutputNames;
+    private static ulong? _lastFingerprint;
 
     /// <summary>
     /// Every input port name we can see.
@@ -102,8 +98,7 @@ public static class MidiPortFactory
         {
             if (_monitorTimer is not null) return;
 
-            _lastInputNames = GetInputPortNames();
-            _lastOutputNames = GetOutputPortNames();
+            _lastFingerprint = _tryReadFingerprint(out ulong _fp) ? _fp : null;
             _monitorTimer = new System.Threading.Timer(_pollPorts, null, _monitorInterval, _monitorInterval);
         }
     }
@@ -117,59 +112,47 @@ public static class MidiPortFactory
         {
             _monitorTimer?.Dispose();
             _monitorTimer = null;
-            _lastInputNames = null;
-            _lastOutputNames = null;
+            _lastFingerprint = null;
         }
     }
 
     /// <summary>
-    /// Timer tick. Re-enumerates and fires PortsChanged if anything moved. A
-    /// failed enumeration is swallowed on purpose — this runs on a pool thread
-    /// and the next pass can just try again.
+    /// Timer tick. Reads the cheap native fingerprint and fires PortsChanged only
+    /// when it moved — no name enumeration, no string allocation on a quiet tick.
+    /// A failed read is swallowed on purpose; this runs on a pool thread and the
+    /// next pass can just try again.
     /// </summary>
     private static void _pollPorts(object? state)
     {
-        IReadOnlyList<string> _inputs;
-        IReadOnlyList<string> _outputs;
-        try
-        {
-            _inputs = GetInputPortNames();
-            _outputs = GetOutputPortNames();
-        }
-        catch
-        {
-            return;
-        }
+        if (!_tryReadFingerprint(out ulong _fingerprint)) return;
 
         bool _changed;
         lock (_monitorLock)
         {
             if (_monitorTimer is null) return;
 
-            _changed = !_portNamesEqual(_lastInputNames, _inputs) || !_portNamesEqual(_lastOutputNames, _outputs);
-            if (_changed)
-            {
-                _lastInputNames = _inputs;
-                _lastOutputNames = _outputs;
-            }
+            _changed = _lastFingerprint is ulong _prev && _prev != _fingerprint;
+            _lastFingerprint = _fingerprint;
         }
 
         if (_changed) { PortsChanged?.Invoke(); }
     }
 
     /// <summary>
-    /// Same names in the same order? A null previous snapshot counts as changed,
-    /// so the first pass after a reset always reports.
+    /// Pulls the native port-topology fingerprint. Returns false on any native
+    /// error so the caller can just skip this tick.
     /// </summary>
-    private static bool _portNamesEqual(IReadOnlyList<string>? previous, IReadOnlyList<string> current)
+    private static bool _tryReadFingerprint(out ulong fingerprint)
     {
-        if (previous is null || previous.Count != current.Count) return false;
-
-        for (int i = 0; i < previous.Count; i++)
+        try
         {
-            if (!string.Equals(previous[i], current[i], StringComparison.Ordinal)) return false;
+            int code = MidiNativeMethods.ownaudio_midi_v1_port_fingerprint(out _, out _, out fingerprint);
+            return code == 0;
         }
-
-        return true;
+        catch
+        {
+            fingerprint = 0;
+            return false;
+        }
     }
 }

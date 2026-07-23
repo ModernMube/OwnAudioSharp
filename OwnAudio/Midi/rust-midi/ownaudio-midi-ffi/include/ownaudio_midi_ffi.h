@@ -257,6 +257,24 @@ int32_t ownaudio_midi_v1_file_get_event(struct MidiFileHandle *handle,
                                         struct NativeMidiEvent *out_event);
 
 /**
+ * Copies every event of track `track_index` into the caller's `out_events`
+ * buffer in a single call, writing how many landed there to `*out_written`.
+ *
+ * This is the batch form of `ownaudio_midi_v1_file_get_event`: one FFI crossing
+ * for a whole track instead of one per event, which matters on large files with
+ * tens of thousands of events. Size the buffer from
+ * `ownaudio_midi_v1_file_get_event_count`; if `capacity` is short only the first
+ * `capacity` events are copied and `*out_written` says so. The `meta_data`
+ * pointers borrow the file handle's memory — same lifetime as the single getter,
+ * valid until the handle is destroyed.
+ */
+int32_t ownaudio_midi_v1_file_get_events(struct MidiFileHandle *handle,
+                                         size_t track_index,
+                                         struct NativeMidiEvent *out_events,
+                                         size_t capacity,
+                                         size_t *out_written);
+
+/**
  * Destroys a parsed file handle. Passing `null` is safe.
  */
 void ownaudio_midi_v1_file_destroy(struct MidiFileHandle *handle);
@@ -280,6 +298,15 @@ int32_t ownaudio_midi_v1_writer_begin_track(struct MidiWriterHandle *handle);
  */
 int32_t ownaudio_midi_v1_writer_add_event(struct MidiWriterHandle *handle,
                                           struct NativeMidiEvent event);
+
+/**
+ * Appends a whole array of events to the current track in one call — the batch
+ * form of `ownaudio_midi_v1_writer_add_event`. Each event's `meta_data` is
+ * copied, so the caller's payload buffer only needs to live for the call.
+ */
+int32_t ownaudio_midi_v1_writer_add_events(struct MidiWriterHandle *handle,
+                                           const struct NativeMidiEvent *events,
+                                           size_t count);
 
 /**
  * Serializes all added tracks to SMF bytes, writing the buffer pointer to
@@ -316,6 +343,21 @@ int32_t ownaudio_midi_v1_list_input_ports(char ***out_names, size_t *out_count);
  * The caller must release the array with `ownaudio_midi_v1_free_port_names`.
  */
 int32_t ownaudio_midi_v1_list_output_ports(char ***out_names, size_t *out_count);
+
+/**
+ * Cheap fingerprint of the current MIDI port topology — the input and output
+ * port counts plus a hash over their names, all in one call. The C# hot-plug
+ * poller compares this against the previous tick and only pays for the full
+ * name lists (and the managed string allocations that go with them) when the
+ * fingerprint actually moved. Any of the out-pointers may be null if the caller
+ * only wants some of the fields.
+ *
+ * The enumeration itself still allocates on the native heap, but nothing here
+ * touches the managed GC, which is the whole point of polling through it.
+ */
+int32_t ownaudio_midi_v1_port_fingerprint(size_t *out_input_count,
+                                          size_t *out_output_count,
+                                          uint64_t *out_fingerprint);
 
 /**
  * Releases a port-name array previously returned by one of the enumeration

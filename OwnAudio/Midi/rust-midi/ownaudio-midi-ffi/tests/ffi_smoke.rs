@@ -34,6 +34,33 @@ fn list_output_ports_returns_an_array() {
 }
 
 #[test]
+fn port_fingerprint_is_stable_across_calls() {
+    let mut in_count: usize = 0;
+    let mut out_count: usize = 0;
+    let mut fp1: u64 = 0;
+    assert_eq!(
+        ownaudio_midi_v1_port_fingerprint(&mut in_count, &mut out_count, &mut fp1),
+        SUCCESS
+    );
+
+    // No topology change between two back-to-back calls, so the hash must match.
+    let mut fp2: u64 = 0;
+    assert_eq!(
+        ownaudio_midi_v1_port_fingerprint(ptr::null_mut(), ptr::null_mut(), &mut fp2),
+        SUCCESS
+    );
+    assert_eq!(fp1, fp2);
+}
+
+#[test]
+fn port_fingerprint_tolerates_all_null_outputs() {
+    assert_eq!(
+        ownaudio_midi_v1_port_fingerprint(ptr::null_mut(), ptr::null_mut(), ptr::null_mut()),
+        SUCCESS
+    );
+}
+
+#[test]
 fn clock_create_and_destroy() {
     let mut handle: *mut MidiClockHandle = ptr::null_mut();
     let code = ownaudio_midi_v1_clock_create(120.0, &mut handle);
@@ -101,6 +128,142 @@ fn writer_round_trips_through_parser() {
         SUCCESS
     );
     assert_eq!(track_count, 1);
+
+    ownaudio_midi_v1_file_destroy(file);
+    ownaudio_midi_v1_free_bytes(data, len);
+    ownaudio_midi_v1_writer_destroy(writer);
+}
+
+/// Builds a plain channel event for the batch tests.
+fn channel_event(delta: i32, status: u8, d1: u8, d2: u8) -> ownaudio_midi_ffi::types::NativeMidiEvent {
+    ownaudio_midi_ffi::types::NativeMidiEvent {
+        delta_time: delta,
+        event_type: 0,
+        status,
+        data1: d1,
+        data2: d2,
+        meta_type: 0,
+        _pad0: 0,
+        _pad1: 0,
+        _pad2: 0,
+        meta_data: ptr::null(),
+        meta_data_len: 0,
+    }
+}
+
+#[test]
+fn batch_add_events_round_trips_through_batch_read() {
+    let mut writer: *mut MidiWriterHandle = ptr::null_mut();
+    assert_eq!(ownaudio_midi_v1_writer_create(0, 480, &mut writer), SUCCESS);
+    assert_eq!(ownaudio_midi_v1_writer_begin_track(writer), SUCCESS);
+
+    // A tempo meta plus two channel events, added in one batch call.
+    let tempo_payload = [0x07u8, 0xA1, 0x20]; // 500000 us/qn
+    let tempo = ownaudio_midi_ffi::types::NativeMidiEvent {
+        delta_time: 0,
+        event_type: 1,
+        status: 0xFF,
+        data1: 0,
+        data2: 0,
+        meta_type: 0x51,
+        _pad0: 0,
+        _pad1: 0,
+        _pad2: 0,
+        meta_data: tempo_payload.as_ptr(),
+        meta_data_len: tempo_payload.len(),
+    };
+    let events = [
+        tempo,
+        channel_event(0, 0x90, 60, 100),
+        channel_event(480, 0x80, 60, 0),
+    ];
+    assert_eq!(
+        ownaudio_midi_v1_writer_add_events(writer, events.as_ptr(), events.len()),
+        SUCCESS
+    );
+
+    let mut data: *mut u8 = ptr::null_mut();
+    let mut len: usize = 0;
+    assert_eq!(
+        ownaudio_midi_v1_writer_serialize(writer, &mut data, &mut len),
+        SUCCESS
+    );
+
+    let mut file: *mut MidiFileHandle = ptr::null_mut();
+    assert_eq!(ownaudio_midi_v1_file_parse(data, len, &mut file), SUCCESS);
+
+    let mut count: usize = 0;
+    assert_eq!(
+        ownaudio_midi_v1_file_get_event_count(file, 0, &mut count),
+        SUCCESS
+    );
+    // Our three events plus the auto-appended End-of-Track meta.
+    assert_eq!(count, 4);
+
+    let mut buf = vec![channel_event(0, 0, 0, 0); count];
+    let mut written: usize = 0;
+    assert_eq!(
+        ownaudio_midi_v1_file_get_events(file, 0, buf.as_mut_ptr(), buf.len(), &mut written),
+        SUCCESS
+    );
+    assert_eq!(written, count);
+
+    // First event is the tempo meta and its payload survived the round trip.
+    assert_eq!(buf[0].event_type, 1);
+    assert_eq!(buf[0].meta_type, 0x51);
+    assert_eq!(buf[0].meta_data_len, 3);
+    let payload = unsafe { std::slice::from_raw_parts(buf[0].meta_data, buf[0].meta_data_len) };
+    assert_eq!(payload, &tempo_payload);
+
+    assert_eq!(buf[1].status, 0x90);
+    assert_eq!(buf[2].status, 0x80);
+
+    ownaudio_midi_v1_file_destroy(file);
+    ownaudio_midi_v1_free_bytes(data, len);
+    ownaudio_midi_v1_writer_destroy(writer);
+}
+
+#[test]
+fn batch_read_rejects_null_arguments() {
+    let mut written: usize = 0;
+    assert_eq!(
+        ownaudio_midi_v1_file_get_events(ptr::null_mut(), 0, ptr::null_mut(), 0, &mut written),
+        NULL_POINTER
+    );
+}
+
+#[test]
+fn batch_read_stops_at_capacity() {
+    let mut writer: *mut MidiWriterHandle = ptr::null_mut();
+    assert_eq!(ownaudio_midi_v1_writer_create(0, 480, &mut writer), SUCCESS);
+    assert_eq!(ownaudio_midi_v1_writer_begin_track(writer), SUCCESS);
+    let events = [
+        channel_event(0, 0x90, 60, 100),
+        channel_event(240, 0x80, 60, 0),
+    ];
+    assert_eq!(
+        ownaudio_midi_v1_writer_add_events(writer, events.as_ptr(), events.len()),
+        SUCCESS
+    );
+
+    let mut data: *mut u8 = ptr::null_mut();
+    let mut len: usize = 0;
+    assert_eq!(
+        ownaudio_midi_v1_writer_serialize(writer, &mut data, &mut len),
+        SUCCESS
+    );
+    let mut file: *mut MidiFileHandle = ptr::null_mut();
+    assert_eq!(ownaudio_midi_v1_file_parse(data, len, &mut file), SUCCESS);
+
+    // Undersized buffer: only the first event should be copied.
+    let mut buf = vec![channel_event(0, 0, 0, 0); 1];
+    let mut written: usize = 0;
+    assert_eq!(
+        ownaudio_midi_v1_file_get_events(file, 0, buf.as_mut_ptr(), buf.len(), &mut written),
+        SUCCESS
+    );
+    assert_eq!(written, 1);
+    assert_eq!(buf[0].status, 0x90);
 
     ownaudio_midi_v1_file_destroy(file);
     ownaudio_midi_v1_free_bytes(data, len);

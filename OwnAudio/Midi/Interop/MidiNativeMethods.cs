@@ -45,6 +45,14 @@ internal static unsafe partial class MidiNativeMethods
     internal static partial void ownaudio_midi_v1_free_port_names(
         IntPtr names, nuint count);
 
+    /// <summary>
+    /// Cheap topology fingerprint — counts plus a name hash, no string marshalling.
+    /// The hot-plug poll leans on this so a quiet tick allocates nothing managed.
+    /// </summary>
+    [LibraryImport(LibName)]
+    internal static partial int ownaudio_midi_v1_port_fingerprint(
+        out nuint outInputCount, out nuint outOutputCount, out ulong outFingerprint);
+
     #endregion
 
     #region Input Port
@@ -212,6 +220,15 @@ internal static unsafe partial class MidiNativeMethods
         out NativeMidiEvent outEvent);
 
     /// <summary>
+    /// A whole track's events in one crossing — outEvents is caller-owned, sized
+    /// from get_event_count; outWritten says how many actually came back.
+    /// </summary>
+    [LibraryImport(LibName)]
+    internal static partial int ownaudio_midi_v1_file_get_events(
+        MidiFileHandle handle, nuint trackIndex,
+        NativeMidiEvent* outEvents, nuint capacity, out nuint outWritten);
+
+    /// <summary>
     /// Destroys the parsed file, called from the SafeHandle release.
     /// </summary>
     [LibraryImport(LibName)]
@@ -240,6 +257,13 @@ internal static unsafe partial class MidiNativeMethods
     [LibraryImport(LibName)]
     internal static partial int ownaudio_midi_v1_writer_add_event(
         MidiWriterHandle handle, NativeMidiEvent evt);
+
+    /// <summary>
+    /// Appends a whole array of events to the current track in one crossing.
+    /// </summary>
+    [LibraryImport(LibName)]
+    internal static partial int ownaudio_midi_v1_writer_add_events(
+        MidiWriterHandle handle, NativeMidiEvent* events, nuint count);
 
     /// <summary>
     /// Bakes everything into a native SMF byte buffer.

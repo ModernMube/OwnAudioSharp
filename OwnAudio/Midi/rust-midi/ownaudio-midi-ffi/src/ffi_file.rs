@@ -135,31 +135,83 @@ pub extern "C" fn ownaudio_midi_v1_file_get_event(
             None => return MidiErrorCode::InvalidHandle as i32,
         };
 
-        let (meta_ptr, meta_len) = if event.meta_data.is_empty() {
-            (std::ptr::null(), 0)
-        } else {
-            (event.meta_data.as_ptr(), event.meta_data.len())
-        };
-
         unsafe {
-            *out_event = NativeMidiEvent {
-                delta_time: event.delta_time,
-                event_type: event.kind.as_u8(),
-                status: event.status,
-                data1: event.data1,
-                data2: event.data2,
-                meta_type: event.meta_type,
-                _pad0: 0,
-                _pad1: 0,
-                _pad2: 0,
-                meta_data: meta_ptr,
-                meta_data_len: meta_len,
-            };
+            *out_event = native_event_from(event);
         }
         MidiErrorCode::Success as i32
     }));
 
     result.unwrap_or(MidiErrorCode::InternalPanic as i32)
+}
+
+/// Copies every event of track `track_index` into the caller's `out_events`
+/// buffer in a single call, writing how many landed there to `*out_written`.
+///
+/// This is the batch form of `ownaudio_midi_v1_file_get_event`: one FFI crossing
+/// for a whole track instead of one per event, which matters on large files with
+/// tens of thousands of events. Size the buffer from
+/// `ownaudio_midi_v1_file_get_event_count`; if `capacity` is short only the first
+/// `capacity` events are copied and `*out_written` says so. The `meta_data`
+/// pointers borrow the file handle's memory — same lifetime as the single getter,
+/// valid until the handle is destroyed.
+#[no_mangle]
+pub extern "C" fn ownaudio_midi_v1_file_get_events(
+    handle: *mut MidiFileHandle,
+    track_index: usize,
+    out_events: *mut NativeMidiEvent,
+    capacity: usize,
+    out_written: *mut usize,
+) -> i32 {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        if out_events.is_null() || out_written.is_null() {
+            return MidiErrorCode::NullPointer as i32;
+        }
+        let wrapper = match unsafe { file_from_ptr(handle) } {
+            Some(w) => w,
+            None => return MidiErrorCode::InvalidHandle as i32,
+        };
+        let track = match wrapper.inner.tracks.get(track_index) {
+            Some(t) => t,
+            None => return MidiErrorCode::InvalidHandle as i32,
+        };
+
+        let dst = unsafe { std::slice::from_raw_parts_mut(out_events, capacity) };
+        let mut written = 0usize;
+        for (slot, event) in dst.iter_mut().zip(track.events.iter()) {
+            *slot = native_event_from(event);
+            written += 1;
+        }
+        unsafe {
+            *out_written = written;
+        }
+        MidiErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(MidiErrorCode::InternalPanic as i32)
+}
+
+/// Builds the C ABI view of a parsed event. The `meta_data` pointer borrows the
+/// event's own buffer, so it only stays valid while the owning file handle does.
+fn native_event_from(event: &MidiEventData) -> NativeMidiEvent {
+    let (meta_ptr, meta_len) = if event.meta_data.is_empty() {
+        (std::ptr::null(), 0)
+    } else {
+        (event.meta_data.as_ptr(), event.meta_data.len())
+    };
+
+    NativeMidiEvent {
+        delta_time: event.delta_time,
+        event_type: event.kind.as_u8(),
+        status: event.status,
+        data1: event.data1,
+        data2: event.data2,
+        meta_type: event.meta_type,
+        _pad0: 0,
+        _pad1: 0,
+        _pad2: 0,
+        meta_data: meta_ptr,
+        meta_data_len: meta_len,
+    }
 }
 
 /// Shared helper for the scalar file-field getters.
@@ -261,27 +313,62 @@ pub extern "C" fn ownaudio_midi_v1_writer_add_event(
             None => return MidiErrorCode::PortNotOpen as i32,
         };
 
-        let meta_data = if event.meta_data.is_null() || event.meta_data_len == 0 {
-            Vec::new()
-        } else {
-            unsafe {
-                std::slice::from_raw_parts(event.meta_data, event.meta_data_len).to_vec()
-            }
-        };
-
-        track.events.push(MidiEventData {
-            delta_time: event.delta_time,
-            kind: kind_from_u8(event.event_type),
-            status: event.status,
-            data1: event.data1,
-            data2: event.data2,
-            meta_type: event.meta_type,
-            meta_data,
-        });
+        track.events.push(event_data_from(&event));
         MidiErrorCode::Success as i32
     }));
 
     result.unwrap_or(MidiErrorCode::InternalPanic as i32)
+}
+
+/// Appends a whole array of events to the current track in one call — the batch
+/// form of `ownaudio_midi_v1_writer_add_event`. Each event's `meta_data` is
+/// copied, so the caller's payload buffer only needs to live for the call.
+#[no_mangle]
+pub extern "C" fn ownaudio_midi_v1_writer_add_events(
+    handle: *mut MidiWriterHandle,
+    events: *const NativeMidiEvent,
+    count: usize,
+) -> i32 {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        if events.is_null() && count != 0 {
+            return MidiErrorCode::NullPointer as i32;
+        }
+        let wrapper = match unsafe { writer_from_ptr(handle) } {
+            Some(w) => w,
+            None => return MidiErrorCode::InvalidHandle as i32,
+        };
+        let track = match wrapper.tracks.last_mut() {
+            Some(t) => t,
+            None => return MidiErrorCode::PortNotOpen as i32,
+        };
+
+        let src = unsafe { std::slice::from_raw_parts(events, count) };
+        track.events.reserve(count);
+        track.events.extend(src.iter().map(event_data_from));
+        MidiErrorCode::Success as i32
+    }));
+
+    result.unwrap_or(MidiErrorCode::InternalPanic as i32)
+}
+
+/// Copies a C ABI event into an owned [`MidiEventData`], duplicating its payload
+/// so the source buffer can go away right after.
+fn event_data_from(event: &NativeMidiEvent) -> MidiEventData {
+    let meta_data = if event.meta_data.is_null() || event.meta_data_len == 0 {
+        Vec::new()
+    } else {
+        unsafe { std::slice::from_raw_parts(event.meta_data, event.meta_data_len).to_vec() }
+    };
+
+    MidiEventData {
+        delta_time: event.delta_time,
+        kind: kind_from_u8(event.event_type),
+        status: event.status,
+        data1: event.data1,
+        data2: event.data2,
+        meta_type: event.meta_type,
+        meta_data,
+    }
 }
 
 /// Serializes all added tracks to SMF bytes, writing the buffer pointer to
