@@ -31,9 +31,9 @@ public static partial class OwnaudioNet
     public static bool IsRunning => _engineWrapper?.IsRunning ?? false;
 
     /// <summary>
-    /// Lib version.
+    /// Lib version, read off the assembly so it never drifts from the package.
     /// </summary>
-    public static Version Version { get; } = new(2, 6, 7);
+    public static Version Version { get; } = typeof(OwnaudioNet).Assembly.GetName().Version ?? new(4, 0, 0);
 
     /// <summary>
     /// The wrapper, null until init.
