@@ -271,7 +271,6 @@ metronome.RouteToChannels(2, 3);
 mixer.AddSource(music);
 mixer.AddSource(metronome);</code></pre></div>
 <div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>The <code>OutputChannelMapping</code> array length must equal the source's <code>Config.Channels</code>. Channels are zero-indexed.</p></div>
-<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p><strong>Not the same as <code>AudioConfig.OutputChannelSelectors</code>.</strong> Channel routing runs on <code>OutputChannelMapping</code> (per source → bus channel), which is fully wired. <code>OutputChannelSelectors</code> would additionally remap the bus onto <em>non-sequential</em> physical ports (e.g. sending a 4-channel bus to physical <code>4,5,6,7</code>), but the current Rust engine does not apply it — the bus always drives physical channels <code>0…N-1</code> in order. So target the first <code>Config.Channels</code> physical channels of the device and route with <code>OutputChannelMapping</code> alone.</p></div>
 
 <h3>Channel Conversion (Upmix / Downmix)</h3>
 <p><code>OutputChannelMapping</code> maps source channels 1-to-1 to output channels — it does not change the channel count of the source itself. To split a mono source across two channels, or sum a stereo source to mono, use the <code>targetChannels</code> parameter on <code>FileSource</code>. The decoder performs the conversion before mixing, and <code>Config.Channels</code> reflects the converted count.</p>
