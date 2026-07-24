@@ -40,9 +40,7 @@ pub use rotary::Rotary;
 pub use smartmaster::SmartMaster;
 pub use vst::{VstAudioBuffer, VstEffect, VstProcessFn};
 
-// ---------------------------------------------------------------------------
 // Effect type identifier
-// ---------------------------------------------------------------------------
 
 /// Identifies the variant of a native audio effect.
 ///
@@ -126,9 +124,7 @@ impl TryFrom<u32> for EffectType {
     }
 }
 
-// ---------------------------------------------------------------------------
 // Effect trait
-// ---------------------------------------------------------------------------
 
 /// Contract for a real-time audio effect.
 ///
@@ -182,18 +178,14 @@ pub trait Effect: Send {
     }
 }
 
-// ---------------------------------------------------------------------------
 // Common parameter IDs (shared across all effects)
-// ---------------------------------------------------------------------------
 
 /// Parameter ID 0 — enabled flag (0.0 = disabled, 1.0 = enabled).
 pub const PARAM_ENABLED: u32 = 0;
 /// Parameter ID 1 — dry/wet mix (0.0 = fully dry, 1.0 = fully wet).
 pub const PARAM_MIX: u32 = 1;
 
-// ---------------------------------------------------------------------------
 // EffectChain
-// ---------------------------------------------------------------------------
 
 /// A single effect together with its stable identifier within a chain.
 ///

@@ -41,9 +41,7 @@ impl StreamConfig {
     }
 }
 
-// ---------------------------------------------------------------------------
 // Internal conversions — not part of the public API
-// ---------------------------------------------------------------------------
 
 /// Validates `config` against the output capabilities of `device` and returns
 /// the Cpal representation if the config is supported.

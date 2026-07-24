@@ -802,13 +802,13 @@ impl Track {
         let pinned = self.shared.stretch_pinned();
         let at_unity = (tempo - 1.0).abs() <= UNITY_EPS && pitch.abs() <= UNITY_EPS;
         let needs_stretch = pinned || always_on || !at_unity;
-        let read = if self.source.is_none() {
-            0
-        } else if needs_stretch {
-            self.stretch
-                .fill(&mut self.source, buf, channels, tempo, pitch)
-        } else {
-            self.source.as_mut().unwrap().read(buf)
+        let read = match self.source {
+            None => 0,
+            Some(_) if needs_stretch => {
+                self.stretch
+                    .fill(&mut self.source, buf, channels, tempo, pitch)
+            }
+            Some(ref mut src) => src.read(buf),
         };
         for s in &mut buf[read..] {
             *s = 0.0;

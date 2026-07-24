@@ -62,9 +62,7 @@ pub enum AudioError {
 /// Convenience alias — all public functions in this crate return this.
 pub type Result<T> = std::result::Result<T, AudioError>;
 
-// ---------------------------------------------------------------------------
 // Cpal 0.18 unified error conversion
-// ---------------------------------------------------------------------------
 
 impl From<cpal::Error> for AudioError {
     fn from(e: cpal::Error) -> Self {

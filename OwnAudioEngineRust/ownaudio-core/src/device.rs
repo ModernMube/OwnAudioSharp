@@ -113,9 +113,7 @@ pub fn default_input_device() -> Result<AudioDeviceInfo> {
     device_to_input_info(&device, None)
 }
 
-// ---------------------------------------------------------------------------
 // Internal helpers
-// ---------------------------------------------------------------------------
 
 /// Selects an output `cpal::Device` by name using the given host, or falls back to the default.
 ///
