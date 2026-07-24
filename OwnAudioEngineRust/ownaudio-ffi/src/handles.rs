@@ -52,9 +52,7 @@ pub struct OwnAudioBpmHandle {
     _private: [u8; 0],
 }
 
-// ---------------------------------------------------------------------------
 // Internal wrapper types — never exposed across the FFI boundary
-// ---------------------------------------------------------------------------
 
 pub(crate) struct EngineWrapper {
     pub inner: AudioEngine,
@@ -81,9 +79,7 @@ unsafe impl Sync for OutputStreamWrapper {}
 unsafe impl Send for InputStreamWrapper {}
 unsafe impl Sync for InputStreamWrapper {}
 
-// ---------------------------------------------------------------------------
 // Helper: safely dereference an opaque handle pointer
-// ---------------------------------------------------------------------------
 
 /// Casts a raw `*mut OwnAudioEngineHandle` back to `&mut EngineWrapper`.
 ///
@@ -141,9 +137,7 @@ pub(crate) unsafe fn decoder_from_ptr<'a>(
     }
 }
 
-// ---------------------------------------------------------------------------
 // Mixer / track / effect opaque handles
-// ---------------------------------------------------------------------------
 
 /// Opaque handle to a [`MultiTrackMixer`] instance.
 ///
@@ -217,9 +211,7 @@ pub struct OwnAudioInputSourceHandle {
     _private: [u8; 0],
 }
 
-// ---------------------------------------------------------------------------
 // Internal wrappers
-// ---------------------------------------------------------------------------
 
 /// Owns one multi-track mixer's control- and audio-side state.
 ///
@@ -364,9 +356,7 @@ unsafe impl Sync for MemorySourceWrapper {}
 unsafe impl Send for InputSourceWrapper {}
 unsafe impl Sync for InputSourceWrapper {}
 
-// ---------------------------------------------------------------------------
 // Helper functions
-// ---------------------------------------------------------------------------
 
 /// Casts a raw `*mut OwnAudioMixerHandle` back to `&mut MixerWrapper`.
 pub(crate) unsafe fn mixer_from_ptr<'a>(

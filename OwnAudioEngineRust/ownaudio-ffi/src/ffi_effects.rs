@@ -15,9 +15,7 @@ use crate::handles::{
     OwnAudioMixerHandle, OwnAudioTrackHandle,
 };
 
-// ---------------------------------------------------------------------------
 // Helper: construct an effect from its numeric type tag
-// ---------------------------------------------------------------------------
 
 fn create_effect(effect_type_raw: u32, sample_rate: f32) -> Option<Box<dyn Effect>> {
     let effect_type = EffectType::try_from(effect_type_raw).ok()?;
@@ -50,9 +48,7 @@ fn create_effect(effect_type_raw: u32, sample_rate: f32) -> Option<Box<dyn Effec
     Some(effect)
 }
 
-// ---------------------------------------------------------------------------
 // Effect lifecycle
-// ---------------------------------------------------------------------------
 
 /// Adds a new effect of the given type to the track's effect chain.
 ///
@@ -242,9 +238,7 @@ pub extern "C" fn ownaudio_v1_mixer_remove_master_effect(
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
 }
 
-// ---------------------------------------------------------------------------
 // VST3 plugin effects (hosted through the OwnAudioVst C ABI)
-// ---------------------------------------------------------------------------
 
 /// Builds a [`VstEffect`] and enqueues it on `target_track`'s chain, returning a
 /// ready effect handle on success.
@@ -472,9 +466,7 @@ pub extern "C" fn ownaudio_v1_effect_remove(
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
 }
 
-// ---------------------------------------------------------------------------
 // Parameter access
-// ---------------------------------------------------------------------------
 
 /// Sets a parameter on an effect by numeric identifier.
 ///

@@ -64,9 +64,7 @@ impl From<ownaudio_core::AudioError> for OwnAudioErrorCode {
     }
 }
 
-// ---------------------------------------------------------------------------
 // Thread-local last error message
-// ---------------------------------------------------------------------------
 
 thread_local! {
     static LAST_ERROR: RefCell<Option<CString>> = const { RefCell::new(None) };

@@ -15,9 +15,7 @@ use crate::handles::{
 /// [`MAX_TRACKS`]: ownaudio_core::multitrack::MAX_TRACKS
 const COMMAND_QUEUE_CAPACITY: usize = 1024;
 
-// ---------------------------------------------------------------------------
 // Mixer lifecycle
-// ---------------------------------------------------------------------------
 
 /// Creates a new [`MultiTrackMixer`] and writes its handle to `*out_mixer`.
 ///
@@ -247,9 +245,7 @@ pub extern "C" fn ownaudio_v1_mixer_get_master_peaks(
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
 }
 
-// ---------------------------------------------------------------------------
 // Master-output capture (recording)
-// ---------------------------------------------------------------------------
 
 /// Starts capturing the mixer's master output into a ring buffer so the control
 /// thread can persist the rendered mix (e.g. record to a file).
@@ -362,9 +358,7 @@ pub extern "C" fn ownaudio_v1_mixer_capture_stop(mixer: *mut OwnAudioMixerHandle
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
 }
 
-// ---------------------------------------------------------------------------
 // Track lifecycle
-// ---------------------------------------------------------------------------
 
 /// Adds a new track to the mixer and writes its handle to `*out_track`.
 ///
@@ -467,9 +461,7 @@ pub extern "C" fn ownaudio_v1_track_remove(
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
 }
 
-// ---------------------------------------------------------------------------
 // Track transport control
-// ---------------------------------------------------------------------------
 
 /// Starts or resumes playback of the track.
 ///
@@ -549,9 +541,7 @@ pub extern "C" fn ownaudio_v1_track_seek(
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
 }
 
-// ---------------------------------------------------------------------------
 // Track position
-// ---------------------------------------------------------------------------
 
 /// Writes the number of output frames the track has rendered since the last
 /// position reset to `*out_frames`.
@@ -789,9 +779,7 @@ pub extern "C" fn ownaudio_v1_track_clear_output_channel_map(
     result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
 }
 
-// ---------------------------------------------------------------------------
 // Track parameters
-// ---------------------------------------------------------------------------
 
 /// Sets the track gain (linear amplitude multiplier; 1.0 = unity).
 ///

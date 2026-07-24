@@ -15,9 +15,7 @@ use crate::handles::{
 };
 use crate::host_api::{resolve_host, OwnHostApi};
 
-// ---------------------------------------------------------------------------
 // Engine lifecycle
-// ---------------------------------------------------------------------------
 
 /// Creates a new `AudioEngine` instance and writes its handle to `*out_handle`.
 ///
@@ -116,9 +114,7 @@ pub extern "C" fn ownaudio_v1_engine_destroy(handle: *mut OwnAudioEngineHandle) 
     }));
 }
 
-// ---------------------------------------------------------------------------
 // Output stream
-// ---------------------------------------------------------------------------
 
 /// Opens an output stream and writes its handle to `*out_stream`.
 ///
@@ -445,9 +441,7 @@ pub extern "C" fn ownaudio_v1_output_stream_destroy(stream: *mut OwnAudioOutputS
     }));
 }
 
-// ---------------------------------------------------------------------------
 // Input stream
-// ---------------------------------------------------------------------------
 
 /// Opens an input stream and writes its handle to `*out_stream`.
 ///
@@ -639,9 +633,7 @@ pub extern "C" fn ownaudio_v1_input_stream_destroy(stream: *mut OwnAudioInputStr
     }));
 }
 
-// ---------------------------------------------------------------------------
 // Internal helper
-// ---------------------------------------------------------------------------
 
 /// Converts a nullable C device name string to an `Option<AudioDeviceInfo>`.
 ///

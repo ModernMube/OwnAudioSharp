@@ -36,9 +36,7 @@ pub type OwnAudioInputCallback = Option<
     ),
 >;
 
-// ---------------------------------------------------------------------------
 // Trampoline state structs
-// ---------------------------------------------------------------------------
 //
 // Rust 2021 RFC 2229 "precise closure capture" would capture the individual
 // fields of a struct if the closure body accesses them directly (e.g. `ud.0`),
@@ -112,9 +110,7 @@ impl InputTrampolineState {
     }
 }
 
-// ---------------------------------------------------------------------------
 // Trampoline constructors
-// ---------------------------------------------------------------------------
 
 /// Builds the closure that `ownaudio_core` expects for output streams.
 ///
