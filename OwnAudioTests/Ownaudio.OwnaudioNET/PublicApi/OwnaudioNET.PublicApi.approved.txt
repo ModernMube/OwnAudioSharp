@@ -612,6 +612,9 @@ namespace OwnaudioNET.Effects.SmartMaster
     }
     public class SmartMasterConfig
     {
+        public const int AlignChannels = 3;
+        public const int EqBands = 30;
+        public const int ParametricBands = 10;
         public SmartMasterConfig() { }
         public float CompressorAttack { get; set; }
         public bool CompressorEnabled { get; set; }
@@ -640,6 +643,8 @@ namespace OwnaudioNET.Effects.SmartMaster
         public int LatencySamples { get; }
         public float Mix { get; set; }
         public string Name { get; set; }
+        public void ApplyConfiguration() { }
+        public void ApplyConfiguration(OwnaudioNET.Effects.SmartMaster.SmartMasterConfig configuration) { }
         public void CancelMeasurement() { }
         public void Dispose() { }
         public OwnaudioNET.Effects.SmartMaster.SmartMasterConfig GetConfiguration() { }

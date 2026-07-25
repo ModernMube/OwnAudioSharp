@@ -375,8 +375,116 @@ namespace Ownaudio.Test.OwnaudioNET.Effects
 
             // Assert
             float drift = MathF.Abs(LinearToDb(firstBlockRMS) - LinearToDb(lastBlockRMS));
-            Assert.True(drift < 0.5f, 
+            Assert.True(drift < 0.5f,
                 $"Effect showed instability over time: drift = {drift:F2} dB");
+        }
+
+        [Fact]
+        public void SmartMasterEffect_ApplyConfiguration_ShouldRebuildTheChain()
+        {
+            using var effect = new SmartMasterEffect();
+            var config = new AudioConfig
+            {
+                SampleRate = (int)SampleRate,
+                Channels = Channels,
+                BufferSize = 512
+            };
+            effect.Initialize(config);
+            effect.LoadSpeakerPreset(SpeakerType.Default);
+
+            float[] before = CreateTestBuffer(1000f, 0.25f, FrameCount, Channels);
+            effect.Process(before, FrameCount);
+
+            // Pull the whole EQ down and apply it in place, no preset round trip
+            var masterConfig = effect.GetConfiguration();
+            for (int i = 0; i < SmartMasterConfig.EqBands; i++)
+                masterConfig.GraphicEQGains[i] = -12.0f;
+
+            effect.ApplyConfiguration();
+
+            float[] after = CreateTestBuffer(1000f, 0.25f, FrameCount, Channels);
+            effect.Process(after, FrameCount);
+
+            float drop = LinearToDb(CalculateRMS(before)) - LinearToDb(CalculateRMS(after));
+            Assert.True(drop > 6.0f, $"ApplyConfiguration did not reach the chain, level dropped only {drop:F2} dB");
+        }
+
+        [Fact]
+        public void SmartMasterConfig_ArrayLengths_ShouldMatchTheChain()
+        {
+            var config = new SmartMasterConfig();
+
+            Assert.Equal(SmartMasterConfig.EqBands, config.GraphicEQGains.Length);
+            Assert.Equal(SmartMasterConfig.AlignChannels, config.TimeDelays.Length);
+            Assert.Equal(SmartMasterConfig.AlignChannels, config.PhaseInvert.Length);
+            Assert.Equal(SmartMasterConfig.EqBands, new MeasurementResults().FrequencyResponse.Length);
+        }
+
+        [Fact]
+        public void SmartMasterConfig_OddSizedArrays_ShouldGetFitted()
+        {
+            // An older 31 band preset, plus a truncated hand edited one
+            var config = new SmartMasterConfig();
+            float[] legacyGains = new float[31];
+            legacyGains[0] = 4.0f;
+            legacyGains[30] = 9.0f;
+
+            config.GraphicEQGains = legacyGains;
+            config.TimeDelays = new float[] { 1.0f };
+
+            Assert.Equal(SmartMasterConfig.EqBands, config.GraphicEQGains.Length);
+            Assert.Equal(4.0f, config.GraphicEQGains[0]);
+            Assert.Equal(SmartMasterConfig.AlignChannels, config.TimeDelays.Length);
+            Assert.Equal(1.0f, config.TimeDelays[0]);
+        }
+
+        [Fact]
+        public void SmartMasterChain_LimiterRelease_ShouldReachTheLimiter()
+        {
+            var config = new AudioConfig
+            {
+                SampleRate = (int)SampleRate,
+                Channels = Channels,
+                BufferSize = 512
+            };
+
+            //Same signal through a fast and a slow release - identical output means the
+            //release never made it past Configure
+            float[] fast = _limitedBlock(config, 1.0f);
+            float[] slow = _limitedBlock(config, 1000.0f);
+
+            bool differs = false;
+            for (int i = 0; i < fast.Length; i++)
+            {
+                if (MathF.Abs(fast[i] - slow[i]) > 1e-6f) { differs = true; break; }
+            }
+
+            Assert.True(differs, "LimiterRelease had no effect on the chain output");
+        }
+
+        /// <summary>
+        /// Pushes a loud transient plus a quiet tail through a chain built with the given
+        /// limiter release, and hands back what came out.
+        /// </summary>
+        private float[] _limitedBlock(AudioConfig config, float releaseMs)
+        {
+            var masterConfig = new SmartMasterConfig
+            {
+                LimiterThreshold = -20.0f,
+                LimiterCeiling = -2.0f,
+                LimiterRelease = releaseMs
+            };
+
+            using var chain = new SmartMasterAudioChain(config.SampleRate, config.Channels);
+            chain.Configure(config, masterConfig);
+
+            float[] loud = CreateTestBuffer(1000f, 1.0f, FrameCount, Channels);
+            chain.Process(loud, FrameCount);
+
+            float[] quiet = CreateTestBuffer(1000f, 0.05f, FrameCount, Channels);
+            chain.Process(quiet, FrameCount);
+
+            return quiet;
         }
     }
 }

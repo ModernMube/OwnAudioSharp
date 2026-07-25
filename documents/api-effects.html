@@ -124,13 +124,13 @@ comp.SetPreset(CompressorPreset.VocalGentle);</code></pre></div>
 
 <!-- SmartMaster -->
 <h2 id="smartmaster">SmartMaster Effect</h2>
-<p>Intelligent adaptive mastering chain for the master bus. Includes 31-band EQ, compressor, subharmonic synthesizer, and auto-calibration via room measurement.</p>
+<p>Intelligent adaptive mastering chain for the master bus. Includes 30-band EQ, compressor, subharmonic synthesizer, and auto-calibration via room measurement.</p>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var smartMaster = new SmartMasterEffect();
 mixer.AddMasterEffect(smartMaster);
 
 // Factory preset by speaker type
-smartMaster.LoadSpeakerPreset(SpeakerType.StudioMonitor);
-// Other types: PA, Headphones, Car, HomeTheater, TV, Laptop
+smartMaster.LoadSpeakerPreset(SpeakerType.Studio);
+// Other types: Default, HiFi, Headphone, Club, Concert
 
 // Save / load user presets
 smartMaster.Save("my-studio");
@@ -144,13 +144,18 @@ await smartMaster.StartMeasurementAsync(); // plays test signal, auto-calibrates
 smartMaster.CancelMeasurement();
 MeasurementStatusInfo status = smartMaster.GetMeasurementStatus();
 
+// Edit the live config, then rebuild the chain from it
+SmartMasterConfig cfg = smartMaster.GetConfiguration();
+cfg.GraphicEQGains[5] = 2.5f;                   // 63 Hz
+smartMaster.ApplyConfiguration();
+
 // Lifecycle
 smartMaster.OnPlaybackStopped(); // call when transport stops</code></pre></div>
 
 <h3>SmartMasterConfig</h3>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var config = new SmartMasterConfig
 {
-    GraphicEQGains       = new float[31],  // per-band dB gains (0 = flat)
+    GraphicEQGains       = new float[SmartMasterConfig.EqBands], // 30 bands, dB (0 = flat)
     CompressorEnabled    = true,
     CompressorThreshold  = 0.5f,           // 0.0–1.0 linear
     CompressorRatio      = 4.0f,           // 4:1
@@ -158,8 +163,15 @@ smartMaster.OnPlaybackStopped(); // call when transport stops</code></pre></div>
     CompressorRelease    = 100f,           // ms
     SubharmonicEnabled   = false,
     SubharmonicMix       = 0.0f,           // 0.0–1.0
-    SubharmonicFreqRange = 60.0f           // max frequency in Hz
-};</code></pre></div>
+    SubharmonicFreqRange = 60.0f,          // max frequency in Hz
+    LimiterThreshold     = -0.1f,          // dBFS
+    LimiterCeiling       = -0.1f,          // dBFS
+    LimiterRelease       = 50f             // ms
+};
+
+// Arrays are fitted to the length the chain expects, so an older or hand
+// edited preset can't silently disable a stage.
+smartMaster.ApplyConfiguration(config);</code></pre></div>
 
 <!-- VST3 -->
 <h2 id="vst3">VST3 Plugin Hosting</h2>

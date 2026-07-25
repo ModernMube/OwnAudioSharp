@@ -435,23 +435,7 @@ public partial class MainWindowViewModel
 
             if (loadedConfig != null)
             {
-                // Use reflection to set the private _configuration field
-                var configField = _smartMaster.GetType().GetField("_configuration", 
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                
-                if (configField != null)
-                {
-                    configField.SetValue(_smartMaster, loadedConfig);
-                    
-                    // Apply the configuration to components
-                    var applyMethod = _smartMaster.GetType().GetMethod("ApplyConfigurationToComponents",
-                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    
-                    if (applyMethod != null)
-                    {
-                        applyMethod.Invoke(_smartMaster, null);
-                    }
-                }
+                _smartMaster.ApplyConfiguration(loadedConfig);
 
                 string fileName = System.IO.Path.GetFileName(filePath);
                 StatusMessage = $"Loaded preset: {fileName}";

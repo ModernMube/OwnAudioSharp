@@ -35,7 +35,7 @@ Public entry point: `SmartMasterEffect`.
 | [SubharmonicSynth.cs](Components/SubharmonicSynth.cs) | FIR bandpass (40–120 Hz) + waveshaper for synthesized sub-bass. |
 | [FIRFilter.cs](Components/FIRFilter.cs) | Generic linear-phase windowed-sinc FIR (per-channel delay lines). |
 | [NoiseGenerator.cs](Components/NoiseGenerator.cs) | White / pink (Voss-McCartney) / low-frequency test noise. |
-| [SmartMasterSpectrumAnalyzer.cs](Components/SmartMasterSpectrumAnalyzer.cs) | FFT-based 31-band ISO spectrum + RMS for calibration. |
+| [SmartMasterSpectrumAnalyzer.cs](Components/SmartMasterSpectrumAnalyzer.cs) | FFT-based 30-band ISO spectrum + RMS for calibration. |
 
 ---
 
@@ -44,7 +44,7 @@ Public entry point: `SmartMasterEffect`.
 `SmartMasterAudioChain.Process` runs the buffer through, in order:
 
 ```
-input ─► Graphic EQ (31-band) ─► [Subharmonic Synth] ─► [Compressor] ─► Crossover chain ─► output
+input ─► Graphic EQ (30-band) ─► [Subharmonic Synth] ─► [Compressor] ─► Crossover chain ─► output
                                                                               │
                           ┌───────────────────────────────────────────────────┘
                           ▼   (only when phase alignment is needed)
@@ -97,8 +97,17 @@ sm.Save("my-room");                        // persist current config
 sm.Load("my-room");                        // restore it later
 sm.ResetToDefaults();                      // flat/transparent + save as "default"
 
-var cfg = sm.GetConfiguration();           // inspect current SmartMasterConfig
+var cfg = sm.GetConfiguration();           // the live SmartMasterConfig
+cfg.GraphicEQGains[5] = 2.5f;              // 63 Hz
+sm.ApplyConfiguration();                   // rebuild the chain from it
+sm.ApplyConfiguration(otherConfig);        // or hand it one built elsewhere
 ```
+
+Editing the object `GetConfiguration()` returns does **not** change the sound on
+its own — the managed chain keeps running the components it was built with until
+`ApplyConfiguration` (or a preset load) swaps in a new one. In rust-native mode
+the control tick mirrors the config onto the native effect every ~15 ms, so edits
+are audible immediately and the call is only a no-op safety net.
 
 Presets are JSON files under
 `%UserProfile%/.ownaudio/smartmasterpresets/*.smartmaster.json`. Factory presets
@@ -132,7 +141,7 @@ Reported through `MeasurementStatusInfo` (status enum + 0–1 progress + step te
    `InputSource`, measure RMS. Below −60 dBFS ⇒ channel error (aborts).
 3. **Subwoofer** — play 2 s low-frequency noise on all channels; below −40 dBFS
    flags a weak sub (→ recommends the subharmonic synth).
-4. **Analyzing spectrum** — play 4 s pink noise, record 3 s, FFT to 31 bands,
+4. **Analyzing spectrum** — play 4 s pink noise, record 3 s, FFT to 30 bands,
    compare against a flat reference to get per-band deviation in dB.
 5. **Calculating correction** — build a fresh `SmartMasterConfig`:
    graphic-EQ gains from the inverse spectrum deviation (clamped: bass bands
@@ -153,7 +162,7 @@ clicks.
 
 | Field | Meaning |
 | --- | --- |
-| `GraphicEQGains[31]` | 31-band graphic EQ gains in dB (0 = flat). |
+| `GraphicEQGains[30]` | 30-band graphic EQ gains in dB (0 = flat), ISO centres 20 Hz – 16 kHz. |
 | `SubharmonicEnabled` / `SubharmonicMix` / `SubharmonicFreqRange` | Sub-bass synth toggle, wet mix, max frequency. |
 | `CompressorEnabled` / `Threshold` / `Ratio` / `Attack` / `Release` | Compressor stage. |
 | `CrossoverFrequency` | Low/high split point in Hz. |
@@ -162,6 +171,11 @@ clicks.
 | `LimiterThreshold` / `LimiterCeiling` / `LimiterRelease` | Output limiter. |
 | `MicInputGain` | Measurement/monitor mic gain (1.0 = unity). |
 | `LastMeasurement` | The `MeasurementResults` that produced this config, if any. |
+
+Band and channel counts come from `SmartMasterConfig.EqBands` (30),
+`AlignChannels` (3) and `ParametricBands` (10); every array property fits what it
+is given to that length, so an older 31-band preset or a hand-trimmed JSON can't
+silently disable a stage.
 
 Serialization goes through `SmartMasterRustNextJsonContext` (System.Text.Json
 source generator) so presets work under Native AOT / trimming.
@@ -180,7 +194,8 @@ alignment.
 1. `new SmartMasterEffect()` → `Initialize(audioConfig)` (creates the chain once;
    later `Initialize` calls preserve state).
 2. Optionally `LoadSpeakerPreset(...)` / `Load(...)`, or run
-   `StartMeasurementAsync()` then load the `measured` preset.
+   `StartMeasurementAsync()` then load the `measured` preset. Hand edits go
+   through `ApplyConfiguration()`.
 3. Add to your mixer/effect chain; audio flows through `Process`.
 4. On playback stop call `OnPlaybackStopped()` (or `Reset()`) to clear IIR state.
 5. `Dispose()` when done (also disposes the mic monitor).

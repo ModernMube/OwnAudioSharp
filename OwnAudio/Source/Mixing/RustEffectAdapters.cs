@@ -239,10 +239,10 @@ internal static class RustEffectAdapters
         var sm = (SM.SmartMasterEffect)e;
         SM.SmartMasterConfig cfg = sm.GetConfiguration();
 
-        // GraphicEQGains is oversized (31); take the first 30 for the native 30-band EQ.
+        //The config keeps every array at its expected length, so we can just walk them
         float[] eqGains = cfg.GraphicEQGains;
-        for (int i = 0; i < 30; i++)
-            sink((uint)(2 + i), (eqGains is not null && i < eqGains.Length) ? eqGains[i] : 0f);
+        for (int i = 0; i < SM.SmartMasterConfig.EqBands; i++)
+            sink((uint)(2 + i), eqGains[i]);
 
         sink(32, cfg.SubharmonicEnabled ? 1f : 0f);
         sink(33, cfg.SubharmonicMix);
@@ -259,12 +259,11 @@ internal static class RustEffectAdapters
         // Phase align: per-channel delay (ms) + polarity flip for L, R, Sub.
         float[] delays = cfg.TimeDelays;
         bool[] invert = cfg.PhaseInvert;
-        sink(40, (delays is not null && delays.Length > 0) ? delays[0] : 0f);
-        sink(41, (delays is not null && delays.Length > 1) ? delays[1] : 0f);
-        sink(42, (delays is not null && delays.Length > 2) ? delays[2] : 0f);
-        sink(43, (invert is not null && invert.Length > 0 && invert[0]) ? 1f : 0f);
-        sink(44, (invert is not null && invert.Length > 1 && invert[1]) ? 1f : 0f);
-        sink(45, (invert is not null && invert.Length > 2 && invert[2]) ? 1f : 0f);
+        for (int ch = 0; ch < SM.SmartMasterConfig.AlignChannels; ch++)
+        {
+            sink((uint)(40 + ch), delays[ch]);
+            sink((uint)(43 + ch), invert[ch] ? 1f : 0f);
+        }
 
         sink(46, cfg.LimiterThreshold);
         sink(47, cfg.LimiterCeiling);

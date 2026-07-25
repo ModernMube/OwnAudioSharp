@@ -597,7 +597,7 @@ namespace OwnaudioNET.Effects.SmartMaster
                 }
                 
                 // 11. Calculate frequency response deviation (in dB)
-                for (int i = 0; i < 31; i++)
+                for (int i = 0; i < SmartMasterConfig.EqBands; i++)
                 {
                     float measuredDb = 20f * (float)Math.Log10(Math.Max(measuredSpectrum[i], 1e-10f));
                     float idealDb = 20f * (float)Math.Log10(Math.Max(idealSpectrum[i], 1e-10f));
@@ -609,7 +609,7 @@ namespace OwnaudioNET.Effects.SmartMaster
                 
                 // 12. Debug log
                 Log.Info("[SmartMaster] Spectrum analysis completed:");
-                for (int i = 0; i < 31; i++)
+                for (int i = 0; i < SmartMasterConfig.EqBands; i++)
                 {
                     Log.Info($"  Band {i}: {results.FrequencyResponse[i]:+0.0;-0.0} dB");
                 }
@@ -617,11 +617,8 @@ namespace OwnaudioNET.Effects.SmartMaster
             catch (Exception ex)
             {
                 Log.Error($"[SmartMaster] Spectrum analysis error: {ex.Message}");
-                
-                for (int i = 0; i < 31; i++)
-                {
-                    results.FrequencyResponse[i] = 0.0f;
-                }
+
+                Array.Clear(results.FrequencyResponse);
             }
         }
         
@@ -631,7 +628,7 @@ namespace OwnaudioNET.Effects.SmartMaster
         private void CalculateCorrectionsToConfig(MeasurementResults results, SmartMasterConfig targetConfig)
         {
             // 1. Graphic EQ setup (spectrum equalization)
-            for (int i = 0; i < 31; i++)
+            for (int i = 0; i < SmartMasterConfig.EqBands; i++)
             {
                 float gain = results.FrequencyResponse[i];
                 

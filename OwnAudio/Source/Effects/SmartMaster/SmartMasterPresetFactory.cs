@@ -81,13 +81,9 @@ namespace OwnaudioNET.Effects.SmartMaster
                 LimiterThreshold = -0.3f, // dB - transparent limiting, only catches peaks
                 LimiterRelease = 50.0f
             };
-            
-            // Flat EQ (all 0 dB)
-            for (int i = 0; i < 31; i++)
-            {
-                config.GraphicEQGains[i] = 0.0f;
-            }
-            
+
+            //A fresh config is already flat, nothing to set here
+
             return config;
         }
         
@@ -122,10 +118,10 @@ namespace OwnaudioNET.Effects.SmartMaster
             // Slight bass boost and presence enhancement
             SetEQCurve(config, new float[]
             {
-                1.5f,  1.2f,  0.8f,  0.5f,  0.3f,  0.2f,  0.0f,  0.0f,  // 20-160Hz: gentle bass lift
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 200-1.6kHz: flat
-                0.0f,  0.0f,  0.0f,  0.5f,  0.8f,  1.0f,  0.8f,  0.5f,  // 2k-8kHz: presence boost
-                0.3f,  0.2f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f           // 10k-20kHz: gentle rolloff
+                1.5f,  1.2f,  0.8f,  0.5f,  0.3f,  0.2f,  0.0f,  0.0f,  // 20-100Hz: gentle bass lift
+                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 125-630Hz: flat
+                0.0f,  0.0f,  0.0f,  0.5f,  0.8f,  1.0f,  0.8f,  0.5f,  // 800Hz-4kHz: presence boost
+                0.3f,  0.2f,  0.0f,  0.0f,  0.0f,  0.0f                 // 5k-16kHz: gentle rolloff
             });
             
             return config;
@@ -160,10 +156,10 @@ namespace OwnaudioNET.Effects.SmartMaster
             // Compensate for typical headphone response
             SetEQCurve(config, new float[]
             {
-                0.5f,  0.3f,  0.2f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 20-160Hz: slight bass
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 200-1.6kHz: flat
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 2k-8kHz: flat
-                -0.5f, -0.8f, -1.0f, -0.8f, -0.5f, -0.3f, 0.0f          // 10k-20kHz: reduce harshness
+                0.5f,  0.3f,  0.2f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 20-100Hz: slight bass
+                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 125-630Hz: flat
+                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 800Hz-4kHz: flat
+                -0.5f, -0.8f, -1.0f, -0.8f, -0.5f, -0.3f               // 5k-16kHz: reduce harshness
             });
             
             return config;
@@ -200,10 +196,10 @@ namespace OwnaudioNET.Effects.SmartMaster
             // Nearly flat EQ with minimal room compensation
             SetEQCurve(config, new float[]
             {
-                0.3f,  0.2f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 20-160Hz: minimal bass
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 200-1.6kHz: flat
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 2k-8kHz: flat
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f           // 10k-20kHz: flat
+                0.3f,  0.2f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 20-100Hz: minimal bass
+                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 125-630Hz: flat
+                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 800Hz-4kHz: flat
+                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f                 // 5k-16kHz: flat
             });
             
             return config;
@@ -240,10 +236,10 @@ namespace OwnaudioNET.Effects.SmartMaster
             // Club EQ: boosted bass and highs
             SetEQCurve(config, new float[]
             {
-                4.0f,  3.5f,  3.0f,  2.5f,  2.0f,  1.5f,  1.0f,  0.5f,  // 20-160Hz: heavy bass
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 200-1.6kHz: flat
-                0.5f,  1.0f,  1.5f,  2.0f,  2.5f,  2.0f,  1.5f,  1.0f,  // 2k-8kHz: presence
-                0.5f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f           // 10k-20kHz: controlled highs
+                4.0f,  3.5f,  3.0f,  2.5f,  2.0f,  1.5f,  1.0f,  0.5f,  // 20-100Hz: heavy bass
+                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 125-630Hz: flat
+                0.5f,  1.0f,  1.5f,  2.0f,  2.5f,  2.0f,  1.5f,  1.0f,  // 800Hz-4kHz: presence
+                0.5f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f                 // 5k-16kHz: controlled highs
             });
             
             // Typical club system delays (sub slightly delayed)
@@ -285,10 +281,10 @@ namespace OwnaudioNET.Effects.SmartMaster
             // Concert EQ: compensate for typical PA response
             SetEQCurve(config, new float[]
             {
-                3.0f,  2.5f,  2.0f,  1.5f,  1.0f,  0.5f,  0.0f,  0.0f,  // 20-160Hz: bass boost
-                0.0f,  0.0f,  0.0f, -0.5f, -0.8f, -0.5f,  0.0f,  0.0f,  // 200-1.6kHz: slight mid scoop
-                0.5f,  1.0f,  1.5f,  2.0f,  2.5f,  2.0f,  1.5f,  1.0f,  // 2k-8kHz: vocal presence
-                0.5f,  0.0f, -0.5f, -1.0f, -1.5f, -1.0f, -0.5f          // 10k-20kHz: air control
+                3.0f,  2.5f,  2.0f,  1.5f,  1.0f,  0.5f,  0.0f,  0.0f,  // 20-100Hz: bass boost
+                0.0f,  0.0f,  0.0f, -0.5f, -0.8f, -0.5f,  0.0f,  0.0f,  // 125-630Hz: slight mid scoop
+                0.5f,  1.0f,  1.5f,  2.0f,  2.5f,  2.0f,  1.5f,  1.0f,  // 800Hz-4kHz: vocal presence
+                0.5f,  0.0f, -0.5f, -1.0f, -1.5f, -1.0f                // 5k-16kHz: air control
             });
             
             // Typical concert system delays
@@ -304,7 +300,7 @@ namespace OwnaudioNET.Effects.SmartMaster
         /// </summary>
         private static void SetEQCurve(SmartMasterConfig config, float[] gains)
         {
-            int count = Math.Min(gains.Length, 31);
+            int count = Math.Min(gains.Length, SmartMasterConfig.EqBands);
             for (int i = 0; i < count; i++)
             {
                 config.GraphicEQGains[i] = gains[i];

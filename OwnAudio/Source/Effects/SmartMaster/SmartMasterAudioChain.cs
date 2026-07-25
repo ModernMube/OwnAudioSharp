@@ -99,6 +99,7 @@ namespace OwnaudioNET.Effects.SmartMaster
             limiter.Initialize(config);
             limiter.Threshold = masterConfig.LimiterThreshold;
             limiter.Ceiling = masterConfig.LimiterCeiling;
+            limiter.Release = masterConfig.LimiterRelease;
             
             // 2. Reset all components to clean state
             graphicEQ.Reset();
@@ -123,15 +124,12 @@ namespace OwnaudioNET.Effects.SmartMaster
             
             // Check if phase alignment is needed
             _needsPhaseAlignment = false;
-            if (masterConfig.TimeDelays != null && masterConfig.PhaseInvert != null)
+            for (int i = 0; i < SmartMasterConfig.AlignChannels; i++)
             {
-                for (int i = 0; i < Math.Min(3, masterConfig.TimeDelays.Length); i++)
+                if (Math.Abs(masterConfig.TimeDelays[i]) > 0.001f || masterConfig.PhaseInvert[i])
                 {
-                    if (Math.Abs(masterConfig.TimeDelays[i]) > 0.001f || masterConfig.PhaseInvert[i])
-                    {
-                        _needsPhaseAlignment = true;
-                        break;
-                    }
+                    _needsPhaseAlignment = true;
+                    break;
                 }
             }
             

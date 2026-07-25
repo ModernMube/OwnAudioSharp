@@ -12,13 +12,14 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
         private readonly int _sampleRate;
 
         /// <summary>
-        /// ISO 31 band centres, 20Hz - 20kHz.
+        /// ISO band centres, 20Hz - 16kHz. Same set (and order) as the graphic EQ,
+        /// so a measured band maps straight onto its correction.
         /// </summary>
         private static readonly float[] _frequencyBands = new float[]
         {
             20f, 25f, 31.5f, 40f, 50f, 63f, 80f, 100f, 125f, 160f,
             200f, 250f, 315f, 400f, 500f, 630f, 800f, 1000f, 1250f, 1600f,
-            2000f, 2500f, 3150f, 4000f, 5000f, 6300f, 8000f, 10000f, 12500f, 16000f, 20000f
+            2000f, 2500f, 3150f, 4000f, 5000f, 6300f, 8000f, 10000f, 12500f, 16000f
         };
 
         public SmartMasterSpectrumAnalyzer(int sampleRate)
@@ -29,7 +30,7 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
         /// <summary>
         /// Chews through the recording with 75% overlapping Hann windows.
         /// </summary>
-        /// <returns>31 band spectrum, linear amplitudes.</returns>
+        /// <returns>One linear amplitude per ISO band.</returns>
         public float[] AnalyzeSpectrum(float[] audioData)
         {
             int fftSize = _sampleRate >= 96000 ? 32768 : (_sampleRate >= 48000 ? 16384 : 8192);

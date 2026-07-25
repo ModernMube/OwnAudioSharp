@@ -93,7 +93,7 @@ Load VST3 effect plugins and use their native cross-platform editor GUI, integra
 Straightforward capture from any input device with configurable sample rate, buffer size and channel count.
 
 ### SmartMaster — Automatic Speaker Calibration
-Measures your speakers with a microphone and corrects the output automatically. Includes speaker profiles (HiFi, Headphone, Studio, Club, Concert), a 31-band EQ, multiband compression and a brick-wall limiter.
+Measures your speakers with a microphone and corrects the output automatically. Includes speaker profiles (HiFi, Headphone, Studio, Club, Concert), a 30-band EQ, multiband compression and a brick-wall limiter.
 
 > Full guide: [OwnAudio/Source/Effects/SmartMaster/README.md](OwnAudio/Source/Effects/SmartMaster/README.md)
 

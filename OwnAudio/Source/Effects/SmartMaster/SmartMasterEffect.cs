@@ -211,22 +211,8 @@ namespace OwnaudioNET.Effects.SmartMaster
             if (_presetManager == null || _config == null)
                 throw new InvalidOperationException("Effect not initialized");
             
-            var loadedConfig = _presetManager.Load(presetName);
-            
-            lock (_configLock)
-            {
-                _configuration = loadedConfig;
-                
-                var newChain = new SmartMasterAudioChain(_config.SampleRate, _config.Channels);
-                newChain.Configure(_config, _configuration);
-                
-                var oldChain = _audioChain;
-                _audioChain = newChain;
-                
-                oldChain?.Dispose();
-                
-                Logger.Log.Info($"[SmartMaster] Preset loaded and applied: {presetName}");
-            }
+            _swapChain(_presetManager.Load(presetName));
+            Logger.Log.Info($"[SmartMaster] Preset loaded and applied: {presetName}");
         }
         
         /// <summary>
@@ -239,21 +225,8 @@ namespace OwnaudioNET.Effects.SmartMaster
             if (_presetManager == null || _config == null)
                 throw new InvalidOperationException("Effect not initialized");
             
-            var loadedConfig = _presetManager.LoadSpeakerPreset(speakerType);
-            
-            lock (_configLock)
-            {
-                _configuration = loadedConfig;
-                
-                var newChain = new SmartMasterAudioChain(_config.SampleRate, _config.Channels);
-                newChain.Configure(_config, _configuration);
-                
-                var oldChain = _audioChain;
-                _audioChain = newChain;
-                oldChain?.Dispose();
-                
-                Logger.Log.Info($"[SmartMaster] Loaded speaker preset: {speakerType}");
-            }
+            _swapChain(_presetManager.LoadSpeakerPreset(speakerType));
+            Logger.Log.Info($"[SmartMaster] Loaded speaker preset: {speakerType}");
         }
         
         /// <summary>
@@ -266,20 +239,9 @@ namespace OwnaudioNET.Effects.SmartMaster
             if (_presetManager == null || _config == null)
                 throw new InvalidOperationException("Effect not initialized");
             
-            lock (_configLock)
-            {
-                _configuration = new SmartMasterConfig();
-                
-                var newChain = new SmartMasterAudioChain(_config.SampleRate, _config.Channels);
-                newChain.Configure(_config, _configuration);
-                
-                var oldChain = _audioChain;
-                _audioChain = newChain;
-                oldChain?.Dispose();
-            }
-            
+            _swapChain(new SmartMasterConfig());
             _presetManager.Save(_configuration, "default");
-            
+
             Logger.Log.Info("[SmartMaster] Default settings restored and saved");
         }
         
@@ -340,21 +302,8 @@ namespace OwnaudioNET.Effects.SmartMaster
             }
             finally
             {
-                lock (_configLock)
-                {
-                    _configuration = new SmartMasterConfig();
-                    
-                    if (_config != null)
-                    {
-                        var newChain = new SmartMasterAudioChain(_config.SampleRate, _config.Channels);
-                        newChain.Configure(_config, _configuration);
-                        
-                        var oldChain = _audioChain;
-                        _audioChain = newChain;
-                        oldChain?.Dispose();
-                    }
-                }
-                
+                _swapChain(new SmartMasterConfig());
+
                 _enabled = wasEnabled;
                 
                 _measurementCancellation?.Dispose();
@@ -426,17 +375,67 @@ namespace OwnaudioNET.Effects.SmartMaster
         {
             return _configuration;
         }
-        
+
+        /// <summary>
+        /// Rebuilds the chain from the current configuration. Call it after editing what
+        /// <see cref="GetConfiguration"/> handed you, otherwise the managed chain keeps
+        /// running the values it was built with. Rust-native mode picks the edits up on
+        /// its own, but calling this there is harmless.
+        /// </summary>
+        public void ApplyConfiguration()
+        {
+            ApplyConfiguration(_configuration);
+        }
+
+        /// <summary>
+        /// Takes over a configuration built elsewhere (own JSON, UI model, measured preset)
+        /// and rebuilds the chain from it.
+        /// </summary>
+        public void ApplyConfiguration(SmartMasterConfig configuration)
+        {
+            ThrowIfDisposed();
+
+            if (configuration == null)
+                throw new ArgumentNullException(nameof(configuration));
+
+            if (_config == null)
+                throw new InvalidOperationException("Effect not initialized");
+
+            _swapChain(configuration);
+        }
+
         #endregion
-        
+
         #region Private Methods
-        
+
         private void ThrowIfDisposed()
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(SmartMasterEffect));
         }
-        
+
+        /// <summary>
+        /// Builds a fresh chain for the given config and swaps it in, so the audio thread
+        /// never sees a half configured one.
+        /// </summary>
+        private void _swapChain(SmartMasterConfig configuration)
+        {
+            if (_config == null)
+                return;
+
+            lock (_configLock)
+            {
+                _configuration = configuration;
+
+                var newChain = new SmartMasterAudioChain(_config.SampleRate, _config.Channels);
+                newChain.Configure(_config, _configuration);
+
+                var oldChain = _audioChain;
+                _audioChain = newChain;
+                oldChain?.Dispose();
+            }
+        }
+
         #endregion
     }
 }
