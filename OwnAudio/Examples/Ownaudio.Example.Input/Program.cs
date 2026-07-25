@@ -39,7 +39,6 @@ namespace OwnaudioInput
                 Console.WriteLine($"Sample Rate: {OwnaudioNet.Engine!.Config.SampleRate} Hz");
                 Console.WriteLine($"Channels: {OwnaudioNet.Engine!.Config.Channels}");
                 Console.WriteLine($"Buffer Size: {OwnaudioNet.Engine!.Config.BufferSize} frames");
-                Console.WriteLine();
 
                 // Start the audio engine
                 OwnaudioNet.Start();
@@ -76,6 +75,10 @@ namespace OwnaudioInput
                     config.InputDeviceId = selectedDevice.Name;
                     OwnaudioNet.Initialize(config);
                     OwnaudioNet.Start();
+
+                    Console.WriteLine($"Device Input Latency: {OwnaudioNet.InputLatencyFrames} frames");
+                    Console.WriteLine($"Device Output Latency: {OwnaudioNet.OutputLatencyFrames} frames");
+                    Console.WriteLine();
                 }
                 else
                 {

@@ -151,6 +151,24 @@ pub(crate) fn resolve_input_device(host: &cpal::Host, name: Option<&str>) -> Res
     }
 }
 
+/// Resolves a single device from the combined enumeration, so an ASIO driver's capture and
+/// playback can be opened on the *same* `cpal::Device` instance — the only way cpal merges them
+/// into one duplex ASIO stream. `None` picks the first (default) driver. Must be called while no
+/// stream is open, since ASIO cannot enumerate once a driver is loaded.
+pub(crate) fn resolve_duplex_device(host: &cpal::Host, name: Option<&str>) -> Result<cpal::Device> {
+    match name {
+        None => host.devices()?.next().ok_or(AudioError::DeviceNotFound),
+        Some(target) => host
+            .devices()?
+            .find(|d| {
+                d.description()
+                    .map(|desc| desc.name() == target)
+                    .unwrap_or(false)
+            })
+            .ok_or(AudioError::DeviceNotFound),
+    }
+}
+
 fn device_to_output_info(
     device: &cpal::Device,
     default_name: Option<&str>,

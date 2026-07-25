@@ -6,8 +6,8 @@ use cpal::traits::DeviceTrait;
 use crate::{
     config::{validate_input_config_adaptive, validate_output_config, StreamConfig},
     device::{
-        collect_input_devices, collect_output_devices, resolve_input_device, resolve_output_device,
-        AudioDeviceInfo,
+        collect_input_devices, collect_output_devices, resolve_duplex_device, resolve_input_device,
+        resolve_output_device, AudioDeviceInfo,
     },
     error::{AudioError, Result},
     stream::{InputStream, OutputStream},
@@ -27,6 +27,11 @@ pub struct AudioEngine {
     /// only metadata — it holds no driver open — so caching it costs nothing.
     output_cache: Mutex<Vec<(String, cpal::Device)>>,
     input_cache: Mutex<Vec<(String, cpal::Device)>>,
+    /// ASIO only: one `cpal::Device` instance per name, shared across both directions. Capture
+    /// and playback have to be built on the same instance or cpal can't merge them into a duplex,
+    /// and the second `ASIOCreateBuffers` wipes the first stream's buffers (render-only capture).
+    /// Resolved once before any stream opens and reused, since ASIO can't enumerate afterwards.
+    shared_device: Mutex<Vec<(String, cpal::Device)>>,
 }
 
 impl AudioEngine {
@@ -50,7 +55,43 @@ impl AudioEngine {
             host,
             output_cache: Mutex::new(Vec::new()),
             input_cache: Mutex::new(Vec::new()),
+            shared_device: Mutex::new(Vec::new()),
         }
+    }
+
+    /// True when this engine drives the ASIO host, where capture and playback must share one
+    /// `cpal::Device` instance. Every other host keeps its separate input/output resolution.
+    fn is_asio(&self) -> bool {
+        self.host.id().name() == "ASIO"
+    }
+
+    /// ASIO only: the one device instance both directions build on. Resolved (and cached) on the
+    /// first call — which happens before any stream is open — then reused, since cpal cannot
+    /// enumerate ASIO once a driver is loaded. Cloning shares the underlying `asio_streams`.
+    fn resolve_shared_device(&self, name: Option<&str>) -> Result<cpal::Device> {
+        if let Ok(cache) = self.shared_device.lock() {
+            let hit = match name {
+                Some(n) => cache.iter().find(|(cn, _)| cn == n).map(|(_, d)| d.clone()),
+                None => cache.first().map(|(_, d)| d.clone()),
+            };
+            if let Some(device) = hit {
+                return Ok(device);
+            }
+        }
+
+        let device = resolve_duplex_device(&self.host, name)?;
+        let resolved_name = device
+            .description()
+            .map(|d| d.name().to_owned())
+            .unwrap_or_default();
+
+        if let Ok(mut cache) = self.shared_device.lock() {
+            if !cache.iter().any(|(cn, _)| *cn == resolved_name) {
+                cache.push((resolved_name, device.clone()));
+            }
+        }
+
+        Ok(device)
     }
 
     /// Looks up a previously enumerated output device by name.
@@ -125,12 +166,16 @@ impl AudioEngine {
         config: &StreamConfig,
         mut callback: impl FnMut(&mut [f32]) + Send + 'static,
     ) -> Result<OutputStream> {
-        let cpal_device = match device.map(|d| d.name.as_str()) {
-            Some(name) => match self.cached_output_device(name) {
-                Some(cached) => cached,
-                None => resolve_output_device(&self.host, Some(name))?,
-            },
-            None => resolve_output_device(&self.host, None)?,
+        let cpal_device = if self.is_asio() {
+            self.resolve_shared_device(device.map(|d| d.name.as_str()))?
+        } else {
+            match device.map(|d| d.name.as_str()) {
+                Some(name) => match self.cached_output_device(name) {
+                    Some(cached) => cached,
+                    None => resolve_output_device(&self.host, Some(name))?,
+                },
+                None => resolve_output_device(&self.host, None)?,
+            }
         };
         let (stream_config, sample_format) = validate_output_config(&cpal_device, config)?;
 
@@ -273,12 +318,16 @@ impl AudioEngine {
         config: &StreamConfig,
         mut callback: impl FnMut(&[f32]) + Send + 'static,
     ) -> Result<InputStream> {
-        let cpal_device = match device.map(|d| d.name.as_str()) {
-            Some(name) => match self.cached_input_device(name) {
-                Some(cached) => cached,
-                None => resolve_input_device(&self.host, Some(name))?,
-            },
-            None => resolve_input_device(&self.host, None)?,
+        let cpal_device = if self.is_asio() {
+            self.resolve_shared_device(device.map(|d| d.name.as_str()))?
+        } else {
+            match device.map(|d| d.name.as_str()) {
+                Some(name) => match self.cached_input_device(name) {
+                    Some(cached) => cached,
+                    None => resolve_input_device(&self.host, Some(name))?,
+                },
+                None => resolve_input_device(&self.host, None)?,
+            }
         };
         let (stream_config, sample_format, device_channels) =
             validate_input_config_adaptive(&cpal_device, config)?;
