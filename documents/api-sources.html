@@ -44,8 +44,8 @@
     <tr><td><code>Position</code></td><td><code>double</code></td><td>—</td><td>Current playback position in seconds (read-only).</td></tr>
     <tr><td><code>Duration</code></td><td><code>double</code></td><td>—</td><td>Total duration in seconds (read-only).</td></tr>
     <tr><td><code>IsEndOfStream</code></td><td><code>bool</code></td><td>—</td><td>Whether the source has reached its end.</td></tr>
-    <tr><td><code>Tempo</code></td><td><code>float</code></td><td><code>1.0</code></td><td>Playback speed multiplier (0.8–1.2). Clears buffer on set — use <code>SetTempoSmooth()</code> for sliders. <span class="badge-compat">FileSource only</span> Wired only on <code>FileSource</code>; <code>SampleSource</code>/<code>StreamingSource</code>/<code>InputSource</code> store the value but do not apply it (backward-compatibility surface).</td></tr>
-    <tr><td><code>PitchShift</code></td><td><code>float</code></td><td><code>0.0</code></td><td>Pitch shift in semitones (-12 to +12). Clears buffer on set. <span class="badge-compat">FileSource only</span> Wired only on <code>FileSource</code>; other sources store the value but do not apply it (backward-compatibility surface).</td></tr>
+    <tr><td><code>Tempo</code></td><td><code>float</code></td><td><code>1.0</code></td><td>Playback speed multiplier, clamped to 0.8–1.2. Goes straight to the native track — no buffer clear, safe to set from a slider. <span class="badge-compat">FileSource only</span> Wired only on <code>FileSource</code>; <code>SampleSource</code>/<code>StreamingSource</code>/<code>InputSource</code> store the value but do not apply it (backward-compatibility surface).</td></tr>
+    <tr><td><code>PitchShift</code></td><td><code>float</code></td><td><code>0.0</code></td><td>Pitch shift in semitones, clamped to -12 … +12. Goes straight to the native track — no buffer clear, safe to set from a slider. <span class="badge-compat">FileSource only</span> Wired only on <code>FileSource</code>; other sources store the value but do not apply it (backward-compatibility surface).</td></tr>
     <tr><td><code>OutputLevels</code></td><td><code>(float left, float right)</code></td><td>—</td><td>Real-time output levels for VU metering (0.0–1.0).</td></tr>
     <tr><td><code>OutputChannelMapping</code></td><td><code>int[]?</code></td><td><code>null</code></td><td>Hardware channel routing. See <a href="#channel-routing">Channel Routing</a>.</td></tr>
   </tbody>
@@ -93,14 +93,17 @@ source.Dispose();</code></pre></div>
 </table></div>
 
 <h3>Tempo &amp; Pitch Control</h3>
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>Hard set</strong> (<code>.Tempo = …</code>) clears the SoundTouch buffer and causes a brief silence gap. Use <strong>smooth set</strong> for real-time sliders to avoid audio glitches.</p></div>
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Hard set — resets SoundTouch buffer (use on load)
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>Setting <code>.Tempo</code> / <code>.PitchShift</code> and calling <code>SetTempoSmooth()</code> / <code>SetPitchSmooth()</code> do the same thing: the value is handed to the native track, with no buffer clear and no silence gap. The smooth variants only read better at slider call sites. Under a master clock use <code>SetTempoSynced()</code> once the slider has settled — it reseeks to the current position so leftover old-tempo audio cannot leave a permanent drift.</p></div>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Direct set — mirrored onto the native track right away
 source.Tempo      = 1.1f;   // 10% faster  (range: 0.8 – 1.2)
 source.PitchShift = 2.0f;   // 2 semitones up  (range: -12.0 – +12.0)
 
-// Smooth set — no buffer clear, ideal for real-time sliders
+// Same thing, named for slider call sites
 source.SetTempoSmooth(1.1f);
-source.SetPitchSmooth(2.0f);</code></pre></div>
+source.SetPitchSmooth(2.0f);
+
+// Clock-synced tracks: call this once the slider settled, it reseeks away the drift
+source.SetTempoSynced(1.1f);</code></pre></div>
 
 <h3>PreBuffer</h3>
 <p>Warm up the decoder before <code>Play()</code> to eliminate initial underruns:</p>
