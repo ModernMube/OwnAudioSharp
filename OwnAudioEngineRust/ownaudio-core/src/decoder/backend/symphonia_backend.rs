@@ -1,13 +1,13 @@
 //! Pure-Rust streaming decoder built on [Symphonia](https://docs.rs/symphonia).
 //!
 //! Supports the formats enabled in `Cargo.toml`: WAV, MP3, FLAC, OGG/Vorbis,
-//! AAC/M4A and AIFF.  This backend is always compiled in and serves as the
-//! fallback whenever the FFmpeg backend is unavailable.
+//! AAC/M4A, ALAC/M4A and AIFF.  This backend is always compiled in and serves
+//! as the fallback whenever the FFmpeg backend is unavailable.
 
 use std::fs::File;
 use std::path::Path;
 
-use symphonia::core::audio::SampleBuffer;
+use symphonia::core::audio::{SampleBuffer, SignalSpec};
 use symphonia::core::codecs::{Decoder, DecoderOptions, CODEC_TYPE_NULL};
 use symphonia::core::errors::Error as SymError;
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo};
@@ -77,7 +77,7 @@ impl SymphoniaBackend {
             .format(&hint, mss, &fmt_opts, &meta_opts)
             .map_err(map_sym_err_open)?;
 
-        let format = probed.format;
+        let mut format = probed.format;
 
         let track = format
             .tracks()
@@ -89,10 +89,25 @@ impl SymphoniaBackend {
 
         let track_id = track.id;
         let params = track.codec_params.clone();
-
-        let source_channels = params.channels.map(|c| c.count()).unwrap_or(2).max(1);
-        let source_rate = params.sample_rate.unwrap_or(44_100).max(1);
         let bit_depth = params.bits_per_sample.unwrap_or(0);
+
+        let mut decoder = symphonia::default::get_codecs()
+            .make(&params, &DecoderOptions::default())
+            .map_err(map_sym_err_open)?;
+
+        // MP4/M4A doesn't populate `codec_params.channels` on the track — only
+        // the decoder knows the real layout (AAC's ASC, ALAC's magic cookie).
+        // Decode the first packet up front so `source_channels`/`source_rate`
+        // reflect reality instead of a guessed default.
+        let peeked = peek_first_packet(format.as_mut(), decoder.as_mut(), track_id)?;
+
+        let (source_channels, source_rate) = match &peeked {
+            Some((_, spec)) => (spec.channels.count().max(1), spec.rate.max(1)),
+            None => (
+                params.channels.map(|c| c.count()).unwrap_or(2).max(1),
+                params.sample_rate.unwrap_or(44_100).max(1),
+            ),
+        };
 
         let output_channels = if target_channels == 0 {
             source_channels
@@ -109,10 +124,6 @@ impl SymphoniaBackend {
             Some(frames) if source_rate > 0 => frames.saturating_mul(1000) / source_rate as u64,
             _ => AudioStreamInfo::UNKNOWN_DURATION,
         };
-
-        let decoder = symphonia::default::get_codecs()
-            .make(&params, &DecoderOptions::default())
-            .map_err(map_sym_err_open)?;
 
         let resampler = if output_rate != source_rate {
             Some(StreamResampler::new(
@@ -131,7 +142,7 @@ impl SymphoniaBackend {
             bit_depth,
         };
 
-        Ok(Self {
+        let mut this = Self {
             format,
             decoder,
             track_id,
@@ -144,9 +155,23 @@ impl SymphoniaBackend {
             residual: Vec::new(),
             residual_pos: 0,
             output_frame_pos: 0,
-            eof: false,
+            eof: peeked.is_none(),
             skip_source_frames: 0,
-        })
+        };
+
+        // Feed the packet consumed by `peek_first_packet` through the normal
+        // channel/rate conversion pipeline so it isn't lost.
+        if let Some((sample_buf, _spec)) = peeked {
+            push_decoded(
+                sample_buf.samples(),
+                this.source_channels,
+                this.output_channels,
+                this.resampler.as_mut(),
+                &mut this.residual,
+            );
+        }
+
+        Ok(this)
     }
 
     /// Decodes packets until `residual` holds at least one sample or EOF is hit.
@@ -211,21 +236,13 @@ impl SymphoniaBackend {
                 }
             }
 
-            // 1) Channel conversion into a scratch buffer.
-            let mut converted: Vec<f32> =
-                Vec::with_capacity(interleaved.len() / self.source_channels * self.output_channels);
-            convert_channels(
+            push_decoded(
                 interleaved,
                 self.source_channels,
                 self.output_channels,
-                &mut converted,
+                self.resampler.as_mut(),
+                &mut self.residual,
             );
-
-            // 2) Optional sample-rate conversion → residual.
-            match self.resampler.as_mut() {
-                Some(rs) => rs.push_interleaved(&converted, &mut self.residual),
-                None => self.residual.extend_from_slice(&converted),
-            }
         }
 
         Ok(false)
@@ -302,6 +319,73 @@ impl AudioDecoderBackend for SymphoniaBackend {
         self.output_frame_pos = frame_position;
         self.eof = false;
         Ok(())
+    }
+}
+
+/// Decodes packets for `track_id` until the first non-empty buffer, returning
+/// it (as an owned interleaved `f32` copy) with its [`SignalSpec`], or
+/// `Ok(None)` if the stream ends first. Used at `open()` to learn the real
+/// channel/sample-rate before committing to a guess.
+fn peek_first_packet(
+    format: &mut dyn FormatReader,
+    decoder: &mut dyn Decoder,
+    track_id: u32,
+) -> Result<Option<(SampleBuffer<f32>, SignalSpec)>> {
+    loop {
+        let packet = match format.next_packet() {
+            Ok(p) => p,
+            Err(SymError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                return Ok(None);
+            }
+            Err(SymError::ResetRequired) => {
+                decoder.reset();
+                continue;
+            }
+            Err(e) => return Err(map_sym_err_read(e)),
+        };
+
+        if packet.track_id() != track_id {
+            continue;
+        }
+
+        let decoded = match decoder.decode(&packet) {
+            Ok(d) => d,
+            Err(SymError::DecodeError(_)) => continue,
+            Err(SymError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                return Ok(None);
+            }
+            Err(e) => return Err(map_sym_err_read(e)),
+        };
+
+        let spec = *decoded.spec();
+        let mut sample_buf = SampleBuffer::new(decoded.capacity() as u64, spec);
+        sample_buf.copy_interleaved_ref(decoded);
+        return Ok(Some((sample_buf, spec)));
+    }
+}
+
+/// Converts `interleaved` to `output_channels` and pushes it (resampled via
+/// `resampler` when present) onto `residual`. A free function, not a method,
+/// so the caller's `sample_buf` borrow doesn't collide with `&mut self`.
+fn push_decoded(
+    interleaved: &[f32],
+    source_channels: usize,
+    output_channels: usize,
+    resampler: Option<&mut StreamResampler>,
+    residual: &mut Vec<f32>,
+) {
+    let mut converted: Vec<f32> =
+        Vec::with_capacity(interleaved.len() / source_channels * output_channels);
+    convert_channels(
+        interleaved,
+        source_channels,
+        output_channels,
+        &mut converted,
+    );
+
+    match resampler {
+        Some(rs) => rs.push_interleaved(&converted, residual),
+        None => residual.extend_from_slice(&converted),
     }
 }
 
