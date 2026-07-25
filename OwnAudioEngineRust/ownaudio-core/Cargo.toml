@@ -22,7 +22,7 @@ ownaudio-soundtouch = { path = "../ownaudio-soundtouch" }
 # FFmpeg-backed decoding is handled separately by the managed C# layer, which
 # loads the system FFmpeg libraries dynamically only when they are present.
 symphonia = { version = "0.5", features = [
-    "mp3", "flac", "wav", "pcm", "adpcm", "ogg", "vorbis", "aac", "isomp4", "aiff",
+    "mp3", "flac", "wav", "pcm", "adpcm", "ogg", "vorbis", "aac", "alac", "isomp4", "aiff",
 ] }
 
 [dev-dependencies]

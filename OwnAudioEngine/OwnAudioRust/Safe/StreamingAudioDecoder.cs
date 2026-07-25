@@ -11,7 +11,7 @@ namespace Ownaudio.Safe;
 /// <summary>
 /// Streaming file decoder over the Rust engine. A native prefetch thread fills a small
 /// lock-free ring buffer, so RAM tracks the prefetch size, not the file. Not thread-safe
-/// per instance; Read is RT-safe. Symphonia backend (wav/mp3/flac/ogg/aac/aiff).
+/// per instance; Read is RT-safe. Symphonia backend (wav/mp3/flac/ogg/aac/alac/aiff).
 /// </summary>
 public sealed class StreamingAudioDecoder : IDisposable
 {

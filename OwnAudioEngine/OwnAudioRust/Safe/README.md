@@ -515,7 +515,7 @@ Memory-efficient streaming audio file decoder backed by the native Rust (Symphon
 A dedicated native prefetch thread decodes the file incrementally into a lock-free ring buffer,
 bounding memory usage to the prefetch size rather than the file size.
 
-**Supported formats:** WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, AIFF (via Symphonia — no external deps).
+**Supported formats:** WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, ALAC/M4A, AIFF (via Symphonia — no external deps).
 
 ```csharp
 using var decoder = new StreamingAudioDecoder(

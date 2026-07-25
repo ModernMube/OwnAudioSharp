@@ -26,7 +26,7 @@ public enum AudioFormat
     Flac = 3,
 
     /// <summary>
-    /// Everything else the native decoder handles: OGG, Opus, AAC, M4A, WMA, AIFF.
+    /// Everything else the native decoder handles: OGG, Opus, AAC, ALAC, M4A, WMA, AIFF.
     /// Name is a leftover from the FFmpeg days.
     /// </summary>
     FFmpeg = 4

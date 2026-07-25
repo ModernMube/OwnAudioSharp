@@ -7,7 +7,7 @@ Cross-platform audio engine core library providing unified interfaces, decoders,
 This package provides the **core foundation** for OwnAudioSharp's audio engine architecture, including:
 
 - **Platform-agnostic interfaces** (`IAudioEngine`, `IAudioDecoder`, `IDeviceEnumerator`)
-- **Native Rust/Symphonia decoder** for broad format support (MP3, WAV, FLAC, AAC, OGG, AIFF, …)
+- **Native Rust/Symphonia decoder** for broad format support (MP3, WAV, FLAC, AAC, ALAC, OGG, AIFF, …)
 - **Lock-free data structures** for real-time audio thread communication
 - **Zero-allocation primitives** (object pools, ring buffers, pooled frame types)
 - **AOT-compatible factory pattern** for automatic engine and decoder selection
@@ -24,7 +24,7 @@ This package provides the **core foundation** for OwnAudioSharp's audio engine a
 - **Pure managed code**: No native dependencies for core infrastructure
 - **AOT & trim compatible**: `IsAotCompatible = true`, `IsTrimmable = true`
 - **Object pooling**: Reusable `PooledAudioFrame` buffers to minimize allocations
-- **Broad format support**: Native Rust (Symphonia) decoder handles MP3, FLAC, WAV, AAC, OGG/Vorbis, AIFF, M4A out of the box
+- **Broad format support**: Native Rust (Symphonia) decoder handles MP3, FLAC, WAV, AAC, ALAC, OGG/Vorbis, AIFF, M4A out of the box
 
 ## Architecture
 
@@ -439,7 +439,7 @@ public enum AudioFormat
     Wav     = 1,   // PCM, IEEE Float, ADPCM
     Mp3     = 2,   // MPEG-1/2 Layer III
     Flac    = 3,   // Free Lossless Audio Codec
-    FFmpeg  = 4    // Formats decoded by FFmpeg (OGG, Opus, AAC, M4A, WMA, AIFF, …)
+    FFmpeg  = 4    // Formats decoded by FFmpeg (OGG, Opus, AAC, ALAC, M4A, WMA, AIFF, …)
 }
 ```
 
