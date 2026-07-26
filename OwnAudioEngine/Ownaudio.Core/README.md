@@ -162,6 +162,7 @@ AudioDecoderFactory.RegisterNativeDecoder((path, rate, ch) => new MyDecoder(path
 | FLAC | .flac |
 | WAV (PCM / ADPCM) | .wav |
 | AAC | .aac |
+| ALAC | .m4a |
 | MP4 / M4A | .mp4, .m4a |
 | OGG / Vorbis | .ogg |
 | AIFF | .aif, .aiff |

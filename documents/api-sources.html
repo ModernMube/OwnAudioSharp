@@ -70,7 +70,7 @@ source.Dispose();</code></pre></div>
 
 <!-- FileSource -->
 <h2 id="filesource">FileSource</h2>
-<p>Plays audio from a file with background decoding, circular buffer, real-time pitch/tempo, and master clock synchronization. Decoding runs entirely in the native Rust engine. Supported formats out of the box: <strong>MP3, FLAC, WAV (PCM/ADPCM), AAC, MP4/M4A, OGG/Vorbis and AIFF</strong> — no external codecs required. Exotic formats can additionally be handled by <a href="api-reference.html#ffmpeg">FFmpeg 8+</a> as an optional legacy fallback when it is installed on the system.</p>
+<p>Plays audio from a file with background decoding, circular buffer, real-time pitch/tempo, and master clock synchronization. Decoding runs entirely in the native Rust engine. Supported formats out of the box: <strong>MP3, FLAC, WAV (PCM/ADPCM), AAC, ALAC, MP4/M4A, OGG/Vorbis and AIFF</strong> — no external codecs required. Exotic formats can additionally be handled by <a href="api-reference.html#ffmpeg">FFmpeg 8+</a> as an optional legacy fallback when it is installed on the system.</p>
 
 <h3>Constructor</h3>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var source = new FileSource(

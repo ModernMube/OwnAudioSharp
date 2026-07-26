@@ -61,7 +61,7 @@ dotnet add package OwnAudioSharp.Mobile   # Android / iOS
 dotnet add package OwnAudioSharp.Basic    # Desktop — minimal engine
 dotnet add package OwnVocalRemover        # Optional vocal separation add-on</code></pre></div>
 
-<div class="callout callout-success"><div class="callout-icon">🎵</div><p><strong>Formats out of the box:</strong> the pure-Rust decoder handles MP3, FLAC, WAV (PCM/ADPCM), AAC, MP4/M4A, OGG/Vorbis and AIFF on every platform — no FFmpeg, no system dependencies. FFmpeg 8+ remains supported as an optional legacy fallback for exotic formats; see <a href="api-reference.html#ffmpeg">FFmpeg Integration</a>.</p></div>
+<div class="callout callout-success"><div class="callout-icon">🎵</div><p><strong>Formats out of the box:</strong> the pure-Rust decoder handles MP3, FLAC, WAV (PCM/ADPCM), AAC, ALAC, MP4/M4A, OGG/Vorbis and AIFF on every platform — no FFmpeg, no system dependencies. FFmpeg 8+ remains supported as an optional legacy fallback for exotic formats; see <a href="api-reference.html#ffmpeg">FFmpeg Integration</a>.</p></div>
 
 <h2 id="architecture">Architecture</h2>
 <p>OwnAudioSharp is a thin C# surface over a native Rust engine. The design keeps the real-time audio thread — now entirely inside Rust — completely separate from your application code and the managed runtime.</p>

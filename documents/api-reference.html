@@ -272,9 +272,9 @@ AudioConstants.MaxTempo         // 1.2 — maximum tempo multiplier (120% speed)
 
 <!-- FFmpeg Integration -->
 <h2 id="ffmpeg">FFmpeg Integration (Optional Legacy Fallback)</h2>
-<p>As of 4.0, decoding is handled entirely by the native Rust engine, which reads <strong>MP3, FLAC, WAV (PCM/ADPCM), AAC, MP4/M4A, OGG/Vorbis and AIFF</strong> out of the box with no external dependencies. FFmpeg is <strong>no longer required</strong>. It remains supported as an <strong>optional legacy fallback</strong>: if FFmpeg 8+ dynamic libraries are detected on startup, they can be used to decode exotic formats (Opus, WMA, AC3, and others) that fall outside the built-in set. This is <strong>not part of the public API</strong> — no code changes are required, and FFmpeg is neither bundled nor needed for normal use.</p>
+<p>As of 4.0, decoding is handled entirely by the native Rust engine, which reads <strong>MP3, FLAC, WAV (PCM/ADPCM), AAC, ALAC, MP4/M4A, OGG/Vorbis and AIFF</strong> out of the box with no external dependencies. FFmpeg is <strong>no longer required</strong>. It remains supported as an <strong>optional legacy fallback</strong>: if FFmpeg 8+ dynamic libraries are detected on startup, they can be used to decode exotic formats (Opus, WMA, AC3, and others) that fall outside the built-in set. This is <strong>not part of the public API</strong> — no code changes are required, and FFmpeg is neither bundled nor needed for normal use.</p>
 
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>Decoder priority:</strong> built-in Rust decoder (MP3 / FLAC / WAV / AAC / MP4 / OGG / AIFF) → optional FFmpeg fallback for additional formats when installed.</p></div>
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>Decoder priority:</strong> built-in Rust decoder (MP3 / FLAC / WAV / AAC / ALAC / MP4 / OGG / AIFF) → optional FFmpeg fallback for additional formats when installed.</p></div>
 
 <div class="code-block"><div class="code-header"><span>C# — FFmpeg availability check</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using Ownaudio.Core;
 
@@ -286,7 +286,7 @@ FFmpegConfig.CustomLibraryPath = @"C:\ffmpeg\bin"; // Windows example
 if (FFmpegConfig.IsAvailable)
     Console.WriteLine("FFmpeg fallback active — extra formats such as Opus, WMA and AC3 are also supported.");
 else
-    Console.WriteLine("FFmpeg not found — using the built-in Rust decoder (MP3 / FLAC / WAV / AAC / MP4 / OGG / AIFF).");
+    Console.WriteLine("FFmpeg not found — using the built-in Rust decoder (MP3 / FLAC / WAV / AAC / ALAC / MP4 / OGG / AIFF).");
 
 // No other changes needed; AudioDecoderFactory picks the best decoder automatically
 using var decoder = AudioDecoderFactory.Create("audio.aac", targetSampleRate: 48000, targetChannels: 2);</code></pre></div>
