@@ -59,6 +59,18 @@
     <ProjectReference Include="..\..\Source\OwnaudioNET.Mobile.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <AndroidNativeLibrary Include="..\..\..\OwnAudioEngine\OwnAudioRust\runtimes\android-arm\native\*.so">
+      <Abi>armeabi-v7a</Abi>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="..\..\..\OwnAudioEngine\OwnAudioRust\runtimes\android-arm64\native\*.so">
+      <Abi>arm64-v8a</Abi>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="..\..\..\OwnAudioEngine\OwnAudioRust\runtimes\android-x64\native\*.so">
+      <Abi>x86_64</Abi>
+    </AndroidNativeLibrary>
+  </ItemGroup>
+
   <!-- Android Manifest -->
   <ItemGroup>
     <AndroidManifest Include="Properties\AndroidManifest.xml" />
