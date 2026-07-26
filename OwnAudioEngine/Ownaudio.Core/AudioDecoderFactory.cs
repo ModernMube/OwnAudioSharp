@@ -9,7 +9,7 @@ namespace Ownaudio.Decoders;
 /// <summary>
 /// Hands out decoders. Since 4.0 there is exactly one: the native Rust/Symphonia one,
 /// registered by the OwnaudioNET layer at module init. It eats mp3, flac, wav, aac,
-/// m4a, ogg and aiff on its own — the old managed decoders and the FFmpeg fallback are gone.
+/// alac, m4a, ogg and aiff on its own — the old managed decoders and the FFmpeg fallback are gone.
 /// </summary>
 public static class AudioDecoderFactory
 {

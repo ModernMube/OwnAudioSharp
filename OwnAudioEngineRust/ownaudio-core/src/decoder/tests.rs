@@ -241,3 +241,40 @@ fn open_missing_file_errors() {
     let result = open_streaming("/nonexistent/path/to/file.wav", 0, 0, 4096);
     assert!(result.is_err());
 }
+
+/// Resolves a fixture path under `tests/fixtures/` relative to this crate.
+fn fixture_path(name: &str) -> String {
+    format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"))
+}
+
+/// Decodes a compressed fixture end-to-end and checks it's a plausible mono
+/// 44.1 kHz, non-silent stream. Shared by the AAC and ALAC tests below.
+fn assert_decodes_as_mono_tone(path: &str) {
+    let mut backend = SymphoniaBackend::open(path, 0, 0).expect("open");
+    let info = backend.stream_info();
+    assert_eq!(info.channels, 1);
+    assert_eq!(info.sample_rate, 44_100);
+
+    let decoded = drain_backend(&mut backend);
+    // 1 second @ 44.1 kHz; loose lower bound to allow for encoder framing/padding differences.
+    assert!(
+        decoded.len() > 40_000,
+        "expected ~44100 decoded samples, got {}",
+        decoded.len()
+    );
+    assert!(decoded.iter().all(|s| s.is_finite()));
+    assert!(
+        decoded.iter().any(|&s| s.abs() > 0.01),
+        "decoded audio should not be silent"
+    );
+}
+
+#[test]
+fn symphonia_decodes_aac_in_m4a() {
+    assert_decodes_as_mono_tone(&fixture_path("aac_mono.m4a"));
+}
+
+#[test]
+fn symphonia_decodes_alac_in_m4a() {
+    assert_decodes_as_mono_tone(&fixture_path("alac_mono.m4a"));
+}

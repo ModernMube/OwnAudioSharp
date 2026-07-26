@@ -10,8 +10,8 @@
 //!
 //! Decoding is performed by the pure-Rust **Symphonia** backend
 //! ([`backend::symphonia_backend`]), which is always available and supports
-//! WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A and AIFF without any external runtime
-//! dependency.
+//! WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, ALAC/M4A and AIFF without any external
+//! runtime dependency.
 //!
 //! FFmpeg-backed decoding is **not** part of the native library.  As in the
 //! original design, FFmpeg is used only when it is installed on the system (or

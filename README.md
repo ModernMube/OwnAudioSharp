@@ -33,7 +33,7 @@ The entire audio path — decoding, mixing, effects, resampling, playback and ca
 
 Nothing like it exists for C# today.
 
-Decoding is pure Rust too — no external codecs, no FFmpeg, no system dependencies. The built-in decoder handles **MP3, FLAC, WAV (PCM/ADPCM), AAC, MP4/M4A, OGG/Vorbis and AIFF** out of the box, on every platform.
+Decoding is pure Rust too — no external codecs, no FFmpeg, no system dependencies. The built-in decoder handles **MP3, FLAC, WAV (PCM/ADPCM), AAC, ALAC, MP4/M4A, OGG/Vorbis and AIFF** out of the box, on every platform.
 
 ---
 
