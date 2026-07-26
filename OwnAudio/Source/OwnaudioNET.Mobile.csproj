@@ -15,8 +15,9 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
+    <GeneratePackageOnBuild Condition="'$(BuildMobile)' == 'true'">true</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild Condition="'$(BuildMobile)' != 'true'">false</GeneratePackageOnBuild>
+    <PackageOutputPath>..\..\artifacts\local-packages\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Mobile</PackageId>
     <Version>4.0.0-preview.39</Version>
     <Authors>ModernMube</Authors>
@@ -56,22 +57,23 @@
     <ProjectReference Include="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj" PrivateAssets="all" IncludeAssets="runtime" />
   </ItemGroup>
 
-  <Target Name="BuildAndroidProjects" BeforeTargets="GenerateNuspec" Condition="$(TargetFramework.StartsWith('net10.0-android'))">
-    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-android35.0;BuildingForMobile=true" />
-    <MSBuild Projects="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-android35.0;BuildingForMobile=true" />
-  </Target>
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);_PackEngineAssemblies</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
 
-  <Target Name="BuildiOSProjects" BeforeTargets="GenerateNuspec" Condition="$(TargetFramework.StartsWith('net10.0-ios'))">
-    <MSBuild Projects="..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-ios18.0;BuildingForMobile=true" />
-    <MSBuild Projects="..\..\OwnAudioEngine\OwnAudioRust\OwnAudioRust.csproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net10.0-ios18.0;BuildingForMobile=true" />
-  </Target>
+  <Target Name="_PackEngineAssemblies" DependsOnTargets="ResolveReferences">
+    <Error Condition="!$(TargetFramework.Contains('-android')) AND !$(TargetFramework.Contains('-ios'))"
+           Text="OwnAudioSharp.Mobile is being packed for $(TargetFramework), which is not a mobile target framework. The resulting package would install on Android and iOS and then fail at run time. Pack with -p:BuildMobile=true." />
 
-  <ItemGroup>
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-android35.0\Ownaudio.Core.dll" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-android35.0\Ownaudio.Core.dll')" Pack="true" PackagePath="lib\net10.0-android35.0\" />
-    <None Include="..\..\OwnAudioEngine\OwnAudioRust\bin\$(Configuration)\net10.0-android35.0\OwnAudioRust.dll" Condition="Exists('..\..\OwnAudioEngine\OwnAudioRust\bin\$(Configuration)\net10.0-android35.0\OwnAudioRust.dll')" Pack="true" PackagePath="lib\net10.0-android35.0\" />
-    <None Include="..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-ios18.0\Ownaudio.Core.dll" Condition="Exists('..\..\OwnAudioEngine\Ownaudio.Core\bin\$(Configuration)\net10.0-ios18.0\Ownaudio.Core.dll')" Pack="true" PackagePath="lib\net10.0-ios18.0\" />
-    <None Include="..\..\OwnAudioEngine\OwnAudioRust\bin\$(Configuration)\net10.0-ios18.0\OwnAudioRust.dll" Condition="Exists('..\..\OwnAudioEngine\OwnAudioRust\bin\$(Configuration)\net10.0-ios18.0\OwnAudioRust.dll')" Pack="true" PackagePath="lib\net10.0-ios18.0\" />
-  </ItemGroup>
+    <ItemGroup>
+      <_EngineAssembly Include="@(ReferenceCopyLocalPaths)"
+                       Condition="'%(Extension)' == '.dll' AND ('%(Filename)' == 'Ownaudio.Core' OR '%(Filename)' == 'OwnAudioRust')" />
+      <BuildOutputInPackage Include="@(_EngineAssembly)" />
+    </ItemGroup>
+
+    <Error Condition="'@(_EngineAssembly->Count())' != '2'"
+           Text="OwnAudioSharp.Mobile would ship without its engine assemblies for $(TargetFramework): expected Ownaudio.Core.dll and OwnAudioRust.dll among the resolved references, found '@(_EngineAssembly->'%(Filename)')'. Pack with -p:BuildMobile=true so both projects expose their mobile target framework." />
+  </Target>
 
   <ItemGroup>
     <None Include="..\..\OwnAudioEngine\OwnAudioRust\runtimes\android-arm\**\*.*" Pack="true" PackagePath="runtimes\android-arm" />

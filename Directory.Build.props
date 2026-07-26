@@ -9,6 +9,10 @@
     <MSBuildProjectExtensionsPath>$(MSBuildProjectDirectory)\obj\Mobile\</MSBuildProjectExtensionsPath>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(BuildMobile)' == '' AND '$(BuildingForMobile)' == 'true'">
+    <BuildMobile>true</BuildMobile>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(JAVA_HOME)' != '' AND '$(JavaToolPath)' == ''">
     <JavaToolPath>$(JAVA_HOME)$([System.IO.Path]::DirectorySeparatorChar)bin</JavaToolPath>
     <JavacToolPath>$(JAVA_HOME)$([System.IO.Path]::DirectorySeparatorChar)bin</JavacToolPath>

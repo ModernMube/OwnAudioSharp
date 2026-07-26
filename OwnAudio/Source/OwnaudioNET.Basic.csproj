@@ -13,7 +13,7 @@
 
   <PropertyGroup>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageOutputPath>..\..\nupkg\</PackageOutputPath>
+    <PackageOutputPath>..\..\artifacts\local-packages\</PackageOutputPath>
     <PackageId>OwnAudioSharp.Basic</PackageId>
     <Version>4.0.0-preview.39</Version>
     <Authors>ModernMube</Authors>
