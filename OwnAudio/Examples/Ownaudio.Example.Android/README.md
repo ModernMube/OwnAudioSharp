@@ -48,36 +48,39 @@ OwnaudioAndroidTest/
 
 ## Building the Application
 
+> **`-p:BuildMobile=true` is required.** The engine projects only expose their
+> `net10.0-android` target framework when that property is set. Without it this app silently
+> links their desktop `net10.0` build, where the Android JNI bootstrap is compiled out — the
+> APK installs and starts, then fails on `Initialize` with
+> `internal panic in native audio engine: android context was not initialized`.
+> CI passes the same flag.
+
 ### 1. Build Debug APK
 
 ```bash
-# Navigate to project directory
-cd OwnAudio/OwnaudioExamples/OwnaudioAndroidTest
+dotnet build OwnAudio/Examples/Ownaudio.Example.Android/Ownaudio.Example.Android.csproj \
+    -c Debug -p:BuildMobile=true
 
-# Build for Android
-dotnet build -c Debug -f net9.0-android
-
-# APK will be in: bin/Debug/net9.0-android/
+# APK: OwnAudio/Examples/Ownaudio.Example.Android/bin/Debug/net10.0-android/
 ```
 
 ### 2. Build Release APK
 
 ```bash
-# Build release (optimized, signed)
-dotnet publish -c Release -f net9.0-android
+dotnet publish OwnAudio/Examples/Ownaudio.Example.Android/Ownaudio.Example.Android.csproj \
+    -c Release -p:BuildMobile=true
 
-# APK will be in: bin/Release/net9.0-android/publish/
+# APK: bin/Release/net10.0-android/publish/
 ```
 
 ### 3. Install on Device/Emulator
 
 ```bash
-# Using adb (Android Debug Bridge)
-adb install bin/Debug/net9.0-android/com.ownaudio.androidtest-Signed.apk
-
-# Or deploy directly
-dotnet build -c Debug -f net9.0-android -t:Install
+adb install -r bin/Debug/net10.0-android/com.ownaudio.androidtest-Signed.apk
 ```
+
+An emulator or a device has to be attached before any `-t:Run` / `-t:Install` target, otherwise
+the Android SDK stops with `XA0010: No available device`. Check with `adb devices`.
 
 ## Running the Application
 
