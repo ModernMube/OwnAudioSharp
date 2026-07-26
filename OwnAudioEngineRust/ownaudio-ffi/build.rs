@@ -68,13 +68,9 @@ fn extract_version(content: &str) -> Option<&str> {
     let after_key = &content[key_pos + key.len()..];
     let colon_pos = after_key.find(':')?;
     let after_colon = after_key[colon_pos + 1..].trim_start();
-    if after_colon.starts_with('"') {
-        let inner = &after_colon[1..];
-        let end = inner.find('"')?;
-        Some(&inner[..end])
-    } else {
-        None
-    }
+    let inner = after_colon.strip_prefix('"')?;
+    let end = inner.find('"')?;
+    Some(&inner[..end])
 }
 
 /// Validates that ASIO_SDK_DIR points to a valid Steinberg ASIO SDK installation.

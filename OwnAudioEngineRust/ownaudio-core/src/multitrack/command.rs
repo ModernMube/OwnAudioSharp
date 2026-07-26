@@ -47,6 +47,12 @@ const PARAM_PROBE_MAX: u32 = 64;
 /// A structural change to be applied by the audio thread at the top of the next
 /// render block.  Payloads that own heap memory are carried by value so moving
 /// them through the ring buffer never allocates on the audio thread.
+///
+/// That is also why `AddTrack` dwarfs the other variants and the queue slot is
+/// sized for it: boxing the track would move the free onto the audio thread when
+/// the box is unwrapped into the mixer's `Vec<Track>`, which is the one thing this
+/// whole command path exists to avoid.
+#[allow(clippy::large_enum_variant)]
 pub enum MixerCommand {
     /// Insert a fully-constructed track (built on the control thread).
     AddTrack(Track),
@@ -114,6 +120,10 @@ pub enum MixerCommand {
 
 /// A resource removed by the audio thread and handed back to the control thread
 /// for deallocation, so the heap free never happens on the real-time path.
+///
+/// Same deal as [`MixerCommand`]: the retired track travels by value, since boxing
+/// it here would allocate on the audio thread instead of the control thread.
+#[allow(clippy::large_enum_variant)]
 pub enum Retired {
     /// A removed (or capacity-refused) track.
     Track(Track),

@@ -298,6 +298,9 @@ mod tests {
     }
 
     impl Reference {
+        // Mirrors the effect's full parameter set one-to-one, so it goes over clippy's
+        // seven argument threshold on purpose; grouping them would only hide the mapping.
+        #[allow(clippy::too_many_arguments)]
         fn new(
             sample_rate: f64,
             target: f64,

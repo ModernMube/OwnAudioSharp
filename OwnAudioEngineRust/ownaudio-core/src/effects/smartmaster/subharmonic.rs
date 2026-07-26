@@ -212,15 +212,12 @@ impl SubharmonicSynth {
         // 2. Waveshape the isolated band and blend it back with the dry signal.
         let mix = self.mix;
         let dry = 1.0 - mix;
-        for i in 0..required {
-            let shaped = waveshape(self.filtered[i] * 2.0);
-            let mut mixed = buffer[i] * dry + shaped * mix;
-            if mixed > 1.0 {
-                mixed = 1.0;
-            } else if mixed < -1.0 {
-                mixed = -1.0;
-            }
-            buffer[i] = mixed;
+        for (sample, &band) in buffer[..required]
+            .iter_mut()
+            .zip(&self.filtered[..required])
+        {
+            let shaped = waveshape(band * 2.0);
+            *sample = (*sample * dry + shaped * mix).clamp(-1.0, 1.0);
         }
     }
 

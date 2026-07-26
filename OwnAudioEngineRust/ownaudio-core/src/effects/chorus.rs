@@ -299,8 +299,8 @@ mod tests {
             let ch = self.channels;
 
             for (out_frame, in_frame) in out.chunks_mut(ch).zip(buffer.chunks(ch)) {
-                for c in 0..ch {
-                    self.bufs[c][self.buffer_index] = in_frame[c] as f64;
+                for (c, &sample) in in_frame.iter().enumerate().take(ch) {
+                    self.bufs[c][self.buffer_index] = sample as f64;
                 }
 
                 for c in 0..ch {
