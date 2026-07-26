@@ -21,10 +21,10 @@ public sealed class PhaserEffect : IDisposable
     private bool _disposed;
 
     private bool _isEnabled = true;
-    private float _mix = 0.5f;
-    private float _rate = 0.5f;
-    private float _depth = 0.7f;
-    private float _feedback = 0.5f;
+    private float _mix = 0.45f;
+    private float _rate = 0.45f;
+    private float _depth = 0.65f;
+    private float _feedback = 0.4f;
     private int _stages = 4;
 
     internal PhaserEffect(EffectHandle handle, IntPtr mixerHandle)

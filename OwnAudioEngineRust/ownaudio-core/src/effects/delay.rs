@@ -66,10 +66,10 @@ impl Delay {
         let capacity = (5.0 * sample_rate) as usize;
         let mut delay = Self {
             enabled: true,
-            mix: 0.30,
+            mix: 0.25,
             time_ms: 375.0,
-            feedback: 0.35,
-            damping: 0.25,
+            feedback: 0.32,
+            damping: 0.22,
             ping_pong: false,
             sample_rate,
             delay_buffer_l: vec![0.0; capacity.max(1)],
@@ -78,8 +78,8 @@ impl Delay {
             last_output_l: 0.0,
             last_output_r: 0.0,
             delay_samples: 0.0,
-            mix_ramp: RampedParam::new(0.30, sample_rate, DEFAULT_SMOOTH_MS),
-            feedback_ramp: RampedParam::new(0.35, sample_rate, DEFAULT_SMOOTH_MS),
+            mix_ramp: RampedParam::new(0.25, sample_rate, DEFAULT_SMOOTH_MS),
+            feedback_ramp: RampedParam::new(0.32, sample_rate, DEFAULT_SMOOTH_MS),
         };
         delay.update_delay_samples();
         delay
@@ -407,9 +407,9 @@ mod tests {
     fn defaults_match_reference() {
         let d = Delay::new(48_000.0);
         assert_eq!(d.get_param(PARAM_TIME_MS), Some(375.0));
-        assert_eq!(d.get_param(PARAM_FEEDBACK), Some(0.35));
-        assert_eq!(d.get_param(PARAM_MIX), Some(0.30));
-        assert_eq!(d.get_param(PARAM_DAMPING), Some(0.25));
+        assert_eq!(d.get_param(PARAM_FEEDBACK), Some(0.32));
+        assert_eq!(d.get_param(PARAM_MIX), Some(0.25));
+        assert_eq!(d.get_param(PARAM_DAMPING), Some(0.22));
         assert_eq!(d.get_param(PARAM_PING_PONG), Some(0.0));
         assert!(d.is_enabled());
     }

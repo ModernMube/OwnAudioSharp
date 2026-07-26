@@ -33,10 +33,10 @@ impl Distortion {
     pub fn new(sample_rate: f32) -> Self {
         Self {
             enabled: true,
-            mix: 1.0,
+            mix: 0.85,
             drive: 2.0,
-            output_gain: 0.5,
-            mix_ramp: RampedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
+            output_gain: 0.55,
+            mix_ramp: RampedParam::new(0.85, sample_rate, DEFAULT_SMOOTH_MS),
         }
     }
 
@@ -182,8 +182,8 @@ mod tests {
     fn defaults_match_reference() {
         let d = Distortion::new(48_000.0);
         assert_eq!(d.get_param(PARAM_DRIVE), Some(2.0));
-        assert_eq!(d.get_param(PARAM_OUTPUT_GAIN), Some(0.5));
-        assert_eq!(d.get_param(PARAM_MIX), Some(1.0));
+        assert_eq!(d.get_param(PARAM_OUTPUT_GAIN), Some(0.55));
+        assert_eq!(d.get_param(PARAM_MIX), Some(0.85));
         assert!(d.is_enabled());
     }
 
@@ -234,6 +234,7 @@ mod tests {
         // The waveshaper asymptote is 2.0; after output gain the result stays
         // well bounded regardless of how hard the input is driven.
         let mut d = Distortion::new(48_000.0);
+        d.set_param(PARAM_MIX, 1.0);
         d.set_param(PARAM_DRIVE, 10.0);
         d.set_param(PARAM_OUTPUT_GAIN, 1.0);
         let mut buf = vec![5.0f32, -5.0, 100.0, -100.0];
@@ -307,7 +308,7 @@ mod tests {
 
         // A loud constant input so the wet (distorted) value differs from the dry input.
         let dry = 0.9f32;
-        let wet = Distortion::soft_clip(dry * 2.0) * 0.5; // drive 2.0, output gain 0.5
+        let wet = Distortion::soft_clip(dry * 2.0) * 0.55; // drive 2.0, output gain 0.55
 
         // First block establishes the "playing" state so later changes ramp.
         let mut warmup = vec![dry; 256];

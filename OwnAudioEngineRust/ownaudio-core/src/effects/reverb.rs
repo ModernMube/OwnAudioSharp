@@ -74,8 +74,8 @@ pub struct Reverb {
 
 impl Reverb {
     /// Creates a new [`Reverb`] sized for `sample_rate`, with the reference
-    /// default parameters (room 0.5, damping 0.5, width 1.0, wet 0.33,
-    /// dry 0.67, mix 0.5, gain 1.0).
+    /// default parameters (room 0.55, damping 0.5, width 1.0, wet 0.33,
+    /// dry 1.0, mix 0.25, gain 1.0).
     pub fn new(sample_rate: f32) -> Self {
         let scale = sample_rate / 44_100.0;
 
@@ -93,12 +93,12 @@ impl Reverb {
 
         let mut reverb = Self {
             enabled: true,
-            mix: 0.5,
-            room_size: 0.5,
+            mix: 0.25,
+            room_size: 0.55,
             damping: 0.5,
             width: 1.0,
             wet_level: 0.33,
-            dry_level: 0.67,
+            dry_level: 1.0,
             gain: 1.0,
             comb_buffers,
             comb_indices: [[0; NUM_COMBS]; 2],
@@ -111,7 +111,7 @@ impl Reverb {
             damp_val: 0.0,
             wet1: 0.0,
             wet2: 0.0,
-            mix_ramp: RampedParam::new(0.5, sample_rate, DEFAULT_SMOOTH_MS),
+            mix_ramp: RampedParam::new(0.25, sample_rate, DEFAULT_SMOOTH_MS),
         };
         reverb.update_coefficients();
         reverb
@@ -463,12 +463,12 @@ mod tests {
     #[test]
     fn defaults_match_reference() {
         let r = Reverb::new(48_000.0);
-        assert_eq!(r.get_param(PARAM_ROOM_SIZE), Some(0.5));
+        assert_eq!(r.get_param(PARAM_ROOM_SIZE), Some(0.55));
         assert_eq!(r.get_param(PARAM_DAMPING), Some(0.5));
         assert_eq!(r.get_param(PARAM_WIDTH), Some(1.0));
         assert_eq!(r.get_param(PARAM_WET_LEVEL), Some(0.33));
-        assert_eq!(r.get_param(PARAM_DRY_LEVEL), Some(0.67));
-        assert_eq!(r.get_param(PARAM_MIX), Some(0.5));
+        assert_eq!(r.get_param(PARAM_DRY_LEVEL), Some(1.0));
+        assert_eq!(r.get_param(PARAM_MIX), Some(0.25));
         assert!(r.is_enabled());
     }
 

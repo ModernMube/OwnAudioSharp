@@ -53,14 +53,14 @@ impl Enhancer {
         let sample_rate = sample_rate.clamp(8000.0, 192_000.0);
         let mut enhancer = Self {
             enabled: true,
-            mix: 0.2,
-            gain: 2.5,
-            cut_freq: 4000.0,
+            mix: 0.15,
+            gain: 1.8,
+            cut_freq: 3500.0,
             sample_rate,
             alpha: 0.0,
             x_prev: [0.0; MAX_CHANNELS],
             y_prev: [0.0; MAX_CHANNELS],
-            mix_ramp: RampedParam::new(0.2, sample_rate, DEFAULT_SMOOTH_MS),
+            mix_ramp: RampedParam::new(0.15, sample_rate, DEFAULT_SMOOTH_MS),
         };
         enhancer.update_filter_coefficient();
         enhancer
@@ -242,9 +242,9 @@ mod tests {
     #[test]
     fn defaults_match_reference() {
         let e = Enhancer::new(48_000.0);
-        assert_eq!(e.get_param(PARAM_MIX), Some(0.2));
-        assert_eq!(e.get_param(PARAM_GAIN), Some(2.5));
-        assert_eq!(e.get_param(PARAM_CUTOFF), Some(4000.0));
+        assert_eq!(e.get_param(PARAM_MIX), Some(0.15));
+        assert_eq!(e.get_param(PARAM_GAIN), Some(1.8));
+        assert_eq!(e.get_param(PARAM_CUTOFF), Some(3500.0));
         assert!(e.is_enabled());
     }
 
@@ -344,7 +344,7 @@ mod tests {
         let mut produced = mono.clone();
         e.process(&mut produced, 1);
 
-        let mut reference = Reference::new(48_000.0, 4000.0, 2.5, 0.2, 1);
+        let mut reference = Reference::new(48_000.0, 3500.0, 1.8, 0.15, 1);
         let expected = reference.process(&mono);
         let err = rms_error_db(&produced, &expected);
         assert!(err < -60.0, "mono RMS error {err:.1} dB exceeds -60 dB");

@@ -19,9 +19,9 @@ public sealed class EnhancerEffect : IDisposable
     private bool _disposed;
 
     private bool _isEnabled = true;
-    private float _mix = 0.2f;
-    private float _gain = 2.5f;
-    private float _cutoff = 4000.0f;
+    private float _mix = 0.15f;
+    private float _gain = 1.8f;
+    private float _cutoff = 3500.0f;
 
     internal EnhancerEffect(EffectHandle handle, IntPtr mixerHandle)
     {

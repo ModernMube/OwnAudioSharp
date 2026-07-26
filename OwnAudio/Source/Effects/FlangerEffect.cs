@@ -63,10 +63,10 @@ namespace OwnaudioNET.Effects
         private readonly int _sampleRate;
         private int _bufferIndex;
 
-        private float _rate = 0.5f;
-        private float _depth = 0.8f;
-        private float _feedback = 0.6f;
-        private float _mix = 0.5f;
+        private float _rate = 0.35f;
+        private float _depth = 0.60f;
+        private float _feedback = 0.45f;
+        private float _mix = 0.40f;
         private float _lfoPhase = 0.0f;
 
         private readonly Guid _id;
@@ -122,7 +122,8 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Dry to wet balance.
+        /// Dry to wet balance. The comb notches are deepest at 0.5, so nothing above that
+        /// buys you anything except a thinner dry.
         /// </summary>
         public float Mix
         {
@@ -136,9 +137,10 @@ namespace OwnaudioNET.Effects
         public int SampleRate => _sampleRate;
 
         /// <summary>
-        /// Builds the flanger with hand picked values.
+        /// Builds the flanger with hand picked values: a slow sweep with moderate resonance,
+        /// same as the Default preset.
         /// </summary>
-        public FlangerEffect(float rate = 0.5f, float depth = 0.8f, float feedback = 0.6f, float mix = 0.5f, int sampleRate = 44100)
+        public FlangerEffect(float rate = 0.35f, float depth = 0.60f, float feedback = 0.45f, float mix = 0.40f, int sampleRate = 44100)
         {
             _id = Guid.NewGuid();
             _name = "Flanger";
@@ -193,35 +195,35 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case FlangerPreset.Default:
-                    Rate = 0.5f; Depth = 0.65f; Feedback = 0.55f; Mix = 0.48f;
+                    Rate = 0.35f; Depth = 0.60f; Feedback = 0.45f; Mix = 0.40f;
                     break;
 
                 case FlangerPreset.Classic:
-                    Rate = 0.7f; Depth = 0.75f; Feedback = 0.65f; Mix = 0.45f;
+                    Rate = 0.50f; Depth = 0.70f; Feedback = 0.60f; Mix = 0.45f;
                     break;
 
                 case FlangerPreset.JetPlane:
-                    Rate = 2.8f; Depth = 0.95f; Feedback = 0.85f; Mix = 0.65f;
+                    Rate = 2.20f; Depth = 0.95f; Feedback = 0.88f; Mix = 0.50f;
                     break;
 
                 case FlangerPreset.SubtleChorus:
-                    Rate = 0.25f; Depth = 0.35f; Feedback = 0.25f; Mix = 0.30f;
+                    Rate = 0.22f; Depth = 0.30f; Feedback = 0.15f; Mix = 0.25f;
                     break;
 
                 case FlangerPreset.VocalDoubling:
-                    Rate = 0.4f; Depth = 0.55f; Feedback = 0.35f; Mix = 0.35f;
+                    Rate = 0.30f; Depth = 0.45f; Feedback = 0.20f; Mix = 0.30f;
                     break;
 
                 case FlangerPreset.GuitarLead:
-                    Rate = 1.5f; Depth = 0.85f; Feedback = 0.75f; Mix = 0.55f;
+                    Rate = 1.10f; Depth = 0.80f; Feedback = 0.70f; Mix = 0.48f;
                     break;
 
                 case FlangerPreset.AmbientWash:
-                    Rate = 0.15f; Depth = 0.90f; Feedback = 0.55f; Mix = 0.60f;
+                    Rate = 0.12f; Depth = 0.90f; Feedback = 0.55f; Mix = 0.45f;
                     break;
 
                 case FlangerPreset.Percussive:
-                    Rate = 3.5f; Depth = 0.60f; Feedback = 0.40f; Mix = 0.40f;
+                    Rate = 3.00f; Depth = 0.55f; Feedback = 0.30f; Mix = 0.35f;
                     break;
             }
         }

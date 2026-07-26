@@ -68,8 +68,8 @@ namespace OwnaudioNET.Effects
         private AudioConfig? _config;
 
         private float _drive = 2.0f;
-        private float _mix = 1.0f;
-        private float _outputGain = 0.5f;
+        private float _mix = 0.85f;
+        private float _outputGain = 0.55f;
 
         /// <summary>
         /// Instance id.
@@ -124,7 +124,7 @@ namespace OwnaudioNET.Effects
         /// <summary>
         /// Builds the effect with hand picked values.
         /// </summary>
-        public DistortionEffect(float drive = 2.0f, float mix = 1.0f, float outputGain = 0.5f)
+        public DistortionEffect(float drive = 2.0f, float mix = 0.85f, float outputGain = 0.55f)
         {
             _id = Guid.NewGuid();
             _name = "Distortion";
@@ -165,7 +165,7 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case DistortionPreset.Default:
-                    Drive = 2.0f; Mix = 0.82f; OutputGain = 0.55f;
+                    Drive = 2.0f; Mix = 0.85f; OutputGain = 0.55f;
                     break;
 
                 case DistortionPreset.WarmOverdrive:

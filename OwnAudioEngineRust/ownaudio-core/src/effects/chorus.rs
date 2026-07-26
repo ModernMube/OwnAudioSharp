@@ -77,9 +77,9 @@ impl Chorus {
         }
         let mut chorus = Self {
             enabled: true,
-            mix: 0.5,
-            rate_hz: 1.0,
-            depth: 0.5,
+            mix: 0.35,
+            rate_hz: 0.5,
+            depth: 0.35,
             voices: 3,
             sample_rate,
             delay_buffers: [vec![0.0; buffer_size.max(1)], vec![0.0; buffer_size.max(1)]],
@@ -87,7 +87,7 @@ impl Chorus {
             lfo_phase: 0.0,
             lfo_increment: 0.0,
             voice_phases,
-            mix_ramp: RampedParam::new(0.5, sample_rate, DEFAULT_SMOOTH_MS),
+            mix_ramp: RampedParam::new(0.35, sample_rate, DEFAULT_SMOOTH_MS),
         };
         chorus.recalculate_increment();
         chorus
@@ -373,9 +373,9 @@ mod tests {
     #[test]
     fn defaults_match_reference() {
         let c = Chorus::new(48_000.0);
-        assert_eq!(c.get_param(PARAM_RATE), Some(1.0));
-        assert_eq!(c.get_param(PARAM_DEPTH), Some(0.5));
-        assert_eq!(c.get_param(PARAM_MIX), Some(0.5));
+        assert_eq!(c.get_param(PARAM_RATE), Some(0.5));
+        assert_eq!(c.get_param(PARAM_DEPTH), Some(0.35));
+        assert_eq!(c.get_param(PARAM_MIX), Some(0.35));
         assert_eq!(c.get_param(PARAM_VOICES), Some(3.0));
         assert!(c.is_enabled());
     }
@@ -486,7 +486,7 @@ mod tests {
         let mut produced = mono.clone();
         c.process(&mut produced, 1);
 
-        let mut reference = Reference::new(48_000.0, 1.0, 0.5, 0.5, 3, 1);
+        let mut reference = Reference::new(48_000.0, 0.5, 0.35, 0.35, 3, 1);
         let expected = reference.process(&mono);
         let err = rms_error_db(&produced, &expected);
         assert!(err < -60.0, "mono RMS error {err:.1} dB exceeds -60 dB");

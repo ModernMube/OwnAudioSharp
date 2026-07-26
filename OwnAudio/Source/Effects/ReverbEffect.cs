@@ -117,13 +117,13 @@ namespace OwnaudioNET.Effects
         private int _preDelayIndex;
         private int _preDelayLength;
 
-        private float _roomSize = 0.5f;
+        private float _roomSize = 0.55f;
         private float _damping = 0.5f;
         private float _wet = 0.33f;
-        private float _dry = 0.67f;
+        private float _dry = 1.0f;
         private float _width = 1.0f;
         private float _gain = 1.0f;
-        private float _mix = 0.5f;
+        private float _mix = 0.25f;
         private float _sampleRate = 44100f;
 
         private float _roomSizeVal;
@@ -167,7 +167,9 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Master dry to wet balance.
+        /// How much reverb is sent to the output. With the default unity DryLevel the dry
+        /// signal stays untouched, so this behaves like a send amount: 0.25 is a normal
+        /// insert setting, above 0.5 you are in wash territory.
         /// </summary>
         public float Mix
         {
@@ -194,7 +196,8 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Wet level inside the blend.
+        /// Tail trim inside the blend. 0.33 is the Freeverb nominal, the presets leave it
+        /// there and set the amount with Mix instead.
         /// </summary>
         public float WetLevel
         {
@@ -203,7 +206,8 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Dry level inside the blend.
+        /// Dry trim inside the blend. Kept at 1.0 so the source never dips when you open
+        /// up the Mix — drop it only if you want that classic wet/dry crossfade.
         /// </summary>
         public float DryLevel
         {
@@ -221,10 +225,11 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Builds the reverb with hand picked values. Buffers are sized for 44.1k here,
-        /// Initialize rebuilds them for the real rate.
+        /// Builds the reverb with hand picked values: a medium room at roughly 25% wet,
+        /// which is where you'd park an insert reverb before touching anything. Buffers are
+        /// sized for 44.1k here, Initialize rebuilds them for the real rate.
         /// </summary>
-        public ReverbEffect(float size = 0.5f, float damp = 0.5f, float wet = 0.33f, float dry = 0.67f, float stereoWidth = 1.0f, float mix = 0.5f, float gainLevel = 1.0f)
+        public ReverbEffect(float size = 0.55f, float damp = 0.5f, float wet = 0.33f, float dry = 1.0f, float stereoWidth = 1.0f, float mix = 0.25f, float gainLevel = 1.0f)
         {
             _id = Guid.NewGuid();
             _name = "Reverb";
@@ -422,45 +427,51 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Loads one of the canned spaces.
+        /// Loads one of the canned spaces. Every preset keeps the dry at unity and the tail
+        /// at the Freeverb nominal, so the only thing that moves is Mix — the wet amounts
+        /// sit where an engineer would leave them: a few percent for glue, around a quarter
+        /// for a normal room, half only for the deliberate wash.
         /// </summary>
         /// <param name="preset"></param>
         public void SetPreset(ReverbPreset preset)
         {
+            WetLevel = 0.33f;
+            DryLevel = 1.0f;
+
             switch (preset)
             {
                 case ReverbPreset.SmallRoom:
-                    RoomSize = 0.30f; Damping = 0.65f; Width = 0.6f; WetLevel = 0.18f; DryLevel = 0.90f;
+                    RoomSize = 0.30f; Damping = 0.62f; Width = 0.70f; Mix = 0.18f;
                     break;
                 case ReverbPreset.LargeHall:
-                    RoomSize = 0.85f; Damping = 0.45f; Width = 1.0f; WetLevel = 0.45f; DryLevel = 0.70f;
+                    RoomSize = 0.85f; Damping = 0.42f; Width = 1.0f; Mix = 0.30f;
                     break;
                 case ReverbPreset.Cathedral:
-                    RoomSize = 0.95f; Damping = 0.12f; Width = 1.0f; WetLevel = 0.60f; DryLevel = 0.55f;
+                    RoomSize = 0.94f; Damping = 0.16f; Width = 1.0f; Mix = 0.38f;
                     break;
                 case ReverbPreset.Plate:
-                    RoomSize = 0.62f; Damping = 0.08f; Width = 0.85f; WetLevel = 0.38f; DryLevel = 0.82f;
+                    RoomSize = 0.62f; Damping = 0.18f; Width = 0.85f; Mix = 0.26f;
                     break;
                 case ReverbPreset.Spring:
-                    RoomSize = 0.42f; Damping = 0.75f; Width = 0.55f; WetLevel = 0.28f; DryLevel = 0.85f;
+                    RoomSize = 0.42f; Damping = 0.72f; Width = 0.55f; Mix = 0.22f;
                     break;
                 case ReverbPreset.AmbientPad:
-                    RoomSize = 0.92f; Damping = 0.20f; Width = 1.0f; WetLevel = 0.70f; DryLevel = 0.35f;
+                    RoomSize = 0.92f; Damping = 0.25f; Width = 1.0f; Mix = 0.50f;
                     break;
                 case ReverbPreset.VocalBooth:
-                    RoomSize = 0.18f; Damping = 0.90f; Width = 0.35f; WetLevel = 0.12f; DryLevel = 0.95f;
+                    RoomSize = 0.18f; Damping = 0.88f; Width = 0.40f; Mix = 0.12f;
                     break;
                 case ReverbPreset.DrumRoom:
-                    RoomSize = 0.65f; Damping = 0.55f; Width = 0.95f; WetLevel = 0.32f; DryLevel = 0.75f;
+                    RoomSize = 0.58f; Damping = 0.58f; Width = 0.95f; Mix = 0.20f;
                     break;
                 case ReverbPreset.Gated:
-                    RoomSize = 0.72f; Damping = 0.92f; Width = 1.0f; WetLevel = 0.42f; DryLevel = 0.72f;
+                    RoomSize = 0.70f; Damping = 0.90f; Width = 1.0f; Mix = 0.28f;
                     break;
                 case ReverbPreset.Subtle:
-                    RoomSize = 0.28f; Damping = 0.72f; Width = 0.75f; WetLevel = 0.10f; DryLevel = 0.96f;
+                    RoomSize = 0.28f; Damping = 0.72f; Width = 0.75f; Mix = 0.08f;
                     break;
                 default:
-                    RoomSize = 0.50f; Damping = 0.50f; Width = 1.0f; WetLevel = 0.30f; DryLevel = 0.80f;
+                    RoomSize = 0.55f; Damping = 0.50f; Width = 1.0f; Mix = 0.25f;
                     break;
             }
         }

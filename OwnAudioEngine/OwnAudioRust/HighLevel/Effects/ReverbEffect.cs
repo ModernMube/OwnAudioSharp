@@ -23,12 +23,12 @@ public sealed class ReverbEffect : IDisposable
     private bool _disposed;
 
     private bool _isEnabled = true;
-    private float _mix = 0.5f;
-    private float _roomSize = 0.5f;
+    private float _mix = 0.25f;
+    private float _roomSize = 0.55f;
     private float _damping = 0.5f;
     private float _width = 1.0f;
     private float _wetLevel = 0.33f;
-    private float _dryLevel = 0.67f;
+    private float _dryLevel = 1.0f;
 
     internal ReverbEffect(EffectHandle handle, IntPtr mixerHandle)
     {

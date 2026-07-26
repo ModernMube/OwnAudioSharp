@@ -26,9 +26,9 @@ use super::{Effect, EffectType, PARAM_ENABLED, PARAM_MIX};
 use crate::denormal;
 use crate::smoothing::{RampedParam, DEFAULT_SMOOTH_MS};
 
-/// Param ID 2 — horn rotation speed in Hz (2.0 … 15.0).
+/// Param ID 2 — horn chorale speed in Hz (0.4 … 8.0); the fast switch scales it up.
 pub const PARAM_HORN_SPEED: u32 = 2;
-/// Param ID 3 — rotor rotation speed in Hz (0.5 … 5.0).
+/// Param ID 3 — rotor chorale speed in Hz (0.3 … 6.0); the fast switch scales it up.
 pub const PARAM_ROTOR_SPEED: u32 = 3;
 /// Param ID 4 — effect intensity (0.0 … 1.0).
 pub const PARAM_INTENSITY: u32 = 4;
@@ -37,6 +37,11 @@ pub const PARAM_IS_FAST: u32 = 5;
 
 /// Crossover frequency between the rotor (low) and horn (high) bands.
 const CROSSOVER_HZ: f32 = 800.0;
+
+/// Chorale → tremolo ratios of a Leslie 122: the horn spins up from roughly
+/// 40 rpm to 400, the bass drum is geared a little lower.
+const FAST_HORN_RATIO: f32 = 9.0;
+const FAST_ROTOR_RATIO: f32 = 8.0;
 
 /// Mix values below this threshold bypass processing entirely (mirrors C#).
 const MIX_BYPASS_THRESHOLD: f32 = 0.001;
@@ -135,8 +140,8 @@ impl Rotary {
         Self {
             enabled: true,
             mix: 1.0,
-            horn_speed: 6.0,
-            rotor_speed: 1.0,
+            horn_speed: 0.8,
+            rotor_speed: 0.7,
             intensity: 0.7,
             is_fast: false,
             sample_rate,
@@ -169,12 +174,12 @@ impl Effect for Rotary {
         let intensity = self.intensity;
 
         let current_horn_speed = if self.is_fast {
-            self.horn_speed * 3.0
+            self.horn_speed * FAST_HORN_RATIO
         } else {
             self.horn_speed
         };
         let current_rotor_speed = if self.is_fast {
-            self.rotor_speed * 2.0
+            self.rotor_speed * FAST_ROTOR_RATIO
         } else {
             self.rotor_speed
         };
@@ -257,11 +262,11 @@ impl Effect for Rotary {
                 true
             }
             PARAM_HORN_SPEED => {
-                self.horn_speed = value.clamp(2.0, 15.0);
+                self.horn_speed = value.clamp(0.4, 8.0);
                 true
             }
             PARAM_ROTOR_SPEED => {
-                self.rotor_speed = value.clamp(0.5, 5.0);
+                self.rotor_speed = value.clamp(0.3, 6.0);
                 true
             }
             PARAM_INTENSITY => {
@@ -386,12 +391,12 @@ mod tests {
             let ch = self.channels;
 
             let horn_speed = if self.is_fast {
-                self.horn_speed * 3.0
+                self.horn_speed * FAST_HORN_RATIO
             } else {
                 self.horn_speed
             };
             let rotor_speed = if self.is_fast {
-                self.rotor_speed * 2.0
+                self.rotor_speed * FAST_ROTOR_RATIO
             } else {
                 self.rotor_speed
             };
@@ -485,8 +490,8 @@ mod tests {
     #[test]
     fn defaults_match_reference() {
         let r = Rotary::new(48_000.0);
-        assert_eq!(r.get_param(PARAM_HORN_SPEED), Some(6.0));
-        assert_eq!(r.get_param(PARAM_ROTOR_SPEED), Some(1.0));
+        assert_eq!(r.get_param(PARAM_HORN_SPEED), Some(0.8));
+        assert_eq!(r.get_param(PARAM_ROTOR_SPEED), Some(0.7));
         assert_eq!(r.get_param(PARAM_INTENSITY), Some(0.7));
         assert_eq!(r.get_param(PARAM_MIX), Some(1.0));
         assert_eq!(r.get_param(PARAM_IS_FAST), Some(0.0));
@@ -497,13 +502,13 @@ mod tests {
     fn params_clamp_to_reference_ranges() {
         let mut r = Rotary::new(48_000.0);
         r.set_param(PARAM_HORN_SPEED, 100.0);
-        assert_eq!(r.get_param(PARAM_HORN_SPEED), Some(15.0));
+        assert_eq!(r.get_param(PARAM_HORN_SPEED), Some(8.0));
         r.set_param(PARAM_HORN_SPEED, 0.0);
-        assert_eq!(r.get_param(PARAM_HORN_SPEED), Some(2.0));
+        assert_eq!(r.get_param(PARAM_HORN_SPEED), Some(0.4));
         r.set_param(PARAM_ROTOR_SPEED, 100.0);
-        assert_eq!(r.get_param(PARAM_ROTOR_SPEED), Some(5.0));
+        assert_eq!(r.get_param(PARAM_ROTOR_SPEED), Some(6.0));
         r.set_param(PARAM_ROTOR_SPEED, 0.0);
-        assert_eq!(r.get_param(PARAM_ROTOR_SPEED), Some(0.5));
+        assert_eq!(r.get_param(PARAM_ROTOR_SPEED), Some(0.3));
         r.set_param(PARAM_INTENSITY, 5.0);
         assert_eq!(r.get_param(PARAM_INTENSITY), Some(1.0));
         r.set_param(PARAM_MIX, 2.0);
@@ -602,7 +607,7 @@ mod tests {
         let mut produced = mono.clone();
         r.process(&mut produced, 1);
 
-        let mut reference = Reference::new(48_000.0, 6.0, 1.0, 0.7, 1.0, false, 1);
+        let mut reference = Reference::new(48_000.0, 0.8, 0.7, 0.7, 1.0, false, 1);
         let expected = reference.process(&mono);
         let err = rms_error_db(&produced, &expected);
         assert!(err < -60.0, "mono RMS error {err:.1} dB exceeds -60 dB");

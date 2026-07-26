@@ -73,10 +73,10 @@ impl Flanger {
         let max_delay_samples = (0.02 * sample_rate) as usize;
         Self {
             enabled: true,
-            mix: 0.5,
-            rate_hz: 0.5,
-            depth: 0.8,
-            feedback: 0.6,
+            mix: 0.4,
+            rate_hz: 0.35,
+            depth: 0.6,
+            feedback: 0.45,
             sample_rate,
             delay_buffers: [
                 vec![0.0; max_delay_samples.max(2)],
@@ -84,7 +84,7 @@ impl Flanger {
             ],
             buffer_index: 0,
             lfo_phase: 0.0,
-            mix_ramp: RampedParam::new(0.5, sample_rate, DEFAULT_SMOOTH_MS),
+            mix_ramp: RampedParam::new(0.4, sample_rate, DEFAULT_SMOOTH_MS),
         }
     }
 }
@@ -327,10 +327,10 @@ mod tests {
     #[test]
     fn defaults_match_reference() {
         let f = Flanger::new(48_000.0);
-        assert_eq!(f.get_param(PARAM_RATE), Some(0.5));
-        assert_eq!(f.get_param(PARAM_DEPTH), Some(0.8));
-        assert_eq!(f.get_param(PARAM_FEEDBACK), Some(0.6));
-        assert_eq!(f.get_param(PARAM_MIX), Some(0.5));
+        assert_eq!(f.get_param(PARAM_RATE), Some(0.35));
+        assert_eq!(f.get_param(PARAM_DEPTH), Some(0.6));
+        assert_eq!(f.get_param(PARAM_FEEDBACK), Some(0.45));
+        assert_eq!(f.get_param(PARAM_MIX), Some(0.4));
         assert!(f.is_enabled());
     }
 
@@ -435,7 +435,7 @@ mod tests {
         let mut produced = mono.clone();
         f.process(&mut produced, 1);
 
-        let mut reference = Reference::new(48_000.0, 0.5, 0.8, 0.6, 0.5, 1);
+        let mut reference = Reference::new(48_000.0, 0.35, 0.6, 0.45, 0.4, 1);
         let expected = reference.process(&mono);
         let err = rms_error_db(&produced, &expected);
         assert!(err < -60.0, "mono RMS error {err:.1} dB exceeds -60 dB");

@@ -21,10 +21,10 @@ public sealed class DelayEffect : IDisposable
     private bool _disposed;
 
     private bool _isEnabled = true;
-    private float _mix = 0.30f;
+    private float _mix = 0.25f;
     private float _timeMs = 375.0f;
-    private float _feedback = 0.35f;
-    private float _damping = 0.25f;
+    private float _feedback = 0.32f;
+    private float _damping = 0.22f;
     private bool _pingPong;
 
     internal DelayEffect(EffectHandle handle, IntPtr mixerHandle)

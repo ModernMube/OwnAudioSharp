@@ -75,7 +75,7 @@ pub struct Compressor {
 
 impl Compressor {
     /// Creates a new [`Compressor`] with the reference default parameters
-    /// (threshold -6 dB, ratio 4:1, attack 100 ms, release 200 ms, makeup 0 dB).
+    /// (threshold -6 dB, ratio 4:1, attack 20 ms, release 200 ms, makeup +1.6 dB).
     pub fn new(sample_rate: f32) -> Self {
         let sample_rate = sample_rate.clamp(8_000.0, 192_000.0);
         let mut c = Self {
@@ -83,9 +83,9 @@ impl Compressor {
             sample_rate,
             threshold_db: -6.0,
             ratio: 4.0,
-            attack_ms: 100.0,
+            attack_ms: 20.0,
             release_ms: 200.0,
-            makeup_db: 0.0,
+            makeup_db: 1.6,
             attack_coeff: 0.0,
             release_coeff: 0.0,
             makeup_lin: 1.0,
@@ -96,6 +96,7 @@ impl Compressor {
             makeup_ramp: RampedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
         };
         c.recompute();
+        c.makeup_ramp.reset(c.makeup_lin);
         c
     }
 
@@ -362,9 +363,9 @@ mod tests {
         assert!(c.is_enabled());
         assert_eq!(c.get_param(PARAM_THRESHOLD), Some(-6.0));
         assert_eq!(c.get_param(PARAM_RATIO), Some(4.0));
-        assert_eq!(c.get_param(PARAM_ATTACK), Some(100.0));
+        assert_eq!(c.get_param(PARAM_ATTACK), Some(20.0));
         assert_eq!(c.get_param(PARAM_RELEASE), Some(200.0));
-        assert_eq!(c.get_param(PARAM_MAKEUP), Some(0.0));
+        assert_eq!(c.get_param(PARAM_MAKEUP), Some(1.6));
         assert_eq!(c.get_param(PARAM_MIX), Some(1.0));
     }
 

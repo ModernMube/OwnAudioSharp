@@ -64,10 +64,10 @@ namespace OwnaudioNET.Effects
         private readonly float[] _apX1 = new float[8];
         private readonly float[] _apY1 = new float[8];
 
-        private float _rate = 0.5f;
-        private float _depth = 0.7f;
-        private float _feedback = 0.5f;
-        private float _mix = 0.5f;
+        private float _rate = 0.45f;
+        private float _depth = 0.65f;
+        private float _feedback = 0.40f;
+        private float _mix = 0.45f;
         private int _stages = 4;
         private float _lfoPhase = 0.0f;
 
@@ -124,7 +124,8 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Dry to wet balance.
+        /// Dry to wet balance. The notches come from cancelling against the dry, so they are
+        /// deepest at 0.5 — the presets stay at or under it.
         /// </summary>
         public float Mix
         {
@@ -147,9 +148,10 @@ namespace OwnaudioNET.Effects
         public int SampleRate => _sampleRate;
 
         /// <summary>
-        /// Builds the phaser with hand picked values.
+        /// Builds the phaser with hand picked values, the same four stage sweep as the
+        /// Default preset.
         /// </summary>
-        public PhaserEffect(float rate = 0.5f, float depth = 0.7f, float feedback = 0.5f, float mix = 0.5f, int stages = 4, int sampleRate = 44100)
+        public PhaserEffect(float rate = 0.45f, float depth = 0.65f, float feedback = 0.40f, float mix = 0.45f, int stages = 4, int sampleRate = 44100)
         {
             _id = Guid.NewGuid();
             _name = "Phaser";
@@ -201,35 +203,35 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case PhaserPreset.Vintage:
-                    Rate = 0.6f; Depth = 0.75f; Feedback = 0.62f; Mix = 0.60f; Stages = 4;
+                    Rate = 0.55f; Depth = 0.75f; Feedback = 0.35f; Mix = 0.50f; Stages = 4;
                     break;
 
                 case PhaserPreset.Ambient:
-                    Rate = 0.2f; Depth = 0.40f; Feedback = 0.28f; Mix = 0.28f; Stages = 6;
+                    Rate = 0.15f; Depth = 0.45f; Feedback = 0.25f; Mix = 0.35f; Stages = 6;
                     break;
 
                 case PhaserPreset.Tremolo:
-                    Rate = 4.0f; Depth = 0.58f; Feedback = 0.18f; Mix = 0.70f; Stages = 3;
+                    Rate = 3.50f; Depth = 0.60f; Feedback = 0.15f; Mix = 0.50f; Stages = 2;
                     break;
 
                 case PhaserPreset.DeepSpace:
-                    Rate = 0.3f; Depth = 1.0f; Feedback = 0.85f; Mix = 0.82f; Stages = 8;
+                    Rate = 0.25f; Depth = 1.0f; Feedback = 0.85f; Mix = 0.50f; Stages = 8;
                     break;
 
                 case PhaserPreset.GuitarSolo:
-                    Rate = 1.2f; Depth = 0.72f; Feedback = 0.52f; Mix = 0.55f; Stages = 4;
+                    Rate = 1.00f; Depth = 0.72f; Feedback = 0.50f; Mix = 0.50f; Stages = 4;
                     break;
 
                 case PhaserPreset.Vocal:
-                    Rate = 0.4f; Depth = 0.45f; Feedback = 0.30f; Mix = 0.22f; Stages = 6;
+                    Rate = 0.35f; Depth = 0.40f; Feedback = 0.20f; Mix = 0.25f; Stages = 6;
                     break;
 
                 case PhaserPreset.SynthPad:
-                    Rate = 0.8f; Depth = 0.80f; Feedback = 0.65f; Mix = 0.68f; Stages = 6;
+                    Rate = 0.70f; Depth = 0.80f; Feedback = 0.60f; Mix = 0.45f; Stages = 6;
                     break;
 
                 default:
-                    Rate = 0.5f; Depth = 0.65f; Feedback = 0.45f; Mix = 0.45f; Stages = 4;
+                    Rate = 0.45f; Depth = 0.65f; Feedback = 0.40f; Mix = 0.45f; Stages = 4;
                     break;
             }
         }

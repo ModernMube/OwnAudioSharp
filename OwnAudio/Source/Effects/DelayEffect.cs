@@ -155,11 +155,13 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Builds the delay with hand picked values.
+        /// Builds the delay with hand picked values: a dotted 8th at 120 BPM, three or four
+        /// audible repeats and a quarter of wet, which is the usual starting point on an
+        /// insert. Same numbers as the Default preset.
         /// </summary>
         /// <param name="repeat">Feedback amount.</param>
         /// <param name="damping">How dark the repeats get.</param>
-        public DelayEffect(int time = 375, float repeat = 0.35f, float mix = 0.3f, float damping = 0.25f, int sampleRate = 44100, bool pingPong = false)
+        public DelayEffect(int time = 375, float repeat = 0.32f, float mix = 0.25f, float damping = 0.22f, int sampleRate = 44100, bool pingPong = false)
         {
             _id = Guid.NewGuid();
             _name = "Delay";
@@ -302,15 +304,15 @@ namespace OwnaudioNET.Effects
         {
             switch (preset)
             {
-                case DelayPreset.Default:     Time=375; Repeat=0.35f; Mix=0.28f; Damping=0.20f; PingPong=false; break;
-                case DelayPreset.SlapBack:    Time=85;  Repeat=0.12f; Mix=0.22f; Damping=0.08f; PingPong=false; break;
-                case DelayPreset.ClassicEcho: Time=500; Repeat=0.42f; Mix=0.32f; Damping=0.22f; PingPong=false; break;
-                case DelayPreset.Ambient:     Time=680; Repeat=0.60f; Mix=0.50f; Damping=0.35f; PingPong=false; break;
-                case DelayPreset.Rhythmic:    Time=250; Repeat=0.40f; Mix=0.33f; Damping=0.18f; PingPong=false; break;
-                case DelayPreset.PingPong:    Time=320; Repeat=0.48f; Mix=0.42f; Damping=0.12f; PingPong=true;  break;
-                case DelayPreset.TapeEcho:    Time=420; Repeat=0.52f; Mix=0.38f; Damping=0.42f; PingPong=false; break;
-                case DelayPreset.Dub:         Time=520; Repeat=0.72f; Mix=0.52f; Damping=0.40f; PingPong=false; break;
-                case DelayPreset.Thickening:  Time=18;  Repeat=0.04f; Mix=0.18f; Damping=0.03f; PingPong=false; break;
+                case DelayPreset.Default:     Time=375; Repeat=0.32f; Mix=0.25f; Damping=0.22f; PingPong=false; break;
+                case DelayPreset.SlapBack:    Time=85;  Repeat=0.10f; Mix=0.20f; Damping=0.10f; PingPong=false; break;
+                case DelayPreset.ClassicEcho: Time=500; Repeat=0.38f; Mix=0.26f; Damping=0.25f; PingPong=false; break;
+                case DelayPreset.Ambient:     Time=680; Repeat=0.58f; Mix=0.35f; Damping=0.40f; PingPong=false; break;
+                case DelayPreset.Rhythmic:    Time=250; Repeat=0.36f; Mix=0.24f; Damping=0.20f; PingPong=false; break;
+                case DelayPreset.PingPong:    Time=320; Repeat=0.45f; Mix=0.30f; Damping=0.18f; PingPong=true;  break;
+                case DelayPreset.TapeEcho:    Time=420; Repeat=0.48f; Mix=0.28f; Damping=0.45f; PingPong=false; break;
+                case DelayPreset.Dub:         Time=520; Repeat=0.70f; Mix=0.38f; Damping=0.48f; PingPong=false; break;
+                case DelayPreset.Thickening:  Time=18;  Repeat=0.04f; Mix=0.30f; Damping=0.05f; PingPong=false; break;
             }
         }
 

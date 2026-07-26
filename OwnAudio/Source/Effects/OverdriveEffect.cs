@@ -173,7 +173,7 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case OverdrivePreset.CleanBoost:
-                    Gain = 1.3f; Tone = 0.6f; Mix = 0.7f; OutputLevel = 0.9f;
+                    Gain = 1.3f; Tone = 0.6f; Mix = 1.0f; OutputLevel = 0.9f;
                     break;
 
                 case OverdrivePreset.Blues:

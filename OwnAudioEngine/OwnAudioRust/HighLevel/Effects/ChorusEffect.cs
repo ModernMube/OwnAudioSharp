@@ -20,9 +20,9 @@ public sealed class ChorusEffect : IDisposable
     private bool _disposed;
 
     private bool _isEnabled = true;
-    private float _mix = 0.5f;
-    private float _rate = 1.0f;
-    private float _depth = 0.5f;
+    private float _mix = 0.35f;
+    private float _rate = 0.5f;
+    private float _depth = 0.35f;
     private int _voices = 3;
 
     internal ChorusEffect(EffectHandle handle, IntPtr mixerHandle)

@@ -22,8 +22,8 @@ public sealed class RotaryEffect : IDisposable
 
     private bool _isEnabled = true;
     private float _mix = 1.0f;
-    private float _hornSpeed = 6.0f;
-    private float _rotorSpeed = 1.0f;
+    private float _hornSpeed = 0.8f;
+    private float _rotorSpeed = 0.7f;
     private float _intensity = 0.7f;
     private bool _isFast;
 
@@ -55,7 +55,8 @@ public sealed class RotaryEffect : IDisposable
     }
 
     /// <summary>
-    /// Treble horn spin in Hz, 2.0 - 15.0.
+    /// Treble horn chorale spin in Hz, 0.4 - 8.0. A 122 idles near 0.8, the fast switch
+    /// takes it up to tremolo.
     /// </summary>
     public float HornSpeed
     {
@@ -64,7 +65,7 @@ public sealed class RotaryEffect : IDisposable
     }
 
     /// <summary>
-    /// Bass rotor spin in Hz, 0.5 - 5.0. Always slower than the horn.
+    /// Bass rotor chorale spin in Hz, 0.3 - 6.0. Always slower than the horn.
     /// </summary>
     public float RotorSpeed
     {

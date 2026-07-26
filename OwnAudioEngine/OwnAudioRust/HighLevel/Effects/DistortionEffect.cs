@@ -19,9 +19,9 @@ public sealed class DistortionEffect : IDisposable
     private bool _disposed;
 
     private bool _isEnabled = true;
-    private float _mix = 1.0f;
+    private float _mix = 0.85f;
     private float _drive = 2.0f;
-    private float _outputGain = 0.5f;
+    private float _outputGain = 0.55f;
 
     internal DistortionEffect(EffectHandle handle, IntPtr mixerHandle)
     {

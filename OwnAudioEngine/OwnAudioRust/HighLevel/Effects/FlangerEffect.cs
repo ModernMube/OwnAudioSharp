@@ -20,10 +20,10 @@ public sealed class FlangerEffect : IDisposable
     private bool _disposed;
 
     private bool _isEnabled = true;
-    private float _mix = 0.5f;
-    private float _rate = 0.5f;
-    private float _depth = 0.8f;
-    private float _feedback = 0.6f;
+    private float _mix = 0.4f;
+    private float _rate = 0.35f;
+    private float _depth = 0.6f;
+    private float _feedback = 0.45f;
 
     internal FlangerEffect(EffectHandle handle, IntPtr mixerHandle)
     {

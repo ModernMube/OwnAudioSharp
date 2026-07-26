@@ -23,9 +23,9 @@ public sealed class CompressorEffect : IDisposable
     private bool _isEnabled = true;
     private float _thresholdDb = -6.0f;
     private float _ratio = 4.0f;
-    private float _attackMs = 100.0f;
+    private float _attackMs = 20.0f;
     private float _releaseMs = 200.0f;
-    private float _makeupDb;
+    private float _makeupDb = 1.6f;
 
     internal CompressorEffect(EffectHandle handle, IntPtr mixerHandle)
     {

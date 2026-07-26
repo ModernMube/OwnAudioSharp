@@ -132,9 +132,10 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Builds the effect. Cutoff is usually 2-6k, gain 2-4x.
+        /// Builds the effect. Cutoff is usually 2-6k, gain 2-4x, and the blend stays under
+        /// 20% — an exciter is meant to be felt, not heard.
         /// </summary>
-        public EnhancerEffect(float mix = 0.2f, float cutFreq = 4000f, float gain = 2.5f, float sampleRate = 44100f)
+        public EnhancerEffect(float mix = 0.15f, float cutFreq = 3500f, float gain = 1.8f, float sampleRate = 44100f)
         {
             _id = Guid.NewGuid();
             _name = "Enhancer";

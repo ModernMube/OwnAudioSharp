@@ -46,7 +46,7 @@ namespace OwnaudioNET.Effects
         VintageSlow,
 
         /// <summary>
-        /// Leslie 122 fast mode: 6.6Hz horn, 2Hz rotor.
+        /// Leslie 122 in tremolo: 6.7Hz horn, 5.2Hz rotor.
         /// </summary>
         VintageFast,
 
@@ -68,12 +68,19 @@ namespace OwnaudioNET.Effects
         private bool _disposed;
         private AudioConfig _config = null!;
 
+        /// <summary>
+        /// Chorale to tremolo ratio of a Leslie 122: the horn goes from about 40rpm to 400,
+        /// the bass drum is geared a bit lower.
+        /// </summary>
+        private const float FastHornRatio = 9.0f;
+        private const float FastRotorRatio = 8.0f;
+
         private readonly int _sampleRate;
         private readonly float[] _hornDelayBuffer;
         private readonly float[] _rotorDelayBuffer;
 
-        private float _hornSpeed = 6.0f;
-        private float _rotorSpeed = 1.0f;
+        private float _hornSpeed = 0.8f;
+        private float _rotorSpeed = 0.7f;
         private float _intensity = 0.7f;
         private float _mix = 1.0f;
         private bool _isFast = false;
@@ -110,21 +117,23 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Horn speed in Hz, 2 - 15. The fast switch triples it.
+        /// Horn chorale speed in Hz, 0.4 - 8. A real 122 idles around 0.8Hz here and the fast
+        /// switch takes it to tremolo, roughly 6.7Hz.
         /// </summary>
         public float HornSpeed
         {
             get => _hornSpeed;
-            set => _hornSpeed = Math.Clamp(value, 2.0f, 15.0f);
+            set => _hornSpeed = Math.Clamp(value, 0.4f, 8.0f);
         }
 
         /// <summary>
-        /// Rotor speed in Hz, 0.5 - 5. The fast switch doubles it.
+        /// Rotor chorale speed in Hz, 0.3 - 6. The bass drum is slower than the horn, both
+        /// standing still and in tremolo.
         /// </summary>
         public float RotorSpeed
         {
             get => _rotorSpeed;
-            set => _rotorSpeed = Math.Clamp(value, 0.5f, 5.0f);
+            set => _rotorSpeed = Math.Clamp(value, 0.3f, 6.0f);
         }
 
         /// <summary>
@@ -137,7 +146,8 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Dry to wet balance.
+        /// Dry to wet balance. A cabinet is the whole sound, not a layer, so this belongs at
+        /// 1.0 unless you deliberately want a parallel blend.
         /// </summary>
         public float Mix
         {
@@ -155,9 +165,9 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Builds the cabinet with hand picked values.
+        /// Builds the cabinet with hand picked values, a 122 sitting in chorale.
         /// </summary>
-        public RotaryEffect(float hornSpeed = 6.0f, float rotorSpeed = 1.0f, float intensity = 0.7f, float mix = 1.0f, bool isFast = false, int sampleRate = 44100)
+        public RotaryEffect(float hornSpeed = 0.8f, float rotorSpeed = 0.7f, float intensity = 0.7f, float mix = 1.0f, bool isFast = false, int sampleRate = 44100)
         {
             if (sampleRate <= 0)
                 throw new ArgumentException("Sample rate must be positive.", nameof(sampleRate));
@@ -186,7 +196,7 @@ namespace OwnaudioNET.Effects
         /// <param name="preset"></param>
         /// <param name="sampleRate"></param>
         public RotaryEffect(RotaryPreset preset, int sampleRate = 44100)
-            : this(6.0f, 1.0f, 0.7f, 1.0f, false, sampleRate)
+            : this(0.8f, 0.7f, 0.7f, 1.0f, false, sampleRate)
         {
             SetPreset(preset);
         }
@@ -208,39 +218,39 @@ namespace OwnaudioNET.Effects
             switch (preset)
             {
                 case RotaryPreset.Hammond:
-                    HornSpeed = 6.7f; RotorSpeed = 1.2f; Intensity = 0.75f; Mix = 1.0f; IsFast = false;
+                    HornSpeed = 0.80f; RotorSpeed = 0.70f; Intensity = 0.75f; Mix = 1.0f; IsFast = false;
                     break;
 
                 case RotaryPreset.Gospel:
-                    HornSpeed = 7.5f; RotorSpeed = 1.4f; Intensity = 0.85f; Mix = 0.95f; IsFast = false;
+                    HornSpeed = 0.85f; RotorSpeed = 0.72f; Intensity = 0.85f; Mix = 1.0f; IsFast = true;
                     break;
 
                 case RotaryPreset.Rock:
-                    HornSpeed = 2.2f; RotorSpeed = 0.55f; Intensity = 0.90f; Mix = 1.0f; IsFast = true;
+                    HornSpeed = 0.78f; RotorSpeed = 0.68f; Intensity = 0.90f; Mix = 1.0f; IsFast = true;
                     break;
 
                 case RotaryPreset.Jazz:
-                    HornSpeed = 5.5f; RotorSpeed = 0.9f; Intensity = 0.60f; Mix = 0.85f; IsFast = false;
+                    HornSpeed = 0.70f; RotorSpeed = 0.60f; Intensity = 0.60f; Mix = 1.0f; IsFast = false;
                     break;
 
                 case RotaryPreset.Psychedelic:
-                    HornSpeed = 5.0f; RotorSpeed = 1.5f; Intensity = 1.0f; Mix = 1.0f; IsFast = true;
+                    HornSpeed = 1.10f; RotorSpeed = 0.90f; Intensity = 1.0f; Mix = 1.0f; IsFast = true;
                     break;
 
                 case RotaryPreset.VintageSlow:
-                    HornSpeed = 6.0f; RotorSpeed = 1.0f; Intensity = 0.70f; Mix = 1.0f; IsFast = false;
+                    HornSpeed = 0.75f; RotorSpeed = 0.65f; Intensity = 0.70f; Mix = 1.0f; IsFast = false;
                     break;
 
                 case RotaryPreset.VintageFast:
-                    HornSpeed = 2.2f; RotorSpeed = 1.0f; Intensity = 0.78f; Mix = 1.0f; IsFast = true;
+                    HornSpeed = 0.75f; RotorSpeed = 0.65f; Intensity = 0.78f; Mix = 1.0f; IsFast = true;
                     break;
 
                 case RotaryPreset.Subtle:
-                    HornSpeed = 4.0f; RotorSpeed = 0.7f; Intensity = 0.40f; Mix = 0.60f; IsFast = false;
+                    HornSpeed = 0.60f; RotorSpeed = 0.50f; Intensity = 0.35f; Mix = 0.65f; IsFast = false;
                     break;
 
                 default:
-                    HornSpeed = 6.0f; RotorSpeed = 1.0f; Intensity = 0.7f; Mix = 1.0f; IsFast = false;
+                    HornSpeed = 0.80f; RotorSpeed = 0.70f; Intensity = 0.70f; Mix = 1.0f; IsFast = false;
                     break;
             }
         }
@@ -264,8 +274,8 @@ namespace OwnaudioNET.Effects
             float mx = _mix;
             float k = _xoverCoeff;
 
-            float hornInc = (float)(2.0 * Math.PI * (_isFast ? _hornSpeed * 3.0f : _hornSpeed) / _sampleRate);
-            float rotorInc = (float)(2.0 * Math.PI * (_isFast ? _rotorSpeed * 2.0f : _rotorSpeed) / _sampleRate);
+            float hornInc = (float)(2.0 * Math.PI * (_isFast ? _hornSpeed * FastHornRatio : _hornSpeed) / _sampleRate);
+            float rotorInc = (float)(2.0 * Math.PI * (_isFast ? _rotorSpeed * FastRotorRatio : _rotorSpeed) / _sampleRate);
 
             for (int i = 0; i < sampleCount; i++)
             {

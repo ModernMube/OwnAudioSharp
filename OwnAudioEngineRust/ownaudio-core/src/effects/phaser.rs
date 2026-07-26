@@ -83,15 +83,15 @@ impl Phaser {
         };
         Self {
             enabled: true,
-            mix: 0.5,
-            rate_hz: 0.5,
-            depth: 0.7,
-            feedback: 0.5,
+            mix: 0.45,
+            rate_hz: 0.45,
+            depth: 0.65,
+            feedback: 0.4,
             stages: 4,
             sample_rate,
             filters: [[AllPass::default(); MAX_STAGES]; MAX_CHANNELS],
             lfo_phase: 0.0,
-            mix_ramp: RampedParam::new(0.5, sample_rate, DEFAULT_SMOOTH_MS),
+            mix_ramp: RampedParam::new(0.45, sample_rate, DEFAULT_SMOOTH_MS),
         }
     }
 
@@ -338,10 +338,10 @@ mod tests {
     #[test]
     fn defaults_match_reference() {
         let p = Phaser::new(48_000.0);
-        assert_eq!(p.get_param(PARAM_RATE), Some(0.5));
-        assert_eq!(p.get_param(PARAM_DEPTH), Some(0.7));
-        assert_eq!(p.get_param(PARAM_FEEDBACK), Some(0.5));
-        assert_eq!(p.get_param(PARAM_MIX), Some(0.5));
+        assert_eq!(p.get_param(PARAM_RATE), Some(0.45));
+        assert_eq!(p.get_param(PARAM_DEPTH), Some(0.65));
+        assert_eq!(p.get_param(PARAM_FEEDBACK), Some(0.4));
+        assert_eq!(p.get_param(PARAM_MIX), Some(0.45));
         assert_eq!(p.get_param(PARAM_STAGES), Some(4.0));
         assert!(p.is_enabled());
     }
@@ -448,7 +448,7 @@ mod tests {
         let mut produced = mono.clone();
         p.process(&mut produced, 1);
 
-        let mut reference = Reference::new(48_000.0, 0.5, 0.7, 0.5, 0.5, 4, 1);
+        let mut reference = Reference::new(48_000.0, 0.45, 0.65, 0.4, 0.45, 4, 1);
         let expected = reference.process(&mono);
         let err = rms_error_db(&produced, &expected);
         assert!(err < -60.0, "mono RMS error {err:.1} dB exceeds -60 dB");

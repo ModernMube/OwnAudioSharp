@@ -97,7 +97,7 @@ namespace OwnaudioNET.Effects
     public sealed class ChorusEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public ChorusEffect(OwnaudioNET.Effects.ChorusPreset preset, int sampleRate = 44100) { }
-        public ChorusEffect(float rate = 1, float depth = 0.5, float mix = 0.5, int voices = 3, int sampleRate = 44100) { }
+        public ChorusEffect(float rate = 0.5, float depth = 0.35, float mix = 0.35, int voices = 3, int sampleRate = 44100) { }
         public float Depth { get; set; }
         public bool Enabled { get; set; }
         public System.Guid Id { get; }
@@ -127,7 +127,7 @@ namespace OwnaudioNET.Effects
     public sealed class CompressorEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public CompressorEffect(OwnaudioNET.Effects.CompressorPreset preset, float sampleRate = 44100) { }
-        public CompressorEffect(float threshold = 0.5, float ratio = 4, float attackTime = 100, float releaseTime = 200, float makeupGain = 1, float sampleRate = 44100) { }
+        public CompressorEffect(float threshold = 0.5, float ratio = 4, float attackTime = 20, float releaseTime = 200, float makeupGain = 1.2, float sampleRate = 44100) { }
         public float AttackTime { get; set; }
         public bool Enabled { get; set; }
         public System.Guid Id { get; }
@@ -160,7 +160,7 @@ namespace OwnaudioNET.Effects
     public sealed class DelayEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public DelayEffect(OwnaudioNET.Effects.DelayPreset preset) { }
-        public DelayEffect(int time = 375, float repeat = 0.35, float mix = 0.3, float damping = 0.25, int sampleRate = 44100, bool pingPong = false) { }
+        public DelayEffect(int time = 375, float repeat = 0.32, float mix = 0.25, float damping = 0.22, int sampleRate = 44100, bool pingPong = false) { }
         public float Damping { get; set; }
         public bool Enabled { get; set; }
         public System.Guid Id { get; }
@@ -192,7 +192,7 @@ namespace OwnaudioNET.Effects
     public sealed class DistortionEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public DistortionEffect(OwnaudioNET.Effects.DistortionPreset preset) { }
-        public DistortionEffect(float drive = 2, float mix = 1, float outputGain = 0.5) { }
+        public DistortionEffect(float drive = 2, float mix = 0.85, float outputGain = 0.55) { }
         public float Drive { get; set; }
         public bool Enabled { get; set; }
         public System.Guid Id { get; }
@@ -255,7 +255,7 @@ namespace OwnaudioNET.Effects
     public sealed class EnhancerEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public EnhancerEffect(OwnaudioNET.Effects.EnhancerPreset preset, float sampleRate = 44100) { }
-        public EnhancerEffect(float mix = 0.2, float cutFreq = 4000, float gain = 2.5, float sampleRate = 44100) { }
+        public EnhancerEffect(float mix = 0.15, float cutFreq = 3500, float gain = 1.8, float sampleRate = 44100) { }
         public float CutoffFrequency { get; set; }
         public bool Enabled { get; set; }
         public float Gain { get; set; }
@@ -354,7 +354,7 @@ namespace OwnaudioNET.Effects
     public sealed class FlangerEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public FlangerEffect(OwnaudioNET.Effects.FlangerPreset preset, int sampleRate = 44100) { }
-        public FlangerEffect(float rate = 0.5, float depth = 0.8, float feedback = 0.6, float mix = 0.5, int sampleRate = 44100) { }
+        public FlangerEffect(float rate = 0.35, float depth = 0.6, float feedback = 0.45, float mix = 0.4, int sampleRate = 44100) { }
         public float Depth { get; set; }
         public bool Enabled { get; set; }
         public float Feedback { get; set; }
@@ -448,7 +448,7 @@ namespace OwnaudioNET.Effects
     public sealed class PhaserEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public PhaserEffect(OwnaudioNET.Effects.PhaserPreset preset, int sampleRate = 44100) { }
-        public PhaserEffect(float rate = 0.5, float depth = 0.7, float feedback = 0.5, float mix = 0.5, int stages = 4, int sampleRate = 44100) { }
+        public PhaserEffect(float rate = 0.45, float depth = 0.65, float feedback = 0.4, float mix = 0.45, int stages = 4, int sampleRate = 44100) { }
         public float Depth { get; set; }
         public bool Enabled { get; set; }
         public float Feedback { get; set; }
@@ -479,7 +479,7 @@ namespace OwnaudioNET.Effects
     public sealed class ReverbEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public ReverbEffect(OwnaudioNET.Effects.ReverbPreset preset) { }
-        public ReverbEffect(float size = 0.5, float damp = 0.5, float wet = 0.33, float dry = 0.67, float stereoWidth = 1, float mix = 0.5, float gainLevel = 1) { }
+        public ReverbEffect(float size = 0.55, float damp = 0.5, float wet = 0.33, float dry = 1, float stereoWidth = 1, float mix = 0.25, float gainLevel = 1) { }
         public float Damping { get; set; }
         public float DryLevel { get; set; }
         public bool Enabled { get; set; }
@@ -515,7 +515,7 @@ namespace OwnaudioNET.Effects
     public sealed class RotaryEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public RotaryEffect(OwnaudioNET.Effects.RotaryPreset preset, int sampleRate = 44100) { }
-        public RotaryEffect(float hornSpeed = 6, float rotorSpeed = 1, float intensity = 0.7, float mix = 1, bool isFast = false, int sampleRate = 44100) { }
+        public RotaryEffect(float hornSpeed = 0.8, float rotorSpeed = 0.7, float intensity = 0.7, float mix = 1, bool isFast = false, int sampleRate = 44100) { }
         public bool Enabled { get; set; }
         public float HornSpeed { get; set; }
         public System.Guid Id { get; }

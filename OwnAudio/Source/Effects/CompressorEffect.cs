@@ -59,9 +59,9 @@ namespace OwnaudioNET.Effects
 
         private float _threshold = 0.5f;
         private float _ratio = 4.0f;
-        private float _attackTime = 0.1f;
+        private float _attackTime = 0.02f;
         private float _releaseTime = 0.2f;
-        private float _makeupGain = 1.0f;
+        private float _makeupGain = 1.2f;
         private float _sampleRate = 44100f;
 
         private float _envelope = 0.0f;
@@ -113,10 +113,12 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Builds the compressor. Attack/release come in milliseconds, threshold is linear 0-1.
+        /// Builds the compressor: 4:1 at -6dB with a 20ms attack and a touch of makeup, the
+        /// setting you'd reach for on almost anything. Attack/release come in milliseconds,
+        /// threshold and makeup are linear.
         /// </summary>
-        public CompressorEffect(float threshold = 0.5f, float ratio = 4.0f, float attackTime = 100f,
-                         float releaseTime = 200f, float makeupGain = 1.0f, float sampleRate = 44100f)
+        public CompressorEffect(float threshold = 0.5f, float ratio = 4.0f, float attackTime = 20f,
+                         float releaseTime = 200f, float makeupGain = 1.2f, float sampleRate = 44100f)
         {
             _id = Guid.NewGuid();
             _name = "Compressor";
