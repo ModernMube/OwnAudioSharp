@@ -484,6 +484,26 @@ uint32_t ownaudio_v1_get_abi_version(void);
 const char *ownaudio_v1_get_package_version(void);
 
 /**
+ * Hands the engine the JVM pointer and the app `Context` it needs for device enumeration.
+ *
+ * - `java_vm` — the process `JavaVM*` (`JNIEnv::GetJavaVM`, or `JniEnvironment.Runtime.InvocationPointer` from C#).
+ * - `context` — a global reference to the application `Context` (`Android.App.Application.Context.Handle`).
+ *
+ * Call it once, before the first engine or device call. Calling it again replaces the previous
+ * pointers. Returns `OwnAudioErrorCode::Success` (0), or `NullPointer` if either argument is null.
+ *
+ * On every platform other than Android this is a no-op that reports success, so the managed side
+ * can call it unconditionally.
+ *
+ * # Safety
+ * - `java_vm` must be the live process-wide `JavaVM` pointer.
+ * - `context` must be a **global** JNI reference (not a local one) that outlives every engine call;
+ *   a local reference goes stale as soon as the creating JNI frame returns.
+ */
+int32_t ownaudio_v1_android_init(void *java_vm,
+                                 void *context);
+
+/**
  * Creates a BPM detector for the given channel count and input sample rate.
  *
  * - `channels` — interleaved channel count of the samples fed to

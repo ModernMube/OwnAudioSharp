@@ -18,6 +18,7 @@
 pub mod callback;
 pub mod error_code;
 pub mod ffi_abi;
+pub mod ffi_android;
 pub mod ffi_bpm;
 pub mod ffi_config;
 pub mod ffi_decoder;

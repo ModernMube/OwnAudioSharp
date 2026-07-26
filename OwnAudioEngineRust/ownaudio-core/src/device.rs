@@ -57,13 +57,83 @@ pub(crate) fn collect_output_devices(
         .default_output_device()
         .and_then(|d| d.description().map(|desc| desc.name().to_owned()).ok());
 
+    let Some(enumerated) = enumerate(|| host.output_devices()) else {
+        return default_output_only(host);
+    };
+
     let mut devices = Vec::new();
-    for device in host.output_devices()? {
+    for device in enumerated? {
         if let Ok(info) = device_to_output_info(&device, default_name.as_deref()) {
             devices.push((device, info));
         }
     }
     Ok(devices)
+}
+
+/// Everything the platform default device can tell us without walking the device list.
+///
+/// Android only: see [`enumerate`] for why we end up here.
+fn default_output_only(host: &cpal::Host) -> Result<Vec<(cpal::Device, AudioDeviceInfo)>> {
+    let Some(device) = host.default_output_device() else {
+        return Ok(Vec::new());
+    };
+
+    let name = device
+        .description()
+        .map(|d| d.name().to_owned())
+        .unwrap_or_else(|_| "Default Device".to_owned());
+    let info = device_to_output_info(&device, Some(&name)).unwrap_or(AudioDeviceInfo {
+        name,
+        is_default_output: true,
+        is_default_input: false,
+        max_output_channels: 2,
+        max_input_channels: 0,
+        default_sample_rate: 48_000,
+    });
+
+    Ok(vec![(device, info)])
+}
+
+/// Same, for capture.
+fn default_input_only(host: &cpal::Host) -> Result<Vec<(cpal::Device, AudioDeviceInfo)>> {
+    let Some(device) = host.default_input_device() else {
+        return Ok(Vec::new());
+    };
+
+    let name = device
+        .description()
+        .map(|d| d.name().to_owned())
+        .unwrap_or_else(|_| "Default Device".to_owned());
+    let info = device_to_input_info(&device, Some(&name)).unwrap_or(AudioDeviceInfo {
+        name,
+        is_default_output: false,
+        is_default_input: true,
+        max_output_channels: 0,
+        max_input_channels: 1,
+        default_sample_rate: 48_000,
+    });
+
+    Ok(vec![(device, info)])
+}
+
+/// Runs a cpal device enumeration, returning `None` when the platform cannot do it.
+///
+/// Only Android can answer `None`: cpal walks the device list through
+/// `AudioManager.getDevices()` over JNI, and the JNI handles come from
+/// `ndk_context`, which *panics* when nothing has initialised it. An app that
+/// loads us through P/Invoke — every .NET Android app — has no ndk-glue and no
+/// `JNI_OnLoad`, so unless it called `ownaudio_v1_android_init` first, this is a
+/// guaranteed panic rather than an error. Catching it keeps playback working on
+/// the default device instead of failing initialisation outright.
+#[cfg(target_os = "android")]
+fn enumerate<T>(list: impl FnOnce() -> T) -> Option<T> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(list)).ok()
+}
+
+/// Everywhere else enumeration is a plain call that either works or returns an error.
+#[cfg(not(target_os = "android"))]
+fn enumerate<T>(list: impl FnOnce() -> T) -> Option<T> {
+    Some(list())
 }
 
 /// Returns a list of all available input devices on the given host.
@@ -86,8 +156,12 @@ pub(crate) fn collect_input_devices(
         .default_input_device()
         .and_then(|d| d.description().map(|desc| desc.name().to_owned()).ok());
 
+    let Some(enumerated) = enumerate(|| host.input_devices()) else {
+        return default_input_only(host);
+    };
+
     let mut devices = Vec::new();
-    for device in host.input_devices()? {
+    for device in enumerated? {
         if let Ok(info) = device_to_input_info(&device, default_name.as_deref()) {
             devices.push((device, info));
         }

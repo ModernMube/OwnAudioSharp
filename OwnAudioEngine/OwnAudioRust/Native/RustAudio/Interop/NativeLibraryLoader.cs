@@ -25,6 +25,8 @@ internal static class NativeLibraryLoader
 
         NativeLibrary.SetDllImportResolver(typeof(NativeLibraryLoader).Assembly, _resolve);
         _registered = true;
+
+        AndroidJniBootstrap.EnsureInitialized();
     }
 
     /// <summary>

@@ -843,6 +843,7 @@ version = "0.1.0"
 dependencies = [
  "cbindgen",
  "cpal",
+ "ndk-context",
  "ownaudio-core",
  "ownaudio-soundtouch",
 ]
