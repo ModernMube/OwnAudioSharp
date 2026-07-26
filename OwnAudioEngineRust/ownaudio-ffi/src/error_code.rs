@@ -93,3 +93,27 @@ pub extern "C" fn ownaudio_v1_last_error_message() -> *const std::os::raw::c_cha
         None => std::ptr::null(),
     })
 }
+
+/// Turns a `catch_unwind` result into a return code, keeping the panic message.
+///
+/// Every entry point catches unwinds so a Rust panic never crosses the C ABI, but the payload used
+/// to be dropped on the floor and the caller got a bare `InternalPanic`. That is a miserable thing
+/// to debug on a device: "code 8" and nothing else. Recording the message means it comes back
+/// through `ownaudio_v1_last_error_message` and lands in the managed exception text.
+pub(crate) fn finish_catch_unwind(
+    result: std::result::Result<i32, Box<dyn std::any::Any + Send>>,
+) -> i32 {
+    match result {
+        Ok(code) => code,
+        Err(payload) => {
+            let msg = payload
+                .downcast_ref::<&str>()
+                .map(|s| (*s).to_owned())
+                .or_else(|| payload.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "non-string panic payload".to_owned());
+
+            set_last_error(format!("panic in native audio engine: {msg}"));
+            OwnAudioErrorCode::InternalPanic as i32
+        }
+    }
+}

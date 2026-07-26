@@ -193,36 +193,48 @@ pub fn default_input_device() -> Result<AudioDeviceInfo> {
 ///
 /// Used by `engine.rs`; callers outside this crate never see `cpal::Device`.
 pub(crate) fn resolve_output_device(host: &cpal::Host, name: Option<&str>) -> Result<cpal::Device> {
-    match name {
-        None => host
-            .default_output_device()
-            .ok_or(AudioError::DeviceNotFound),
-        Some(target) => host
-            .output_devices()?
-            .find(|d| {
-                d.description()
-                    .map(|desc| desc.name() == target)
-                    .unwrap_or(false)
-            })
-            .ok_or(AudioError::DeviceNotFound),
-    }
+    let default = || {
+        host.default_output_device()
+            .ok_or(AudioError::DeviceNotFound)
+    };
+
+    let Some(target) = name else { return default() };
+
+    // Without enumeration the only name we ever handed out is the default device's own,
+    // so resolving anything by name can only mean that one.
+    let Some(enumerated) = enumerate(|| host.output_devices()) else {
+        return default();
+    };
+
+    enumerated?
+        .find(|d| {
+            d.description()
+                .map(|desc| desc.name() == target)
+                .unwrap_or(false)
+        })
+        .ok_or(AudioError::DeviceNotFound)
 }
 
 /// Selects an input `cpal::Device` by name using the given host, or falls back to the default.
 pub(crate) fn resolve_input_device(host: &cpal::Host, name: Option<&str>) -> Result<cpal::Device> {
-    match name {
-        None => host
-            .default_input_device()
-            .ok_or(AudioError::DeviceNotFound),
-        Some(target) => host
-            .input_devices()?
-            .find(|d| {
-                d.description()
-                    .map(|desc| desc.name() == target)
-                    .unwrap_or(false)
-            })
-            .ok_or(AudioError::DeviceNotFound),
-    }
+    let default = || {
+        host.default_input_device()
+            .ok_or(AudioError::DeviceNotFound)
+    };
+
+    let Some(target) = name else { return default() };
+
+    let Some(enumerated) = enumerate(|| host.input_devices()) else {
+        return default();
+    };
+
+    enumerated?
+        .find(|d| {
+            d.description()
+                .map(|desc| desc.name() == target)
+                .unwrap_or(false)
+        })
+        .ok_or(AudioError::DeviceNotFound)
 }
 
 /// Resolves a single device from the combined enumeration, so an ASIO driver's capture and
@@ -230,10 +242,16 @@ pub(crate) fn resolve_input_device(host: &cpal::Host, name: Option<&str>) -> Res
 /// into one duplex ASIO stream. `None` picks the first (default) driver. Must be called while no
 /// stream is open, since ASIO cannot enumerate once a driver is loaded.
 pub(crate) fn resolve_duplex_device(host: &cpal::Host, name: Option<&str>) -> Result<cpal::Device> {
+    let Some(enumerated) = enumerate(|| host.devices()) else {
+        return host
+            .default_output_device()
+            .ok_or(AudioError::DeviceNotFound);
+    };
+    let mut devices = enumerated?;
+
     match name {
-        None => host.devices()?.next().ok_or(AudioError::DeviceNotFound),
-        Some(target) => host
-            .devices()?
+        None => devices.next().ok_or(AudioError::DeviceNotFound),
+        Some(target) => devices
             .find(|d| {
                 d.description()
                     .map(|desc| desc.name() == target)

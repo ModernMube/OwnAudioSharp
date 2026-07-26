@@ -173,7 +173,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_open_input(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Starts (or resumes) device capture feeding the track.
@@ -202,7 +202,7 @@ pub unsafe extern "C" fn ownaudio_v1_input_source_play(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Pauses device capture. Buffered samples already in the ring keep playing out.
@@ -231,7 +231,7 @@ pub unsafe extern "C" fn ownaudio_v1_input_source_pause(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Writes the most recent capture peak levels (0.0..) to `*out_left` / `*out_right`.
@@ -272,7 +272,7 @@ pub unsafe extern "C" fn ownaudio_v1_input_source_get_peaks(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Destroys an input-source control handle, stopping capture and releasing the

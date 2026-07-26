@@ -51,7 +51,7 @@ pub unsafe extern "C" fn ownaudio_v1_engine_create(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Creates a new `AudioEngine` instance using an explicitly chosen host API, and writes
@@ -103,7 +103,7 @@ pub unsafe extern "C" fn ownaudio_v1_engine_create_with_host(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Destroys an engine handle created by `ownaudio_v1_engine_create`.
@@ -206,7 +206,7 @@ pub unsafe extern "C" fn ownaudio_v1_open_output_stream(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Opens an output stream **driven by a multi-track mixer** and writes its
@@ -331,7 +331,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_open_output_stream(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Starts (or resumes) audio output on the given stream.
@@ -361,7 +361,7 @@ pub unsafe extern "C" fn ownaudio_v1_output_stream_play(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Pauses audio output without destroying the stream.
@@ -391,7 +391,7 @@ pub unsafe extern "C" fn ownaudio_v1_output_stream_pause(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Polls the output stream's error state, writing the most recent error kind to
@@ -441,7 +441,7 @@ pub unsafe extern "C" fn ownaudio_v1_output_stream_get_error_state(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Writes the stream's hardware playback latency (in frames) to `*out_frames`.
@@ -479,7 +479,7 @@ pub unsafe extern "C" fn ownaudio_v1_output_stream_get_latency_frames(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Destroys an output stream and releases all associated resources.
@@ -577,7 +577,7 @@ pub unsafe extern "C" fn ownaudio_v1_open_input_stream(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Starts (or resumes) audio capture on the given stream.
@@ -606,7 +606,7 @@ pub unsafe extern "C" fn ownaudio_v1_input_stream_play(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Pauses audio capture without destroying the stream.
@@ -635,7 +635,7 @@ pub unsafe extern "C" fn ownaudio_v1_input_stream_pause(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Polls the input stream's error state. See
@@ -672,7 +672,7 @@ pub unsafe extern "C" fn ownaudio_v1_input_stream_get_error_state(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Writes the stream's hardware capture latency (in frames) to `*out_frames`.
@@ -709,7 +709,7 @@ pub unsafe extern "C" fn ownaudio_v1_input_stream_get_latency_frames(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Destroys an input stream and releases all associated resources.

@@ -124,7 +124,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_add_effect(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Adds a new effect of the given type to the mixer's **master** effect chain,
@@ -198,7 +198,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_add_master_effect(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Removes a master effect from the mixer's master chain and destroys the handle.
@@ -252,7 +252,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_remove_master_effect(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 // VST3 plugin effects (hosted through the OwnAudioVst C ABI)
@@ -382,7 +382,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_add_vst_effect(
         )
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Adds an external VST3 plugin to the mixer's **master** effect chain, which
@@ -423,7 +423,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_add_master_vst_effect(
         )
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Destroys an effect handle.
@@ -505,7 +505,7 @@ pub unsafe extern "C" fn ownaudio_v1_effect_remove(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 // Parameter access
@@ -568,7 +568,7 @@ pub unsafe extern "C" fn ownaudio_v1_effect_set_param(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Reads the current value of an effect parameter.
@@ -628,5 +628,5 @@ pub unsafe extern "C" fn ownaudio_v1_effect_get_param(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }

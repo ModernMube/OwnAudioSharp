@@ -114,7 +114,7 @@ pub unsafe extern "C" fn ownaudio_v1_decoder_open(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Reads up to `buffer_count` decoded interleaved `f32` samples into `buffer`
@@ -160,7 +160,7 @@ pub unsafe extern "C" fn ownaudio_v1_decoder_read(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Requests a non-blocking seek to `frame_position` (output sample frames).
@@ -187,7 +187,7 @@ pub unsafe extern "C" fn ownaudio_v1_decoder_seek(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Writes the decoded output stream metadata to `*out_info`.
@@ -219,7 +219,7 @@ pub unsafe extern "C" fn ownaudio_v1_decoder_get_stream_info(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Writes `true` to `*out_is_eof` when the file has been fully decoded and the
@@ -252,7 +252,7 @@ pub unsafe extern "C" fn ownaudio_v1_decoder_is_eof(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Destroys a decoder handle, stopping and joining the prefetch thread.

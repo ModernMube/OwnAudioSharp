@@ -65,7 +65,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_create(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Destroys a mixer handle and releases all associated resources.
@@ -115,7 +115,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_play_all(mixer: *mut OwnAudioMixerHan
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Pauses every track in the mixer in a single call, against the shared clock.
@@ -142,7 +142,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_pause_all(mixer: *mut OwnAudioMixerHa
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Stops every track in the mixer in a single call, against the shared clock.
@@ -169,7 +169,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_stop_all(mixer: *mut OwnAudioMixerHan
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Sets the mixer's master output gain (linear amplitude multiplier applied once
@@ -200,7 +200,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_set_master_gain(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Sets the mixer's master stereo pan position (`-1.0` = hard left, `0.0` = center,
@@ -232,7 +232,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_set_master_pan(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Writes the mixer's most recently measured master output peak levels (absolute,
@@ -276,7 +276,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_get_master_peaks(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 // Master-output capture (recording)
@@ -322,7 +322,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_capture_start(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Reads up to `len` captured samples into `out`, returning the number actually
@@ -371,7 +371,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_capture_read(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Stops master-output capture and releases the ring's read side. The mixer's
@@ -403,7 +403,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_capture_stop(mixer: *mut OwnAudioMixe
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 // Track lifecycle
@@ -455,7 +455,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_create(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Destroys a track handle.  Does NOT remove the track from the mixer.
@@ -520,7 +520,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_remove(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 // Track transport control
@@ -545,7 +545,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_play(track: *mut OwnAudioTrackHandle)
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Pauses the track without resetting its position.
@@ -568,7 +568,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_pause(track: *mut OwnAudioTrackHandle
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Stops the track and resets its position to zero.
@@ -594,7 +594,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_stop(track: *mut OwnAudioTrackHandle)
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Sets the track's playback position to `sample_position`.
@@ -616,7 +616,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_seek(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 // Track position
@@ -660,7 +660,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_get_rendered_frames(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Writes the number of *content* (source-timeline) frames the track has advanced
@@ -704,7 +704,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_get_rendered_content_frames(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Resets the track's rendered-frame position counter to zero.
@@ -734,7 +734,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_reset_position(track: *mut OwnAudioTr
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Writes the track's most recently measured output peak levels (absolute, of the
@@ -779,7 +779,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_get_peaks(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Sets the track's start-offset silence: the number of output frames the track
@@ -811,7 +811,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_set_start_delay_frames(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Installs a per-track output-channel routing map: source channel `i` is summed
@@ -860,7 +860,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_set_output_channel_map(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Clears any per-track output-channel routing installed by
@@ -887,7 +887,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_clear_output_channel_map(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 // Track parameters
@@ -915,7 +915,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_set_gain(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Sets the track stereo pan position (`-1.0` = hard left, `0.0` = center,
@@ -944,7 +944,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_set_pan(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Sets the track tempo ratio (1.0 = normal speed, 2.0 = double speed).
@@ -970,7 +970,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_set_tempo(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Sets the track pitch shift in semitones (-24 … +24).
@@ -996,7 +996,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_set_pitch(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Pins the track's SoundTouch time-stretch stage on for its whole lifetime (nonzero = on,
@@ -1029,7 +1029,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_set_stretch_always_on(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Sets the track mute state (0.0 = unmuted, 1.0 = muted).
@@ -1055,5 +1055,5 @@ pub unsafe extern "C" fn ownaudio_v1_track_set_mute(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }

@@ -123,7 +123,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_open_file(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Enables or disables seamless looping for a file source.
@@ -155,7 +155,7 @@ pub unsafe extern "C" fn ownaudio_v1_file_source_set_loop(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Writes whether the file source has reached end-of-stream (without looping) to
@@ -195,7 +195,7 @@ pub unsafe extern "C" fn ownaudio_v1_file_source_is_finished(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Requests a seek to `frame_position` (output frames) on a file source.
@@ -229,7 +229,7 @@ pub unsafe extern "C" fn ownaudio_v1_file_source_seek(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Destroys a file-source control handle.

@@ -112,7 +112,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_open_memory(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Enables or disables seamless looping for a memory source.
@@ -141,7 +141,7 @@ pub unsafe extern "C" fn ownaudio_v1_memory_source_set_loop(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Writes whether the memory source has reached end-of-buffer (without looping) to
@@ -178,7 +178,7 @@ pub unsafe extern "C" fn ownaudio_v1_memory_source_is_finished(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Requests a seek to `frame_position` (output frames) on a memory source.
@@ -210,7 +210,7 @@ pub unsafe extern "C" fn ownaudio_v1_memory_source_seek(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Destroys a memory-source control handle.

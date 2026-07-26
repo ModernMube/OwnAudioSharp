@@ -55,7 +55,7 @@ pub unsafe extern "C" fn ownaudio_v1_bpm_create(
         OwnAudioErrorCode::Success as i32
     });
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Feeds `num_samples` interleaved frames from `samples` into the detector.
@@ -93,7 +93,7 @@ pub unsafe extern "C" fn ownaudio_v1_bpm_input_samples(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Writes the current estimated tempo (in BPM) to `*out_bpm`, or `0.0` when there is not yet enough
@@ -127,7 +127,7 @@ pub unsafe extern "C" fn ownaudio_v1_bpm_get_bpm(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Destroys a BPM detector created by `ownaudio_v1_bpm_create`. Null is ignored.

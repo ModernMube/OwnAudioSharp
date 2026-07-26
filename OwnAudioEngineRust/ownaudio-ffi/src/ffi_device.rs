@@ -65,7 +65,7 @@ pub unsafe extern "C" fn ownaudio_v1_list_output_devices(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Lists all available input devices on the default host.
@@ -106,7 +106,7 @@ pub unsafe extern "C" fn ownaudio_v1_list_input_devices(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Lists all available output devices on the host of the given engine.
@@ -159,7 +159,7 @@ pub unsafe extern "C" fn ownaudio_v1_engine_list_output_devices(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Lists all available input devices on the host of the given engine.
@@ -212,7 +212,7 @@ pub unsafe extern "C" fn ownaudio_v1_engine_list_input_devices(
         }
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Releases an array previously returned by `ownaudio_v1_list_output_devices`,

@@ -84,7 +84,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_set_ring_source(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Pushes up to `sample_count` interleaved `f32` samples into the track feed and
@@ -140,7 +140,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_source_write(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Writes the number of samples that can currently be written without overflow
@@ -177,7 +177,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_source_free_samples(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Clears a track's audio source, silencing it.
@@ -230,7 +230,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_clear_source(
         OwnAudioErrorCode::Success as i32
     }));
 
-    result.unwrap_or(OwnAudioErrorCode::InternalPanic as i32)
+    crate::error_code::finish_catch_unwind(result)
 }
 
 /// Destroys a track-source write handle and releases its ring-buffer producer.
