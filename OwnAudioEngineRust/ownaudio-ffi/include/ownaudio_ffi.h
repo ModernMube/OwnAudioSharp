@@ -493,6 +493,10 @@ const char *ownaudio_v1_get_package_version(void);
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success. The handle must be released with
  * `ownaudio_v1_bpm_destroy`.
+ *
+ * # Safety
+ * - `out_detector` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_bpm_create(uint32_t channels,
                                uint32_t sample_rate,
@@ -505,6 +509,11 @@ int32_t ownaudio_v1_bpm_create(uint32_t channels,
  * to `ownaudio_v1_bpm_create`).
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `handle` must be a live handle from `ownaudio_v1_bpm_create` that has not been destroyed.
+ * - `samples` must be valid for `sample_count` `f32` values (readable).
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_bpm_input_samples(struct OwnAudioBpmHandle *handle,
                                       const float *samples,
@@ -516,11 +525,20 @@ int32_t ownaudio_v1_bpm_input_samples(struct OwnAudioBpmHandle *handle,
  * data for a reliable estimate.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `handle` must be a live handle from `ownaudio_v1_bpm_create` that has not been destroyed.
+ * - `out_bpm` must point to a writable `f32`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_bpm_get_bpm(struct OwnAudioBpmHandle *handle, float *out_bpm);
 
 /**
  * Destroys a BPM detector created by `ownaudio_v1_bpm_create`. Null is ignored.
+ *
+ * # Safety
+ * - `handle` must be a live handle from `ownaudio_v1_bpm_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 void ownaudio_v1_bpm_destroy(struct OwnAudioBpmHandle *handle);
 
@@ -536,6 +554,11 @@ void ownaudio_v1_bpm_destroy(struct OwnAudioBpmHandle *handle);
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.  The handle must be
  * released with `ownaudio_v1_decoder_destroy`.
+ *
+ * # Safety
+ * - `path` must be a NUL-terminated UTF-8 string.
+ * - `out_decoder` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_decoder_open(const char *path,
                                  uint32_t target_sample_rate,
@@ -551,6 +574,12 @@ int32_t ownaudio_v1_decoder_open(const char *path,
  * `buffer_count` means EOF or a transient prefetch underrun.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `handle` must be a live handle from `ownaudio_v1_decoder_open` that has not been destroyed.
+ * - `buffer` must be valid for `buffer_count` `f32` values (writable).
+ * - `out_samples_written` must point to a writable `usize`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_decoder_read(struct OwnAudioDecoderHandle *handle,
                                  float *buffer,
@@ -564,6 +593,10 @@ int32_t ownaudio_v1_decoder_read(struct OwnAudioDecoderHandle *handle,
  * briefly return pre-seek samples already buffered in the ring.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `handle` must be a live handle from `ownaudio_v1_decoder_open` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_decoder_seek(struct OwnAudioDecoderHandle *handle, uint64_t frame_position);
 
@@ -571,6 +604,11 @@ int32_t ownaudio_v1_decoder_seek(struct OwnAudioDecoderHandle *handle, uint64_t 
  * Writes the decoded output stream metadata to `*out_info`.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `handle` must be a live handle from `ownaudio_v1_decoder_open` that has not been destroyed.
+ * - `out_info` must point to a writable `OwnAudioStreamInfo`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_decoder_get_stream_info(struct OwnAudioDecoderHandle *handle,
                                             struct OwnAudioStreamInfo *out_info);
@@ -580,6 +618,11 @@ int32_t ownaudio_v1_decoder_get_stream_info(struct OwnAudioDecoderHandle *handle
  * prefetch buffer is drained.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `handle` must be a live handle from `ownaudio_v1_decoder_open` that has not been destroyed.
+ * - `out_is_eof` must point to a writable `bool`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_decoder_is_eof(struct OwnAudioDecoderHandle *handle, bool *out_is_eof);
 
@@ -587,6 +630,10 @@ int32_t ownaudio_v1_decoder_is_eof(struct OwnAudioDecoderHandle *handle, bool *o
  * Destroys a decoder handle, stopping and joining the prefetch thread.
  *
  * Passing `null` is safe and has no effect.
+ *
+ * # Safety
+ * - `handle` must be a live handle from `ownaudio_v1_decoder_open` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 void ownaudio_v1_decoder_destroy(struct OwnAudioDecoderHandle *handle);
 
@@ -598,6 +645,11 @@ void ownaudio_v1_decoder_destroy(struct OwnAudioDecoderHandle *handle);
  * `ownaudio_v1_free_device_list(*out_devices, *out_count)`.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `out_devices` must point to a writable pointer slot; it receives the new handle.
+ * - `out_count` must point to a writable `usize`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_list_output_devices(struct OwnAudioDeviceInfo **out_devices, size_t *out_count);
 
@@ -609,6 +661,11 @@ int32_t ownaudio_v1_list_output_devices(struct OwnAudioDeviceInfo **out_devices,
  * `ownaudio_v1_free_device_list(*out_devices, *out_count)`.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `out_devices` must point to a writable pointer slot; it receives the new handle.
+ * - `out_count` must point to a writable `usize`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_list_input_devices(struct OwnAudioDeviceInfo **out_devices, size_t *out_count);
 
@@ -625,6 +682,12 @@ int32_t ownaudio_v1_list_input_devices(struct OwnAudioDeviceInfo **out_devices, 
  * `ownaudio_v1_free_device_list(*out_devices, *out_count)`.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `engine` must be a live handle from `ownaudio_v1_engine_create` that has not been destroyed.
+ * - `out_devices` must point to a writable pointer slot; it receives the new handle.
+ * - `out_count` must point to a writable `usize`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_engine_list_output_devices(struct OwnAudioEngineHandle *engine,
                                                struct OwnAudioDeviceInfo **out_devices,
@@ -643,6 +706,12 @@ int32_t ownaudio_v1_engine_list_output_devices(struct OwnAudioEngineHandle *engi
  * `ownaudio_v1_free_device_list(*out_devices, *out_count)`.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `engine` must be a live handle from `ownaudio_v1_engine_create` that has not been destroyed.
+ * - `out_devices` must point to a writable pointer slot; it receives the new handle.
+ * - `out_count` must point to a writable `usize`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_engine_list_input_devices(struct OwnAudioEngineHandle *engine,
                                               struct OwnAudioDeviceInfo **out_devices,
@@ -654,6 +723,11 @@ int32_t ownaudio_v1_engine_list_input_devices(struct OwnAudioEngineHandle *engin
  * counterparts.
  *
  * Passing `null` or `count = 0` is safe and has no effect.
+ *
+ * # Safety
+ * - `devices` must be the array handed out by one of the list functions, released exactly once.
+ * - `count` must be the element count that came with it.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 void ownaudio_v1_free_device_list(struct OwnAudioDeviceInfo *devices, size_t count);
 
@@ -668,6 +742,12 @@ void ownaudio_v1_free_device_list(struct OwnAudioDeviceInfo *devices, size_t cou
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
  * Returns `OwnAudioErrorCode::InvalidHandle` (7) for an unknown `effect_type`.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - `out_effect` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_add_effect(struct OwnAudioMixerHandle *mixer,
                                      struct OwnAudioTrackHandle *track,
@@ -690,6 +770,11 @@ int32_t ownaudio_v1_track_add_effect(struct OwnAudioMixerHandle *mixer,
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
  * Returns `OwnAudioErrorCode::InvalidHandle` (7) for an unknown `effect_type`.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `out_effect` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_mixer_add_master_effect(struct OwnAudioMixerHandle *mixer,
                                             uint32_t effect_type,
@@ -706,6 +791,12 @@ int32_t ownaudio_v1_mixer_add_master_effect(struct OwnAudioMixerHandle *mixer,
  * - `effect` — valid master effect handle from `ownaudio_v1_mixer_add_master_effect`.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `effect` must be a live handle from `ownaudio_v1_track_add_effect` or `ownaudio_v1_mixer_add_master_effect`,
+ *   not yet destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_mixer_remove_master_effect(struct OwnAudioMixerHandle *mixer,
                                                struct OwnAudioEffectHandle *effect);
@@ -732,6 +823,13 @@ int32_t ownaudio_v1_mixer_remove_master_effect(struct OwnAudioMixerHandle *mixer
  * - `out_effect` — receives the new effect handle on success.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - `plugin_handle` is opaque to the engine and is only handed back to the callback; it must stay alive for as long as the stream runs.
+ * - `out_effect` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_add_vst_effect(struct OwnAudioMixerHandle *mixer,
                                          struct OwnAudioTrackHandle *track,
@@ -752,6 +850,12 @@ int32_t ownaudio_v1_track_add_vst_effect(struct OwnAudioMixerHandle *mixer,
  * effect. See that function for the argument contract.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `plugin_handle` is opaque to the engine and is only handed back to the callback; it must stay alive for as long as the stream runs.
+ * - `out_effect` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_mixer_add_master_vst_effect(struct OwnAudioMixerHandle *mixer,
                                                 void *plugin_handle,
@@ -766,6 +870,11 @@ int32_t ownaudio_v1_mixer_add_master_vst_effect(struct OwnAudioMixerHandle *mixe
  *
  * Passing `null` is safe and has no effect.
  * The effect is NOT removed from the track chain; call `ownaudio_v1_effect_remove` first.
+ *
+ * # Safety
+ * - `effect` must be a live handle from `ownaudio_v1_track_add_effect` or `ownaudio_v1_mixer_add_master_effect`,
+ *   not yet destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 void ownaudio_v1_effect_destroy(struct OwnAudioEffectHandle *effect);
 
@@ -777,6 +886,13 @@ void ownaudio_v1_effect_destroy(struct OwnAudioEffectHandle *effect);
  * - `effect` — valid effect handle to remove and destroy.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - `effect` must be a live handle from `ownaudio_v1_track_add_effect` or `ownaudio_v1_mixer_add_master_effect`,
+ *   not yet destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_effect_remove(struct OwnAudioMixerHandle *mixer,
                                   struct OwnAudioTrackHandle *track,
@@ -791,6 +907,12 @@ int32_t ownaudio_v1_effect_remove(struct OwnAudioMixerHandle *mixer,
  *
  * Returns `OwnAudioErrorCode::Success` (0) when the parameter is recognised.
  * Returns `OwnAudioErrorCode::InvalidHandle` (7) when `param_id` is unknown.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `effect` must be a live handle from `ownaudio_v1_track_add_effect` or `ownaudio_v1_mixer_add_master_effect`,
+ *   not yet destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_effect_set_param(struct OwnAudioMixerHandle *mixer,
                                      struct OwnAudioEffectHandle *effect,
@@ -806,6 +928,13 @@ int32_t ownaudio_v1_effect_set_param(struct OwnAudioMixerHandle *mixer,
  *
  * Returns `OwnAudioErrorCode::Success` (0) when the parameter is recognised.
  * Returns `OwnAudioErrorCode::InvalidHandle` (7) when `param_id` is unknown.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `effect` must be a live handle from `ownaudio_v1_track_add_effect` or `ownaudio_v1_mixer_add_master_effect`,
+ *   not yet destroyed.
+ * - `out_value` must point to a writable `f32`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_effect_get_param(struct OwnAudioMixerHandle *mixer,
                                      struct OwnAudioEffectHandle *effect,
@@ -838,6 +967,13 @@ int32_t ownaudio_v1_effect_get_param(struct OwnAudioMixerHandle *mixer,
  * Returns `OwnAudioErrorCode::Success` (0) on success.  Destroy the returned
  * handle with `ownaudio_v1_file_source_destroy` after the track's source has
  * been cleared or the track removed.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - `path` must be a NUL-terminated UTF-8 string.
+ * - `out_source` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_open_file(struct OwnAudioMixerHandle *mixer,
                                     struct OwnAudioTrackHandle *track,
@@ -857,6 +993,10 @@ int32_t ownaudio_v1_track_open_file(struct OwnAudioMixerHandle *mixer,
  * - `enabled` — non-zero to loop, zero to stop at end-of-stream.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_file_source_set_loop(struct OwnAudioFileSourceHandle *source, uint8_t enabled);
 
@@ -871,6 +1011,11 @@ int32_t ownaudio_v1_file_source_set_loop(struct OwnAudioFileSourceHandle *source
  * - `out_finished` — receives the finished flag on success.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.
+ * - `out_finished` must point to a writable `u8`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_file_source_is_finished(struct OwnAudioFileSourceHandle *source,
                                             uint8_t *out_finished);
@@ -887,6 +1032,10 @@ int32_t ownaudio_v1_file_source_is_finished(struct OwnAudioFileSourceHandle *sou
  * - `frame_position` — target position in output sample frames.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_file_source_seek(struct OwnAudioFileSourceHandle *source,
                                      uint64_t frame_position);
@@ -899,6 +1048,10 @@ int32_t ownaudio_v1_file_source_seek(struct OwnAudioFileSourceHandle *source,
  * the track's source is cleared (`ownaudio_v1_track_clear_source`) or the track
  * is removed, at which point the source and its prefetch thread are retired off
  * the real-time path.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 void ownaudio_v1_file_source_destroy(struct OwnAudioFileSourceHandle *source);
 
@@ -923,6 +1076,14 @@ void ownaudio_v1_file_source_destroy(struct OwnAudioFileSourceHandle *source);
  * Returns `OwnAudioErrorCode::Success` (0) on success. Destroy the returned
  * handle with `ownaudio_v1_input_source_destroy` after the track's source has
  * been cleared or the track removed.
+ *
+ * # Safety
+ * - `engine` must be a live handle from `ownaudio_v1_engine_create` that has not been destroyed.
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - `device_name` must be a NUL-terminated UTF-8 string.
+ * - `out_input` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_open_input(struct OwnAudioEngineHandle *engine,
                                      struct OwnAudioMixerHandle *mixer,
@@ -937,6 +1098,10 @@ int32_t ownaudio_v1_track_open_input(struct OwnAudioEngineHandle *engine,
  * Starts (or resumes) device capture feeding the track.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `input` must be a live handle from `ownaudio_v1_track_open_input` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_input_source_play(struct OwnAudioInputSourceHandle *input);
 
@@ -944,6 +1109,10 @@ int32_t ownaudio_v1_input_source_play(struct OwnAudioInputSourceHandle *input);
  * Pauses device capture. Buffered samples already in the ring keep playing out.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `input` must be a live handle from `ownaudio_v1_track_open_input` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_input_source_pause(struct OwnAudioInputSourceHandle *input);
 
@@ -954,6 +1123,12 @@ int32_t ownaudio_v1_input_source_pause(struct OwnAudioInputSourceHandle *input);
  * - `out_left` / `out_right` — receive the peaks on success.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `input` must be a live handle from `ownaudio_v1_track_open_input` that has not been destroyed.
+ * - `out_left` must point to a writable `f32`.
+ * - `out_right` must point to a writable `f32`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_input_source_get_peaks(struct OwnAudioInputSourceHandle *input,
                                            float *out_left,
@@ -966,6 +1141,10 @@ int32_t ownaudio_v1_input_source_get_peaks(struct OwnAudioInputSourceHandle *inp
  * Passing `null` is safe and has no effect. The track's ring-buffer reader lives
  * on the audio thread until the track's source is cleared or the track is
  * removed; after this call it simply underruns (renders silence).
+ *
+ * # Safety
+ * - `input` must be a live handle from `ownaudio_v1_track_open_input` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 void ownaudio_v1_input_source_destroy(struct OwnAudioInputSourceHandle *input);
 
@@ -994,6 +1173,13 @@ void ownaudio_v1_input_source_destroy(struct OwnAudioInputSourceHandle *input);
  * Returns `OwnAudioErrorCode::Success` (0) on success.  Destroy the returned
  * handle with `ownaudio_v1_memory_source_destroy` after the track's source has
  * been cleared or the track removed.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - `samples` must be valid for `sample_count` `f32` values (readable).
+ * - `out_source` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_open_memory(struct OwnAudioMixerHandle *mixer,
                                       struct OwnAudioTrackHandle *track,
@@ -1010,6 +1196,10 @@ int32_t ownaudio_v1_track_open_memory(struct OwnAudioMixerHandle *mixer,
  * - `enabled` — non-zero to loop, zero to stop at end-of-buffer.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_memory` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_memory_source_set_loop(struct OwnAudioMemorySourceHandle *source,
                                            uint8_t enabled);
@@ -1022,6 +1212,11 @@ int32_t ownaudio_v1_memory_source_set_loop(struct OwnAudioMemorySourceHandle *so
  * - `out_finished` — receives the finished flag on success.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_memory` that has not been destroyed.
+ * - `out_finished` must point to a writable `u8`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_memory_source_is_finished(struct OwnAudioMemorySourceHandle *source,
                                               uint8_t *out_finished);
@@ -1036,6 +1231,10 @@ int32_t ownaudio_v1_memory_source_is_finished(struct OwnAudioMemorySourceHandle 
  * - `frame_position` — target position in output sample frames.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_memory` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_memory_source_seek(struct OwnAudioMemorySourceHandle *source,
                                        uint64_t frame_position);
@@ -1048,6 +1247,10 @@ int32_t ownaudio_v1_memory_source_seek(struct OwnAudioMemorySourceHandle *source
  * the track's source is cleared (`ownaudio_v1_track_clear_source`) or the track
  * is removed, at which point the source (and its buffer) is retired off the
  * real-time path.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_open_memory` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 void ownaudio_v1_memory_source_destroy(struct OwnAudioMemorySourceHandle *source);
 
@@ -1069,6 +1272,12 @@ void ownaudio_v1_memory_source_destroy(struct OwnAudioMemorySourceHandle *source
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.  Destroy the returned
  * handle with `ownaudio_v1_track_source_destroy`.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - `out_source` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_set_ring_source(struct OwnAudioMixerHandle *mixer,
                                           struct OwnAudioTrackHandle *track,
@@ -1090,6 +1299,12 @@ int32_t ownaudio_v1_track_set_ring_source(struct OwnAudioMixerHandle *mixer,
  * - `out_written` — receives the number of samples accepted.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_set_ring_source` that has not been destroyed.
+ * - `samples` must be valid for `sample_count` `f32` values (readable).
+ * - `out_written` must point to a writable `usize`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_source_write(struct OwnAudioTrackSourceHandle *source,
                                        const float *samples,
@@ -1104,6 +1319,11 @@ int32_t ownaudio_v1_track_source_write(struct OwnAudioTrackSourceHandle *source,
  * - `out_free` — receives the free-sample count.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_set_ring_source` that has not been destroyed.
+ * - `out_free` must point to a writable `usize`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_source_free_samples(struct OwnAudioTrackSourceHandle *source,
                                               size_t *out_free);
@@ -1120,6 +1340,11 @@ int32_t ownaudio_v1_track_source_free_samples(struct OwnAudioTrackSourceHandle *
  * - `track` — valid track handle whose source is to be cleared.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_clear_source(struct OwnAudioMixerHandle *mixer,
                                        struct OwnAudioTrackHandle *track);
@@ -1130,6 +1355,10 @@ int32_t ownaudio_v1_track_clear_source(struct OwnAudioMixerHandle *mixer,
  * Passing `null` is safe and has no effect.  Dropping the producer does not
  * disturb the track's reader on the audio thread; the track simply underruns
  * (renders silence) once the buffered samples are consumed.
+ *
+ * # Safety
+ * - `source` must be a live handle from `ownaudio_v1_track_set_ring_source` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 void ownaudio_v1_track_source_destroy(struct OwnAudioTrackSourceHandle *source);
 
@@ -1140,6 +1369,10 @@ void ownaudio_v1_track_source_destroy(struct OwnAudioTrackSourceHandle *source);
  * longer needed.  A single engine can be used to open multiple streams.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `out_handle` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_engine_create(struct OwnAudioEngineHandle **out_handle);
 
@@ -1159,6 +1392,10 @@ int32_t ownaudio_v1_engine_create(struct OwnAudioEngineHandle **out_handle);
  * in but no ASIO driver is installed on this machine.
  *
  * If `out_handle` is null returns `OwnAudioErrorCode::NullPointer` (6).
+ *
+ * # Safety
+ * - `out_handle` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_engine_create_with_host(enum OwnHostApi host_api,
                                             struct OwnAudioEngineHandle **out_handle);
@@ -1168,6 +1405,10 @@ int32_t ownaudio_v1_engine_create_with_host(enum OwnHostApi host_api,
  *
  * All streams opened from this engine must be destroyed before calling this
  * function.  Passing `null` is safe and has no effect.
+ *
+ * # Safety
+ * - `handle` must be a live handle from `ownaudio_v1_engine_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 void ownaudio_v1_engine_destroy(struct OwnAudioEngineHandle *handle);
 
@@ -1187,6 +1428,14 @@ void ownaudio_v1_engine_destroy(struct OwnAudioEngineHandle *handle);
  * `ownaudio_v1_output_stream_play` to begin audio output.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `engine` must be a live handle from `ownaudio_v1_engine_create` that has not been destroyed.
+ * - `device_name` must be a NUL-terminated UTF-8 string.
+ * - `config` must point to an initialised `OwnAudioStreamConfig`.
+ * - `user_data` is opaque to the engine and is only handed back to the callback; it must stay alive for as long as the stream runs.
+ * - `out_stream` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_open_output_stream(struct OwnAudioEngineHandle *engine,
                                        const char *device_name,
@@ -1224,6 +1473,14 @@ int32_t ownaudio_v1_open_output_stream(struct OwnAudioEngineHandle *engine,
  * Returns `OwnAudioErrorCode::Success` (0) on success.
  *
  * [`MultiTrackMixer::mix`]: ownaudio_core::MultiTrackMixer::mix
+ *
+ * # Safety
+ * - `engine` must be a live handle from `ownaudio_v1_engine_create` that has not been destroyed.
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `device_name` must be a NUL-terminated UTF-8 string.
+ * - `config` must point to an initialised `OwnAudioStreamConfig`.
+ * - `out_stream` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_mixer_open_output_stream(struct OwnAudioEngineHandle *engine,
                                              struct OwnAudioMixerHandle *mixer,
@@ -1235,6 +1492,11 @@ int32_t ownaudio_v1_mixer_open_output_stream(struct OwnAudioEngineHandle *engine
  * Starts (or resumes) audio output on the given stream.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_output_stream` or
+ *   `ownaudio_v1_mixer_open_output_stream`, not yet destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_output_stream_play(struct OwnAudioOutputStreamHandle *stream);
 
@@ -1242,6 +1504,11 @@ int32_t ownaudio_v1_output_stream_play(struct OwnAudioOutputStreamHandle *stream
  * Pauses audio output without destroying the stream.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_output_stream` or
+ *   `ownaudio_v1_mixer_open_output_stream`, not yet destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_output_stream_pause(struct OwnAudioOutputStreamHandle *stream);
 
@@ -1261,6 +1528,13 @@ int32_t ownaudio_v1_output_stream_pause(struct OwnAudioOutputStreamHandle *strea
  * Either out-pointer may be null to skip that field. Returns
  * `OwnAudioErrorCode::Success` (0) on success, or `InvalidHandle` if `stream`
  * is null / invalid.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_output_stream` or
+ *   `ownaudio_v1_mixer_open_output_stream`, not yet destroyed.
+ * - `out_kind` must point to a writable `u32`.
+ * - `out_count` must point to a writable `u64`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_output_stream_get_error_state(struct OwnAudioOutputStreamHandle *stream,
                                                   uint32_t *out_kind,
@@ -1277,6 +1551,12 @@ int32_t ownaudio_v1_output_stream_get_error_state(struct OwnAudioOutputStreamHan
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success, `NullPointer` (6) if
  * `out_frames` is null, or `InvalidHandle` if `stream` is null / invalid.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_output_stream` or
+ *   `ownaudio_v1_mixer_open_output_stream`, not yet destroyed.
+ * - `out_frames` must point to a writable `u32`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_output_stream_get_latency_frames(struct OwnAudioOutputStreamHandle *stream,
                                                      uint32_t *out_frames);
@@ -1285,6 +1565,11 @@ int32_t ownaudio_v1_output_stream_get_latency_frames(struct OwnAudioOutputStream
  * Destroys an output stream and releases all associated resources.
  *
  * Passing `null` is safe and has no effect.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_output_stream` or
+ *   `ownaudio_v1_mixer_open_output_stream`, not yet destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 void ownaudio_v1_output_stream_destroy(struct OwnAudioOutputStreamHandle *stream);
 
@@ -1299,6 +1584,14 @@ void ownaudio_v1_output_stream_destroy(struct OwnAudioOutputStreamHandle *stream
  * `ownaudio_v1_input_stream_play` to begin capturing.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `engine` must be a live handle from `ownaudio_v1_engine_create` that has not been destroyed.
+ * - `device_name` must be a NUL-terminated UTF-8 string.
+ * - `config` must point to an initialised `OwnAudioStreamConfig`.
+ * - `user_data` is opaque to the engine and is only handed back to the callback; it must stay alive for as long as the stream runs.
+ * - `out_stream` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_open_input_stream(struct OwnAudioEngineHandle *engine,
                                       const char *device_name,
@@ -1311,6 +1604,10 @@ int32_t ownaudio_v1_open_input_stream(struct OwnAudioEngineHandle *engine,
  * Starts (or resumes) audio capture on the given stream.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_input_stream_play(struct OwnAudioInputStreamHandle *stream);
 
@@ -1318,6 +1615,10 @@ int32_t ownaudio_v1_input_stream_play(struct OwnAudioInputStreamHandle *stream);
  * Pauses audio capture without destroying the stream.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_input_stream_pause(struct OwnAudioInputStreamHandle *stream);
 
@@ -1325,6 +1626,12 @@ int32_t ownaudio_v1_input_stream_pause(struct OwnAudioInputStreamHandle *stream)
  * Polls the input stream's error state. See
  * `ownaudio_v1_output_stream_get_error_state` for semantics; the input path is
  * identical.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+ * - `out_kind` must point to a writable `u32`.
+ * - `out_count` must point to a writable `u64`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_input_stream_get_error_state(struct OwnAudioInputStreamHandle *stream,
                                                  uint32_t *out_kind,
@@ -1341,6 +1648,11 @@ int32_t ownaudio_v1_input_stream_get_error_state(struct OwnAudioInputStreamHandl
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success, `NullPointer` (6) if
  * `out_frames` is null, or `InvalidHandle` if `stream` is null / invalid.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+ * - `out_frames` must point to a writable `u32`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_input_stream_get_latency_frames(struct OwnAudioInputStreamHandle *stream,
                                                     uint32_t *out_frames);
@@ -1349,6 +1661,10 @@ int32_t ownaudio_v1_input_stream_get_latency_frames(struct OwnAudioInputStreamHa
  * Destroys an input stream and releases all associated resources.
  *
  * Passing `null` is safe and has no effect.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 void ownaudio_v1_input_stream_destroy(struct OwnAudioInputStreamHandle *stream);
 
@@ -1360,6 +1676,10 @@ void ownaudio_v1_input_stream_destroy(struct OwnAudioInputStreamHandle *stream);
  * - `out_mixer` — receives the new mixer handle on success.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `out_mixer` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_mixer_create(float sample_rate,
                                  uint16_t channels,
@@ -1371,6 +1691,10 @@ int32_t ownaudio_v1_mixer_create(float sample_rate,
  * Passing `null` is safe and has no effect.
  * All track and effect handles obtained from this mixer must be destroyed
  * before calling this function.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 void ownaudio_v1_mixer_destroy(struct OwnAudioMixerHandle *mixer);
 
@@ -1383,6 +1707,10 @@ void ownaudio_v1_mixer_destroy(struct OwnAudioMixerHandle *mixer);
  * drift they would introduce.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_mixer_play_all(struct OwnAudioMixerHandle *mixer);
 
@@ -1394,6 +1722,10 @@ int32_t ownaudio_v1_mixer_play_all(struct OwnAudioMixerHandle *mixer);
  * P/Invoke round-trips and the synchronisation drift they would introduce.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_mixer_pause_all(struct OwnAudioMixerHandle *mixer);
 
@@ -1405,6 +1737,10 @@ int32_t ownaudio_v1_mixer_pause_all(struct OwnAudioMixerHandle *mixer);
  * P/Invoke round-trips and the synchronisation drift they would introduce.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_mixer_stop_all(struct OwnAudioMixerHandle *mixer);
 
@@ -1417,6 +1753,10 @@ int32_t ownaudio_v1_mixer_stop_all(struct OwnAudioMixerHandle *mixer);
  * onto the audio thread by an output stream (the master block is shared).
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_mixer_set_master_gain(struct OwnAudioMixerHandle *mixer, float gain);
 
@@ -1430,6 +1770,10 @@ int32_t ownaudio_v1_mixer_set_master_gain(struct OwnAudioMixerHandle *mixer, flo
  * been moved onto the audio thread by an output stream (the master block is shared).
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_mixer_set_master_pan(struct OwnAudioMixerHandle *mixer, float pan);
 
@@ -1445,6 +1789,12 @@ int32_t ownaudio_v1_mixer_set_master_pan(struct OwnAudioMixerHandle *mixer, floa
  * - `out_left` / `out_right` — receive the channel peaks on success.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `out_left` must point to a writable `f32`.
+ * - `out_right` must point to a writable `f32`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_mixer_get_master_peaks(struct OwnAudioMixerHandle *mixer,
                                            float *out_left,
@@ -1465,6 +1815,10 @@ int32_t ownaudio_v1_mixer_get_master_peaks(struct OwnAudioMixerHandle *mixer,
  *
  * Calling this while capture is already active replaces the previous ring.
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_mixer_capture_start(struct OwnAudioMixerHandle *mixer, size_t capacity_samples);
 
@@ -1477,6 +1831,12 @@ int32_t ownaudio_v1_mixer_capture_start(struct OwnAudioMixerHandle *mixer, size_
  * with [`ownaudio_v1_mixer_capture_stop`].
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `out` must be valid for `len` `f32` values (writable).
+ * - `out_read` must point to a writable `usize`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_mixer_capture_read(struct OwnAudioMixerHandle *mixer,
                                        float *out,
@@ -1491,6 +1851,10 @@ int32_t ownaudio_v1_mixer_capture_read(struct OwnAudioMixerHandle *mixer,
  * with [`ownaudio_v1_mixer_capture_read`].
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_mixer_capture_stop(struct OwnAudioMixerHandle *mixer);
 
@@ -1501,6 +1865,11 @@ int32_t ownaudio_v1_mixer_capture_stop(struct OwnAudioMixerHandle *mixer);
  * - `out_track` — receives the new track handle on success.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `out_track` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_create(struct OwnAudioMixerHandle *mixer,
                                  struct OwnAudioTrackHandle **out_track);
@@ -1511,6 +1880,10 @@ int32_t ownaudio_v1_track_create(struct OwnAudioMixerHandle *mixer,
  * Call `ownaudio_v1_track_remove` first to remove the track from the mix,
  * then this function to release the handle memory.
  * Passing `null` is safe and has no effect.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 void ownaudio_v1_track_destroy(struct OwnAudioTrackHandle *track);
 
@@ -1521,6 +1894,11 @@ void ownaudio_v1_track_destroy(struct OwnAudioTrackHandle *track);
  * Passing `null` is safe and has no effect.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_remove(struct OwnAudioMixerHandle *mixer,
                                  struct OwnAudioTrackHandle *track);
@@ -1529,6 +1907,10 @@ int32_t ownaudio_v1_track_remove(struct OwnAudioMixerHandle *mixer,
  * Starts or resumes playback of the track.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_play(struct OwnAudioTrackHandle *track);
 
@@ -1536,6 +1918,10 @@ int32_t ownaudio_v1_track_play(struct OwnAudioTrackHandle *track);
  * Pauses the track without resetting its position.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_pause(struct OwnAudioTrackHandle *track);
 
@@ -1543,6 +1929,10 @@ int32_t ownaudio_v1_track_pause(struct OwnAudioTrackHandle *track);
  * Stops the track and resets its position to zero.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_stop(struct OwnAudioTrackHandle *track);
 
@@ -1550,6 +1940,10 @@ int32_t ownaudio_v1_track_stop(struct OwnAudioTrackHandle *track);
  * Sets the track's playback position to `sample_position`.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_seek(struct OwnAudioTrackHandle *track, uint64_t _sample_position);
 
@@ -1566,6 +1960,11 @@ int32_t ownaudio_v1_track_seek(struct OwnAudioTrackHandle *track, uint64_t _samp
  * - `out_frames` — receives the rendered frame count on success.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - `out_frames` must point to a writable `u64`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_get_rendered_frames(struct OwnAudioTrackHandle *track,
                                               uint64_t *out_frames);
@@ -1585,6 +1984,11 @@ int32_t ownaudio_v1_track_get_rendered_frames(struct OwnAudioTrackHandle *track,
  * - `out_frames` — receives the content frame count on success.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - `out_frames` must point to a writable `f64`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_get_rendered_content_frames(struct OwnAudioTrackHandle *track,
                                                       double *out_frames);
@@ -1598,6 +2002,10 @@ int32_t ownaudio_v1_track_get_rendered_content_frames(struct OwnAudioTrackHandle
  * counter in lock-step so the content-time position also restarts from the seek.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_reset_position(struct OwnAudioTrackHandle *track);
 
@@ -1614,6 +2022,12 @@ int32_t ownaudio_v1_track_reset_position(struct OwnAudioTrackHandle *track);
  * - `out_left` / `out_right` — receive the channel peaks on success.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - `out_left` must point to a writable `f32`.
+ * - `out_right` must point to a writable `f32`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_get_peaks(struct OwnAudioTrackHandle *track,
                                     float *out_left,
@@ -1629,6 +2043,10 @@ int32_t ownaudio_v1_track_get_peaks(struct OwnAudioTrackHandle *track,
  * content, matching the managed `content = clock − start_offset` behaviour.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_set_start_delay_frames(struct OwnAudioTrackHandle *track,
                                                  uint64_t frames);
@@ -1648,6 +2066,11 @@ int32_t ownaudio_v1_track_set_start_delay_frames(struct OwnAudioTrackHandle *tra
  *
  * Passing `len == 0` clears any routing, returning the track to the straight
  * identity mix. Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - `map` must be valid for `len` `u32` values (readable).
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_set_output_channel_map(struct OwnAudioTrackHandle *track,
                                                  const uint32_t *map,
@@ -1659,6 +2082,10 @@ int32_t ownaudio_v1_track_set_output_channel_map(struct OwnAudioTrackHandle *tra
  * identity mix (source channel `i` → output channel `i`).
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_clear_output_channel_map(struct OwnAudioTrackHandle *track);
 
@@ -1666,6 +2093,10 @@ int32_t ownaudio_v1_track_clear_output_channel_map(struct OwnAudioTrackHandle *t
  * Sets the track gain (linear amplitude multiplier; 1.0 = unity).
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_set_gain(struct OwnAudioTrackHandle *track, float gain);
 
@@ -1676,6 +2107,10 @@ int32_t ownaudio_v1_track_set_gain(struct OwnAudioTrackHandle *track, float gain
  * a live change sweeps rather than clicks.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_set_pan(struct OwnAudioTrackHandle *track, float pan);
 
@@ -1683,6 +2118,10 @@ int32_t ownaudio_v1_track_set_pan(struct OwnAudioTrackHandle *track, float pan);
  * Sets the track tempo ratio (1.0 = normal speed, 2.0 = double speed).
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_set_tempo(struct OwnAudioTrackHandle *track, float ratio);
 
@@ -1690,6 +2129,10 @@ int32_t ownaudio_v1_track_set_tempo(struct OwnAudioTrackHandle *track, float rat
  * Sets the track pitch shift in semitones (-24 … +24).
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_set_pitch(struct OwnAudioTrackHandle *track, float semitones);
 
@@ -1704,6 +2147,10 @@ int32_t ownaudio_v1_track_set_pitch(struct OwnAudioTrackHandle *track, float sem
  * baked into its audio) leaves it off.
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_set_stretch_always_on(struct OwnAudioTrackHandle *track, int32_t enabled);
 
@@ -1711,6 +2158,10 @@ int32_t ownaudio_v1_track_set_stretch_always_on(struct OwnAudioTrackHandle *trac
  * Sets the track mute state (0.0 = unmuted, 1.0 = muted).
  *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_set_mute(struct OwnAudioTrackHandle *track, float muted);
 

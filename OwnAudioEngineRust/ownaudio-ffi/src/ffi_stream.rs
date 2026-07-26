@@ -23,8 +23,14 @@ use crate::host_api::{resolve_host, OwnHostApi};
 /// longer needed.  A single engine can be used to open multiple streams.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `out_handle` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_engine_create(out_handle: *mut *mut OwnAudioEngineHandle) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_engine_create(
+    out_handle: *mut *mut OwnAudioEngineHandle,
+) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if out_handle.is_null() {
             return OwnAudioErrorCode::NullPointer as i32;
@@ -63,8 +69,12 @@ pub extern "C" fn ownaudio_v1_engine_create(out_handle: *mut *mut OwnAudioEngine
 /// in but no ASIO driver is installed on this machine.
 ///
 /// If `out_handle` is null returns `OwnAudioErrorCode::NullPointer` (6).
+///
+/// # Safety
+/// - `out_handle` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_engine_create_with_host(
+pub unsafe extern "C" fn ownaudio_v1_engine_create_with_host(
     host_api: OwnHostApi,
     out_handle: *mut *mut OwnAudioEngineHandle,
 ) -> i32 {
@@ -100,8 +110,12 @@ pub extern "C" fn ownaudio_v1_engine_create_with_host(
 ///
 /// All streams opened from this engine must be destroyed before calling this
 /// function.  Passing `null` is safe and has no effect.
+///
+/// # Safety
+/// - `handle` must be a live handle from `ownaudio_v1_engine_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_engine_destroy(handle: *mut OwnAudioEngineHandle) {
+pub unsafe extern "C" fn ownaudio_v1_engine_destroy(handle: *mut OwnAudioEngineHandle) {
     // A panic in the engine's Drop must never unwind across the FFI boundary.
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if handle.is_null() {
@@ -131,8 +145,16 @@ pub extern "C" fn ownaudio_v1_engine_destroy(handle: *mut OwnAudioEngineHandle) 
 /// `ownaudio_v1_output_stream_play` to begin audio output.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `engine` must be a live handle from `ownaudio_v1_engine_create` that has not been destroyed.
+/// - `device_name` must be a NUL-terminated UTF-8 string.
+/// - `config` must point to an initialised `OwnAudioStreamConfig`.
+/// - `user_data` is opaque to the engine and is only handed back to the callback; it must stay alive for as long as the stream runs.
+/// - `out_stream` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_open_output_stream(
+pub unsafe extern "C" fn ownaudio_v1_open_output_stream(
     engine: *mut OwnAudioEngineHandle,
     device_name: *const c_char,
     config: *const OwnAudioStreamConfig,
@@ -215,8 +237,16 @@ pub extern "C" fn ownaudio_v1_open_output_stream(
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
 ///
 /// [`MultiTrackMixer::mix`]: ownaudio_core::MultiTrackMixer::mix
+///
+/// # Safety
+/// - `engine` must be a live handle from `ownaudio_v1_engine_create` that has not been destroyed.
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `device_name` must be a NUL-terminated UTF-8 string.
+/// - `config` must point to an initialised `OwnAudioStreamConfig`.
+/// - `out_stream` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_mixer_open_output_stream(
+pub unsafe extern "C" fn ownaudio_v1_mixer_open_output_stream(
     engine: *mut OwnAudioEngineHandle,
     mixer: *mut OwnAudioMixerHandle,
     device_name: *const c_char,
@@ -307,8 +337,15 @@ pub extern "C" fn ownaudio_v1_mixer_open_output_stream(
 /// Starts (or resumes) audio output on the given stream.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_output_stream` or
+///   `ownaudio_v1_mixer_open_output_stream`, not yet destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_output_stream_play(stream: *mut OwnAudioOutputStreamHandle) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_output_stream_play(
+    stream: *mut OwnAudioOutputStreamHandle,
+) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { output_stream_from_ptr(stream) } {
             Some(w) => w,
@@ -330,8 +367,15 @@ pub extern "C" fn ownaudio_v1_output_stream_play(stream: *mut OwnAudioOutputStre
 /// Pauses audio output without destroying the stream.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_output_stream` or
+///   `ownaudio_v1_mixer_open_output_stream`, not yet destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_output_stream_pause(stream: *mut OwnAudioOutputStreamHandle) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_output_stream_pause(
+    stream: *mut OwnAudioOutputStreamHandle,
+) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { output_stream_from_ptr(stream) } {
             Some(w) => w,
@@ -365,8 +409,15 @@ pub extern "C" fn ownaudio_v1_output_stream_pause(stream: *mut OwnAudioOutputStr
 /// Either out-pointer may be null to skip that field. Returns
 /// `OwnAudioErrorCode::Success` (0) on success, or `InvalidHandle` if `stream`
 /// is null / invalid.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_output_stream` or
+///   `ownaudio_v1_mixer_open_output_stream`, not yet destroyed.
+/// - `out_kind` must point to a writable `u32`.
+/// - `out_count` must point to a writable `u64`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_output_stream_get_error_state(
+pub unsafe extern "C" fn ownaudio_v1_output_stream_get_error_state(
     stream: *mut OwnAudioOutputStreamHandle,
     out_kind: *mut u32,
     out_count: *mut u64,
@@ -403,8 +454,14 @@ pub extern "C" fn ownaudio_v1_output_stream_get_error_state(
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success, `NullPointer` (6) if
 /// `out_frames` is null, or `InvalidHandle` if `stream` is null / invalid.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_output_stream` or
+///   `ownaudio_v1_mixer_open_output_stream`, not yet destroyed.
+/// - `out_frames` must point to a writable `u32`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_output_stream_get_latency_frames(
+pub unsafe extern "C" fn ownaudio_v1_output_stream_get_latency_frames(
     stream: *mut OwnAudioOutputStreamHandle,
     out_frames: *mut u32,
 ) -> i32 {
@@ -428,8 +485,15 @@ pub extern "C" fn ownaudio_v1_output_stream_get_latency_frames(
 /// Destroys an output stream and releases all associated resources.
 ///
 /// Passing `null` is safe and has no effect.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_output_stream` or
+///   `ownaudio_v1_mixer_open_output_stream`, not yet destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_output_stream_destroy(stream: *mut OwnAudioOutputStreamHandle) {
+pub unsafe extern "C" fn ownaudio_v1_output_stream_destroy(
+    stream: *mut OwnAudioOutputStreamHandle,
+) {
     // A panic while stopping/dropping the stream must not cross the FFI boundary.
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if stream.is_null() {
@@ -453,8 +517,16 @@ pub extern "C" fn ownaudio_v1_output_stream_destroy(stream: *mut OwnAudioOutputS
 /// `ownaudio_v1_input_stream_play` to begin capturing.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `engine` must be a live handle from `ownaudio_v1_engine_create` that has not been destroyed.
+/// - `device_name` must be a NUL-terminated UTF-8 string.
+/// - `config` must point to an initialised `OwnAudioStreamConfig`.
+/// - `user_data` is opaque to the engine and is only handed back to the callback; it must stay alive for as long as the stream runs.
+/// - `out_stream` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_open_input_stream(
+pub unsafe extern "C" fn ownaudio_v1_open_input_stream(
     engine: *mut OwnAudioEngineHandle,
     device_name: *const c_char,
     config: *const OwnAudioStreamConfig,
@@ -511,8 +583,14 @@ pub extern "C" fn ownaudio_v1_open_input_stream(
 /// Starts (or resumes) audio capture on the given stream.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_input_stream_play(stream: *mut OwnAudioInputStreamHandle) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_input_stream_play(
+    stream: *mut OwnAudioInputStreamHandle,
+) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { input_stream_from_ptr(stream) } {
             Some(w) => w,
@@ -534,8 +612,14 @@ pub extern "C" fn ownaudio_v1_input_stream_play(stream: *mut OwnAudioInputStream
 /// Pauses audio capture without destroying the stream.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_input_stream_pause(stream: *mut OwnAudioInputStreamHandle) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_input_stream_pause(
+    stream: *mut OwnAudioInputStreamHandle,
+) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { input_stream_from_ptr(stream) } {
             Some(w) => w,
@@ -557,8 +641,14 @@ pub extern "C" fn ownaudio_v1_input_stream_pause(stream: *mut OwnAudioInputStrea
 /// Polls the input stream's error state. See
 /// `ownaudio_v1_output_stream_get_error_state` for semantics; the input path is
 /// identical.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+/// - `out_kind` must point to a writable `u32`.
+/// - `out_count` must point to a writable `u64`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_input_stream_get_error_state(
+pub unsafe extern "C" fn ownaudio_v1_input_stream_get_error_state(
     stream: *mut OwnAudioInputStreamHandle,
     out_kind: *mut u32,
     out_count: *mut u64,
@@ -595,8 +685,13 @@ pub extern "C" fn ownaudio_v1_input_stream_get_error_state(
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success, `NullPointer` (6) if
 /// `out_frames` is null, or `InvalidHandle` if `stream` is null / invalid.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+/// - `out_frames` must point to a writable `u32`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_input_stream_get_latency_frames(
+pub unsafe extern "C" fn ownaudio_v1_input_stream_get_latency_frames(
     stream: *mut OwnAudioInputStreamHandle,
     out_frames: *mut u32,
 ) -> i32 {
@@ -620,8 +715,12 @@ pub extern "C" fn ownaudio_v1_input_stream_get_latency_frames(
 /// Destroys an input stream and releases all associated resources.
 ///
 /// Passing `null` is safe and has no effect.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_input_stream_destroy(stream: *mut OwnAudioInputStreamHandle) {
+pub unsafe extern "C" fn ownaudio_v1_input_stream_destroy(stream: *mut OwnAudioInputStreamHandle) {
     // A panic while stopping/dropping the stream must not cross the FFI boundary.
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if stream.is_null() {

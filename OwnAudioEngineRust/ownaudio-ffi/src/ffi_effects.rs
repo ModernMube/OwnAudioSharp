@@ -60,8 +60,14 @@ fn create_effect(effect_type_raw: u32, sample_rate: f32) -> Option<Box<dyn Effec
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
 /// Returns `OwnAudioErrorCode::InvalidHandle` (7) for an unknown `effect_type`.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - `out_effect` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_add_effect(
+pub unsafe extern "C" fn ownaudio_v1_track_add_effect(
     mixer: *mut OwnAudioMixerHandle,
     track: *mut OwnAudioTrackHandle,
     effect_type: u32,
@@ -135,8 +141,13 @@ pub extern "C" fn ownaudio_v1_track_add_effect(
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
 /// Returns `OwnAudioErrorCode::InvalidHandle` (7) for an unknown `effect_type`.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `out_effect` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_mixer_add_master_effect(
+pub unsafe extern "C" fn ownaudio_v1_mixer_add_master_effect(
     mixer: *mut OwnAudioMixerHandle,
     effect_type: u32,
     sample_rate: f32,
@@ -199,8 +210,14 @@ pub extern "C" fn ownaudio_v1_mixer_add_master_effect(
 /// - `effect` — valid master effect handle from `ownaudio_v1_mixer_add_master_effect`.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `effect` must be a live handle from `ownaudio_v1_track_add_effect` or `ownaudio_v1_mixer_add_master_effect`,
+///   not yet destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_mixer_remove_master_effect(
+pub unsafe extern "C" fn ownaudio_v1_mixer_remove_master_effect(
     mixer: *mut OwnAudioMixerHandle,
     effect: *mut OwnAudioEffectHandle,
 ) -> i32 {
@@ -324,9 +341,16 @@ fn add_vst_effect_to(
 /// - `out_effect` — receives the new effect handle on success.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - `plugin_handle` is opaque to the engine and is only handed back to the callback; it must stay alive for as long as the stream runs.
+/// - `out_effect` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
-pub extern "C" fn ownaudio_v1_track_add_vst_effect(
+pub unsafe extern "C" fn ownaudio_v1_track_add_vst_effect(
     mixer: *mut OwnAudioMixerHandle,
     track: *mut OwnAudioTrackHandle,
     plugin_handle: *mut c_void,
@@ -370,8 +394,14 @@ pub extern "C" fn ownaudio_v1_track_add_vst_effect(
 /// effect. See that function for the argument contract.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `plugin_handle` is opaque to the engine and is only handed back to the callback; it must stay alive for as long as the stream runs.
+/// - `out_effect` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_mixer_add_master_vst_effect(
+pub unsafe extern "C" fn ownaudio_v1_mixer_add_master_vst_effect(
     mixer: *mut OwnAudioMixerHandle,
     plugin_handle: *mut c_void,
     process_fn: VstProcessFn,
@@ -400,8 +430,13 @@ pub extern "C" fn ownaudio_v1_mixer_add_master_vst_effect(
 ///
 /// Passing `null` is safe and has no effect.
 /// The effect is NOT removed from the track chain; call `ownaudio_v1_effect_remove` first.
+///
+/// # Safety
+/// - `effect` must be a live handle from `ownaudio_v1_track_add_effect` or `ownaudio_v1_mixer_add_master_effect`,
+///   not yet destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_effect_destroy(effect: *mut OwnAudioEffectHandle) {
+pub unsafe extern "C" fn ownaudio_v1_effect_destroy(effect: *mut OwnAudioEffectHandle) {
     // A panic in the effect handle's Drop must never unwind across the FFI boundary.
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if effect.is_null() {
@@ -420,8 +455,15 @@ pub extern "C" fn ownaudio_v1_effect_destroy(effect: *mut OwnAudioEffectHandle) 
 /// - `effect` — valid effect handle to remove and destroy.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - `effect` must be a live handle from `ownaudio_v1_track_add_effect` or `ownaudio_v1_mixer_add_master_effect`,
+///   not yet destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_effect_remove(
+pub unsafe extern "C" fn ownaudio_v1_effect_remove(
     mixer: *mut OwnAudioMixerHandle,
     track: *mut OwnAudioTrackHandle,
     effect: *mut OwnAudioEffectHandle,
@@ -476,8 +518,14 @@ pub extern "C" fn ownaudio_v1_effect_remove(
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) when the parameter is recognised.
 /// Returns `OwnAudioErrorCode::InvalidHandle` (7) when `param_id` is unknown.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `effect` must be a live handle from `ownaudio_v1_track_add_effect` or `ownaudio_v1_mixer_add_master_effect`,
+///   not yet destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_effect_set_param(
+pub unsafe extern "C" fn ownaudio_v1_effect_set_param(
     mixer: *mut OwnAudioMixerHandle,
     effect: *mut OwnAudioEffectHandle,
     param_id: u32,
@@ -531,8 +579,15 @@ pub extern "C" fn ownaudio_v1_effect_set_param(
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) when the parameter is recognised.
 /// Returns `OwnAudioErrorCode::InvalidHandle` (7) when `param_id` is unknown.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `effect` must be a live handle from `ownaudio_v1_track_add_effect` or `ownaudio_v1_mixer_add_master_effect`,
+///   not yet destroyed.
+/// - `out_value` must point to a writable `f32`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_effect_get_param(
+pub unsafe extern "C" fn ownaudio_v1_effect_get_param(
     mixer: *mut OwnAudioMixerHandle,
     effect: *mut OwnAudioEffectHandle,
     param_id: u32,

@@ -48,8 +48,16 @@ const INPUT_RING_SECONDS: f32 = 0.5;
 /// Returns `OwnAudioErrorCode::Success` (0) on success. Destroy the returned
 /// handle with `ownaudio_v1_input_source_destroy` after the track's source has
 /// been cleared or the track removed.
+///
+/// # Safety
+/// - `engine` must be a live handle from `ownaudio_v1_engine_create` that has not been destroyed.
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - `device_name` must be a NUL-terminated UTF-8 string.
+/// - `out_input` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_open_input(
+pub unsafe extern "C" fn ownaudio_v1_track_open_input(
     engine: *mut OwnAudioEngineHandle,
     mixer: *mut OwnAudioMixerHandle,
     track: *mut OwnAudioTrackHandle,
@@ -171,8 +179,14 @@ pub extern "C" fn ownaudio_v1_track_open_input(
 /// Starts (or resumes) device capture feeding the track.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `input` must be a live handle from `ownaudio_v1_track_open_input` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_input_source_play(input: *mut OwnAudioInputSourceHandle) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_input_source_play(
+    input: *mut OwnAudioInputSourceHandle,
+) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { input_source_from_ptr(input) } {
             Some(w) => w,
@@ -194,8 +208,14 @@ pub extern "C" fn ownaudio_v1_input_source_play(input: *mut OwnAudioInputSourceH
 /// Pauses device capture. Buffered samples already in the ring keep playing out.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `input` must be a live handle from `ownaudio_v1_track_open_input` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_input_source_pause(input: *mut OwnAudioInputSourceHandle) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_input_source_pause(
+    input: *mut OwnAudioInputSourceHandle,
+) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { input_source_from_ptr(input) } {
             Some(w) => w,
@@ -220,8 +240,14 @@ pub extern "C" fn ownaudio_v1_input_source_pause(input: *mut OwnAudioInputSource
 /// - `out_left` / `out_right` — receive the peaks on success.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `input` must be a live handle from `ownaudio_v1_track_open_input` that has not been destroyed.
+/// - `out_left` must point to a writable `f32`.
+/// - `out_right` must point to a writable `f32`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_input_source_get_peaks(
+pub unsafe extern "C" fn ownaudio_v1_input_source_get_peaks(
     input: *mut OwnAudioInputSourceHandle,
     out_left: *mut f32,
     out_right: *mut f32,
@@ -255,8 +281,12 @@ pub extern "C" fn ownaudio_v1_input_source_get_peaks(
 /// Passing `null` is safe and has no effect. The track's ring-buffer reader lives
 /// on the audio thread until the track's source is cleared or the track is
 /// removed; after this call it simply underruns (renders silence).
+///
+/// # Safety
+/// - `input` must be a live handle from `ownaudio_v1_track_open_input` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_input_source_destroy(input: *mut OwnAudioInputSourceHandle) {
+pub unsafe extern "C" fn ownaudio_v1_input_source_destroy(input: *mut OwnAudioInputSourceHandle) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if input.is_null() {
             return;

@@ -24,8 +24,12 @@ const COMMAND_QUEUE_CAPACITY: usize = 1024;
 /// - `out_mixer` — receives the new mixer handle on success.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `out_mixer` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_mixer_create(
+pub unsafe extern "C" fn ownaudio_v1_mixer_create(
     sample_rate: f32,
     channels: u16,
     out_mixer: *mut *mut OwnAudioMixerHandle,
@@ -69,8 +73,12 @@ pub extern "C" fn ownaudio_v1_mixer_create(
 /// Passing `null` is safe and has no effect.
 /// All track and effect handles obtained from this mixer must be destroyed
 /// before calling this function.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_mixer_destroy(mixer: *mut OwnAudioMixerHandle) {
+pub unsafe extern "C" fn ownaudio_v1_mixer_destroy(mixer: *mut OwnAudioMixerHandle) {
     // A panic in the mixer's Drop must never unwind across the FFI boundary.
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if mixer.is_null() {
@@ -90,8 +98,12 @@ pub extern "C" fn ownaudio_v1_mixer_destroy(mixer: *mut OwnAudioMixerHandle) {
 /// drift they would introduce.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_mixer_play_all(mixer: *mut OwnAudioMixerHandle) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_mixer_play_all(mixer: *mut OwnAudioMixerHandle) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
@@ -113,8 +125,12 @@ pub extern "C" fn ownaudio_v1_mixer_play_all(mixer: *mut OwnAudioMixerHandle) ->
 /// P/Invoke round-trips and the synchronisation drift they would introduce.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_mixer_pause_all(mixer: *mut OwnAudioMixerHandle) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_mixer_pause_all(mixer: *mut OwnAudioMixerHandle) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
@@ -136,8 +152,12 @@ pub extern "C" fn ownaudio_v1_mixer_pause_all(mixer: *mut OwnAudioMixerHandle) -
 /// P/Invoke round-trips and the synchronisation drift they would introduce.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_mixer_stop_all(mixer: *mut OwnAudioMixerHandle) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_mixer_stop_all(mixer: *mut OwnAudioMixerHandle) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
@@ -160,8 +180,12 @@ pub extern "C" fn ownaudio_v1_mixer_stop_all(mixer: *mut OwnAudioMixerHandle) ->
 /// onto the audio thread by an output stream (the master block is shared).
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_mixer_set_master_gain(
+pub unsafe extern "C" fn ownaudio_v1_mixer_set_master_gain(
     mixer: *mut OwnAudioMixerHandle,
     gain: f32,
 ) -> i32 {
@@ -188,8 +212,12 @@ pub extern "C" fn ownaudio_v1_mixer_set_master_gain(
 /// been moved onto the audio thread by an output stream (the master block is shared).
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_mixer_set_master_pan(
+pub unsafe extern "C" fn ownaudio_v1_mixer_set_master_pan(
     mixer: *mut OwnAudioMixerHandle,
     pan: f32,
 ) -> i32 {
@@ -218,8 +246,14 @@ pub extern "C" fn ownaudio_v1_mixer_set_master_pan(
 /// - `out_left` / `out_right` — receive the channel peaks on success.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `out_left` must point to a writable `f32`.
+/// - `out_right` must point to a writable `f32`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_mixer_get_master_peaks(
+pub unsafe extern "C" fn ownaudio_v1_mixer_get_master_peaks(
     mixer: *mut OwnAudioMixerHandle,
     out_left: *mut f32,
     out_right: *mut f32,
@@ -261,8 +295,12 @@ pub extern "C" fn ownaudio_v1_mixer_get_master_peaks(
 ///
 /// Calling this while capture is already active replaces the previous ring.
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_mixer_capture_start(
+pub unsafe extern "C" fn ownaudio_v1_mixer_capture_start(
     mixer: *mut OwnAudioMixerHandle,
     capacity_samples: usize,
 ) -> i32 {
@@ -295,8 +333,14 @@ pub extern "C" fn ownaudio_v1_mixer_capture_start(
 /// with [`ownaudio_v1_mixer_capture_stop`].
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `out` must be valid for `len` `f32` values (writable).
+/// - `out_read` must point to a writable `usize`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_mixer_capture_read(
+pub unsafe extern "C" fn ownaudio_v1_mixer_capture_read(
     mixer: *mut OwnAudioMixerHandle,
     out: *mut f32,
     len: usize,
@@ -337,8 +381,12 @@ pub extern "C" fn ownaudio_v1_mixer_capture_read(
 /// with [`ownaudio_v1_mixer_capture_read`].
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_mixer_capture_stop(mixer: *mut OwnAudioMixerHandle) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_mixer_capture_stop(mixer: *mut OwnAudioMixerHandle) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
@@ -366,8 +414,13 @@ pub extern "C" fn ownaudio_v1_mixer_capture_stop(mixer: *mut OwnAudioMixerHandle
 /// - `out_track` — receives the new track handle on success.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `out_track` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_create(
+pub unsafe extern "C" fn ownaudio_v1_track_create(
     mixer: *mut OwnAudioMixerHandle,
     out_track: *mut *mut OwnAudioTrackHandle,
 ) -> i32 {
@@ -410,8 +463,12 @@ pub extern "C" fn ownaudio_v1_track_create(
 /// Call `ownaudio_v1_track_remove` first to remove the track from the mix,
 /// then this function to release the handle memory.
 /// Passing `null` is safe and has no effect.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_destroy(track: *mut OwnAudioTrackHandle) {
+pub unsafe extern "C" fn ownaudio_v1_track_destroy(track: *mut OwnAudioTrackHandle) {
     // A panic in the track handle's Drop must never unwind across the FFI boundary.
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if track.is_null() {
@@ -429,8 +486,13 @@ pub extern "C" fn ownaudio_v1_track_destroy(track: *mut OwnAudioTrackHandle) {
 /// Passing `null` is safe and has no effect.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_remove(
+pub unsafe extern "C" fn ownaudio_v1_track_remove(
     mixer: *mut OwnAudioMixerHandle,
     track: *mut OwnAudioTrackHandle,
 ) -> i32 {
@@ -466,8 +528,12 @@ pub extern "C" fn ownaudio_v1_track_remove(
 /// Starts or resumes playback of the track.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_play(track: *mut OwnAudioTrackHandle) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_track_play(track: *mut OwnAudioTrackHandle) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { track_from_ptr(track) } {
             Some(w) => w,
@@ -485,8 +551,12 @@ pub extern "C" fn ownaudio_v1_track_play(track: *mut OwnAudioTrackHandle) -> i32
 /// Pauses the track without resetting its position.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_pause(track: *mut OwnAudioTrackHandle) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_track_pause(track: *mut OwnAudioTrackHandle) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { track_from_ptr(track) } {
             Some(w) => w,
@@ -504,8 +574,12 @@ pub extern "C" fn ownaudio_v1_track_pause(track: *mut OwnAudioTrackHandle) -> i3
 /// Stops the track and resets its position to zero.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_stop(track: *mut OwnAudioTrackHandle) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_track_stop(track: *mut OwnAudioTrackHandle) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { track_from_ptr(track) } {
             Some(w) => w,
@@ -526,8 +600,12 @@ pub extern "C" fn ownaudio_v1_track_stop(track: *mut OwnAudioTrackHandle) -> i32
 /// Sets the track's playback position to `sample_position`.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_seek(
+pub unsafe extern "C" fn ownaudio_v1_track_seek(
     track: *mut OwnAudioTrackHandle,
     _sample_position: u64,
 ) -> i32 {
@@ -555,8 +633,13 @@ pub extern "C" fn ownaudio_v1_track_seek(
 /// - `out_frames` — receives the rendered frame count on success.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - `out_frames` must point to a writable `u64`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_get_rendered_frames(
+pub unsafe extern "C" fn ownaudio_v1_track_get_rendered_frames(
     track: *mut OwnAudioTrackHandle,
     out_frames: *mut u64,
 ) -> i32 {
@@ -594,8 +677,13 @@ pub extern "C" fn ownaudio_v1_track_get_rendered_frames(
 /// - `out_frames` — receives the content frame count on success.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - `out_frames` must point to a writable `f64`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_get_rendered_content_frames(
+pub unsafe extern "C" fn ownaudio_v1_track_get_rendered_content_frames(
     track: *mut OwnAudioTrackHandle,
     out_frames: *mut f64,
 ) -> i32 {
@@ -627,8 +715,12 @@ pub extern "C" fn ownaudio_v1_track_get_rendered_content_frames(
 /// counter in lock-step so the content-time position also restarts from the seek.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_reset_position(track: *mut OwnAudioTrackHandle) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_track_reset_position(track: *mut OwnAudioTrackHandle) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { track_from_ptr(track) } {
             Some(w) => w,
@@ -657,8 +749,14 @@ pub extern "C" fn ownaudio_v1_track_reset_position(track: *mut OwnAudioTrackHand
 /// - `out_left` / `out_right` — receive the channel peaks on success.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - `out_left` must point to a writable `f32`.
+/// - `out_right` must point to a writable `f32`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_get_peaks(
+pub unsafe extern "C" fn ownaudio_v1_track_get_peaks(
     track: *mut OwnAudioTrackHandle,
     out_left: *mut f32,
     out_right: *mut f32,
@@ -693,8 +791,12 @@ pub extern "C" fn ownaudio_v1_track_get_peaks(
 /// content, matching the managed `content = clock − start_offset` behaviour.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_set_start_delay_frames(
+pub unsafe extern "C" fn ownaudio_v1_track_set_start_delay_frames(
     track: *mut OwnAudioTrackHandle,
     frames: u64,
 ) -> i32 {
@@ -726,8 +828,13 @@ pub extern "C" fn ownaudio_v1_track_set_start_delay_frames(
 ///
 /// Passing `len == 0` clears any routing, returning the track to the straight
 /// identity mix. Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - `map` must be valid for `len` `u32` values (readable).
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_set_output_channel_map(
+pub unsafe extern "C" fn ownaudio_v1_track_set_output_channel_map(
     track: *mut OwnAudioTrackHandle,
     map: *const u32,
     len: usize,
@@ -761,8 +868,12 @@ pub extern "C" fn ownaudio_v1_track_set_output_channel_map(
 /// identity mix (source channel `i` → output channel `i`).
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_clear_output_channel_map(
+pub unsafe extern "C" fn ownaudio_v1_track_clear_output_channel_map(
     track: *mut OwnAudioTrackHandle,
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -784,8 +895,15 @@ pub extern "C" fn ownaudio_v1_track_clear_output_channel_map(
 /// Sets the track gain (linear amplitude multiplier; 1.0 = unity).
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_set_gain(track: *mut OwnAudioTrackHandle, gain: f32) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_track_set_gain(
+    track: *mut OwnAudioTrackHandle,
+    gain: f32,
+) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { track_from_ptr(track) } {
             Some(w) => w,
@@ -806,8 +924,15 @@ pub extern "C" fn ownaudio_v1_track_set_gain(track: *mut OwnAudioTrackHandle, ga
 /// a live change sweeps rather than clicks.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_set_pan(track: *mut OwnAudioTrackHandle, pan: f32) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_track_set_pan(
+    track: *mut OwnAudioTrackHandle,
+    pan: f32,
+) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { track_from_ptr(track) } {
             Some(w) => w,
@@ -825,8 +950,15 @@ pub extern "C" fn ownaudio_v1_track_set_pan(track: *mut OwnAudioTrackHandle, pan
 /// Sets the track tempo ratio (1.0 = normal speed, 2.0 = double speed).
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_set_tempo(track: *mut OwnAudioTrackHandle, ratio: f32) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_track_set_tempo(
+    track: *mut OwnAudioTrackHandle,
+    ratio: f32,
+) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { track_from_ptr(track) } {
             Some(w) => w,
@@ -844,8 +976,12 @@ pub extern "C" fn ownaudio_v1_track_set_tempo(track: *mut OwnAudioTrackHandle, r
 /// Sets the track pitch shift in semitones (-24 … +24).
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_set_pitch(
+pub unsafe extern "C" fn ownaudio_v1_track_set_pitch(
     track: *mut OwnAudioTrackHandle,
     semitones: f32,
 ) -> i32 {
@@ -873,8 +1009,12 @@ pub extern "C" fn ownaudio_v1_track_set_pitch(
 /// baked into its audio) leaves it off.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_set_stretch_always_on(
+pub unsafe extern "C" fn ownaudio_v1_track_set_stretch_always_on(
     track: *mut OwnAudioTrackHandle,
     enabled: i32,
 ) -> i32 {
@@ -895,8 +1035,15 @@ pub extern "C" fn ownaudio_v1_track_set_stretch_always_on(
 /// Sets the track mute state (0.0 = unmuted, 1.0 = muted).
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_set_mute(track: *mut OwnAudioTrackHandle, muted: f32) -> i32 {
+pub unsafe extern "C" fn ownaudio_v1_track_set_mute(
+    track: *mut OwnAudioTrackHandle,
+    muted: f32,
+) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wrapper = match unsafe { track_from_ptr(track) } {
             Some(w) => w,

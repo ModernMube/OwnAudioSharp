@@ -56,8 +56,13 @@ impl From<ownaudio_core::AudioStreamInfo> for OwnAudioStreamInfo {
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.  The handle must be
 /// released with `ownaudio_v1_decoder_destroy`.
+///
+/// # Safety
+/// - `path` must be a NUL-terminated UTF-8 string.
+/// - `out_decoder` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_decoder_open(
+pub unsafe extern "C" fn ownaudio_v1_decoder_open(
     path: *const c_char,
     target_sample_rate: u32,
     target_channels: u32,
@@ -119,8 +124,14 @@ pub extern "C" fn ownaudio_v1_decoder_open(
 /// `buffer_count` means EOF or a transient prefetch underrun.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `handle` must be a live handle from `ownaudio_v1_decoder_open` that has not been destroyed.
+/// - `buffer` must be valid for `buffer_count` `f32` values (writable).
+/// - `out_samples_written` must point to a writable `usize`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_decoder_read(
+pub unsafe extern "C" fn ownaudio_v1_decoder_read(
     handle: *mut OwnAudioDecoderHandle,
     buffer: *mut f32,
     buffer_count: usize,
@@ -158,8 +169,12 @@ pub extern "C" fn ownaudio_v1_decoder_read(
 /// briefly return pre-seek samples already buffered in the ring.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `handle` must be a live handle from `ownaudio_v1_decoder_open` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_decoder_seek(
+pub unsafe extern "C" fn ownaudio_v1_decoder_seek(
     handle: *mut OwnAudioDecoderHandle,
     frame_position: u64,
 ) -> i32 {
@@ -178,8 +193,13 @@ pub extern "C" fn ownaudio_v1_decoder_seek(
 /// Writes the decoded output stream metadata to `*out_info`.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `handle` must be a live handle from `ownaudio_v1_decoder_open` that has not been destroyed.
+/// - `out_info` must point to a writable `OwnAudioStreamInfo`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_decoder_get_stream_info(
+pub unsafe extern "C" fn ownaudio_v1_decoder_get_stream_info(
     handle: *mut OwnAudioDecoderHandle,
     out_info: *mut OwnAudioStreamInfo,
 ) -> i32 {
@@ -206,8 +226,13 @@ pub extern "C" fn ownaudio_v1_decoder_get_stream_info(
 /// prefetch buffer is drained.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `handle` must be a live handle from `ownaudio_v1_decoder_open` that has not been destroyed.
+/// - `out_is_eof` must point to a writable `bool`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_decoder_is_eof(
+pub unsafe extern "C" fn ownaudio_v1_decoder_is_eof(
     handle: *mut OwnAudioDecoderHandle,
     out_is_eof: *mut bool,
 ) -> i32 {
@@ -233,8 +258,12 @@ pub extern "C" fn ownaudio_v1_decoder_is_eof(
 /// Destroys a decoder handle, stopping and joining the prefetch thread.
 ///
 /// Passing `null` is safe and has no effect.
+///
+/// # Safety
+/// - `handle` must be a live handle from `ownaudio_v1_decoder_open` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_decoder_destroy(handle: *mut OwnAudioDecoderHandle) {
+pub unsafe extern "C" fn ownaudio_v1_decoder_destroy(handle: *mut OwnAudioDecoderHandle) {
     // Dropping the decoder stops and joins the prefetch thread; a panic there
     // must never unwind across the FFI boundary.
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

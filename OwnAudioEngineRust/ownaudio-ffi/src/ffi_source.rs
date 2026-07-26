@@ -33,8 +33,14 @@ use crate::handles::{
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.  Destroy the returned
 /// handle with `ownaudio_v1_track_source_destroy`.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - `out_source` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_set_ring_source(
+pub unsafe extern "C" fn ownaudio_v1_track_set_ring_source(
     mixer: *mut OwnAudioMixerHandle,
     track: *mut OwnAudioTrackHandle,
     capacity_samples: usize,
@@ -95,8 +101,14 @@ pub extern "C" fn ownaudio_v1_track_set_ring_source(
 /// - `out_written` — receives the number of samples accepted.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `source` must be a live handle from `ownaudio_v1_track_set_ring_source` that has not been destroyed.
+/// - `samples` must be valid for `sample_count` `f32` values (readable).
+/// - `out_written` must point to a writable `usize`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_source_write(
+pub unsafe extern "C" fn ownaudio_v1_track_source_write(
     source: *mut OwnAudioTrackSourceHandle,
     samples: *const f32,
     sample_count: usize,
@@ -138,8 +150,13 @@ pub extern "C" fn ownaudio_v1_track_source_write(
 /// - `out_free` — receives the free-sample count.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `source` must be a live handle from `ownaudio_v1_track_set_ring_source` that has not been destroyed.
+/// - `out_free` must point to a writable `usize`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_source_free_samples(
+pub unsafe extern "C" fn ownaudio_v1_track_source_free_samples(
     source: *mut OwnAudioTrackSourceHandle,
     out_free: *mut usize,
 ) -> i32 {
@@ -174,8 +191,13 @@ pub extern "C" fn ownaudio_v1_track_source_free_samples(
 /// - `track` — valid track handle whose source is to be cleared.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_clear_source(
+pub unsafe extern "C" fn ownaudio_v1_track_clear_source(
     mixer: *mut OwnAudioMixerHandle,
     track: *mut OwnAudioTrackHandle,
 ) -> i32 {
@@ -216,8 +238,12 @@ pub extern "C" fn ownaudio_v1_track_clear_source(
 /// Passing `null` is safe and has no effect.  Dropping the producer does not
 /// disturb the track's reader on the audio thread; the track simply underruns
 /// (renders silence) once the buffered samples are consumed.
+///
+/// # Safety
+/// - `source` must be a live handle from `ownaudio_v1_track_set_ring_source` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_source_destroy(source: *mut OwnAudioTrackSourceHandle) {
+pub unsafe extern "C" fn ownaudio_v1_track_source_destroy(source: *mut OwnAudioTrackSourceHandle) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if source.is_null() {
             return;

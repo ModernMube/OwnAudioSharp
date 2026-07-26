@@ -32,8 +32,12 @@ unsafe fn bpm_from_ptr<'a>(ptr: *mut OwnAudioBpmHandle) -> Option<&'a mut BpmDet
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success. The handle must be released with
 /// `ownaudio_v1_bpm_destroy`.
+///
+/// # Safety
+/// - `out_detector` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_bpm_create(
+pub unsafe extern "C" fn ownaudio_v1_bpm_create(
     channels: u32,
     sample_rate: u32,
     out_detector: *mut *mut OwnAudioBpmHandle,
@@ -60,8 +64,13 @@ pub extern "C" fn ownaudio_v1_bpm_create(
 /// to `ownaudio_v1_bpm_create`).
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `handle` must be a live handle from `ownaudio_v1_bpm_create` that has not been destroyed.
+/// - `samples` must be valid for `sample_count` `f32` values (readable).
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_bpm_input_samples(
+pub unsafe extern "C" fn ownaudio_v1_bpm_input_samples(
     handle: *mut OwnAudioBpmHandle,
     samples: *const f32,
     num_samples: usize,
@@ -91,8 +100,13 @@ pub extern "C" fn ownaudio_v1_bpm_input_samples(
 /// data for a reliable estimate.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `handle` must be a live handle from `ownaudio_v1_bpm_create` that has not been destroyed.
+/// - `out_bpm` must point to a writable `f32`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_bpm_get_bpm(
+pub unsafe extern "C" fn ownaudio_v1_bpm_get_bpm(
     handle: *mut OwnAudioBpmHandle,
     out_bpm: *mut f32,
 ) -> i32 {
@@ -117,8 +131,12 @@ pub extern "C" fn ownaudio_v1_bpm_get_bpm(
 }
 
 /// Destroys a BPM detector created by `ownaudio_v1_bpm_create`. Null is ignored.
+///
+/// # Safety
+/// - `handle` must be a live handle from `ownaudio_v1_bpm_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_bpm_destroy(handle: *mut OwnAudioBpmHandle) {
+pub unsafe extern "C" fn ownaudio_v1_bpm_destroy(handle: *mut OwnAudioBpmHandle) {
     if handle.is_null() {
         return;
     }

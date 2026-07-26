@@ -34,8 +34,13 @@ pub struct OwnAudioDeviceInfo {
 /// `ownaudio_v1_free_device_list(*out_devices, *out_count)`.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `out_devices` must point to a writable pointer slot; it receives the new handle.
+/// - `out_count` must point to a writable `usize`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_list_output_devices(
+pub unsafe extern "C" fn ownaudio_v1_list_output_devices(
     out_devices: *mut *mut OwnAudioDeviceInfo,
     out_count: *mut usize,
 ) -> i32 {
@@ -70,8 +75,13 @@ pub extern "C" fn ownaudio_v1_list_output_devices(
 /// `ownaudio_v1_free_device_list(*out_devices, *out_count)`.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `out_devices` must point to a writable pointer slot; it receives the new handle.
+/// - `out_count` must point to a writable `usize`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_list_input_devices(
+pub unsafe extern "C" fn ownaudio_v1_list_input_devices(
     out_devices: *mut *mut OwnAudioDeviceInfo,
     out_count: *mut usize,
 ) -> i32 {
@@ -111,8 +121,14 @@ pub extern "C" fn ownaudio_v1_list_input_devices(
 /// `ownaudio_v1_free_device_list(*out_devices, *out_count)`.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `engine` must be a live handle from `ownaudio_v1_engine_create` that has not been destroyed.
+/// - `out_devices` must point to a writable pointer slot; it receives the new handle.
+/// - `out_count` must point to a writable `usize`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_engine_list_output_devices(
+pub unsafe extern "C" fn ownaudio_v1_engine_list_output_devices(
     engine: *mut OwnAudioEngineHandle,
     out_devices: *mut *mut OwnAudioDeviceInfo,
     out_count: *mut usize,
@@ -158,8 +174,14 @@ pub extern "C" fn ownaudio_v1_engine_list_output_devices(
 /// `ownaudio_v1_free_device_list(*out_devices, *out_count)`.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `engine` must be a live handle from `ownaudio_v1_engine_create` that has not been destroyed.
+/// - `out_devices` must point to a writable pointer slot; it receives the new handle.
+/// - `out_count` must point to a writable `usize`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_engine_list_input_devices(
+pub unsafe extern "C" fn ownaudio_v1_engine_list_input_devices(
     engine: *mut OwnAudioEngineHandle,
     out_devices: *mut *mut OwnAudioDeviceInfo,
     out_count: *mut usize,
@@ -198,8 +220,16 @@ pub extern "C" fn ownaudio_v1_engine_list_input_devices(
 /// counterparts.
 ///
 /// Passing `null` or `count = 0` is safe and has no effect.
+///
+/// # Safety
+/// - `devices` must be the array handed out by one of the list functions, released exactly once.
+/// - `count` must be the element count that came with it.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_free_device_list(devices: *mut OwnAudioDeviceInfo, count: usize) {
+pub unsafe extern "C" fn ownaudio_v1_free_device_list(
+    devices: *mut OwnAudioDeviceInfo,
+    count: usize,
+) {
     // A panic while freeing must never unwind across the FFI boundary.
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if devices.is_null() || count == 0 {

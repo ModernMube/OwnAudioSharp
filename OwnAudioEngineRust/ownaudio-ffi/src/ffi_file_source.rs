@@ -47,8 +47,15 @@ const DEFAULT_PREFETCH_FRAMES: usize = 88_200;
 /// Returns `OwnAudioErrorCode::Success` (0) on success.  Destroy the returned
 /// handle with `ownaudio_v1_file_source_destroy` after the track's source has
 /// been cleared or the track removed.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - `path` must be a NUL-terminated UTF-8 string.
+/// - `out_source` must point to a writable pointer slot; it receives the new handle.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_track_open_file(
+pub unsafe extern "C" fn ownaudio_v1_track_open_file(
     mixer: *mut OwnAudioMixerHandle,
     track: *mut OwnAudioTrackHandle,
     path: *const c_char,
@@ -128,8 +135,12 @@ pub extern "C" fn ownaudio_v1_track_open_file(
 /// - `enabled` — non-zero to loop, zero to stop at end-of-stream.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_file_source_set_loop(
+pub unsafe extern "C" fn ownaudio_v1_file_source_set_loop(
     source: *mut OwnAudioFileSourceHandle,
     enabled: u8,
 ) -> i32 {
@@ -157,8 +168,13 @@ pub extern "C" fn ownaudio_v1_file_source_set_loop(
 /// - `out_finished` — receives the finished flag on success.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.
+/// - `out_finished` must point to a writable `u8`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_file_source_is_finished(
+pub unsafe extern "C" fn ownaudio_v1_file_source_is_finished(
     source: *mut OwnAudioFileSourceHandle,
     out_finished: *mut u8,
 ) -> i32 {
@@ -193,8 +209,12 @@ pub extern "C" fn ownaudio_v1_file_source_is_finished(
 /// - `frame_position` — target position in output sample frames.
 ///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_file_source_seek(
+pub unsafe extern "C" fn ownaudio_v1_file_source_seek(
     source: *mut OwnAudioFileSourceHandle,
     frame_position: u64,
 ) -> i32 {
@@ -219,8 +239,12 @@ pub extern "C" fn ownaudio_v1_file_source_seek(
 /// the track's source is cleared (`ownaudio_v1_track_clear_source`) or the track
 /// is removed, at which point the source and its prefetch thread are retired off
 /// the real-time path.
+///
+/// # Safety
+/// - `source` must be a live handle from `ownaudio_v1_track_open_file` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
 #[no_mangle]
-pub extern "C" fn ownaudio_v1_file_source_destroy(source: *mut OwnAudioFileSourceHandle) {
+pub unsafe extern "C" fn ownaudio_v1_file_source_destroy(source: *mut OwnAudioFileSourceHandle) {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if source.is_null() {
             return;
