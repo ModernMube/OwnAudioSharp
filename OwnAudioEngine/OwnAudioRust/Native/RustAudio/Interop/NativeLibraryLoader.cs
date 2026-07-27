@@ -11,8 +11,21 @@ namespace Ownaudio.Native.RustAudio.Interop;
 /// </summary>
 internal static class NativeLibraryLoader
 {
+    /// <summary>
     /// The name every [LibraryImport] in this layer uses.
+    /// </summary>
+    /// <remarks>
+    /// On iOS the engine is a static .a linked straight into the app, and "__Internal" is how you
+    /// say that: the AOT compiler then emits a direct reference to each symbol. Going through a
+    /// resolver and dlsym instead does not work there — nothing references the Rust symbols
+    /// statically, so -dead_strip throws all of them out during the native link and the lookup
+    /// finds an empty binary.
+    /// </remarks>
+#if IOS || TVOS
+    internal const string LogicalName = "__Internal";
+#else
     internal const string LogicalName = "ownaudio_ffi";
+#endif
 
     private static bool _registered;
 
@@ -22,9 +35,11 @@ internal static class NativeLibraryLoader
     public static void EnsureRegistered()
     {
         if (_registered) { return; }
-
-        NativeLibrary.SetDllImportResolver(typeof(NativeLibraryLoader).Assembly, _resolve);
         _registered = true;
+
+        //Statically linked, the runtime resolves __Internal itself — a resolver would only get in the way
+        if (!OperatingSystem.IsIOS() && !OperatingSystem.IsTvOS())
+            NativeLibrary.SetDllImportResolver(typeof(NativeLibraryLoader).Assembly, _resolve);
 
         AndroidJniBootstrap.EnsureInitialized();
     }
@@ -39,10 +54,6 @@ internal static class NativeLibraryLoader
     {
         if (!string.Equals(libraryName, LogicalName, StringComparison.Ordinal))
             return IntPtr.Zero;
-
-        //On ios everything is linked into the main binary
-        if (OperatingSystem.IsIOS() || OperatingSystem.IsTvOS())
-            return NativeLibrary.GetMainProgramHandle();
 
         if (OperatingSystem.IsAndroid())
             return NativeLibrary.TryLoad("libownaudio_ffi.so", assembly, searchPath, out IntPtr _droidHandle) ? _droidHandle : IntPtr.Zero;

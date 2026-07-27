@@ -105,7 +105,12 @@ AudioEngineException: Failed to initialize Rust audio engine:
 The flag has to be on the command line, where it reaches restore as well as build; setting it
 inside the project file or through `AdditionalProperties` on a `ProjectReference` does not work.
 This applies to the samples in `OwnAudio/Examples/` too — see the
-[Android sample README](OwnAudio/Examples/Ownaudio.Example.Android/README.md).
+[Android](OwnAudio/Examples/Ownaudio.Example.Android/README.md) and
+[iOS](OwnAudio/Examples/Ownaudio.Example.iOS/README.md) sample READMEs.
+
+On iOS add a `RuntimeIdentifier` as well (`ios-arm64`, `iossimulator-arm64` or
+`iossimulator-x64`): the engine is a static library picked per RID, and no single one covers
+device and simulator.
 
 Deploying with `-t:Run` or `-t:Install` needs an emulator or a connected device with USB
 debugging enabled, otherwise the Android SDK stops with `XA0010: No available device`. Check

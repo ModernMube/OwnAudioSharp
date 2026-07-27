@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Ownaudio.Native.RustAudio.Interop;
@@ -6,15 +7,18 @@ using Ownaudio.Native.RustAudio.Interop;
 namespace Ownaudio.Safe.Callbacks;
 
 /// <summary>
-/// Glues a managed fill handler onto the unmanaged NativeOutputCallback the FFI wants.
-/// The delegate stays pinned for the whole lifetime, otherwise the GC could move it out
-/// from under the native audio thread. Dispose only after the stream is destroyed.
+/// Glues a managed fill handler onto the unmanaged callback the FFI wants.
 /// </summary>
-internal sealed class AudioOutputCallbackMarshaller : IDisposable
+/// <remarks>
+/// The entry point is a static [UnmanagedCallersOnly] method rather than a delegate: iOS runs
+/// AOT-only, and a delegate needs a native-to-managed thunk built at run time, which is exactly
+/// what it cannot do. We find the way back to the instance through the user_data pointer the
+/// engine hands to every callback. Dispose only after the stream is destroyed.
+/// </remarks>
+internal sealed unsafe class AudioOutputCallbackMarshaller : IDisposable
 {
     private readonly AudioOutputCallbackHandler _userCallback;
-    private readonly NativeOutputCallback _nativeDelegate;
-    private readonly GCHandle _pin;
+    private GCHandle _self;
     private int _disposed;
 
     /// <summary>
@@ -23,38 +27,55 @@ internal sealed class AudioOutputCallbackMarshaller : IDisposable
     /// </summary>
     internal event EventHandler<Exception>? CallbackError;
 
-    internal unsafe AudioOutputCallbackMarshaller(AudioOutputCallbackHandler userCallback)
+    internal AudioOutputCallbackMarshaller(AudioOutputCallbackHandler userCallback)
     {
         _userCallback = userCallback;
-        _nativeDelegate = _nativeEntry;
-        _pin = GCHandle.Alloc(_nativeDelegate);
+        _self = GCHandle.Alloc(this);
     }
 
     /// <summary>
-    /// Function pointer for ownaudio_v1_open_output_stream. Dead once disposed.
+    /// Function pointer for ownaudio_v1_open_output_stream.
     /// </summary>
-    internal IntPtr NativeFunctionPointer => Marshal.GetFunctionPointerForDelegate(_nativeDelegate);
+    internal static IntPtr NativeFunctionPointer
+        => (IntPtr)(delegate* unmanaged[Cdecl]<float*, nuint, ushort, void*, void>)&_nativeEntry;
 
     /// <summary>
-    /// Frees the pin. Only after the native stream is gone!
+    /// Goes in as user_data and comes back on every callback — this is how the static entry
+    /// finds its instance again.
+    /// </summary>
+    internal IntPtr UserData => GCHandle.ToIntPtr(_self);
+
+    /// <summary>
+    /// Frees the handle. Only after the native stream is gone!
     /// </summary>
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) == 0) { _pin.Free(); }
+        if (Interlocked.Exchange(ref _disposed, 1) == 0) { _self.Free(); }
     }
 
-    private unsafe void _nativeEntry(float* buffer, nuint frameCount, ushort channels, void* userData)
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    private static void _nativeEntry(float* buffer, nuint frameCount, ushort channels, void* userData)
     {
+        AudioOutputCallbackMarshaller? _target = _fromUserData(userData);
+        if (_target is null) return;
+
         try
         {
             var args = new AudioOutputCallbackArgs(buffer, (int)frameCount, channels);
-            _userCallback(in args);
+            _target._userCallback(in args);
         }
         catch (Exception ex)
         {
             new Span<float>(buffer, (int)frameCount * channels).Clear();
-            _raiseError(ex);
+            _target._raiseError(ex);
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static AudioOutputCallbackMarshaller? _fromUserData(void* userData)
+    {
+        if (userData is null) return null;
+        return GCHandle.FromIntPtr((IntPtr)userData).Target as AudioOutputCallbackMarshaller;
     }
 
     private void _raiseError(Exception ex)

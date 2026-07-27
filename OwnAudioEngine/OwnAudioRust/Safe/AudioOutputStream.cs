@@ -56,8 +56,8 @@ public sealed class AudioOutputStream : IDisposable
                 engine.DangerousGetHandle(),
                 deviceNamePtr,
                 in nativeConfig,
-                marshaller.NativeFunctionPointer,
-                IntPtr.Zero,
+                AudioOutputCallbackMarshaller.NativeFunctionPointer,
+                marshaller.UserData,
                 out rawStream);
         }
         finally

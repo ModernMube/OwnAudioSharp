@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-ios</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationId>com.ownaudio.iostest</ApplicationId>
+    <ApplicationTitle>OwnAudio iOS Demo</ApplicationTitle>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <SupportedOSPlatformVersion>12.2</SupportedOSPlatformVersion>
+    <RuntimeIdentifiers>ios-arm64;iossimulator-arm64;iossimulator-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <MtouchLink>None</MtouchLink>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <MtouchLink>SdkOnly</MtouchLink>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\OwnAudioEngine\Ownaudio.Core\Ownaudio.Core.csproj" />
+    <ProjectReference Include="..\..\Source\OwnaudioNET.Mobile.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'ios-arm64'">
+    <NativeReference Include="..\..\..\OwnAudioEngine\OwnAudioRust\runtimes\ios-arm64\native\libownaudio_ffi.a">
+      <Kind>Static</Kind>
+      <ForceLoad>True</ForceLoad>
+      <SmartLink>False</SmartLink>
+      <Frameworks>AudioToolbox AVFAudio AVFoundation CoreAudio CoreFoundation Foundation</Frameworks>
+    </NativeReference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'iossimulator-arm64'">
+    <NativeReference Include="..\..\..\OwnAudioEngine\OwnAudioRust\runtimes\iossimulator-arm64\native\libownaudio_ffi.a">
+      <Kind>Static</Kind>
+      <ForceLoad>True</ForceLoad>
+      <SmartLink>False</SmartLink>
+      <Frameworks>AudioToolbox AVFAudio AVFoundation CoreAudio CoreFoundation Foundation</Frameworks>
+    </NativeReference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'iossimulator-x64'">
+    <NativeReference Include="..\..\..\OwnAudioEngine\OwnAudioRust\runtimes\iossimulator-x64\native\libownaudio_ffi.a">
+      <Kind>Static</Kind>
+      <ForceLoad>True</ForceLoad>
+      <SmartLink>False</SmartLink>
+      <Frameworks>AudioToolbox AVFAudio AVFoundation CoreAudio CoreFoundation Foundation</Frameworks>
+    </NativeReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <BundleResource Include="..\Ownaudio.Example.Desktop\media\bass.wav">
+      <Link>bass.wav</Link>
+    </BundleResource>
+    <BundleResource Include="..\Ownaudio.Example.Desktop\media\drums.wav">
+      <Link>drums.wav</Link>
+    </BundleResource>
+    <BundleResource Include="..\Ownaudio.Example.Desktop\media\other.wav">
+      <Link>other.wav</Link>
+    </BundleResource>
+    <BundleResource Include="..\Ownaudio.Example.Desktop\media\vocals.wav">
+      <Link>vocals.wav</Link>
+    </BundleResource>
+  </ItemGroup>
+
+</Project>
