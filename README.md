@@ -71,6 +71,46 @@ dotnet add package OwnAudioSharp.Basic    # Desktop — minimal engine
 
 **Requirement:** .NET 10.0 or later. The native Rust engine — including the audio decoder — is bundled in the package. There is nothing else to install and no external codecs to configure.
 
+### Building a mobile app
+
+If you consume `OwnAudioSharp.Mobile` from NuGet, there is nothing to configure. The package
+carries the native engine for every Android ABI and both iOS architectures, and the SDK puts
+them into your APK or app bundle on its own — the JNI handshake Android needs for device
+enumeration is done by the library at startup.
+
+| | Minimum | Notes |
+|---|---|---|
+| Android | 7.0 (API 24) | `arm64-v8a`, `armeabi-v7a`, `x86_64`. Audio runs on AAudio. |
+| iOS | 12.2 | Device and simulator, arm64 + x64. The engine is linked statically. |
+
+Add `RECORD_AUDIO` to your manifest if you capture audio; playback needs no permission.
+
+**Building this repository from source is different — `-p:BuildMobile=true` is mandatory:**
+
+```bash
+dotnet build YourApp.csproj -c Debug -p:BuildMobile=true
+dotnet publish YourApp.csproj -c Release -p:BuildMobile=true
+```
+
+The engine projects only expose their `net10.0-android` and `net10.0-ios` target frameworks when
+that property is set. Leave it off and everything still *builds* — your app quietly links the
+desktop `net10.0` assemblies instead, installs onto the phone, and then throws on the first
+`Initialize` call:
+
+```
+AudioEngineException: Failed to initialize Rust audio engine:
+  internal panic in native audio engine: android context was not initialized
+```
+
+The flag has to be on the command line, where it reaches restore as well as build; setting it
+inside the project file or through `AdditionalProperties` on a `ProjectReference` does not work.
+This applies to the samples in `OwnAudio/Examples/` too — see the
+[Android sample README](OwnAudio/Examples/Ownaudio.Example.Android/README.md).
+
+Deploying with `-t:Run` or `-t:Install` needs an emulator or a connected device with USB
+debugging enabled, otherwise the Android SDK stops with `XA0010: No available device`. Check
+with `adb devices` first.
+
 ---
 
 ## Features

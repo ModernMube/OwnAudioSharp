@@ -78,8 +78,13 @@ var result = separator.Separate("song.mp3");
 
 ## Platform Support
 
-- **Android**: Android 7.0 (API 24)+ (ARM64, x64)
-- **iOS**: iOS 11.0+ (ARM64, x64 Simulator)
+- **Android**: Android 7.0 (API 24)+ — `arm64-v8a`, `armeabi-v7a`, `x86_64`, running on AAudio
+- **iOS**: iOS 12.2+ — device arm64, simulator arm64 and x64, engine linked statically
+
+The native engine ships inside this package for every one of those targets, and the SDK puts it
+into your APK or app bundle automatically. There is no build flag to set and no native
+dependency to install. Add `RECORD_AUDIO` to your Android manifest if you capture audio;
+playback needs no permission.
 
 ## Mobile-Specific Features
 
