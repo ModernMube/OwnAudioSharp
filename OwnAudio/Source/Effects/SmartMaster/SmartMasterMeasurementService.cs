@@ -64,7 +64,10 @@ namespace OwnaudioNET.Effects.SmartMaster
                 {
                     OwnaudioNET.OwnaudioNet.Engine.ClearOutputBuffer();
                 }
-                catch {}
+                catch (Exception ex)
+                {
+                    Log.Warning($"[SmartMaster] Output buffer flush before measuring failed, stale audio may skew it: {ex.Message}");
+                }
             }
 
             await Task.Delay(500, cancellationToken);
@@ -300,7 +303,7 @@ namespace OwnaudioNET.Effects.SmartMaster
             }
             catch (Exception ex)
             {
-                Log.Error($"[SmartMaster] Channel {channel} check error: {ex.Message}");
+                Log.Error($"[SmartMaster] Channel {channel} check error", ex);
                 return false;
             }
         }
@@ -454,7 +457,7 @@ namespace OwnaudioNET.Effects.SmartMaster
             }
             catch (Exception ex)
             {
-                Log.Error($"[SmartMaster] Subwoofer check error: {ex.Message}");
+                Log.Error("[SmartMaster] Subwoofer check error", ex);
                 return false;
             }
         }
@@ -616,7 +619,7 @@ namespace OwnaudioNET.Effects.SmartMaster
             }
             catch (Exception ex)
             {
-                Log.Error($"[SmartMaster] Spectrum analysis error: {ex.Message}");
+                Log.Error("[SmartMaster] Spectrum analysis error", ex);
 
                 Array.Clear(results.FrequencyResponse);
             }

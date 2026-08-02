@@ -1,3 +1,4 @@
+using Logger;
 using Ownaudio.Decoders;
 using OwnaudioNET.Core;
 using OwnaudioNET.Exceptions;
@@ -88,6 +89,7 @@ public partial class FileSource
         }
         catch (Exception ex) when (ex is not AudioException)
         {
+            Log.Error($"[FileSource] Raw data extraction from '{_filePath}' failed", ex);
             throw new AudioException($"Failed to extract audio data: {ex.Message}", ex);
         }
     }

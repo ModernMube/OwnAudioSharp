@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using Logger;
 using OwnaudioNET.Synchronization;
 
 namespace OwnaudioNET.NetworkSync;
@@ -31,6 +32,17 @@ public sealed class NetworkSyncServer : IDisposable
     private const int CommandQueueSize = 256;
 
     private const int BroadcastIntervalMs = 10;
+
+    /// <summary>
+    /// Broadcast runs at 100Hz, so a dead socket would spam the log. Report the 1st hit
+    /// and every Nth after that.
+    /// </summary>
+    private const int SendErrorReportInterval = 500;
+
+    /// <summary>
+    /// Failed-send streak feeding the throttle above. Cleared by a send that goes through.
+    /// </summary>
+    private int _sendErrors;
 
     /// <summary>
     /// What we remember about a connected client.
@@ -100,9 +112,12 @@ public sealed class NetworkSyncServer : IDisposable
                 Priority = ThreadPriority.Normal
             };
             _broadcastThread.Start();
+
+            Log.Info($"[SyncServer] Broadcasting on UDP {_port}, {1000 / BroadcastIntervalMs}Hz clock tick");
         }
         catch (Exception ex)
         {
+            Log.Error($"[SyncServer] Cannot start on UDP {_port}", ex);
             _isRunning = false;
             throw new InvalidOperationException($"Failed to start network sync server: {ex.Message}", ex);
         }
@@ -120,13 +135,14 @@ public sealed class NetworkSyncServer : IDisposable
 
         _isRunning = false;
 
-        if (_broadcastThread != null && _broadcastThread.IsAlive)
-            _broadcastThread.Join(TimeSpan.FromSeconds(2));
+        if (_broadcastThread != null && _broadcastThread.IsAlive && !_broadcastThread.Join(TimeSpan.FromSeconds(2)))
+            Log.Error("[SyncServer] Broadcast thread did not exit in 2s, closing the socket under it");
 
         _udpClient?.Close();
         _udpClient?.Dispose();
         _udpClient = null;
 
+        Log.Info($"[SyncServer] Stopped, {_clients.Count} clients dropped");
         _clients.Clear();
     }
 
@@ -141,7 +157,10 @@ public sealed class NetworkSyncServer : IDisposable
         {
             int nextTail = (_commandQueueTail + 1) % CommandQueueSize;
             if (nextTail == _commandQueueHead)
+            {
+                Log.Error($"[SyncServer] Command ring full ({CommandQueueSize}), a {command.Type} command was dropped");
                 return false;
+            }
 
             _commandQueue[_commandQueueTail] = command;
             _commandQueueTail = nextTail;
@@ -172,8 +191,9 @@ public sealed class NetworkSyncServer : IDisposable
 
                     Thread.Sleep(BroadcastIntervalMs);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    _reportSendError("Broadcast pass", ex);
                     Thread.Sleep(BroadcastIntervalMs * 2);
                 }
             }
@@ -203,8 +223,20 @@ public sealed class NetworkSyncServer : IDisposable
         Span<byte> bufferSpan = buffer.AsSpan(0, NetworkSyncProtocol.MaxPacketSize);
         int bytesWritten = NetworkSyncProtocol.SerializeCommand(ref cmd, bufferSpan);
 
-        try { _udpClient.Send(buffer, bytesWritten, endpoint); }
-        catch {}
+        try { _udpClient.Send(buffer, bytesWritten, endpoint); _sendErrors = 0; }
+        catch (Exception ex) { _reportSendError("Clock tick broadcast", ex); }
+    }
+
+    /// <summary>
+    /// First-then-every-Nth reporting for the send path, which runs at broadcast rate.
+    /// </summary>
+    /// <param name="what">what we were sending</param>
+    /// <param name="ex"></param>
+    private void _reportSendError(string what, Exception ex)
+    {
+        int _n = ++_sendErrors;
+        if (_n == 1 || _n % SendErrorReportInterval == 0)
+            Log.Error($"[SyncServer] {what} failed (occurrence #{_n}), clients are drifting", ex);
     }
 
     /// <summary>
@@ -233,8 +265,8 @@ public sealed class NetworkSyncServer : IDisposable
             Span<byte> bufferSpan = buffer.AsSpan(0, NetworkSyncProtocol.MaxPacketSize);
             int bytesWritten = NetworkSyncProtocol.SerializeCommand(ref cmd, bufferSpan);
 
-            try { _udpClient.Send(buffer, bytesWritten, endpoint); }
-            catch {}
+            try { _udpClient.Send(buffer, bytesWritten, endpoint); _sendErrors = 0; }
+            catch (Exception ex) { _reportSendError($"Broadcast of a {cmd.Type} command", ex); }
         }
     }
 
@@ -255,7 +287,10 @@ public sealed class NetworkSyncServer : IDisposable
         foreach (var key in staleClients)
         {
             if (_clients.TryRemove(key, out var client))
+            {
+                Log.Warning($"[SyncServer] Client {client.Endpoint} went silent for 30s, dropped");
                 ClientDisconnected?.Invoke(this, new ClientDisconnectedEventArgs(client.Endpoint));
+            }
         }
     }
 

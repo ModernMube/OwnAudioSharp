@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Logger;
 using Ownaudio;
 using Ownaudio.Core;
 using OwnaudioNET.Core;
@@ -124,6 +125,8 @@ public sealed class AudioEngineWrapper : IDisposable
         _pump = new AudioPump(_engine, _bufferController, _engineBufferSize, FramesPerBuffer, _config.SampleRate);
 
         _subscribeEngineEvents();
+
+        Log.Info($"[EngineWrapper] Created: {_config.SampleRate}Hz {_config.Channels}ch, {FramesPerBuffer} frames/buffer, x{bufferMultiplier} headroom");
     }
 
     /// <summary>
@@ -139,12 +142,17 @@ public sealed class AudioEngineWrapper : IDisposable
         {
             int _result = _engine.Start();
             if (_result < 0)
+            {
+                Log.Error($"[EngineWrapper] Engine start refused, error code: {_result}");
                 throw new AudioEngineException($"Failed to start audio engine. Error code: {_result}", _result);
+            }
 
             _pump.Start();
+            Log.Info("[EngineWrapper] Started");
         }
         catch (Exception ex) when (ex is not AudioEngineException)
         {
+            Log.Error("[EngineWrapper] Start failed", ex);
             throw new AudioEngineException("Failed to start audio engine wrapper.", ex);
         }
     }
@@ -167,10 +175,16 @@ public sealed class AudioEngineWrapper : IDisposable
 
             int _result = _engine.Stop();
             if (_result < 0)
+            {
+                Log.Error($"[EngineWrapper] Engine stop refused, error code: {_result}");
                 throw new AudioEngineException($"Failed to stop audio engine. Error code: {_result}", _result);
+            }
+
+            Log.Info($"[EngineWrapper] Stopped after {TotalPumpedFrames} frames, {TotalUnderruns} underruns");
         }
         catch (Exception ex) when (ex is not AudioEngineException)
         {
+            Log.Error("[EngineWrapper] Stop failed", ex);
             throw new AudioEngineException("Failed to stop audio engine wrapper.", ex);
         }
     }
@@ -257,6 +271,7 @@ public sealed class AudioEngineWrapper : IDisposable
         }
         catch (Exception ex)
         {
+            Log.Error("[EngineWrapper] Output device enumeration failed", ex);
             throw new AudioEngineException("Failed to get output devices.", ex);
         }
     }
@@ -275,6 +290,7 @@ public sealed class AudioEngineWrapper : IDisposable
         }
         catch (Exception ex)
         {
+            Log.Error("[EngineWrapper] Input device enumeration failed", ex);
             throw new AudioEngineException("Failed to get input devices.", ex);
         }
     }
@@ -293,15 +309,20 @@ public sealed class AudioEngineWrapper : IDisposable
 
         try
         {
-            return _engine.SetOutputDeviceByName(deviceName) == 0;
+            bool _ok = _engine.SetOutputDeviceByName(deviceName) == 0;
+            if (_ok) { Log.Info($"[EngineWrapper] Output device set to '{deviceName}'"); }
+            else { Log.Warning($"[EngineWrapper] Engine rejected output device '{deviceName}'"); }
+            return _ok;
         }
-        catch (NotSupportedException)
+        catch (NotSupportedException ex)
         {
             // The engine explains why the host can't do this; wrapping would bury that message.
+            Log.Warning($"[EngineWrapper] Host cannot switch output device: {ex.Message}");
             throw;
         }
         catch (Exception ex)
         {
+            Log.Error($"[EngineWrapper] Setting output device to '{deviceName}' failed", ex);
             throw new AudioEngineException($"Failed to set output device to '{deviceName}'.", ex);
         }
     }
@@ -320,15 +341,20 @@ public sealed class AudioEngineWrapper : IDisposable
 
         try
         {
-            return _engine.SetInputDeviceByName(deviceName) == 0;
+            bool _ok = _engine.SetInputDeviceByName(deviceName) == 0;
+            if (_ok) { Log.Info($"[EngineWrapper] Input device set to '{deviceName}'"); }
+            else { Log.Warning($"[EngineWrapper] Engine rejected input device '{deviceName}'"); }
+            return _ok;
         }
-        catch (NotSupportedException)
+        catch (NotSupportedException ex)
         {
             // The engine explains why the host can't do this; wrapping would bury that message.
+            Log.Warning($"[EngineWrapper] Host cannot switch input device: {ex.Message}");
             throw;
         }
         catch (Exception ex)
         {
+            Log.Error($"[EngineWrapper] Setting input device to '{deviceName}' failed", ex);
             throw new AudioEngineException($"Failed to set input device to '{deviceName}'.", ex);
         }
     }
@@ -349,6 +375,7 @@ public sealed class AudioEngineWrapper : IDisposable
     {
         _throwIfDisposed();
         _engine.PauseDeviceMonitoring();
+        Log.Info("[EngineWrapper] Device monitoring paused");
     }
 
     /// <summary>
@@ -358,6 +385,7 @@ public sealed class AudioEngineWrapper : IDisposable
     {
         _throwIfDisposed();
         _engine.ResumeDeviceMonitoring();
+        Log.Info("[EngineWrapper] Device monitoring resumed");
     }
 
     /// <summary>
@@ -405,7 +433,7 @@ public sealed class AudioEngineWrapper : IDisposable
         if (IsRunning)
         {
             try { Stop(); }
-            catch {}
+            catch (Exception ex) { Log.Warning($"[EngineWrapper] Stop during dispose failed, tearing down anyway: {ex.Message}"); }
         }
 
         _unsubscribeEngineEvents();
@@ -415,6 +443,7 @@ public sealed class AudioEngineWrapper : IDisposable
         _engine?.Dispose();
 
         _disposed = true;
+        Log.Info("[EngineWrapper] Disposed");
     }
 
     /// <summary>

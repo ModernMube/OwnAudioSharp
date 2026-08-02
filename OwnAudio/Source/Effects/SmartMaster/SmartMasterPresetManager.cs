@@ -81,7 +81,7 @@ namespace OwnaudioNET.Effects.SmartMaster
             }
             catch (Exception ex)
             {
-                Log.Error($"[SmartMaster] Preset save error: {ex.Message}");
+                Log.Error("[SmartMaster] Preset save error", ex);
                 throw new InvalidOperationException($"Failed to save preset: {ex.Message}", ex);
             }
         }
@@ -117,7 +117,7 @@ namespace OwnaudioNET.Effects.SmartMaster
             }
             catch (Exception ex)
             {
-                Log.Error($"[SmartMaster] Preset load error: {ex.Message}");
+                Log.Error("[SmartMaster] Preset load error", ex);
                 throw new InvalidOperationException($"Failed to load preset: {ex.Message}", ex);
             }
         }

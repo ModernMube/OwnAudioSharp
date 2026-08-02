@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using Logger;
 using Ownaudio.Core;
 
 namespace OwnaudioNET.Mixing;
@@ -54,9 +55,12 @@ public sealed class WaveFileWriter : IDisposable
             _stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
             _writer = new BinaryWriter(_stream, Encoding.UTF8, leaveOpen: false);
             _writeWavHeader();
+
+            Log.Info($"[WavWriter] Opened '{filePath}': Float32 {_config.SampleRate}Hz {_config.Channels}ch");
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Error($"[WavWriter] Cannot open '{filePath}'", ex);
             _writer?.Dispose();
             _stream?.Dispose();
             throw;
@@ -96,6 +100,7 @@ public sealed class WaveFileWriter : IDisposable
         }
         catch (Exception ex)
         {
+            Log.Error($"[WavWriter] Write failed after {_totalSamplesWritten} samples ({Duration:F2}s)", ex);
             throw new IOException($"Failed to write samples to WAV file: {ex.Message}", ex);
         }
     }
@@ -143,7 +148,11 @@ public sealed class WaveFileWriter : IDisposable
             _writer.Flush();
             _stream.Flush();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // Header sizes stay at 0 here, so the file plays as empty. Never let that pass quietly.
+            Log.Error($"[WavWriter] Header patch failed, the file stays unreadable ({_totalSamplesWritten} samples lost)", ex);
+        }
     }
 
     /// <summary>
@@ -172,6 +181,8 @@ public sealed class WaveFileWriter : IDisposable
             _writer?.Dispose();
             _stream?.Dispose();
             _disposed = true;
+
+            Log.Info($"[WavWriter] Closed, {TotalFramesWritten} frames ({Duration:F2}s) written");
         }
     }
 

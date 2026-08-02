@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
+using Logger;
 
 namespace OwnaudioNET.NetworkSync;
 
@@ -82,10 +83,15 @@ public sealed class LocalTimeProvider : IDisposable
                         _lastSyncTime = DateTime.UtcNow;
                         _currentTier = TimeSyncTier.LocalNtp;
                     }
+
+                    Log.Info($"[TimeSync] Locked onto NTP server {server}, offset {_timeOffset * 1000.0:F1}ms");
                     return true;
                 }
             }
-            catch {}
+            catch (Exception ex)
+            {
+                Log.Warning($"[TimeSync] NTP server {server} did not answer: {ex.GetType().Name} {ex.Message}");
+            }
         }
 
         return false;
@@ -134,11 +140,21 @@ public sealed class LocalTimeProvider : IDisposable
                         _lastSyncTime = DateTime.UtcNow;
                         _currentTier = TimeSyncTier.PeerToPeer;
                     }
+
+                    Log.Info($"[TimeSync] Peer {serverEndpoint} answered, offset {_timeOffset * 1000.0:F1}ms, "
+                        + $"latency {estimatedLatency * 1000.0:F1}ms");
                     return true;
                 }
             }
+            else
+            {
+                Log.Warning($"[TimeSync] Peer {serverEndpoint} timed out after {timeout}ms");
+            }
         }
-        catch {}
+        catch (Exception ex)
+        {
+            Log.Warning($"[TimeSync] Peer sync with {serverEndpoint} failed: {ex.GetType().Name} {ex.Message}");
+        }
 
         return false;
     }
@@ -161,6 +177,8 @@ public sealed class LocalTimeProvider : IDisposable
             _timeOffset = 0.0;
             _currentTier = TimeSyncTier.SystemTime;
         }
+
+        Log.Warning("[TimeSync] No NTP and no peer, falling back to the raw system clock");
         return TimeSyncTier.SystemTime;
     }
 
@@ -205,8 +223,9 @@ public sealed class LocalTimeProvider : IDisposable
             return new DateTime(1900, 1, 1, 0, 0, 0, DateTimeKind.Utc)
                 .AddMilliseconds((long)milliseconds);
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Warning($"[TimeSync] SNTP request to {server} failed: {ex.GetType().Name} {ex.Message}");
             return null;
         }
     }

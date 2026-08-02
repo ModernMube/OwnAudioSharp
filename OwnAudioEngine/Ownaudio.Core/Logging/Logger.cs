@@ -3,7 +3,8 @@ using System;
 namespace Logger;
 
 /// <summary>
-/// Dead simple console logger. Set LoggerLevel before spinning up the engine.
+/// Dead simple console logger. Off by default — turn it on through the logLevel argument
+/// of OwnaudioNet.Initialize, or set LoggerLevel here before spinning up the engine.
 /// </summary>
 public static class Log
 {
@@ -25,9 +26,10 @@ public static class Log
     }
 
     /// <summary>
-    /// Anything above this level gets swallowed.
+    /// Anything above this level gets swallowed. Disabled out of the box so a host app
+    /// never gets console spam it did not ask for.
     /// </summary>
-    public static Level LoggerLevel { get; set; } = Level.Info;
+    public static Level LoggerLevel { get; set; } = Level.Disabled;
 
     private static void _write(string message, Level requiredLogLevel = Level.Info, string end = "\n")
     {

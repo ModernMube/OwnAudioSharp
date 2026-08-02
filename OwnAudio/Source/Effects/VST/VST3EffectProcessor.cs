@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Logger;
 using Ownaudio.Core;
 using OwnaudioNET.Interfaces;
 using OwnVST3Host;
@@ -30,6 +31,17 @@ namespace OwnaudioNET.Effects.VST
         private float[]? _dryBuffer;
         private int _allocatedBlockSize;
         private int _allocatedChannels;
+
+        /// <summary>
+        /// Process runs at audio rate, so a throwing plugin gets one line on the first hit and a
+        /// total on Reset/Dispose instead of a log entry per block.
+        /// </summary>
+        private int _processFaults;
+
+        /// <summary>
+        /// Latches the first-hit line above.
+        /// </summary>
+        private bool _processFaultLogged;
 
         #region IEffectProcessor properties
 
@@ -144,11 +156,14 @@ namespace OwnaudioNET.Effects.VST
                 throw new ObjectDisposedException(nameof(VST3EffectProcessor));
 
             if (!_threaded.IsReady)
+            {
+                Log.Error($"[VST3] '{_name}' cannot be initialized, the plugin is in state {_threaded.State}");
                 throw new InvalidOperationException(
                     $"VST3 plugin '{_name}' is not audio-initialized. " +
                     $"Call and await VST3PluginHost.InitializeAudioAsync(sampleRate, blockSize) " +
                     $"before adding this processor to an effect chain. " +
                     $"Current state: {_threaded.State}");
+            }
 
             _config = config ?? throw new ArgumentNullException(nameof(config));
 
@@ -158,6 +173,11 @@ namespace OwnaudioNET.Effects.VST
 
             _allocateBuffers(config.BufferSize, _channels);
             _buffersAllocated = true;
+
+            if (_pluginChannels > config.Channels)
+                Log.Warning($"[VST3] '{_name}' wants {_pluginChannels} channels but the mixer runs {config.Channels}, buffers sized to {_channels}");
+
+            Log.Info($"[VST3] Processor '{_name}' initialized: {_channels}ch, block {config.BufferSize}, {LatencySamples} samples latency");
         }
 
         #endregion
@@ -189,7 +209,15 @@ namespace OwnaudioNET.Effects.VST
                 _threaded.ProcessAudio(_planarInputBuffers!, _planarOutputBuffers!, channels, frameCount);
                 VST3BufferConverter.PlanarToInterleaved(_planarOutputBuffers!, buffer, channels, frameCount);
             }
-            catch {}
+            catch (Exception ex)
+            {
+                _processFaults++;
+                if (!_processFaultLogged)
+                {
+                    _processFaultLogged = true;
+                    Log.Error($"[VST3] '{_name}' threw while processing, its block is passed through dry", ex);
+                }
+            }
 
             if (needsDryMix)
             {
@@ -212,6 +240,7 @@ namespace OwnaudioNET.Effects.VST
         {
             if (_disposed) return;
 
+            _reportProcessFaults();
             _threaded.SetTransportState(false);
             _threaded.ResetTransportPosition();
 
@@ -299,6 +328,7 @@ namespace OwnaudioNET.Effects.VST
         {
             if (_disposed) return;
 
+            _reportProcessFaults();
             _disposed = true;
 
             _threaded.SetTransportState(false);
@@ -308,6 +338,21 @@ namespace OwnaudioNET.Effects.VST
             _planarOutputBuffers = null;
             _dryBuffer           = null;
             _buffersAllocated    = false;
+
+            Log.Info($"[VST3] Processor '{_name}' disposed");
+        }
+
+        /// <summary>
+        /// Dumps how many blocks the plugin dropped since the last report, then arms the
+        /// first-hit line again. Called off the audio path.
+        /// </summary>
+        private void _reportProcessFaults()
+        {
+            if (_processFaults == 0) return;
+
+            Log.Error($"[VST3] '{_name}' dropped {_processFaults} blocks on process failures");
+            _processFaults = 0;
+            _processFaultLogged = false;
         }
 
         #region Private helpers

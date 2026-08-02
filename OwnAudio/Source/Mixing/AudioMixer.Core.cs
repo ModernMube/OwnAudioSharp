@@ -81,6 +81,12 @@ public sealed partial class AudioMixer : IDisposable
     private int _rustSyncConsecutiveErrors;
 
     /// <summary>
+    /// Error streak for the per-track applies the tick retries every pass. Separate from the
+    /// tick's own counter because these don't abort the loop, they just must not flood the log.
+    /// </summary>
+    private int _rustApplyErrors;
+
+    /// <summary>
     /// Immutable sample rate / channels / buffer size, pinned at ctor.
     /// </summary>
     private readonly AudioConfig _config;

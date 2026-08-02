@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Logger;
 using Ownaudio.Audio.Tracks;
 using OwnaudioNET.Core;
 using OwnaudioNET.Synchronization;
@@ -114,10 +115,15 @@ public partial class FileSource : IRustNativeChainSource
                 _rustTrack = _fileTrack.Track;
                 _rustBackendAttached = false;
                 _applyControlStateToTrack();
+
+                Log.Info($"[FileSource] Standalone native backend up for '{Path.GetFileName(_path)}': "
+                    + $"{_streamInfo.SampleRate}Hz {_streamInfo.Channels}ch");
+
                 return _rustTrack;
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Error($"[FileSource] Native backend for '{_path}' failed to come up", ex);
                 _session.Dispose();
                 throw;
             }

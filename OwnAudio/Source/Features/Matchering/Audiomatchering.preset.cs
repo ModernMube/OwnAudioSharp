@@ -176,9 +176,10 @@ namespace OwnaudioNET.Features.Matchering
 
                 OwnaudioNET.Recording.WaveFile.Create(path, memoryStream.ToArray(), 48000, 2, 24);
             }
-            catch
+            catch (Exception ex)
             {
-                throw new Exception("Load error target audio data!");
+                Log.Error($"[Matchering] Embedded base sample could not be written to '{path}'", ex);
+                throw new Exception("Load error target audio data!", ex);
             }
         }
 
@@ -298,7 +299,7 @@ namespace OwnaudioNET.Features.Matchering
                     }
                     catch (Exception ex)
                     {
-                        Log.Error($"Error processing {Path.GetFileName(sourceFiles[i])}: {ex.Message}");
+                        Log.Error($"Error processing {Path.GetFileName(sourceFiles[i])}", ex);
                     }
                 }
 

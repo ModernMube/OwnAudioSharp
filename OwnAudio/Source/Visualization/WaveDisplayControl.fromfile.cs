@@ -1,3 +1,4 @@
+using Logger;
 using Ownaudio.Decoders;
 using System.Buffers;
 
@@ -13,7 +14,12 @@ namespace OwnaudioNET.Visualization
             int channels = 1, int sampleRate = 44100)
         {
             if (string.IsNullOrEmpty(filePath)) throw new ArgumentNullException(nameof(filePath));
-            if (!File.Exists(filePath)) return false;
+
+            if (!File.Exists(filePath))
+            {
+                Log.Error($"[WaveDisplay] '{filePath}' does not exist, waveform left empty");
+                return false;
+            }
 
             ResetView();
             try {
@@ -21,7 +27,7 @@ namespace OwnaudioNET.Visualization
                 return ProcessDecoderData(decoder, maxSamples);
             }
             catch (Exception ex) {
-                System.Diagnostics.Debug.WriteLine($"decoder failed: {ex.Message}");
+                Log.Error($"[WaveDisplay] Cannot decode '{filePath}', waveform left empty", ex);
                 return false;
             }
         }
@@ -43,7 +49,7 @@ namespace OwnaudioNET.Visualization
                 return ProcessDecoderData(decoder, _maxsample);
             }
             catch (Exception ex) {
-                System.Diagnostics.Debug.WriteLine($"stream decoder failed: {ex.Message}");
+                Log.Error($"[WaveDisplay] Cannot decode the {audioFormat} stream, waveform left empty", ex);
                 return false;
             }
         }

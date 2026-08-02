@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Logger;
 using OwnVST3Host;
 using OwnVST3Host.NativeWindow;
 
@@ -111,6 +112,7 @@ namespace OwnaudioNET.Effects.VST
             bool loaded = _threaded.LoadPluginAsync(pluginPath).GetAwaiter().GetResult();
             if (!loaded)
             {
+                Log.Error($"[VST3] Load refused: {pluginPath}");
                 _threaded.Dispose();
                 throw new InvalidOperationException($"Failed to load VST3 plugin: {pluginPath}");
             }
@@ -122,6 +124,8 @@ namespace OwnaudioNET.Effects.VST
             _isInstrument = _threaded.GetIsInstrumentAsync().GetAwaiter().GetResult();
 
             _hasEditor = true;
+
+            Log.Info($"[VST3] Loaded '{_name}' {_version} by {_vendor} (effect: {_isEffect}, instrument: {_isInstrument})");
         }
 
         /// <summary>
@@ -137,6 +141,7 @@ namespace OwnaudioNET.Effects.VST
             bool loaded = await threaded.LoadPluginAsync(pluginPath).ConfigureAwait(false);
             if (!loaded)
             {
+                Log.Error($"[VST3] Load refused: {pluginPath}");
                 threaded.Dispose();
                 throw new InvalidOperationException($"Failed to load VST3 plugin: {pluginPath}");
             }
@@ -147,6 +152,8 @@ namespace OwnaudioNET.Effects.VST
             bool isEffect = await threaded.GetIsEffectAsync().ConfigureAwait(false);
             bool isInstrument = await threaded.GetIsInstrumentAsync().ConfigureAwait(false);
 
+            Log.Info($"[VST3] Loaded '{name}' {version} by {vendor} (effect: {isEffect}, instrument: {isInstrument})");
+
             return new VST3PluginHost(pluginPath, threaded, name, vendor, version, isEffect, isInstrument, true);
         }
 
@@ -154,10 +161,16 @@ namespace OwnaudioNET.Effects.VST
         /// Preps the plugin for audio and flips State to Ready. Await this before GetProcessor().
         /// </summary>
         /// <param name="maxBlockSize">Biggest frame count we will ever hand it.</param>
-        public Task<bool> InitializeAudioAsync(int sampleRate, int maxBlockSize)
+        public async Task<bool> InitializeAudioAsync(int sampleRate, int maxBlockSize)
         {
             _throwIfDisposed();
-            return _threaded.InitializeAsync(sampleRate, maxBlockSize);
+
+            bool _ok = await _threaded.InitializeAsync(sampleRate, maxBlockSize).ConfigureAwait(false);
+
+            if (_ok) { Log.Info($"[VST3] '{_name}' ready for audio at {sampleRate}Hz, max block {maxBlockSize}"); }
+            else { Log.Error($"[VST3] '{_name}' refused audio init at {sampleRate}Hz, max block {maxBlockSize}"); }
+
+            return _ok;
         }
 
         /// <summary>
@@ -370,8 +383,9 @@ namespace OwnaudioNET.Effects.VST
                 string name = content.Substring(strStart, strEnd - strStart).Trim();
                 return string.IsNullOrEmpty(name) ? null : name;
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Warning($"[VST3] Bundle plist unreadable at '{plistPath}': {ex.Message}");
                 return null;
             }
         }
@@ -404,11 +418,19 @@ namespace OwnaudioNET.Effects.VST
                                 ParameterCount = wrapper.GetParameterCount()
                             });
                         }
+                        else
+                        {
+                            Log.Warning($"[VST3] Scan could not load '{path}', left out of the list");
+                        }
                     }
                 }
-                catch {}
+                catch (Exception ex)
+                {
+                    Log.Error($"[VST3] Scan of '{path}' threw, left out of the list", ex);
+                }
             }
 
+            Log.Info($"[VST3] Scan finished: {results.Count} of {paths.Count} plugins usable");
             return results;
         }
 
@@ -437,6 +459,8 @@ namespace OwnaudioNET.Effects.VST
                 await Task.Delay(200).ConfigureAwait(false);
 
             _threaded?.Dispose();
+
+            Log.Info($"[VST3] '{_name}' unloaded");
         }
 
         /// <summary>
@@ -456,6 +480,8 @@ namespace OwnaudioNET.Effects.VST
                 System.Threading.Thread.Sleep(150);
 
             _threaded?.Dispose();
+
+            Log.Info($"[VST3] '{_name}' unloaded");
         }
 
         /// <summary>

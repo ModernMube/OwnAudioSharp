@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using Logger;
 using Ownaudio.Core;
 using Ownaudio.Core.Common;
 using OwnaudioNET.Exceptions;
@@ -114,9 +115,12 @@ internal sealed class RustAudioEngine : IAudioEngine
     {
         lock (_stateLock)
         {
-            _inputStream?.Dispose();
+            if (_inputStream == null) return;
+
+            _inputStream.Dispose();
             _inputStream = null;
             _inputRing?.Clear();
+            Log.Info("[RustEngine] Capture released, session takes the device");
         }
     }
 
@@ -130,9 +134,12 @@ internal sealed class RustAudioEngine : IAudioEngine
     {
         lock (_stateLock)
         {
-            _outputStream?.Dispose();
+            if (_outputStream == null) return;
+
+            _outputStream.Dispose();
             _outputStream = null;
             _outputRing?.Clear();
+            Log.Info("[RustEngine] Playback released, session takes the device");
         }
     }
 
@@ -152,6 +159,8 @@ internal sealed class RustAudioEngine : IAudioEngine
             _outputRing ??= new LockFreeRingBuffer<float>(_ringCapacity(_config));
             _openOutputStream(_config);
             if (_running) _outputStream?.Play();
+
+            Log.Info($"[RustEngine] Playback restored on '{_selectedOutputDevice?.Name ?? "(default)"}'");
         }
     }
 
@@ -208,16 +217,22 @@ internal sealed class RustAudioEngine : IAudioEngine
                     _openOutputStream(config);
                 }
 
+                Log.Info($"[RustEngine] Initialized on {config.HostType}: {config.SampleRate}Hz {_channels}ch, "
+                    + $"out '{_selectedOutputDevice?.Name ?? "(default)"}' in '{_selectedInputDevice?.Name ?? "(none)"}', "
+                    + $"latency out/in {_outputStream?.LatencyFrames ?? 0}/{_inputStream?.LatencyFrames ?? 0} frames");
+
                 _status = EngineStatus.Idle;
                 return 0;
             }
-            catch (AudioEngineException)
+            catch (AudioEngineException ex)
             {
+                Log.Error("[RustEngine] Initialize failed", ex);
                 _disposeNative();
                 throw;
             }
             catch (Exception ex)
             {
+                Log.Error("[RustEngine] Initialize failed", ex);
                 _disposeNative();
                 _status = EngineStatus.Error;
                 throw new AudioEngineException($"Failed to initialize Rust audio engine: {ex.Message}", ex);
@@ -230,7 +245,12 @@ internal sealed class RustAudioEngine : IAudioEngine
     {
         lock (_stateLock)
         {
-            if (_disposed || _engine == null) return -1;
+            if (_disposed || _engine == null)
+            {
+                Log.Error($"[RustEngine] Start on a {(_disposed ? "disposed" : "uninitialized")} engine");
+                return -1;
+            }
+
             if (_running) return 0;
 
             try
@@ -239,10 +259,12 @@ internal sealed class RustAudioEngine : IAudioEngine
                 _inputStream?.Play();
                 _running = true;
                 _status = EngineStatus.Running;
+                Log.Info("[RustEngine] Streams playing");
                 return 0;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Log.Error("[RustEngine] Start failed, streams left in error state", ex);
                 _status = EngineStatus.Error;
                 return -1;
             }
@@ -265,10 +287,12 @@ internal sealed class RustAudioEngine : IAudioEngine
                 _outputRing?.Clear();
                 _inputRing?.Clear();
                 _status = EngineStatus.Idle;
+                Log.Info("[RustEngine] Streams paused, rings cleared");
                 return 0;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Log.Error("[RustEngine] Stop failed, streams may still be live", ex);
                 _status = EngineStatus.Error;
                 return -1;
             }
@@ -442,12 +466,24 @@ internal sealed class RustAudioEngine : IAudioEngine
     public int SetOutputDeviceByName(string deviceName)
     {
         if (string.IsNullOrEmpty(deviceName))
+        {
+            Log.Error("[RustEngine] SetOutputDeviceByName got an empty name");
             return -1;
+        }
 
         lock (_stateLock)
         {
-            if (_engine == null || !_outputEnabled || _config == null) return -1;
-            if (_running) return -1;
+            if (_engine == null || !_outputEnabled || _config == null)
+            {
+                Log.Error($"[RustEngine] Cannot pick output '{deviceName}': engine not initialized or output disabled");
+                return -1;
+            }
+
+            if (_running)
+            {
+                Log.Error($"[RustEngine] Cannot pick output '{deviceName}' while running, stop the engine first");
+                return -1;
+            }
 
             if (_isAsioHost())
                 throw _asioSwitchNotSupported(nameof(AudioConfig.OutputDeviceId));
@@ -455,10 +491,14 @@ internal sealed class RustAudioEngine : IAudioEngine
             RustSafe.AudioDevice? _device = _findDeviceByName(
                 _engine.EnumerateOutputDevices(), deviceName, preferOutput: true);
             if (_device == null)
+            {
+                Log.Error($"[RustEngine] No output device named '{deviceName}'");
                 return -1;
+            }
 
             _selectedOutputDevice = _device;
             _reopenOutputStream(_config);
+            Log.Info($"[RustEngine] Output stream reopened on '{_device.Name}'");
             return 0;
         }
     }
@@ -473,7 +513,10 @@ internal sealed class RustAudioEngine : IAudioEngine
 
             var _devices = GetOutputDevices();
             if (deviceIndex < 0 || deviceIndex >= _devices.Count)
+            {
+                Log.Error($"[RustEngine] Output device index {deviceIndex} out of range (0..{_devices.Count - 1})");
                 return -1;
+            }
 
             return SetOutputDeviceByName(_devices[deviceIndex].Name);
         }
@@ -483,12 +526,24 @@ internal sealed class RustAudioEngine : IAudioEngine
     public int SetInputDeviceByName(string deviceName)
     {
         if (string.IsNullOrEmpty(deviceName))
+        {
+            Log.Error("[RustEngine] SetInputDeviceByName got an empty name");
             return -1;
+        }
 
         lock (_stateLock)
         {
-            if (_engine == null || !_inputEnabled || _config == null) return -1;
-            if (_running) return -1;
+            if (_engine == null || !_inputEnabled || _config == null)
+            {
+                Log.Error($"[RustEngine] Cannot pick input '{deviceName}': engine not initialized or input disabled");
+                return -1;
+            }
+
+            if (_running)
+            {
+                Log.Error($"[RustEngine] Cannot pick input '{deviceName}' while running, stop the engine first");
+                return -1;
+            }
 
             if (_isAsioHost())
                 throw _asioSwitchNotSupported(nameof(AudioConfig.InputDeviceId));
@@ -496,10 +551,14 @@ internal sealed class RustAudioEngine : IAudioEngine
             RustSafe.AudioDevice? _device = _findDeviceByName(
                 _engine.EnumerateInputDevices(), deviceName, preferOutput: false);
             if (_device == null)
+            {
+                Log.Error($"[RustEngine] No input device named '{deviceName}'");
                 return -1;
+            }
 
             _selectedInputDevice = _device;
             _reopenInputStream(_config);
+            Log.Info($"[RustEngine] Input stream reopened on '{_device.Name}'");
             return 0;
         }
     }
@@ -522,7 +581,10 @@ internal sealed class RustAudioEngine : IAudioEngine
 
             var _devices = GetInputDevices();
             if (deviceIndex < 0 || deviceIndex >= _devices.Count)
+            {
+                Log.Error($"[RustEngine] Input device index {deviceIndex} out of range (0..{_devices.Count - 1})");
                 return -1;
+            }
 
             return SetInputDeviceByName(_devices[deviceIndex].Name);
         }
@@ -572,6 +634,7 @@ internal sealed class RustAudioEngine : IAudioEngine
             _disposed = true;
             _running = false;
             _disposeNative();
+            Log.Info("[RustEngine] Disposed");
         }
     }
 
@@ -638,9 +701,14 @@ internal sealed class RustAudioEngine : IAudioEngine
     /// </summary>
     private void _disposeNative()
     {
-        try { _outputStream?.Dispose(); } catch { }
-        try { _inputStream?.Dispose(); } catch { }
-        try { _engine?.Dispose(); } catch { }
+        try { _outputStream?.Dispose(); }
+        catch (Exception ex) { Log.Error("[RustEngine] Output stream dispose failed", ex); }
+
+        try { _inputStream?.Dispose(); }
+        catch (Exception ex) { Log.Error("[RustEngine] Input stream dispose failed", ex); }
+
+        try { _engine?.Dispose(); }
+        catch (Exception ex) { Log.Error("[RustEngine] Native engine dispose failed", ex); }
 
         _outputStream = null;
         _inputStream = null;

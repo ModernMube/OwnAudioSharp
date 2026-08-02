@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using Logger;
 using Ownaudio.Audio.Tracks;
 using Ownaudio.Safe;
 using OwnaudioNET.Core;
@@ -124,8 +125,9 @@ public sealed partial class AudioMixer
                 else
                     _trackChain?.Remove(Native);
             }
-            catch (Ownaudio.Safe.Exceptions.OwnAudioException)
+            catch (Ownaudio.Safe.Exceptions.OwnAudioException ex)
             {
+                Log.Warning($"[Mixer] Native effect twin stayed on its chain until the session dies: {ex.Message}");
             }
         }
 
@@ -587,7 +589,7 @@ public sealed partial class AudioMixer
                     continue;
 
                 try { _applyRustStartOffset(fs, _project); }
-                catch { }
+                catch (Exception ex) { _logRustApplyError("Start offset", fs.Id, ex); }
             }
         }
     }
@@ -649,7 +651,7 @@ public sealed partial class AudioMixer
                 if (_track is null) continue;
 
                 try { _applyChannelMap(source, _id, _track); }
-                catch { }
+                catch (Exception ex) { _logRustApplyError("Output channel map", _id, ex); }
             }
         }
     }
@@ -942,6 +944,7 @@ public sealed partial class AudioMixer
                 PollRustStreamFaultOnce();
 
                 _rustSyncConsecutiveErrors = 0;
+                _rustApplyErrors = 0;
             }
             catch (Exception ex)
             {
@@ -1014,6 +1017,8 @@ public sealed partial class AudioMixer
             ? AudioStreamFaultKind.DeviceNotAvailable
             : AudioStreamFaultKind.BackendSpecific;
 
+        Log.FatalError($"[Mixer] Native output stream faulted: {_fault} (fault #{_count})");
+
         StreamFaulted?.Invoke(this, new AudioStreamFaultEventArgs(_fault, _count));
     }
 
@@ -1036,7 +1041,7 @@ public sealed partial class AudioMixer
                     continue;
 
                 try { _applyRustStartOffset(fs, projectSeconds); }
-                catch { }
+                catch (Exception ex) { Log.Error($"[Mixer] Seek of native track '{fs.Id}' to {projectSeconds:F3}s failed", ex); }
             }
         }
     }
@@ -1053,12 +1058,17 @@ public sealed partial class AudioMixer
         RustAudioEngine? _rustEngine = _engine as RustAudioEngine;
         AudioEngine? _nativeEngine = _rustEngine?.NativeEngine;
         if (_rustEngine is null || _nativeEngine is null)
+        {
+            Log.Error("[Mixer] Rust-native output cannot open: the mixer is not sitting on a live RustAudioEngine");
             return;
+        }
 
         _rustOutputStream = _rustSession.OpenOutput(_nativeEngine, _rustEngine.SelectedOutputDevice);
         _rustLastStreamErrorCount = 0;
         _rustEngine.ReleaseOutput();
         _rustReleasedEngine = _rustEngine;
+
+        Log.Info($"[Mixer] Session output opened on '{_rustEngine.SelectedOutputDevice?.Name ?? "(default)"}'");
     }
 
     /// <summary>
@@ -1092,7 +1102,10 @@ public sealed partial class AudioMixer
                         _rustAppliedStartOffsets[fs.Id] = 0.0;
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Log.Error($"[Mixer] Track '{fs.Id}' starts misaligned, its offset could not be applied", ex);
+                }
             }
 
             _rustSession?.PlayAll();
@@ -1154,12 +1167,16 @@ public sealed partial class AudioMixer
             _rustMasterEffects.Clear();
             _rustEffectSources.Clear();
 
-            _rustSession?.Dispose();
+            try { _rustSession?.Dispose(); }
+            catch (Exception ex) { Log.Error("[Mixer] Native session dispose failed, native tracks may leak", ex); }
+
             _rustSession = null;
             _rustOutputStream = null;
 
             _rustReleasedEngine?.RestoreOutput();
             _rustReleasedEngine = null;
+
+            Log.Info("[Mixer] Native session disposed, device handed back to the engine");
         }
     }
 }

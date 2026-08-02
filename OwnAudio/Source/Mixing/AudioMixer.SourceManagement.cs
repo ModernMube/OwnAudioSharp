@@ -1,3 +1,4 @@
+using Logger;
 using Ownaudio.Core;
 using OwnaudioNET.Core;
 using OwnaudioNET.Events;
@@ -41,11 +42,17 @@ public sealed partial class AudioMixer
             source.Error += _onSourceError;
             _rebuildSourcesCache();
 
+            Log.Info($"[Mixer] Source '{source.Id}' added ({_sources.Count} total)");
+
             if (_isRunning && source.State != AudioState.Playing)
             {
                 try { source.Play(); }
-                catch {}
+                catch (Exception ex) { Log.Error($"[Mixer] Hot-swapped source '{source.Id}' failed to start", ex); }
             }
+        }
+        else
+        {
+            Log.Warning($"[Mixer] Source '{source.Id}' is already registered, add ignored");
         }
 
         return _added;
@@ -83,6 +90,12 @@ public sealed partial class AudioMixer
 
             source.Error += _onSourceError;
             _rebuildSourcesCache();
+
+            Log.Info($"[Mixer] Source '{source.Id}' added prepared ({_sources.Count} total)");
+        }
+        else
+        {
+            Log.Warning($"[Mixer] Source '{source.Id}' is already registered, add ignored");
         }
 
         return _added;
@@ -123,13 +136,15 @@ public sealed partial class AudioMixer
             _rebuildSourcesCache();
 
             try { source.Stop(); }
-            catch {}
+            catch (Exception ex) { Log.Error($"[Mixer] Source '{sourceId}' refused to stop while being removed", ex); }
 
             if (_rustNative) _detachSourceFromRustSession(source);
 
+            Log.Info($"[Mixer] Source '{sourceId}' removed ({_sources.Count} left)");
             return true;
         }
 
+        Log.Warning($"[Mixer] Remove asked for an unknown source '{sourceId}'");
         return false;
     }
 
@@ -139,6 +154,8 @@ public sealed partial class AudioMixer
     public void ClearSources()
     {
         _throwIfDisposed();
+
+        int _cleared = _sources.Count;
 
         foreach (var source in _sources.Values)
         {
@@ -152,11 +169,16 @@ public sealed partial class AudioMixer
 
                 if (_rustNative) _detachSourceFromRustSession(source);
             }
-            catch {}
+            catch (Exception ex)
+            {
+                Log.Error($"[Mixer] Detaching source '{source.Id}' failed, dropping it anyway", ex);
+            }
         }
 
         _sources.Clear();
         _rebuildSourcesCache();
+
+        if (_cleared > 0) Log.Info($"[Mixer] {_cleared} sources cleared");
     }
 
     /// <summary>
@@ -210,12 +232,17 @@ public sealed partial class AudioMixer
         }
 
         if (_count == 0 || _maxLatency == 0)
+        {
+            Log.Info($"[Mixer] Plugin delay compensation skipped: {_count} effect tracks, max latency {_maxLatency} samples");
             return;
+        }
 
         foreach (var src in _sources.Values)
         {
             if (src is SourceWithEffects swe)
                 swe.SetDelayCompensation(_maxLatency - swe.EffectLatencySamples);
         }
+
+        Log.Info($"[Mixer] Plugin delay compensation applied to {_count} tracks, aligned to {_maxLatency} samples");
     }
 }

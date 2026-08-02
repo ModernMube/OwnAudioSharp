@@ -24,8 +24,13 @@ public static class AudioEngineFactory
             throw new ArgumentNullException(nameof(config));
 
         if (!config.Validate())
+        {
+            Log.Error($"[EngineFactory] Rejected config: {config.SampleRate}Hz {config.Channels}ch, buffer {config.BufferSize}");
             throw new AudioEngineException(
                 "Invalid audio configuration. Check SampleRate, Channels, BufferSize, and Enable* flags.");
+        }
+
+        Log.Info($"[EngineFactory] Creating {GetPlatformEngineName()}: {config.SampleRate}Hz {config.Channels}ch, buffer {config.BufferSize}");
 
         IAudioEngine engine = new RustAudioEngine();
 
@@ -35,11 +40,13 @@ public static class AudioEngineFactory
 
             if (_result < 0)
             {
+                Log.Error($"[EngineFactory] Init failed with error code {_result}");
                 engine.Dispose();
                 throw new AudioEngineException(
                     $"Audio engine initialization failed with error code: {_result}", _result);
             }
 
+            Log.Info($"[EngineFactory] Engine ready, {engine.FramesPerBuffer} frames/buffer");
             return engine;
         }
         catch (AudioEngineException)
@@ -48,6 +55,7 @@ public static class AudioEngineFactory
         }
         catch (Exception ex)
         {
+            Log.Error("[EngineFactory] Engine init threw, disposing the half-built engine", ex);
             engine.Dispose();
             throw new AudioEngineException($"Failed to initialize audio engine: {ex.Message}", ex);
         }
@@ -76,11 +84,13 @@ public static class AudioEngineFactory
 
             if (_result < 0)
             {
+                Log.Error($"[EngineFactory] Mock engine init failed with error code {_result}");
                 engine.Dispose();
                 throw new AudioEngineException(
                     $"Mock engine initialization failed with error code: {_result}", _result);
             }
 
+            Log.Info($"[EngineFactory] Mock engine ready, test signal: {generateTestSignal}");
             return engine;
         }
         catch (AudioEngineException)
@@ -89,6 +99,7 @@ public static class AudioEngineFactory
         }
         catch (Exception ex)
         {
+            Log.Error("[EngineFactory] Mock engine init threw", ex);
             engine.Dispose();
             throw new AudioEngineException($"Failed to create mock audio engine: {ex.Message}", ex);
         }
@@ -105,8 +116,9 @@ public static class AudioEngineFactory
             using var probe = new RustAudioEngine();
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Warning($"[EngineFactory] Native engine not available here: {ex.GetType().Name} {ex.Message}");
             return false;
         }
     }

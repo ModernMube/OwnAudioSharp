@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using Logger;
 using Ownaudio.Core;
 
 namespace OwnaudioNET.Engine;
@@ -92,6 +93,8 @@ internal sealed class AudioPump : IDisposable
          Priority = ThreadPriority.Highest
       };
       _pumpThread.Start();
+
+      Log.Info($"[AudioPump] Thread started, {_framesPerBuffer} frames/buffer, {_sleepIntervalMs}ms idle nap");
    }
 
    /// <summary>
@@ -110,10 +113,15 @@ internal sealed class AudioPump : IDisposable
       // and a live loop still calling Send() into it is a use-after-dispose race. Never Abort().
       Thread? _thread = _pumpThread;
       if (_thread is not null && _thread != Thread.CurrentThread && _thread.IsAlive)
-         _thread.Join(TimeSpan.FromMilliseconds(timeoutMs));
+      {
+         if (!_thread.Join(TimeSpan.FromMilliseconds(timeoutMs)))
+            Log.Error($"[AudioPump] Thread did not exit within {timeoutMs}ms, engine teardown may race with it");
+      }
 
       _pumpThread = null;
       _isRunning = false;
+
+      Log.Info($"[AudioPump] Stopped, {TotalPumpedFrames} frames pumped");
    }
 
    /// <summary>
@@ -172,10 +180,11 @@ internal sealed class AudioPump : IDisposable
 
             // Don't swallow it silently, a stuck fault would otherwise throw hundreds of times a second.
             if (_errors == 1 || _errors % PumpErrorReportInterval == 0)
-               Console.Error.WriteLine($"[AudioPump] Send loop error (occurrence #{_errors}): {ex.Message}");
+               Log.Error($"[AudioPump] Send loop error (occurrence #{_errors})", ex);
 
             if (_errors >= PumpErrorFaultThreshold)
             {
+               Log.FatalError($"[AudioPump] {_errors} consecutive send errors, giving up on the pump thread", ex);
                _stopRequested = true;
                _isRunning = false;
                break;
@@ -206,7 +215,7 @@ internal sealed class AudioPump : IDisposable
       if (_isRunning)
       {
          try { Stop(); }
-         catch {}
+         catch (Exception ex) { Log.Warning($"[AudioPump] Stop during dispose failed: {ex.Message}"); }
       }
 
       _disposed = true;

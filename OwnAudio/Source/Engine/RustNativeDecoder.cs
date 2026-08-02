@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
+using Logger;
 using Ownaudio.Decoders;
 using Ownaudio.Safe;
 using CoreStreamInfo = Ownaudio.AudioStreamInfo;
@@ -39,12 +40,25 @@ internal sealed class RustNativeDecoder : IAudioDecoder
     /// <param name="targetChannels"></param>
     public RustNativeDecoder(string filePath, int targetSampleRate, int targetChannels)
     {
-        _inner = new StreamingAudioDecoder(filePath, targetSampleRate, targetChannels);
+        try
+        {
+            _inner = new StreamingAudioDecoder(filePath, targetSampleRate, targetChannels);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"[RustDecoder] Cannot open '{filePath}'", ex);
+            throw;
+        }
 
         var _info = _inner.StreamInfo;
         _channels = _info.Channels > 0 ? _info.Channels : 1;
         _sampleRate = _info.SampleRate > 0 ? _info.SampleRate : 48_000;
         StreamInfo = new CoreStreamInfo(_info.Channels, _info.SampleRate, _info.Duration, _info.BitDepth);
+
+        if (_info.Channels <= 0 || _info.SampleRate <= 0)
+            Log.Warning($"[RustDecoder] '{filePath}' reported {_info.Channels}ch {_info.SampleRate}Hz, falling back to {_channels}ch {_sampleRate}Hz");
+
+        Log.Info($"[RustDecoder] Opened '{filePath}': {_channels}ch {_sampleRate}Hz, {_info.Duration}");
     }
 
     #endregion
@@ -81,13 +95,19 @@ internal sealed class RustNativeDecoder : IAudioDecoder
             }
             catch (Exception ex)
             {
+                Log.Error("[RustDecoder] Read failed, decode stops here", ex);
                 return AudioDecoderResult.CreateError(ex.Message);
             }
 
             if (_written > 0) break;
 
             if (_inner.IsEndOfStream) return AudioDecoderResult.CreateEOF();
-            if (++_waits > MaxUnderrunWaits) return AudioDecoderResult.CreateEOF();
+            if (++_waits > MaxUnderrunWaits)
+            {
+                // Not a real EOF, the prefetch thread went quiet on us. Loud on purpose, it truncates audio.
+                Log.Error($"[RustDecoder] Prefetch stalled for {MaxUnderrunWaits}ms at {_currentPts:F0}ms, reporting EOF");
+                return AudioDecoderResult.CreateEOF();
+            }
 
             Thread.Sleep(1);
         }
@@ -115,6 +135,7 @@ internal sealed class RustNativeDecoder : IAudioDecoder
         }
         catch (Exception ex)
         {
+            Log.Error($"[RustDecoder] Seek to {position} failed", ex);
             error = ex.Message;
             return false;
         }

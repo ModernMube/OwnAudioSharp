@@ -1598,11 +1598,11 @@ namespace OwnaudioNET
         public static System.Collections.Generic.List<Ownaudio.Core.AudioDeviceInfo> GetOutputDevices() { }
         public static System.Threading.Tasks.Task<System.Collections.Generic.List<Ownaudio.Core.AudioDeviceInfo>> GetOutputDevicesAsync(System.Threading.CancellationToken cancellationToken = default) { }
         public static OwnaudioNET.Mixing.AudioMixer? GetRegisteredAudioMixer() { }
-        public static void Initialize() { }
-        public static void Initialize(Ownaudio.Core.AudioConfig config, bool useMockEngine = false, int bufferMultiplier = 8) { }
-        public static System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken = default) { }
-        public static System.Threading.Tasks.Task InitializeAsync(Ownaudio.Core.AudioConfig config, bool useMockEngine = false, int bufferMultiplier = 8, System.Threading.CancellationToken cancellationToken = default) { }
-        public static System.Threading.Tasks.Task InitializeAsync(Ownaudio.Core.IAudioEngine engine, Ownaudio.Core.AudioConfig config, int bufferMultiplier = 8, System.Threading.CancellationToken cancellationToken = default) { }
+        public static void Initialize(Logger.Log.Level logLevel = 0) { }
+        public static void Initialize(Ownaudio.Core.AudioConfig config, bool useMockEngine = false, int bufferMultiplier = 8, Logger.Log.Level logLevel = 0) { }
+        public static System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken cancellationToken = default, Logger.Log.Level logLevel = 0) { }
+        public static System.Threading.Tasks.Task InitializeAsync(Ownaudio.Core.AudioConfig config, bool useMockEngine = false, int bufferMultiplier = 8, System.Threading.CancellationToken cancellationToken = default, Logger.Log.Level logLevel = 0) { }
+        public static System.Threading.Tasks.Task InitializeAsync(Ownaudio.Core.IAudioEngine engine, Ownaudio.Core.AudioConfig config, int bufferMultiplier = 8, System.Threading.CancellationToken cancellationToken = default, Logger.Log.Level logLevel = 0) { }
         public static bool IsNetworkSyncLocalControlAllowed() { }
         public static void PauseDeviceMonitoring() { }
         public static float[]? Receive(out int sampleCount) { }

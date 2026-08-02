@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Logger;
 using OwnaudioNET.Core;
 using OwnaudioNET.Interfaces;
 using OwnaudioNET.Sources;
@@ -22,9 +23,12 @@ public sealed partial class AudioMixer
             foreach (var effect in _masterEffects)
             {
                 if (!effect.IsReady)
+                {
+                    Log.Error($"[Mixer] Start blocked, master effect '{effect.Name}' is not ready");
                     throw new InvalidOperationException(
                         $"Cannot start mixer: effect '{effect.Name}' is not ready for audio processing. " +
                         $"For VST3 effects call and await VST3PluginHost.InitializeAudioAsync() first.");
+                }
             }
         }
 
@@ -33,6 +37,8 @@ public sealed partial class AudioMixer
 
         _startRustOutput();
         _startRustSyncTick();
+
+        Log.Info($"[Mixer] Started ({(_rustNative ? "rust-native" : "managed")}), {_sources.Count} sources");
     }
 
     /// <summary>
@@ -49,6 +55,8 @@ public sealed partial class AudioMixer
 
         _isRunning = false;
         _pauseEvent.Reset();
+
+        Log.Info($"[Mixer] Paused at {_masterClock.CurrentTimestamp:F3}s");
     }
 
     /// <summary>
@@ -69,10 +77,11 @@ public sealed partial class AudioMixer
         foreach (var source in _sources.Values)
         {
             try { source.Stop(); }
-            catch {}
+            catch (Exception ex) { Log.Error($"[Mixer] Source '{source.Id}' refused to stop", ex); }
         }
 
         _isRunning = false;
+        Log.Info($"[Mixer] Stopped at {_masterClock.CurrentTimestamp:F3}s");
     }
 
     /// <summary>
@@ -88,7 +97,7 @@ public sealed partial class AudioMixer
         if (_isRunning)
         {
             try { Stop(); }
-            catch {}
+            catch (Exception ex) { Log.Error("[Mixer] Stop during dispose failed, tearing down anyway", ex); }
         }
 
         StopRecording();
@@ -101,13 +110,15 @@ public sealed partial class AudioMixer
             foreach (var effect in _masterEffects)
             {
                 try { effect?.Dispose(); }
-                catch {}
+                catch (Exception ex) { Log.Error($"[Mixer] Master effect '{effect?.Name}' dispose failed", ex); }
             }
             _masterEffects.Clear();
         }
 
         _pauseEvent?.Dispose();
         _disposed = true;
+
+        Log.Info("[Mixer] Disposed");
     }
 
     /// <summary>
@@ -125,10 +136,12 @@ public sealed partial class AudioMixer
         if (_rustNative)
         {
             SeekRustNative(positionInSeconds);
+            Log.Info($"[Mixer] Seek to {positionInSeconds:F3}s (rust-native)");
             return;
         }
 
         _masterClock.SeekTo(positionInSeconds);
+        Log.Info($"[Mixer] Seek to {positionInSeconds:F3}s");
 
         foreach (var source in _sources.Values.ToArray())
         {
@@ -154,7 +167,10 @@ public sealed partial class AudioMixer
                 source.Seek(_target);
                 source.Play();
             }
-            catch {}
+            catch (Exception ex)
+            {
+                Log.Error($"[Mixer] Reviving source '{source.Id}' at {_target:F3}s failed, it stays at end-of-stream", ex);
+            }
         }
     }
 
@@ -169,14 +185,17 @@ public sealed partial class AudioMixer
 
         _masterClock.SeekTo(startPosition);
 
+        int _started = 0;
         foreach (var source in _sources.Values.ToArray())
         {
             if (source.State != AudioState.Playing)
             {
-                try { source.Play(); }
-                catch {}
+                try { source.Play(); _started++; }
+                catch (Exception ex) { Log.Error($"[Mixer] Prepared source '{source.Id}' failed to start", ex); }
             }
         }
+
+        Log.Info($"[Mixer] {_started} prepared sources started from {startPosition:F3}s");
     }
 
     /// <summary>

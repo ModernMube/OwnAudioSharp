@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Logger;
 using Ownaudio.Core;
 using OwnaudioNET.Engine;
 using OwnaudioNET.Exceptions;
@@ -41,24 +42,39 @@ public static partial class OwnaudioNet
     public static AudioEngineWrapper? Engine => _engineWrapper;
 
     /// <summary>
-    /// One-shot init with the default cfg.
+    /// One-shot init with the default cfg. logLevel opens up the console logger, it stays quiet otherwise.
     /// </summary>
-    public static void Initialize() => Initialize(CreateDefaultConfig());
+    /// <param name="logLevel"></param>
+    public static void Initialize(Log.Level logLevel = Log.Level.Disabled) => Initialize(CreateDefaultConfig(), logLevel: logLevel);
 
     /// <summary>
     /// Init with a custom cfg. useMockEngine skips the hw (tests), bufferMultiplier
-    /// sizes the ring buffer - bump to 16 for lots of srcs/fx.
+    /// sizes the ring buffer - bump to 16 for lots of srcs/fx. logLevel turns the console
+    /// logger on, which is off unless you ask for it.
     /// </summary>
     /// <param name="config"></param>
     /// <param name="useMockEngine"></param>
     /// <param name="bufferMultiplier"></param>
-    public static void Initialize(AudioConfig config, bool useMockEngine = false, int bufferMultiplier = 8)
+    /// <param name="logLevel"></param>
+    public static void Initialize(AudioConfig config, bool useMockEngine = false, int bufferMultiplier = 8,
+        Log.Level logLevel = Log.Level.Disabled)
     {
         if(config == null) throw new ArgumentNullException(nameof(config));
+
+        Log.LoggerLevel = logLevel;
+
         lock (_initLock) {
-            if (_initialized) return;
+            if (_initialized) {
+                Log.Warning("[OwnaudioNet] Already initialized, this Initialize() call does nothing");
+                return;
+            }
+
+            Log.Info($"[OwnaudioNet] {Version} starting up on {(useMockEngine ? "mock" : "rust")} engine");
+
             _engineWrapper = new AudioEngineWrapper(_createEngine(config, useMockEngine), config, bufferMultiplier);
             _initialized = true;
+
+            Log.Info("[OwnaudioNet] Initialized");
         }
     }
 
@@ -68,7 +84,10 @@ public static partial class OwnaudioNet
     public static void Start()
     {
         lock (_initLock) {
-            if (_engineWrapper == null) throw new InvalidOperationException("call Initialize() first");
+            if (_engineWrapper == null) {
+                Log.Error("[OwnaudioNet] Transport call before Initialize()");
+                throw new InvalidOperationException("call Initialize() first");
+            }
             _engineWrapper.Start();
         }
     }
@@ -79,7 +98,10 @@ public static partial class OwnaudioNet
     public static void Stop()
     {
         lock (_initLock) {
-            if (_engineWrapper == null) throw new InvalidOperationException("call Initialize() first");
+            if (_engineWrapper == null) {
+                Log.Error("[OwnaudioNet] Transport call before Initialize()");
+                throw new InvalidOperationException("call Initialize() first");
+            }
             _engineWrapper.Stop();
         }
     }
@@ -90,9 +112,13 @@ public static partial class OwnaudioNet
     public static void Shutdown()
     {
         lock (_initLock) {
+            if (!_initialized) return;
+
             _engineWrapper?.Dispose();
             _engineWrapper = null;
             _initialized = false;
+
+            Log.Info("[OwnaudioNet] Shut down");
         }
     }
 
@@ -228,22 +254,26 @@ public static partial class OwnaudioNet
     /// Async init so the UI thread doesn't stall.
     /// </summary>
     /// <param name="cancellationToken"></param>
+    /// <param name="logLevel"></param>
     /// <returns></returns>
-    public static Task InitializeAsync(CancellationToken cancellationToken = default)
-        => InitializeAsync(CreateDefaultConfig(), cancellationToken: cancellationToken);
+    public static Task InitializeAsync(CancellationToken cancellationToken = default, Log.Level logLevel = Log.Level.Disabled)
+        => InitializeAsync(CreateDefaultConfig(), cancellationToken: cancellationToken, logLevel: logLevel);
 
     /// <summary>
-    /// Async init. useMockEngine skips the hw (tests), bufferMultiplier sizes the ring buffer.
+    /// Async init. useMockEngine skips the hw (tests), bufferMultiplier sizes the ring buffer,
+    /// logLevel opens up the otherwise silent console logger.
     /// </summary>
     /// <param name="config"></param>
     /// <param name="useMockEngine"></param>
     /// <param name="bufferMultiplier"></param>
     /// <param name="cancellationToken"></param>
+    /// <param name="logLevel"></param>
     /// <returns></returns>
-    public static Task InitializeAsync(AudioConfig config, bool useMockEngine = false, int bufferMultiplier = 8, CancellationToken cancellationToken = default)
+    public static Task InitializeAsync(AudioConfig config, bool useMockEngine = false, int bufferMultiplier = 8,
+        CancellationToken cancellationToken = default, Log.Level logLevel = Log.Level.Disabled)
     {
         if (config == null) throw new ArgumentNullException(nameof(config));
-        return Task.Run(() => Initialize(config, useMockEngine, bufferMultiplier), cancellationToken);
+        return Task.Run(() => Initialize(config, useMockEngine, bufferMultiplier, logLevel), cancellationToken);
     }
 
     /// <summary>
@@ -254,17 +284,30 @@ public static partial class OwnaudioNet
     /// <param name="config"></param>
     /// <param name="bufferMultiplier"></param>
     /// <param name="cancellationToken"></param>
+    /// <param name="logLevel"></param>
     /// <returns></returns>
-    public static Task InitializeAsync(IAudioEngine engine, AudioConfig config, int bufferMultiplier = 8, CancellationToken cancellationToken = default)
+    public static Task InitializeAsync(IAudioEngine engine, AudioConfig config, int bufferMultiplier = 8,
+        CancellationToken cancellationToken = default, Log.Level logLevel = Log.Level.Disabled)
     {
         if (engine == null) throw new ArgumentNullException(nameof(engine));
         if (config == null) throw new ArgumentNullException(nameof(config));
+
+        Log.LoggerLevel = logLevel;
+
         return Task.Run(() =>
         {
             lock (_initLock) {
-                if (_initialized) return;
+                if (_initialized) {
+                    Log.Warning("[OwnaudioNet] Already initialized, this InitializeAsync() call does nothing");
+                    return;
+                }
+
+                Log.Info($"[OwnaudioNet] {Version} starting up on a caller-supplied {engine.GetType().Name}");
+
                 _engineWrapper = new AudioEngineWrapper(engine, config, bufferMultiplier);
                 _initialized = true;
+
+                Log.Info("[OwnaudioNet] Initialized");
             }
         }, cancellationToken);
     }

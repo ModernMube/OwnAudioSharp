@@ -1,4 +1,5 @@
 using System;
+using Logger;
 using Ownaudio.Audio.Tracks;
 using OwnaudioNET.Core;
 
@@ -104,10 +105,15 @@ public sealed partial class SampleSource : IRustNativeChainSource
                 _rustTrack = _memoryTrack.Track;
                 _rustBackendAttached = false;
                 _applyControlState();
+
+                Log.Info($"[SampleSource] Standalone native backend up for '{Id}': "
+                    + $"{_config.SampleRate}Hz {_config.Channels}ch, loop {Loop}");
+
                 return _rustTrack;
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Error($"[SampleSource] Native backend for '{Id}' failed to come up", ex);
                 _session.Dispose();
                 throw;
             }

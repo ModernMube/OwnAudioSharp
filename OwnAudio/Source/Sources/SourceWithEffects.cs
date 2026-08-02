@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Threading;
+using Logger;
 using Ownaudio;
 using Ownaudio.Core;
 using OwnaudioNET.Core;
@@ -27,6 +28,17 @@ public sealed class SourceWithEffects : IAudioSource
     /// instead of allocating an array every tick. Written under _effectsLock, read lock-free.
     /// </summary>
     private int _effectsVersion;
+
+    /// <summary>
+    /// Throwing effects are counted, not logged per buffer — the read path runs at audio rate.
+    /// First hit gets a line, the rest are summed up and reported on reset/dispose.
+    /// </summary>
+    private int _effectFaults;
+
+    /// <summary>
+    /// Latches the first-hit report above.
+    /// </summary>
+    private bool _effectFaultLogged;
 
     #region Plugin Delay Compensation Fields
 
@@ -141,9 +153,12 @@ public sealed class SourceWithEffects : IAudioSource
         if (effect == null) throw new ArgumentNullException(nameof(effect));
 
         if (!effect.IsReady)
+        {
+            Log.Error($"[SourceFx] Effect '{effect.Name}' rejected on source '{Id}': not ready for audio");
             throw new InvalidOperationException(
                 $"Effect '{effect.Name}' is not ready for audio processing. " +
                 $"For VST3 effects call and await VST3PluginHost.InitializeAudioAsync() first.");
+        }
 
         lock (_effectsLock)
         {
@@ -151,6 +166,9 @@ public sealed class SourceWithEffects : IAudioSource
             _effects.Add(effect);
             _effectsChanged = true;
             _effectsVersion++;
+
+            Log.Info($"[SourceFx] '{effect.Name}' added to source '{Id}' ({_effects.Count} in chain, "
+                + $"{effect.LatencySamples} samples latency)");
         }
     }
 
@@ -170,7 +188,13 @@ public sealed class SourceWithEffects : IAudioSource
             {
                 _effectsChanged = true;
                 _effectsVersion++;
+                Log.Info($"[SourceFx] '{effect.Name}' removed from source '{Id}' ({_effects.Count} left)");
             }
+            else
+            {
+                Log.Warning($"[SourceFx] '{effect?.Name}' is not on source '{Id}', remove ignored");
+            }
+
             return _removed;
         }
     }
@@ -184,9 +208,12 @@ public sealed class SourceWithEffects : IAudioSource
 
         lock (_effectsLock)
         {
+            int _had = _effects.Count;
             _effects.Clear();
             _effectsChanged = true;
             _effectsVersion++;
+
+            if (_had > 0) Log.Info($"[SourceFx] Chain of source '{Id}' cleared ({_had} effects)");
         }
     }
 
@@ -255,6 +282,8 @@ public sealed class SourceWithEffects : IAudioSource
         }
         else
             _delayBuffer = null;
+
+        Log.Info($"[SourceFx] PDC on source '{Id}' set to {samples} frames");
     }
 
     #endregion
@@ -297,7 +326,15 @@ public sealed class SourceWithEffects : IAudioSource
             {
                 if (effect.Enabled) effect.Process(buffer, framesRead);
             }
-            catch {}
+            catch (Exception ex)
+            {
+                _effectFaults++;
+                if (!_effectFaultLogged)
+                {
+                    _effectFaultLogged = true;
+                    Log.Error($"[SourceFx] Effect '{effect.Name}' on source '{Id}' threw, its block is passed through dry", ex);
+                }
+            }
         }
 
         if (_compensationSamples > 0 && _delayBuffer != null)
@@ -366,6 +403,19 @@ public sealed class SourceWithEffects : IAudioSource
     #region Private Methods
 
     /// <summary>
+    /// Dumps how many buffers the effect chain dropped since the last report, then arms the
+    /// first-hit line again. Called off the read path.
+    /// </summary>
+    private void _reportEffectFaults()
+    {
+        if (_effectFaults == 0) return;
+
+        Log.Error($"[SourceFx] Source '{Id}' passed {_effectFaults} blocks through dry on effect failures");
+        _effectFaults = 0;
+        _effectFaultLogged = false;
+    }
+
+    /// <summary>
     /// Resets every effect and clears the PDC ring, used on Seek/Stop.
     /// </summary>
     private void _resetEffectsAndDelay()
@@ -375,9 +425,11 @@ public sealed class SourceWithEffects : IAudioSource
             foreach (var effect in _effects)
             {
                 try { effect.Reset(); }
-                catch {}
+                catch (Exception ex) { Log.Error($"[SourceFx] Effect '{effect.Name}' failed to reset, it keeps its old tail", ex); }
             }
         }
+
+        _reportEffectFaults();
 
         if (_delayBuffer != null)
         {
@@ -433,18 +485,20 @@ public sealed class SourceWithEffects : IAudioSource
     {
         if (_disposed) return;
 
+        _reportEffectFaults();
+
         lock (_effectsLock)
         {
             foreach (var effect in _effects)
             {
                 try { effect?.Dispose(); }
-                catch {}
+                catch (Exception ex) { Log.Error($"[SourceFx] Effect '{effect?.Name}' dispose failed", ex); }
             }
             _effects.Clear();
         }
 
         try { _innerSource?.Dispose(); }
-        catch {}
+        catch (Exception ex) { Log.Error($"[SourceFx] Inner source of '{Id}' failed to dispose", ex); }
 
         _disposed = true;
     }

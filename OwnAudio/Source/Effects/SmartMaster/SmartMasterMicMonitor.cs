@@ -112,7 +112,7 @@ namespace OwnaudioNET.Effects.SmartMaster
             }
             catch (Exception ex)
             {
-                Logger.Log.Error($"[SmartMaster] Microphone monitoring error: {ex.Message}");
+                Logger.Log.Error("[SmartMaster] Microphone monitoring error", ex);
                 _lastMicLevel = -100.0f;
             }
         }

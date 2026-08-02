@@ -1,3 +1,4 @@
+using Logger;
 using Ownaudio;
 using Ownaudio.Core;
 using OwnaudioNET.Core;
@@ -266,6 +267,7 @@ public sealed partial class StreamingSource : BaseAudioSource
             }
             catch (Exception ex)
             {
+                Log.Error($"[Streaming] Feed of source '{Id}' died, the pump thread quits", ex);
                 OnError(new OwnaudioNET.Events.AudioErrorEventArgs($"Streaming feed failed: {ex.Message}", ex));
                 return;
             }
@@ -350,7 +352,10 @@ public sealed partial class StreamingSource : BaseAudioSource
                 _rustTrack?.ResetFeed();
                 if (_rustNative) _rustRebaseAfterFeedReset(_target / (double)_config.SampleRate);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Log.Error($"[Streaming] Feed reset of source '{Id}' failed, it may play stale audio after the seek", ex);
+            }
         }
 
         return true;

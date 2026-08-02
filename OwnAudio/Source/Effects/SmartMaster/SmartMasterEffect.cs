@@ -296,7 +296,7 @@ namespace OwnaudioNET.Effects.SmartMaster
             }
             catch (Exception ex)
             {
-                Logger.Log.Error($"[SmartMaster] Measurement error: {ex.Message}");
+                Logger.Log.Error("[SmartMaster] Measurement error", ex);
                 _measurementStatus.Status = MeasurementStatus.Error;
                 _measurementStatus.ErrorMessage = ex.Message;
             }

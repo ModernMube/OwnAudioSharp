@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Net;
 using System.Net.Sockets;
+using Logger;
 using OwnaudioNET.Synchronization;
 
 namespace OwnaudioNET.NetworkSync;
@@ -36,6 +37,16 @@ public sealed class NetworkSyncClient : IDisposable
     private int _reconnectAttempts = 0;
     private const int MaxReconnectAttempts = 10;
     private const int ReconnectBaseDelayMs = 1000;
+
+    /// <summary>
+    /// Report the 1st receive-loop error then every Nth, the loop is too tight for anything else.
+    /// </summary>
+    private const int ReceiveErrorReportInterval = 500;
+
+    /// <summary>
+    /// Streak feeding the throttle above.
+    /// </summary>
+    private int _receiveErrors;
 
     /// <summary>
     /// Current spot in the connect/sync lifecycle.
@@ -104,10 +115,16 @@ public sealed class NetworkSyncClient : IDisposable
                 var addresses = await Dns.GetHostAddressesAsync(_serverAddress);
                 if (addresses.Length > 0)
                     _serverEndpoint = new IPEndPoint(addresses[0], _port);
+                else
+                    Log.Error($"[SyncClient] '{_serverAddress}' resolved to nothing, no ping target");
             }
 
             if (_serverEndpoint != null)
-                await _timeProvider.TrySyncAsync(_serverEndpoint);
+            {
+                var _tier = await _timeProvider.TrySyncAsync(_serverEndpoint);
+                if (_tier == LocalTimeProvider.TimeSyncTier.SystemTime)
+                    Log.Warning($"[SyncClient] Clock handshake with {_serverEndpoint} fell through to the raw system clock");
+            }
 
             _isRunning = true;
 
@@ -128,9 +145,12 @@ public sealed class NetworkSyncClient : IDisposable
             _pingThread.Start();
 
             SetConnectionState(NetworkSyncProtocol.ConnectionState.Connecting);
+
+            Log.Info($"[SyncClient] Listening on UDP {_port}, server {_serverEndpoint?.ToString() ?? "(broadcast)"}");
         }
         catch (Exception ex)
         {
+            Log.Error($"[SyncClient] Cannot start against '{_serverAddress}' on UDP {_port}", ex);
             _isRunning = false;
             SetConnectionState(NetworkSyncProtocol.ConnectionState.Disconnected);
             throw new InvalidOperationException($"Failed to start network sync client: {ex.Message}", ex);
@@ -147,7 +167,9 @@ public sealed class NetworkSyncClient : IDisposable
 
         _isRunning = false;
 
-        _receiveThread?.Join(TimeSpan.FromSeconds(2));
+        if (_receiveThread is { } _rx && !_rx.Join(TimeSpan.FromSeconds(2)))
+            Log.Error("[SyncClient] Receive thread did not exit in 2s, closing the socket under it");
+
         _pingThread?.Join(TimeSpan.FromSeconds(2));
 
         _udpClient?.Close();
@@ -184,7 +206,7 @@ public sealed class NetworkSyncClient : IDisposable
                     }
                 }
                 catch (SocketException) { CheckConnectionTimeout(); }
-                catch {}
+                catch (Exception ex) { _reportReceiveError(ex); }
             }
         }
         finally
@@ -210,8 +232,22 @@ public sealed class NetworkSyncClient : IDisposable
 
                 Thread.Sleep(5000);
             }
-            catch {}
+            catch (Exception ex)
+            {
+                Log.Error("[SyncClient] Ping failed, the latency estimate goes stale", ex);
+            }
         }
+    }
+
+    /// <summary>
+    /// Receive runs in a tight loop, so a broken socket gets the 1st-then-every-Nth treatment.
+    /// </summary>
+    /// <param name="ex"></param>
+    private void _reportReceiveError(Exception ex)
+    {
+        int _n = ++_receiveErrors;
+        if (_n == 1 || _n % ReceiveErrorReportInterval == 0)
+            Log.Error($"[SyncClient] Receive loop error (occurrence #{_n})", ex);
     }
 
     /// <summary>
@@ -315,6 +351,8 @@ public sealed class NetworkSyncClient : IDisposable
         {
             SetConnectionState(NetworkSyncProtocol.ConnectionState.Disconnected);
 
+            Log.Warning($"[SyncClient] No server message for {timeSinceLastMessage:F0}s, link considered down");
+
             if (_reconnectAttempts < MaxReconnectAttempts)
             {
                 _reconnectAttempts++;
@@ -322,6 +360,10 @@ public sealed class NetworkSyncClient : IDisposable
                 Thread.Sleep(delay);
 
                 SetConnectionState(NetworkSyncProtocol.ConnectionState.Connecting);
+            }
+            else
+            {
+                Log.Error($"[SyncClient] Gave up after {MaxReconnectAttempts} reconnect attempts, the clock runs free");
             }
         }
     }
@@ -337,6 +379,12 @@ public sealed class NetworkSyncClient : IDisposable
             return;
 
         _connectionState = newState;
+
+        if (newState == NetworkSyncProtocol.ConnectionState.Disconnected)
+            Log.Warning($"[SyncClient] {oldState} -> {newState}");
+        else
+            Log.Info($"[SyncClient] {oldState} -> {newState}");
+
         ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs(oldState, newState));
 
         if (newState == NetworkSyncProtocol.ConnectionState.Synced)

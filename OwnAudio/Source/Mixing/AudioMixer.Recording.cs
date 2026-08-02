@@ -1,3 +1,4 @@
+using Logger;
 using Ownaudio.Audio.Tracks;
 using Ownaudio.Core;
 
@@ -85,8 +86,11 @@ public sealed partial class AudioMixer
         lock (_rustSessionLock) { _session = _rustSession; }
 
         if (_session is null)
+        {
+            Log.Error($"[Recording] Cannot start '{filePath}': no native session, the mixer isn't playing yet");
             throw new InvalidOperationException(
                 "Cannot record before audio is playing. Add a source and start the mixer, then start recording.");
+        }
 
         // Grab the latency now, while the stream is live and the number is real.
         int _skipFrames = compensateInputLatency ? _engine.InputLatencyFrames : 0;
@@ -107,12 +111,20 @@ public sealed partial class AudioMixer
                 Priority = ThreadPriority.BelowNormal
             };
             _recorderDrainThread.Start();
+
+            Log.Info($"[Recording] Started '{filePath}' at {_config.SampleRate}Hz {_config.Channels}ch, "
+                + $"latency trim {_skipFrames} frames");
         }
         catch (Exception ex)
         {
+            Log.Error($"[Recording] Start of '{filePath}' failed, rolling back", ex);
+
             _recorderDrainRunning = false;
             _isRecording = false;
-            try { _session.StopCapture(); } catch { }
+
+            try { _session.StopCapture(); }
+            catch (Exception stopEx) { Log.Error("[Recording] Capture stop during rollback failed too", stopEx); }
+
             _recorder?.Dispose();
             _recorder = null;
             throw new InvalidOperationException($"Failed to start recording: {ex.Message}", ex);
@@ -134,10 +146,13 @@ public sealed partial class AudioMixer
             _recorderDrainRunning = false;
             _isRecording = false;
 
-            _recorderDrainThread?.Join(TimeSpan.FromSeconds(2));
+            if (_recorderDrainThread is { } _drain && !_drain.Join(TimeSpan.FromSeconds(2)))
+                Log.Error("[Recording] Drain thread did not finish in 2s, the tail of the take may be missing");
+
             _recorderDrainThread = null;
 
             _stopRustCaptureRecording();
+            Log.Info("[Recording] Stopped and file closed");
         }
     }
 
@@ -162,10 +177,15 @@ public sealed partial class AudioMixer
 
             _session?.StopCapture();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Log.Error("[Recording] Flushing the capture tail failed, the end of the take may be lost", ex);
+        }
         finally
         {
-            try { _recorder?.Dispose(); } catch { }
+            try { _recorder?.Dispose(); }
+            catch (Exception ex) { Log.Error("[Recording] Closing the WAV file failed, it may be corrupt", ex); }
+
             _recorder = null;
         }
     }
@@ -184,11 +204,14 @@ public sealed partial class AudioMixer
             lock (_rustSessionLock) { _session = _rustSession; }
 
             if (_session is null)
+            {
+                Log.Error("[Recording] Native session vanished under the drain thread, recording ends here");
                 break;
+            }
 
             int _read;
             try { _read = _session.ReadCapture(_drain); }
-            catch { break; }
+            catch (Exception ex) { Log.Error("[Recording] Capture read failed, drain thread quits", ex); break; }
 
             if (_read <= 0)
             {
@@ -200,8 +223,9 @@ public sealed partial class AudioMixer
             {
                 _writeCapturedSamples(_drain.AsSpan(0, _read));
             }
-            catch
+            catch (Exception ex)
             {
+                Log.FatalError("[Recording] Disk write failed, recording aborted", ex);
                 _recorderDrainRunning = false;
                 _isRecording = false;
                 break;
