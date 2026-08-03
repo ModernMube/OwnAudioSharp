@@ -3,6 +3,27 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.1 — 2026-08-03
+
+### Diagnostics
+
+- Every `catch` block in the audio package now reports through `Ownaudio.Core`'s `Log` instead of
+  discarding the exception, and the silent failure returns beside them (`-1` / `false` / `null` on
+  the device and stream paths) report the same way.
+- Initialization, teardown and parameter changes are logged across the engine, mixer, sources,
+  network sync and VST3 hosting.
+- Real-time code stays off the logger. Audio-rate handlers count their failures and emit one line
+  on the first hit plus a total on reset or dispose; control-rate and network loops report the
+  first occurrence and every Nth after it, so a stuck fault stays visible without flooding.
+
+### API
+
+- `Log.LoggerLevel` now starts at `Disabled` instead of `Info`, so the library is silent unless
+  asked otherwise.
+- `OwnaudioNet.Initialize` and `InitializeAsync` take an optional `logLevel` argument that turns
+  the console logger on. It sits last on every overload, so existing positional calls keep
+  compiling; `Log.LoggerLevel` can still be changed at any time while the API is running.
+
 ## 4.0.0 — 2026-07-27
 
 The whole audio engine was rewritten in **Rust**. Everything below the public C# API — device
