@@ -1,9 +1,10 @@
 //! FFI layer for the native BPM detector.
 //!
-//! Exposes [`ownaudio_soundtouch::BpmDetect`] — the port of the managed `BpmDetect` used by the
-//! offline chord/tempo detection — so the C# `ChordDetect` feature can drop its managed SoundTouch
-//! dependency and call the native detector instead. The detector is not real-time (it allocates in
-//! `get_bpm`), which is fine: it is driven offline on the caller's thread.
+//! Exposes [`ownaudio_soundtouch::BpmDetect`] — the tempo estimator behind the offline
+//! chord/tempo detection — so the C# `ChordDetect` feature can drop its managed SoundTouch
+//! dependency and call the native detector instead. It is driven offline on the caller's thread,
+//! and `get_bpm` folds in every window seen so far, so feed the whole track and ask once at the
+//! end rather than polling as you go.
 
 use ownaudio_soundtouch::BpmDetect;
 

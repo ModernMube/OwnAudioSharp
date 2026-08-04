@@ -6,8 +6,9 @@ using Ownaudio.Safe.Handles;
 namespace Ownaudio.Safe;
 
 /// <summary>
-/// Tempo estimator over the native detector. Offline, runs on the caller thread, same
-/// algorithm and api as the managed SoundTouch.BpmDetect it replaced.
+/// Tempo estimator over the native detector. Offline, runs on the caller thread, same api
+/// as the managed SoundTouch.BpmDetect it replaced. Feed the whole track and ask for the
+/// tempo once at the end — every window fed in has a say in the estimate.
 /// </summary>
 public sealed class BpmDetect : IDisposable
 {
@@ -49,7 +50,8 @@ public sealed class BpmDetect : IDisposable
     }
 
     /// <summary>
-    /// Estimated tempo, 0 while there is not enough data for anything reliable.
+    /// Estimated tempo, 0 while there is not enough data for anything reliable — that means
+    /// under about 4 seconds of audio, or material with no beat in it at all.
     /// </summary>
     public float GetBpm()
     {

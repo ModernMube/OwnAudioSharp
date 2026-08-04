@@ -1,24 +1,51 @@
-//! BPM detector — port of `BpmDetect.cs`.
+//! BPM detector.
 //!
 //! Spectral-flux onset detection followed by normalised-autocorrelation tempo
-//! estimation with a log-Gaussian perceptual prior.  The C# version delegates
-//! the transform to `OwnAudioFft.Forward`; to keep this crate dependency-free
-//! the FFT is implemented here as a small in-place radix-2 Cooley-Tukey routine
-//! (the window size is always 512, a power of two).
+//! estimation with a log-Gaussian perceptual prior.  To keep this crate
+//! dependency-free the FFT is implemented here as a small in-place radix-2
+//! Cooley-Tukey routine (the window size is always 512, a power of two).
+//!
+//! Two things in here are less obvious than they look:
+//!
+//! * The autocorrelation of every analysis window is *accumulated* over the whole
+//!   stream instead of only looking at the last window.  Songs tend to end in a
+//!   fade, a reverb tail or plain silence, so an estimate taken from the newest
+//!   few seconds says more about the outro than about the track.
+//! * The prior is symmetric in log-tempo, which means it flips in favour of the
+//!   half tempo above `PREFERRED_BPM * sqrt(2)` — see [`PREFERRED_BPM`].
 //!
 //! All processing buffers — including the FFT twiddle table — are allocated at
-//! construction; [`BpmDetect::input_samples`] performs no heap allocation.
+//! construction; neither [`BpmDetect::input_samples`] nor [`BpmDetect::get_bpm`]
+//! touches the heap.
 
 use std::f64::consts::PI;
 
 const FFT_SIZE: usize = 512;
-const HOP_SIZE: usize = 128;
+const HOP_SIZE: usize = 64;
 const TARGET_SAMPLE_RATE: usize = 11025;
 const MIN_BPM: f32 = 45.0;
 const MAX_BPM: f32 = 190.0;
-const PREFERRED_BPM: f32 = 120.0;
+
+/// Centre of the tempo prior.  Since the prior is symmetric in log-tempo, the point
+/// where a candidate and its half score the same weight is `PREFERRED_BPM * sqrt(2)`
+/// regardless of the sigma — above that the half tempo wins on weight alone, and a
+/// periodic onset train correlates just as well at twice its beat period.  Keep this
+/// high enough that the crossover (here 198 BPM) stays clear of [`MAX_BPM`].
+const PREFERRED_BPM: f32 = 140.0;
 const TEMPO_PRIOR_SIGMA: f32 = 0.9;
-const HISTORY_SECONDS: f32 = 8.0;
+
+/// Length of one autocorrelation window, and the shortest input worth answering for.
+const WINDOW_SECONDS: f32 = 12.0;
+const MIN_ANALYSIS_SECONDS: f32 = 4.0;
+
+/// Below this peak correlation there is no tempo to speak of (silence, noise, a
+/// single sustained chord) and [`BpmDetect::get_bpm`] reports 0 instead of guessing.
+const MIN_PEAK_CORRELATION: f32 = 0.25;
+
+/// How strong the twice-as-fast reading has to be, relative to the winning lag, to be
+/// taken instead.  Patterns accented on every other beat (kick 1 and 3, softer snare
+/// on 2 and 4) correlate best at two beats, which otherwise reads as half tempo.
+const OCTAVE_PREFERENCE: f32 = 0.85;
 
 /// A double-precision complex value (mirrors `System.Numerics.Complex`).
 #[derive(Copy, Clone, Default)]
@@ -100,18 +127,29 @@ pub struct BpmDetect {
     prev_magnitudes: Vec<f32>,
     window: Vec<f32>,
     slide_buffer: Vec<f32>,
-    onset_history: Vec<f32>,
-    xcorr_result: Vec<f32>,
+    /// Ring of onset strengths, one per hop, `window_size` long.
+    onset_window: Vec<f32>,
+    /// Mean-removed copy of the ring, laid out oldest to newest.
+    detrended: Vec<f32>,
+    /// Autocorrelation summed over every window folded in so far.
+    xcorr_sum: Vec<f32>,
+    xcorr: Vec<f32>,
+    smoothed: Vec<f32>,
 
     channels: usize,
-    history_size: usize,
+    window_size: usize,
     decimate_by: usize,
     hop_rate: f32,
+    lag_min: usize,
+    lag_max: usize,
+    min_frames: usize,
 
     slide_pos: usize,
     hop_accum: usize,
-    history_write_pos: usize,
-    history_count: usize,
+    onset_write_pos: usize,
+    onset_count: usize,
+    hops_since_fold: usize,
+    windows_folded: u32,
     decimate_count: usize,
     decimate_sum: f64,
 }
@@ -123,7 +161,14 @@ impl BpmDetect {
         let decimate_by = (sample_rate / TARGET_SAMPLE_RATE).max(1);
         let effective_sample_rate = sample_rate as f32 / decimate_by as f32;
         let hop_rate = effective_sample_rate / HOP_SIZE as f32;
-        let history_size = (HISTORY_SECONDS * effective_sample_rate / HOP_SIZE as f32) as usize;
+
+        let lag_min = ((hop_rate * 60.0 / MAX_BPM) as usize).max(1);
+        let lag_max = (hop_rate * 60.0 / MIN_BPM) as usize + 1;
+        // A window shorter than twice the slowest lag cannot show that lag at all, so both
+        // the window and the "enough data" threshold are floored there.
+        let floor = 2 * lag_max + 4;
+        let window_size = ((WINDOW_SECONDS * hop_rate) as usize).max(floor);
+        let min_frames = ((MIN_ANALYSIS_SECONDS * hop_rate) as usize).max(floor);
 
         let mut window = vec![0.0f32; FFT_SIZE];
         for (i, w) in window.iter_mut().enumerate() {
@@ -137,16 +182,24 @@ impl BpmDetect {
             prev_magnitudes: vec![0.0; FFT_SIZE / 2 + 1],
             window,
             slide_buffer: vec![0.0; FFT_SIZE],
-            onset_history: vec![0.0; history_size],
-            xcorr_result: vec![0.0; history_size / 2 + 1],
+            onset_window: vec![0.0; window_size],
+            detrended: vec![0.0; window_size],
+            xcorr_sum: vec![0.0; lag_max + 1],
+            xcorr: vec![0.0; lag_max + 1],
+            smoothed: vec![0.0; lag_max + 1],
             channels,
-            history_size,
+            window_size,
             decimate_by,
             hop_rate,
+            lag_min,
+            lag_max,
+            min_frames,
             slide_pos: 0,
             hop_accum: 0,
-            history_write_pos: 0,
-            history_count: 0,
+            onset_write_pos: 0,
+            onset_count: 0,
+            hops_since_fold: 0,
+            windows_folded: 0,
             decimate_count: 0,
             decimate_sum: 0.0,
         }
@@ -183,108 +236,106 @@ impl BpmDetect {
         }
     }
 
-    /// Returns the estimated tempo in BPM, or `0.0` if there is not yet enough
-    /// data for a reliable estimate.
+    /// Estimated tempo over everything fed in so far, or `0.0` when there is either not
+    /// enough audio (under [`MIN_ANALYSIS_SECONDS`]) or no periodicity worth reporting.
+    ///
+    /// Fair warning: sustained material with no percussive onsets at all — a held chord,
+    /// a solo pad — has no tempo to find, and what comes back for it is the strongest
+    /// ripple in the flux, not a beat.
     pub fn get_bpm(&mut self) -> f32 {
-        let count = self.history_count;
-        if count < 150 {
+        let count = self.onset_count;
+        if count < self.min_frames {
             return 0.0;
         }
 
-        let mut history = vec![0.0f32; count];
-        let start_slot = self.history_write_pos as isize - count as isize;
-
-        let mut sum_onset = 0.0f32;
-        for (i, h) in history.iter_mut().enumerate() {
-            let mut slot = start_slot + i as isize;
-            if slot < 0 {
-                slot += self.history_size as isize;
+        // Newest (possibly partial) window plus every window folded in along the way.
+        self.detrend(count);
+        let weight = self.windows_folded as f32 + 1.0;
+        let lag_max = self.lag_max;
+        {
+            let src = &self.detrended[..count];
+            for (lag, out) in self.xcorr[..=lag_max].iter_mut().enumerate() {
+                *out = (correlate(src, lag) + self.xcorr_sum[lag]) / weight;
             }
-            let val = self.onset_history[slot as usize];
-            *h = val;
-            sum_onset += val;
         }
 
-        let mean = sum_onset / count as f32;
-        for h in history.iter_mut() {
-            *h -= mean;
-        }
-
-        let hop_rate = self.hop_rate;
-        let lag_min = ((hop_rate * 60.0 / MAX_BPM) as usize).max(1);
-        let mut lag_max = ((hop_rate * 60.0 / MIN_BPM) as usize + 1).min(count / 2 - 1);
-
-        if lag_max <= lag_min {
-            return 0.0;
-        }
-        if lag_max >= self.xcorr_result.len() {
-            lag_max = self.xcorr_result.len() - 1;
-        }
-
-        for x in self.xcorr_result[..=lag_max].iter_mut() {
-            *x = 0.0;
-        }
-        for lag in 0..=lag_max {
-            let a = &history[..count - lag];
-            let b = &history[lag..count];
-            let cross = dot(a, b);
-            let energy_a = dot(a, a);
-            let energy_b = dot(b, b);
-            let denom = (energy_a * energy_b).sqrt();
-            self.xcorr_result[lag] = if denom > 1e-9 { cross / denom } else { 0.0 };
-        }
-
-        // 3-point smoothing.
-        let mut smoothed = vec![0.0f32; lag_max + 1];
-        smoothed[0] = self.xcorr_result[0];
-        smoothed[lag_max] = self.xcorr_result[lag_max];
-        #[allow(clippy::needless_range_loop)]
+        self.smoothed[0] = self.xcorr[0];
+        self.smoothed[lag_max] = self.xcorr[lag_max];
         for i in 1..lag_max {
-            smoothed[i] =
-                (self.xcorr_result[i - 1] + self.xcorr_result[i] + self.xcorr_result[i + 1]) / 3.0;
+            self.smoothed[i] = (self.xcorr[i - 1] + self.xcorr[i] + self.xcorr[i + 1]) / 3.0;
         }
 
-        // Weight by the log-Gaussian tempo prior and take the strongest lag.
-        let mut best_lag: isize = -1;
+        let mut best_lag = 0usize;
         let mut best_score = f32::NEG_INFINITY;
-        #[allow(clippy::needless_range_loop)]
-        for lag in lag_min..=lag_max {
-            let bpm_at_lag = hop_rate * 60.0 / lag as f32;
+        for lag in self.lag_min..=lag_max {
+            let bpm_at_lag = self.hop_rate * 60.0 / lag as f32;
             let log_ratio = (bpm_at_lag / PREFERRED_BPM).log2() / TEMPO_PRIOR_SIGMA;
-            let weight = (-0.5 * log_ratio * log_ratio).exp();
-            let score = smoothed[lag] * weight;
+            let score = self.smoothed[lag] * (-0.5 * log_ratio * log_ratio).exp();
             if score > best_score {
                 best_score = score;
-                best_lag = lag as isize;
+                best_lag = lag;
             }
         }
-
-        if best_lag < 0 {
+        if best_lag == 0 {
             return 0.0;
         }
-        let best_lag = best_lag as usize;
+
+        let faster = best_lag / 2;
+        if faster >= self.lag_min
+            && self.smoothed[faster] >= OCTAVE_PREFERENCE * self.smoothed[best_lag]
+        {
+            best_lag = faster;
+        }
+
+        if self.smoothed[best_lag] < MIN_PEAK_CORRELATION {
+            return 0.0;
+        }
 
         // Parabolic interpolation for sub-bin lag resolution.
         let mut peak_lag = best_lag as f32;
-        if best_lag > lag_min && best_lag < lag_max {
-            let y0 = smoothed[best_lag - 1];
-            let y1 = smoothed[best_lag];
-            let y2 = smoothed[best_lag + 1];
+        if best_lag > self.lag_min && best_lag < lag_max {
+            let y0 = self.smoothed[best_lag - 1];
+            let y1 = self.smoothed[best_lag];
+            let y2 = self.smoothed[best_lag + 1];
             let curvature = y0 - 2.0 * y1 + y2;
             if curvature.abs() > 1e-12 {
                 let delta = 0.5 * (y0 - y2) / curvature;
                 if delta > -1.0 && delta < 1.0 {
-                    peak_lag = best_lag as f32 + delta;
+                    peak_lag += delta;
                 }
             }
         }
 
-        if peak_lag < 1e-9 {
-            return 0.0;
+        (self.hop_rate * 60.0 / peak_lag).clamp(MIN_BPM, MAX_BPM)
+    }
+
+    /// Copies the newest `count` onsets out of the ring, oldest first, mean removed.
+    fn detrend(&mut self, count: usize) {
+        let start = self.onset_write_pos + self.window_size - count;
+        let mut sum = 0.0f32;
+        for i in 0..count {
+            let value = self.onset_window[(start + i) % self.window_size];
+            self.detrended[i] = value;
+            sum += value;
         }
 
-        let bpm = hop_rate * 60.0 / peak_lag;
-        bpm.clamp(MIN_BPM, MAX_BPM)
+        let mean = sum / count as f32;
+        for value in self.detrended[..count].iter_mut() {
+            *value -= mean;
+        }
+    }
+
+    /// Folds the current window's autocorrelation into the running sum, so that the whole
+    /// stream gets a say in the estimate and not just whatever was played last.
+    fn fold_window(&mut self) {
+        let count = self.window_size;
+        self.detrend(count);
+
+        let src = &self.detrended[..count];
+        for (lag, acc) in self.xcorr_sum[..=self.lag_max].iter_mut().enumerate() {
+            *acc += correlate(src, lag);
+        }
+        self.windows_folded += 1;
     }
 
     fn process_hop(&mut self) {
@@ -304,7 +355,9 @@ impl BpmDetect {
         let mut spectral_flux = 0.0f32;
         for k in 0..bins {
             let c = self.fft_buffer[k];
-            let magnitude = (c.re * c.re + c.im * c.im) as f32;
+            // magnitude, not power: squaring gives an accented beat several times the weight
+            // of the beats around it and the autocorrelation locks onto the accent period
+            let magnitude = (c.re * c.re + c.im * c.im).sqrt() as f32;
             let diff = magnitude - self.prev_magnitudes[k];
             if diff > 0.0 {
                 spectral_flux += diff;
@@ -312,12 +365,29 @@ impl BpmDetect {
             self.prev_magnitudes[k] = magnitude;
         }
 
-        self.onset_history[self.history_write_pos] = spectral_flux;
-        self.history_write_pos += 1;
-        if self.history_write_pos >= self.history_size {
-            self.history_write_pos = 0;
+        self.onset_window[self.onset_write_pos] = spectral_flux;
+        self.onset_write_pos = (self.onset_write_pos + 1) % self.window_size;
+        self.onset_count = (self.onset_count + 1).min(self.window_size);
+        self.hops_since_fold += 1;
+
+        // 50% overlap between folded windows
+        if self.onset_count == self.window_size && self.hops_since_fold >= self.window_size / 2 {
+            self.fold_window();
+            self.hops_since_fold = 0;
         }
-        self.history_count = (self.history_count + 1).min(self.history_size);
+    }
+}
+
+/// Normalised autocorrelation of `data` at `lag`, in `-1..1`.
+#[inline]
+fn correlate(data: &[f32], lag: usize) -> f32 {
+    let a = &data[..data.len() - lag];
+    let b = &data[lag..];
+    let denom = (dot(a, a) * dot(b, b)).sqrt();
+    if denom > 1e-9 {
+        dot(a, b) / denom
+    } else {
+        0.0
     }
 }
 
@@ -329,6 +399,24 @@ fn dot(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const SR: usize = 22050;
+
+    /// Click train at `bpm`, mono, `secs` long.
+    fn click_track(bpm: f32, secs: f32) -> Vec<f32> {
+        let period = 60.0 / bpm * SR as f32;
+        (0..(SR as f32 * secs) as usize)
+            .map(|i| if (i as f32 % period) < 64.0 { 1.0 } else { 0.0 })
+            .collect()
+    }
+
+    fn detect(mono: &[f32]) -> f32 {
+        let mut bpm = BpmDetect::new(1, SR);
+        for chunk in mono.chunks(4096) {
+            bpm.input_samples(chunk, chunk.len());
+        }
+        bpm.get_bpm()
+    }
 
     #[test]
     fn fft_matches_naive_dft() {
@@ -368,26 +456,40 @@ mod tests {
 
     #[test]
     fn detects_120_bpm_click_track() {
-        // Synthesise a 120 BPM click train at 44.1 kHz stereo: an impulse every
-        // 0.5 s.  The detector should land near 120 BPM (allowing octave-free
-        // tolerance from the perceptual prior).
-        let sr = 44100usize;
-        let mut bpm = BpmDetect::new(2, sr);
-        let beat_period = sr / 2; // 0.5 s → 120 BPM
-        let total = sr * 12; // 12 seconds
-        let mut block = vec![0.0f32; 2];
-        for n in 0..total {
-            let v = if n % beat_period < 64 { 1.0 } else { 0.0 };
-            block[0] = v;
-            block[1] = v;
-            bpm.input_samples(&block, 1);
+        let detected = detect(&click_track(120.0, 20.0));
+        assert!(
+            (detected - 120.0).abs() < 3.0,
+            "expected 120, got {detected}"
+        );
+    }
+
+    /// The prior used to hand everything above 170 BPM over to its half tempo.
+    #[test]
+    fn fast_tempo_is_not_halved() {
+        for truth in [174.0f32, 190.0] {
+            let detected = detect(&click_track(truth, 20.0));
+            assert!(
+                (detected - truth).abs() < 4.0,
+                "expected {truth}, got {detected}"
+            );
         }
-        let detected = bpm.get_bpm();
-        assert!(detected > 0.0, "no tempo detected");
-        // Accept the true tempo or a near octave; the prior favours 120.
-        let near = (detected - 120.0).abs() < 12.0
-            || (detected - 60.0).abs() < 8.0
-            || (detected - 90.0).abs() < 8.0;
-        assert!(near, "unexpected tempo {detected}");
+    }
+
+    /// A quiet outro must not decide the tempo of the whole track.
+    #[test]
+    fn silent_ending_does_not_hijack_the_estimate() {
+        let mut samples = click_track(150.0, 40.0);
+        samples.extend(std::iter::repeat_n(0.0, SR * 10));
+
+        let detected = detect(&samples);
+        assert!(
+            (detected - 150.0).abs() < 4.0,
+            "expected 150, got {detected}"
+        );
+    }
+
+    #[test]
+    fn no_tempo_in_silence() {
+        assert_eq!(detect(&vec![0.0f32; SR * 20]), 0.0);
     }
 }

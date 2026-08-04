@@ -3,6 +3,28 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.2 — 2026-08-04
+
+### Fixed
+
+- BPM detection was inaccurate in several ways at once. The spectral flux was computed in the
+  power domain instead of magnitude, which gave an accented beat a squared weight and locked the
+  autocorrelation onto the accent period — tempi from about 112 BPM up came back halved on
+  ordinary kick/snare material. On top of that the log-Gaussian tempo prior is symmetric, so above
+  `PREFERRED_BPM * sqrt(2)` (169.7 BPM with the old centre of 120) the half tempo won on prior
+  weight alone and everything fast was reported at half speed.
+- The estimate only ever looked at the last 8 seconds of input. Since `ChordDetect` feeds a whole
+  track and asks once at the end, the outro decided the tempo: a fade, a reverb tail or trailing
+  silence produced a confident wrong answer (silence came back as 190 BPM). Every analysis window
+  now folds into an accumulated autocorrelation, so the whole track has a say.
+- No confidence check at all, and the final `clamp` made failures look like plausible readings —
+  white noise reported 152 BPM, digital silence 190. Below a minimum peak correlation the detector
+  now returns 0, and the "enough data" threshold went from 1.7 to 4 seconds, which was also the
+  point below which slow tempi could not be represented at all and came back doubled.
+- Onset frames are twice as dense (64-sample hop instead of 128) for finer lag resolution near
+  `MAX_BPM`, and a candidate is compared against its twice-as-fast reading, so a pattern accented
+  on every other beat no longer reads as half tempo. `get_bpm` is now allocation-free as well.
+
 ## 4.0.1 — 2026-08-03
 
 ### Diagnostics
