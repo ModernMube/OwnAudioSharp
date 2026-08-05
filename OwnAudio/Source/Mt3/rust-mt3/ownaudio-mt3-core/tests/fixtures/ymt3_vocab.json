@@ -1,0 +1,57 @@
+{
+  "sample_rate": 16000,
+  "segment_seconds": 2.048,
+  "segment_samples": 32767,
+  "max_target_length": 1024,
+  "decoder_start_token": 0,
+  "special": {
+    "pad": 0,
+    "eos": 1,
+    "unk": 2
+  },
+  "shift": {
+    "offset": 3,
+    "steps": 206,
+    "steps_per_second": 100
+  },
+  "ranges": [
+    {
+      "kind": "pitch",
+      "offset": 209,
+      "min": 0,
+      "max": 127
+    },
+    {
+      "kind": "velocity",
+      "offset": 337,
+      "min": 0,
+      "max": 1
+    },
+    {
+      "kind": "tie",
+      "offset": 339,
+      "min": 0,
+      "max": 0
+    },
+    {
+      "kind": "program",
+      "offset": 340,
+      "min": 0,
+      "max": 127
+    },
+    {
+      "kind": "drum",
+      "offset": 468,
+      "min": 0,
+      "max": 127
+    }
+  ],
+  "_vocab_size": 596,
+  "_mel": {
+    "n_fft": 2048,
+    "hop_length": 128,
+    "n_mels": 512,
+    "f_min": 50.0,
+    "f_max": 8000.0
+  }
+}

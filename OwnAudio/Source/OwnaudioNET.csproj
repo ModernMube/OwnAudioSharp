@@ -8,6 +8,8 @@
     <IsAotCompatible>true</IsAotCompatible>
     <IsTrimmable>true</IsTrimmable>
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+
+    <DefaultItemExcludes>$(DefaultItemExcludes);Mt3\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <PropertyGroup>

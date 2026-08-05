@@ -1,0 +1,16 @@
+[package]
+name = "ownaudio-mt3-ffi"
+version = "1.0.0"
+edition = "2021"
+description = "C ABI FFI layer for the OwnAudioSharp MT3 transcription core"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+name = "ownaudio_mt3_ffi"
+
+[dependencies]
+ownaudio-mt3-core = { path = "../ownaudio-mt3-core" }
+
+[build-dependencies]
+cbindgen = "0.27"

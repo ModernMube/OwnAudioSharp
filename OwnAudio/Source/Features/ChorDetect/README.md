@@ -13,11 +13,12 @@ Namespace root: `OwnaudioNET.Features.OwnChordDetect`
 
 ```
 audio file(s)
-   │  AudioDecoderFactory  →  mono, 22050 Hz PCM
+   │  AudioDecoderFactory  →  mono PCM at the transcriber's PreferredSampleRate
    ▼
-Model.Predict  (note-transcription model, in Features/Extensions)
+INoteTranscriber          (BasicPitch by default, or MT3)
    ▼
-NotesConverter  →  List<Note>   (pitch, start/end time, amplitude)
+List<Note>                (pitch, start/end time, amplitude, program, isDrum)
+   │  drums dropped
    ▼
 ┌───────────────────────────────────────────────┐
 │ SongChordAnalyzer                              │
@@ -45,7 +46,10 @@ only need this class.
 | `DetectFromFiles(IReadOnlyList<string> audioFiles, float intervalSecond = 1.0f)` | Mix several files into one mono stream (peak-normalized) and analyze the mix — useful for multi-track projects. |
 | `DetectRealtime(List<Note> notes, DetectionMode mode = Optimized, int buffersize = 5)` | One step of streaming detection; returns the most stable chord and a stability score. |
 
-All three offline calls return `(List<TimedChord>, MusicalKey, int bpm)`.
+Both offline calls also take an `INoteTranscriber` overload — see
+[Transcription backends](#transcription-backends).
+
+All offline calls return `(List<TimedChord>, MusicalKey, int bpm)`.
 
 ```csharp
 var (chords, key, bpm) = ChordDetect.DetectFromFile("song.wav");
@@ -60,11 +64,39 @@ Notes:
 - `intervalSecond` is only a **fallback** window size. When BPM detection
   succeeds (`bpm > 0`), the window is derived from the tempo instead and this
   argument is ignored.
-- Decoding targets **22050 Hz mono** — the sample rate the transcription model
-  expects. Do not change this without retuning the frequency limits in
-  `NotesConvertOptions`.
+- Decoding targets whatever `INoteTranscriber.PreferredSampleRate` says — 22050 Hz
+  for BasicPitch, 16000 Hz for MT3. It is no longer hard-coded.
 - `DetectBpmFromSamples` falls back to **120 BPM** when detection fails (e.g.
   speech or non-rhythmic content).
+
+---
+
+## Transcription backends
+
+Chord analysis only ever sees a `List<Note>`, so the thing that produces those notes is
+swappable behind `INoteTranscriber` (in `Features/Extensions`).
+
+| Backend | Package | Rate | Notes |
+| --- | --- | --- | --- |
+| `BasicPitchTranscriber` | built in, `nmp.onnx` is embedded (200 KB) | 22050 | The default. Fast, pitch-only — it cannot tell instruments apart. |
+| `Mt3Transcriber` | `OwnAudioSharp.Mt3`, models supplied by you | 16000 | Transformer, labels every note with a MIDI program and marks drums. Minutes per song. |
+
+```csharp
+using var mt3 = new Mt3Transcriber(Mt3ModelPaths.FromDirectory("/models/mt3"));
+var (chords, key, bpm) = ChordDetect.DetectFromFile("song.wav", mt3);
+```
+
+MT3's four model files (~290 MB) are downloaded separately into one folder — see the
+[OwnAudioSharp.Mt3 readme](../../Mt3/README.md) for the links.
+
+Percussion is dropped before the chromagram either way — with BasicPitch there is simply
+never anything flagged as a drum, while MT3 actually finds it. That filtering is where most
+of MT3's benefit to chord detection comes from: the bass and the kick stop voting on the
+harmony.
+
+MT3 inference is entirely native. The ONNX sessions, the autoregressive decode loop with its
+KV cache, the MT3 event codec and the note state machine all live in the Rust
+`ownaudio-mt3-core` crate; the C# side just marshals samples in and notes out.
 
 ---
 
@@ -80,6 +112,8 @@ The transcription output. Immutable, sorted by start time.
 | `Pitch` | MIDI pitch 0–127 (`Pitch % 12` gives the pitch class) |
 | `Amplitude` | 0.0–1.0 |
 | `PitchBend` | optional |
+| `Program` | MIDI program; always 0 from BasicPitch, filled in by MT3 |
+| `IsDrum` | percussion flag; only MT3 ever sets it |
 
 ### `TimedChord` ([Analysis/SongChordAnalyzer.cs](Analysis/SongChordAnalyzer.cs))
 

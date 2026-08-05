@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <RootNamespace>OwnaudioNET.Features.Extensions</RootNamespace>
+
+    <DefaultItemExcludes>$(DefaultItemExcludes);rust-mt3\**;runtimes\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageOutputPath>..\..\..\artifacts\local-packages\</PackageOutputPath>
+    <PackageId>OwnAudioSharp.Mt3</PackageId>
+    <Version>4.0.2</Version>
+    <Authors>ModernMube</Authors>
+    <Description>MT3 multi-track music transcription backend for OwnAudioSharp. Adds an INoteTranscriber that separates instruments instead of collapsing them, which is what chord detection wants. The transformer runs natively in Rust on ONNX Runtime; the model weights are not included and are loaded from a path you provide. Desktop only.</Description>
+    <PackageTags>audio;transcription;mt3;midi;chord-detection;onnx;desktop</PackageTags>
+    <RepositoryUrl>https://github.com/ModernMube/OwnAudioSharp</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageCopyright>Copyright (c) 2025 ModernMube</PackageCopyright>
+    <PackageIcon>ownaudio.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\..\ownaudio.png" Pack="true" PackagePath="\" />
+    <None Include="README.md" Pack="true" PackagePath="\README.md" />
+    <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="runtimes\win-x64\**\*.*" Link="runtimes\win-x64\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes\win-x64" />
+    <None Include="runtimes\win-arm64\**\*.*" Link="runtimes\win-arm64\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes\win-arm64" />
+    <None Include="runtimes\linux-x64\**\*.*" Link="runtimes\linux-x64\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes\linux-x64" />
+    <None Include="runtimes\linux-arm64\**\*.*" Link="runtimes\linux-arm64\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes\linux-arm64" />
+    <None Include="runtimes\osx-arm64\**\*.*" Link="runtimes\osx-arm64\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="true" PackagePath="runtimes\osx-arm64" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OwnaudioNET.csproj" />
+  </ItemGroup>
+
+</Project>

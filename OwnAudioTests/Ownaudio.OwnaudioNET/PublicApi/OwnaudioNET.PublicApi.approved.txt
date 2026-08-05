@@ -923,6 +923,14 @@ namespace OwnaudioNET.Exceptions
 }
 namespace OwnaudioNET.Features.Extensions
 {
+    public sealed class BasicPitchTranscriber : OwnaudioNET.Features.Extensions.INoteTranscriber, System.IDisposable
+    {
+        public BasicPitchTranscriber() { }
+        public BasicPitchTranscriber(OwnaudioNET.Features.Extensions.NotesConvertOptions options) { }
+        public int PreferredSampleRate { get; }
+        public void Dispose() { }
+        public System.Collections.Generic.IReadOnlyList<OwnaudioNET.Features.Extensions.Note> Transcribe(float[] samples, int sampleRate, System.Action<double>? progress = null) { }
+    }
     public static class Constants
     {
         public const float ANNOTATIONS_BASE_FREQUENCY = 27.5F;
@@ -948,6 +956,11 @@ namespace OwnaudioNET.Features.Extensions
         public readonly System.IntPtr[]? Shape;
         public CustomTensor(float[]? data, System.IntPtr[]? shape) { }
         public Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<float> ToOnnxTensor() { }
+    }
+    public interface INoteTranscriber
+    {
+        int PreferredSampleRate { get; }
+        System.Collections.Generic.IReadOnlyList<OwnaudioNET.Features.Extensions.Note> Transcribe(float[] samples, int sampleRate, System.Action<double>? progress = null);
     }
     public class MathTool
     {
@@ -991,10 +1004,13 @@ namespace OwnaudioNET.Features.Extensions
     {
         public readonly float Amplitude;
         public readonly float EndTime;
+        public readonly bool IsDrum;
         public readonly int Pitch;
         public float[]? PitchBend;
+        public readonly int Program;
         public readonly float StartTime;
         public Note(float startTime, float endTime, int pitch, float amplitude, float[]? pitchBend) { }
+        public Note(float startTime, float endTime, int pitch, float amplitude, float[]? pitchBend, int program, bool isDrum) { }
         public int CompareTo(OwnaudioNET.Features.Extensions.Note? other) { }
         public override string ToString() { }
     }
@@ -1195,7 +1211,9 @@ namespace OwnaudioNET.Features.OwnChordDetect
     public static class ChordDetect
     {
         public static System.ValueTuple<System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord>, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey, int> DetectFromFile(string audioFile, float intervalSecond = 1) { }
+        public static System.ValueTuple<System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord>, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey, int> DetectFromFile(string audioFile, OwnaudioNET.Features.Extensions.INoteTranscriber transcriber, float intervalSecond = 1) { }
         public static System.ValueTuple<System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord>, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey, int> DetectFromFiles(System.Collections.Generic.IReadOnlyList<string> audioFiles, float intervalSecond = 1) { }
+        public static System.ValueTuple<System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord>, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey, int> DetectFromFiles(System.Collections.Generic.IReadOnlyList<string> audioFiles, OwnaudioNET.Features.Extensions.INoteTranscriber transcriber, float intervalSecond = 1) { }
         [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
                 "chord",
                 "stability"})]

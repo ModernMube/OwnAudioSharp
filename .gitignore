@@ -441,3 +441,9 @@ FodyWeavers.xsd
 
 # Rider project structure cache files
 *.lscache
+
+# MT3 export scripts — local tooling, needs a GPL YourMT3 checkout to run
+/tools/
+
+# MT3 natives are built by CI into the nupkg, never committed (26 MB per platform)
+/OwnAudio/Source/Mt3/runtimes/

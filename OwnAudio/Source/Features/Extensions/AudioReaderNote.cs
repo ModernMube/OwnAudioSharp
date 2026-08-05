@@ -480,15 +480,34 @@ public sealed class Note : IComparable<Note>
     public float[]? PitchBend;
 
     /// <summary>
+    /// MIDI program the note was played on. Always 0 from BasicPitch, which can't tell
+    /// instruments apart — only MT3 fills this in.
+    /// </summary>
+    public readonly int Program;
+
+    /// <summary>
+    /// Percussion hit rather than a pitched note. Chord analysis wants these gone.
+    /// </summary>
+    public readonly bool IsDrum;
+
+    /// <summary>
     /// Fills everything in one go.
     /// </summary>
     public Note(float startTime, float endTime, int pitch, float amplitude, float[]? pitchBend)
+        : this(startTime, endTime, pitch, amplitude, pitchBend, 0, false) { }
+
+    /// <summary>
+    /// Same plus the instrument labels a multi-track transcriber gives us.
+    /// </summary>
+    public Note(float startTime, float endTime, int pitch, float amplitude, float[]? pitchBend, int program, bool isDrum)
     {
         StartTime = startTime;
         EndTime = endTime;
         Pitch = pitch;
         Amplitude = amplitude;
         PitchBend = pitchBend;
+        Program = program;
+        IsDrum = isDrum;
     }
 
     /// <summary>

@@ -1,0 +1,28 @@
+[package]
+name = "ownaudio-mt3-core"
+version = "1.0.0"
+edition = "2021"
+description = "MT3 music transcription core for OwnAudioSharp (ONNX Runtime, audio in - notes out)"
+license = "MIT"
+
+[lib]
+crate-type = ["lib"]
+
+[features]
+# Inference needs ONNX Runtime, which is a heavy native dependency. The token codec and the
+# note state machine build and test without it, so CI can check those on every platform.
+default = ["inference"]
+inference = ["dep:ort"]
+
+[dependencies]
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
+rubato = { version = "0.15", features = ["fft_resampler"] }
+
+ort = { version = "2.0.0-rc.13", optional = true, default-features = false, features = [
+    "std",
+    "download-binaries",
+    "tls-rustls",
+] }

@@ -23,16 +23,16 @@
   <div class="sidebar-section"><span class="sidebar-label">High-Level API</span><ul class="sidebar-nav"><li><a href="api-core.html">OwnaudioNet</a></li><li><a href="api-core.html#logging" class="sub">Logging</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-mixer.html">AudioMixer</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Audio Sources</span><ul class="sidebar-nav"><li><a href="api-sources.html">Source Overview</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#streamingsource" class="sub">StreamingSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#sourcewitheffects" class="sub">SourceWithEffects</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel Routing</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Processing</span><ul class="sidebar-nav"><li><a href="api-sync.html">Synchronization</a></li><li><a href="api-effects.html">Built-in Effects</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 Plugins</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#mt3" class="sub">MT3 Transcription</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">MIDI</span><ul class="sidebar-nav"><li><a href="api-midi.html">MIDI Overview</a></li><li><a href="api-midi.html#port-management" class="sub">Port Management</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI File</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI Clock</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Reference</span><ul class="sidebar-nav"><li><a href="api-reference.html">Events &amp; Types</a></li><li><a href="api-reference.html#architecture" class="sub">Architecture</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#best-practices" class="sub">Best Practices</a></li></ul></div>
 </nav>
 <main class="main">
 
 <h1 class="page-title">Analysis &amp; Mastering</h1>
-<p class="page-subtitle">Real-time musical analysis and reference-based mastering, plus the optional vocal-separation add-on.</p>
+<p class="page-subtitle">Real-time musical analysis and reference-based mastering, plus the optional vocal-separation and MT3 transcription add-ons.</p>
 
-<div class="callout callout-info"><div class="callout-icon">🧠</div><p><strong>Chord Detection</strong> ships only in the full <span class="pkg-badge pkg-full">OwnAudioSharp</span> package. <strong>Audio Matchering</strong> is in <code>OwnAudioSharp.Mobile</code> too, but neither is in <code>OwnAudioSharp.Basic</code>, which is a playback/recording engine only. <strong>Vocal separation</strong> now lives in its own <span class="pkg-badge pkg-addon">OwnVocalRemover</span> add-on package — reference it only when you need it.</p></div>
+<div class="callout callout-info"><div class="callout-icon">🧠</div><p><strong>Chord Detection</strong> ships only in the full <span class="pkg-badge pkg-full">OwnAudioSharp</span> package. <strong>Audio Matchering</strong> is in <code>OwnAudioSharp.Mobile</code> too, but neither is in <code>OwnAudioSharp.Basic</code>, which is a playback/recording engine only. <strong>Vocal separation</strong> and <strong>MT3 transcription</strong> live in their own add-on packages — <span class="pkg-badge pkg-addon">OwnVocalRemover</span> and <span class="pkg-badge pkg-addon">OwnAudioSharp.Mt3</span> — reference them only when you need them.</p></div>
 
 <!-- Vocal Remover -->
 <h2 id="vocal-remover">Vocal Remover <span class="pkg-badge pkg-addon">OwnVocalRemover</span></h2>
@@ -103,12 +103,12 @@ Console.WriteLine(result.InstrumentalPath); // path to instrumental-only file</c
 
 <!-- Chord Detection -->
 <h2 id="chord-detection">Chord Detection</h2>
-<p>Detects musical chords, key, and tempo from audio files. Namespace: <code>OwnaudioNET.Features</code></p>
+<p>Detects musical chords, key, and tempo from audio files. Namespace: <code>OwnaudioNET.Features.OwnChordDetect</code></p>
 
 <div class="code-block"><div class="code-header"><span>C# — From a file</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var (chords, key, bpm) = ChordDetect.DetectFromFile("song.mp3", intervalSecond: 1.0f);
 
 foreach (var chord in chords)
-    Console.WriteLine($"{chord.TimeSeconds:F1}s  {chord.ChordName}");
+    Console.WriteLine($"{chord.StartTime:F1}s-{chord.EndTime:F1}s  {chord.ChordName} ({chord.Confidence:F2})");
 
 Console.WriteLine($"Key: {key}  BPM: {bpm}");</code></pre></div>
 
@@ -117,26 +117,129 @@ var (chords, key, bpm) = ChordDetect.DetectFromFiles(
     new[] { "guitar.wav", "piano.wav" },
     intervalSecond: 0.5f);</code></pre></div>
 
-<div class="code-block"><div class="code-header"><span>C# — Real-time detection</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Continuous detection from an active note stream
+<div class="code-block"><div class="code-header"><span>C# — Real-time detection</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Continuous detection from an active note stream. The detector is kept between
+// calls on purpose — a fresh one every frame would wipe the stability history.
 var (chord, stability) = ChordDetect.DetectRealtime(
     notes,                   // List&lt;Note&gt;
-    DetectionMode.Standard,
-    bufferSize: 4096);
+    DetectionMode.Optimized,
+    buffersize: 5);          // how many recent frames vote on the answer
 
-Console.WriteLine($"Chord: {chord}  Stability: {stability:P0}");</code></pre></div>
+if (stability > 0.6f)
+    Console.WriteLine($"Chord: {chord}  Stability: {stability:P0}");</code></pre></div>
+
+<p><code>intervalSecond</code> is only a <strong>fallback</strong> window size. When tempo detection succeeds the window is derived from the BPM instead (quarter note below 100 BPM, half note up to 150, whole note above) and the argument is ignored.</p>
 
 <h3>Return Types</h3>
 <div class="table-wrap"><table class="prop-table">
   <thead><tr><th>Member</th><th>Type</th><th>Description</th></tr></thead>
   <tbody>
-    <tr><td><code>chords</code></td><td><code>List&lt;TimedChord&gt;</code></td><td>List of chords with timestamps.</td></tr>
-    <tr><td><code>TimedChord.TimeSeconds</code></td><td><code>double</code></td><td>Timestamp in seconds.</td></tr>
-    <tr><td><code>TimedChord.ChordName</code></td><td><code>string</code></td><td>Chord name (e.g. <code>"Cmaj"</code>, <code>"Am7"</code>).</td></tr>
-    <tr><td><code>key</code></td><td><code>MusicalKey</code></td><td>Detected musical key.</td></tr>
-    <tr><td><code>bpm</code></td><td><code>int</code></td><td>Detected tempo in BPM.</td></tr>
-    <tr><td><code>stability</code></td><td><code>float</code></td><td>Real-time detection confidence (0.0–1.0).</td></tr>
+    <tr><td><code>chords</code></td><td><code>List&lt;TimedChord&gt;</code></td><td>Chord progression on the timeline.</td></tr>
+    <tr><td><code>TimedChord.StartTime</code> / <code>EndTime</code></td><td><code>float</code></td><td>Chord span in seconds.</td></tr>
+    <tr><td><code>TimedChord.ChordName</code></td><td><code>string</code></td><td>Chord name (e.g. <code>"Cmaj"</code>, <code>"Am7"</code>). <code>"N"</code> means silence, <code>"Unknown"</code> means nothing cleared the confidence threshold.</td></tr>
+    <tr><td><code>TimedChord.Confidence</code></td><td><code>float</code></td><td>Cosine similarity against the chord template, 0.0–1.0.</td></tr>
+    <tr><td><code>TimedChord.Notes</code></td><td><code>string[]</code></td><td>Constituent note names, spelled to fit the key.</td></tr>
+    <tr><td><code>key</code></td><td><code>MusicalKey</code></td><td>Detected musical key (Krumhansl–Schmuckler).</td></tr>
+    <tr><td><code>bpm</code></td><td><code>int</code></td><td>Detected tempo in BPM. Falls back to 120 when detection fails.</td></tr>
+    <tr><td><code>stability</code></td><td><code>float</code></td><td>Real-time agreement across the rolling buffer, 0.0–1.0.</td></tr>
   </tbody>
 </table></div>
+
+<h3 id="transcription-backends">Transcription backends</h3>
+<p>Chord analysis never touches audio directly — it works from a <code>List&lt;Note&gt;</code>. Whatever produces those notes sits behind <code>INoteTranscriber</code>, so it can be swapped:</p>
+
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Backend</th><th>Package</th><th>Rate</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>BasicPitchTranscriber</code></td><td>built in (model embedded, ~200 KB)</td><td>22050 Hz</td><td>The default. Fast, but pitch-only — it cannot tell instruments apart.</td></tr>
+    <tr><td><code>Mt3Transcriber</code></td><td><span class="pkg-badge pkg-addon">OwnAudioSharp.Mt3</span>, models supplied by you</td><td>16000 Hz</td><td>Transformer. Labels every note with a MIDI program and flags drums. Roughly 4× realtime on CPU.</td></tr>
+  </tbody>
+</table></div>
+
+<p>Every offline entry point takes an optional transcriber. Audio is decoded straight into whatever sample rate that backend asks for.</p>
+
+<div class="code-block"><div class="code-header"><span>C# — Choosing a backend</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Default — identical to the calls above
+var (chords, key, bpm) = ChordDetect.DetectFromFile("song.mp3");
+
+// MT3 instead
+using var mt3 = new Mt3Transcriber(Mt3ModelPaths.FromDirectory("/models/mt3"));
+var (chords2, key2, bpm2) = ChordDetect.DetectFromFile("song.mp3", mt3);</code></pre></div>
+
+<h3>Note</h3>
+<p>The transcription output, in <code>OwnaudioNET.Features.Extensions</code>. Sorted by start time.</p>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>StartTime</code> / <code>EndTime</code></td><td><code>float</code></td><td>Seconds.</td></tr>
+    <tr><td><code>Pitch</code></td><td><code>int</code></td><td>MIDI pitch 0–127. <code>Pitch % 12</code> gives the pitch class.</td></tr>
+    <tr><td><code>Amplitude</code></td><td><code>float</code></td><td>0.0–1.0.</td></tr>
+    <tr><td><code>PitchBend</code></td><td><code>float[]?</code></td><td>Optional bend curve.</td></tr>
+    <tr><td><code>Program</code></td><td><code>int</code></td><td>MIDI program the note was played on. Always <code>0</code> from BasicPitch — only MT3 fills it in.</td></tr>
+    <tr><td><code>IsDrum</code></td><td><code>bool</code></td><td>Percussion hit. Only MT3 ever sets it; drums are dropped before chord analysis either way.</td></tr>
+  </tbody>
+</table></div>
+
+<!-- MT3 -->
+<h2 id="mt3">MT3 Transcription <span class="pkg-badge pkg-addon">OwnAudioSharp.Mt3</span></h2>
+<p>Multi-track music transcription. Where BasicPitch hears <em>pitches</em>, MT3 hears <em>instruments</em>: a sequence-to-sequence transformer that emits MIDI-like events with a program number attached, so a bass line and a piano voicing stay separate instead of collapsing into one smear on the chromagram. For chord detection that separation is usually worth more than the extra pitch accuracy.</p>
+
+<div class="callout callout-info"><div class="callout-icon">📦</div><p>Add it with <code>dotnet add package OwnAudioSharp.Mt3</code>. Separate package on purpose: ONNX Runtime is linked into the native library and costs about 26 MB per platform. Desktop only — win-x64, win-arm64, linux-x64, linux-arm64 and osx-arm64. Intel Macs are not covered: there is no prebuilt ONNX Runtime for <code>x86_64-apple-darwin</code>. The rest of OwnAudioSharp still runs there.</p></div>
+
+<h3 id="mt3-models">Getting the model files</h3>
+<p><strong>The model weights are not in the package</strong> — they are about 290 MB, far too much to put in everyone's NuGet download. Grab the four files below, <strong>put them all in one folder</strong>, and hand that folder's path to <code>Mt3ModelPaths.FromDirectory()</code>. Keep the file names as they are; that is what the helper looks for.</p>
+
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>File</th><th>Size</th><th>Download</th></tr></thead>
+  <tbody>
+    <tr><td><code>mt3_encoder.onnx</code></td><td>92 MB</td><td><a href="https://huggingface.co/ModernMube/HTDemucs_onnx/resolve/main/mt3-onnx/mt3_encoder.onnx?download=true">Hugging Face</a></td></tr>
+    <tr><td><code>mt3_decoder_init.onnx</code></td><td>101 MB</td><td><a href="https://huggingface.co/ModernMube/HTDemucs_onnx/resolve/main/mt3-onnx/mt3_decoder_init.onnx?download=true">Hugging Face</a></td></tr>
+    <tr><td><code>mt3_decoder_step.onnx</code></td><td>89 MB</td><td><a href="https://huggingface.co/ModernMube/HTDemucs_onnx/resolve/main/mt3-onnx/mt3_decoder_step.onnx?download=true">Hugging Face</a></td></tr>
+    <tr><td><code>vocab.json</code></td><td>&lt; 1 KB</td><td><a href="https://huggingface.co/ModernMube/HTDemucs_onnx/resolve/main/mt3-onnx/vocab.json?download=true">Hugging Face</a></td></tr>
+  </tbody>
+</table></div>
+
+<div class="code-block"><div class="code-header"><span>Shell — Download all four into one folder</span><button class="copy-btn">Copy</button></div><pre><code class="language-bash">mkdir -p ~/models/mt3 &amp;&amp; cd ~/models/mt3
+
+BASE=https://huggingface.co/ModernMube/HTDemucs_onnx/resolve/main/mt3-onnx
+for f in mt3_encoder.onnx mt3_decoder_init.onnx mt3_decoder_step.onnx vocab.json; do
+  curl -L -o "$f" "$BASE/$f?download=true"
+done</code></pre></div>
+
+<div class="code-block"><div class="code-header"><span>C# — Point the transcriber at that folder</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// The folder you downloaded the four files into
+using var transcriber = new Mt3Transcriber(
+    Mt3ModelPaths.FromDirectory("/Users/me/models/mt3"));</code></pre></div>
+
+<p>If you would rather export your own weights from a different MT3-family checkpoint, the export scripts live in <code>tools/mt3/</code> in the repository and produce exactly these four files. Mind the checkpoint's own licence in that case — YourMT3, the usual source of PyTorch MT3 weights, is GPL-3.0. This package contains none of its code and only reads exported weights at runtime, but what you may ship alongside those weights is between you and that licence.</p>
+
+<div class="code-block"><div class="code-header"><span>C# — Chord detection with MT3</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using var transcriber = new Mt3Transcriber(
+    Mt3ModelPaths.FromDirectory("/models/mt3"),
+    threads: 0,        // 0 lets ONNX Runtime decide
+    skipDrums: true);  // drops percussion natively
+
+var (chords, key, bpm) = ChordDetect.DetectFromFile("song.wav", transcriber);</code></pre></div>
+
+<div class="code-block"><div class="code-header"><span>C# — Straight to notes</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">float[] samples = /* mono PCM at transcriber.PreferredSampleRate */;
+
+var notes = transcriber.Transcribe(samples, transcriber.PreferredSampleRate,
+    progress => Console.Write($"\r{progress:P0}"));
+
+foreach (var n in notes.Where(n =&gt; !n.IsDrum))
+    Console.WriteLine($"{n.StartTime:F2}s  pitch {n.Pitch}  program {n.Program}");</code></pre></div>
+
+<h3>Mt3ModelPaths</h3>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Member</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>Encoder</code></td><td><code>string</code></td><td>Encoder graph. Raw audio in — the mel spectrogram is baked into the graph.</td></tr>
+    <tr><td><code>DecoderInit</code></td><td><code>string</code></td><td>First decoder step, priming the KV cache.</td></tr>
+    <tr><td><code>DecoderStep</code></td><td><code>string</code></td><td>Every step after, consuming the cache.</td></tr>
+    <tr><td><code>Vocab</code></td><td><code>string</code></td><td>Token codec layout, dumped from the same checkpoint.</td></tr>
+    <tr><td><code>FromDirectory(string)</code></td><td><code>Mt3ModelPaths</code></td><td>Picks all four out of a folder holding an export.</td></tr>
+  </tbody>
+</table></div>
+
+<div class="callout callout-warning"><div class="callout-icon">⏱️</div><p>MT3 decodes autoregressively — up to a thousand tokens per two seconds of audio. Even with the KV cache the native side keeps, a full song is <strong>minutes of CPU work, not seconds</strong>. Run it offline, off the UI thread, and use the progress callback. All four files must come from the same export run — do not mix files from different sources, because a vocabulary paired with a decoder it was not dumped from produces confident nonsense rather than an error.</p></div>
+
+<p>Everything below the C# surface is Rust — the ONNX sessions, the greedy decode loop, the MT3 event codec and the note state machine all live in <code>ownaudio_mt3_ffi</code>. The managed side only marshals a float buffer in and a note array out.</p>
 
 <!-- Matchering -->
 <h2 id="matchering">Auto-Mastering (Matchering)</h2>

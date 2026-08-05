@@ -48,7 +48,7 @@ Decoding is pure Rust too — no external codecs, no FFmpeg, no system dependenc
 | MIDI | Hardware I/O, SMF file read/write, hardware-accurate clock |
 | Network | Sample-accurate multi-device sync over LAN |
 | Mastering | Reference-based mastering (Audio Matchering) |
-| Analysis | Real-time chord detection |
+| Analysis | Real-time chord detection, MT3 multi-instrument transcription |
 | Calibration | SmartMaster speaker calibration with automatic EQ correction |
 
 **Recommended for:** music players and DAWs, DJ software, music-education tools, broadcast and podcast pipelines, live-performance apps, and low-latency game audio.
@@ -61,6 +61,7 @@ Decoding is pure Rust too — no external codecs, no FFmpeg, no system dependenc
 dotnet add package OwnAudioSharp          # Desktop — everything
 dotnet add package OwnAudioSharp.Mobile   # Android / iOS
 dotnet add package OwnAudioSharp.Basic    # Desktop — minimal engine
+dotnet add package OwnAudioSharp.Mt3      # Optional — MT3 transcription
 ```
 
 | Package | Platforms | What it is |
@@ -68,6 +69,7 @@ dotnet add package OwnAudioSharp.Basic    # Desktop — minimal engine
 | `OwnAudioSharp` | Windows, Linux, macOS | The complete edition. Playback, recording, mixing, effects, VST3 and MIDI, plus the analysis features (chord detection, note transcription, matchering) and the waveform display. |
 | `OwnAudioSharp.Mobile` | Android, iOS | The same feature set built for mobile, including matchering and the waveform display — minus the ONNX-based analysis (no chord detection, no note transcription). |
 | `OwnAudioSharp.Basic` | Windows, Linux, macOS | Audio in and out, and nothing that could be left out. Playback, recording, mixing, effects and VST3 — no analysis features, no ONNX models, no UI dependency. |
+| `OwnAudioSharp.Mt3` | Windows, Linux, macOS (ARM) | Optional add-on. Swaps the note transcriber behind chord detection for MT3, which labels every note with its instrument. Separate package because ONNX Runtime costs ~26 MB per platform. |
 
 **Requirement:** .NET 10.0 or later. The native Rust engine — including the audio decoder — is bundled in the package. There is nothing else to install and no external codecs to configure.
 
@@ -153,7 +155,33 @@ Analyzes a reference track and applies its spectral and dynamic characteristics 
 ### Chord Detection — Real-Time Musical Analysis
 Recognizes major, minor, diminished, augmented and extended chords (7th–13th) from audio in real time or offline, using a chromagram-based pipeline.
 
+The notes feeding that pipeline now come from a swappable `INoteTranscriber`. The built-in BasicPitch model stays the default and needs no setup; MT3 is the alternative:
+
+```csharp
+var (chords, key, bpm) = ChordDetect.DetectFromFile("song.mp3");   // BasicPitch, as before
+
+using var mt3 = new Mt3Transcriber(Mt3ModelPaths.FromDirectory("/models/mt3"));
+var (chords2, key2, bpm2) = ChordDetect.DetectFromFile("song.mp3", mt3);
+```
+
 > Full guide: [OwnAudio/Source/Features/ChorDetect/README.md](OwnAudio/Source/Features/ChorDetect/README.md)
+
+### MT3 — Multi-Instrument Transcription
+Where BasicPitch hears *pitches*, MT3 hears *instruments*. It is a sequence-to-sequence transformer that emits MIDI-like events with a program number attached, so a bass line and a piano voicing stay separate instead of collapsing into one smear on the chromagram — which is most of what it buys chord detection. Every note comes back with a `Program` and an `IsDrum` flag.
+
+Inference is entirely native: the ONNX sessions, the autoregressive decode loop with its KV cache, the MT3 event codec and the note state machine all live in Rust. Roughly 4× realtime on CPU, so a full song is about a minute of work — run it offline, not on a UI thread.
+
+**The model weights are not in the package** (~290 MB). Download the four files into one folder and pass that folder's path:
+
+```bash
+mkdir -p ~/models/mt3 && cd ~/models/mt3
+BASE=https://huggingface.co/ModernMube/HTDemucs_onnx/resolve/main/mt3-onnx
+for f in mt3_encoder.onnx mt3_decoder_init.onnx mt3_decoder_step.onnx vocab.json; do
+  curl -L -o "$f" "$BASE/$f?download=true"
+done
+```
+
+> Full guide: [OwnAudio/Source/Mt3/README.md](OwnAudio/Source/Mt3/README.md)
 
 ### MIDI — Hardware I/O, Files, and Clock
 
@@ -193,6 +221,8 @@ Application
 - **[Ownaudio.Core](OwnAudioEngine/Ownaudio.Core/README.md)** — platform-agnostic interfaces, lock-free ring buffers, SIMD converters and object pools.
 - **OwnAudioRust** — the C# binding stack over the Rust core, in three layers: **[HighLevel](OwnAudioEngine/OwnAudioRust/HighLevel/README.md)** → **[Safe](OwnAudioEngine/OwnAudioRust/Safe/README.md)** → **[Native](OwnAudioEngine/OwnAudioRust/Native/README.md)**.
 - **Native Rust engine** — **[ownaudio-ffi](OwnAudioEngineRust/ownaudio-ffi/README.md)** (the C ABI boundary) wrapping **[ownaudio-core](OwnAudioEngineRust/ownaudio-core/README.md)** (decoding, mixing, effects, resampling, playback and capture).
+
+MIDI and MT3 follow the same shape in their own workspaces — `ownaudio-midi-ffi` and `ownaudio-mt3-ffi` ship as separate native libraries so the audio engine never has to carry MIDI backends or ONNX Runtime.
 
 All blocking engine methods (`Initialize`, `Stop`, `Send`) must be called off the UI thread. The high-level `OwnaudioNet` API handles threading internally.
 

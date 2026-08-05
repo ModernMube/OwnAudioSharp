@@ -21,15 +21,33 @@ public static class ChordDetect
     /// </summary>
     public static (List<TimedChord>, MusicalKey, int) DetectFromFile(string audioFile, float intervalSecond = 1.0f)
     {
+        using (var transcriber = new BasicPitchTranscriber())
+        {
+            return DetectFromFile(audioFile, transcriber, intervalSecond);
+        }
+    }
+
+    /// <summary>
+    /// Same, with the transcriber of your choice — BasicPitch by default, or an
+    /// <see cref="Mt3Transcriber"/> if you have the models. The audio is decoded straight into
+    /// whatever rate the transcriber asks for.
+    /// </summary>
+    public static (List<TimedChord>, MusicalKey, int) DetectFromFile(
+        string audioFile,
+        INoteTranscriber transcriber,
+        float intervalSecond = 1.0f)
+    {
         if (!File.Exists(audioFile))
             throw new AudioException("Source is not loaded.");
 
+        int _rate = transcriber.PreferredSampleRate;
+
 #nullable disable
-        IAudioDecoder _decoder = AudioDecoderFactory.Create(audioFile, 22050, 1);
+        IAudioDecoder _decoder = AudioDecoderFactory.Create(audioFile, _rate, 1);
         var samples = _decoder.ReadAllSamples();
         _decoder.Dispose();
 
-        return _analyze(samples, intervalSecond);
+        return _analyze(samples, _rate, transcriber, intervalSecond);
 #nullable restore
     }
 
@@ -40,9 +58,24 @@ public static class ChordDetect
         IReadOnlyList<string> audioFiles,
         float intervalSecond = 1.0f)
     {
+        using (var transcriber = new BasicPitchTranscriber())
+        {
+            return DetectFromFiles(audioFiles, transcriber, intervalSecond);
+        }
+    }
+
+    /// <summary>
+    /// Multitrack mix analyzed with the given transcriber.
+    /// </summary>
+    public static (List<TimedChord>, MusicalKey, int) DetectFromFiles(
+        IReadOnlyList<string> audioFiles,
+        INoteTranscriber transcriber,
+        float intervalSecond = 1.0f)
+    {
         if (audioFiles == null || audioFiles.Count == 0)
             throw new AudioException("No audio files provided.");
 
+        int _rate = transcriber.PreferredSampleRate;
         var allTrackSamples = new List<float[]>(audioFiles.Count);
         int maxLength = 0;
 
@@ -51,7 +84,7 @@ public static class ChordDetect
             if (!File.Exists(file))
                 throw new AudioException($"Audio file not found: {file}");
 
-            using (var decoder = AudioDecoderFactory.Create(file, 22050, 1))
+            using (var decoder = AudioDecoderFactory.Create(file, _rate, 1))
             {
                 float[] _samples = decoder.ReadAllSamples();
                 if (_samples.Length > maxLength) maxLength = _samples.Length;
@@ -80,32 +113,30 @@ public static class ChordDetect
         }
 
 #nullable disable
-        return _analyze(mixed, intervalSecond);
+        return _analyze(mixed, _rate, transcriber, intervalSecond);
 #nullable restore
     }
 
 #nullable disable
-    private static (List<TimedChord>, MusicalKey, int) _analyze(float[] samples, float intervalSecond)
+    private static (List<TimedChord>, MusicalKey, int) _analyze(
+        float[] samples,
+        int sampleRate,
+        INoteTranscriber transcriber,
+        float intervalSecond)
     {
-        using var model = new Model();
-        var modelOutput = model.Predict(new WaveBuffer(samples), progress =>
+        var notes = transcriber.Transcribe(samples, sampleRate, progress =>
         {
             Log.Info($"\rRecognizing musical notes: {progress:P1}");
         });
 
-        var convertOptions = new NotesConvertOptions
+        //Percussion only muddies the chromagram, and MT3 is the one that can tell us about it.
+        var rawNotes = new List<Note>(notes.Count);
+        foreach (var note in notes)
         {
-            OnsetThreshold = 0.5f,
-            FrameThreshold = 0.2f,
-            MinNoteLength = 15,
-            MinFreq = 32.7f,
-            MaxFreq = 2800f,
-            IncludePitchBends = false,
-            MelodiaTrick = true
-        };
+            if (!note.IsDrum) rawNotes.Add(note);
+        }
 
-        var rawNotes = new NotesConverter(modelOutput).Convert(convertOptions);
-        int detectTempo = _detectBpm(samples, 22050, 1);
+        int detectTempo = _detectBpm(samples, sampleRate, 1);
 
         var analyzer = new SongChordAnalyzer(
             windowSize: intervalSecond,

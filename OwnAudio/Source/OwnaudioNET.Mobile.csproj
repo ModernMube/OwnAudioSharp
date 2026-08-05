@@ -38,8 +38,8 @@
 
   <ItemGroup>
     <Compile Remove="Features\ChorDetect\**\*.cs" />
-    <Compile Remove="Features\Extensions\AudioReaderNote.cs" />
-    <Compile Remove="Features\Extensions\OrtInference.cs" />
+    <Compile Remove="Features\Extensions\**\*.cs" />
+    <Compile Remove="Mt3\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>

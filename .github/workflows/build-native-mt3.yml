@@ -1,0 +1,300 @@
+name: Build native MT3 + pack NuGet
+
+on:
+  push:
+    branches: [ "develop_rust_audio", "master" ]
+    tags:     [ "mt3-v*.*.*" ]
+    paths:
+      - "OwnAudio/Source/Mt3/**"
+      - ".github/workflows/build-native-mt3.yml"
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - "OwnAudio/Source/Mt3/**"
+      - ".github/workflows/build-native-mt3.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # -------------------------------------------------------------------------
+  # The codec and the note state machine build without ONNX Runtime, so they
+  # get checked on their own before anything downloads 26 MB of runtime.
+  # -------------------------------------------------------------------------
+  rust-test:
+    name: Rust / unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-mt3-test-${{ hashFiles('OwnAudio/Source/Mt3/rust-mt3/**/Cargo.lock') }}
+
+      - name: Format
+        working-directory: OwnAudio/Source/Mt3/rust-mt3
+        run: cargo fmt --check
+
+      - name: Test codec + note decoder
+        working-directory: OwnAudio/Source/Mt3/rust-mt3
+        run: cargo test -p ownaudio-mt3-core --no-default-features
+
+      - name: Clippy
+        working-directory: OwnAudio/Source/Mt3/rust-mt3
+        run: cargo clippy --all-targets -- -D warnings
+
+  # -------------------------------------------------------------------------
+  # Native builds — desktop only. Chord detection is not compiled into the
+  # mobile package, and nobody wants ONNX Runtime inside an iOS static lib.
+  # -------------------------------------------------------------------------
+  rust-build-windows:
+    name: Rust / Windows (x64 + ARM64)
+    needs: rust-test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-mt3-windows-${{ hashFiles('OwnAudio/Source/Mt3/rust-mt3/**/Cargo.lock') }}
+
+      - name: Install cargo-xwin (MSVC cross-linker)
+        run: cargo install cargo-xwin --locked
+
+      - name: Build win-x64
+        working-directory: OwnAudio/Source/Mt3/rust-mt3
+        run: cargo build --release -p ownaudio-mt3-ffi --target x86_64-pc-windows-msvc
+
+      - name: Build win-arm64
+        working-directory: OwnAudio/Source/Mt3/rust-mt3
+        run: cargo xwin build --release -p ownaudio-mt3-ffi --target aarch64-pc-windows-msvc
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/win-x64 artifacts/win-arm64
+          cp OwnAudio/Source/Mt3/rust-mt3/target/x86_64-pc-windows-msvc/release/ownaudio_mt3_ffi.dll  artifacts/win-x64/
+          cp OwnAudio/Source/Mt3/rust-mt3/target/aarch64-pc-windows-msvc/release/ownaudio_mt3_ffi.dll artifacts/win-arm64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mt3-native-windows
+          path: artifacts/
+          retention-days: 7
+
+  rust-build-linux-x64:
+    name: Rust / Linux x64
+    needs: rust-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-mt3-linux-x64-${{ hashFiles('OwnAudio/Source/Mt3/rust-mt3/**/Cargo.lock') }}
+
+      - name: Build linux-x64
+        working-directory: OwnAudio/Source/Mt3/rust-mt3
+        run: cargo build --release -p ownaudio-mt3-ffi --target x86_64-unknown-linux-gnu
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/linux-x64
+          cp OwnAudio/Source/Mt3/rust-mt3/target/x86_64-unknown-linux-gnu/release/libownaudio_mt3_ffi.so artifacts/linux-x64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mt3-native-linux-x64
+          path: artifacts/
+          retention-days: 7
+
+  rust-build-linux-arm64:
+    name: Rust / Linux ARM64
+    needs: rust-test
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-mt3-linux-arm64-${{ hashFiles('OwnAudio/Source/Mt3/rust-mt3/**/Cargo.lock') }}
+
+      - name: Build linux-arm64
+        working-directory: OwnAudio/Source/Mt3/rust-mt3
+        run: cargo build --release -p ownaudio-mt3-ffi --target aarch64-unknown-linux-gnu
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/linux-arm64
+          cp OwnAudio/Source/Mt3/rust-mt3/target/aarch64-unknown-linux-gnu/release/libownaudio_mt3_ffi.so artifacts/linux-arm64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mt3-native-linux-arm64
+          path: artifacts/
+          retention-days: 7
+
+  # Apple Silicon only: `ort` ships no prebuilt ONNX Runtime for x86_64-apple-darwin, so
+  # Intel Macs cannot have MT3 without building the runtime from source.
+  rust-build-macos:
+    name: Rust / macOS (ARM64)
+    needs: rust-test
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-mt3-macos-${{ hashFiles('OwnAudio/Source/Mt3/rust-mt3/**/Cargo.lock') }}
+
+      - name: Build osx-arm64
+        working-directory: OwnAudio/Source/Mt3/rust-mt3
+        run: cargo build --release -p ownaudio-mt3-ffi --target aarch64-apple-darwin
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts/osx-arm64
+          cp OwnAudio/Source/Mt3/rust-mt3/target/aarch64-apple-darwin/release/libownaudio_mt3_ffi.dylib artifacts/osx-arm64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mt3-native-macos
+          path: artifacts/
+          retention-days: 7
+
+  # -------------------------------------------------------------------------
+  # dotnet pack — depends on all native builds
+  # -------------------------------------------------------------------------
+  dotnet-pack:
+    name: Pack OwnAudioSharp.Mt3 NuGet
+    needs:
+      - rust-build-windows
+      - rust-build-linux-x64
+      - rust-build-linux-arm64
+      - rust-build-macos
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download all native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: mt3-native-*
+          path: native-dl/
+          merge-multiple: false
+
+      - name: Place natives into runtimes/
+        run: |
+          RUNTIMES="OwnAudio/Source/Mt3/runtimes"
+
+          copy_if_exists() {
+            local SRC="$1"
+            local DST="$2"
+            if [[ -f "$SRC" ]]; then
+              mkdir -p "$(dirname "$DST")"
+              cp "$SRC" "$DST"
+              echo "  Copied: $SRC -> $DST"
+            else
+              echo "::warning::Missing artifact: $SRC"
+            fi
+          }
+
+          copy_if_exists "native-dl/mt3-native-windows/win-x64/ownaudio_mt3_ffi.dll"           "$RUNTIMES/win-x64/native/ownaudio_mt3_ffi.dll"
+          copy_if_exists "native-dl/mt3-native-windows/win-arm64/ownaudio_mt3_ffi.dll"         "$RUNTIMES/win-arm64/native/ownaudio_mt3_ffi.dll"
+          copy_if_exists "native-dl/mt3-native-linux-x64/linux-x64/libownaudio_mt3_ffi.so"     "$RUNTIMES/linux-x64/native/libownaudio_mt3_ffi.so"
+          copy_if_exists "native-dl/mt3-native-linux-arm64/linux-arm64/libownaudio_mt3_ffi.so" "$RUNTIMES/linux-arm64/native/libownaudio_mt3_ffi.so"
+          copy_if_exists "native-dl/mt3-native-macos/osx-arm64/libownaudio_mt3_ffi.dylib"      "$RUNTIMES/osx-arm64/native/libownaudio_mt3_ffi.dylib"
+
+          echo "Runtimes tree:"
+          find "$RUNTIMES" -type f -exec ls -lh {} \; | sort
+
+      - name: Symbol smoke test
+        run: |
+          check_sym() {
+            local FILE="$1"
+            [[ -f "$FILE" ]] || return 0
+            if nm -D "$FILE" 2>/dev/null | grep -q "ownaudio_mt3_v1_create"; then
+              echo "  OK   ownaudio_mt3_v1_create in $(basename "$FILE")"
+            else
+              echo "::warning::ownaudio_mt3_v1_create not found in $FILE"
+            fi
+          }
+          check_sym "OwnAudio/Source/Mt3/runtimes/linux-x64/native/libownaudio_mt3_ffi.so"
+          check_sym "OwnAudio/Source/Mt3/runtimes/linux-arm64/native/libownaudio_mt3_ffi.so"
+
+      - name: Pack OwnAudioSharp.Mt3
+        run: |
+          dotnet pack OwnAudio/Source/Mt3/OwnaudioNET.Mt3.csproj \
+            --configuration Release \
+            -p:GeneratePackageOnBuild=false \
+            --output nupkg-out
+
+      - name: Verify native binaries are in the package
+        run: |
+          NUPKG=$(ls nupkg-out/OwnAudioSharp.Mt3.*.nupkg | head -n 1)
+          echo "Inspecting $NUPKG ($(du -h "$NUPKG" | cut -f1))"
+          unzip -l "$NUPKG" | grep -E "runtimes/.*/native/.*\.(dll|so|dylib)" || {
+            echo "::error::No native runtime binaries found in the package."
+            exit 1
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mt3-nupkg
+          path: nupkg-out/*.nupkg
+          retention-days: 30
