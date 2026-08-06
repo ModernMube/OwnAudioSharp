@@ -172,6 +172,18 @@ public sealed class AudioEngine : IDisposable
         return AudioInputStream.Open(_handle, device, config, callback);
     }
 
+    /// <summary>
+    /// Opens a capture stream in buffered mode, paused. Capture lands in a native ring you drain with
+    /// AudioInputStream.Read — no managed code on the audio thread, so a GC pause can't cost samples.
+    /// </summary>
+    public AudioInputStream OpenBufferedInputStream(AudioDevice? device, AudioStreamConfig config)
+    {
+        Guard.NotDisposed(_disposed, nameof(AudioEngine));
+        Guard.NotNull(config, nameof(config));
+
+        return AudioInputStream.Open(_handle, device, config, null);
+    }
+
     #endregion
 
     /// <summary>

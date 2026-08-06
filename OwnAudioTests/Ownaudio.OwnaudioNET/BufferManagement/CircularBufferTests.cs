@@ -159,4 +159,69 @@ public class CircularBufferTests
         Action act = () => Task.WaitAll(writeTask, readTask);
         act.Should().NotThrow();
     }
+
+    [Fact]
+    public void Constructor_DefaultFrameSize_IsOne()
+    {
+        new CircularBuffer(1024).FrameSize.Should().Be(1);
+    }
+
+    [Fact]
+    public void Constructor_WithInvalidFrameSize_ShouldThrow()
+    {
+        Action act = () => new CircularBuffer(1024, 0);
+
+        act.Should().Throw<Exception>();
+    }
+
+    [Fact]
+    public void Write_Overflow_ShouldTruncateOnFrameBoundary()
+    {
+        var buffer = new CircularBuffer(64, 12);
+
+        int written = buffer.Write(new float[200]);
+
+        written.Should().BePositive();
+        (written % 12).Should().Be(0, "a half frame left behind rotates every channel after it");
+    }
+
+    [Fact]
+    public void Read_ShortRead_ShouldLeavePartialFrameBehind()
+    {
+        var buffer = new CircularBuffer(1024, 4);
+        buffer.Write(new float[6]);
+
+        int read = buffer.Read(new float[8]);
+
+        read.Should().Be(4);
+        buffer.Available.Should().Be(2);
+    }
+
+    [Fact]
+    public void Write_ThatFits_IsNeverTruncated()
+    {
+        var buffer = new CircularBuffer(1024, 12);
+
+        buffer.Write(new float[5]).Should().Be(5);
+    }
+
+    [Fact]
+    public void Overflow_ShouldNotRotateChannels()
+    {
+        //Same regression as the engine side ring: a mid-frame drop used to shift every channel
+        const int channels = 12;
+        var buffer = new CircularBuffer(64, channels);
+
+        var block = new float[channels * 2];
+        for (int i = 0; i < block.Length; i++) block[i] = i % channels;
+
+        for (int i = 0; i < 8; i++) buffer.Write(block);
+
+        var drained = new float[buffer.Available];
+        int read = buffer.Read(drained);
+
+        (read % channels).Should().Be(0);
+        for (int i = 0; i < read; i++)
+            drained[i].Should().Be(i % channels, $"channel rotated at sample {i}");
+    }
 }

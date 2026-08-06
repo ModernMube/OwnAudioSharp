@@ -8,8 +8,40 @@ use rtrb::{Consumer, Producer, RingBuffer};
 /// The writer is intended for the producer thread (decoder / input callback);
 /// the reader for the real-time audio output callback.  Both are `Send`.
 pub fn ring_buffer(capacity_samples: usize) -> (RingBufferWriter, RingBufferReader) {
+    ring_buffer_frames(capacity_samples, 1)
+}
+
+/// Same, but the buffer refuses to split a frame.
+///
+/// `frame_size` is the interleaved channel count.  A transfer that fits goes
+/// through untouched; one that has to be truncated stops on a frame boundary
+/// instead of leaving half a frame behind — a stray half frame rotates every
+/// channel from that point on and nothing downstream can detect it.
+pub fn ring_buffer_frames(
+    capacity_samples: usize,
+    frame_size: usize,
+) -> (RingBufferWriter, RingBufferReader) {
+    let frame_size = frame_size.max(1);
     let (producer, consumer) = RingBuffer::<f32>::new(capacity_samples);
-    (RingBufferWriter { producer }, RingBufferReader { consumer })
+    (
+        RingBufferWriter {
+            producer,
+            frame_size,
+        },
+        RingBufferReader {
+            consumer,
+            frame_size,
+        },
+    )
+}
+
+/// How much of `wanted` we can move given `limit`, never ending mid-frame.
+fn fit(wanted: usize, limit: usize, frame_size: usize) -> usize {
+    if wanted <= limit {
+        wanted
+    } else {
+        limit - limit % frame_size
+    }
 }
 
 /// Write-side of the SPSC audio ring buffer.
@@ -17,6 +49,7 @@ pub fn ring_buffer(capacity_samples: usize) -> (RingBufferWriter, RingBufferRead
 /// Safe to send to any thread.  All writes are non-blocking and lock-free.
 pub struct RingBufferWriter {
     producer: Producer<f32>,
+    frame_size: usize,
 }
 
 /// Read-side of the SPSC audio ring buffer.
@@ -25,16 +58,17 @@ pub struct RingBufferWriter {
 /// non-blocking and lock-free.
 pub struct RingBufferReader {
     consumer: Consumer<f32>,
+    frame_size: usize,
 }
 
 impl RingBufferWriter {
     /// Writes as many samples from `samples` as the buffer can currently accept.
     ///
     /// Returns the number of samples actually written.  Never allocates and never
-    /// blocks.  The caller is responsible for handling the dropped tail (overflow).
+    /// blocks.  The caller is responsible for handling the dropped tail (overflow),
+    /// which is always a whole number of frames.
     pub fn write(&mut self, samples: &[f32]) -> usize {
-        let available = self.producer.slots();
-        let to_write = samples.len().min(available);
+        let to_write = fit(samples.len(), self.producer.slots(), self.frame_size);
         if to_write == 0 {
             return 0;
         }
@@ -73,9 +107,9 @@ impl RingBufferReader {
     /// Returns the number of samples actually read.  If fewer samples are
     /// available than `out.len()`, only the available portion is filled; the
     /// caller must silence-fill the rest.  Never allocates and never blocks.
+    /// A short read stops on a frame boundary and leaves the partial frame behind.
     pub fn read(&mut self, out: &mut [f32]) -> usize {
-        let available = self.consumer.slots();
-        let to_read = out.len().min(available);
+        let to_read = fit(out.len(), self.consumer.slots(), self.frame_size);
         if to_read == 0 {
             return 0;
         }
@@ -92,6 +126,22 @@ impl RingBufferReader {
     /// Returns the number of samples currently available to read.
     pub fn available(&self) -> usize {
         self.consumer.slots()
+    }
+
+    /// Drops everything currently readable, returning how many samples went.
+    ///
+    /// Only touches the read side, so a writer running concurrently is safe — its
+    /// samples simply survive the discard.
+    pub fn discard_all(&mut self) -> usize {
+        let to_drop = self.consumer.slots();
+        if to_drop == 0 {
+            return 0;
+        }
+        self.consumer
+            .read_chunk(to_drop)
+            .expect("slots checked")
+            .commit_all();
+        to_drop
     }
 }
 
@@ -150,5 +200,45 @@ mod tests {
         let (_writer, mut reader) = ring_buffer(8);
         let mut out = [0.0f32; 4];
         assert_eq!(reader.read(&mut out), 0);
+    }
+
+    #[test]
+    fn overflow_truncates_on_frame_boundary() {
+        let (mut writer, _reader) = ring_buffer_frames(50, 12);
+        assert_eq!(writer.write(&[1.0f32; 120]) % 12, 0);
+    }
+
+    #[test]
+    fn short_read_leaves_partial_frame() {
+        let (mut writer, mut reader) = ring_buffer_frames(64, 4);
+        writer.write(&[1.0f32; 6]);
+
+        let mut out = [0.0f32; 8];
+        assert_eq!(reader.read(&mut out), 4);
+        assert_eq!(reader.available(), 2);
+    }
+
+    #[test]
+    fn write_that_fits_is_never_truncated() {
+        let (mut writer, _reader) = ring_buffer_frames(64, 12);
+        assert_eq!(writer.write(&[1.0f32; 5]), 5);
+    }
+
+    #[test]
+    fn overflow_does_not_rotate_channels() {
+        let ch = 12;
+        let (mut writer, mut reader) = ring_buffer_frames(50, ch);
+
+        let block: Vec<f32> = (0..ch * 2).map(|i| (i % ch) as f32).collect();
+        for _ in 0..8 {
+            writer.write(&block);
+        }
+
+        let mut out = vec![0.0f32; reader.available()];
+        let read = reader.read(&mut out);
+        assert_eq!(read % ch, 0);
+        for (i, s) in out[..read].iter().enumerate() {
+            assert_eq!(*s, (i % ch) as f32, "channel rotated at sample {i}");
+        }
     }
 }

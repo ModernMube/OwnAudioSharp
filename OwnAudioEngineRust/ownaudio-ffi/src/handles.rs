@@ -1,10 +1,10 @@
-use std::sync::atomic::AtomicU32;
+use std::sync::atomic::{AtomicU32, AtomicU64};
 use std::sync::Arc;
 
 use ownaudio_core::multitrack::MixerController;
 use ownaudio_core::{
     AudioEngine, FileSourceControl, InputStream, MemorySourceControl, MixerShared, MultiTrackMixer,
-    OutputStream, RingBufferWriter, StreamingTrack, TrackShared,
+    OutputStream, RingBufferReader, RingBufferWriter, StreamingTrack, TrackShared,
 };
 
 /// Opaque handle to an [`AudioEngine`] instance.
@@ -68,6 +68,16 @@ pub(crate) struct OutputStreamWrapper {
 
 pub(crate) struct InputStreamWrapper {
     pub inner: InputStream,
+    /// Present when the stream was opened without a callback: capture then lands
+    /// in a native ring the host drains with `ownaudio_v1_input_stream_read`,
+    /// so no managed code runs on the audio thread.
+    pub capture: Option<CaptureBridge>,
+}
+
+/// Read side of the native capture ring plus the overflow tally the callback keeps.
+pub(crate) struct CaptureBridge {
+    pub reader: RingBufferReader,
+    pub dropped_frames: Arc<AtomicU64>,
 }
 
 // SAFETY: cpal::Stream is not Send on all platforms (e.g. macOS AudioQueue).

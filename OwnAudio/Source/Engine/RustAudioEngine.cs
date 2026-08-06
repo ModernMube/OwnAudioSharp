@@ -10,8 +10,9 @@ using RustSafe = Ownaudio.Safe;
 namespace OwnaudioNET.Engine;
 
 /// <summary>
-/// IAudioEngine on top of the native Rust engine. Bridges the blocking push/pull contract the wrapper wants
-/// to the callback driven Rust streams through two SPSC ring buffers.
+/// IAudioEngine on top of the native Rust engine. Output goes through a managed SPSC ring into the
+/// stream callback; capture is buffered natively and Receives() just drains it, so no managed code —
+/// and no GC pause — ever lands on the capture thread.
 /// </summary>
 /// <remarks>
 /// Send() must come from a single producer (the pump thread) and Receives() from a single consumer.
@@ -28,7 +29,6 @@ internal sealed class RustAudioEngine : IAudioEngine
     private RustSafe.AudioInputStream? _inputStream;
 
     private LockFreeRingBuffer<float>? _outputRing;
-    private LockFreeRingBuffer<float>? _inputRing;
 
     private AudioConfig? _config;
     private int _channels = 2;
@@ -55,6 +55,21 @@ internal sealed class RustAudioEngine : IAudioEngine
 
     /// <inheritdoc />
     public EngineStatus Status => _status;
+
+    /// <summary>
+    /// Capture frames the native ring had to throw away because nobody called Receives() in time.
+    /// Cumulative for the life of the stream.
+    /// </summary>
+    internal long InputOverflowFrames
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return (long)(_inputStream?.DroppedFrames ?? 0);
+            }
+        }
+    }
 
     /// <summary>
     /// The native engine, null before init and after dispose. The Rust-native mixer facade uses it to drive a
@@ -109,7 +124,7 @@ internal sealed class RustAudioEngine : IAudioEngine
     /// <remarks>
     /// The output side only parks its stream, but capture has to be closed outright: a second
     /// capture on a device that already has one gets silence on ASIO4ALL and takes the process
-    /// down with FlexASIO. Nothing reads the engine's input ring in rust-native mode anyway.
+    /// down with FlexASIO. Nothing reads the engine's capture ring in rust-native mode anyway.
     /// </remarks>
     internal void ReleaseInput()
     {
@@ -119,7 +134,6 @@ internal sealed class RustAudioEngine : IAudioEngine
 
             _inputStream.Dispose();
             _inputStream = null;
-            _inputRing?.Clear();
             Log.Info("[RustEngine] Capture released, session takes the device");
         }
     }
@@ -156,7 +170,7 @@ internal sealed class RustAudioEngine : IAudioEngine
 
             if (_isAsioHost()) return;
 
-            _outputRing ??= new LockFreeRingBuffer<float>(_ringCapacity(_config));
+            _outputRing ??= new LockFreeRingBuffer<float>(_ringCapacity(_config), _channels);
             _openOutputStream(_config);
             if (_running) _outputStream?.Play();
 
@@ -206,14 +220,13 @@ internal sealed class RustAudioEngine : IAudioEngine
                 if (_inputEnabled)
                 {
                     _selectedInputDevice = _findDevice(_inputDeviceSnapshot, _inputId, preferOutput: false);
-                    _inputRing = new LockFreeRingBuffer<float>(_ringCapacity(config));
                     _openInputStream(config);
                 }
 
                 if (_outputEnabled)
                 {
                     _selectedOutputDevice = _findDevice(_outputDeviceSnapshot, _outputId, preferOutput: true);
-                    _outputRing = new LockFreeRingBuffer<float>(_ringCapacity(config));
+                    _outputRing = new LockFreeRingBuffer<float>(_ringCapacity(config), _channels);
                     _openOutputStream(config);
                 }
 
@@ -285,7 +298,7 @@ internal sealed class RustAudioEngine : IAudioEngine
                 _outputStream?.Pause();
                 _inputStream?.Pause();
                 _outputRing?.Clear();
-                _inputRing?.Clear();
+                _inputStream?.Clear();
                 _status = EngineStatus.Idle;
                 Log.Info("[RustEngine] Streams paused, rings cleared");
                 return 0;
@@ -336,29 +349,21 @@ internal sealed class RustAudioEngine : IAudioEngine
         if (_disposed || !_running)
             return -1;
 
-        LockFreeRingBuffer<float>? _ring = _inputRing;
-        if (_ring == null || destination.IsEmpty)
+        RustSafe.AudioInputStream? _stream = _inputStream;
+        if (_stream == null || destination.IsEmpty)
             return 0;
 
-        return _ring.Read(destination);
+        return _stream.Read(destination);
     }
 
     /// <summary>
-    /// RT callback pulling playback samples. The native buffer comes zeroed, so an underrun just leaves silence.
+    /// RT callback pulling playback samples. The native buffer comes zeroed, so an underrun just leaves silence,
+    /// and the ring keeps a trailing partial frame back instead of ending the read mid-frame.
     /// </summary>
     /// <param name="args"></param>
     private void _outputCallback(in RustSafe.Callbacks.AudioOutputCallbackArgs args)
     {
         _outputRing?.Read(args.Buffer);
-    }
-
-    /// <summary>
-    /// RT callback pushing captured samples. On overflow we drop rather than block the audio thread.
-    /// </summary>
-    /// <param name="args"></param>
-    private void _inputCallback(in RustSafe.Callbacks.AudioInputCallbackArgs args)
-    {
-        _inputRing?.Write(args.Buffer);
     }
 
     #endregion
@@ -669,7 +674,7 @@ internal sealed class RustAudioEngine : IAudioEngine
             RustSafe.SampleFormat.F32,
             _clampStreamBuffer(config.BufferSize));
 
-        _inputStream = _engine!.OpenInputStream(_selectedInputDevice, _cfg, _inputCallback);
+        _inputStream = _engine!.OpenBufferedInputStream(_selectedInputDevice, _cfg);
     }
 
     /// <summary>
@@ -692,7 +697,6 @@ internal sealed class RustAudioEngine : IAudioEngine
     {
         _inputStream?.Dispose();
         _inputStream = null;
-        _inputRing?.Clear();
         _openInputStream(config);
     }
 
@@ -714,7 +718,6 @@ internal sealed class RustAudioEngine : IAudioEngine
         _inputStream = null;
         _engine = null;
         _outputRing = null;
-        _inputRing = null;
     }
 
     /// <summary>

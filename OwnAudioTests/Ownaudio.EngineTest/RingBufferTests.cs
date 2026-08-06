@@ -399,5 +399,93 @@ namespace Ownaudio.EngineTest
                 Assert.AreEqual(2, read, $"Should read from buffer with capacity {capacity}");
             }
         }
+
+        [TestMethod]
+        public void Constructor_WithZeroFrameSize_ShouldThrow()
+        {
+            try
+            {
+                var buffer = new LockFreeRingBuffer<float>(1024, 0);
+                Assert.Fail("Expected ArgumentException was not thrown");
+            }
+            catch (ArgumentException)
+            {
+                // Expected
+            }
+        }
+
+        [TestMethod]
+        public void Constructor_DefaultFrameSize_IsOne()
+        {
+            var buffer = new LockFreeRingBuffer<float>(1024);
+            Assert.AreEqual(1, buffer.FrameSize, "Default should stay frame agnostic");
+        }
+
+        [TestMethod]
+        public void Write_Overflow_ShouldTruncateOnFrameBoundary()
+        {
+            // Capacity 16 leaves 15 writable, which is what the old code handed back — half a stereo frame.
+            var buffer = new LockFreeRingBuffer<float>(16, 2);
+            float[] data = new float[20];
+
+            int written = buffer.Write(data);
+
+            Assert.AreEqual(14, written, "Short write must land on a stereo frame boundary");
+        }
+
+        [TestMethod]
+        public void Write_Overflow_MultiChannel_ShouldTruncateOnFrameBoundary()
+        {
+            var buffer = new LockFreeRingBuffer<float>(64, 12);
+            float[] data = new float[120];
+
+            int written = buffer.Write(data);
+
+            Assert.AreEqual(0, written % 12, "Short write must be a whole number of 12ch frames");
+            Assert.IsTrue(written > 0, "Should still take what fits");
+        }
+
+        [TestMethod]
+        public void Write_ThatFits_IsNeverTruncated()
+        {
+            // Sub-frame tails have to go through untouched, otherwise Send() would spin forever on them.
+            var buffer = new LockFreeRingBuffer<float>(1024, 12);
+            float[] data = new float[5];
+
+            Assert.AreEqual(5, buffer.Write(data), "A write with room to spare goes in as asked");
+        }
+
+        [TestMethod]
+        public void Read_ShortRead_ShouldLeavePartialFrameBehind()
+        {
+            var buffer = new LockFreeRingBuffer<float>(1024, 4);
+            buffer.Write(new float[6]);
+
+            float[] destination = new float[8];
+            int read = buffer.Read(destination);
+
+            Assert.AreEqual(4, read, "Should stop at the last whole frame");
+            Assert.AreEqual(2, buffer.Available, "The partial frame stays for the next round");
+        }
+
+        [TestMethod]
+        public void Overflow_ShouldNotRotateChannels()
+        {
+            //Regression for the ASIO capture report: a mid-frame drop used to shift every channel
+            const int channels = 12;
+            var buffer = new LockFreeRingBuffer<float>(64, channels);
+
+            float[] block = new float[channels * 2];
+            for (int i = 0; i < block.Length; i++) block[i] = i % channels;
+
+            for (int i = 0; i < 8; i++) buffer.Write(block);
+
+            float[] drained = new float[buffer.Available];
+            int read = buffer.Read(drained);
+
+            Assert.AreEqual(0, read % channels, "Drain should come out frame aligned");
+            for (int i = 0; i < read; i++)
+                Assert.AreEqual(i % channels, drained[i], $"Channel rotated at sample {i}");
+        }
     }
 }

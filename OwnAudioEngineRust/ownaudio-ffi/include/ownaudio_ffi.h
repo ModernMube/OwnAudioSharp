@@ -1598,7 +1598,11 @@ void ownaudio_v1_output_stream_destroy(struct OwnAudioOutputStreamHandle *stream
  *
  * - `device_name` — null-terminated UTF-8 name of the target device, or
  *   `null` to use the system default input device.
- * - `callback` — called on the audio thread with each captured buffer.
+ * - `callback` — called on the audio thread with each captured buffer. Pass
+ *   `null` to run the stream buffered instead: capture then lands in a native
+ *   ring that the host drains with `ownaudio_v1_input_stream_read`. That is the
+ *   preferred mode for managed hosts, since no foreign code — and therefore no
+ *   garbage collector — ever runs on the capture thread.
  *
  * The stream starts in the paused state; call
  * `ownaudio_v1_input_stream_play` to begin capturing.
@@ -1676,6 +1680,54 @@ int32_t ownaudio_v1_input_stream_get_error_state(struct OwnAudioInputStreamHandl
  */
 int32_t ownaudio_v1_input_stream_get_latency_frames(struct OwnAudioInputStreamHandle *stream,
                                                     uint32_t *out_frames);
+
+/**
+ * Drains captured samples from a stream opened in buffered mode (null callback)
+ * into `dst`, writing the sample count actually taken to `*out_read`.
+ *
+ * Reads only whole frames, so the caller can always slice the result into
+ * interleaved frames without the channels sliding. Returns `0` samples when the
+ * ring is empty rather than blocking, and `InternalError` (9) if the stream was
+ * opened with a callback and therefore has no ring to read.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+ * - `dst` must point to at least `dst_len` writable `f32` slots.
+ * - `out_read` must point to a writable `usize`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_input_stream_read(struct OwnAudioInputStreamHandle *stream,
+                                      float *dst,
+                                      size_t dst_len,
+                                      size_t *out_read);
+
+/**
+ * Throws away everything sitting in a buffered stream's capture ring.
+ *
+ * Meant for stop/start, so a new take never opens with the tail of the old one.
+ * Call it while capture is paused: it only moves the read side, so samples the
+ * callback writes concurrently may survive. No-op on a callback-mode stream.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_input_stream_clear(struct OwnAudioInputStreamHandle *stream);
+
+/**
+ * Writes the number of capture frames dropped so far to `*out_frames`.
+ *
+ * Frames get dropped when the host leaves the capture ring unread for longer
+ * than it is deep. Cumulative for the life of the stream, and always `0` on a
+ * callback-mode stream. Anything above zero means the recording has a hole in it.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+ * - `out_frames` must point to a writable `u64`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_input_stream_get_dropped_frames(struct OwnAudioInputStreamHandle *stream,
+                                                    uint64_t *out_frames);
 
 /**
  * Destroys an input stream and releases all associated resources.

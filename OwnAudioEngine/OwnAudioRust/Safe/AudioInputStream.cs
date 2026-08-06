@@ -16,20 +16,28 @@ namespace Ownaudio.Safe;
 public sealed class AudioInputStream : IDisposable
 {
     private readonly AudioInputStreamHandle _handle;
-    private readonly AudioInputCallbackMarshaller _marshaller;
+    private readonly AudioInputCallbackMarshaller? _marshaller;
     private bool _disposed;
 
     /// <summary>
     /// Fires on a threadpool thread when the capture callback throws. We swallow it at the ffi
-    /// boundary so the rt thread keeps running.
+    /// boundary so the rt thread keeps running. Never fires on a buffered stream, there is no callback.
     /// </summary>
     public event EventHandler<Exception>? CallbackError;
 
-    private AudioInputStream(AudioInputStreamHandle handle, AudioInputCallbackMarshaller marshaller)
+    /// <summary>
+    /// True when the stream was opened without a callback and capture lands in the native ring,
+    /// which is the only mode where Read works.
+    /// </summary>
+    public bool IsBuffered => _marshaller is null;
+
+    private AudioInputStream(AudioInputStreamHandle handle, AudioInputCallbackMarshaller? marshaller)
     {
         _handle     = handle;
         _marshaller = marshaller;
-        _marshaller.CallbackError += (_, ex) => CallbackError?.Invoke(this, ex);
+
+        if (_marshaller is not null)
+            _marshaller.CallbackError += (_, ex) => CallbackError?.Invoke(this, ex);
     }
 
     // engine only
@@ -37,9 +45,11 @@ public sealed class AudioInputStream : IDisposable
         AudioEngineHandle engine,
         AudioDevice? device,
         AudioStreamConfig config,
-        AudioInputCallbackHandler callback)
+        AudioInputCallbackHandler? callback)
     {
-        var marshaller = new AudioInputCallbackMarshaller(callback);
+        AudioInputCallbackMarshaller? marshaller = callback is not null
+            ? new AudioInputCallbackMarshaller(callback)
+            : null;
 
         NativeStreamConfig nativeConfig = config.ToNative();
         IntPtr deviceNamePtr = device is not null ? Marshal.StringToCoTaskMemUTF8(device.Name) : IntPtr.Zero;
@@ -53,8 +63,8 @@ public sealed class AudioInputStream : IDisposable
                 engine.DangerousGetHandle(),
                 deviceNamePtr,
                 in nativeConfig,
-                AudioInputCallbackMarshaller.NativeFunctionPointer,
-                marshaller.UserData,
+                marshaller is not null ? AudioInputCallbackMarshaller.NativeFunctionPointer : IntPtr.Zero,
+                marshaller?.UserData ?? IntPtr.Zero,
                 out rawStream);
         }
         finally
@@ -64,7 +74,7 @@ public sealed class AudioInputStream : IDisposable
 
         if (code != (int)NativeErrorCode.Success)
         {
-            marshaller.Dispose();
+            marshaller?.Dispose();
             ErrorCodeMapper.ThrowIfError(code, nameof(Open));
         }
 
@@ -72,6 +82,58 @@ public sealed class AudioInputStream : IDisposable
         Marshal.InitHandle(handle, rawStream);
 
         return new AudioInputStream(handle, marshaller);
+    }
+
+    /// <summary>
+    /// Pulls captured samples out of the native ring, whole frames only. Returns what it got, 0 when
+    /// the ring is empty. Buffered streams only, and it never blocks.
+    /// </summary>
+    /// <param name="destination"></param>
+    /// <returns>Sample count copied into destination.</returns>
+    public unsafe int Read(Span<float> destination)
+    {
+        Guard.NotDisposed(_disposed, nameof(AudioInputStream));
+
+        if (destination.IsEmpty) return 0;
+
+        fixed (float* _dst = destination)
+        {
+            int code = OwnAudioNative.ownaudio_v1_input_stream_read(
+                _handle.DangerousGetHandle(), _dst, (nuint)destination.Length, out nuint _read);
+            ErrorCodeMapper.ThrowIfError(code, nameof(Read));
+
+            return (int)_read;
+        }
+    }
+
+    /// <summary>
+    /// Throws away whatever is queued in the native ring, so a restart doesn't open with the
+    /// previous take's tail. Meant to be called while capture is paused.
+    /// </summary>
+    public void Clear()
+    {
+        Guard.NotDisposed(_disposed, nameof(AudioInputStream));
+
+        int code = OwnAudioNative.ownaudio_v1_input_stream_clear(_handle.DangerousGetHandle());
+        ErrorCodeMapper.ThrowIfError(code, nameof(Clear));
+    }
+
+    /// <summary>
+    /// Capture frames the native ring dropped because nobody read it in time. Cumulative for the
+    /// life of the stream, 0 on a callback mode one.
+    /// </summary>
+    public ulong DroppedFrames
+    {
+        get
+        {
+            Guard.NotDisposed(_disposed, nameof(AudioInputStream));
+
+            int code = OwnAudioNative.ownaudio_v1_input_stream_get_dropped_frames(
+                _handle.DangerousGetHandle(), out ulong _frames);
+            ErrorCodeMapper.ThrowIfError(code, nameof(DroppedFrames));
+
+            return _frames;
+        }
     }
 
     /// <summary>
@@ -124,6 +186,6 @@ public sealed class AudioInputStream : IDisposable
 
         _disposed = true;
         _handle.Dispose();
-        _marshaller.Dispose();
+        _marshaller?.Dispose();
     }
 }

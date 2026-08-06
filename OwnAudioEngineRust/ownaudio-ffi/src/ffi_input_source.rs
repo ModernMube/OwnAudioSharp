@@ -13,7 +13,7 @@ use std::os::raw::c_char;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use ownaudio_core::{ring_buffer, SampleFormat, StreamConfig};
+use ownaudio_core::{ring_buffer_frames, SampleFormat, StreamConfig};
 
 use crate::error_code::{set_last_error, OwnAudioErrorCode};
 use crate::ffi_stream::parse_device_name;
@@ -91,7 +91,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_open_input(
         // Lock-free bridge: the capture callback writes into `writer`, the mixer
         // audio thread reads `reader` (installed as the track's source).
         let capacity = ((sample_rate.max(1) as f32) * (ch as f32) * INPUT_RING_SECONDS) as usize;
-        let (mut writer, reader) = ring_buffer(capacity.max(1));
+        let (mut writer, reader) = ring_buffer_frames(capacity.max(ch), ch);
 
         let peaks = Arc::new(InputPeaks {
             left: std::sync::atomic::AtomicU32::new(0.0f32.to_bits()),

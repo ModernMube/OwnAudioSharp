@@ -20,8 +20,10 @@ namespace OwnaudioNET.BufferManagement
     public sealed class CircularBuffer
     {
         public CircularBuffer(int capacityInSamples) { }
+        public CircularBuffer(int capacityInSamples, int frameSize) { }
         public int Available { get; }
         public int Capacity { get; }
+        public int FrameSize { get; }
         public bool IsEmpty { get; }
         public bool IsFull { get; }
         public int WritableCount { get; }
@@ -787,6 +789,7 @@ namespace OwnaudioNET.Engine
         public bool IsRunning { get; }
         public int OutputBufferAvailable { get; }
         public int OutputLatencyFrames { get; }
+        public long TotalInputOverflowFrames { get; }
         public long TotalPumpedFrames { get; }
         public long TotalUnderruns { get; }
         public Ownaudio.Core.IAudioEngine UnderlyingEngine { get; }
@@ -1604,6 +1607,7 @@ namespace OwnaudioNET
         public static bool IsInitialized { get; }
         public static bool IsRunning { get; }
         public static int OutputLatencyFrames { get; }
+        public static long TotalInputOverflowFrames { get; }
         public static System.Version Version { get; }
         public static event System.EventHandler<OwnaudioNET.NetworkSync.ConnectionStateChangedEventArgs>? NetworkSyncConnectionChanged;
         public static bool BroadcastCommand(ref OwnaudioNET.NetworkSync.NetworkSyncProtocol.Command command) { }

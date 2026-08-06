@@ -154,6 +154,39 @@ internal static unsafe partial class OwnAudioNative
         out uint outFrames);
 
     /// <summary>
+    /// Drains a buffered-mode stream (one opened with a zero callback) into dst. Whole frames only,
+    /// returns 0 samples on an empty ring rather than blocking.
+    /// </summary>
+    /// <param name="stream"></param>
+    /// <param name="dst"></param>
+    /// <param name="dstLen"></param>
+    /// <param name="outRead">receives the sample count actually taken</param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static unsafe partial int ownaudio_v1_input_stream_read(
+        IntPtr stream,
+        float* dst,
+        nuint dstLen,
+        out nuint outRead);
+
+    /// <summary>
+    /// Drops whatever sits in a buffered stream's ring. Call it while capture is paused.
+    /// </summary>
+    /// <param name="stream"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_input_stream_clear(IntPtr stream);
+
+    /// <summary>
+    /// Capture frames the native ring had to drop because nobody read it in time. Cumulative,
+    /// always 0 on a callback mode stream.
+    /// </summary>
+    /// <param name="stream"></param>
+    /// <param name="outFrames"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_input_stream_get_dropped_frames(
+        IntPtr stream,
+        out ulong outFrames);
+
+    /// <summary>
     /// Kills the input stream. Zero handle is fine.
     /// </summary>
     /// <param name="stream"></param>

@@ -6,13 +6,15 @@ namespace OwnaudioNET.BufferManagement;
 /// <summary>
 /// Lock-free SPSC ring buffer for audio. One producer calls Write, one consumer
 /// calls Read/Peek/Skip. Capacity gets rounded up to a power of two so the wrap
-/// is a cheap mask instead of a modulo.
+/// is a cheap mask instead of a modulo. Given a frame size, short transfers stop
+/// on a frame edge so interleaved channels never end up rotated.
 /// </summary>
 public sealed class CircularBuffer
 {
     private readonly float[] _buffer;
     private readonly int _capacity;
     private readonly int _mask;
+    private readonly int _frameSize;
     private volatile int _writePos;
     private volatile int _readPos;
     private int _available;
@@ -44,18 +46,42 @@ public sealed class CircularBuffer
     public bool IsFull => Available == _capacity;
 
     /// <summary>
+    /// Samples the buffer won't split, i.e. channel count for interleaved audio. 1 = anything goes.
+    /// </summary>
+    public int FrameSize => _frameSize;
+
+    /// <summary>
     /// Capacity is given in samples, not frames.
     /// </summary>
     /// <param name="capacityInSamples"></param>
-    public CircularBuffer(int capacityInSamples)
+    public CircularBuffer(int capacityInSamples) : this(capacityInSamples, 1) { }
+
+    /// <summary>
+    /// Same, but frameSize keeps short reads and writes on channel boundaries.
+    /// </summary>
+    /// <param name="capacityInSamples"></param>
+    /// <param name="frameSize"></param>
+    public CircularBuffer(int capacityInSamples, int frameSize)
     {
         if (capacityInSamples <= 0)
             throw new AudioException("CircularBuffer ERROR: ", new ArgumentException("Capacity must be greater than zero.", nameof(capacityInSamples)));
 
+        if (frameSize <= 0)
+            throw new AudioException("CircularBuffer ERROR: ", new ArgumentException("Frame size must be greater than zero.", nameof(frameSize)));
+
         _capacity = _roundUpPow2(capacityInSamples);
         _mask = _capacity - 1;
+        _frameSize = frameSize;
         _buffer = new float[_capacity];
     }
+
+    /// <summary>
+    /// What we can actually move of wanted. Full transfers pass through, truncated ones
+    /// drop back to the last frame boundary.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private int _fit(int wanted, int limit)
+        => wanted <= limit ? wanted : limit - limit % _frameSize;
 
     /// <summary>
     /// Pushes samples in. If a Clear is pending we swallow the data and return 0,
@@ -68,8 +94,8 @@ public sealed class CircularBuffer
         if (_clearRequested) { _applyPendingClear(); return 0; }
 
         int writable = _capacity - Volatile.Read(ref _available);
-        int toWrite = Math.Min(data.Length, writable);
-        if (toWrite == 0) return 0;
+        int toWrite = _fit(data.Length, writable);
+        if (toWrite <= 0) return 0;
 
         int writePos = _writePos;
         int firstChunk = Math.Min(toWrite, _capacity - writePos);
@@ -95,8 +121,8 @@ public sealed class CircularBuffer
     {
         if (_clearRequested) { _applyPendingClear(); return 0; }
 
-        int toRead = Math.Min(destination.Length, Volatile.Read(ref _available));
-        if (toRead == 0) return 0;
+        int toRead = _fit(destination.Length, Volatile.Read(ref _available));
+        if (toRead <= 0) return 0;
 
         int readPos = _readPos;
         int firstChunk = Math.Min(toRead, _capacity - readPos);
@@ -119,8 +145,8 @@ public sealed class CircularBuffer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Peek(Span<float> destination)
     {
-        int toPeek = Math.Min(destination.Length, Volatile.Read(ref _available));
-        if (toPeek == 0) return 0;
+        int toPeek = _fit(destination.Length, Volatile.Read(ref _available));
+        if (toPeek <= 0) return 0;
 
         int readPos = _readPos;
         int firstChunk = Math.Min(toPeek, _capacity - readPos);

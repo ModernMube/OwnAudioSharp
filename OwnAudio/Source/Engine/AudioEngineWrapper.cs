@@ -62,6 +62,12 @@ public sealed class AudioEngineWrapper : IDisposable
     public long TotalPumpedFrames => _pump.TotalPumpedFrames;
 
     /// <summary>
+    /// Capture frames dropped because Receive() wasn't called often enough to keep the input ring
+    /// drained. Stays 0 on engines that don't report it.
+    /// </summary>
+    public long TotalInputOverflowFrames => (_engine as RustAudioEngine)?.InputOverflowFrames ?? 0;
+
+    /// <summary>
     /// The raw engine, for cases like passing it straight to AudioMixer.
     /// </summary>
     public IAudioEngine UnderlyingEngine => _engine;

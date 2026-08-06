@@ -1,7 +1,9 @@
 use std::ffi::CStr;
 use std::os::raw::c_char;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
-use ownaudio_core::AudioDeviceInfo;
+use ownaudio_core::{ring_buffer_frames, AudioDeviceInfo};
 
 use crate::callback::{
     make_input_trampoline, make_output_trampoline, OwnAudioInputCallback, OwnAudioOutputCallback,
@@ -9,11 +11,16 @@ use crate::callback::{
 use crate::error_code::{set_last_error, OwnAudioErrorCode};
 use crate::ffi_config::OwnAudioStreamConfig;
 use crate::handles::{
-    engine_from_ptr, input_stream_from_ptr, mixer_from_ptr, output_stream_from_ptr, EngineWrapper,
-    InputStreamWrapper, OutputStreamWrapper, OwnAudioEngineHandle, OwnAudioInputStreamHandle,
-    OwnAudioMixerHandle, OwnAudioOutputStreamHandle,
+    engine_from_ptr, input_stream_from_ptr, mixer_from_ptr, output_stream_from_ptr, CaptureBridge,
+    EngineWrapper, InputStreamWrapper, OutputStreamWrapper, OwnAudioEngineHandle,
+    OwnAudioInputStreamHandle, OwnAudioMixerHandle, OwnAudioOutputStreamHandle,
 };
 use crate::host_api::{resolve_host, OwnHostApi};
+
+/// How deep the buffered-mode capture ring is, in seconds. Generous on purpose:
+/// a host that is busy starting up can be hundreds of milliseconds late with its
+/// first read, and the ring is what stands between that and lost audio.
+const CAPTURE_RING_SECONDS: f32 = 2.0;
 
 // Engine lifecycle
 
@@ -511,7 +518,11 @@ pub unsafe extern "C" fn ownaudio_v1_output_stream_destroy(
 ///
 /// - `device_name` — null-terminated UTF-8 name of the target device, or
 ///   `null` to use the system default input device.
-/// - `callback` — called on the audio thread with each captured buffer.
+/// - `callback` — called on the audio thread with each captured buffer. Pass
+///   `null` to run the stream buffered instead: capture then lands in a native
+///   ring that the host drains with `ownaudio_v1_input_stream_read`. That is the
+///   preferred mode for managed hosts, since no foreign code — and therefore no
+///   garbage collector — ever runs on the capture thread.
 ///
 /// The stream starts in the paused state; call
 /// `ownaudio_v1_input_stream_play` to begin capturing.
@@ -538,14 +549,6 @@ pub unsafe extern "C" fn ownaudio_v1_open_input_stream(
         if engine.is_null() || config.is_null() || out_stream.is_null() {
             return OwnAudioErrorCode::NullPointer as i32;
         }
-        let cb = match callback {
-            Some(f) => f,
-            None => {
-                set_last_error("input callback must not be null");
-                return OwnAudioErrorCode::NullPointer as i32;
-            }
-        };
-
         let engine_wrapper = match unsafe { engine_from_ptr(engine) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
@@ -557,14 +560,56 @@ pub unsafe extern "C" fn ownaudio_v1_open_input_stream(
 
         let device_info = parse_device_name(device_name);
 
-        let trampoline = make_input_trampoline(cb, user_data, channels);
+        let (stream_result, capture) = match callback {
+            Some(cb) => {
+                let trampoline = make_input_trampoline(cb, user_data, channels);
+                let opened = engine_wrapper.inner.open_input_stream(
+                    device_info.as_ref(),
+                    &core_config,
+                    trampoline,
+                );
+                (opened, None)
+            }
+            None => {
+                let ch = channels.max(1) as usize;
+                let capacity = ((core_config.sample_rate.max(1) as f32)
+                    * (ch as f32)
+                    * CAPTURE_RING_SECONDS) as usize;
+                let (mut writer, reader) = ring_buffer_frames(capacity.max(ch), ch);
 
-        match engine_wrapper
-            .inner
-            .open_input_stream(device_info.as_ref(), &core_config, trampoline)
-        {
+                let dropped = Arc::new(AtomicU64::new(0));
+                let dropped_cb = Arc::clone(&dropped);
+
+                // Runs on the device audio thread. Non-blocking, allocation-free, and the
+                // only place capture data moves — it never reaches into foreign memory.
+                let opened = engine_wrapper.inner.open_input_stream(
+                    device_info.as_ref(),
+                    &core_config,
+                    move |data: &[f32]| {
+                        let written = writer.write(data);
+                        if written < data.len() {
+                            dropped_cb
+                                .fetch_add(((data.len() - written) / ch) as u64, Ordering::Relaxed);
+                        }
+                    },
+                );
+
+                (
+                    opened,
+                    Some(CaptureBridge {
+                        reader,
+                        dropped_frames: dropped,
+                    }),
+                )
+            }
+        };
+
+        match stream_result {
             Ok(stream) => {
-                let boxed = Box::new(InputStreamWrapper { inner: stream });
+                let boxed = Box::new(InputStreamWrapper {
+                    inner: stream,
+                    capture,
+                });
                 unsafe {
                     *out_stream = Box::into_raw(boxed) as *mut OwnAudioInputStreamHandle;
                 }
@@ -705,6 +750,114 @@ pub unsafe extern "C" fn ownaudio_v1_input_stream_get_latency_frames(
         };
         unsafe {
             *out_frames = wrapper.inner.latency_frames();
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Drains captured samples from a stream opened in buffered mode (null callback)
+/// into `dst`, writing the sample count actually taken to `*out_read`.
+///
+/// Reads only whole frames, so the caller can always slice the result into
+/// interleaved frames without the channels sliding. Returns `0` samples when the
+/// ring is empty rather than blocking, and `InternalError` (9) if the stream was
+/// opened with a callback and therefore has no ring to read.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+/// - `dst` must point to at least `dst_len` writable `f32` slots.
+/// - `out_read` must point to a writable `usize`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_input_stream_read(
+    stream: *mut OwnAudioInputStreamHandle,
+    dst: *mut f32,
+    dst_len: usize,
+    out_read: *mut usize,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if dst.is_null() || out_read.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let wrapper = match unsafe { input_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        let bridge = match wrapper.capture.as_mut() {
+            Some(b) => b,
+            None => {
+                set_last_error("input stream was opened with a callback; there is no ring to read");
+                return OwnAudioErrorCode::InternalError as i32;
+            }
+        };
+
+        let out = unsafe { std::slice::from_raw_parts_mut(dst, dst_len) };
+        unsafe {
+            *out_read = bridge.reader.read(out);
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Throws away everything sitting in a buffered stream's capture ring.
+///
+/// Meant for stop/start, so a new take never opens with the tail of the old one.
+/// Call it while capture is paused: it only moves the read side, so samples the
+/// callback writes concurrently may survive. No-op on a callback-mode stream.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_input_stream_clear(
+    stream: *mut OwnAudioInputStreamHandle,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { input_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        if let Some(bridge) = wrapper.capture.as_mut() {
+            bridge.reader.discard_all();
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Writes the number of capture frames dropped so far to `*out_frames`.
+///
+/// Frames get dropped when the host leaves the capture ring unread for longer
+/// than it is deep. Cumulative for the life of the stream, and always `0` on a
+/// callback-mode stream. Anything above zero means the recording has a hole in it.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+/// - `out_frames` must point to a writable `u64`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_input_stream_get_dropped_frames(
+    stream: *mut OwnAudioInputStreamHandle,
+    out_frames: *mut u64,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_frames.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let wrapper = match unsafe { input_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        unsafe {
+            *out_frames = wrapper
+                .capture
+                .as_ref()
+                .map_or(0, |b| b.dropped_frames.load(Ordering::Relaxed));
         }
         OwnAudioErrorCode::Success as i32
     }));

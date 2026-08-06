@@ -243,6 +243,12 @@ public static partial class OwnaudioNet
     public static int InputLatencyFrames => _engineWrapper?.InputLatencyFrames ?? 0;
 
     /// <summary>
+    /// Capture frames lost so far because Receive() fell behind the input ring. Anything above 0
+    /// means the take has a hole in it — worth surfacing to the user.
+    /// </summary>
+    public static long TotalInputOverflowFrames => _engineWrapper?.TotalInputOverflowFrames ?? 0;
+
+    /// <summary>
     /// 48k stereo presets, only the buf size differs.
     /// </summary>
     /// <returns></returns>

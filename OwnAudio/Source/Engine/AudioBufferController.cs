@@ -59,7 +59,7 @@ internal sealed class AudioBufferController : IDisposable
       _engineBufferSize = engineBufferSize;
       _channels = channels;
 
-      _outputBuffer = new CircularBuffer(engineBufferSize * bufferMultiplier);
+      _outputBuffer = new CircularBuffer(engineBufferSize * bufferMultiplier, channels);
       _inputBufferPool = new AudioBufferPool(engineBufferSize, initialPoolSize: 4, maxPoolSize: 16);
    }
 

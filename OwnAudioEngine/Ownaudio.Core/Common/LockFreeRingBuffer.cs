@@ -7,6 +7,8 @@ namespace Ownaudio.Core.Common
     /// <summary>
     /// SPSC ring buffer for the RT path. One reader, one writer, no locks,
     /// no allocation once it is built. Capacity is rounded to a power of 2.
+    /// With a frame size set, a short read or write is cut on a frame edge so
+    /// interleaved audio never gets rotated by a stray half frame.
     /// </summary>
     /// <typeparam name="T">Element type, float for samples.</typeparam>
     public sealed class LockFreeRingBuffer<T> where T : struct
@@ -14,6 +16,7 @@ namespace Ownaudio.Core.Common
         private readonly T[] _buffer;
         private readonly int _capacity;
         private readonly int _capacityMask;
+        private readonly int _frameSize;
 
         private int _writeIndex;
         private int _readIndex;
@@ -55,27 +58,38 @@ namespace Ownaudio.Core.Common
             get => _capacity - Available - 1;
         }
 
+        /// <summary>
+        /// Elements the ring refuses to split, i.e. channel count for interleaved audio. 1 = anything goes.
+        /// </summary>
+        public int FrameSize => _frameSize;
+
         /// <summary></summary>
         /// <param name="capacity"></param>
-        public LockFreeRingBuffer(int capacity)
+        /// <param name="frameSize"></param>
+        public LockFreeRingBuffer(int capacity, int frameSize = 1)
         {
             if (capacity <= 0)
                 throw new ArgumentException("Capacity must be positive", nameof(capacity));
 
+            if (frameSize <= 0)
+                throw new ArgumentException("Frame size must be positive", nameof(frameSize));
+
             _capacity = _roundUpToPowerOf2(capacity);
             _capacityMask = _capacity - 1;
+            _frameSize = frameSize;
             _buffer = new T[_capacity];
         }
 
         /// <summary>
-        /// Pushes what fits, wrapping around the end.
+        /// Pushes what fits, wrapping around the end. If it can't take everything the
+        /// leftover is dropped, but only ever whole frames.
         /// </summary>
         /// <returns>How many elements actually landed in there.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int Write(ReadOnlySpan<T> data)
         {
-            int _toWrite = Math.Min(data.Length, WritableCount);
-            if (_toWrite == 0) return 0;
+            int _toWrite = _fit(data.Length, WritableCount);
+            if (_toWrite <= 0) return 0;
 
             int _writeIdx = Volatile.Read(ref _writeIndex);
             int _firstChunk = Math.Min(_toWrite, _capacity - _writeIdx);
@@ -90,14 +104,15 @@ namespace Ownaudio.Core.Common
         }
 
         /// <summary>
-        /// Pulls what it can into destination, wrapping the same way.
+        /// Pulls what it can into destination, wrapping the same way. On a short read the
+        /// trailing partial frame stays in the ring for the next round.
         /// </summary>
         /// <returns>How many elements we managed to read.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int Read(Span<T> destination)
         {
-            int _toRead = Math.Min(destination.Length, Available);
-            if(_toRead == 0) return 0;
+            int _toRead = _fit(destination.Length, Available);
+            if(_toRead <= 0) return 0;
 
             int _readIdx = Volatile.Read(ref _readIndex);
             int _firstChunk = Math.Min(_toRead, _capacity - _readIdx);
@@ -120,6 +135,14 @@ namespace Ownaudio.Core.Common
             _writeIndex = 0;
             _readIndex = 0;
         }
+
+        /// <summary>
+        /// How much of wanted actually moves given the room (or data) we have. A transfer that
+        /// fits goes as asked, a truncated one falls back to the last frame boundary.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private int _fit(int wanted, int limit)
+            => wanted <= limit ? wanted : limit - limit % _frameSize;
 
         /// <summary>
         /// Next power of 2 at or above value.

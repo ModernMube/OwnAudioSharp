@@ -58,7 +58,7 @@ pub use multitrack::{
     MultiTrackMixer, SampleClock, Track, TrackShared, TrackSource, TrackState,
 };
 pub use resampler::Resampler;
-pub use ringbuffer::{ring_buffer, RingBufferReader, RingBufferWriter};
+pub use ringbuffer::{ring_buffer, ring_buffer_frames, RingBufferReader, RingBufferWriter};
 pub use smoothing::SmoothedParam;
 pub use stream::{InputStream, OutputStream};
 pub use stream_error::{StreamErrorKind, StreamErrorState};
