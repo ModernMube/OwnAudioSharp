@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU32, AtomicU64};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64};
 use std::sync::Arc;
 
 use ownaudio_core::multitrack::MixerController;
@@ -64,6 +64,20 @@ pub(crate) struct DecoderWrapper {
 
 pub(crate) struct OutputStreamWrapper {
     pub inner: OutputStream,
+    /// Present when the stream was opened without a callback: the host pushes
+    /// into this ring with `ownaudio_v1_output_stream_write` and the render
+    /// callback drains it, so no managed code runs on the audio thread.
+    pub render: Option<RenderBridge>,
+}
+
+/// Write side of the native render ring, plus what the callback reports back.
+pub(crate) struct RenderBridge {
+    pub writer: RingBufferWriter,
+    /// Frames the callback had to fill with silence because the ring ran dry.
+    pub underrun_frames: Arc<AtomicU64>,
+    /// Set by the host, honoured by the callback — only the reader may move the
+    /// read side, so a flush has to be handed over rather than done in place.
+    pub clear_requested: Arc<AtomicBool>,
 }
 
 pub(crate) struct InputStreamWrapper {

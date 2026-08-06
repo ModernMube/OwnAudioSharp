@@ -1439,8 +1439,11 @@ void ownaudio_v1_engine_destroy(struct OwnAudioEngineHandle *handle);
  * - `device_name` — null-terminated UTF-8 name of the target device, or
  *   `null` to use the system default output device.
  * - `config` — pointer to a filled `OwnAudioStreamConfig`; must not be null.
- * - `callback` — function called on the audio thread for every buffer;
- *   must not be null.
+ * - `callback` — function called on the audio thread for every buffer. Pass
+ *   `null` to run the stream buffered instead: the host then pushes audio with
+ *   `ownaudio_v1_output_stream_write` and the callback drains a native ring.
+ *   That is the preferred mode for managed hosts, since no foreign code — and
+ *   therefore no garbage collector — ever runs on the render thread.
  * - `user_data` — opaque pointer passed back to `callback`; may be null.
  * - `out_stream` — receives the new stream handle on success.
  *
@@ -1580,6 +1583,55 @@ int32_t ownaudio_v1_output_stream_get_error_state(struct OwnAudioOutputStreamHan
  */
 int32_t ownaudio_v1_output_stream_get_latency_frames(struct OwnAudioOutputStreamHandle *stream,
                                                      uint32_t *out_frames);
+
+/**
+ * Pushes interleaved samples into a buffered stream's render ring, writing the
+ * sample count actually taken to `*out_written`.
+ *
+ * Takes only whole frames and never blocks: a short write means the ring is
+ * full, and the caller should back off and retry rather than drop the tail.
+ * Returns `InternalError` (9) if the stream was opened with a callback and
+ * therefore has no ring to write.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_output_stream` that has not been destroyed.
+ * - `src` must point to at least `src_len` readable `f32` values.
+ * - `out_written` must point to a writable `usize`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_output_stream_write(struct OwnAudioOutputStreamHandle *stream,
+                                        const float *src,
+                                        size_t src_len,
+                                        size_t *out_written);
+
+/**
+ * Asks a buffered stream to drop whatever is queued in its render ring.
+ *
+ * The flush happens on the next callback, because only the reader may move the
+ * read side. Meant for stop/seek, so playback never resumes with stale audio.
+ * No-op on a callback-mode stream.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_output_stream` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_output_stream_clear(struct OwnAudioOutputStreamHandle *stream);
+
+/**
+ * Writes the number of frames the render callback had to fill with silence to
+ * `*out_frames`.
+ *
+ * Frames go silent when the host does not keep the ring fed. Cumulative for the
+ * life of the stream, and always `0` on a callback-mode stream. Note that a
+ * paused-but-playing stream naturally accumulates these.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_output_stream` that has not been destroyed.
+ * - `out_frames` must point to a writable `u64`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_output_stream_get_underrun_frames(struct OwnAudioOutputStreamHandle *stream,
+                                                      uint64_t *out_frames);
 
 /**
  * Destroys an output stream and releases all associated resources.

@@ -1,6 +1,6 @@
 use std::ffi::CStr;
 use std::os::raw::c_char;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
 use ownaudio_core::{ring_buffer_frames, AudioDeviceInfo};
@@ -13,7 +13,7 @@ use crate::ffi_config::OwnAudioStreamConfig;
 use crate::handles::{
     engine_from_ptr, input_stream_from_ptr, mixer_from_ptr, output_stream_from_ptr, CaptureBridge,
     EngineWrapper, InputStreamWrapper, OutputStreamWrapper, OwnAudioEngineHandle,
-    OwnAudioInputStreamHandle, OwnAudioMixerHandle, OwnAudioOutputStreamHandle,
+    OwnAudioInputStreamHandle, OwnAudioMixerHandle, OwnAudioOutputStreamHandle, RenderBridge,
 };
 use crate::host_api::{resolve_host, OwnHostApi};
 
@@ -21,6 +21,11 @@ use crate::host_api::{resolve_host, OwnHostApi};
 /// a host that is busy starting up can be hundreds of milliseconds late with its
 /// first read, and the ring is what stands between that and lost audio.
 const CAPTURE_RING_SECONDS: f32 = 2.0;
+
+/// How deep the buffered-mode render ring is, in seconds. Kept short on purpose:
+/// a producer that pushes as fast as it can keeps the ring full, so the depth is
+/// what the host pays in output latency.
+const RENDER_RING_SECONDS: f32 = 0.1;
 
 // Engine lifecycle
 
@@ -143,8 +148,11 @@ pub unsafe extern "C" fn ownaudio_v1_engine_destroy(handle: *mut OwnAudioEngineH
 /// - `device_name` — null-terminated UTF-8 name of the target device, or
 ///   `null` to use the system default output device.
 /// - `config` — pointer to a filled `OwnAudioStreamConfig`; must not be null.
-/// - `callback` — function called on the audio thread for every buffer;
-///   must not be null.
+/// - `callback` — function called on the audio thread for every buffer. Pass
+///   `null` to run the stream buffered instead: the host then pushes audio with
+///   `ownaudio_v1_output_stream_write` and the callback drains a native ring.
+///   That is the preferred mode for managed hosts, since no foreign code — and
+///   therefore no garbage collector — ever runs on the render thread.
 /// - `user_data` — opaque pointer passed back to `callback`; may be null.
 /// - `out_stream` — receives the new stream handle on success.
 ///
@@ -173,14 +181,6 @@ pub unsafe extern "C" fn ownaudio_v1_open_output_stream(
         if engine.is_null() || config.is_null() || out_stream.is_null() {
             return OwnAudioErrorCode::NullPointer as i32;
         }
-        let cb = match callback {
-            Some(f) => f,
-            None => {
-                set_last_error("output callback must not be null");
-                return OwnAudioErrorCode::NullPointer as i32;
-            }
-        };
-
         let engine_wrapper = match unsafe { engine_from_ptr(engine) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
@@ -192,15 +192,64 @@ pub unsafe extern "C" fn ownaudio_v1_open_output_stream(
 
         let device_info = parse_device_name(device_name);
 
-        let trampoline = make_output_trampoline(cb, user_data, channels);
+        let (stream_result, render) = match callback {
+            Some(cb) => {
+                let trampoline = make_output_trampoline(cb, user_data, channels);
+                let opened = engine_wrapper.inner.open_output_stream(
+                    device_info.as_ref(),
+                    &core_config,
+                    trampoline,
+                );
+                (opened, None)
+            }
+            None => {
+                let ch = channels.max(1) as usize;
+                let capacity = ((core_config.sample_rate.max(1) as f32)
+                    * (ch as f32)
+                    * RENDER_RING_SECONDS) as usize;
+                let (writer, mut reader) = ring_buffer_frames(capacity.max(ch), ch);
 
-        match engine_wrapper.inner.open_output_stream(
-            device_info.as_ref(),
-            &core_config,
-            trampoline,
-        ) {
+                let underruns = Arc::new(AtomicU64::new(0));
+                let clear = Arc::new(AtomicBool::new(false));
+                let underruns_cb = Arc::clone(&underruns);
+                let clear_cb = Arc::clone(&clear);
+
+                // Runs on the device audio thread. Drains the ring, fills the rest with
+                // silence, and never reaches into foreign memory.
+                let opened = engine_wrapper.inner.open_output_stream(
+                    device_info.as_ref(),
+                    &core_config,
+                    move |buf: &mut [f32]| {
+                        if clear_cb.swap(false, Ordering::Relaxed) {
+                            reader.discard_all();
+                        }
+
+                        let filled = reader.read(buf);
+                        if filled < buf.len() {
+                            buf[filled..].fill(0.0);
+                            underruns_cb
+                                .fetch_add(((buf.len() - filled) / ch) as u64, Ordering::Relaxed);
+                        }
+                    },
+                );
+
+                (
+                    opened,
+                    Some(RenderBridge {
+                        writer,
+                        underrun_frames: underruns,
+                        clear_requested: clear,
+                    }),
+                )
+            }
+        };
+
+        match stream_result {
             Ok(stream) => {
-                let boxed = Box::new(OutputStreamWrapper { inner: stream });
+                let boxed = Box::new(OutputStreamWrapper {
+                    inner: stream,
+                    render,
+                });
                 unsafe {
                     *out_stream = Box::into_raw(boxed) as *mut OwnAudioOutputStreamHandle;
                 }
@@ -322,7 +371,10 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_open_output_stream(
 
         match open {
             Ok(stream) => {
-                let boxed = Box::new(OutputStreamWrapper { inner: stream });
+                let boxed = Box::new(OutputStreamWrapper {
+                    inner: stream,
+                    render: None,
+                });
                 unsafe {
                     *out_stream = Box::into_raw(boxed) as *mut OwnAudioOutputStreamHandle;
                 }
@@ -482,6 +534,117 @@ pub unsafe extern "C" fn ownaudio_v1_output_stream_get_latency_frames(
         };
         unsafe {
             *out_frames = wrapper.inner.latency_frames();
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Pushes interleaved samples into a buffered stream's render ring, writing the
+/// sample count actually taken to `*out_written`.
+///
+/// Takes only whole frames and never blocks: a short write means the ring is
+/// full, and the caller should back off and retry rather than drop the tail.
+/// Returns `InternalError` (9) if the stream was opened with a callback and
+/// therefore has no ring to write.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_output_stream` that has not been destroyed.
+/// - `src` must point to at least `src_len` readable `f32` values.
+/// - `out_written` must point to a writable `usize`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_output_stream_write(
+    stream: *mut OwnAudioOutputStreamHandle,
+    src: *const f32,
+    src_len: usize,
+    out_written: *mut usize,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if src.is_null() || out_written.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let wrapper = match unsafe { output_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        let bridge = match wrapper.render.as_mut() {
+            Some(b) => b,
+            None => {
+                set_last_error(
+                    "output stream was opened with a callback; there is no ring to write",
+                );
+                return OwnAudioErrorCode::InternalError as i32;
+            }
+        };
+
+        let input = unsafe { std::slice::from_raw_parts(src, src_len) };
+        unsafe {
+            *out_written = bridge.writer.write(input);
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Asks a buffered stream to drop whatever is queued in its render ring.
+///
+/// The flush happens on the next callback, because only the reader may move the
+/// read side. Meant for stop/seek, so playback never resumes with stale audio.
+/// No-op on a callback-mode stream.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_output_stream` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_output_stream_clear(
+    stream: *mut OwnAudioOutputStreamHandle,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { output_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        if let Some(bridge) = wrapper.render.as_ref() {
+            bridge.clear_requested.store(true, Ordering::Relaxed);
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Writes the number of frames the render callback had to fill with silence to
+/// `*out_frames`.
+///
+/// Frames go silent when the host does not keep the ring fed. Cumulative for the
+/// life of the stream, and always `0` on a callback-mode stream. Note that a
+/// paused-but-playing stream naturally accumulates these.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_output_stream` that has not been destroyed.
+/// - `out_frames` must point to a writable `u64`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_output_stream_get_underrun_frames(
+    stream: *mut OwnAudioOutputStreamHandle,
+    out_frames: *mut u64,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_frames.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let wrapper = match unsafe { output_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        unsafe {
+            *out_frames = wrapper
+                .render
+                .as_ref()
+                .map_or(0, |b| b.underrun_frames.load(Ordering::Relaxed));
         }
         OwnAudioErrorCode::Success as i32
     }));

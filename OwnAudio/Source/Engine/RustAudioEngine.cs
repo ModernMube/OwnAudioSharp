@@ -3,16 +3,15 @@ using System.Collections.Generic;
 using System.Threading;
 using Logger;
 using Ownaudio.Core;
-using Ownaudio.Core.Common;
 using OwnaudioNET.Exceptions;
 using RustSafe = Ownaudio.Safe;
 
 namespace OwnaudioNET.Engine;
 
 /// <summary>
-/// IAudioEngine on top of the native Rust engine. Output goes through a managed SPSC ring into the
-/// stream callback; capture is buffered natively and Receives() just drains it, so no managed code —
-/// and no GC pause — ever lands on the capture thread.
+/// IAudioEngine on top of the native Rust engine. Both directions run buffered natively: Send() pushes
+/// into the stream's render ring and Receives() drains its capture ring, so no managed code — and no
+/// GC pause — ever lands on an audio thread.
 /// </summary>
 /// <remarks>
 /// Send() must come from a single producer (the pump thread) and Receives() from a single consumer.
@@ -27,8 +26,6 @@ internal sealed class RustAudioEngine : IAudioEngine
     private RustSafe.AudioEngine? _engine;
     private RustSafe.AudioOutputStream? _outputStream;
     private RustSafe.AudioInputStream? _inputStream;
-
-    private LockFreeRingBuffer<float>? _outputRing;
 
     private AudioConfig? _config;
     private int _channels = 2;
@@ -152,7 +149,6 @@ internal sealed class RustAudioEngine : IAudioEngine
 
             _outputStream.Dispose();
             _outputStream = null;
-            _outputRing?.Clear();
             Log.Info("[RustEngine] Playback released, session takes the device");
         }
     }
@@ -170,7 +166,6 @@ internal sealed class RustAudioEngine : IAudioEngine
 
             if (_isAsioHost()) return;
 
-            _outputRing ??= new LockFreeRingBuffer<float>(_ringCapacity(_config), _channels);
             _openOutputStream(_config);
             if (_running) _outputStream?.Play();
 
@@ -226,7 +221,6 @@ internal sealed class RustAudioEngine : IAudioEngine
                 if (_outputEnabled)
                 {
                     _selectedOutputDevice = _findDevice(_outputDeviceSnapshot, _outputId, preferOutput: true);
-                    _outputRing = new LockFreeRingBuffer<float>(_ringCapacity(config), _channels);
                     _openOutputStream(config);
                 }
 
@@ -297,7 +291,7 @@ internal sealed class RustAudioEngine : IAudioEngine
                 _running = false;
                 _outputStream?.Pause();
                 _inputStream?.Pause();
-                _outputRing?.Clear();
+                _outputStream?.Clear();
                 _inputStream?.Clear();
                 _status = EngineStatus.Idle;
                 Log.Info("[RustEngine] Streams paused, rings cleared");
@@ -322,8 +316,8 @@ internal sealed class RustAudioEngine : IAudioEngine
         if (samples.IsEmpty)
             return;
 
-        LockFreeRingBuffer<float>? _ring = _outputRing;
-        if (_ring == null)
+        RustSafe.AudioOutputStream? _stream = _outputStream;
+        if (_stream == null)
             return;
 
         int _offset = 0;
@@ -334,10 +328,10 @@ internal sealed class RustAudioEngine : IAudioEngine
             if (_disposed || !_running || !_outputEnabled)
                 return;
 
-            _offset += _ring.Write(samples.Slice(_offset));
+            _offset += _stream.Write(samples.Slice(_offset));
 
-            // Ring full, the callback hasn't drained it yet. Back off and retry, this is the
-            // blocking behaviour IAudioEngine promises.
+            // Ring full, the render callback hasn't drained it yet. Back off and retry, this is
+            // the blocking behaviour IAudioEngine promises.
             if (_offset < samples.Length) _spinner.SpinOnce();
             else _spinner.Reset();
         }
@@ -354,16 +348,6 @@ internal sealed class RustAudioEngine : IAudioEngine
             return 0;
 
         return _stream.Read(destination);
-    }
-
-    /// <summary>
-    /// RT callback pulling playback samples. The native buffer comes zeroed, so an underrun just leaves silence,
-    /// and the ring keeps a trailing partial frame back instead of ending the read mid-frame.
-    /// </summary>
-    /// <param name="args"></param>
-    private void _outputCallback(in RustSafe.Callbacks.AudioOutputCallbackArgs args)
-    {
-        _outputRing?.Read(args.Buffer);
     }
 
     #endregion
@@ -659,7 +643,7 @@ internal sealed class RustAudioEngine : IAudioEngine
             RustSafe.SampleFormat.F32,
             _clampStreamBuffer(config.BufferSize));
 
-        _outputStream = _engine!.OpenOutputStream(_selectedOutputDevice, _cfg, _outputCallback);
+        _outputStream = _engine!.OpenBufferedOutputStream(_selectedOutputDevice, _cfg);
     }
 
     /// <summary>
@@ -685,7 +669,6 @@ internal sealed class RustAudioEngine : IAudioEngine
     {
         _outputStream?.Dispose();
         _outputStream = null;
-        _outputRing?.Clear();
         _openOutputStream(config);
     }
 
@@ -717,19 +700,6 @@ internal sealed class RustAudioEngine : IAudioEngine
         _outputStream = null;
         _inputStream = null;
         _engine = null;
-        _outputRing = null;
-    }
-
-    /// <summary>
-    /// Ring size in samples. Eight engine buffers of headroom keeps the blocking producer off the RT
-    /// consumer without piling up latency, capped at 1M.
-    /// </summary>
-    /// <param name="config"></param>
-    /// <returns></returns>
-    private int _ringCapacity(AudioConfig config)
-    {
-        long _capacity = (long)Math.Max(config.BufferSize, 64) * Math.Max(config.Channels, 1) * 8L;
-        return (int)Math.Min(_capacity, 1 << 20);
     }
 
     /// <summary>

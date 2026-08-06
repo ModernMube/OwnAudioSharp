@@ -147,6 +147,19 @@ public sealed class AudioEngine : IDisposable
     }
 
     /// <summary>
+    /// Opens an output stream in buffered mode, paused. You push samples with
+    /// AudioOutputStream.Write and the render callback drains a native ring — no managed code
+    /// on the audio thread, so a GC pause can't turn into a dropout.
+    /// </summary>
+    public AudioOutputStream OpenBufferedOutputStream(AudioDevice? device, AudioStreamConfig config)
+    {
+        Guard.NotDisposed(_disposed, nameof(AudioEngine));
+        Guard.NotNull(config, nameof(config));
+
+        return AudioOutputStream.OpenBuffered(_handle, device, config);
+    }
+
+    /// <summary>
     /// Output stream driven by a native mixer. Rendering happens on the audio thread itself,
     /// no managed callback, the samples never come back to managed memory. The mixer rate and
     /// channel count has to line up with the config.

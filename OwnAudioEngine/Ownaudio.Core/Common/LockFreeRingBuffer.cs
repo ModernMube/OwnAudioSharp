@@ -11,6 +11,8 @@ namespace Ownaudio.Core.Common
     /// interleaved audio never gets rotated by a stray half frame.
     /// </summary>
     /// <typeparam name="T">Element type, float for samples.</typeparam>
+    [Obsolete("The engine buffers natively now, so nothing in OwnAudio uses this any more. " +
+        "Use OwnaudioNET.BufferManagement.CircularBuffer for a managed audio ring. Removed in 5.0.")]
     public sealed class LockFreeRingBuffer<T> where T : struct
     {
         private readonly T[] _buffer;

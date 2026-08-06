@@ -5,11 +5,14 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+#pragma warning disable CS0618 // the type is obsolete, testing it is the whole point of this file
+
 namespace Ownaudio.EngineTest
 {
     /// <summary>
     /// Test suite for LockFreeRingBuffer.
     /// Tests thread-safe operations, capacity management, and concurrent access.
+    /// The engine buffers natively now, so this is API contract coverage until 5.0 drops the type.
     /// </summary>
     [TestClass]
     public class RingBufferTests
@@ -489,3 +492,5 @@ namespace Ownaudio.EngineTest
         }
     }
 }
+
+#pragma warning restore CS0618

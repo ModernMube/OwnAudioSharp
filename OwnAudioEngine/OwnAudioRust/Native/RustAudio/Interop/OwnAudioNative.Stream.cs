@@ -94,6 +94,39 @@ internal static unsafe partial class OwnAudioNative
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial void ownaudio_v1_output_stream_destroy(IntPtr stream);
 
+    /// <summary>
+    /// Pushes samples into a buffered stream (one opened with a zero callback). Whole frames only,
+    /// never blocks — a short write means the ring is full.
+    /// </summary>
+    /// <param name="stream"></param>
+    /// <param name="src"></param>
+    /// <param name="srcLen"></param>
+    /// <param name="outWritten">receives the sample count actually taken</param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static unsafe partial int ownaudio_v1_output_stream_write(
+        IntPtr stream,
+        float* src,
+        nuint srcLen,
+        out nuint outWritten);
+
+    /// <summary>
+    /// Asks the render callback to drop whatever is queued. Takes effect on its next run.
+    /// </summary>
+    /// <param name="stream"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_output_stream_clear(IntPtr stream);
+
+    /// <summary>
+    /// Frames the render callback had to fill with silence because the ring ran dry. Cumulative,
+    /// always 0 on a callback mode stream.
+    /// </summary>
+    /// <param name="stream"></param>
+    /// <param name="outFrames"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_output_stream_get_underrun_frames(
+        IntPtr stream,
+        out ulong outFrames);
+
     #endregion
 
     #region Input stream

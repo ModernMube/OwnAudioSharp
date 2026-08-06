@@ -77,6 +77,92 @@ public sealed class AudioOutputStream : IDisposable
         return new AudioOutputStream(handle, marshaller);
     }
 
+    // engine only, buffered mode: nothing managed runs on the render thread
+    internal static unsafe AudioOutputStream OpenBuffered(
+        AudioEngineHandle engine,
+        AudioDevice? device,
+        AudioStreamConfig config)
+    {
+        NativeStreamConfig nativeConfig = config.ToNative();
+        IntPtr deviceNamePtr = device is not null ? Marshal.StringToCoTaskMemUTF8(device.Name) : IntPtr.Zero;
+
+        int code;
+        IntPtr rawStream;
+
+        try
+        {
+            code = OwnAudioNative.ownaudio_v1_open_output_stream(
+                engine.DangerousGetHandle(),
+                deviceNamePtr,
+                in nativeConfig,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                out rawStream);
+        }
+        finally
+        {
+            if (deviceNamePtr != IntPtr.Zero) Marshal.FreeCoTaskMem(deviceNamePtr);
+        }
+
+        ErrorCodeMapper.ThrowIfError(code, nameof(OpenBuffered));
+
+        var handle = new AudioOutputStreamHandle();
+        Marshal.InitHandle(handle, rawStream);
+
+        return new AudioOutputStream(handle, null);
+    }
+
+    /// <summary>
+    /// Pushes interleaved samples into the native render ring, whole frames only. Returns what it
+    /// took; anything short means the ring is full, back off and retry. Buffered streams only.
+    /// </summary>
+    /// <param name="samples"></param>
+    /// <returns>Sample count actually queued.</returns>
+    public unsafe int Write(ReadOnlySpan<float> samples)
+    {
+        Guard.NotDisposed(_disposed, nameof(AudioOutputStream));
+
+        if (samples.IsEmpty) return 0;
+
+        fixed (float* _src = samples)
+        {
+            int code = OwnAudioNative.ownaudio_v1_output_stream_write(
+                _handle.DangerousGetHandle(), _src, (nuint)samples.Length, out nuint _written);
+            ErrorCodeMapper.ThrowIfError(code, nameof(Write));
+
+            return (int)_written;
+        }
+    }
+
+    /// <summary>
+    /// Drops whatever is queued for playback. The render callback honours it on its next run,
+    /// so a stop doesn't leave stale audio to replay on the next start.
+    /// </summary>
+    public void Clear()
+    {
+        Guard.NotDisposed(_disposed, nameof(AudioOutputStream));
+
+        int code = OwnAudioNative.ownaudio_v1_output_stream_clear(_handle.DangerousGetHandle());
+        ErrorCodeMapper.ThrowIfError(code, nameof(Clear));
+    }
+
+    /// <summary>
+    /// Frames that came out silent because the ring ran dry. Cumulative, 0 on a callback mode stream.
+    /// </summary>
+    public ulong UnderrunFrames
+    {
+        get
+        {
+            Guard.NotDisposed(_disposed, nameof(AudioOutputStream));
+
+            int code = OwnAudioNative.ownaudio_v1_output_stream_get_underrun_frames(
+                _handle.DangerousGetHandle(), out ulong _frames);
+            ErrorCodeMapper.ThrowIfError(code, nameof(UnderrunFrames));
+
+            return _frames;
+        }
+    }
+
     // engine only, the mixer fills every buffer on the audio thread, zero per buffer pinvoke
     internal static unsafe AudioOutputStream OpenMixerDriven(
         AudioEngineHandle engine,

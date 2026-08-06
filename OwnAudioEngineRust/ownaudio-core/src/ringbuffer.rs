@@ -225,6 +225,22 @@ mod tests {
     }
 
     #[test]
+    fn discard_all_empties_the_ring() {
+        let (mut writer, mut reader) = ring_buffer_frames(64, 2);
+        writer.write(&[1.0f32; 10]);
+
+        assert_eq!(reader.discard_all(), 10);
+        assert_eq!(reader.available(), 0);
+        assert_eq!(reader.discard_all(), 0);
+
+        // Still usable afterwards, the write side never moved.
+        assert_eq!(writer.write(&[2.0f32; 4]), 4);
+        let mut out = [0.0f32; 4];
+        assert_eq!(reader.read(&mut out), 4);
+        assert_eq!(out, [2.0; 4]);
+    }
+
+    #[test]
     fn overflow_does_not_rotate_channels() {
         let ch = 12;
         let (mut writer, mut reader) = ring_buffer_frames(50, ch);
