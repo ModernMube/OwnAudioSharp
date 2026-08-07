@@ -3,6 +3,17 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.3 — 2026-08-07
+
+### API
+
+- `ChordDetect.DetectFromFile` and `DetectFromFiles` now take an optional
+  `Action<double>? progress` callback that reports 0..1 over the whole job — decoding, note
+  transcription, tempo detection and chord analysis, weighted by phase. With the MT3
+  transcriber an analysis is minutes of work on a full song and there was no way to show that
+  to the user. The parameter is last on both overloads, so existing calls are unaffected, and
+  without a callback the transcription percentage still goes to the log as before.
+
 ## 4.0.2 — 2026-08-04
 
 ### Fixed

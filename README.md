@@ -4,7 +4,7 @@
 
 <div align="center">
   <a href="https://www.nuget.org/packages/OwnAudioSharp">
-    <img src="https://img.shields.io/badge/NuGet-OwnAudioSharp%204.0.2-blue" alt="OwnAudioSharp NuGet Package">
+    <img src="https://img.shields.io/badge/NuGet-OwnAudioSharp%204.0.3-blue" alt="OwnAudioSharp NuGet Package">
   </a>
   <a href="https://modernmube.github.io/OwnAudioSharp">
     <img src="https://img.shields.io/badge/Docs-API%20Documentation-darkgreen" alt="Documentation">
