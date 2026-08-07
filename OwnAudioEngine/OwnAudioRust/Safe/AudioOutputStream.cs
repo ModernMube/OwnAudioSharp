@@ -147,6 +147,24 @@ public sealed class AudioOutputStream : IDisposable
     }
 
     /// <summary>
+    /// Samples queued for playback. Divide by the channel count for the frames of audio still
+    /// standing between Write and the DAC.
+    /// </summary>
+    public int QueuedSamples
+    {
+        get
+        {
+            Guard.NotDisposed(_disposed, nameof(AudioOutputStream));
+
+            int code = OwnAudioNative.ownaudio_v1_output_stream_get_queued_samples(
+                _handle.DangerousGetHandle(), out nuint _samples);
+            ErrorCodeMapper.ThrowIfError(code, nameof(QueuedSamples));
+
+            return (int)_samples;
+        }
+    }
+
+    /// <summary>
     /// Frames that came out silent because the ring ran dry. Cumulative, 0 on a callback mode stream.
     /// </summary>
     public ulong UnderrunFrames

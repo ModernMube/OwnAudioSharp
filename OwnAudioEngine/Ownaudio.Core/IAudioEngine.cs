@@ -60,6 +60,21 @@ namespace Ownaudio.Core
         void Send(Span<float> samples);
 
         /// <summary>
+        /// Queues what the device buffer has room for right now and returns that much, instead of
+        /// waiting like Send does. Lets a caller on an arbitrary thread push audio without risking
+        /// a stall. Engines that can't do a partial write fall back to the blocking Send.
+        /// </summary>
+        /// <returns>Samples actually queued.</returns>
+        int TrySend(ReadOnlySpan<float> samples)
+        {
+            // Legacy bridge for engines that only have the blocking Send. Those take a writable
+            // span for historical reasons even though queueing has no business writing back.
+            Send(System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
+                ref System.Runtime.InteropServices.MemoryMarshal.GetReference(samples), samples.Length));
+            return samples.Length;
+        }
+
+        /// <summary>
         /// Pulls captured samples into the caller's own buffer.
         /// </summary>
         /// <returns>Samples written, or a negative error code.</returns>

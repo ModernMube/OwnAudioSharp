@@ -110,6 +110,16 @@ internal static unsafe partial class OwnAudioNative
         out nuint outWritten);
 
     /// <summary>
+    /// Samples still queued for playback, i.e. how far ahead of the DAC the host has pushed.
+    /// </summary>
+    /// <param name="stream"></param>
+    /// <param name="outSamples"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_output_stream_get_queued_samples(
+        IntPtr stream,
+        out nuint outSamples);
+
+    /// <summary>
     /// Asks the render callback to drop whatever is queued. Takes effect on its next run.
     /// </summary>
     /// <param name="stream"></param>

@@ -99,6 +99,11 @@ impl RingBufferWriter {
     pub fn free(&self) -> usize {
         self.producer.slots()
     }
+
+    /// Samples written but not yet read — what the writer is holding ahead of the reader.
+    pub fn queued(&self) -> usize {
+        self.producer.buffer().capacity() - self.producer.slots()
+    }
 }
 
 impl RingBufferReader {
@@ -222,6 +227,19 @@ mod tests {
     fn write_that_fits_is_never_truncated() {
         let (mut writer, _reader) = ring_buffer_frames(64, 12);
         assert_eq!(writer.write(&[1.0f32; 5]), 5);
+    }
+
+    #[test]
+    fn queued_tracks_the_unread_tail() {
+        let (mut writer, mut reader) = ring_buffer_frames(64, 2);
+        assert_eq!(writer.queued(), 0);
+
+        writer.write(&[1.0f32; 10]);
+        assert_eq!(writer.queued(), 10);
+
+        let mut out = [0.0f32; 4];
+        reader.read(&mut out);
+        assert_eq!(writer.queued(), 6);
     }
 
     #[test]

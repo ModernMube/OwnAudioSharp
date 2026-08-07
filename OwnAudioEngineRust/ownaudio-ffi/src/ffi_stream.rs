@@ -589,6 +589,37 @@ pub unsafe extern "C" fn ownaudio_v1_output_stream_write(
     crate::error_code::finish_catch_unwind(result)
 }
 
+/// Writes the number of samples currently queued for playback to `*out_samples`.
+///
+/// This is the host's view of how far ahead of the DAC it has pushed. `0` on a
+/// callback-mode stream, which has no ring.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_output_stream` that has not been destroyed.
+/// - `out_samples` must point to a writable `usize`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_output_stream_get_queued_samples(
+    stream: *mut OwnAudioOutputStreamHandle,
+    out_samples: *mut usize,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_samples.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let wrapper = match unsafe { output_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        unsafe {
+            *out_samples = wrapper.render.as_ref().map_or(0, |b| b.writer.queued());
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
 /// Asks a buffered stream to drop whatever is queued in its render ring.
 ///
 /// The flush happens on the next callback, because only the reader may move the

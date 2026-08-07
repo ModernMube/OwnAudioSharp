@@ -1605,6 +1605,20 @@ int32_t ownaudio_v1_output_stream_write(struct OwnAudioOutputStreamHandle *strea
                                         size_t *out_written);
 
 /**
+ * Writes the number of samples currently queued for playback to `*out_samples`.
+ *
+ * This is the host's view of how far ahead of the DAC it has pushed. `0` on a
+ * callback-mode stream, which has no ring.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_output_stream` that has not been destroyed.
+ * - `out_samples` must point to a writable `usize`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_output_stream_get_queued_samples(struct OwnAudioOutputStreamHandle *stream,
+                                                     size_t *out_samples);
+
+/**
  * Asks a buffered stream to drop whatever is queued in its render ring.
  *
  * The flush happens on the next callback, because only the reader may move the

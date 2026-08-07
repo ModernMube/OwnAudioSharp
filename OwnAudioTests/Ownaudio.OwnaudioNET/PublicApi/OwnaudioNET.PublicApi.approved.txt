@@ -850,6 +850,7 @@ namespace OwnaudioNET.Engine
         public void SimulateOutputDeviceChange(string oldDeviceId, string newDeviceId) { }
         public int Start() { }
         public int Stop() { }
+        public int TrySend(System.ReadOnlySpan<float> samples) { }
     }
 }
 namespace OwnaudioNET.Events

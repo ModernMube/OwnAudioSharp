@@ -24,8 +24,8 @@ public sealed partial class AudioMixer : IDisposable
     private readonly IAudioEngine _engine;
 
     /// <summary>
-    /// Optional pre-buffer in front of _engine. When set the mix thread writes here
-    /// instead of calling _engine.Send, so mix and I/O threads don't step on each other.
+    /// Optional wrapper in front of _engine, set when the mixer was built through Create.
+    /// Only used for lifecycle and stats, audio goes to the engine either way.
     /// </summary>
     private readonly AudioEngineWrapper? _engineWrapper;
 
@@ -257,9 +257,9 @@ public sealed partial class AudioMixer : IDisposable
     public event EventHandler<AudioStreamFaultEventArgs>? StreamFaulted;
 
     /// <summary>
-    /// Builds a mixer that routes through an AudioEngineWrapper's pre-buffer, decoupling
-    /// the mix thread from the engine. Use it with 8+ sources or 2+ master effects to
-    /// avoid starvation under heavy DSP.
+    /// Builds a mixer that routes through an AudioEngineWrapper instead of straight at the engine,
+    /// so it picks up the wrapper's lifecycle and device events. Playback headroom lives in the
+    /// engine's native render ring either way.
     /// </summary>
     /// <param name="engineWrapper"></param>
     /// <param name="bufferSizeInFrames"></param>

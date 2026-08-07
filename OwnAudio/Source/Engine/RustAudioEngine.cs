@@ -14,7 +14,7 @@ namespace OwnaudioNET.Engine;
 /// GC pause — ever lands on an audio thread.
 /// </summary>
 /// <remarks>
-/// Send() must come from a single producer (the pump thread) and Receives() from a single consumer.
+/// Send() must come from a single producer and Receives() from a single consumer.
 /// Initialize / Start / Stop / Dispose are expected to be serialized by the caller.
 /// </remarks>
 internal sealed class RustAudioEngine : IAudioEngine
@@ -336,6 +336,31 @@ internal sealed class RustAudioEngine : IAudioEngine
             else _spinner.Reset();
         }
     }
+
+    /// <inheritdoc />
+    public int TrySend(ReadOnlySpan<float> samples)
+    {
+        if (samples.IsEmpty || _disposed || !_running || !_outputEnabled)
+            return 0;
+
+        RustSafe.AudioOutputStream? _stream = _outputStream;
+        return _stream?.Write(samples) ?? 0;
+    }
+
+    /// <summary>
+    /// Samples sitting in the render ring, i.e. how far ahead of the DAC we've pushed.
+    /// </summary>
+    internal int OutputQueuedSamples => _outputStream?.QueuedSamples ?? 0;
+
+    /// <summary>
+    /// Throws away everything queued for playback.
+    /// </summary>
+    internal void ClearOutput() => _outputStream?.Clear();
+
+    /// <summary>
+    /// Frames the render callback had to fill with silence. Cumulative for the life of the stream.
+    /// </summary>
+    internal long OutputUnderrunFrames => (long)(_outputStream?.UnderrunFrames ?? 0);
 
     /// <inheritdoc />
     public int Receives(Span<float> destination)

@@ -203,6 +203,23 @@ public sealed class MockAudioEngine : IAudioEngine
     }
 
     /// <inheritdoc/>
+    public int TrySend(ReadOnlySpan<float> samples)
+    {
+        if (_disposed || _config == null || _state != 1) return 0;
+
+        // Pretend to have a device queue eight buffers deep, so an oversized push comes back
+        // partial the way a real one does. Without that nothing here could ever report a drop.
+        int _room = _config.BufferSize * _config.Channels * 8;
+        int _queued = Math.Min(samples.Length, _room);
+        if (_queued <= 0) return 0;
+
+        Interlocked.Increment(ref _sendCallCount);
+        Interlocked.Add(ref _totalSamplesSent, _queued);
+
+        return _queued;
+    }
+
+    /// <inheritdoc/>
     public int Receives(Span<float> destination)
     {
         if (_disposed) return -1;
