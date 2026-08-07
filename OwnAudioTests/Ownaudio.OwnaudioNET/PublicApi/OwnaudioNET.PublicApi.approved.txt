@@ -1217,10 +1217,10 @@ namespace OwnaudioNET.Features.OwnChordDetect
 {
     public static class ChordDetect
     {
-        public static System.ValueTuple<System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord>, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey, int> DetectFromFile(string audioFile, float intervalSecond = 1) { }
-        public static System.ValueTuple<System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord>, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey, int> DetectFromFile(string audioFile, OwnaudioNET.Features.Extensions.INoteTranscriber transcriber, float intervalSecond = 1) { }
-        public static System.ValueTuple<System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord>, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey, int> DetectFromFiles(System.Collections.Generic.IReadOnlyList<string> audioFiles, float intervalSecond = 1) { }
-        public static System.ValueTuple<System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord>, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey, int> DetectFromFiles(System.Collections.Generic.IReadOnlyList<string> audioFiles, OwnaudioNET.Features.Extensions.INoteTranscriber transcriber, float intervalSecond = 1) { }
+        public static System.ValueTuple<System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord>, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey, int> DetectFromFile(string audioFile, float intervalSecond = 1, System.Action<double>? progress = null) { }
+        public static System.ValueTuple<System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord>, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey, int> DetectFromFile(string audioFile, OwnaudioNET.Features.Extensions.INoteTranscriber transcriber, float intervalSecond = 1, System.Action<double>? progress = null) { }
+        public static System.ValueTuple<System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord>, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey, int> DetectFromFiles(System.Collections.Generic.IReadOnlyList<string> audioFiles, float intervalSecond = 1, System.Action<double>? progress = null) { }
+        public static System.ValueTuple<System.Collections.Generic.List<OwnaudioNET.Features.OwnChordDetect.Analysis.TimedChord>, OwnaudioNET.Features.OwnChordDetect.Core.MusicalKey, int> DetectFromFiles(System.Collections.Generic.IReadOnlyList<string> audioFiles, OwnaudioNET.Features.Extensions.INoteTranscriber transcriber, float intervalSecond = 1, System.Action<double>? progress = null) { }
         [return: System.Runtime.CompilerServices.TupleElementNames(new string[] {
                 "chord",
                 "stability"})]

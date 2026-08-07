@@ -28,7 +28,10 @@ namespace ChordDetect
                     Console.WriteLine($"Audio loaded successfully!");
                     Console.WriteLine($"Duration: {audioSource.Duration}");
 
-                    var (chords, detectedKey, detectedTempo) = OwnaudioNET.Features.OwnChordDetect.ChordDetect.DetectFromFile(audioFilePath);
+                    var (chords, detectedKey, detectedTempo) = OwnaudioNET.Features.OwnChordDetect.ChordDetect.DetectFromFile(
+                        audioFilePath, 1.0f, p => Console.Write($"\rAnalyzing: {p:P0}   "));
+
+                    Console.WriteLine();
                     Console.WriteLine($"Detected key: {detectedKey}");
                     Console.WriteLine($"Tempo detection: {detectedTempo} BPM ");
 

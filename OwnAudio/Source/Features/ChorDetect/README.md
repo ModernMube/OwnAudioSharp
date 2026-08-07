@@ -42,8 +42,8 @@ only need this class.
 
 | Method | Purpose |
 | --- | --- |
-| `DetectFromFile(string audioFile, float intervalSecond = 1.0f)` | Decode, transcribe and analyze a single file. |
-| `DetectFromFiles(IReadOnlyList<string> audioFiles, float intervalSecond = 1.0f)` | Mix several files into one mono stream (peak-normalized) and analyze the mix — useful for multi-track projects. |
+| `DetectFromFile(string audioFile, float intervalSecond = 1.0f, Action<double>? progress = null)` | Decode, transcribe and analyze a single file. |
+| `DetectFromFiles(IReadOnlyList<string> audioFiles, float intervalSecond = 1.0f, Action<double>? progress = null)` | Mix several files into one mono stream (peak-normalized) and analyze the mix — useful for multi-track projects. |
 | `DetectRealtime(List<Note> notes, DetectionMode mode = Optimized, int buffersize = 5)` | One step of streaming detection; returns the most stable chord and a stability score. |
 
 Both offline calls also take an `INoteTranscriber` overload — see
@@ -68,6 +68,16 @@ Notes:
   for BasicPitch, 16000 Hz for MT3. It is no longer hard-coded.
 - `DetectBpmFromSamples` falls back to **120 BPM** when detection fails (e.g.
   speech or non-rhythmic content).
+- `progress` reports **0..1 over the whole run**, weighted by phase: decoding is
+  the first 5%, transcription 5–85%, tempo detection 85–95%, chord analysis the
+  rest. It matters with MT3, where a full song is minutes of work. Leave it
+  `null` and the transcription percentage goes to the log as before. The callback
+  fires on the calling thread, so marshal to your UI dispatcher yourself.
+
+```csharp
+var (chords, key, bpm) = ChordDetect.DetectFromFile("song.wav", mt3, 1.0f,
+    p => Console.Write($"\rAnalyzing: {p:P0}"));
+```
 
 ---
 

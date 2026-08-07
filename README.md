@@ -161,7 +161,8 @@ The notes feeding that pipeline now come from a swappable `INoteTranscriber`. Th
 var (chords, key, bpm) = ChordDetect.DetectFromFile("song.mp3");   // BasicPitch, as before
 
 using var mt3 = new Mt3Transcriber(Mt3ModelPaths.FromDirectory("/models/mt3"));
-var (chords2, key2, bpm2) = ChordDetect.DetectFromFile("song.mp3", mt3);
+var (chords2, key2, bpm2) = ChordDetect.DetectFromFile("song.mp3", mt3, 1.0f,
+    p => Console.Write($"\rAnalyzing: {p:P0}"));   // 0..1 over the whole run
 ```
 
 > Full guide: [OwnAudio/Source/Features/ChorDetect/README.md](OwnAudio/Source/Features/ChorDetect/README.md)

@@ -16,38 +16,53 @@ namespace OwnaudioNET.Features.OwnChordDetect;
 public static class ChordDetect
 {
     /// <summary>
+    /// How the 0..1 handed to the progress callback is split between the phases. Transcription
+    /// is the one that takes minutes with MT3, so it gets almost all of the bar.
+    /// </summary>
+    private const double DecodeShare = 0.05;
+    private const double TranscribeShare = 0.80;
+    private const double TempoShare = 0.10;
+
+    /// <summary>
     /// Runs the whole chain on one file — decode, note transcription, chord analysis.
     /// intervalSecond is only the fallback window when we can't find a tempo.
     /// </summary>
-    public static (List<TimedChord>, MusicalKey, int) DetectFromFile(string audioFile, float intervalSecond = 1.0f)
+    public static (List<TimedChord>, MusicalKey, int) DetectFromFile(
+        string audioFile,
+        float intervalSecond = 1.0f,
+        Action<double>? progress = null)
     {
         using (var transcriber = new BasicPitchTranscriber())
         {
-            return DetectFromFile(audioFile, transcriber, intervalSecond);
+            return DetectFromFile(audioFile, transcriber, intervalSecond, progress);
         }
     }
 
     /// <summary>
     /// Same, with the transcriber of your choice — BasicPitch by default, or an
     /// <see cref="Mt3Transcriber"/> if you have the models. The audio is decoded straight into
-    /// whatever rate the transcriber asks for.
+    /// whatever rate the transcriber asks for. progress gets 0..1 over the whole run.
     /// </summary>
     public static (List<TimedChord>, MusicalKey, int) DetectFromFile(
         string audioFile,
         INoteTranscriber transcriber,
-        float intervalSecond = 1.0f)
+        float intervalSecond = 1.0f,
+        Action<double>? progress = null)
     {
         if (!File.Exists(audioFile))
             throw new AudioException("Source is not loaded.");
 
         int _rate = transcriber.PreferredSampleRate;
+        progress?.Invoke(0d);
 
 #nullable disable
         IAudioDecoder _decoder = AudioDecoderFactory.Create(audioFile, _rate, 1);
         var samples = _decoder.ReadAllSamples();
         _decoder.Dispose();
 
-        return _analyze(samples, _rate, transcriber, intervalSecond);
+        progress?.Invoke(DecodeShare);
+
+        return _analyze(samples, _rate, transcriber, intervalSecond, progress);
 #nullable restore
     }
 
@@ -56,21 +71,24 @@ public static class ChordDetect
     /// </summary>
     public static (List<TimedChord>, MusicalKey, int) DetectFromFiles(
         IReadOnlyList<string> audioFiles,
-        float intervalSecond = 1.0f)
+        float intervalSecond = 1.0f,
+        Action<double>? progress = null)
     {
         using (var transcriber = new BasicPitchTranscriber())
         {
-            return DetectFromFiles(audioFiles, transcriber, intervalSecond);
+            return DetectFromFiles(audioFiles, transcriber, intervalSecond, progress);
         }
     }
 
     /// <summary>
-    /// Multitrack mix analyzed with the given transcriber.
+    /// Multitrack mix analyzed with the given transcriber. progress runs 0..1 across the decode
+    /// of every track and then the analysis.
     /// </summary>
     public static (List<TimedChord>, MusicalKey, int) DetectFromFiles(
         IReadOnlyList<string> audioFiles,
         INoteTranscriber transcriber,
-        float intervalSecond = 1.0f)
+        float intervalSecond = 1.0f,
+        Action<double>? progress = null)
     {
         if (audioFiles == null || audioFiles.Count == 0)
             throw new AudioException("No audio files provided.");
@@ -78,6 +96,8 @@ public static class ChordDetect
         int _rate = transcriber.PreferredSampleRate;
         var allTrackSamples = new List<float[]>(audioFiles.Count);
         int maxLength = 0;
+
+        progress?.Invoke(0d);
 
         foreach (var file in audioFiles)
         {
@@ -90,6 +110,8 @@ public static class ChordDetect
                 if (_samples.Length > maxLength) maxLength = _samples.Length;
                 allTrackSamples.Add(_samples);
             }
+
+            progress?.Invoke(DecodeShare * allTrackSamples.Count / audioFiles.Count);
         }
 
         var mixed = new float[maxLength];
@@ -113,7 +135,7 @@ public static class ChordDetect
         }
 
 #nullable disable
-        return _analyze(mixed, _rate, transcriber, intervalSecond);
+        return _analyze(mixed, _rate, transcriber, intervalSecond, progress);
 #nullable restore
     }
 
@@ -122,11 +144,13 @@ public static class ChordDetect
         float[] samples,
         int sampleRate,
         INoteTranscriber transcriber,
-        float intervalSecond)
+        float intervalSecond,
+        Action<double> report)
     {
         var notes = transcriber.Transcribe(samples, sampleRate, progress =>
         {
-            Log.Info($"\rRecognizing musical notes: {progress:P1}");
+            if (report == null) Log.Info($"\rRecognizing musical notes: {progress:P1}");
+            else report(DecodeShare + progress * TranscribeShare);
         });
 
         //Percussion only muddies the chromagram, and MT3 is the one that can tell us about it.
@@ -136,7 +160,7 @@ public static class ChordDetect
             if (!note.IsDrum) rawNotes.Add(note);
         }
 
-        int detectTempo = _detectBpm(samples, sampleRate, 1);
+        int detectTempo = _detectBpm(samples, sampleRate, 1, report);
 
         var analyzer = new SongChordAnalyzer(
             windowSize: intervalSecond,
@@ -145,22 +169,33 @@ public static class ChordDetect
             confidence: 0.65f,
             bpm: detectTempo);
 
-        return (analyzer.AnalyzeSong(rawNotes), analyzer.DetectedKey, detectTempo);
+        var chords = analyzer.AnalyzeSong(rawNotes);
+        report?.Invoke(1d);
+
+        return (chords, analyzer.DetectedKey, detectTempo);
     }
 #nullable restore
 
-    private static int _detectBpm(float[] samples, int sampleRate, int channels)
+    private static int _detectBpm(float[] samples, int sampleRate, int channels, Action<double>? report = null)
     {
         const int chunkSize = 4096;
+        const double tempoStart = DecodeShare + TranscribeShare;
         using var bpmDetect = new BpmDetect(channels, sampleRate);
 
         int offset = 0;
+        int chunk = 0;
         while (offset < samples.Length)
         {
             int count = Math.Min(chunkSize, samples.Length - offset);
             bpmDetect.InputSamples(samples.AsSpan(offset, count), count / channels);
             offset += count;
+
+            //Ticking on every 4k chunk would be hundreds of calls for nothing.
+            if ((++chunk & 31) == 0)
+                report?.Invoke(tempoStart + TempoShare * offset / samples.Length);
         }
+
+        report?.Invoke(tempoStart + TempoShare);
 
         float bpm = bpmDetect.GetBpm();
         return bpm > 0 ? (int)Math.Round(bpm) : 120;

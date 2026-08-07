@@ -110,7 +110,11 @@ Console.WriteLine(result.InstrumentalPath); // path to instrumental-only file</c
 foreach (var chord in chords)
     Console.WriteLine($"{chord.StartTime:F1}s-{chord.EndTime:F1}s  {chord.ChordName} ({chord.Confidence:F2})");
 
-Console.WriteLine($"Key: {key}  BPM: {bpm}");</code></pre></div>
+Console.WriteLine($"Key: {key}  BPM: {bpm}");
+
+// With MT3 an analysis takes minutes, so pass a progress callback (0..1 over the whole run)
+var (chords2, key2, bpm2) = ChordDetect.DetectFromFile("song.mp3", mt3, 1.0f,
+    p =&gt; Console.Write($"\rAnalyzing: {p:P0}"));</code></pre></div>
 
 <div class="code-block"><div class="code-header"><span>C# — From multiple files (mixed)</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Mixes all files before analysis
 var (chords, key, bpm) = ChordDetect.DetectFromFiles(
