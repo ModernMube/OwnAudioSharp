@@ -9,6 +9,9 @@ namespace OwnaudioNET.BufferManagement;
 /// is a cheap mask instead of a modulo. Given a frame size, short transfers stop
 /// on a frame edge so interleaved channels never end up rotated.
 /// </summary>
+[Obsolete("Playback and capture are buffered on the Rust side now, so nothing in OwnAudio uses this. " +
+    "Push audio with OwnaudioNet.Send and pull it with OwnaudioNet.Receive instead of staging it " +
+    "in a managed ring. Removed in 5.0.")]
 public sealed class CircularBuffer
 {
     private readonly float[] _buffer;

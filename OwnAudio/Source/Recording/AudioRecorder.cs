@@ -5,6 +5,14 @@ namespace OwnaudioNET.Recording;
 /// <summary>
 /// Grabs the audio going through the mixer and dumps it into a WAV.
 /// </summary>
+/// <remarks>
+/// Holds the whole take on the managed heap, which is exactly what the rest of the library
+/// avoids: ten minutes of 48k stereo is a quarter gigabyte of List&lt;float&gt;, re-copied
+/// every time it doubles and once more on save.
+/// </remarks>
+[Obsolete("Buffers the entire recording in managed memory. Use AudioMixer.StartRecording to capture " +
+    "the mixer, or OwnaudioNET.Mixing.WaveFileWriter to write your own samples — both stream " +
+    "straight to disk. Removed in 5.0.")]
 public class AudioRecorder : IDisposable
 {
     private readonly AudioConfig _config;

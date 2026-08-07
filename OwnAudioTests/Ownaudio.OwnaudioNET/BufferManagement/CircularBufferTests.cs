@@ -1,9 +1,12 @@
 using OwnaudioNET.BufferManagement;
 
+#pragma warning disable CS0618 // the type is obsolete, testing it is the whole point of this file
+
 namespace Ownaudio.OwnaudioNET.Tests.BufferManagement;
 
 /// <summary>
 /// Tests for the CircularBuffer class.
+/// The engine buffers natively now, so this is API contract coverage until 5.0 drops the type.
 /// </summary>
 public class CircularBufferTests
 {
@@ -225,3 +228,5 @@ public class CircularBufferTests
             drained[i].Should().Be(i % channels, $"channel rotated at sample {i}");
     }
 }
+
+#pragma warning restore CS0618

@@ -17,6 +17,9 @@ namespace OwnaudioNET.BufferManagement
             public override string ToString() { }
         }
     }
+    [System.Obsolete("Playback and capture are buffered on the Rust side now, so nothing in OwnAudio us" +
+        "es this. Push audio with OwnaudioNet.Send and pull it with OwnaudioNet.Receive i" +
+        "nstead of staging it in a managed ring. Removed in 5.0.")]
     public sealed class CircularBuffer
     {
         public CircularBuffer(int capacityInSamples) { }
@@ -1645,6 +1648,9 @@ namespace OwnaudioNET
 }
 namespace OwnaudioNET.Recording
 {
+    [System.Obsolete("Buffers the entire recording in managed memory. Use AudioMixer.StartRecording to " +
+        "capture the mixer, or OwnaudioNET.Mixing.WaveFileWriter to write your own sample" +
+        "s — both stream straight to disk. Removed in 5.0.")]
     public class AudioRecorder : System.IDisposable
     {
         public AudioRecorder(Ownaudio.Core.AudioConfig config) { }
