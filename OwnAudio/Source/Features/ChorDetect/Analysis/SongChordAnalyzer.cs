@@ -110,10 +110,10 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
         private MusicalKey? _appliedKey;
 
         /// <summary>
-        /// With bpm &gt; 0 the window comes from the tempo instead of windowSize/hopSize:
-        /// under 100 a quarter note, up to 150 a half, above that a whole note. That's harmonic
-        /// rhythm — fast music holds chords for more beats, so the window has to grow with it.
-        /// minimumChordDuration drops anything shorter from the result.
+        /// With bpm &gt; 0 the beat sets everything and windowSize/hopSize/minimumChordDuration are
+        /// ignored: one quarter note per window, an eighth of hop, and nothing shorter than a
+        /// quarter survives the merge. Anything faster than that isn't harmonic rhythm any more,
+        /// anything slower smears chord changes together.
         /// </summary>
         public SongChordAnalyzer(
             float windowSize = 1.0f,
@@ -123,22 +123,21 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
             int bpm = 0)
         {
             _detector = new ChordDetector(DetectionMode.KeyAware, confidence);
-            _minimumChordDuration = minimumChordDuration;
             _confidence = confidence;
 
             if (bpm > 0)
             {
                 float quarterNote = 60f / bpm;
-                _windowSize = bpm < 100 ? quarterNote
-                            : bpm <= 150 ? quarterNote * 2f
-                                         : quarterNote * 4f;
 
-                _hopSize = _windowSize / 2f;
+                _windowSize = quarterNote;
+                _hopSize = quarterNote / 2f;
+                _minimumChordDuration = quarterNote;
             }
             else
             {
                 _windowSize = windowSize;
                 _hopSize = hopSize;
+                _minimumChordDuration = minimumChordDuration;
             }
         }
 
@@ -371,16 +370,23 @@ namespace OwnaudioNET.Features.OwnChordDetect.Analysis
                 }
                 else
                 {
-                    if (current.EndTime - current.StartTime >= _minimumChordDuration)
-                        merged.Add(current);
+                    if (_longEnough(current)) merged.Add(current);
                     current = next;
                 }
             }
 
-            if (current.EndTime - current.StartTime >= _minimumChordDuration)
-                merged.Add(current);
+            if (_longEnough(current)) merged.Add(current);
 
             return merged;
+        }
+
+        /// <summary>
+        /// On the tempo path the minimum is exactly one window long, and the float drift the window
+        /// loop accumulates would shave a hair off some of them — so we let a millisecond slide.
+        /// </summary>
+        private bool _longEnough(TimedChord chord)
+        {
+            return chord.EndTime - chord.StartTime >= _minimumChordDuration - 0.001f;
         }
     }
 }

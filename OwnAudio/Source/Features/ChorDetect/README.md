@@ -31,7 +31,8 @@ List<Note>                (pitch, start/end time, amplitude, program, isDrum)
 ```
 
 BPM is detected in parallel with `BpmDetect` (SoundTouch auto-correlation) and
-is used to size the analysis window (see [Harmonic-rhythm window sizing](#harmonic-rhythm-window-sizing)).
+drives the analysis window, hop and minimum chord length (see
+[Beat-driven window sizing](#beat-driven-window-sizing)).
 
 ---
 
@@ -62,12 +63,13 @@ foreach (var c in chords)
 Notes:
 
 - `intervalSecond` is only a **fallback** window size. When BPM detection
-  succeeds (`bpm > 0`), the window is derived from the tempo instead and this
-  argument is ignored.
+  succeeds the window is one quarter note and this argument is ignored; it takes
+  over when detection fails, and the hop is then half of it.
 - Decoding targets whatever `INoteTranscriber.PreferredSampleRate` says — 22050 Hz
   for BasicPitch, 16000 Hz for MT3. It is no longer hard-coded.
-- `DetectBpmFromSamples` falls back to **120 BPM** when detection fails (e.g.
-  speech or non-rhythmic content).
+- When tempo detection fails (e.g. speech or non-rhythmic content) the returned
+  BPM is **120**, but the analysis itself switches to `intervalSecond` rather
+  than pretending the song runs at 120.
 - `progress` reports **0..1 over the whole run**, weighted by phase: decoding is
   the first 5%, transcription 5–85%, tempo detection 85–95%, chord analysis the
   rest. It matters with MT3, where a full song is minutes of work. Leave it
@@ -223,18 +225,24 @@ across windows to avoid per-window allocations.
 
 Use `AnalyzeSongInKey(notes, key)` to skip auto-detection and force a key.
 
-#### Harmonic-rhythm window sizing
+#### Beat-driven window sizing
 
-When `bpm > 0` the window adapts to the tempo, mirroring how faster music tends
-to hold chords over more beats:
+When `bpm > 0` the beat sets all three sizes and the `windowSize` / `hopSize` /
+`minimumChordDuration` arguments are ignored:
 
-| Tempo | Window |
-| --- | --- |
-| BPM < 100 | quarter note (`60/bpm` s) |
-| 100 ≤ BPM ≤ 150 | half note (`120/bpm` s) |
-| BPM > 150 | whole note (`240/bpm` s) |
+| | Length | At 60 BPM | At 120 BPM | At 180 BPM |
+| --- | --- | --- | --- | --- |
+| Window | quarter note (`60/bpm` s) | 1.000 s | 0.500 s | 0.333 s |
+| Hop | eighth note (50% overlap) | 0.500 s | 0.250 s | 0.167 s |
+| Minimum chord | quarter note | 1.000 s | 0.500 s | 0.333 s |
 
-The hop is always half the window (50% overlap).
+One quarter note is the shortest harmonic rhythm worth resolving — below it a
+window mostly sees passing tones, above it a chord change gets smeared across
+the window and the lattice has to pick from the union of two chords. Since the
+minimum equals the window, nothing shorter than a quarter can reach the result,
+but a single unrepeated window still survives the merge.
+
+Without a tempo (`bpm == 0`) all three arguments are used exactly as given.
 
 ### `RealTimeChordDetector` — [Detectors/RealTimeChordDetector.cs](Detectors/RealTimeChordDetector.cs)
 

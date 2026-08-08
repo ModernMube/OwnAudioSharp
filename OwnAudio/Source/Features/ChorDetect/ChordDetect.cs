@@ -24,6 +24,12 @@ public static class ChordDetect
     private const double TempoShare = 0.10;
 
     /// <summary>
+    /// What we report back when the tempo detector comes up empty. Only the returned value,
+    /// the analyzer never sees it — that's what intervalSecond is for.
+    /// </summary>
+    private const int DefaultBpm = 120;
+
+    /// <summary>
     /// Runs the whole chain on one file — decode, note transcription, chord analysis.
     /// intervalSecond is only the fallback window when we can't find a tempo.
     /// </summary>
@@ -162,9 +168,10 @@ public static class ChordDetect
 
         int detectTempo = _detectBpm(samples, sampleRate, 1, report);
 
+        //With a tempo the analyzer works in quarter notes and ignores the three sizes below.
         var analyzer = new SongChordAnalyzer(
             windowSize: intervalSecond,
-            hopSize: 0.5f,
+            hopSize: intervalSecond / 2f,
             minimumChordDuration: 0.5f,
             confidence: 0.65f,
             bpm: detectTempo);
@@ -172,10 +179,14 @@ public static class ChordDetect
         var chords = analyzer.AnalyzeSong(rawNotes);
         report?.Invoke(1d);
 
-        return (chords, analyzer.DetectedKey, detectTempo);
+        return (chords, analyzer.DetectedKey, detectTempo > 0 ? detectTempo : DefaultBpm);
     }
 #nullable restore
 
+    /// <summary>
+    /// Tempo over the whole stream, or 0 if the detector couldn't settle on one. Don't paper
+    /// over the 0 here — callers need to know detection failed.
+    /// </summary>
     private static int _detectBpm(float[] samples, int sampleRate, int channels, Action<double>? report = null)
     {
         const int chunkSize = 4096;
@@ -198,7 +209,7 @@ public static class ChordDetect
         report?.Invoke(tempoStart + TempoShare);
 
         float bpm = bpmDetect.GetBpm();
-        return bpm > 0 ? (int)Math.Round(bpm) : 120;
+        return bpm > 0 ? (int)Math.Round(bpm) : 0;
     }
 
     private static readonly object _realtimeLock = new object();
