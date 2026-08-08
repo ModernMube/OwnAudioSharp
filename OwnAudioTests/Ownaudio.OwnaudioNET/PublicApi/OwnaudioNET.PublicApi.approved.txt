@@ -136,6 +136,7 @@ namespace OwnaudioNET.Effects
         public float AttackTime { get; set; }
         public bool Enabled { get; set; }
         public System.Guid Id { get; }
+        public float KneeWidth { get; set; }
         public float MakeupGain { get; set; }
         public float Mix { get; set; }
         public string Name { get; set; }
@@ -565,6 +566,13 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
         public void Reset() { }
         public static float[] CreateBandpassKernel(float sampleRate, float lowFreq, float highFreq, int kernelSize, float kaiserBeta = 5) { }
     }
+    public class ParametricEqStage
+    {
+        public ParametricEqStage(float sampleRate, OwnaudioNET.Effects.SmartMaster.ParametricBand[] bands, int channels) { }
+        public void Process(System.Span<float> buffer, int frameCount, int channels) { }
+        public void Reset() { }
+        public void SetBands(OwnaudioNET.Effects.SmartMaster.ParametricBand[] bands) { }
+    }
     public class PhaseAlignment
     {
         public PhaseAlignment(float sampleRate) { }
@@ -577,7 +585,17 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
     {
         public SubharmonicSynth(float sampleRate) { }
         public bool Enabled { get; set; }
+        public float HighLevel { get; set; }
+        public float LowLevel { get; set; }
         public float Mix { get; set; }
+        public void Process(System.Span<float> buffer, int frameCount, int channels) { }
+        public void Reset() { }
+    }
+    public class SubsonicFilter
+    {
+        public SubsonicFilter(float sampleRate, float frequency, int channels) { }
+        public bool Enabled { get; set; }
+        public float Frequency { get; set; }
         public void Process(System.Span<float> buffer, int frameCount, int channels) { }
         public void Reset() { }
     }
@@ -615,29 +633,53 @@ namespace OwnaudioNET.Effects.SmartMaster
         public OwnaudioNET.Effects.SmartMaster.MeasurementStatus Status { get; set; }
         public string[] Warnings { get; set; }
     }
+    public class ParametricBand
+    {
+        public ParametricBand() { }
+        public float Frequency { get; set; }
+        public float GainDb { get; set; }
+        public float Q { get; set; }
+        public OwnaudioNET.Effects.SmartMaster.ParametricShape Shape { get; set; }
+        public static OwnaudioNET.Effects.SmartMaster.ParametricBand[] CreateDefaults() { }
+        public static OwnaudioNET.Effects.SmartMaster.ParametricBand[] Fit(OwnaudioNET.Effects.SmartMaster.ParametricBand[]? source) { }
+    }
+    public enum ParametricShape
+    {
+        Bell = 0,
+        LowShelf = 1,
+        HighShelf = 2,
+    }
     public class SmartMasterConfig
     {
         public const int AlignChannels = 3;
         public const int EqBands = 30;
-        public const int ParametricBands = 10;
+        public const int ParametricBands = 8;
         public SmartMasterConfig() { }
         public float CompressorAttack { get; set; }
         public bool CompressorEnabled { get; set; }
+        public float CompressorKnee { get; set; }
         public float CompressorRatio { get; set; }
         public float CompressorRelease { get; set; }
         public float CompressorThreshold { get; set; }
+        public bool CrossoverEnabled { get; set; }
         public float CrossoverFrequency { get; set; }
         public float[] GraphicEQGains { get; set; }
         public OwnaudioNET.Effects.SmartMaster.MeasurementResults? LastMeasurement { get; set; }
         public float LimiterCeiling { get; set; }
         public float LimiterRelease { get; set; }
         public float LimiterThreshold { get; set; }
+        public float MainLimiterThreshold { get; set; }
         public float MicInputGain { get; set; }
-        public float[][] ParametricEQGains { get; set; }
+        public float[] OutputGains { get; set; }
+        public OwnaudioNET.Effects.SmartMaster.ParametricBand[] ParametricEQ { get; set; }
         public bool[] PhaseInvert { get; set; }
+        public float SubLimiterThreshold { get; set; }
         public bool SubharmonicEnabled { get; set; }
-        public float SubharmonicFreqRange { get; set; }
+        public float SubharmonicHighLevel { get; set; }
+        public float SubharmonicLowLevel { get; set; }
         public float SubharmonicMix { get; set; }
+        public bool SubsonicEnabled { get; set; }
+        public float SubsonicFrequency { get; set; }
         public float[] TimeDelays { get; set; }
     }
     public sealed class SmartMasterEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
@@ -648,6 +690,7 @@ namespace OwnaudioNET.Effects.SmartMaster
         public int LatencySamples { get; }
         public float Mix { get; set; }
         public string Name { get; set; }
+        public long SanitizedSampleCount { get; }
         public void ApplyConfiguration() { }
         public void ApplyConfiguration(OwnaudioNET.Effects.SmartMaster.SmartMasterConfig configuration) { }
         public void CancelMeasurement() { }

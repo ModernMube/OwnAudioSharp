@@ -128,6 +128,7 @@ internal static class RustEffectAdapters
         sink(4, c.AttackTime);
         sink(5, c.ReleaseTime);
         sink(6, c.MakeupGain);
+        sink(7, c.KneeWidth);
     }
 
     private static void _mirrorLimiter(IEffectProcessor e, ParamSink sink)
@@ -232,14 +233,15 @@ internal static class RustEffectAdapters
     /// Mirrors the composite SmartMaster config onto its single native effect.
     /// Param layout matches the Rust smartmaster module: EQ gains 2–31 (dB),
     /// subharmonic 32–33, compressor 34–38, crossover 39, phase align 40–45,
-    /// limiter 46–48. Enable/mix (0–1) come from the base Mirror.
+    /// limiter 46–48, subsonic 49–50, knee 51, sub band levels 52–53, crossover
+    /// switch 54, output trims 55–57, band limiters 58–59, PEQ 60–91.
+    /// Enable/mix (0–1) come from the base Mirror.
     /// </summary>
     private static void _mirrorSmartMaster(IEffectProcessor e, ParamSink sink)
     {
         var sm = (SM.SmartMasterEffect)e;
         SM.SmartMasterConfig cfg = sm.GetConfiguration();
 
-        //The config keeps every array at its expected length, so we can just walk them
         float[] eqGains = cfg.GraphicEQGains;
         for (int i = 0; i < SM.SmartMasterConfig.EqBands; i++)
             sink((uint)(2 + i), eqGains[i]);
@@ -259,14 +261,35 @@ internal static class RustEffectAdapters
         // Phase align: per-channel delay (ms) + polarity flip for L, R, Sub.
         float[] delays = cfg.TimeDelays;
         bool[] invert = cfg.PhaseInvert;
+        float[] outGains = cfg.OutputGains;
         for (int ch = 0; ch < SM.SmartMasterConfig.AlignChannels; ch++)
         {
             sink((uint)(40 + ch), delays[ch]);
             sink((uint)(43 + ch), invert[ch] ? 1f : 0f);
+            sink((uint)(55 + ch), outGains[ch]);
         }
 
         sink(46, cfg.LimiterThreshold);
         sink(47, cfg.LimiterCeiling);
         sink(48, cfg.LimiterRelease);
+
+        sink(49, cfg.SubsonicEnabled ? 1f : 0f);
+        sink(50, cfg.SubsonicFrequency);
+        sink(51, cfg.CompressorKnee);
+        sink(52, cfg.SubharmonicLowLevel);
+        sink(53, cfg.SubharmonicHighLevel);
+        sink(54, cfg.CrossoverEnabled ? 1f : 0f);
+        sink(58, cfg.MainLimiterThreshold);
+        sink(59, cfg.SubLimiterThreshold);
+
+        SM.ParametricBand[] peq = cfg.ParametricEQ;
+        for (int b = 0; b < SM.SmartMasterConfig.ParametricBands; b++)
+        {
+            uint id = (uint)(60 + b * 4);
+            sink(id, (float)peq[b].Shape);
+            sink(id + 1, peq[b].Frequency);
+            sink(id + 2, peq[b].Q);
+            sink(id + 3, peq[b].GainDb);
+        }
     }
 }

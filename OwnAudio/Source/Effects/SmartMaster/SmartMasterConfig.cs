@@ -18,14 +18,15 @@ namespace OwnaudioNET.Effects.SmartMaster
         public const int AlignChannels = 3;
 
         /// <summary>
-        /// Bands per parametric EQ branch.
+        /// Bands in the input parametric EQ, same count a PA2 gives you.
         /// </summary>
-        public const int ParametricBands = 10;
+        public const int ParametricBands = 8;
 
         private float[] _graphicEQGains = new float[EqBands];
         private float[] _timeDelays = new float[AlignChannels];
         private bool[] _phaseInvert = new bool[AlignChannels];
-        private float[][] _parametricEQGains = _emptyParametric();
+        private float[] _outputGains = new float[AlignChannels];
+        private ParametricBand[] _parametricEQ = ParametricBand.CreateDefaults();
 
         /// <summary>
         /// Gets or sets the 30-band graphic EQ gains in dB. Default is 0 dB (flat).
@@ -38,19 +39,36 @@ namespace OwnaudioNET.Effects.SmartMaster
         }
 
         /// <summary>
+        /// Subsonic high-pass on the input. Off by default so an existing preset
+        /// sounds the way it did.
+        /// </summary>
+        public bool SubsonicEnabled { get; set; } = false;
+
+        /// <summary>
+        /// Corner of the subsonic high-pass in Hz, 24 dB/oct.
+        /// </summary>
+        public float SubsonicFrequency { get; set; } = 35.0f;
+
+        /// <summary>
         /// Gets or sets whether the subharmonic synthesizer is enabled.
         /// </summary>
         public bool SubharmonicEnabled { get; set; } = false;
 
         /// <summary>
-        /// Gets or sets the subharmonic mix level (0.0 = dry, 1.0 = full effect).
+        /// How much synthesized sub gets added on top of the dry signal, 0 to 1.
+        /// This is a parallel level now, not a dry/wet crossfade.
         /// </summary>
         public float SubharmonicMix { get; set; } = 0.0f;
 
         /// <summary>
-        /// Gets or sets the maximum frequency for subharmonic generation in Hz.
+        /// Level of the 24-36Hz divider band.
         /// </summary>
-        public float SubharmonicFreqRange { get; set; } = 60.0f;
+        public float SubharmonicLowLevel { get; set; } = 1.0f;
+
+        /// <summary>
+        /// Level of the 36-56Hz divider band.
+        /// </summary>
+        public float SubharmonicHighLevel { get; set; } = 1.0f;
 
         /// <summary>
         /// Gets or sets whether the compressor is enabled.
@@ -78,6 +96,17 @@ namespace OwnaudioNET.Effects.SmartMaster
         public float CompressorRelease { get; set; } = 100.0f;
 
         /// <summary>
+        /// Soft knee width in dB. dbx would call this OverEasy.
+        /// </summary>
+        public float CompressorKnee { get; set; } = 6.0f;
+
+        /// <summary>
+        /// Runs the crossover section even without alignment delays, so the
+        /// per-band trims and limiters come into play.
+        /// </summary>
+        public bool CrossoverEnabled { get; set; } = false;
+
+        /// <summary>
         /// Gets or sets the crossover frequency in Hz for splitting high/low frequencies.
         /// </summary>
         public float CrossoverFrequency { get; set; } = 80.0f;
@@ -101,14 +130,33 @@ namespace OwnaudioNET.Effects.SmartMaster
         }
 
         /// <summary>
-        /// Gets or sets the parametric EQ gains for L, R, and Sub branches (10 bands each).
-        /// Reserved - the chain does not run a parametric stage yet.
+        /// Per-band output trim in dB, main L / main R / sub. Only bites while the
+        /// crossover section runs.
         /// </summary>
-        public float[][] ParametricEQGains
+        public float[] OutputGains
         {
-            get => _parametricEQGains;
-            set => _parametricEQGains = _fitParametric(value);
+            get => _outputGains;
+            set => _outputGains = _fit(value, AlignChannels);
         }
+
+        /// <summary>
+        /// Input parametric EQ, eight sweepable bands.
+        /// </summary>
+        public ParametricBand[] ParametricEQ
+        {
+            get => _parametricEQ;
+            set => _parametricEQ = ParametricBand.Fit(value);
+        }
+
+        /// <summary>
+        /// Driver protection limiter on the main band, dBFS. 0 leaves it open.
+        /// </summary>
+        public float MainLimiterThreshold { get; set; } = 0.0f;
+
+        /// <summary>
+        /// Driver protection limiter on the sub band, dBFS. 0 leaves it open.
+        /// </summary>
+        public float SubLimiterThreshold { get; set; } = 0.0f;
 
         /// <summary>
         /// Gets or sets the limiter threshold in dBFS.
@@ -149,23 +197,92 @@ namespace OwnaudioNET.Effects.SmartMaster
 
             return fitted;
         }
+    }
+
+    /// <summary>
+    /// Shape a parametric band takes.
+    /// </summary>
+    public enum ParametricShape
+    {
+        /// <summary>
+        /// Peaking bell.
+        /// </summary>
+        Bell = 0,
 
         /// <summary>
-        /// Same idea for the jagged parametric gains.
+        /// Low shelf.
         /// </summary>
-        private static float[][] _fitParametric(float[][]? source)
-        {
-            var fitted = new float[AlignChannels][];
-            for (int i = 0; i < AlignChannels; i++)
-                fitted[i] = _fit(source is not null && i < source.Length ? source[i] : null, ParametricBands);
+        LowShelf = 1,
 
-            return fitted;
+        /// <summary>
+        /// High shelf.
+        /// </summary>
+        HighShelf = 2
+    }
+
+    /// <summary>
+    /// One sweepable band of the input parametric EQ. A band at 0 dB is skipped.
+    /// </summary>
+    public class ParametricBand
+    {
+        /// <summary>
+        /// Where the bands sit on a fresh config, so a UI has sane starting points.
+        /// </summary>
+        private static readonly float[] DefaultFrequencies =
+        {
+            60f, 120f, 250f, 500f, 1000f, 2500f, 6000f, 12000f
+        };
+
+        /// <summary>
+        /// Bell, low shelf or high shelf.
+        /// </summary>
+        public ParametricShape Shape { get; set; } = ParametricShape.Bell;
+
+        /// <summary>
+        /// Centre (or corner) frequency in Hz.
+        /// </summary>
+        public float Frequency { get; set; } = 1000.0f;
+
+        /// <summary>
+        /// Q, 0.1 to 16.
+        /// </summary>
+        public float Q { get; set; } = 1.4f;
+
+        /// <summary>
+        /// Gain in dB, +/-20.
+        /// </summary>
+        public float GainDb { get; set; } = 0.0f;
+
+        /// <summary>
+        /// Flat set of bands spread over the spectrum.
+        /// </summary>
+        public static ParametricBand[] CreateDefaults()
+        {
+            var bands = new ParametricBand[SmartMasterConfig.ParametricBands];
+            for (int i = 0; i < bands.Length; i++)
+                bands[i] = new ParametricBand { Frequency = DefaultFrequencies[i] };
+
+            return bands;
         }
 
         /// <summary>
-        /// Flat parametric gains for a fresh config.
+        /// Cuts or pads a hand edited array to the length the chain expects.
         /// </summary>
-        private static float[][] _emptyParametric() => _fitParametric(null);
+        public static ParametricBand[] Fit(ParametricBand[]? source)
+        {
+            if (source is not null && source.Length == SmartMasterConfig.ParametricBands)
+                return source;
+
+            var fitted = CreateDefaults();
+            if (source is not null)
+            {
+                int count = Math.Min(source.Length, fitted.Length);
+                for (int i = 0; i < count; i++)
+                    if (source[i] is not null) fitted[i] = source[i];
+            }
+
+            return fitted;
+        }
     }
 
     /// <summary>

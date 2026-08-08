@@ -284,14 +284,14 @@ impl Limiter {
         self.min_deque_values[self.min_deque_head]
     }
 
-    /// Required instantaneous gain for a given window peak (reference parity).
+    /// Gain that lands the window peak on the threshold. The old form divided by
+    /// the excess twice (`thr²/peak²`), which ducked 6 dB *under* the threshold
+    /// on a 6 dB overshoot.
     fn gain_reduction(&self, peak_level: f32) -> f32 {
         if peak_level <= self.threshold_lin {
             return 1.0;
         }
-        let excess = peak_level / self.threshold_lin;
-        let target_level = self.threshold_lin / excess;
-        (target_level / peak_level).max(MIN_GAIN)
+        (self.threshold_lin / peak_level).max(MIN_GAIN)
     }
 
     /// Smoothed gain from the window-minimum required gain, with a look-ahead
@@ -556,9 +556,7 @@ mod tests {
             if peak <= self.threshold_lin {
                 return 1.0;
             }
-            let excess = peak / self.threshold_lin;
-            let target = self.threshold_lin / excess;
-            (target / peak).max(MIN_GAIN as f64)
+            (self.threshold_lin / peak).max(MIN_GAIN as f64)
         }
 
         fn smoothed_gain(&mut self) -> f64 {

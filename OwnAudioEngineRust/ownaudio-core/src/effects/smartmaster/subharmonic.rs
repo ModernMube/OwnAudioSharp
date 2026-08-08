@@ -1,230 +1,209 @@
-//! Subharmonic synthesizer with a linear-phase FIR band-pass and a
-//! waveshaping harmonic generator.
+//! Subharmonic synthesizer — two octave-divider bands, added in parallel.
 //!
-//! Faithful Rust port of the reference C# `SubharmonicSynth` (and the
-//! `FIRFilter` it uses): the 40–120 Hz band is isolated with a 127-tap
-//! Kaiser-windowed-sinc band-pass (linear phase), the isolated band is passed
-//! through a soft-clipping waveshaper (`x / (1 + |x|)`) to synthesise harmonics,
-//! and the result is blended back with the dry signal by `mix`.  The FIR delay
-//! lines and the filtered scratch buffer are pre-allocated / grown off the hot
-//! path so steady-state processing never allocates.
+//! The old version band-passed 40–120 Hz, ran it through a soft clipper and
+//! *crossfaded* the result over the program (`dry·(1−mix) + shaped·mix`).  That
+//! did two wrong things at once: a waveshaper makes harmonics, not
+//! subharmonics, and at mix 0.4 the whole mix dropped 4.4 dB.
+//!
+//! What actually generates an octave below is a divider.  Each band isolates its
+//! source octave, runs a Schmitt trigger whose edges toggle a flip-flop (that is
+//! the divide-by-two), multiplies the resulting square by the source band's
+//! envelope so it tracks dynamics, and band-passes it down to a near-sine in the
+//! target band.  Both bands are summed and *added* to the dry signal.
+//!
+//! | band | source    | output   |
+//! |------|-----------|----------|
+//! | low  | 48–72 Hz  | 24–36 Hz |
+//! | high | 72–112 Hz | 36–56 Hz |
+//!
+//! Generation runs on the mono sum — low bass is mono in practice, and the same
+//! synthesized signal going to every channel keeps it phase-coherent.
 
-/// FIR kernel length (odd, linear phase), matching the reference.
-const KERNEL_SIZE: usize = 127;
-/// Band-pass low edge in Hz.
-const LOW_FREQ: f32 = 40.0;
-/// Band-pass high edge in Hz.
-const HIGH_FREQ: f32 = 120.0;
-/// Kaiser window beta, matching the reference.
-const KAISER_BETA: f32 = 5.0;
-/// Channels the FIR delay lines are kept for (stereo mastering chain).
-const FIR_CHANNELS: usize = 2;
+use super::biquad::{Coeffs, State};
 
-/// Linear-phase FIR band-pass filter with per-channel circular delay lines.
-struct FirBandpass {
-    kernel: [f32; KERNEL_SIZE],
-    delay: [[f32; KERNEL_SIZE]; FIR_CHANNELS],
-    write_pos: [usize; FIR_CHANNELS],
+/// Level below which the divider is muted, so it doesn't chatter on noise.
+const GATE: f32 = 1.0e-4;
+
+/// Headroom scale on the synthesized sub at mix 1.0. The divided square's
+/// fundamental is 4/π of its amplitude, so this lands it near the source level.
+const SUB_TRIM: f32 = 0.55;
+
+/// One octave-divider band: isolate the source octave, halve it, shape it.
+struct DividerBand {
+    src: Coeffs,
+    out: Coeffs,
+    src_state: [State; 2],
+    out_state: [State; 2],
+
+    env: f32,
+    env_attack: f32,
+    env_release: f32,
+
+    /// Flip-flop output, ±1 — toggled once per source cycle.
+    flip: f32,
+    /// Schmitt trigger state, true while the source is above the upper edge.
+    armed: bool,
+
+    level: f32,
 }
 
-impl FirBandpass {
-    fn new(sample_rate: f32) -> Self {
+impl DividerBand {
+    fn new(sample_rate: f32, src_lo: f32, src_hi: f32, out_lo: f32, out_hi: f32) -> Self {
+        let src_centre = (src_lo * src_hi).sqrt();
+        let out_centre = (out_lo * out_hi).sqrt();
+
         Self {
-            kernel: build_bandpass_kernel(sample_rate, LOW_FREQ, HIGH_FREQ),
-            delay: [[0.0; KERNEL_SIZE]; FIR_CHANNELS],
-            write_pos: [0; FIR_CHANNELS],
+            src: Coeffs::bandpass(sample_rate, src_centre, src_centre / (src_hi - src_lo)),
+            out: Coeffs::bandpass(sample_rate, out_centre, out_centre / (out_hi - out_lo)),
+            src_state: [State::default(); 2],
+            out_state: [State::default(); 2],
+            env: 0.0,
+            env_attack: time_coeff(8.0, sample_rate),
+            env_release: time_coeff(120.0, sample_rate),
+            flip: 1.0,
+            armed: false,
+            level: 1.0,
         }
     }
 
-    /// Filters `buffer` (interleaved) in place, up to [`FIR_CHANNELS`] channels.
-    fn process(&mut self, buffer: &mut [f32], frame_count: usize, channels: usize) {
-        let active = channels.min(FIR_CHANNELS);
-        for ch in 0..active {
-            let mut write = self.write_pos[ch];
-            for frame in 0..frame_count {
-                let idx = frame * channels + ch;
-                self.delay[ch][write] = buffer[idx];
-
-                let mut out = 0.0f32;
-                let mut read = write;
-                for k in 0..KERNEL_SIZE {
-                    out += self.kernel[k] * self.delay[ch][read];
-                    read = if read == 0 { KERNEL_SIZE - 1 } else { read - 1 };
-                }
-                buffer[idx] = out;
-
-                write = (write + 1) % KERNEL_SIZE;
-            }
-            self.write_pos[ch] = write;
+    #[inline]
+    fn tick(&mut self, x: f32) -> f32 {
+        let mut s = x;
+        for st in self.src_state.iter_mut() {
+            s = st.tick(&self.src, s);
         }
+
+        let a = s.abs();
+        let c = if a > self.env {
+            self.env_attack
+        } else {
+            self.env_release
+        };
+        self.env = c * self.env + (1.0 - c) * a;
+
+        if self.env < GATE {
+            // Still run the output filters so their tail decays smoothly.
+            let mut y = 0.0;
+            for st in self.out_state.iter_mut() {
+                y = st.tick(&self.out, y);
+            }
+            return y;
+        }
+
+        // Schmitt trigger scaled to the current level, so it works at any gain;
+        // one toggle per full source cycle is the divide-by-two.
+        let hyst = 0.25 * self.env;
+        if self.armed {
+            if s < -hyst {
+                self.armed = false;
+                self.flip = -self.flip;
+            }
+        } else if s > hyst {
+            self.armed = true;
+        }
+
+        let mut y = self.flip * self.env;
+        for st in self.out_state.iter_mut() {
+            y = st.tick(&self.out, y);
+        }
+        y * self.level
     }
 
     fn reset(&mut self) {
-        self.delay = [[0.0; KERNEL_SIZE]; FIR_CHANNELS];
-        self.write_pos = [0; FIR_CHANNELS];
-    }
-}
-
-/// Windowed-sinc band-pass kernel (high-pass minus low-pass), Kaiser-windowed
-/// and normalised to unity pass-band gain — a direct transcription of the
-/// reference `FIRFilter.CreateBandpassKernel`.
-fn build_bandpass_kernel(sample_rate: f32, low: f32, high: f32) -> [f32; KERNEL_SIZE] {
-    let mut kernel = [0.0f32; KERNEL_SIZE];
-    let center = (KERNEL_SIZE / 2) as i32;
-    let wl = 2.0 * std::f32::consts::PI * low / sample_rate;
-    let wh = 2.0 * std::f32::consts::PI * high / sample_rate;
-
-    for (i, k) in kernel.iter_mut().enumerate() {
-        let n = i as i32 - center;
-        let sinc = if n == 0 {
-            (wh - wl) / std::f32::consts::PI
-        } else {
-            let nf = n as f32;
-            (wh * nf).sin() / (std::f32::consts::PI * nf)
-                - (wl * nf).sin() / (std::f32::consts::PI * nf)
-        };
-        *k = sinc * kaiser_window(i, KERNEL_SIZE, KAISER_BETA);
-    }
-
-    // A band-pass must reject DC, but a short 127-tap kernel at such a low centre
-    // frequency cannot resolve the 40–120 Hz band: its raw coefficient sum (the
-    // DC gain) is comparable to its pass-band gain, so it leaks DC/subsonic
-    // rumble.  Normalising by that sum (the reference approach) merely forces the
-    // DC gain to unity instead of rejecting it.  Restore true band-pass behaviour
-    // by removing the coefficient mean so the DC gain is exactly zero (the kernel
-    // stays symmetric, hence linear phase), then normalise to unity gain at the
-    // pass-band centre.
-    let mean: f32 = kernel.iter().sum::<f32>() / KERNEL_SIZE as f32;
-    for k in kernel.iter_mut() {
-        *k -= mean;
-    }
-
-    let center_freq = 0.5 * (low + high);
-    let wc = 2.0 * std::f32::consts::PI * center_freq / sample_rate;
-    let mut re = 0.0f32;
-    let mut im = 0.0f32;
-    for (i, k) in kernel.iter().enumerate() {
-        let nf = (i as i32 - center) as f32;
-        re += *k * (wc * nf).cos();
-        im += *k * (wc * nf).sin();
-    }
-    let gain = (re * re + im * im).sqrt();
-    if gain > 1.0e-6 {
-        for k in kernel.iter_mut() {
-            *k /= gain;
+        for st in self.src_state.iter_mut() {
+            st.clear();
         }
-    }
-    kernel
-}
-
-/// Kaiser window sample `I0(beta·sqrt(1−x²)) / I0(beta)`.
-fn kaiser_window(n: usize, size: usize, beta: f32) -> f32 {
-    let alpha = (size - 1) as f32 / 2.0;
-    let x = (n as f32 - alpha) / alpha;
-    let arg = beta * (1.0 - x * x).max(0.0).sqrt();
-    bessel_i0(arg) / bessel_i0(beta)
-}
-
-/// Modified Bessel function of the first kind, order zero (Taylor series),
-/// matching the reference approximation.
-fn bessel_i0(x: f32) -> f32 {
-    let mut sum = 1.0f32;
-    let mut term = 1.0f32;
-    let x_squared = x * x / 4.0;
-    for k in 1..=20 {
-        term *= x_squared / (k * k) as f32;
-        sum += term;
-        if term < 1.0e-8 * sum {
-            break;
+        for st in self.out_state.iter_mut() {
+            st.clear();
         }
+        self.env = 0.0;
+        self.flip = 1.0;
+        self.armed = false;
     }
-    sum
 }
 
-/// Soft-clipping waveshaper generating harmonics from the isolated sub band.
-#[inline]
-fn waveshape(x: f32) -> f32 {
-    x / (1.0 + x.abs())
+/// One-pole coefficient for a time constant in ms.
+fn time_coeff(ms: f32, sample_rate: f32) -> f32 {
+    (-1.0 / (ms * 0.001 * sample_rate)).exp()
 }
 
-/// Subharmonic synthesizer: FIR band-pass isolation + waveshaping + dry/wet mix.
+/// dbx-style subharmonic synthesizer: two divider bands mixed in parallel with
+/// the dry signal.
 pub struct SubharmonicSynth {
     enabled: bool,
     mix: f32,
-    fir: FirBandpass,
-    /// Filtered-signal scratch, grown off the hot path.
-    filtered: Vec<f32>,
+    low: DividerBand,
+    high: DividerBand,
 }
 
 impl SubharmonicSynth {
-    /// Creates a subharmonic synthesizer for the given sample rate (disabled,
-    /// mix 0 — the reference defaults).
+    /// Off, at zero mix — the reference config defaults.
     pub fn new(sample_rate: f32) -> Self {
         Self {
             enabled: false,
             mix: 0.0,
-            fir: FirBandpass::new(sample_rate),
-            filtered: vec![0.0; 2_048 * FIR_CHANNELS],
+            low: DividerBand::new(sample_rate, 48.0, 72.0, 24.0, 36.0),
+            high: DividerBand::new(sample_rate, 72.0, 112.0, 36.0, 56.0),
         }
     }
 
-    /// Enables or disables the synthesizer.
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
     }
 
-    /// Gets whether the synthesizer is enabled.
     pub fn enabled(&self) -> bool {
         self.enabled
     }
 
-    /// Sets the dry/wet mix (`0` dry … `1` full effect).
+    /// Master level of the synthesized sub, `0` off … `1` full.
     pub fn set_mix(&mut self, mix: f32) {
         self.mix = mix.clamp(0.0, 1.0);
     }
 
-    /// Gets the current mix.
     pub fn mix(&self) -> f32 {
         self.mix
     }
 
-    /// Processes the interleaved `buffer` in place. A no-op while disabled or at
-    /// zero mix (reference parity).
+    /// Level of the 24–36 Hz band.
+    pub fn set_low_level(&mut self, level: f32) {
+        self.low.level = level.clamp(0.0, 1.0);
+    }
+
+    pub fn low_level(&self) -> f32 {
+        self.low.level
+    }
+
+    /// Level of the 36–56 Hz band.
+    pub fn set_high_level(&mut self, level: f32) {
+        self.high.level = level.clamp(0.0, 1.0);
+    }
+
+    pub fn high_level(&self) -> f32 {
+        self.high.level
+    }
+
+    /// Adds the synthesized sub to the interleaved `buffer` in place.
     pub fn process(&mut self, buffer: &mut [f32], channels: u16) {
         if !self.enabled || self.mix <= 0.0 || channels == 0 {
             return;
         }
-        let channels = channels as usize;
-        let frame_count = buffer.len() / channels;
-        let required = frame_count * channels;
-        if required == 0 {
-            return;
-        }
-        if self.filtered.len() < required {
-            self.filtered.resize(required, 0.0);
-        }
+        let ch = channels as usize;
+        let amount = self.mix * SUB_TRIM;
+        let inv_ch = 1.0 / ch as f32;
 
-        // 1. Copy the dry signal, then isolate the 40–120 Hz band.
-        self.filtered[..required].copy_from_slice(&buffer[..required]);
-        self.fir
-            .process(&mut self.filtered[..required], frame_count, channels);
+        for frame in buffer.chunks_mut(ch) {
+            let mono = frame.iter().sum::<f32>() * inv_ch;
+            let sub = (self.low.tick(mono) + self.high.tick(mono)) * amount;
 
-        // 2. Waveshape the isolated band and blend it back with the dry signal.
-        let mix = self.mix;
-        let dry = 1.0 - mix;
-        for (sample, &band) in buffer[..required]
-            .iter_mut()
-            .zip(&self.filtered[..required])
-        {
-            let shaped = waveshape(band * 2.0);
-            *sample = (*sample * dry + shaped * mix).clamp(-1.0, 1.0);
+            for s in frame.iter_mut() {
+                *s = (*s + sub).clamp(-1.5, 1.5);
+            }
         }
     }
 
-    /// Clears the FIR delay lines and filtered scratch.
     pub fn reset(&mut self) {
-        self.fir.reset();
-        self.filtered.iter_mut().for_each(|s| *s = 0.0);
+        self.low.reset();
+        self.high.reset();
     }
 }
 
@@ -232,11 +211,32 @@ impl SubharmonicSynth {
 mod tests {
     use super::*;
 
+    const SR: f32 = 48_000.0;
+
+    fn tone(freq: f32, amp: f32, frames: usize) -> Vec<f32> {
+        (0..frames)
+            .map(|i| amp * (2.0 * std::f32::consts::PI * freq * i as f32 / SR).sin())
+            .collect()
+    }
+
+    /// Goertzel magnitude at `freq`, skipping the settling transient.
+    fn magnitude_at(signal: &[f32], freq: f32) -> f32 {
+        let skip = signal.len() / 2;
+        let s = &signal[skip..];
+        let w = 2.0 * std::f32::consts::PI * freq / SR;
+        let (mut re, mut im) = (0.0f64, 0.0f64);
+        for (i, &x) in s.iter().enumerate() {
+            re += (x as f64) * (w as f64 * i as f64).cos();
+            im += (x as f64) * (w as f64 * i as f64).sin();
+        }
+        (2.0 * (re * re + im * im).sqrt() / s.len() as f64) as f32
+    }
+
     #[test]
     fn disabled_is_passthrough() {
-        let mut s = SubharmonicSynth::new(48_000.0);
-        s.set_mix(1.0); // still disabled
-        let input: Vec<f32> = (0..512).map(|i| (i as f32 * 0.05).sin() * 0.5).collect();
+        let mut s = SubharmonicSynth::new(SR);
+        s.set_mix(1.0);
+        let input = tone(60.0, 0.5, 512);
         let mut buf = input.clone();
         s.process(&mut buf, 1);
         assert_eq!(buf, input);
@@ -244,47 +244,59 @@ mod tests {
 
     #[test]
     fn zero_mix_is_passthrough() {
-        let mut s = SubharmonicSynth::new(48_000.0);
+        let mut s = SubharmonicSynth::new(SR);
         s.set_enabled(true);
-        s.set_mix(0.0);
-        let input: Vec<f32> = (0..512).map(|i| (i as f32 * 0.05).sin() * 0.5).collect();
+        let input = tone(60.0, 0.5, 512);
         let mut buf = input.clone();
         s.process(&mut buf, 1);
         assert_eq!(buf, input);
     }
 
     #[test]
-    fn enabled_alters_low_content_and_stays_bounded() {
-        let mut s = SubharmonicSynth::new(48_000.0);
+    fn generates_an_octave_below_the_source() {
+        let mut s = SubharmonicSynth::new(SR);
         s.set_enabled(true);
         s.set_mix(1.0);
-        // A 60 Hz tone sits inside the 40–120 Hz band, so it is reshaped.
-        let input: Vec<f32> = (0..8_192)
-            .map(|i| 0.6 * (2.0 * std::f32::consts::PI * 60.0 * i as f32 / 48_000.0).sin())
-            .collect();
-        let mut buf = input.clone();
+
+        // 60 Hz sits in the low band's source octave, so we expect 30 Hz out.
+        let mut buf = tone(60.0, 0.5, 96_000);
         s.process(&mut buf, 1);
-        assert_ne!(buf, input, "an in-band tone must be altered");
-        assert!(buf.iter().all(|&x| x.is_finite() && x.abs() <= 1.0));
+
+        let sub = magnitude_at(&buf, 30.0);
+        assert!(sub > 0.05, "no octave-down content, got {sub}");
     }
 
     #[test]
-    fn kernel_is_normalised_and_finite() {
-        let kernel = build_bandpass_kernel(48_000.0, LOW_FREQ, HIGH_FREQ);
-        assert!(kernel.iter().all(|k| k.is_finite()));
-        // Band-pass kernels sum to ~0 (no DC), but must be well-defined.
-        let sum: f32 = kernel.iter().sum();
-        assert!(sum.abs() < 1.0);
+    fn dry_signal_is_kept_not_faded() {
+        let mut s = SubharmonicSynth::new(SR);
+        s.set_enabled(true);
+        s.set_mix(1.0);
+
+        // 800 Hz is far outside both bands: it must come through untouched.
+        let mut buf = tone(800.0, 0.5, 48_000);
+        s.process(&mut buf, 1);
+
+        let dry = magnitude_at(&buf, 800.0);
+        assert!(dry > 0.45, "dry signal was attenuated, got {dry}");
+    }
+
+    #[test]
+    fn silence_stays_silent() {
+        let mut s = SubharmonicSynth::new(SR);
+        s.set_enabled(true);
+        s.set_mix(1.0);
+        let mut buf = vec![0.0f32; 24_000];
+        s.process(&mut buf, 1);
+        assert!(buf.iter().all(|&x| x.abs() < 1.0e-6));
     }
 
     #[test]
     fn reset_restores_reproducibility() {
-        let mut s = SubharmonicSynth::new(48_000.0);
+        let mut s = SubharmonicSynth::new(SR);
         s.set_enabled(true);
         s.set_mix(0.8);
-        let input: Vec<f32> = (0..1_024)
-            .map(|i| 0.5 * (2.0 * std::f32::consts::PI * 70.0 * i as f32 / 48_000.0).sin())
-            .collect();
+        let input = tone(70.0, 0.5, 4_096);
+
         let mut a = input.clone();
         s.process(&mut a, 1);
         s.reset();

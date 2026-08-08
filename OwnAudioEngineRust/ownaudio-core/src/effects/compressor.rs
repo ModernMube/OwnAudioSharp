@@ -37,11 +37,13 @@ pub const PARAM_ATTACK: u32 = 4;
 pub const PARAM_RELEASE: u32 = 5;
 /// Param ID 6 — makeup gain in dB (-20 … +20).
 pub const PARAM_MAKEUP: u32 = 6;
+/// Param ID 7 — soft-knee ("OverEasy") width in dB (0 … 24).
+pub const PARAM_KNEE: u32 = 7;
 
-/// Soft-knee width in dB (reference constant).
+/// Default knee width, what the effect used to hard-code.
 const KNEE_WIDTH_DB: f32 = 6.0;
-/// Half the soft-knee width.
-const KNEE_HALF_WIDTH_DB: f32 = KNEE_WIDTH_DB / 2.0;
+const MIN_KNEE_DB: f32 = 0.0;
+const MAX_KNEE_DB: f32 = 24.0;
 
 /// Envelope values below this are treated as silence (reference parity).
 const ENV_FLOOR: f32 = 1.0e-6;
@@ -55,6 +57,8 @@ pub struct Compressor {
     attack_ms: f32,
     release_ms: f32,
     makeup_db: f32,
+    /// dbx calls this OverEasy: how wide the transition into full ratio is.
+    knee_db: f32,
 
     // Derived coefficients (recomputed on parameter change).
     attack_coeff: f32,
@@ -86,6 +90,7 @@ impl Compressor {
             attack_ms: 20.0,
             release_ms: 200.0,
             makeup_db: 1.6,
+            knee_db: KNEE_WIDTH_DB,
             attack_coeff: 0.0,
             release_coeff: 0.0,
             makeup_lin: 1.0,
@@ -108,8 +113,8 @@ impl Compressor {
         self.release_coeff = (-1.0 / (self.sample_rate * release_sec)).exp();
         self.makeup_lin = 10.0f32.powf(self.makeup_db / 20.0);
         self.slope = 1.0 / self.ratio - 1.0;
-        self.knee_lower_db = self.threshold_db - KNEE_HALF_WIDTH_DB;
-        self.knee_upper_db = self.threshold_db + KNEE_HALF_WIDTH_DB;
+        self.knee_lower_db = self.threshold_db - self.knee_db * 0.5;
+        self.knee_upper_db = self.threshold_db + self.knee_db * 0.5;
     }
 }
 
@@ -131,6 +136,7 @@ impl Effect for Compressor {
         let t_db = self.threshold_db;
         let k_lower = self.knee_lower_db;
         let k_upper = self.knee_upper_db;
+        let knee = self.knee_db.max(1.0e-3);
         let mut env = self.envelope;
 
         for frame in buffer.chunks_mut(ch) {
@@ -166,7 +172,7 @@ impl Effect for Compressor {
                     slope * (env_db - t_db)
                 } else {
                     let over = env_db - k_lower;
-                    slope * (over * over) / (2.0 * KNEE_WIDTH_DB)
+                    slope * (over * over) / (2.0 * knee)
                 };
                 10.0f32.powf(gain_reduction_db * 0.05)
             };
@@ -216,6 +222,11 @@ impl Effect for Compressor {
                 self.makeup_ramp.set(self.makeup_lin);
                 true
             }
+            PARAM_KNEE => {
+                self.knee_db = value.clamp(MIN_KNEE_DB, MAX_KNEE_DB);
+                self.recompute();
+                true
+            }
             _ => false,
         }
     }
@@ -229,6 +240,7 @@ impl Effect for Compressor {
             PARAM_ATTACK => Some(self.attack_ms),
             PARAM_RELEASE => Some(self.release_ms),
             PARAM_MAKEUP => Some(self.makeup_db),
+            PARAM_KNEE => Some(self.knee_db),
             _ => None,
         }
     }
@@ -280,8 +292,8 @@ mod tests {
                 makeup_lin: 10.0f64.powf(makeup_db / 20.0),
                 slope: 1.0 / ratio - 1.0,
                 threshold_db,
-                knee_lower_db: threshold_db - KNEE_HALF_WIDTH_DB as f64,
-                knee_upper_db: threshold_db + KNEE_HALF_WIDTH_DB as f64,
+                knee_lower_db: threshold_db - (KNEE_WIDTH_DB * 0.5) as f64,
+                knee_upper_db: threshold_db + (KNEE_WIDTH_DB * 0.5) as f64,
                 envelope: 0.0,
             }
         }

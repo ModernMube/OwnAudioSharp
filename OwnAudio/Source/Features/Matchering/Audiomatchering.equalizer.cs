@@ -204,9 +204,28 @@ namespace OwnaudioNET.Features.Matchering
                 Log.Info($"\rProcessing: {(float)(offset + count) / totalSamples * 100f:F1}%");
             }
 
+            _compensateLimiterLatency(audioData, totalSamples, channels, outputLimiter);
+
             Log.Info("\nWriting to file...");
             OwnaudioNET.Recording.WaveFile.Create(outputFile, audioData, sampleRate, channels, 24);
             Log.Info($"Processing completed: {outputFile}");
+        }
+
+        /// <summary>
+        /// The limiter's lookahead delays the whole render, so the head is silence
+        /// and the last few ms are still sitting in its delay line. Pushes silence
+        /// through to get the tail back, then slides everything into place.
+        /// </summary>
+        private static void _compensateLimiterLatency(float[] audioData, int totalSamples, int channels, LimiterEffect limiter)
+        {
+            int shift = limiter.LatencySamples * channels;
+            if (shift <= 0 || shift >= totalSamples) return;
+
+            float[] tail = new float[shift];
+            limiter.Process(tail, limiter.LatencySamples);
+
+            Array.Copy(audioData, shift, audioData, 0, totalSamples - shift);
+            Array.Copy(tail, 0, audioData, totalSamples - shift, shift);
         }
 
         #endregion

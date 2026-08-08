@@ -264,20 +264,20 @@ namespace OwnaudioNET.Effects
         #endregion
 
         /// <summary>
-        /// Sets the ISO centres and the per band Q, everything flat to start with.
+        /// Constant-Q for 1/3-octave spacing. The old 0.6-1.4 table gave 1.4 octave
+        /// wide bells, so a drawn curve summed to about 5x what you set.
+        /// </summary>
+        private const float BandQ = 4.318474f;
+
+        /// <summary>
+        /// ISO centres, constant Q, flat to start with.
         /// </summary>
         private void _initFilters()
         {
-            float[] _q = {
-                0.6f, 0.6f, 0.7f, 0.7f, 0.8f, 0.8f, 0.9f, 1.0f, 1.0f, 1.1f,
-                1.2f, 1.2f, 1.1f, 1.0f, 1.0f, 1.0f, 1.1f, 1.2f, 1.2f, 1.3f,
-                1.4f, 1.3f, 1.2f, 1.1f, 1.0f, 0.9f, 0.8f, 0.7f, 0.7f, 0.6f
-            };
-
             for (int band = 0; band < BANDS; band++)
             {
                 _frequencies[band] = StandardFrequencies[band];
-                _qFactors[band] = _q[band];
+                _qFactors[band] = BandQ;
                 _gains[band] = 0.0f;
                 _updateFilter(band);
             }

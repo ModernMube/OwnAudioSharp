@@ -1,5 +1,4 @@
 using System;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using Ownaudio.Core;
 using OwnaudioNET.Effects.SmartMaster.Components;
@@ -7,173 +6,216 @@ using OwnaudioNET.Effects.SmartMaster.Components;
 namespace OwnaudioNET.Effects.SmartMaster
 {
     /// <summary>
-    /// Sealed DSP processing chain for SmartMaster effect.
+    /// Managed mirror of the native SmartMaster chain, in the same order:
+    /// subsonic HPF, graphic EQ, parametric EQ, subharmonic, compressor, then the
+    /// crossover section with per-band trim, alignment and limiters, then the
+    /// output limiter.
     /// </summary>
     internal sealed class SmartMasterAudioChain : IDisposable
     {
         #region Fields
-        
-        private const int PARALLEL_THRESHOLD = 512;
-        
+
         private readonly int _sampleRate;
         private readonly int _channels;
-        
-        // DSP Components
+
+        private SubsonicFilter? _subsonic;
         private Equalizer30BandEffect? _graphicEQ;
+        private ParametricEqStage? _parametricEQ;
         private SubharmonicSynth? _subharmonicSynth;
         private CompressorEffect? _compressor;
         private CrossoverFilter? _crossover;
         private PhaseAlignment? _phaseAlignment;
+        private LimiterEffect? _mainLimiter;
+        private LimiterEffect? _subLimiter;
         private LimiterEffect? _limiter;
-        
-        // These are sized during Configure() and reused for every Process() call
+
         private float[]? _tempLBuffer;
         private float[]? _tempRBuffer;
         private float[]? _subLBuffer;
         private float[]? _subRBuffer;
         private float[]? _monoSubBuffer;
+        private float[]? _bandScratch;
         private int _maxFrameCount;
-        
-        // Configuration cache
+
         private bool _subharmonicEnabled;
         private bool _compressorEnabled;
-        private bool _needsPhaseAlignment;
-        
+        private bool _crossoverActive;
+        private float _gainMainL = 1.0f;
+        private float _gainMainR = 1.0f;
+        private float _gainSub = 1.0f;
+
         private bool _disposed;
-        
+
         #endregion
-        
+
         #region Constructor
-        
+
         /// <summary>
-        /// Creates a new audio processing chain.
+        /// Sample rate in Hz and the channel count the chain will see.
         /// </summary>
-        /// <param name="sampleRate">Sample rate in Hz.</param>
-        /// <param name="channels">Number of audio channels.</param>
         public SmartMasterAudioChain(int sampleRate, int channels)
         {
             _sampleRate = sampleRate;
             _channels = channels;
             _maxFrameCount = 0;
         }
-        
+
         #endregion
-        
+
         #region Configuration
-        
+
         /// <summary>
-        /// Configures the audio chain with the given settings.
-        /// This method allocates all necessary resources and should NOT be called from the audio thread.
+        /// Builds every stage from the config. Allocates, so keep it off the audio thread.
         /// </summary>
-        /// <param name="config">Audio configuration.</param>
-        /// <param name="masterConfig">SmartMaster configuration.</param>
         public void Configure(AudioConfig config, SmartMasterConfig masterConfig)
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(SmartMasterAudioChain));
-            
-            // 1. Create and configure components
+
+            var subsonic = new SubsonicFilter(_sampleRate, masterConfig.SubsonicFrequency, _channels)
+            {
+                Enabled = masterConfig.SubsonicEnabled
+            };
+
             var graphicEQ = new Equalizer30BandEffect(_sampleRate);
             graphicEQ.Initialize(config);
             graphicEQ.SetAllGains(masterConfig.GraphicEQGains);
-            
-            var subharmonicSynth = new SubharmonicSynth(_sampleRate);
-            subharmonicSynth.Enabled = masterConfig.SubharmonicEnabled;
-            subharmonicSynth.Mix = masterConfig.SubharmonicMix;
-            
+
+            var parametricEQ = new ParametricEqStage(_sampleRate, masterConfig.ParametricEQ, _channels);
+
+            var subharmonicSynth = new SubharmonicSynth(_sampleRate)
+            {
+                Enabled = masterConfig.SubharmonicEnabled,
+                Mix = masterConfig.SubharmonicMix,
+                LowLevel = masterConfig.SubharmonicLowLevel,
+                HighLevel = masterConfig.SubharmonicHighLevel
+            };
+
             var compressor = new CompressorEffect(sampleRate: _sampleRate);
             compressor.Initialize(config);
             compressor.Enabled = masterConfig.CompressorEnabled;
-            compressor.Threshold = masterConfig.CompressorThreshold;
+
+            compressor.Threshold = CompressorEffect.LinearToDb(masterConfig.CompressorThreshold);
             compressor.Ratio = masterConfig.CompressorRatio;
             compressor.AttackTime = masterConfig.CompressorAttack;
             compressor.ReleaseTime = masterConfig.CompressorRelease;
-            
+            compressor.KneeWidth = masterConfig.CompressorKnee;
+
             var crossover = new CrossoverFilter(_sampleRate, masterConfig.CrossoverFrequency);
-            
+
             var phaseAlignment = new PhaseAlignment(_sampleRate);
             phaseAlignment.SetDelays(masterConfig.TimeDelays);
             phaseAlignment.SetPhaseInversions(masterConfig.PhaseInvert);
-            
+
+            var mainLimiter = _bandLimiter(config, 2, masterConfig.MainLimiterThreshold);
+            var subLimiter = _bandLimiter(config, 1, masterConfig.SubLimiterThreshold);
+
             var limiter = new LimiterEffect(sampleRate: _sampleRate);
             limiter.Initialize(config);
             limiter.Threshold = masterConfig.LimiterThreshold;
             limiter.Ceiling = masterConfig.LimiterCeiling;
             limiter.Release = masterConfig.LimiterRelease;
-            
-            // 2. Reset all components to clean state
+
+            subsonic.Reset();
             graphicEQ.Reset();
+            parametricEQ.Reset();
             subharmonicSynth.Reset();
             compressor.Reset();
             crossover.Reset();
             phaseAlignment.Reset();
+            mainLimiter.Reset();
+            subLimiter.Reset();
             limiter.Reset();
-            
-            // 3. Pre-allocate buffers for crossover processing
+
             _maxFrameCount = Math.Max(_maxFrameCount, 2048);
-            
             _tempLBuffer = new float[_maxFrameCount];
             _tempRBuffer = new float[_maxFrameCount];
             _subLBuffer = new float[_maxFrameCount];
             _subRBuffer = new float[_maxFrameCount];
             _monoSubBuffer = new float[_maxFrameCount];
-            
-            // 4. Cache configuration flags
+            _bandScratch = new float[_maxFrameCount * 2];
+
             _subharmonicEnabled = masterConfig.SubharmonicEnabled;
             _compressorEnabled = masterConfig.CompressorEnabled;
-            
-            // Check if phase alignment is needed
-            _needsPhaseAlignment = false;
-            for (int i = 0; i < SmartMasterConfig.AlignChannels; i++)
+
+            float[] delays = masterConfig.TimeDelays;
+            bool[] invert = masterConfig.PhaseInvert;
+            _crossoverActive = masterConfig.CrossoverEnabled;
+            for (int i = 0; i < SmartMasterConfig.AlignChannels && !_crossoverActive; i++)
             {
-                if (Math.Abs(masterConfig.TimeDelays[i]) > 0.001f || masterConfig.PhaseInvert[i])
-                {
-                    _needsPhaseAlignment = true;
-                    break;
-                }
+                if (Math.Abs(delays[i]) > 0.001f || invert[i]) _crossoverActive = true;
             }
-            
-            // 5. Atomic assignment (thread-safe swap)
+
+            float[] gains = masterConfig.OutputGains;
+            _gainMainL = _dbToLinear(gains[0]);
+            _gainMainR = _dbToLinear(gains[1]);
+            _gainSub = _dbToLinear(gains[2]);
+
+            _subsonic = subsonic;
             _graphicEQ = graphicEQ;
+            _parametricEQ = parametricEQ;
             _subharmonicSynth = subharmonicSynth;
             _compressor = compressor;
             _crossover = crossover;
             _phaseAlignment = phaseAlignment;
+            _mainLimiter = mainLimiter;
+            _subLimiter = subLimiter;
             _limiter = limiter;
         }
-        
+
+        /// <summary>
+        /// Driver protection limiter for one band, laid out for its own channel
+        /// count. At 0 dBFS it just sits open.
+        /// </summary>
+        private LimiterEffect _bandLimiter(AudioConfig config, int channels, float thresholdDb)
+        {
+            var bandConfig = new AudioConfig
+            {
+                SampleRate = config.SampleRate,
+                Channels = channels,
+                BufferSize = config.BufferSize
+            };
+
+            var l = new LimiterEffect(sampleRate: _sampleRate);
+            l.Initialize(bandConfig);
+            l.Threshold = thresholdDb;
+            l.Ceiling = 0.0f;
+            l.Release = 80.0f;
+
+            return l;
+        }
+
+        private static float _dbToLinear(float db) => MathF.Pow(10.0f, db / 20.0f);
+
         #endregion
 
         #region Latency
 
         /// <summary>
-        /// Gets the lookahead latency of the internal limiter in samples.
+        /// Lookahead the chain adds. Only the limiters delay anything, and with the
+        /// crossover running the band limiter sits in series with the output one.
         /// </summary>
-        /// <remarks>
-        /// The only latency-inducing component in the SmartMaster chain is the internal
-        /// <see cref="LimiterEffect"/>. All other components (EQ, compressor, subharmonic
-        /// synth, crossover, phase alignment) are zero-latency.
-        /// Returns 0 before <see cref="Configure"/> has been called.
-        /// </remarks>
-        public int LimiterLatencySamples => _limiter?.LatencySamples ?? 0;
+        public int LimiterLatencySamples
+        {
+            get
+            {
+                int band = _crossoverActive ? (_mainLimiter?.LatencySamples ?? 0) : 0;
+                return band + (_limiter?.LatencySamples ?? 0);
+            }
+        }
 
         #endregion
 
-        #region Audio Processing (Hot Path - Zero GC)
-        
+        #region Audio Processing
+
         /// <summary>
-        /// Processes audio buffer through the DSP chain.
-        /// CRITICAL: This method is called from the audio thread and MUST NOT allocate any memory.
+        /// Runs an interleaved block through the chain, in place.
         /// </summary>
-        /// <param name="buffer">Audio buffer to process (interleaved samples).</param>
-        /// <param name="frameCount">Number of frames to process.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
         {
-            if (_graphicEQ == null)
-                return;
-            
-            // Expand pre-allocated buffers if needed (rare case, but prevents crashes)
+            if (_graphicEQ == null) return;
+
             if (frameCount > _maxFrameCount)
             {
                 _maxFrameCount = frameCount;
@@ -182,241 +224,116 @@ namespace OwnaudioNET.Effects.SmartMaster
                 _subLBuffer = new float[_maxFrameCount];
                 _subRBuffer = new float[_maxFrameCount];
                 _monoSubBuffer = new float[_maxFrameCount];
+                _bandScratch = new float[_maxFrameCount * 2];
             }
-            
-            // 1. Graphic EQ
+
+            _subsonic?.Process(buffer, frameCount, _channels);
             _graphicEQ.Process(buffer, frameCount);
-            
-            // 2. Subharmonic Synth
+            _parametricEQ?.Process(buffer, frameCount, _channels);
+
             if (_subharmonicEnabled && _subharmonicSynth != null)
-            {
                 _subharmonicSynth.Process(buffer, frameCount, _channels);
-            }
-            
-            // 3. Compressor
+
             if (_compressorEnabled && _compressor != null)
-            {
                 _compressor.Process(buffer, frameCount);
-            }
-            
-            // 4. Crossover + Phase Alignment + Limiter
-            ProcessCrossoverChain(buffer, frameCount);
+
+            if (_crossoverActive) ProcessCrossoverChain(buffer, frameCount);
+
+            _limiter?.Process(buffer, frameCount);
         }
-        
+
         /// <summary>
-        /// Processes the crossover chain (frequency splitting, phase alignment, and limiting).
-        /// CRITICAL: Zero allocation - uses pre-allocated buffers.
-        /// Optimized: SIMD vectorization + adaptive parallelization based on buffer size.
-        /// Unsafe: Uses pointers for SIMD operations.
+        /// Splits into a main and a mono sub band, trims, aligns and limits each,
+        /// then sums them back into the buffer.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private unsafe void ProcessCrossoverChain(Span<float> buffer, int frameCount)
+        private void ProcessCrossoverChain(Span<float> buffer, int frameCount)
         {
-            if (_crossover == null || _phaseAlignment == null || _limiter == null)
-            {
-                _limiter?.Process(buffer, frameCount);
-                return;
-            }
-            
-            if (!_needsPhaseAlignment)
-            {
-                _limiter.Process(buffer, frameCount);
-                return;
-            }
-            
+            if (_crossover == null || _phaseAlignment == null) return;
+
             float[] tempL = _tempLBuffer!;
             float[] tempR = _tempRBuffer!;
             float[] subL = _subLBuffer!;
             float[] subR = _subRBuffer!;
             float[] monoSub = _monoSubBuffer!;
-            
+            float[] band = _bandScratch!;
+
             int channels = _channels;
-            bool useParallel = frameCount >= PARALLEL_THRESHOLD;
-            
-            if (channels == 2)
+
+            for (int i = 0; i < frameCount; i++)
             {
-                DeinterleaveStereoSIMD(buffer, tempL, tempR, frameCount);
+                tempL[i] = buffer[i * channels];
+                tempR[i] = channels > 1 ? buffer[i * channels + 1] : tempL[i];
             }
-            else
+
+            _crossover.Process(tempL.AsSpan(0, frameCount), tempL.AsSpan(0, frameCount), subL.AsSpan(0, frameCount), frameCount, 0);
+            _crossover.Process(tempR.AsSpan(0, frameCount), tempR.AsSpan(0, frameCount), subR.AsSpan(0, frameCount), frameCount, 1);
+
+            for (int i = 0; i < frameCount; i++)
             {
-                for (int i = 0; i < frameCount; i++)
-                {
-                    tempL[i] = buffer[i * channels + 0];
-                    tempR[i] = channels > 1 ? buffer[i * channels + 1] : tempL[i];
-                }
+                monoSub[i] = (subL[i] + subR[i]) * 0.5f * _gainSub;
+                tempL[i] *= _gainMainL;
+                tempR[i] *= _gainMainR;
             }
-            
-            if (useParallel)
+
+            _phaseAlignment.Process(tempL.AsSpan(0, frameCount), 0, frameCount);
+            _phaseAlignment.Process(tempR.AsSpan(0, frameCount), 1, frameCount);
+            _phaseAlignment.Process(monoSub.AsSpan(0, frameCount), 2, frameCount);
+
+            for (int i = 0; i < frameCount; i++)
             {
-                Parallel.Invoke(
-                    () => _crossover.Process(tempL.AsSpan(0, frameCount), tempL.AsSpan(0, frameCount), subL.AsSpan(0, frameCount), frameCount, 0),
-                    () => _crossover.Process(tempR.AsSpan(0, frameCount), tempR.AsSpan(0, frameCount), subR.AsSpan(0, frameCount), frameCount, 1)
-                );
+                band[i * 2] = tempL[i];
+                band[i * 2 + 1] = tempR[i];
             }
-            else
+
+            _mainLimiter?.Process(band.AsSpan(0, frameCount * 2), frameCount);
+            _subLimiter?.Process(monoSub.AsSpan(0, frameCount), frameCount);
+
+            for (int i = 0; i < frameCount; i++)
             {
-                _crossover.Process(tempL.AsSpan(0, frameCount), tempL.AsSpan(0, frameCount), subL.AsSpan(0, frameCount), frameCount, 0);
-                _crossover.Process(tempR.AsSpan(0, frameCount), tempR.AsSpan(0, frameCount), subR.AsSpan(0, frameCount), frameCount, 1);
-            }
-            
-            SumToMonoSIMD(subL, subR, monoSub, frameCount);
-            
-            if (useParallel)
-            {
-                Parallel.Invoke(
-                    () => _phaseAlignment.Process(tempL.AsSpan(0, frameCount), 0, frameCount),
-                    () => _phaseAlignment.Process(tempR.AsSpan(0, frameCount), 1, frameCount),
-                    () => _phaseAlignment.Process(monoSub.AsSpan(0, frameCount), 2, frameCount)
-                );
-            }
-            else
-            {
-                _phaseAlignment.Process(tempL.AsSpan(0, frameCount), 0, frameCount);
-                _phaseAlignment.Process(tempR.AsSpan(0, frameCount), 1, frameCount);
-                _phaseAlignment.Process(monoSub.AsSpan(0, frameCount), 2, frameCount);
-            }
-            
-            if (channels == 2)
-            {
-                InterleaveStereoPlusSubSIMD(buffer, tempL, tempR, monoSub, frameCount);
-            }
-            else
-            {
-                for (int i = 0; i < frameCount; i++)
-                {
-                    buffer[i * channels + 0] = tempL[i] + monoSub[i];
-                    if (channels > 1)
-                        buffer[i * channels + 1] = tempR[i] + monoSub[i];
-                }
-            }
-            
-            _limiter.Process(buffer, frameCount);
-        }
-        
-        /// <summary>
-        /// SIMD-optimized deinterleaving: Stereo interleaved -> Separate L/R buffers.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void DeinterleaveStereoSIMD(Span<float> interleaved, float[] left, float[] right, int frameCount)
-        {
-            fixed (float* pInterleaved = interleaved)
-            fixed (float* pLeft = left)
-            fixed (float* pRight = right)
-            {
-                int i = 0;
-                int simdWidth = Vector<float>.Count;
-                
-                int simdLimit = frameCount - (simdWidth - 1);
-                
-                for (; i < simdLimit; i += simdWidth)
-                {
-                    for (int j = 0; j < simdWidth; j++)
-                    {
-                        pLeft[i + j] = pInterleaved[(i + j) * 2 + 0];
-                        pRight[i + j] = pInterleaved[(i + j) * 2 + 1];
-                    }
-                }
-                
-                for (; i < frameCount; i++)
-                {
-                    pLeft[i] = pInterleaved[i * 2 + 0];
-                    pRight[i] = pInterleaved[i * 2 + 1];
-                }
+                float sub = monoSub[i];
+                buffer[i * channels] = band[i * 2] + sub;
+                if (channels > 1) buffer[i * channels + 1] = band[i * 2 + 1] + sub;
             }
         }
-        
-        /// <summary>
-        /// SIMD-optimized mono sum: (L + R) * 0.5.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void SumToMonoSIMD(float[] left, float[] right, float[] mono, int frameCount)
-        {
-            int i = 0;
-            int simdWidth = Vector<float>.Count;
-            var half = new Vector<float>(0.5f);
-            
-            for (; i <= frameCount - simdWidth; i += simdWidth)
-            {
-                var vL = new Vector<float>(left, i);
-                var vR = new Vector<float>(right, i);
-                var vSum = (vL + vR) * half;
-                vSum.CopyTo(mono, i);
-            }
-            
-            for (; i < frameCount; i++)
-            {
-                mono[i] = (left[i] + right[i]) * 0.5f;
-            }
-        }
-        
-        /// <summary>
-        /// SIMD-optimized interleaving: L/R/Sub -> Stereo interleaved (L+Sub, R+Sub).
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static unsafe void InterleaveStereoPlusSubSIMD(Span<float> interleaved, float[] left, float[] right, float[] sub, int frameCount)
-        {
-            fixed (float* pInterleaved = interleaved)
-            fixed (float* pLeft = left)
-            fixed (float* pRight = right)
-            fixed (float* pSub = sub)
-            {
-                int i = 0;
-                int simdWidth = Vector<float>.Count;
-                
-                int simdLimit = frameCount - (simdWidth - 1);
-                
-                for (; i < simdLimit; i += simdWidth)
-                {
-                    for (int j = 0; j < simdWidth; j++)
-                    {
-                        float subVal = pSub[i + j];
-                        pInterleaved[(i + j) * 2 + 0] = pLeft[i + j] + subVal;
-                        pInterleaved[(i + j) * 2 + 1] = pRight[i + j] + subVal;
-                    }
-                }
-                
-                for (; i < frameCount; i++)
-                {
-                    float subVal = pSub[i];
-                    pInterleaved[i * 2 + 0] = pLeft[i] + subVal;
-                    pInterleaved[i * 2 + 1] = pRight[i] + subVal;
-                }
-            }
-        }
-        
+
         #endregion
-        
+
         #region Reset
-        
+
         /// <summary>
-        /// Resets all DSP component states without clearing configuration.
+        /// Clears every stage's state, keeps the configuration.
         /// </summary>
         public void Reset()
         {
+            _subsonic?.Reset();
             _graphicEQ?.Reset();
+            _parametricEQ?.Reset();
             _subharmonicSynth?.Reset();
             _compressor?.Reset();
             _crossover?.Reset();
             _phaseAlignment?.Reset();
+            _mainLimiter?.Reset();
+            _subLimiter?.Reset();
             _limiter?.Reset();
         }
-        
+
         #endregion
-        
+
         #region Dispose
-        
+
         public void Dispose()
         {
-            if (_disposed)
-                return;
-            
+            if (_disposed) return;
+
             _graphicEQ?.Dispose();
             _compressor?.Dispose();
+            _mainLimiter?.Dispose();
+            _subLimiter?.Dispose();
             _limiter?.Dispose();
-            
+
             _disposed = true;
         }
-        
+
         #endregion
     }
 }

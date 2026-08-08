@@ -68,13 +68,20 @@ namespace OwnaudioNET.Effects
         private bool _disposed;
         private AudioConfig _config = null!;
 
+        /// <summary>
+        /// Look-ahead line holding whole interleaved frames, slot * channels + ch.
+        /// </summary>
         private float[] _delayBuffer;
-        private float[] _envelopeBuffer;
         private int _delayIndex;
-        private int _envelopeIndex;
+        private int _channels;
         private float _currentGain;
         private float _targetGain;
         private readonly float _sampleRate;
+
+        /// <summary>
+        /// Window length in frames, so the look-ahead stays the same in ms whatever
+        /// the channel count.
+        /// </summary>
         private readonly int _maxBufferSize;
 
         /// <summary>
@@ -87,15 +94,26 @@ namespace OwnaudioNET.Effects
         private int _dequeSize;
 
         /// <summary>
-        /// Keeps counting past the ring wrap, that's how the deque knows what expired.
+        /// Same trick for the window minimum of the required gain - the old code
+        /// rescanned the whole envelope buffer per sample.
         /// </summary>
-        private long _absoluteSampleIndex;
+        private readonly long[] _minIndices;
+        private readonly float[] _minValues;
+        private int _minHead;
+        private int _minTail;
+        private int _minSize;
+
+        /// <summary>
+        /// Keeps counting past the ring wrap, that's how the deques know what expired.
+        /// </summary>
+        private long _absoluteFrameIndex;
 
         private float _threshold;
         private float _ceiling;
         private float _release;
+        private float _attack;
         private float _lookAheadMs;
-        private int _lookAheadSamples;
+        private int _lookAheadFrames;
         private int _activeBufferSize;
 
         private const float DEFAULT_THRESHOLD = -3.0f;
@@ -141,10 +159,10 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Lookahead latency in samples, the mixer uses this for PDC.
-        /// 5ms is 240 samples at 48k, 20ms is 960.
+        /// Lookahead latency in frames, the mixer uses this for PDC.
+        /// 5ms is 240 frames at 48k, 20ms is 960.
         /// </summary>
-        public int LatencySamples => _lookAheadSamples;
+        public int LatencySamples => _lookAheadFrames;
 
         /// <summary>
         /// Builds the limiter with hand picked values. Threshold and ceiling are in dB,
@@ -159,25 +177,28 @@ namespace OwnaudioNET.Effects
             _enabled = true;
 
             _sampleRate = sampleRate;
-            _maxBufferSize = (int)(MAX_LOOKAHEAD * sampleRate / 1000.0f);
+
+            _maxBufferSize = (int)(MAX_LOOKAHEAD * sampleRate / 1000.0f) + 1;
 
             Threshold = threshold;
             Ceiling = ceiling;
             Release = release;
 
             _lookAheadMs = Math.Clamp(lookAheadMs, MIN_LOOKAHEAD, MAX_LOOKAHEAD);
-            _lookAheadSamples = (int)(_lookAheadMs * sampleRate / 1000.0f);
-            _activeBufferSize = _lookAheadSamples;
+            _lookAheadFrames = (int)(_lookAheadMs * sampleRate / 1000.0f);
+            _activeBufferSize = _lookAheadFrames + 1;
+            _attack = _attackCoeff(_lookAheadMs, sampleRate);
 
-            _delayBuffer = new float[_maxBufferSize];
-            _envelopeBuffer = new float[_maxBufferSize];
-            Array.Fill(_envelopeBuffer, 1.0f);
+            _channels = 2;
+            _delayBuffer = new float[_maxBufferSize * _channels];
 
             _currentGain = 1.0f;
             _targetGain = 1.0f;
 
             _dequeIndices = new long[_maxBufferSize];
             _dequeValues = new float[_maxBufferSize];
+            _minIndices = new long[_maxBufferSize];
+            _minValues = new float[_maxBufferSize];
         }
 
         /// <summary>
@@ -192,11 +213,20 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Stores the engine config.
+        /// Stores the engine config, and relays out the delay line if the stream is
+        /// wider than the stereo we pre-sized for.
         /// </summary>
         public void Initialize(AudioConfig config)
         {
             _config = config;
+
+            int ch = Math.Max(config.Channels, 1);
+            if (ch != _channels)
+            {
+                _channels = ch;
+                _delayBuffer = new float[_maxBufferSize * ch];
+                Reset();
+            }
         }
 
         /// <summary>
@@ -241,19 +271,22 @@ namespace OwnaudioNET.Effects
             set
             {
                 _lookAheadMs = Math.Clamp(value, MIN_LOOKAHEAD, MAX_LOOKAHEAD);
-                int newSamples = (int)(_lookAheadMs * _sampleRate / 1000.0f);
+                _attack = _attackCoeff(_lookAheadMs, _sampleRate);
 
-                if (newSamples != _lookAheadSamples)
+                int newFrames = (int)(_lookAheadMs * _sampleRate / 1000.0f);
+                if (newFrames != _lookAheadFrames)
                 {
-                    _lookAheadSamples = newSamples;
-                    _activeBufferSize = newSamples;
+                    _lookAheadFrames = newFrames;
+                    _activeBufferSize = newFrames + 1;
                     Reset();
                 }
             }
         }
 
         /// <summary>
-        /// Delays the signal by the lookahead, then applies the gain the upcoming peaks call for.
+        /// Delays the signal by the lookahead, then applies the gain the upcoming peaks
+        /// call for. Detection is per frame off the loudest channel, so every channel
+        /// gets the same gain and the stereo image stays put.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
@@ -263,47 +296,54 @@ namespace OwnaudioNET.Effects
 
             if (!_enabled) return;
 
-            int sampleCount = frameCount * _config.Channels;
+            int ch = _channels;
 
-            for (int i = 0; i < sampleCount; i++)
+            for (int f = 0; f < frameCount; f++)
             {
-                _delayBuffer[_delayIndex] = buffer[i];
-                _envelopeBuffer[_envelopeIndex] = _gainReduction(_peakLevel());
+                int write = _delayIndex * ch;
+                float linked = 0.0f;
 
-                float smoothGain = _smoothedGain();
-                if (!float.IsFinite(smoothGain))
+                for (int c = 0; c < ch; c++)
                 {
-                    smoothGain = 1.0f;
+                    float s = buffer[f * ch + c];
+                    _delayBuffer[write + c] = s;
+
+                    float a = Math.Abs(s);
+                    if (a > linked) linked = a;
+                }
+
+                float gain = _smoothedGain(_windowMinGain(_gainReduction(_windowPeak(linked))));
+                if (!float.IsFinite(gain))
+                {
+                    gain = 1.0f;
                     _currentGain = 1.0f;
                     _targetGain = 1.0f;
                 }
 
-                float delayed = _delayBuffer[(_delayIndex - _lookAheadSamples + _activeBufferSize) % _activeBufferSize];
-                buffer[i] = _applyCeiling(delayed * smoothGain);
+                int read = ((_delayIndex - _lookAheadFrames + _activeBufferSize) % _activeBufferSize) * ch;
+
+                for (int c = 0; c < ch; c++)
+                    buffer[f * ch + c] = _applyCeiling(_delayBuffer[read + c] * gain);
 
                 _delayIndex = (_delayIndex + 1) % _activeBufferSize;
-                _envelopeIndex = (_envelopeIndex + 1) % _activeBufferSize;
-                _absoluteSampleIndex++;
+                _absoluteFrameIndex++;
             }
         }
 
         /// <summary>
-        /// Empties the active part of the ring and opens the gain back up.
+        /// Empties the ring and opens the gain back up.
         /// </summary>
         public void Reset()
         {
-            Array.Clear(_delayBuffer, 0, _activeBufferSize);
-            Array.Fill(_envelopeBuffer, 1.0f, 0, _activeBufferSize);
+            Array.Clear(_delayBuffer);
 
             _currentGain = 1.0f;
             _targetGain = 1.0f;
             _delayIndex = 0;
-            _envelopeIndex = 0;
-            _absoluteSampleIndex = 0;
+            _absoluteFrameIndex = 0;
 
-            _dequeHead = 0;
-            _dequeTail = 0;
-            _dequeSize = 0;
+            _dequeHead = _dequeTail = _dequeSize = 0;
+            _minHead = _minTail = _minSize = 0;
         }
 
         /// <summary>
@@ -381,12 +421,12 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Biggest absolute value inside the lookahead window, amortized O(1) from the deque.
+        /// Biggest linked peak inside the lookahead window, amortized O(1) from the deque.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private float _peakLevel()
+        private float _windowPeak(float linked)
         {
-            long expire = _absoluteSampleIndex - _activeBufferSize;
+            long expire = _absoluteFrameIndex - _activeBufferSize;
 
             while (_dequeSize > 0 && _dequeIndices[_dequeHead] <= expire)
             {
@@ -394,19 +434,17 @@ namespace OwnaudioNET.Effects
                 _dequeSize--;
             }
 
-            float currentAbs = Math.Abs(_delayBuffer[_delayIndex]);
-
             while (_dequeSize > 0)
             {
                 int backIdx = (_dequeTail - 1 + _maxBufferSize) % _maxBufferSize;
-                if (_dequeValues[backIdx] >= currentAbs) break;
+                if (_dequeValues[backIdx] >= linked) break;
 
                 _dequeTail = backIdx;
                 _dequeSize--;
             }
 
-            _dequeIndices[_dequeTail] = _absoluteSampleIndex;
-            _dequeValues[_dequeTail] = currentAbs;
+            _dequeIndices[_dequeTail] = _absoluteFrameIndex;
+            _dequeValues[_dequeTail] = linked;
             _dequeTail = (_dequeTail + 1) % _maxBufferSize;
             _dequeSize++;
 
@@ -414,35 +452,63 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Gain the given peak needs, never pulls below 10%.
+        /// Smallest required gain inside the window, same deque trick the other way round.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private float _windowMinGain(float required)
+        {
+            long expire = _absoluteFrameIndex - _activeBufferSize;
+
+            while (_minSize > 0 && _minIndices[_minHead] <= expire)
+            {
+                _minHead = (_minHead + 1) % _maxBufferSize;
+                _minSize--;
+            }
+
+            while (_minSize > 0)
+            {
+                int backIdx = (_minTail - 1 + _maxBufferSize) % _maxBufferSize;
+                if (_minValues[backIdx] <= required) break;
+
+                _minTail = backIdx;
+                _minSize--;
+            }
+
+            _minIndices[_minTail] = _absoluteFrameIndex;
+            _minValues[_minTail] = required;
+            _minTail = (_minTail + 1) % _maxBufferSize;
+            _minSize++;
+
+            return _minValues[_minHead];
+        }
+
+        /// <summary>
+        /// Gain that lands the peak on the threshold, never below 10%. The old form
+        /// divided by the excess twice, which ducked well under the threshold.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private float _gainReduction(float peakLevel)
         {
             if (peakLevel <= _threshold) return 1.0f;
 
-            float excess = peakLevel / _threshold;
-            return Math.Max((_threshold / excess) / peakLevel, 0.1f);
+            return Math.Max(_threshold / peakLevel, 0.1f);
         }
 
         /// <summary>
-        /// Smallest gain in the window, grabbed instantly on the way down and eased back
-        /// on the way up. The release speeds up or slows down with how deep we are.
+        /// Rides the window minimum: ramped down over the lookahead instead of stepped
+        /// (a gain step modulates the low end), eased back up on release. The release
+        /// speeds up or slows down with how deep we are.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private float _smoothedGain()
+        private float _smoothedGain(float minGain)
         {
-            float minGain = 1.0f;
-            for (int i = 0; i < _activeBufferSize; i++)
-            {
-                if (_envelopeBuffer[i] < minGain) minGain = _envelopeBuffer[i];
-            }
-
             _targetGain = minGain;
 
             if (_targetGain < _currentGain)
             {
-                _currentGain = _targetGain;
+                _currentGain += (_targetGain - _currentGain) * _attack;
+                if (Math.Abs(_targetGain - _currentGain) < 0.0001f) _currentGain = _targetGain;
+
                 return _currentGain;
             }
 
@@ -486,6 +552,15 @@ namespace OwnaudioNET.Effects
         private static float _releaseCoeff(float timeMs, float sampleRate)
         {
             return 1.0f - MathF.Exp(-1.0f / (timeMs * sampleRate / 1000.0f));
+        }
+
+        /// <summary>
+        /// Attack fast enough to finish inside the lookahead window.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float _attackCoeff(float lookAheadMs, float sampleRate)
+        {
+            return _releaseCoeff(Math.Max(lookAheadMs / 3.0f, 0.05f), sampleRate);
         }
 
         /// <summary>

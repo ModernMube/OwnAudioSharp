@@ -1,10 +1,16 @@
 # SmartMaster
 
-An intelligent "one-knob" mastering effect for OwnAudioSharp. SmartMaster wraps
-a full mastering chain (graphic EQ → subharmonic synth → compressor → crossover
-→ phase alignment → brick-wall limiter) behind a single
-[`IEffectProcessor`](../../Interfaces/IEffectProcessor.cs), plus a microphone-based
-**room-calibration measurement** system and a JSON preset library.
+An intelligent "one-knob" mastering effect for OwnAudioSharp, laid out like a
+dbx DriveRack style PA processor: everything that shapes the program runs before
+the crossover, everything that protects the drivers runs after it, per band.
+It sits behind a single [`IEffectProcessor`](../../Interfaces/IEffectProcessor.cs)
+and comes with a microphone-based **room-calibration measurement** system and a
+JSON preset library.
+
+The real-time DSP lives in Rust
+([`ownaudio-core/src/effects/smartmaster/`](../../../../OwnAudioEngineRust/ownaudio-core/src/effects/smartmaster/));
+the managed side here is the parameter model, the preset owner and the
+measurement (cold path), plus a managed mirror of the chain for non-native mode.
 
 Namespace root: `OwnaudioNET.Effects.SmartMaster`
 Public entry point: `SmartMasterEffect`.
@@ -30,10 +36,13 @@ Public entry point: `SmartMasterEffect`.
 
 | Component | Role |
 | --- | --- |
+| [Biquad.cs](Components/Biquad.cs) | RBJ coefficient builders (HP/LP/BP/peaking/shelf) + denormal-flushed TDF-II state. |
+| [SubsonicFilter.cs](Components/SubsonicFilter.cs) | 4th-order Butterworth subsonic high-pass, 24 dB/oct. |
+| [ParametricEqStage.cs](Components/ParametricEqStage.cs) | 8-band sweepable input PEQ (bell / low shelf / high shelf). |
 | [CrossoverFilter.cs](Components/CrossoverFilter.cs) | Linkwitz-Riley 4th-order (2× cascaded Butterworth) low/high split. |
-| [PhaseAlignment.cs](Components/PhaseAlignment.cs) | Per-channel (L/R/Sub) time delay + phase inversion. |
-| [SubharmonicSynth.cs](Components/SubharmonicSynth.cs) | FIR bandpass (40–120 Hz) + waveshaper for synthesized sub-bass. |
-| [FIRFilter.cs](Components/FIRFilter.cs) | Generic linear-phase windowed-sinc FIR (per-channel delay lines). |
+| [PhaseAlignment.cs](Components/PhaseAlignment.cs) | Per-channel (main L / main R / Sub) time delay + phase inversion. |
+| [SubharmonicSynth.cs](Components/SubharmonicSynth.cs) | Two-band octave divider (48–72→24–36 Hz, 72–112→36–56 Hz), added in parallel. |
+| [FIRFilter.cs](Components/FIRFilter.cs) | Generic linear-phase windowed-sinc FIR. Unused by the chain now, kept as a utility. |
 | [NoiseGenerator.cs](Components/NoiseGenerator.cs) | White / pink (Voss-McCartney) / low-frequency test noise. |
 | [SmartMasterSpectrumAnalyzer.cs](Components/SmartMasterSpectrumAnalyzer.cs) | FFT-based 30-band ISO spectrum + RMS for calibration. |
 
@@ -41,35 +50,38 @@ Public entry point: `SmartMasterEffect`.
 
 ## Signal chain
 
-`SmartMasterAudioChain.Process` runs the buffer through, in order:
-
 ```
-input ─► Graphic EQ (30-band) ─► [Subharmonic Synth] ─► [Compressor] ─► Crossover chain ─► output
-                                                                              │
-                          ┌───────────────────────────────────────────────────┘
-                          ▼   (only when phase alignment is needed)
-              split L/R (highs) + summed mono Sub (lows)
-                          ▼
-              PhaseAlignment per L / R / Sub  ─►  recombine (L+Sub, R+Sub)  ─►  Limiter
+in ─► [Subsonic HPF] ─► Graphic EQ (30-band) ─► [Parametric EQ] ─► [Subharmonic] ─► [Compressor]
+                                                                                        │
+    ┌───────────────────────────────────────────────────────────────────────────────────┘
+    ▼  (only when the crossover section is engaged)
+  split ─┬─ main L/R (highs) ─► trim ─► delay/polarity ─► main limiter ─┐
+         └─ mono sub (lows)  ─► trim ─► delay/polarity ─► sub limiter  ─┴─► sum
+                                                                            │
+                                                     output limiter ◄───────┘
 ```
 
-Bracketed stages are skipped when disabled in the config. When no time delay or
-phase inversion is configured, the crossover/phase branch is bypassed entirely
-and the signal goes straight to the limiter — the common case.
+Bracketed stages are skipped when disabled. The crossover section runs when
+`CrossoverEnabled` is set, or when any alignment delay / polarity flip needs it;
+otherwise the signal goes straight to the output limiter — the common case.
+
+The two band limiters are driver protection, not bus limiting: at a 0 dBFS
+threshold they sit open and only bite when a preset pulls them down.
 
 ### Hot-path guarantees
 
-- `SmartMasterAudioChain.Process` **must not allocate** — it runs on the audio
-  thread. All scratch buffers are pre-allocated in `Configure()` (initially
-  sized for 2048 frames, grown only on the rare oversize block).
-- Deinterleave / mono-sum / interleave use `System.Numerics.Vector<float>` SIMD.
-- For blocks ≥ `PARALLEL_THRESHOLD` (512 frames) the crossover and phase stages
-  run across channels via `Parallel.Invoke`.
-- The input is sanitized for NaN/Inf in `SmartMasterEffect.Process` before the
-  chain sees it, and the crossover self-heals corrupted IIR state.
-- Only the limiter adds latency (its lookahead). Everything else is
-  zero-latency; `LatencySamples` surfaces the limiter's value for the mixer's
-  delay compensation.
+- `SmartMasterAudioChain.Process` **must not allocate**. All scratch buffers are
+  pre-allocated in `Configure()` (sized for 2048 frames, grown only on the rare
+  oversize block).
+- No `Parallel.Invoke` on the audio thread — it allocated a closure per block and
+  handed the work to the thread pool, which is exactly what a real-time path must
+  not do.
+- No logging from `Process` either; NaN/Inf input is zeroed silently and counted
+  in `SanitizedSampleCount` for whoever wants to poll it.
+- Every IIR state is denormal-flushed, so a decaying tail can't park in the
+  subnormal range and cost a fortune on x86.
+- Only the limiters add latency (their lookahead). `LatencySamples` reports the
+  output limiter plus, when the crossover runs, the main-band limiter in series.
 
 ### Reconfiguration is atomic
 
@@ -143,11 +155,15 @@ Reported through `MeasurementStatusInfo` (status enum + 0–1 progress + step te
    flags a weak sub (→ recommends the subharmonic synth).
 4. **Analyzing spectrum** — play 4 s pink noise, record 3 s, FFT to 30 bands,
    compare against a flat reference to get per-band deviation in dB.
-5. **Calculating correction** — build a fresh `SmartMasterConfig`:
-   graphic-EQ gains from the inverse spectrum deviation (clamped: bass bands
-   0–4 boost ≤ +3 dB, others ≤ +12 dB, all ≥ −12 dB); phase-alignment delays /
-   polarity from the channel results; enable subharmonic synth if the sub was
-   weak.
+5. **Calculating correction** — build a fresh `SmartMasterConfig`. The deviation
+   is 3-band smoothed first (a single mic position is full of narrow interference
+   dips that say nothing about the system), then aimed at a house target curve
+   (warm at the bottom, rolled off on top) and applied at 65 % — a room is not a
+   minimum-phase system, so a 1:1 correction mostly makes it sound worse. Boosts
+   are capped short (bass bands 0–4 ≤ +2 dB, others ≤ +6 dB, all ≥ −12 dB)
+   because filling a null costs headroom and rarely fills it. Phase-alignment
+   delays / polarity come from the channel results; the subharmonic synth is
+   enabled if the sub was weak.
 6. Save to `measured.smartmaster.json` and report **Completed** (with any
    warnings). The active chain is reset to defaults; the measured preset is not
    applied automatically.
@@ -162,18 +178,21 @@ clicks.
 
 | Field | Meaning |
 | --- | --- |
-| `GraphicEQGains[30]` | 30-band graphic EQ gains in dB (0 = flat), ISO centres 20 Hz – 16 kHz. |
-| `SubharmonicEnabled` / `SubharmonicMix` / `SubharmonicFreqRange` | Sub-bass synth toggle, wet mix, max frequency. |
-| `CompressorEnabled` / `Threshold` / `Ratio` / `Attack` / `Release` | Compressor stage. |
-| `CrossoverFrequency` | Low/high split point in Hz. |
-| `TimeDelays[3]` / `PhaseInvert[3]` | Per-channel (L/R/Sub) alignment. |
-| `ParametricEQGains[3][10]` | Per-branch parametric EQ gains (reserved). |
+| `SubsonicEnabled` / `SubsonicFrequency` | 24 dB/oct subsonic high-pass on the input. |
+| `GraphicEQGains[30]` | 30-band graphic EQ gains in dB (0 = flat), ISO centres 20 Hz – 16 kHz, constant-Q. |
+| `ParametricEQ[8]` | Input PEQ: `Shape` (bell / low shelf / high shelf), `Frequency`, `Q`, `GainDb`. |
+| `SubharmonicEnabled` / `SubharmonicMix` / `SubharmonicLowLevel` / `SubharmonicHighLevel` | Octave-divider sub synth: master level plus the 24–36 Hz and 36–56 Hz band levels. `Mix` is a parallel level, not a dry/wet crossfade. |
+| `CompressorEnabled` / `Threshold` / `Ratio` / `Attack` / `Release` / `Knee` | Compressor. `Threshold` is linear 0–1; `Knee` is the OverEasy width in dB. |
+| `CrossoverEnabled` / `CrossoverFrequency` | Crossover section switch and split point in Hz. |
+| `OutputGains[3]` | Per-band trim in dB: main L, main R, sub. |
+| `TimeDelays[3]` / `PhaseInvert[3]` | Per-band alignment (main L / main R / sub). |
+| `MainLimiterThreshold` / `SubLimiterThreshold` | Driver-protection limiters in dBFS; 0 leaves them open. |
 | `LimiterThreshold` / `LimiterCeiling` / `LimiterRelease` | Output limiter. |
 | `MicInputGain` | Measurement/monitor mic gain (1.0 = unity). |
 | `LastMeasurement` | The `MeasurementResults` that produced this config, if any. |
 
 Band and channel counts come from `SmartMasterConfig.EqBands` (30),
-`AlignChannels` (3) and `ParametricBands` (10); every array property fits what it
+`AlignChannels` (3) and `ParametricBands` (8); every array property fits what it
 is given to that length, so an older 31-band preset or a hand-trimmed JSON can't
 silently disable a stage.
 
@@ -183,9 +202,14 @@ source generator) so presets work under Native AOT / trimming.
 ### Built-in speaker presets ([SmartMasterPresetFactory.cs](SmartMasterPresetFactory.cs))
 
 `SpeakerType`: `Default` (transparent passthrough), `HiFi`, `Headphone`,
-`Studio`, `Club`, `Concert`. Each sets a tuned EQ curve, subharmonic/compressor/
-limiter parameters and (for Club/Concert) a small sub delay for driver
-alignment.
+`Studio`, `Club`, `Concert`. Each sets a voicing curve on the graphic EQ plus
+subsonic / subharmonic / compressor / limiter values; `Club` and `Concert` also
+engage the crossover section with its own trims and driver limiters.
+
+The parametric EQ is left **flat in every preset** on purpose — the graphic EQ
+carries the voicing and those eight bands are the user's room tool, the same
+split a DriveRack works with. Alignment delays are likewise left at zero: without
+a measurement they only comb the crossover region.
 
 ---
 

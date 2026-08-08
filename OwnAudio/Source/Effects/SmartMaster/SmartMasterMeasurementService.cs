@@ -626,41 +626,71 @@ namespace OwnaudioNET.Effects.SmartMaster
         }
         
         /// <summary>
-        /// Calculate corrections based on measurement results and apply to target configuration
+        /// How much of the measured deviation we actually dial in. A room is not a
+        /// minimum phase system, so correcting it 1:1 mostly makes it sound worse.
+        /// </summary>
+        private const float CorrectionFactor = 0.65f;
+
+        /// <summary>
+        /// Target house curve in dB against a flat reference, per EQ band. Slightly
+        /// warm at the bottom and rolled off on top - a genuinely flat room is
+        /// fatiguing, which is why nobody tunes to one.
+        /// </summary>
+        private static readonly float[] TargetCurve =
+        {
+             3.0f,  3.0f,  3.0f,  2.8f,  2.5f,  2.0f,  1.5f,  1.0f,
+             0.5f,  0.2f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,
+             0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f, -0.2f, -0.4f,
+            -0.8f, -1.2f, -1.6f, -2.0f, -2.5f, -3.0f
+        };
+
+        /// <summary>
+        /// Turns a measurement into a config: smoothed, partially applied EQ plus
+        /// the channel alignment the sweep found. Boosts stay short because filling
+        /// a null costs headroom and rarely fills it.
         /// </summary>
         private void CalculateCorrectionsToConfig(MeasurementResults results, SmartMasterConfig targetConfig)
         {
-            // 1. Graphic EQ setup (spectrum equalization)
+            float[] deviation = _smoothedDeviation(results.FrequencyResponse);
+
             for (int i = 0; i < SmartMasterConfig.EqBands; i++)
             {
-                float gain = results.FrequencyResponse[i];
-                
-                float maxBoost;
-                if (i < 5) // Bands 0-4: ~20Hz to ~80Hz
-                {
-                    maxBoost = 3.0f;
-                }
-                else // Bands 5+: ~100Hz and above
-                {
-                    maxBoost = 12.0f;
-                }
-                
-                gain = Math.Clamp(gain, -12.0f, maxBoost);
-                
-                targetConfig.GraphicEQGains[i] = gain;
+                float gain = (deviation[i] + TargetCurve[i]) * CorrectionFactor;
+                float maxBoost = i < 5 ? 2.0f : 6.0f;
+                targetConfig.GraphicEQGains[i] = Math.Clamp(gain, -12.0f, maxBoost);
             }
-            
-            // 2. Phase Alignment setup
+
             targetConfig.TimeDelays = results.ChannelDelays;
             targetConfig.PhaseInvert = results.ChannelPolarity;
-            
-            // 3. Subharmonic Synth - Enable if subwoofer response was weak
+
             if (results.ChannelLevels.Length > 2 && results.ChannelLevels[2] < -40.0f)
             {
                 targetConfig.SubharmonicEnabled = true;
-                targetConfig.SubharmonicMix = 0.1f;
+                targetConfig.SubharmonicMix = 0.15f;
                 Log.Info("[SmartMaster] Enabled Subharmonic Synth in measured preset due to weak subwoofer response");
             }
+        }
+
+        /// <summary>
+        /// Three band moving average over the deviation. A single mic position is
+        /// full of narrow interference dips that say nothing about the system.
+        /// </summary>
+        private static float[] _smoothedDeviation(float[] raw)
+        {
+            var smoothed = new float[SmartMasterConfig.EqBands];
+
+            for (int i = 0; i < smoothed.Length; i++)
+            {
+                float sum = raw[i];
+                int count = 1;
+
+                if (i > 0) { sum += raw[i - 1]; count++; }
+                if (i < smoothed.Length - 1) { sum += raw[i + 1]; count++; }
+
+                smoothed[i] = sum / count;
+            }
+
+            return smoothed;
         }
         
         /// <summary>

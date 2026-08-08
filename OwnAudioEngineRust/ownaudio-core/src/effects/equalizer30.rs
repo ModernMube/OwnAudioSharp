@@ -70,11 +70,10 @@ const STANDARD_FREQUENCIES: [f32; BANDS] = [
     8000.0, 10000.0, 12500.0, 16000.0,
 ];
 
-/// Per-band Q factors tuned for smooth 1/3-octave overlap (reference `optimizedQ`).
-const OPTIMIZED_Q: [f32; BANDS] = [
-    0.6, 0.6, 0.7, 0.7, 0.8, 0.8, 0.9, 1.0, 1.0, 1.1, 1.2, 1.2, 1.1, 1.0, 1.0, 1.0, 1.1, 1.2, 1.2,
-    1.3, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.7, 0.6,
-];
+/// Constant-Q for 1/3-octave spacing: `1 / (2·sinh(ln2/6))`.  The old 0.6…1.4
+/// table made every bell ~1.4 octaves wide, so a drawn curve summed to about 5×
+/// what the sliders read.
+const BAND_Q: f32 = 4.318_474;
 
 /// 30-band 1/3-octave parametric equalizer.
 pub struct Equalizer30 {
@@ -165,7 +164,7 @@ impl Equalizer30 {
     /// from its fixed centre frequency / Q and its current gain.
     fn update_filter(&mut self, band: usize) {
         let freq = STANDARD_FREQUENCIES[band];
-        let q = OPTIMIZED_Q[band];
+        let q = BAND_Q;
         let gain = self.gains_db[band];
 
         let omega = 2.0 * std::f32::consts::PI * freq / self.sample_rate;
@@ -374,7 +373,7 @@ mod tests {
 
         fn update_filter(&mut self, band: usize) {
             let freq = STANDARD_FREQUENCIES[band] as f64;
-            let q = OPTIMIZED_Q[band] as f64;
+            let q = BAND_Q as f64;
             let gain = self.gains_db[band];
 
             let omega = 2.0 * std::f64::consts::PI * freq / self.sample_rate;

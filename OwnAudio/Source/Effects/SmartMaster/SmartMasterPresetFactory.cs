@@ -11,40 +11,42 @@ namespace OwnaudioNET.Effects.SmartMaster
         /// Default - No processing, transparent passthrough
         /// </summary>
         Default,
-        
+
         /// <summary>
         /// HiFi - High-fidelity stereo speakers (bookshelf/tower)
         /// Typical frequency response: 40Hz-20kHz
         /// </summary>
         HiFi,
-        
+
         /// <summary>
         /// Headphone - Studio/consumer headphones
         /// Typical frequency response: 20Hz-20kHz, no crossover needed
         /// </summary>
         Headphone,
-        
+
         /// <summary>
         /// Studio - Professional studio monitors
         /// Typical frequency response: 35Hz-20kHz, flat response
         /// </summary>
         Studio,
-        
+
         /// <summary>
         /// Club - Club/DJ system (1 sub + 2 satellites)
         /// Typical: Sub 30-100Hz, Satellites 100Hz-18kHz
         /// </summary>
         Club,
-        
+
         /// <summary>
         /// Concert - Medium concert PA system
         /// Typical: Sub 30-80Hz, Mids 80Hz-1kHz, Highs 1kHz-18kHz
         /// </summary>
         Concert
     }
-    
+
     /// <summary>
-    /// Factory for creating speaker-specific presets
+    /// Built-in speaker tunings. The graphic EQ carries the voicing and the
+    /// parametric EQ is left flat on purpose - those eight bands are the user's
+    /// room tool, the same split a DriveRack works with.
     /// </summary>
     public static class SmartMasterPresetFactory
     {
@@ -64,237 +66,232 @@ namespace OwnaudioNET.Effects.SmartMaster
                 _ => CreateDefaultPreset()
             };
         }
-        
+
         /// <summary>
-        /// Default - Transparent passthrough, no processing
+        /// Transparent passthrough, only a safety limiter on the way out.
         /// </summary>
         private static SmartMasterConfig CreateDefaultPreset()
         {
-            var config = new SmartMasterConfig
+            return new SmartMasterConfig
             {
-                // All processing disabled
+                SubsonicEnabled = false,
                 SubharmonicEnabled = false,
                 CompressorEnabled = false,
-                
-                // Neutral settings
+                CrossoverEnabled = false,
                 CrossoverFrequency = 80.0f,
-                LimiterThreshold = -0.3f, // dB - transparent limiting, only catches peaks
-                LimiterRelease = 50.0f
+                LimiterThreshold = -1.0f,
+                LimiterCeiling = -0.3f,
+                LimiterRelease = 100.0f
             };
-
-            //A fresh config is already flat, nothing to set here
-
-            return config;
         }
-        
+
         /// <summary>
-        /// HiFi - High-fidelity stereo speakers
-        /// Typical bookshelf/tower speakers with good bass extension
+        /// Bookshelf or tower pair: a touch of low extension, gentle levelling,
+        /// nothing that draws attention to itself.
         /// </summary>
         private static SmartMasterConfig CreateHiFiPreset()
         {
             var config = new SmartMasterConfig
             {
-                // Minimal subharmonic enhancement for natural bass
+                SubsonicEnabled = true,
+                SubsonicFrequency = 28.0f,
+
                 SubharmonicEnabled = true,
-                SubharmonicMix = 0.15f,
-                SubharmonicFreqRange = 50.0f,
-                
-                // Light compression for consistent dynamics
+                SubharmonicMix = 0.12f,
+                SubharmonicLowLevel = 0.8f,
+                SubharmonicHighLevel = 1.0f,
+
                 CompressorEnabled = true,
-                CompressorThreshold = 0.85f,
-                CompressorRatio = 2.5f,
-                CompressorAttack = 15.0f,
-                CompressorRelease = 150.0f,
-                
-                // No crossover needed for full-range speakers
-                CrossoverFrequency = 40.0f,
-                
-                // Conservative limiter
-                LimiterThreshold = -0.1f, // dB
-                LimiterRelease = 100.0f
+                CompressorThreshold = 0.158f,
+                CompressorRatio = 2.0f,
+                CompressorAttack = 20.0f,
+                CompressorRelease = 250.0f,
+                CompressorKnee = 8.0f,
+
+                CrossoverEnabled = false,
+                CrossoverFrequency = 60.0f,
+
+                LimiterThreshold = -1.0f,
+                LimiterCeiling = -0.3f,
+                LimiterRelease = 150.0f
             };
-            
-            // Slight bass boost and presence enhancement
+
             SetEQCurve(config, new float[]
             {
-                1.5f,  1.2f,  0.8f,  0.5f,  0.3f,  0.2f,  0.0f,  0.0f,  // 20-100Hz: gentle bass lift
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 125-630Hz: flat
-                0.0f,  0.0f,  0.0f,  0.5f,  0.8f,  1.0f,  0.8f,  0.5f,  // 800Hz-4kHz: presence boost
-                0.3f,  0.2f,  0.0f,  0.0f,  0.0f,  0.0f                 // 5k-16kHz: gentle rolloff
+                1.5f,  1.5f,  1.2f,  0.8f,  0.4f,  0.0f,  0.0f,  0.0f,
+                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,
+                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.4f,  0.6f,  0.6f,
+                0.4f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f
             });
-            
+
             return config;
         }
-        
+
         /// <summary>
-        /// Headphone - Studio/consumer headphones
-        /// No crossover, focus on balanced response
+        /// Headphones: no cabinet to protect, so no subsonic and no sub synth.
+        /// Takes the edge off the usual 5-8k peak and adds a little air.
         /// </summary>
         private static SmartMasterConfig CreateHeadphonePreset()
         {
             var config = new SmartMasterConfig
             {
-                // No subharmonic needed for headphones
+                SubsonicEnabled = false,
                 SubharmonicEnabled = false,
-                
-                // Gentle compression for comfort
+
                 CompressorEnabled = true,
-                CompressorThreshold = 0.90f,
-                CompressorRatio = 2.0f,
-                CompressorAttack = 20.0f,
-                CompressorRelease = 200.0f,
-                
-                // No crossover for headphones
-                CrossoverFrequency = 20.0f,
-                
-                // Protective limiter
-                LimiterThreshold = -0.5f, // dB
-                LimiterRelease = 80.0f
+                CompressorThreshold = 0.200f,
+                CompressorRatio = 1.8f,
+                CompressorAttack = 25.0f,
+                CompressorRelease = 250.0f,
+                CompressorKnee = 12.0f,
+
+                CrossoverEnabled = false,
+                CrossoverFrequency = 40.0f,
+
+                LimiterThreshold = -2.0f,
+                LimiterCeiling = -0.5f,
+                LimiterRelease = 120.0f
             };
-            
-            // Compensate for typical headphone response
+
             SetEQCurve(config, new float[]
             {
-                0.5f,  0.3f,  0.2f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 20-100Hz: slight bass
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 125-630Hz: flat
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 800Hz-4kHz: flat
-                -0.5f, -0.8f, -1.0f, -0.8f, -0.5f, -0.3f               // 5k-16kHz: reduce harshness
+                1.0f,  1.0f,  0.8f,  0.5f,  0.0f,  0.0f,  0.0f,  0.0f,
+                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,
+                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f, -0.5f,
+               -1.2f, -1.5f, -1.0f, -0.3f,  0.4f,  0.5f
             });
-            
+
             return config;
         }
-        
+
         /// <summary>
-        /// Studio - Professional studio monitors
-        /// Flat response, minimal processing
+        /// Nearfield monitors, flat on purpose. Only a subsonic filter and a
+        /// safety limiter - anything else would be lying to you about the mix.
         /// </summary>
         private static SmartMasterConfig CreateStudioPreset()
         {
-            var config = new SmartMasterConfig
+            return new SmartMasterConfig
             {
-                // Minimal subharmonic for extended low end
-                SubharmonicEnabled = true,
-                SubharmonicMix = 0.10f,
-                SubharmonicFreqRange = 40.0f,
-                
-                // Very light compression
+                SubsonicEnabled = true,
+                SubsonicFrequency = 30.0f,
+
+                SubharmonicEnabled = false,
+
                 CompressorEnabled = true,
-                CompressorThreshold = 0.85f,
+                CompressorThreshold = 0.126f,
                 CompressorRatio = 1.5f,
-                CompressorAttack = 25.0f,
-                CompressorRelease = 250.0f,
-                
-                // Low crossover for extended bass
-                CrossoverFrequency = 35.0f,
-                
-                // Transparent limiter
-                LimiterThreshold = -0.2f, // dB
-                LimiterRelease = 150.0f
+                CompressorAttack = 30.0f,
+                CompressorRelease = 300.0f,
+                CompressorKnee = 12.0f,
+
+                CrossoverEnabled = false,
+                CrossoverFrequency = 50.0f,
+
+                LimiterThreshold = -1.0f,
+                LimiterCeiling = -0.3f,
+                LimiterRelease = 200.0f
             };
-            
-            // Nearly flat EQ with minimal room compensation
-            SetEQCurve(config, new float[]
-            {
-                0.3f,  0.2f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 20-100Hz: minimal bass
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 125-630Hz: flat
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 800Hz-4kHz: flat
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f                 // 5k-16kHz: flat
-            });
-            
-            return config;
         }
-        
+
         /// <summary>
-        /// Club - DJ/Club system (1 sub + 2 satellites)
-        /// Heavy bass, crossover at 100Hz
+        /// One sub plus satellites. Crossover runs so the sub gets its own trim
+        /// and driver limiter; alignment delays stay at zero until a measurement
+        /// fills them in, otherwise they just comb the crossover region.
         /// </summary>
         private static SmartMasterConfig CreateClubPreset()
         {
             var config = new SmartMasterConfig
             {
-                // Strong subharmonic for club bass
+                SubsonicEnabled = true,
+                SubsonicFrequency = 32.0f,
+
                 SubharmonicEnabled = true,
-                SubharmonicMix = 0.40f,
-                SubharmonicFreqRange = 70.0f,
-                
-                // Moderate compression for consistent loudness
+                SubharmonicMix = 0.25f,
+                SubharmonicLowLevel = 1.0f,
+                SubharmonicHighLevel = 0.8f,
+
                 CompressorEnabled = true,
-                CompressorThreshold = 0.75f,
-                CompressorRatio = 3.5f,
-                CompressorAttack = 10.0f,
-                CompressorRelease = 100.0f,
-                
-                // Crossover at 100Hz for sub/satellite split
-                CrossoverFrequency = 100.0f,
-                
-                // Aggressive limiter for protection
-                LimiterThreshold = -0.7f, // dB
-                LimiterRelease = 40.0f
+                CompressorThreshold = 0.251f,
+                CompressorRatio = 3.0f,
+                CompressorAttack = 15.0f,
+                CompressorRelease = 120.0f,
+                CompressorKnee = 6.0f,
+
+                CrossoverEnabled = true,
+                CrossoverFrequency = 90.0f,
+
+                MainLimiterThreshold = -3.0f,
+                SubLimiterThreshold = -3.0f,
+
+                LimiterThreshold = -1.5f,
+                LimiterCeiling = -0.3f,
+                LimiterRelease = 60.0f
             };
-            
-            // Club EQ: boosted bass and highs
+
             SetEQCurve(config, new float[]
             {
-                4.0f,  3.5f,  3.0f,  2.5f,  2.0f,  1.5f,  1.0f,  0.5f,  // 20-100Hz: heavy bass
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  // 125-630Hz: flat
-                0.5f,  1.0f,  1.5f,  2.0f,  2.5f,  2.0f,  1.5f,  1.0f,  // 800Hz-4kHz: presence
-                0.5f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f                 // 5k-16kHz: controlled highs
+                1.0f,  1.8f,  2.5f,  2.5f,  2.2f,  1.5f,  0.8f,  0.0f,
+                0.0f,  0.0f,  0.0f, -1.5f, -1.5f, -1.2f, -0.5f,  0.0f,
+                0.0f,  0.0f,  0.0f,  0.4f,  0.8f,  1.2f,  1.2f,  1.0f,
+                0.5f,  0.0f,  0.0f, -0.5f, -1.0f, -1.0f
             });
-            
-            // Typical club system delays (sub slightly delayed)
-            config.TimeDelays[0] = 0.0f;  // Left
-            config.TimeDelays[1] = 0.0f;  // Right
-            config.TimeDelays[2] = 2.0f;  // Sub (2ms delay for alignment)
-            
+
+            config.OutputGains[0] = 0.0f;
+            config.OutputGains[1] = 0.0f;
+            config.OutputGains[2] = 1.5f;
+
             return config;
         }
-        
+
         /// <summary>
-        /// Concert - Medium concert PA system
-        /// Multi-way system with sub, mids, highs
+        /// Medium PA: vocal presence up, stage boom out, top end pulled back so
+        /// it stays listenable for a whole set.
         /// </summary>
         private static SmartMasterConfig CreateConcertPreset()
         {
             var config = new SmartMasterConfig
             {
-                // Moderate subharmonic for concert bass
+                SubsonicEnabled = true,
+                SubsonicFrequency = 35.0f,
+
                 SubharmonicEnabled = true,
-                SubharmonicMix = 0.30f,
-                SubharmonicFreqRange = 60.0f,
-                
-                // Compression for consistent PA output
+                SubharmonicMix = 0.18f,
+                SubharmonicLowLevel = 0.9f,
+                SubharmonicHighLevel = 1.0f,
+
                 CompressorEnabled = true,
-                CompressorThreshold = 0.80f,
-                CompressorRatio = 3.0f,
-                CompressorAttack = 12.0f,
-                CompressorRelease = 120.0f,
-                
-                // Crossover at 80Hz for sub/main split
+                CompressorThreshold = 0.200f,
+                CompressorRatio = 2.5f,
+                CompressorAttack = 20.0f,
+                CompressorRelease = 150.0f,
+                CompressorKnee = 8.0f,
+
+                CrossoverEnabled = true,
                 CrossoverFrequency = 80.0f,
-                
-                // Protective limiter for PA system
-                LimiterThreshold = -0.6f, // dB
-                LimiterRelease = 50.0f
+
+                MainLimiterThreshold = -3.0f,
+                SubLimiterThreshold = -2.0f,
+
+                LimiterThreshold = -2.0f,
+                LimiterCeiling = -0.3f,
+                LimiterRelease = 80.0f
             };
-            
-            // Concert EQ: compensate for typical PA response
+
             SetEQCurve(config, new float[]
             {
-                3.0f,  2.5f,  2.0f,  1.5f,  1.0f,  0.5f,  0.0f,  0.0f,  // 20-100Hz: bass boost
-                0.0f,  0.0f,  0.0f, -0.5f, -0.8f, -0.5f,  0.0f,  0.0f,  // 125-630Hz: slight mid scoop
-                0.5f,  1.0f,  1.5f,  2.0f,  2.5f,  2.0f,  1.5f,  1.0f,  // 800Hz-4kHz: vocal presence
-                0.5f,  0.0f, -0.5f, -1.0f, -1.5f, -1.0f                // 5k-16kHz: air control
+                0.0f,  0.8f,  1.5f,  1.8f,  1.8f,  1.5f,  1.0f,  0.4f,
+                0.0f,  0.0f, -0.8f, -1.8f, -1.8f, -1.5f, -0.8f,  0.0f,
+                0.4f,  0.8f,  1.2f,  1.5f,  1.5f,  1.2f,  1.0f,  0.6f,
+                0.0f, -0.4f, -0.8f, -1.2f, -1.2f, -1.0f
             });
-            
-            // Typical concert system delays
-            config.TimeDelays[0] = 0.0f;  // Left
-            config.TimeDelays[1] = 0.0f;  // Right
-            config.TimeDelays[2] = 3.0f;  // Sub (3ms delay for alignment)
-            
+
+            config.OutputGains[0] = 0.0f;
+            config.OutputGains[1] = 0.0f;
+            config.OutputGains[2] = 1.0f;
+
             return config;
         }
-        
+
         /// <summary>
         /// Helper to set EQ curve from array
         /// </summary>
@@ -306,7 +303,7 @@ namespace OwnaudioNET.Effects.SmartMaster
                 config.GraphicEQGains[i] = gains[i];
             }
         }
-        
+
         /// <summary>
         /// Get preset filename for speaker type
         /// </summary>

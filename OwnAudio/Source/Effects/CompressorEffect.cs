@@ -75,8 +75,10 @@ namespace OwnaudioNET.Effects
         /// </summary>
         private float _slope;
 
-        private const float KneeWidthDb = 6.0f;
-        private const float KneeHalfWidth = KneeWidthDb / 2.0f;
+        /// <summary>
+        /// dbx calls this OverEasy - how wide the transition into full ratio is.
+        /// </summary>
+        private float _kneeDb = 6.0f;
         private float _kneeLowerBoundDb;
         private float _kneeUpperBoundDb;
 
@@ -175,8 +177,8 @@ namespace OwnaudioNET.Effects
             _thresholdDb = 20.0f * MathF.Log10(Math.Max(_threshold, 1e-6f));
             _slope = 1.0f / _ratio - 1.0f;
 
-            _kneeLowerBoundDb = _thresholdDb - KneeHalfWidth;
-            _kneeUpperBoundDb = _thresholdDb + KneeHalfWidth;
+            _kneeLowerBoundDb = _thresholdDb - _kneeDb * 0.5f;
+            _kneeUpperBoundDb = _thresholdDb + _kneeDb * 0.5f;
 
             if (isMakeUoGain) _autoMakeupGain();
         }
@@ -201,6 +203,8 @@ namespace OwnaudioNET.Effects
 
         /// <summary>
         /// Runs the detector and the gain stage over the interleaved buffer, in place.
+        /// The loudest channel of each frame drives one shared envelope, so every
+        /// channel gets the same gain and the stereo image doesn't wander.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Process(Span<float> buffer, int frameCount)
@@ -218,43 +222,50 @@ namespace OwnaudioNET.Effects
             float tDb = _thresholdDb;
             float kLower = _kneeLowerBoundDb;
             float kUpper = _kneeUpperBoundDb;
+            float knee = Math.Max(_kneeDb, 0.001f);
 
-            int totalSamples = frameCount * _config.Channels;
+            int channels = _config.Channels;
 
-            for (int i = 0; i < totalSamples; i++)
+            for (int f = 0; f < frameCount; f++)
             {
-                float input = buffer[i];
-                float absInput = Math.Abs(input);
+                int b = f * channels;
 
-                if (absInput > env)
-                    env = att * env + (1.0f - att) * absInput;
+                float linked = 0.0f;
+                for (int c = 0; c < channels; c++)
+                {
+                    float a = Math.Abs(buffer[b + c]);
+                    if (a > linked) linked = a;
+                }
+
+                if (linked > env)
+                    env = att * env + (1.0f - att) * linked;
                 else
-                    env = rel * env + (1.0f - rel) * absInput;
+                    env = rel * env + (1.0f - rel) * linked;
 
-                if (env < 1e-6f)
+                float gain = mkp;
+                if (env >= 1e-6f)
                 {
-                    buffer[i] = input * mkp;
-                    continue;
+                    float envDb = 20.0f * MathF.Log10(env);
+                    float grDb = 0.0f;
+
+                    if (envDb > kUpper)
+                    {
+                        grDb = slope * (envDb - tDb);
+                    }
+                    else if (envDb >= kLower)
+                    {
+                        float over = envDb - kLower;
+                        grDb = slope * (over * over) / (2.0f * knee);
+                    }
+
+                    gain = MathF.Pow(10.0f, grDb * 0.05f) * mkp;
                 }
 
-                float envDb = 20.0f * MathF.Log10(env);
-                float grDb = 0.0f;
-
-                if (envDb > kUpper)
-                {
-                    grDb = slope * (envDb - tDb);
-                }
-                else if (envDb >= kLower)
-                {
-                    float over = envDb - kLower;
-                    grDb = slope * (over * over) / (2.0f * KneeWidthDb);
-                }
-
-                buffer[i] = input * MathF.Pow(10.0f, grDb * 0.05f) * mkp;
+                for (int c = 0; c < channels; c++)
+                    buffer[b + c] *= gain;
             }
 
-            _envelope = env;
-            if (_envelope < 1e-10f) _envelope = 0.0f;
+            _envelope = env < 1e-10f ? 0.0f : env;
         }
 
         /// <summary>
@@ -408,6 +419,19 @@ namespace OwnaudioNET.Effects
                     _releaseTime = newTime;
                     _recalcCoeffs(true);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Soft knee width in dB, 0 is hard knee. dbx OverEasy in everything but name.
+        /// </summary>
+        public float KneeWidth
+        {
+            get => _kneeDb;
+            set
+            {
+                _kneeDb = FastClamp(value, 0.0f, 24.0f);
+                _recalcCoeffs();
             }
         }
 

@@ -46,6 +46,17 @@ namespace Ownaudio.Test.OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// RMS past the chain's look-ahead ramp-in. The output limiter really does
+        /// delay now, so the first LatencySamples frames of the very first block are
+        /// still the empty delay line and would drag a whole-buffer RMS down.
+        /// </summary>
+        private float CalculateSteadyRMS(float[] buffer, SmartMasterEffect effect)
+        {
+            int skip = Math.Min(effect.LatencySamples * Channels, buffer.Length - Channels);
+            return CalculateRMS(buffer.AsSpan(skip));
+        }
+
+        /// <summary>
         /// Calculate peak level of a buffer
         /// </summary>
         private float CalculatePeak(Span<float> buffer)
@@ -113,7 +124,7 @@ namespace Ownaudio.Test.OwnaudioNET.Effects
             effect.Process(buffer, FrameCount);
 
             // Assert
-            float outputRMS = CalculateRMS(buffer);
+            float outputRMS = CalculateSteadyRMS(buffer, effect);
             float outputDb = LinearToDb(outputRMS);
             float volumeLoss = inputDb - outputDb;
 
@@ -368,9 +379,9 @@ namespace Ownaudio.Test.OwnaudioNET.Effects
                 effect.Process(blockBuffer, FrameCount);
                 
                 if (block == 0)
-                    firstBlockRMS = CalculateRMS(blockBuffer);
+                    firstBlockRMS = CalculateSteadyRMS(blockBuffer, effect);
                 if (block == 9)
-                    lastBlockRMS = CalculateRMS(blockBuffer);
+                    lastBlockRMS = CalculateSteadyRMS(blockBuffer, effect);
             }
 
             // Assert

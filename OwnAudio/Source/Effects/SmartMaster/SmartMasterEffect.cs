@@ -20,18 +20,17 @@ namespace OwnaudioNET.Effects.SmartMaster
         private SmartMasterConfig _configuration;
         private MeasurementStatusInfo _measurementStatus;
         
-        // Service components
         private SmartMasterAudioChain? _audioChain;
         private SmartMasterPresetManager? _presetManager;
         private SmartMasterMeasurementService? _measurementService;
         private SmartMasterMicMonitor? _micMonitor;
         
-        // Thread synchronization
         private readonly object _configLock = new object();
         
-        // Measurement cancellation
         private CancellationTokenSource? _measurementCancellation;
         
+        private long _sanitizedSamples;
+
         private const float SILENCE_THRESHOLD = 0.0001f;
         
         #endregion
@@ -87,19 +86,15 @@ namespace OwnaudioNET.Effects.SmartMaster
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
             
-            // Set presets directory
             string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             string ownaudioFolder = System.IO.Path.Combine(userProfile, ".ownaudio");
             string presetsDirectory = System.IO.Path.Combine(ownaudioFolder, "smartmasterpresets");
             
-            // Create preset manager
             _presetManager = new SmartMasterPresetManager(presetsDirectory);
             _presetManager.CreateFactoryPresetsIfNeeded();
             
-            // Create measurement service
             _measurementService = new SmartMasterMeasurementService(config, presetsDirectory);
             
-            // Create audio chain ONCE on first Initialize() call
             if (_audioChain == null)
             {
                 _audioChain = new SmartMasterAudioChain(config.SampleRate, config.Channels);
@@ -119,32 +114,28 @@ namespace OwnaudioNET.Effects.SmartMaster
         public void Process(Span<float> buffer, int frameCount)
         {
             if (buffer.Length == 0 || frameCount == 0)
-            {
                 return;
-            }
-            
-            bool hasNaN = false;
+
+            if (!_enabled || _audioChain == null)
+                return;
+
             for (int i = 0; i < buffer.Length; i++)
             {
                 if (!float.IsFinite(buffer[i]))
                 {
                     buffer[i] = 0.0f;
-                    hasNaN = true;
+                    _sanitizedSamples++;
                 }
             }
-            
-            if (hasNaN)
-            {
-                Logger.Log.Warning("[SmartMaster] NaN/Inf detected in input buffer - sanitized to zero");
-            }
 
-            if (!_enabled || _audioChain == null)
-            {
-                return;
-            }
-            
             _audioChain.Process(buffer, frameCount);
         }
+
+        /// <summary>
+        /// How many NaN/Inf samples the chain has had to zero out since it started.
+        /// Non-zero means something upstream is broken.
+        /// </summary>
+        public long SanitizedSampleCount => _sanitizedSamples;
         
         #endregion
         
