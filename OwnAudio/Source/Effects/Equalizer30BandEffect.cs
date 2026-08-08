@@ -352,29 +352,32 @@ namespace OwnaudioNET.Effects
             {
                 case Equalizer30Preset.Default: break;
                 case Equalizer30Preset.Bass:
-                    _gainCurve(gains, new[] { (0, 6f), (4, 5f), (7, 4f), (9, 2f), (11, -1f), (14, 0f), (17, 0f), (22, 1f), (26, 2f), (29, 1f) }); break;
+                    _gainCurve(gains, new[] { (0, 6f), (3, 5.5f), (5, 4.5f), (7, 2.5f), (9, 1f), (11, -1f), (13, -1f), (16, 0f), (22, 0f), (26, 0.7f), (29, 0.5f) }); break;
                 case Equalizer30Preset.Treble:
-                    _gainCurve(gains, new[] { (0, 0f), (9, 0f), (14, 0f), (17, 1f), (20, 2f), (22, 4f), (25, 4f), (27, 5f), (29, 3f) }); break;
+                    _gainCurve(gains, new[] { (0, 0f), (14, 0f), (17, 0f), (20, 1.2f), (23, 2.8f), (26, 4.5f), (29, 5f) }); break;
                 case Equalizer30Preset.Rock:
-                    _gainCurve(gains, new[] { (0, 5f), (3, 4f), (7, 2f), (11, -2f), (14, -2f), (17, 0f), (20, 2f), (22, 4f), (25, 4f), (27, 3f), (29, 2f) }); break;
+                    _gainCurve(gains, new[] { (0, 4f), (3, 4f), (5, 3.5f), (7, 1.3f), (11, -2f), (14, -2f), (17, 0f), (21, 2f), (23, 3.3f), (26, 3.3f), (29, 2f) }); break;
                 case Equalizer30Preset.Classical:
-                    _gainCurve(gains, new[] { (0, 1f), (7, 0f), (14, -1f), (17, 0f), (20, 1f), (23, 2f), (26, 2f), (29, 1f) }); break;
+                    _gainCurve(gains, new[] { (0, 1.3f), (3, 1f), (7, 0f), (13, -0.7f), (17, 0f), (23, 1f), (27, 1.6f), (29, 1.3f) }); break;
                 case Equalizer30Preset.Pop:
-                    _gainCurve(gains, new[] { (0, 2f), (5, 2f), (9, 1f), (13, 2f), (17, 3f), (20, 3f), (22, 3f), (25, 2f), (27, 2f), (29, 2f) }); break;
+                    _gainCurve(gains, new[] { (0, 2f), (5, 2f), (9, 0.7f), (11, 0f), (16, 1.3f), (18, 1.6f), (21, 2f), (23, 2f), (25, 1.3f), (27, 2f), (29, 1.6f) }); break;
                 case Equalizer30Preset.Jazz:
-                    _gainCurve(gains, new[] { (0, 3f), (4, 3f), (8, 2f), (12, 2f), (17, 1f), (20, 0f), (23, 0f), (26, 0f), (29, -1f) }); break;
+                    _gainCurve(gains, new[] { (0, 2f), (4, 2f), (8, 1.3f), (11, 1.3f), (17, 0f), (20, 0f), (25, -0.7f), (29, -1.3f) }); break;
                 case Equalizer30Preset.Voice:
-                    _gainCurve(gains, new[] { (0, -3f), (3, -2f), (8, 0f), (11, 2f), (14, 4f), (17, 5f), (20, 5f), (22, 3f), (25, 1f), (27, -1f), (29, -2f) }); break;
+                    _gainCurve(gains, new[] { (0, -3.3f), (3, -2.6f), (7, -1.3f), (13, 1.3f), (17, 3.3f), (20, 3.3f), (22, 2f), (25, 0f), (29, -2f) }); break;
                 case Equalizer30Preset.Electronic:
-                    _gainCurve(gains, new[] { (0, 6f), (2, 6f), (4, 4f), (7, 2f), (11, 0f), (15, -1f), (18, 1f), (22, 3f), (25, 5f), (27, 5f), (29, 4f) }); break;
+                    _gainCurve(gains, new[] { (0, 6f), (2, 6f), (4, 4f), (7, 2f), (11, 0f), (15, -0.7f), (18, 1.3f), (21, 2.6f), (25, 4f), (27, 4.2f), (29, 4.5f) }); break;
                 case Equalizer30Preset.Acoustic:
-                    _gainCurve(gains, new[] { (0, 1f), (7, 1f), (10, 2f), (13, 1f), (17, 2f), (20, 2f), (23, 1f), (25, 1f), (27, 0f), (29, -1f) }); break;
+                    _gainCurve(gains, new[] { (0, 1.3f), (7, 1f), (10, 1.3f), (13, 0.7f), (17, 1.6f), (20, 1.6f), (23, 1f), (25, 0.7f), (27, 0f), (29, -1f) }); break;
             }
             SetAllGains(gains);
         }
 
         /// <summary>
         /// Fills the gain array by interpolating between the given band/gain key points.
+        /// A broad stretch of equal gains ends up about 1.6x what you write, since
+        /// the neighbouring bells still overlap at constant Q - the curves above are
+        /// scaled for that. Bands outside the first and last key point stay flat.
         /// </summary>
         private void _gainCurve(float[] gains, (int band, float gain)[] keyPoints)
         {
