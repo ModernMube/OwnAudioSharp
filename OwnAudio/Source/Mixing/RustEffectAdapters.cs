@@ -85,8 +85,6 @@ internal static class RustEffectAdapters
             adapter.Mirror(effect, sink);
     }
 
-    // Per-effect mirrors. Managed props already speak native units, so every
-    // param is a straight pass-through to its native id.
 
     private static void _mirrorReverb(IEffectProcessor e, ParamSink sink)
     {
@@ -249,7 +247,6 @@ internal static class RustEffectAdapters
         sink(32, cfg.SubharmonicEnabled ? 1f : 0f);
         sink(33, cfg.SubharmonicMix);
 
-        // Compressor — threshold stays linear 0–1, native turns it into dB.
         sink(34, cfg.CompressorEnabled ? 1f : 0f);
         sink(35, cfg.CompressorThreshold);
         sink(36, cfg.CompressorRatio);
@@ -258,7 +255,6 @@ internal static class RustEffectAdapters
 
         sink(39, cfg.CrossoverFrequency);
 
-        // Phase align: per-channel delay (ms) + polarity flip for L, R, Sub.
         float[] delays = cfg.TimeDelays;
         bool[] invert = cfg.PhaseInvert;
         float[] outGains = cfg.OutputGains;

@@ -43,7 +43,6 @@ namespace OwnaudioNET.Effects.SmartMaster
             
             var status = new MeasurementStatusInfo();
             
-            // 1. Initialization
             UpdateStatus(status, statusCallback, MeasurementStatus.Initializing, 0.0f, "Initializing measurement...");
 
             if (!OwnaudioNET.OwnaudioNet.Engine!.Config.EnableInput)
@@ -72,7 +71,6 @@ namespace OwnaudioNET.Effects.SmartMaster
 
             await Task.Delay(500, cancellationToken);
             
-            // 2. Right channel check
             UpdateStatus(status, statusCallback, MeasurementStatus.CheckingRightChannel, 0.2f, "Checking right channel...");
             bool rightOk = await CheckChannelAsync(1, results, micInputGain, cancellationToken);
             if (!rightOk)
@@ -80,7 +78,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 AddWarning(results, "Right channel error: no signal or too quiet");
             }
             
-            // 3. Left channel check
             UpdateStatus(status, statusCallback, MeasurementStatus.CheckingLeftChannel, 0.4f, "Checking left channel...");
             bool leftOk = await CheckChannelAsync(0, results, micInputGain, cancellationToken);
             if (!leftOk)
@@ -88,7 +85,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 AddWarning(results, "Left channel error: no signal or too quiet");
             }
             
-            // 4. Subwoofer check
             UpdateStatus(status, statusCallback, MeasurementStatus.CheckingSubwoofer, 0.6f, "Checking subwoofer...");
             bool subOk = await CheckSubwooferAsync(results, micInputGain, cancellationToken);
             if (!subOk)
@@ -96,11 +92,9 @@ namespace OwnaudioNET.Effects.SmartMaster
                 AddWarning(results, "Warning: Weak or missing low frequency range");
             }
             
-            // 5. Spectrum analysis
             UpdateStatus(status, statusCallback, MeasurementStatus.AnalyzingSpectrum, 0.75f, "Spectrum analysis...");
             await AnalyzeSpectrumAsync(results, micInputGain, cancellationToken);
             
-            // 6. Evaluate results and decide if we can proceed
             if (!rightOk || !leftOk)
             {
                 UpdateStatus(status, statusCallback, MeasurementStatus.Error, 1.0f, 
@@ -112,16 +106,13 @@ namespace OwnaudioNET.Effects.SmartMaster
                     "Measurement failed due to critical errors. Please check microphone placement and volume. SmartMaster settings remain unchanged.");
             }
             
-            // 7. Create a NEW configuration for measurement results
             UpdateStatus(status, statusCallback, MeasurementStatus.CalculatingCorrection, 0.9f, "Calculating correction...");
             
             var measuredConfig = new SmartMasterConfig();
             CalculateCorrectionsToConfig(results, measuredConfig);
             
-            // 8. Store measurement results in the measured config
             measuredConfig.LastMeasurement = results;
             
-            // 9. Save the measured configuration to a separate preset file
             try
             {
                 string fileName = "measured.smartmaster.json";
@@ -138,7 +129,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                 Log.Warning($"[SmartMaster] Failed to save measurement results: {ex.Message}");
             }
             
-            // 10. Completion
             if (results.Warnings.Length == 0)
             {
                 UpdateStatus(status, statusCallback, MeasurementStatus.Completed, 1.0f, 
@@ -168,12 +158,10 @@ namespace OwnaudioNET.Effects.SmartMaster
                     return false;
                 }
                 
-                // 1. Noise generation (white noise, 2 seconds)
                 int durationSeconds = 2;
                 int sampleCount = _config.SampleRate * durationSeconds;
                 float[] whiteNoise = NoiseGenerator.GenerateWhiteNoise(sampleCount, 0.3f);
                 
-                // 2. Prepare multi-channel audio (noise only on target channel)
                 float[] channelAudio = new float[sampleCount * _config.Channels];
                 for (int i = 0; i < sampleCount; i++)
                 {
@@ -183,25 +171,21 @@ namespace OwnaudioNET.Effects.SmartMaster
                     }
                 }
                 
-                // 3. Create SampleSource for playback
                 var noiseSource = new SampleSource(channelAudio, _config);
                 noiseSource.Loop = false;
                 
-                // 4. Create InputSource for recording
                 var inputSource = new InputSource(OwnaudioNET.OwnaudioNet.Engine, 8192);
                 inputSource.Volume = micInputGain;
                 
-                // 5. Start playback and recording
                 noiseSource.Play();
                 inputSource.Play();
                 
-                // 6. Smart Pumping: Monitor engine buffer and send data only when space is available
-                int playbackFrames = _config.SampleRate * 2; // 2 seconds
+                int playbackFrames = _config.SampleRate * 2;
                 int playbackSamples = playbackFrames * _config.Channels;
                 const int chunkFrames = 512;
                 float[] playbackBuffer = new float[chunkFrames * _config.Channels];
                 
-                int recordDuration = 1500; // ms
+                int recordDuration = 1500;
                 int recordFrames = _config.SampleRate * recordDuration / 1000;
                 int recordSamples = recordFrames * _config.Channels;
                 float[] recordedBuffer = new float[recordSamples];
@@ -260,20 +244,16 @@ namespace OwnaudioNET.Effects.SmartMaster
                     await Task.Delay(1, cancellationToken);
                 }
                 
-                // 7. Fade out to prevent clicks
                 await FadeOutSourceAsync(noiseSource, cancellationToken);
                 
                 noiseSource.Stop();
                 inputSource.Stop();
                 
-                // 8. Dispose resources
                 noiseSource.Dispose();
                 inputSource.Dispose();
                 
-                // 9. Create spectrum analyzer
                 var analyzer = new SmartMasterSpectrumAnalyzer(_config.SampleRate);
                 
-                // 10. RMS measurement on recorded material
                 float rmsLevel;
                 if (totalRead > 0)
                 {
@@ -286,14 +266,12 @@ namespace OwnaudioNET.Effects.SmartMaster
                 
                 float rmsDb = 20f * (float)Math.Log10(Math.Max(rmsLevel, 1e-10f));
                 
-                // 11. Store results
                 results.ChannelLevels[channel] = rmsDb;
                 results.ChannelDelays[channel] = 0.0f;
                 results.ChannelPolarity[channel] = false;
                 
                 Log.Info($"[SmartMaster] Channel {channel} measured: {rmsDb:F1} dB (read {totalRead}/{recordFrames} frames)");
                 
-                // 12. Check: is there a signal?
                 if (rmsDb < -60.0f)
                 {
                     return false;
@@ -321,13 +299,11 @@ namespace OwnaudioNET.Effects.SmartMaster
                     return false;
                 }
                 
-                // 1. Generate low frequency noise (20-100Hz, 2 seconds)
                 int durationSeconds = 2;
                 int sampleCount = _config.SampleRate * durationSeconds;
                 float[] lowFreqNoise = NoiseGenerator.GenerateLowFrequencyNoise(
                     sampleCount, _config.SampleRate, 0.4f);
                 
-                // 2. Channel audio (same signal on all channels)
                 float[] channelAudio = new float[sampleCount * _config.Channels];
                 for (int i = 0; i < sampleCount; i++)
                 {
@@ -337,19 +313,15 @@ namespace OwnaudioNET.Effects.SmartMaster
                     }
                 }
                 
-                // 3. Create SampleSource
                 var noiseSource = new SampleSource(channelAudio, _config);
                 noiseSource.Loop = false;
                 
-                // 4. Create InputSource
                 var inputSource = new InputSource(OwnaudioNET.OwnaudioNet.Engine, 8192);
                 inputSource.Volume = micInputGain;
                 
-                // 5. Start playback and recording
                 noiseSource.Play();
                 inputSource.Play();
                 
-                // 6. Smart Pumping
                 int playbackFrames = _config.SampleRate * 2;
                 int playbackSamples = playbackFrames * _config.Channels;
                 const int chunkFrames = 512;
@@ -414,17 +386,14 @@ namespace OwnaudioNET.Effects.SmartMaster
                     await Task.Delay(1, cancellationToken);
                 }
                 
-                // 7. Fade out to prevent clicks
                 await FadeOutSourceAsync(noiseSource, cancellationToken);
 
                 noiseSource.Stop();
                 inputSource.Stop();
                 
-                // 8. Dispose
                 noiseSource.Dispose();
                 inputSource.Dispose();
                 
-                // 9. RMS measurement
                 var analyzer = new SmartMasterSpectrumAnalyzer(_config.SampleRate);
                 
                 float rmsLevel;
@@ -439,14 +408,12 @@ namespace OwnaudioNET.Effects.SmartMaster
                 
                 float rmsDb = 20f * (float)Math.Log10(Math.Max(rmsLevel, 1e-10f));
                 
-                // 10. Store results (Sub = channel 2)
                 results.ChannelLevels[2] = rmsDb;
                 results.ChannelDelays[2] = 0.0f;
                 results.ChannelPolarity[2] = false;
                 
                 Log.Info($"[SmartMaster] Subwoofer measured: {rmsDb:F1} dB (read {totalRead}/{recordFrames} frames)");
                 
-                // 11. Check if subwoofer response is weak
                 if (rmsDb < -40.0f)
                 {
                     Log.Warning("[SmartMaster] Weak subwoofer response detected, will recommend Subharmonic Synth in measured preset");
@@ -475,12 +442,10 @@ namespace OwnaudioNET.Effects.SmartMaster
                     return;
                 }
                 
-                // 1. Generate pink noise (4 seconds for more accurate measurement)
                 int durationSeconds = 4;
                 int sampleCount = _config.SampleRate * durationSeconds;
                 float[] pinkNoise = NoiseGenerator.GeneratePinkNoise(sampleCount, 0.3f);
                 
-                // 2. Channel audio (on all channels)
                 float[] channelAudio = new float[sampleCount * _config.Channels];
                 for (int i = 0; i < sampleCount; i++)
                 {
@@ -490,25 +455,20 @@ namespace OwnaudioNET.Effects.SmartMaster
                     }
                 }
                 
-                // 3. Create SampleSource
                 var noiseSource = new SampleSource(channelAudio, _config);
                 noiseSource.Loop = false;
                 
-                // 4. Create InputSource
                 var inputSource = new InputSource(OwnaudioNET.OwnaudioNet.Engine, 16384);
                 inputSource.Volume = micInputGain;
                 
-                // 5. Start playback and recording
                 noiseSource.Play();
                 inputSource.Play();
                 
-                // 6. Smart Pumping
                 int playbackFrames = _config.SampleRate * 4;
                 int playbackSamples = playbackFrames * _config.Channels;
                 const int chunkFrames = 512;
                 float[] playbackBuffer = new float[chunkFrames * _config.Channels];
                 
-                // Recording (3 seconds)
                 int recordDuration = 3000;
                 int recordFrames = _config.SampleRate * recordDuration / 1000;
                 int recordSamples = recordFrames * _config.Channels;
@@ -568,23 +528,19 @@ namespace OwnaudioNET.Effects.SmartMaster
                     await Task.Delay(1, cancellationToken);
                 }
                 
-                // 7. Fade out to prevent clicks
                 await FadeOutSourceAsync(noiseSource, cancellationToken);
 
                 noiseSource.Stop();
                 inputSource.Stop();
                 
-                // 8. Dispose
                 noiseSource.Dispose();
                 inputSource.Dispose();
                 
                 Log.Info($"[SmartMaster] Spectrum recording completed: {totalRead}/{recordFrames} frames");
                 
-                // 9. Spectrum analysis
                 var analyzer = new SmartMasterSpectrumAnalyzer(_config.SampleRate);
                 float[] measuredSpectrum = analyzer.AnalyzeSpectrum(recordedBuffer);
                 
-                // 10. Create ideal (flat) spectrum for pink noise
                 float[] idealSpectrum = new float[measuredSpectrum.Length];
                 
                 float avgLevel = 0;
@@ -599,7 +555,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                     idealSpectrum[i] = avgLevel;
                 }
                 
-                // 11. Calculate frequency response deviation (in dB)
                 for (int i = 0; i < SmartMasterConfig.EqBands; i++)
                 {
                     float measuredDb = 20f * (float)Math.Log10(Math.Max(measuredSpectrum[i], 1e-10f));
@@ -610,7 +565,6 @@ namespace OwnaudioNET.Effects.SmartMaster
                     results.FrequencyResponse[i] = deviation;
                 }
                 
-                // 12. Debug log
                 Log.Info("[SmartMaster] Spectrum analysis completed:");
                 for (int i = 0; i < SmartMasterConfig.EqBands; i++)
                 {
@@ -727,37 +681,30 @@ namespace OwnaudioNET.Effects.SmartMaster
         {
             try
             {
-                // 100ms fade out
                 int fadeFrames = _config.SampleRate / 10;
-                // Ensure valid duration
-                if (fadeFrames <= 0) fadeFrames = 4800; // Default ~100ms at 48k
+                if (fadeFrames <= 0) fadeFrames = 4800;
 
                 int channels = _config.Channels;
                 float[] buffer = new float[fadeFrames * channels];
 
-                // Read next chunk from source
                 int framesRead = source.ReadSamples(buffer.AsSpan(), fadeFrames);
 
                 if (framesRead > 0)
                 {
-                    // Apply Fade Out
                     for (int frame = 0; frame < framesRead; frame++)
                     {
                         float gain = 1.0f - ((float)frame / framesRead);
-                        // Apply gain to all channels
                         for (int ch = 0; ch < channels; ch++)
                         {
                             buffer[frame * channels + ch] *= gain;
                         }
                     }
 
-                    // Send to Engine
                     int totalBytes = framesRead * channels;
                     int sent = 0;
                     
                     int engineBufferCapacity = OwnaudioNET.OwnaudioNet.Engine!.FramesPerBuffer * channels * 2;
 
-                    // We need to pump this data
                     while (sent < totalBytes)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
@@ -771,7 +718,7 @@ namespace OwnaudioNET.Effects.SmartMaster
                             int spaceInFrames = free / channels;
                             
                             int framesToSend = Math.Min(remaining / channels, spaceInFrames);
-                            framesToSend = Math.Min(framesToSend, 1024); // Chunk limit
+                            framesToSend = Math.Min(framesToSend, 1024);
 
                             if (framesToSend > 0)
                             {
