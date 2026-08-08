@@ -3,7 +3,7 @@
 Reference-based audio mastering for OwnAudioSharp. The module analyzes the
 spectral and dynamic character of a *target* track and reshapes a *source* track
 to match it — or applies a built-in playback-system preset. Everything is driven
-by a 30-band ISO spectrum analysis plus a compressor → EQ → dynamic-amp →
+by a 30-band ISO spectrum analysis plus an EQ → compressor → dynamic-amp →
 limiter mastering chain.
 
 Namespace root: `OwnaudioNET.Features.Matchering`
@@ -41,7 +41,7 @@ target file  →   │ AnalyzeAudioFile → AudioSpectrum (target) │
               └─────────────────────┼──────────────────────┘
                                     ▼
                         ApplyDirectEQProcessing
-        Compressor → 30-Band EQ → Dynamic Amp → Limiter  →  output .wav
+        30-Band EQ → Compressor → Dynamic Amp → Limiter  →  output .wav
 ```
 
 Spectrum analysis itself is **segmented**: the audio is cut into overlapping
@@ -120,15 +120,21 @@ overlap, tagging each with its RMS energy.
 
 **Per-segment analysis** — `AnalyzeSegments` skips segments quieter than
 `MinSegmentEnergyThreshold` (−60 dBFS), then for each remaining segment runs:
-- `AnalyzeFrequencySpectrumAbsolute` — overlapped FFT (75% overlap) with a
-  **Flat-Top window** (chosen for amplitude accuracy over frequency resolution).
-  FFT size scales with sample rate (8192 / 16384 / 32768). Per-band energy uses
-  proportional bandwidth (`centerFreq × 0.23`) and linear distance weighting.
+- overlapped FFT (75% overlap) with a **Hann window**, normalized by the window's
+  noise power (`2·Σ|X|² / (N·Σw²)`) so a band reading is an absolute RMS that does
+  not depend on the window or the FFT size. Flat-Top used to be used here, but its
+  ~9-bin main lobe smears broadband material across neighbouring bands — it is a
+  window for reading an isolated sine, not for band energy.
+  FFT size comes from a fixed 0.35 s analysis window, so 44.1k and 48k files get
+  the same resolution instead of being 2× apart. Band edges are the geometric
+  1/3-octave ones (`fc / 2^(1/6)` … `fc · 2^(1/6)`), widened where the FFT cannot
+  resolve them — at 20 Hz the natural band is about one bin wide, and a one-bin
+  reading is noise, not a measurement.
 - `AnalyzeAbsoluteDynamics` — absolute RMS, peak, loudness (dBFS), dynamic range.
 - `CalculateSegmentWeight` — weights each segment by energy, closeness to a
   15 dB "ideal" dynamic range, and position (middle sections slightly boosted).
 
-**Outlier rejection** — `FilterOutlierSegments` computes per-band mean/σ and
+**Outlier rejection** — `FilterOutlierSegments` computes per-band mean/σ **in dB** and
 scores each segment by how many bands exceed `OutlierThreshold` (2.5σ). Segments
 that are outliers in more than 30% of bands are discarded.
 
@@ -139,14 +145,19 @@ that are outliers in more than 30% of bands are discarded.
 
 ## EQ matching ([Audiomatchering.equalizer.cs](Audiomatchering.equalizer.cs))
 
-1. `CalculateDirectEQAdjustments` — smooths both spectra
-   (`SmoothSpectrum`), converts to dB, and takes the per-band difference
-   `target − source`.
-2. `ApplyIntelligentScaling` — clamps every band to ±18 dB (the EQ's capacity).
-3. `ApplyDirectEQProcessing` — builds and runs the mastering chain (see below).
-
-`ApplyRefinedSpectralBalance` is available to tame excessive 2–5 kHz presence and
-low-end dominance, though the default path uses the simpler scaling.
+1. `_calcEqAdjustments` — smooths both spectra, converts to dB, takes the per-band
+   difference `target − source`, then **removes the broadband offset**: an overall
+   level difference is a gain change, not an EQ move, and leaving it in meant the
+   EQ and the AGC downstream both corrected for the same thing. What is left is
+   clamped to ±9 dB — matching is a tonal balance job, and the old ±18 dB let one
+   bad measurement wreck a master.
+2. `_deconvolveToBandGains` — turns the wanted curve into the gains the filter bank
+   must actually be *set* to. A 1/3-octave bell still bleeds into its neighbours,
+   so setting every band to its wanted value overshoots by 60–120%. This solves the
+   bank's response matrix (ridge-regularised least squares over the 30×30 system),
+   which brings the realised curve to within ~0.1–0.35 dB of what was asked for,
+   against 1.3–2.4 dB for the naive assignment.
+3. `_applyEqProcessing` — builds and runs the mastering chain (see below).
 
 ### Mastering chain
 
@@ -228,7 +239,7 @@ matchering *target* rather than overdriving the source, and
 | `SegmentLengthSeconds` / `OverlapRatio` | `SegmentedAnalysisConfig` | Analysis granularity vs. cost. |
 | `MinSegmentEnergyThreshold` | `SegmentedAnalysisConfig` | Skips quiet/silent segments. |
 | `OutlierThreshold` | `SegmentedAnalysisConfig` | Aggressiveness of outlier rejection. |
-| `maxBoost` / `maxCut` (±18 dB) | `ApplyIntelligentScaling` | EQ delta clamp. |
+| `MaxBandCorrectionDb` (±9 dB) | `_calcEqAdjustments` | Per-band correction limit. |
 | `smoothingFactor` | `SmoothSpectrum` | Curve smoothness before diffing. |
 | Q clamp (2.5…8.0) | `CalculateOptimalQFactors` | EQ band width limits. |
 | `eqOnlyMode` | `ProcessWithEnhancedPreset` | EQ-only vs. full effects for presets. |

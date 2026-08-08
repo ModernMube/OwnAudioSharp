@@ -30,6 +30,19 @@ namespace OwnaudioNET.Features.Matchering
             "2kHz", "2.5kHz", "3.15kHz", "4kHz", "5kHz", "6.3kHz", "8kHz", "10kHz", "12.5kHz", "16kHz"
         };
 
+        /// <summary>
+        /// Half a third of an octave, the geometric edge factor of an ISO band.
+        /// </summary>
+        private static readonly float _bandEdge = MathF.Pow(2.0f, 1.0f / 6.0f);
+
+        /// <summary>
+        /// Analysis window length in seconds. The FFT size follows from this so the
+        /// bin spacing lands within a few percent of each other at 44.1k and 48k -
+        /// picking the size straight from the sample rate used to give the two files
+        /// a 2x resolution difference and bias every delta.
+        /// </summary>
+        private const float AnalysisWindowSeconds = 0.35f;
+
         private static readonly object _analyzerLock = new object();
 
         /// <summary>
@@ -69,10 +82,10 @@ namespace OwnaudioNET.Features.Matchering
 
                 int perChannel = audioData.Length / channels;
                 var channelSpectra = new List<AudioSpectrum>(channels);
-                float[] scratch = new float[perChannel];
 
                 for (int c = 0; c < channels; c++)
                 {
+                    float[] scratch = new float[perChannel];
                     for (int i = 0; i < perChannel; i++)
                         scratch[i] = audioData[i * channels + c];
 
@@ -91,8 +104,9 @@ namespace OwnaudioNET.Features.Matchering
         {
             Log.Info($"Starting segmented analysis (Length: {monoData.Length / (float)sampleRate:F1}s)");
 
+            var context = _spectrumContext(sampleRate);
             var segments = _createSegments(monoData, sampleRate);
-            var analyses = _filterOutliers(_analyzeSegments(segments, sampleRate));
+            var analyses = _filterOutliers(_analyzeSegments(segments, context));
             var spectrum = _weightedAverage(analyses);
 
             Log.Info($"\n=== ANALYZED SPECTRUM INFO ===");
@@ -103,8 +117,8 @@ namespace OwnaudioNET.Features.Matchering
         }
 
         /// <summary>
-        /// Folds per-channel spectra into one. RMS is combined in the power domain,
-        /// peak is just the loudest of the bunch.
+        /// Folds per-channel spectra into one. Bands and RMS combine in the power
+        /// domain, peak is just the loudest of the bunch.
         /// </summary>
         private AudioSpectrum _averageSpectra(List<AudioSpectrum> spectra)
         {
@@ -112,20 +126,21 @@ namespace OwnaudioNET.Features.Matchering
             if (spectra.Count == 1) return spectra[0];
 
             int bands = spectra[0].FrequencyBands.Length;
-            float[] avg = new float[bands];
+            double[] power = new double[bands];
 
             double sumRmsSquares = 0;
             double maxPeak = 0;
 
             foreach (var s in spectra)
             {
-                for (int i = 0; i < bands; i++) avg[i] += s.FrequencyBands[i];
+                for (int i = 0; i < bands; i++) power[i] += s.FrequencyBands[i] * s.FrequencyBands[i];
 
                 sumRmsSquares += s.RMSLevel * s.RMSLevel;
                 maxPeak = Math.Max(maxPeak, s.PeakLevel);
             }
 
-            for (int i = 0; i < bands; i++) avg[i] /= spectra.Count;
+            float[] avg = new float[bands];
+            for (int i = 0; i < bands; i++) avg[i] = (float)Math.Sqrt(power[i] / spectra.Count);
 
             float rms = (float)Math.Sqrt(sumRmsSquares / spectra.Count);
             float peak = (float)maxPeak;
@@ -169,7 +184,8 @@ namespace OwnaudioNET.Features.Matchering
         #region Segment Creation and Management
 
         /// <summary>
-        /// Slices the buffer into overlapping chunks and tags each with its energy.
+        /// Slices the buffer into overlapping views and tags each with its energy.
+        /// The segments share the source array, nothing is copied.
         /// </summary>
         private List<AudioSegment> _createSegments(float[] audioData, int sampleRate)
         {
@@ -179,24 +195,26 @@ namespace OwnaudioNET.Features.Matchering
             int hopSize = (int)(segmentSamples * (1 - _segmentConfig.OverlapRatio));
 
             if (audioData.Length <= segmentSamples)
-                throw new InvalidOperationException($"The audio is too short. Less than 10 seconds!: {audioData.Length / sampleRate} second");
+                throw new InvalidOperationException($"The audio is too short. Less than {_segmentConfig.SegmentLengthSeconds:F0} seconds!: {audioData.Length / sampleRate} second");
 
             Log.Info($"Segment size: {segmentSamples} samples ({_segmentConfig.SegmentLengthSeconds}s)");
             Log.Info($"Hop size: {hopSize} samples (overlap: {_segmentConfig.OverlapRatio * 100:F1}%)");
 
+            float totalDuration = audioData.Length / (float)sampleRate;
+
             for (int start = 0; start < audioData.Length - segmentSamples; start += hopSize)
             {
                 int len = Math.Min(segmentSamples, audioData.Length - start);
-                float[] data = new float[len];
-                Array.Copy(audioData, start, data, 0, len);
-
-                float rms = _calcRms(data);
+                float rms = _calcRms(audioData.AsSpan(start, len));
 
                 segments.Add(new AudioSegment
                 {
-                    Data = data,
+                    Data = audioData,
+                    Offset = start,
+                    Length = len,
                     StartTime = (float)start / sampleRate,
                     Duration = (float)len / sampleRate,
+                    TotalDuration = totalDuration,
                     EnergyLevel = 20 * (float)Math.Log10(Math.Max(rms, 1e-10f)),
                     SampleRate = sampleRate
                 });
@@ -207,30 +225,40 @@ namespace OwnaudioNET.Features.Matchering
         }
 
         /// <summary>
-        /// Spectrum + dynamics for every segment that clears the energy gate.
+        /// Spectrum + dynamics for every segment that clears the energy gate. Runs
+        /// across cores - segments are independent and this is an offline path.
         /// </summary>
-        private List<SegmentAnalysis> _analyzeSegments(List<AudioSegment> segments, int sampleRate)
+        private List<SegmentAnalysis> _analyzeSegments(List<AudioSegment> segments, SpectrumContext context)
         {
-            var analyses = new List<SegmentAnalysis>(segments.Count);
+            var results = new SegmentAnalysis?[segments.Count];
 
-            for (int i = 0; i < segments.Count; i++)
-            {
-                AudioSegment segment = segments[i];
-                if (segment.EnergyLevel < _segmentConfig.MinSegmentEnergyThreshold) continue;
-
-                DynamicsInfo dynamics = _analyzeDynamics(segment.Data);
-
-                analyses.Add(new SegmentAnalysis
+            Parallel.For(0, segments.Count,
+                () => new Complex[context.FftSize],
+                (i, _, fftScratch) =>
                 {
-                    SegmentIndex = i,
-                    StartTime = segment.StartTime,
-                    Duration = segment.Duration,
-                    EnergyLevel = segment.EnergyLevel,
-                    FrequencySpectrum = _analyzeSpectrum(segment.Data, sampleRate),
-                    Dynamics = dynamics,
-                    Weight = _segmentWeight(segment, dynamics)
-                });
-            }
+                    AudioSegment segment = segments[i];
+                    if (segment.EnergyLevel < _segmentConfig.MinSegmentEnergyThreshold) return fftScratch;
+
+                    DynamicsInfo dynamics = _analyzeDynamics(segment.Samples);
+
+                    results[i] = new SegmentAnalysis
+                    {
+                        SegmentIndex = i,
+                        StartTime = segment.StartTime,
+                        Duration = segment.Duration,
+                        EnergyLevel = segment.EnergyLevel,
+                        FrequencySpectrum = _analyzeSpectrum(segment.Samples, context, fftScratch),
+                        Dynamics = dynamics,
+                        Weight = _segmentWeight(segment, dynamics)
+                    };
+
+                    return fftScratch;
+                },
+                _ => { });
+
+            var analyses = new List<SegmentAnalysis>(segments.Count);
+            foreach (var r in results)
+                if (r is not null) analyses.Add(r);
 
             Log.Info($"Completed analysis: {analyses.Count} valid segments from {segments.Count} total");
             return analyses;
@@ -248,7 +276,7 @@ namespace OwnaudioNET.Features.Matchering
 
             float dynamicWeight = Math.Max(0.5f, 1.0f - (Math.Abs(dynamics.DynamicRange - 15.0f) / 20.0f));
 
-            float pos = segment.StartTime / (segment.StartTime + segment.Duration);
+            float pos = segment.TotalDuration > 0 ? segment.StartTime / segment.TotalDuration : 0.5f;
             float positionWeight = (pos > 0.2f && pos < 0.8f) ? 1.1f : 1.0f;
 
             return energyWeight * dynamicWeight * positionWeight;
@@ -259,8 +287,9 @@ namespace OwnaudioNET.Features.Matchering
         #region Outlier Detection and Filtering
 
         /// <summary>
-        /// Drops segments that sit way off the mean in too many bands. Anything that
-        /// deviates in more than ~30% of the bands is thrown out.
+        /// Drops segments that sit way off the mean in too many bands. Statistics run
+        /// in dB, otherwise the loud bass bands own the standard deviation and the top
+        /// end can never register as an outlier at all.
         /// </summary>
         private List<SegmentAnalysis> _filterOutliers(List<SegmentAnalysis> analyses)
         {
@@ -269,21 +298,21 @@ namespace OwnaudioNET.Features.Matchering
             for (int band = 0; band < _freqBands.Length; band++)
             {
                 float sum = 0f;
-                foreach (var a in analyses) sum += a.FrequencySpectrum[band];
+                foreach (var a in analyses) sum += _toDb(a.FrequencySpectrum[band]);
                 float mean = sum / analyses.Count;
 
                 float sq = 0f;
                 foreach (var a in analyses)
                 {
-                    float d = a.FrequencySpectrum[band] - mean;
+                    float d = _toDb(a.FrequencySpectrum[band]) - mean;
                     sq += d * d;
                 }
 
-                float sd = Math.Max((float)Math.Sqrt(sq / analyses.Count), 1e-10f);
+                float sd = Math.Max((float)Math.Sqrt(sq / analyses.Count), 1e-6f);
 
                 foreach (var a in analyses)
                 {
-                    if (Math.Abs(a.FrequencySpectrum[band] - mean) / sd > _segmentConfig.OutlierThreshold)
+                    if (Math.Abs(_toDb(a.FrequencySpectrum[band]) - mean) / sd > _segmentConfig.OutlierThreshold)
                         a.OutlierScore += 1.0f;
                 }
             }
@@ -303,14 +332,15 @@ namespace OwnaudioNET.Features.Matchering
         #region Weighted Average Calculation
 
         /// <summary>
-        /// Weighted fold of the surviving segments into one spectrum.
+        /// Weighted fold of the surviving segments into one spectrum. Bands average in
+        /// the power domain so a loud segment doesn't get diluted by a quiet one.
         /// </summary>
         private AudioSpectrum _weightedAverage(List<SegmentAnalysis> analyses)
         {
             if (analyses.Count == 0)
                 throw new InvalidOperationException("No valid segments for analysis");
 
-            float[] spectrum = new float[_freqBands.Length];
+            double[] power = new double[_freqBands.Length];
             float totalWeight = 0f, rms = 0f, peak = 0f, loudness = 0f, dr = 0f;
 
             foreach (var a in analyses)
@@ -319,7 +349,7 @@ namespace OwnaudioNET.Features.Matchering
                 totalWeight += w;
 
                 for (int i = 0; i < _freqBands.Length; i++)
-                    spectrum[i] += a.FrequencySpectrum[i] * w;
+                    power[i] += (double)a.FrequencySpectrum[i] * a.FrequencySpectrum[i] * w;
 
                 rms += a.Dynamics.RMS * w;
                 peak = Math.Max(peak, a.Dynamics.Peak);
@@ -327,7 +357,9 @@ namespace OwnaudioNET.Features.Matchering
                 dr += a.Dynamics.DynamicRange * w;
             }
 
-            for (int i = 0; i < _freqBands.Length; i++) spectrum[i] /= totalWeight;
+            float[] spectrum = new float[_freqBands.Length];
+            for (int i = 0; i < _freqBands.Length; i++)
+                spectrum[i] = (float)Math.Sqrt(power[i] / totalWeight);
 
             Log.Info($"Averaged {analyses.Count} segments with total weight: {totalWeight:F2}");
 
@@ -346,6 +378,101 @@ namespace OwnaudioNET.Features.Matchering
         #region Frequency Spectrum Analisys
 
         /// <summary>
+        /// Everything about an analysis that only depends on the sample rate: window,
+        /// its power sum and the bin range of every band. Built once per rate.
+        /// </summary>
+        private sealed class SpectrumContext
+        {
+            public int SampleRate;
+            public int FftSize;
+            public int HopSize;
+            public float[] Window = Array.Empty<float>();
+
+            /// <summary>
+            /// Sum of the squared window, the noise power the normalization needs.
+            /// </summary>
+            public double WindowPowerSum;
+
+            public int[] BandStart = Array.Empty<int>();
+            public int[] BandEnd = Array.Empty<int>();
+        }
+
+        private SpectrumContext? _cachedContext;
+
+        /// <summary>
+        /// Cached per rate, since both files usually share one.
+        /// </summary>
+        private SpectrumContext _spectrumContext(int sampleRate)
+        {
+            SpectrumContext? cached = _cachedContext;
+            if (cached is not null && cached.SampleRate == sampleRate) return cached;
+
+            int fftSize = _analysisFftSize(sampleRate);
+            float[] window = _hannWindow(fftSize);
+
+            double powerSum = 0;
+            for (int i = 0; i < fftSize; i++) powerSum += (double)window[i] * window[i];
+
+            var ctx = new SpectrumContext
+            {
+                SampleRate = sampleRate,
+                FftSize = fftSize,
+                HopSize = fftSize / 4,
+                Window = window,
+                WindowPowerSum = powerSum,
+                BandStart = new int[_freqBands.Length],
+                BandEnd = new int[_freqBands.Length]
+            };
+
+            _bandBins(ctx);
+            _cachedContext = ctx;
+
+            Log.Info($"Analysis FFT: {fftSize} bins at {sampleRate}Hz ({fftSize / (float)sampleRate * 1000f:F0}ms, {sampleRate / (float)fftSize:F2}Hz resolution)");
+            return ctx;
+        }
+
+        /// <summary>
+        /// Power of two closest to the fixed analysis window, so 44.1k and 48k end up
+        /// with nearly the same resolution instead of a factor of two apart.
+        /// </summary>
+        private int _analysisFftSize(int sampleRate)
+        {
+            float wanted = sampleRate * AnalysisWindowSeconds;
+
+            int size = 1024;
+            while (size * 2 <= 65536 && Math.Abs(size * 2 - wanted) < Math.Abs(size - wanted))
+                size *= 2;
+
+            return size;
+        }
+
+        /// <summary>
+        /// Geometric 1/3 octave edges per band, widened where the FFT can't resolve
+        /// them - down at 20Hz the natural band is barely one bin wide, and a single
+        /// bin reading is noise, not a measurement.
+        /// </summary>
+        private void _bandBins(SpectrumContext ctx)
+        {
+            float binWidth = ctx.SampleRate / (float)ctx.FftSize;
+            float minHalf = 1.5f * binWidth;
+            int maxBin = ctx.FftSize / 2 - 1;
+
+            for (int i = 0; i < _freqBands.Length; i++)
+            {
+                float fc = _freqBands[i];
+                float lo = Math.Min(fc / _bandEdge, fc - minHalf);
+                float hi = Math.Max(fc * _bandEdge, fc + minHalf);
+
+                int start = Math.Max(1, (int)Math.Ceiling(lo / binWidth));
+                int end = Math.Min(maxBin, (int)Math.Floor(hi / binWidth));
+                if (end < start) end = Math.Min(start, maxBin);
+
+                ctx.BandStart[i] = start;
+                ctx.BandEnd[i] = end;
+            }
+        }
+
+        /// <summary>
         /// Plain RMS over a buffer.
         /// </summary>
         private float _calcRms(ReadOnlySpan<float> audioData)
@@ -359,90 +486,64 @@ namespace OwnaudioNET.Features.Matchering
         }
 
         /// <summary>
-        /// Overlapped FFT with a Flat-Top window - we trade frequency resolution for
-        /// amplitude accuracy, which is what matters when matching levels.
+        /// Overlapped FFT into per band RMS. Hann rather than Flat-Top: Flat-Top is for
+        /// reading the amplitude of an isolated sine, and its ~9 bin main lobe smears
+        /// broadband program material straight across neighbouring bands.
         /// </summary>
-        private float[] _analyzeSpectrum(float[] audioData, int sampleRate)
+        private float[] _analyzeSpectrum(ReadOnlySpan<float> audioData, SpectrumContext ctx, Complex[] fft)
         {
-            int fftSize = _optimalFftSize(sampleRate);
-            int hopSize = fftSize / 4;
-            float[] window = _flatTopWindow(fftSize);
+            int fftSize = ctx.FftSize;
+            int hopSize = ctx.HopSize;
+            float[] window = ctx.Window;
 
-            float windowSum = 0f;
-            for (int i = 0; i < fftSize; i++) windowSum += window[i];
-            float windowNorm = windowSum / fftSize;
+            double[] power = new double[_freqBands.Length];
+            int windows = 0;
 
-            float[] energies = new float[_freqBands.Length];
-            Complex[] fft = new Complex[fftSize];
-            int windowCount = Math.Max(1, (audioData.Length - fftSize) / hopSize + 1);
-
-            for (int w = 0; w < windowCount; w++)
+            for (int start = 0; start + fftSize <= audioData.Length; start += hopSize)
             {
-                int start = w * hopSize;
-                if (start + fftSize > audioData.Length) break;
-
                 for (int i = 0; i < fftSize; i++)
                     fft[i] = audioData[start + i] * window[i];
 
                 OwnAudioFft.Forward(fft);
 
                 for (int band = 0; band < _freqBands.Length; band++)
-                    energies[band] += _bandEnergy(fft, _freqBands[band], sampleRate, fftSize, windowNorm);
+                    power[band] += _bandPower(fft, ctx, band);
+
+                windows++;
             }
 
-            for (int i = 0; i < energies.Length; i++) energies[i] /= windowCount;
+            float[] rms = new float[_freqBands.Length];
+            if (windows == 0) return rms;
 
-            return energies;
+            for (int i = 0; i < rms.Length; i++)
+                rms[i] = (float)Math.Sqrt(power[i] / windows);
+
+            return rms;
         }
 
         /// <summary>
-        /// Bigger FFT at higher rates so the bin spacing stays usable.
+        /// Power inside one band. Single sided, normalized by the window's noise power
+        /// so the reading is independent of the window and the FFT size.
         /// </summary>
-        private int _optimalFftSize(int sampleRate)
+        private double _bandPower(Complex[] fft, SpectrumContext ctx, int band)
         {
-            if (sampleRate >= 96000) return 32768;
-            if (sampleRate >= 48000) return 16384;
-            return 8192;
-        }
+            int start = ctx.BandStart[band];
+            int end = ctx.BandEnd[band];
 
-        /// <summary>
-        /// Weighted RMS of the bins falling inside one band, corrected for the window gain.
-        /// </summary>
-        private float _bandEnergy(Complex[] fft, float centerFreq, int sampleRate, int fftSize, float windowNorm)
-        {
-            float bandwidth = centerFreq * 0.23f;
-            float startFreq = Math.Max(0, centerFreq - bandwidth / 2);
-            float endFreq = Math.Min(sampleRate / 2.0f, centerFreq + bandwidth / 2);
-
-            int startBin = Math.Max(0, (int)Math.Floor(startFreq * fftSize / (double)sampleRate));
-            int endBin = Math.Min(fftSize / 2, (int)Math.Ceiling(endFreq * fftSize / (double)sampleRate));
-
-            if (startBin >= endBin) return 0;
-
-            double energySum = 0, weightSum = 0;
-
-            for (int bin = startBin; bin <= endBin; bin++)
+            double sum = 0;
+            for (int bin = start; bin <= end; bin++)
             {
-                double binFreq = bin * (double)sampleRate / fftSize;
-                if (binFreq < startFreq || binFreq > endFreq) continue;
-
-                double weight = 1.0 - (Math.Abs(binFreq - centerFreq) / (bandwidth / 2.0));
-                if (weight <= 0) continue;
-
-                double mag = fft[bin].Magnitude;
-                energySum += mag * mag * weight;
-                weightSum += weight;
+                double re = fft[bin].Real, im = fft[bin].Imaginary;
+                sum += re * re + im * im;
             }
 
-            if (weightSum == 0) return 0;
-
-            return (float)(Math.Sqrt(energySum / weightSum) / (windowNorm * fftSize / 2.0));
+            return 2.0 * sum / (ctx.FftSize * ctx.WindowPowerSum);
         }
 
         /// <summary>
         /// Absolute RMS / peak / loudness / crest of a buffer, no normalization.
         /// </summary>
-        private DynamicsInfo _analyzeDynamics(float[] audioData)
+        private DynamicsInfo _analyzeDynamics(ReadOnlySpan<float> audioData)
         {
             if (audioData.Length == 0) return new DynamicsInfo();
 
@@ -469,27 +570,18 @@ namespace OwnaudioNET.Features.Matchering
         }
 
         /// <summary>
-        /// Flat-Top window coefficients.
+        /// Periodic Hann, the usual choice for spectral estimation.
         /// </summary>
-        private float[] _flatTopWindow(int size)
+        private float[] _hannWindow(int size)
         {
             float[] window = new float[size];
-            const double a0 = 0.21557895;
-            const double a1 = 0.41663158;
-            const double a2 = 0.277263158;
-            const double a3 = 0.083578947;
-            const double a4 = 0.006947368;
-
             for (int i = 0; i < size; i++)
-            {
-                double n = (double)i / (size - 1);
-                window[i] = (float)(a0 - a1 * Math.Cos(2 * Math.PI * n) +
-                                   a2 * Math.Cos(4 * Math.PI * n) -
-                                   a3 * Math.Cos(6 * Math.PI * n) +
-                                   a4 * Math.Cos(8 * Math.PI * n));
-            }
+                window[i] = (float)(0.5 - 0.5 * Math.Cos(2 * Math.PI * i / size));
+
             return window;
         }
+
+        private static float _toDb(float linear) => 20f * MathF.Log10(Math.Max(linear, 1e-10f));
 
         #endregion
     }

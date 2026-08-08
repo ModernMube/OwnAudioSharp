@@ -63,24 +63,39 @@ namespace OwnaudioNET.Recording
                 writer.Write(new[] { 'd', 'a', 't', 'a' });
                 writer.Write(dataSize);
 
+                var rng = new Random(0x5EED);
+                float lastDither = _rpdf(rng);
+
                 for (int i = 0; i < samples.Length; i++)
                 {
-                    float s = samples[i] < -1f ? -1f : samples[i] > 1f ? 1f : samples[i];
+                    float s = samples[i];
+
+                    if (bitPerSamples == 32)
+                    {
+                        s = s < -1f ? -1f : s > 1f ? 1f : s;
+                        writer.Write((int)Math.Round(s * (double)int.MaxValue));
+                        continue;
+                    }
+
+                    float scale = bitPerSamples == 16 ? short.MaxValue : 8388607f;
+
+                    float d = _rpdf(rng);
+                    s += (d - lastDither) / scale;
+                    lastDither = d;
+
+                    s = s < -1f ? -1f : s > 1f ? 1f : s;
+                    int pcm = (int)Math.Round(s * scale);
 
                     if (bitPerSamples == 16)
                     {
-                        writer.Write((short)(s * short.MaxValue));
-                    }
-                    else if (bitPerSamples == 24)
-                    {
-                        int pcm = (int)(s * 8388607);
-                        writer.Write((byte)(pcm & 0xFF));
-                        writer.Write((byte)((pcm >> 8) & 0xFF));
-                        writer.Write((byte)((pcm >> 16) & 0xFF));
+                        writer.Write((short)Math.Clamp(pcm, short.MinValue, short.MaxValue));
                     }
                     else
                     {
-                        writer.Write((int)(s * int.MaxValue));
+                        pcm = Math.Clamp(pcm, -8388608, 8388607);
+                        writer.Write((byte)(pcm & 0xFF));
+                        writer.Write((byte)((pcm >> 8) & 0xFF));
+                        writer.Write((byte)((pcm >> 16) & 0xFF));
                     }
                 }
             }
@@ -104,5 +119,13 @@ namespace OwnaudioNET.Recording
 
             Create(filePath, samples, sampleRate, channels, bitPerSamples);
         }
+
+        /// <summary>
+        /// One rectangular dither sample, +/-0.5 LSB. Two of these subtracted give the
+        /// triangular distribution the quantizer wants, with the noise pushed up high
+        /// where nobody hears it - beats plain truncation, which correlates its error
+        /// with the signal.
+        /// </summary>
+        private static float _rpdf(Random rng) => (float)(rng.NextDouble() - 0.5);
     }
 }

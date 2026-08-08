@@ -2,6 +2,7 @@ using OwnaudioNET.Effects;
 using OwnaudioNET.Sources;
 using Logger;
 using System;
+using System.Numerics;
 
 namespace OwnaudioNET.Features.Matchering
 {
@@ -13,32 +14,171 @@ namespace OwnaudioNET.Features.Matchering
         #region EQ Calculation and Smoothing
 
         /// <summary>
-        /// Per band dB delta between source and target, smoothed a bit and clamped
-        /// to what the 30 band EQ can actually do.
+        /// How far a single band is allowed to be pushed. Matching is a tonal balance
+        /// job, not surgery - the old 18 dB let one bad measurement wreck a master.
+        /// </summary>
+        private const float MaxBandCorrectionDb = 9.0f;
+
+        /// <summary>
+        /// Per band dB delta between source and target. The broadband level difference
+        /// is taken out first: that is a gain change, and leaving it in meant the EQ
+        /// and the AGC downstream both corrected for the same thing.
         /// </summary>
         private float[] _calcEqAdjustments(AudioSpectrum source, AudioSpectrum target)
         {
-            float[] adjustments = new float[_freqBands.Length];
-
             float[] src = _smoothSpectrum(source.FrequencyBands, 0.5f);
             float[] tgt = _smoothSpectrum(target.FrequencyBands, 0.5f);
 
-            Log.Info("\n=== CALCULATED EQ ADJUSTMENTS ===");
+            int bands = _freqBands.Length;
+            float[] wanted = new float[bands];
+            bool[] usable = new bool[bands];
 
-            for (int i = 0; i < adjustments.Length; i++)
+            float offsetSum = 0f;
+            int offsetCount = 0;
+
+            for (int i = 0; i < bands; i++)
             {
                 float srcDb = 20 * (float)Math.Log10(Math.Max(src[i], 1e-10f));
                 float tgtDb = 20 * (float)Math.Log10(Math.Max(tgt[i], 1e-10f));
 
-                float raw = (srcDb < -80.0f && tgtDb > srcDb) ? 0.0f : tgtDb - srcDb;
-                adjustments[i] = Math.Clamp(raw, -18.0f, 18.0f);
+                usable[i] = srcDb > -80.0f && tgtDb > -80.0f;
+                if (!usable[i]) continue;
 
-                string limited = (Math.Abs(adjustments[i] - raw) > 0.01f) ? " [LIMITED]" : "";
-                Log.Info($"{_bandNames[i],8}: {adjustments[i],6:F1} dB (Raw: {raw,6:F1} dB) " +
-                                $"[Src: {srcDb,6:F1} dB -> Tgt: {tgtDb,6:F1} dB]{limited}");
+                wanted[i] = tgtDb - srcDb;
+                offsetSum += wanted[i];
+                offsetCount++;
             }
 
-            return adjustments;
+            float offset = offsetCount > 0 ? offsetSum / offsetCount : 0f;
+            for (int i = 0; i < bands; i++)
+                wanted[i] = usable[i] ? Math.Clamp(wanted[i] - offset, -MaxBandCorrectionDb, MaxBandCorrectionDb) : 0f;
+
+            Log.Info("\n=== CALCULATED EQ ADJUSTMENTS ===");
+            Log.Info($"Broadband offset removed: {offset:+0.0;-0.0} dB (handled as gain, not EQ)");
+
+            for (int i = 0; i < bands; i++)
+            {
+                string skipped = usable[i] ? "" : " [NO DATA]";
+                Log.Info($"{_bandNames[i],8}: {wanted[i],6:F1} dB{skipped}");
+            }
+
+            return wanted;
+        }
+
+        /// <summary>
+        /// Turns the wanted curve into the gains the filter bank has to be set to.
+        /// A 1/3 octave bell still bleeds into its neighbours, so setting every band
+        /// to its wanted value overshoots by 60-120%. Solves the bank's response
+        /// matrix instead, with a little ridge on the diagonal to stop the solution
+        /// from ringing band to band.
+        /// </summary>
+        private float[] _deconvolveToBandGains(float[] wanted, float[] qFactors, int sampleRate)
+        {
+            int n = _freqBands.Length;
+            var m = new double[n, n];
+
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    m[j, i] = _bellResponseDb(_freqBands[i], qFactors[i], 1.0f, _freqBands[j], sampleRate);
+
+            var ata = new double[n, n];
+            var atb = new double[n];
+            double ridge = 0.05;
+
+            for (int r = 0; r < n; r++)
+            {
+                for (int c = 0; c < n; c++)
+                {
+                    double sum = 0;
+                    for (int k = 0; k < n; k++) sum += m[k, r] * m[k, c];
+                    ata[r, c] = sum + (r == c ? ridge : 0.0);
+                }
+
+                double b = 0;
+                for (int k = 0; k < n; k++) b += m[k, r] * wanted[k];
+                atb[r] = b;
+            }
+
+            double[] solved = _solve(ata, atb, n);
+            float[] gains = new float[n];
+
+            for (int i = 0; i < n; i++)
+            {
+                float g = (float)solved[i];
+                gains[i] = float.IsFinite(g) ? Math.Clamp(g, -MaxBandCorrectionDb, MaxBandCorrectionDb) : 0f;
+            }
+
+            Log.Info("\n=== FILTER BANK SOLUTION (wanted -> set) ===");
+            for (int i = 0; i < n; i++)
+                Log.Info($"{_bandNames[i],8}: wanted {wanted[i],5:F1} dB -> set {gains[i],5:F1} dB (Q={qFactors[i]:F2})");
+
+            return gains;
+        }
+
+        /// <summary>
+        /// Magnitude of an RBJ peaking filter at one frequency, in dB.
+        /// </summary>
+        private static float _bellResponseDb(float centreFreq, float q, float gainDb, float atFreq, int sampleRate)
+        {
+            double a = Math.Pow(10.0, gainDb / 40.0);
+            double w0 = 2 * Math.PI * centreFreq / sampleRate;
+            double alpha = Math.Sin(w0) / (2 * q);
+            double cosW0 = Math.Cos(w0);
+
+            double b0 = 1 + alpha * a, b1 = -2 * cosW0, b2 = 1 - alpha * a;
+            double a0 = 1 + alpha / a, a1 = -2 * cosW0, a2 = 1 - alpha / a;
+
+            double w = 2 * Math.PI * atFreq / sampleRate;
+            Complex z1 = Complex.FromPolarCoordinates(1.0, -w);
+            Complex z2 = z1 * z1;
+
+            Complex num = b0 + b1 * z1 + b2 * z2;
+            Complex den = a0 + a1 * z1 + a2 * z2;
+
+            return (float)(20.0 * Math.Log10(Math.Max((num / den).Magnitude, 1e-12)));
+        }
+
+        /// <summary>
+        /// Gaussian elimination with partial pivoting. Small and offline, nothing
+        /// fancy needed.
+        /// </summary>
+        private static double[] _solve(double[,] a, double[] b, int n)
+        {
+            for (int col = 0; col < n; col++)
+            {
+                int pivot = col;
+                for (int r = col + 1; r < n; r++)
+                    if (Math.Abs(a[r, col]) > Math.Abs(a[pivot, col])) pivot = r;
+
+                if (pivot != col)
+                {
+                    for (int c = 0; c < n; c++) (a[col, c], a[pivot, c]) = (a[pivot, c], a[col, c]);
+                    (b[col], b[pivot]) = (b[pivot], b[col]);
+                }
+
+                double d = a[col, col];
+                if (Math.Abs(d) < 1e-12) continue;
+
+                for (int r = col + 1; r < n; r++)
+                {
+                    double f = a[r, col] / d;
+                    if (f == 0) continue;
+
+                    for (int c = col; c < n; c++) a[r, c] -= f * a[col, c];
+                    b[r] -= f * b[col];
+                }
+            }
+
+            var x = new double[n];
+            for (int r = n - 1; r >= 0; r--)
+            {
+                double sum = b[r];
+                for (int c = r + 1; c < n; c++) sum -= a[r, c] * x[c];
+
+                x[r] = Math.Abs(a[r, r]) > 1e-12 ? sum / a[r, r] : 0.0;
+            }
+
+            return x;
         }
 
         /// <summary>
@@ -68,9 +208,12 @@ namespace OwnaudioNET.Features.Matchering
         #region Direct EQ Processing
 
         /// <summary>
-        /// Offline render: Compressor -> EQ -> DynamicAmp -> Limiter, chunked, in place.
-        /// We pull some pre-gain first so the EQ boosts don't slam into the ceiling,
-        /// then hand that headroom back through the AGC initial gain.
+        /// Offline render: EQ -> Compressor -> DynamicAmp -> Limiter, chunked, in place.
+        /// The EQ goes first now - running the compressor on the un-corrected signal
+        /// and then boosting bands afterwards undid whatever control it had. We pull
+        /// some pre-gain so the EQ boosts don't slam into the ceiling, move the
+        /// compressor threshold down by the same amount, and hand the headroom back
+        /// through the AGC initial gain.
         /// </summary>
         private void _applyEqProcessing(string inputFile, string outputFile,
             float[] eqAdjustments, DynamicAmpSettings dynamicAmp,
@@ -99,10 +242,11 @@ namespace OwnaudioNET.Features.Matchering
 
             float avgBoost = boostCount > 0 ? totalBoost / boostCount : 0;
             float effectiveBoost = Math.Min(maxBoost, avgBoost + 4.0f);
+            float preGainDb = 0f;
 
             if (effectiveBoost > 0)
             {
-                float preGainDb = Math.Clamp(-(effectiveBoost + 2.0f), -12.0f, 0.0f);
+                preGainDb = Math.Clamp(-(effectiveBoost + 2.0f), -12.0f, 0.0f);
                 float linearPreGain = (float)Math.Pow(10, preGainDb / 20.0f);
 
                 Log.Info($"Applying Smart Headroom: {preGainDb:F1}dB (Max: {maxBoost:F1}dB, Avg: {avgBoost:F1}dB, Effective: {effectiveBoost:F1}dB)");
@@ -112,30 +256,34 @@ namespace OwnaudioNET.Features.Matchering
             }
 
             var qFactors = _optimalQFactors(eqAdjustments, sourceSpectrum, targetSpectrum);
+            float[] bandGains = _deconvolveToBandGains(eqAdjustments, qFactors, sampleRate);
+
             Log.Info("\n=== MASTERING CHAIN CONFIGURATION ===");
 
+            var directEQ = new Equalizer30BandEffect(sampleRate);
+
+            Log.Info($"\n[1] EQUALIZER (30-Band Parametric):");
+
+            for (int i = 0; i < _freqBands.Length; i++)
+            {
+                directEQ.SetBandGain(i, _freqBands[i], qFactors[i], bandGains[i]);
+                Log.Info($"    Band {i,2} ({_bandNames[i],8}): {bandGains[i],+6:F1} dB, Q={qFactors[i]:F2}");
+            }
+
+            float compThreshold = Math.Clamp(compSettings.Threshold + preGainDb, -40f, -0.5f);
+
             var globalCompressor = new CompressorEffect(
-                CompressorEffect.DbToLinear(compSettings.Threshold),
+                CompressorEffect.DbToLinear(compThreshold),
                 compSettings.Ratio,
                 10.0f,
                 100.0f,
                 1.0f
             );
 
-            Log.Info($"\n[1] COMPRESSOR:");
-            Log.Info($"    Threshold: {compSettings.Threshold:F1} dB");
+            Log.Info($"\n[2] COMPRESSOR:");
+            Log.Info($"    Threshold: {compThreshold:F1} dB (measured {compSettings.Threshold:F1} dB, shifted by the {preGainDb:F1} dB pre-gain)");
             Log.Info($"    Ratio: {compSettings.Ratio:F1}:1");
             Log.Info($"    Attack: 10ms, Release: 100ms (Surgical)");
-
-            var directEQ = new Equalizer30BandEffect();
-
-            Log.Info($"\n[2] EQUALIZER (30-Band Parametric):");
-
-            for (int i = 0; i < _freqBands.Length; i++)
-            {
-                directEQ.SetBandGain(i, _freqBands[i], qFactors[i], eqAdjustments[i]);
-                Log.Info($"    Band {i,2} ({_bandNames[i],8}): {eqAdjustments[i],+6:F1} dB, Q={qFactors[i]:F2}");
-            }
 
             float headroomRecoveryGain = (effectiveBoost > 0) ? (float)Math.Pow(10, (effectiveBoost + 2.0f) / 20.0f) : 1.0f;
             float maxGain = Math.Min(dynamicAmp.MaxGain * headroomRecoveryGain, 3.0f);
@@ -183,7 +331,7 @@ namespace OwnaudioNET.Features.Matchering
             outputLimiter.Initialize(audioConfig);
 
             Log.Info("\n=== PROCESSING AUDIO ===");
-            Log.Info($"Chain: Compressor → EQ → DynamicAmp → Limiter");
+            Log.Info($"Chain: EQ → Compressor → DynamicAmp → Limiter");
             Log.Info($"Sample Rate: {sampleRate} Hz, Channels: {channels}");
             Log.Info($"Total Samples: {audioData.Length:N0}, Total Frames: {audioData.Length / channels:N0}");
 
@@ -196,8 +344,8 @@ namespace OwnaudioNET.Features.Matchering
                 int frames = count / channels;
                 var chunk = audioData.AsSpan(offset, count);
 
-                globalCompressor.Process(chunk, frames);
                 directEQ.Process(chunk, frames);
+                globalCompressor.Process(chunk, frames);
                 dynamicAmplifier.Process(chunk, frames);
                 outputLimiter.Process(chunk, frames);
 

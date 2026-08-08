@@ -1140,8 +1140,12 @@ namespace OwnaudioNET.Features.Matchering
         public float[] Data { get; set; }
         public float Duration { get; set; }
         public float EnergyLevel { get; set; }
+        public int Length { get; set; }
+        public int Offset { get; set; }
         public int SampleRate { get; set; }
+        public System.ReadOnlySpan<float> Samples { get; }
         public float StartTime { get; set; }
+        public float TotalDuration { get; set; }
     }
     public class AudioSpectrum
     {

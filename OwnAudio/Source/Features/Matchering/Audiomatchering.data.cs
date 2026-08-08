@@ -124,9 +124,25 @@ namespace OwnaudioNET.Features.Matchering
     public class AudioSegment
     {
         /// <summary>
-        /// The samples of this slice.
+        /// The channel buffer this slice lives in. Segments are views now, not
+        /// copies, so every one of them points at the same array.
         /// </summary>
         public float[] Data { get; set; } = null!;
+
+        /// <summary>
+        /// Where this slice starts inside <see cref="Data"/>.
+        /// </summary>
+        public int Offset { get; set; }
+
+        /// <summary>
+        /// How many samples belong to this slice.
+        /// </summary>
+        public int Length { get; set; }
+
+        /// <summary>
+        /// The slice itself.
+        /// </summary>
+        public ReadOnlySpan<float> Samples => Data.AsSpan(Offset, Length);
 
         /// <summary>
         /// Offset from the start of the track, seconds.
@@ -137,6 +153,11 @@ namespace OwnaudioNET.Features.Matchering
         /// Length in seconds.
         /// </summary>
         public float Duration { get; set; }
+
+        /// <summary>
+        /// Length of the whole track, so the position weight knows where we are.
+        /// </summary>
+        public float TotalDuration { get; set; }
 
         /// <summary>
         /// Energy in dBFS, used by the quiet-segment gate.
