@@ -6,6 +6,7 @@
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Quick Start — OwnAudioSharp</title>
+  <meta name="description" content="From an empty folder to a playing audio file in three steps — install OwnAudioSharp, paste 15 lines of C#, run.">
   <link rel="stylesheet" href="../assets/docs.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 </head>
@@ -13,165 +14,136 @@
 <nav class="topnav">
   <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
   <a class="topnav-logo" href="../index.html"><img src="../ownaudio-logo.svg" alt="OwnAudioSharp" height="24"></a>
-  <ul class="topnav-links">
-    <li><a href="../index.html">Home</a></li>
-    <li><a href="quickstart.html" class="active">Quick Start</a></li>
-    <li><a href="api-core.html">API</a></li>
-    <li><a href="api-midi.html">MIDI</a></li>
-    <li><a href="api-reference.html">Reference</a></li>
-  </ul>
-  <div class="topnav-right">
-    <span class="badge-version">v4.0.3</span>
-    <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a>
-    <button id="theme-toggle" class="btn-icon" title="Toggle theme"></button>
-  </div>
+  <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html" class="active">Quick Start</a></li><li><a href="concepts.html">Concepts</a></li><li><a href="recipes.html">Recipes</a></li><li><a href="api-core.html">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
+  <div class="topnav-right"><span class="badge-version">v4.0.3</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
 </nav>
 <div id="sidebar-overlay" class="sidebar-overlay"></div>
 <div class="layout">
 <nav id="sidebar" class="sidebar">
-  <div class="sidebar-section"><span class="sidebar-label">Getting Started</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">High-Level API</span><ul class="sidebar-nav"><li><a href="api-core.html">OwnaudioNet</a></li><li><a href="api-core.html#logging" class="sub">Logging</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-mixer.html">AudioMixer</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Audio Sources</span><ul class="sidebar-nav"><li><a href="api-sources.html">Source Overview</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#streamingsource" class="sub">StreamingSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#sourcewitheffects" class="sub">SourceWithEffects</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel Routing</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Processing</span><ul class="sidebar-nav"><li><a href="api-sync.html">Synchronization</a></li><li><a href="api-effects.html">Built-in Effects</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 Plugins</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#mt3" class="sub">MT3 Transcription</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">MIDI</span><ul class="sidebar-nav"><li><a href="api-midi.html">MIDI Overview</a></li><li><a href="api-midi.html#port-management" class="sub">Port Management</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI File</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI Clock</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Reference</span><ul class="sidebar-nav"><li><a href="api-reference.html">Events &amp; Types</a></li><li><a href="api-reference.html#architecture" class="sub">Architecture</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#best-practices" class="sub">Best Practices</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Start here</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li><li><a href="concepts.html">🧭 Core Concepts</a></li><li><a href="concepts.html#glossary" class="sub">Glossary</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Build something</span><ul class="sidebar-nav"><li><a href="recipes.html">🍳 Recipes</a></li><li><a href="recipes.html#play-file" class="sub">Play a file</a></li><li><a href="recipes.html#backing-player" class="sub">Multi-track player</a></li><li><a href="recipes.html#transport" class="sub">Play / pause / stop</a></li><li><a href="recipes.html#meters" class="sub">Position &amp; meters</a></li><li><a href="recipes.html#tempo-pitch" class="sub">Tempo &amp; pitch</a></li><li><a href="recipes.html#fx-live" class="sub">Effects while playing</a></li><li><a href="recipes.html#record" class="sub">Record &amp; monitor</a></li><li><a href="recipes.html#metronome" class="sub">Generate audio</a></li><li><a href="recipes.html#render" class="sub">Render to WAV</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">The API, in order</span><ul class="sidebar-nav"><li><a href="api-core.html">1 · Engine &amp; Config</a></li><li><a href="api-core.html#lifecycle" class="sub">Start &amp; shut down</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-core.html#devices" class="sub">Devices</a></li><li><a href="api-core.html#logging" class="sub">Logging</a></li><li><a href="api-mixer.html">2 · Mixer</a></li><li><a href="api-mixer.html#sources" class="sub">Sources on the bus</a></li><li><a href="api-mixer.html#master-effects" class="sub">Master effects</a></li><li><a href="api-mixer.html#recording" class="sub">Recording</a></li><li><a href="api-sources.html">3 · Sources</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#streamingsource" class="sub">StreamingSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel routing</a></li><li><a href="api-effects.html">4 · Effects &amp; VST3</a></li><li><a href="api-effects.html#all-effects" class="sub">The effect list</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 plugins</a></li><li><a href="api-sync.html">5 · Timeline &amp; Sync</a></li><li><a href="api-sync.html#masterclock" class="sub">MasterClock</a></li><li><a href="api-sync.html#drift-zones" class="sub">Drift correction</a></li><li><a href="api-sync.html#offline-mode" class="sub">Offline render</a></li><li><a href="api-network.html">6 · Network Sync</a></li><li><a href="api-advanced.html">7 · Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal remover</a></li><li><a href="api-advanced.html#mt3" class="sub">MT3 transcription</a></li><li><a href="api-midi.html">8 · MIDI</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI files</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI clock</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">When it breaks</span><ul class="sidebar-nav"><li><a href="troubleshooting.html">🩺 Troubleshooting</a></li><li><a href="troubleshooting.html#faq" class="sub">FAQ</a></li><li><a href="api-reference.html">📋 Reference</a></li><li><a href="api-reference.html#architecture" class="sub">Architecture</a></li><li><a href="api-reference.html#events" class="sub">Events</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#threading" class="sub">Threading rules</a></li></ul></div>
 </nav>
 <main class="main">
 
 <h1 class="page-title">Quick Start</h1>
-<p class="page-subtitle">Get OwnAudioSharp running in your .NET project in minutes.</p>
+<p class="page-subtitle">From an empty folder to a playing audio file. Three steps, about three minutes.</p>
 
-<div class="callout callout-info"><div class="callout-icon">🦀</div><p><strong>New in 4.0:</strong> the entire audio path now runs in a purpose-built native Rust engine, wrapped in the same C# API you already use. The upgrade is fully backward compatible — your existing code keeps working, and gains a <strong>fully native real-time path</strong>. <a href="api-reference.html#architecture">Read about the architecture →</a></p></div>
+<h2 id="step-1">1 · Create a project and add the package</h2>
+<p>You need <strong>.NET 10.0 or later</strong>. Everything else — including the audio decoder — comes in the package.</p>
 
-<h2 id="installation">Installation</h2>
-<p>Choose the package that fits your use case. Requires <strong>.NET 10.0 or later</strong>. The native Rust engine — including the built-in audio decoder — is bundled; there are no external codecs to configure.</p>
-<div class="table-wrap"><table>
-  <thead><tr><th>Package</th><th>Platforms</th><th>What's included</th></tr></thead>
-  <tbody>
-    <tr><td><code>OwnAudioSharp</code></td><td>Windows, Linux, macOS</td><td>The complete edition — mixing, effects, VST3, network sync, recording and MIDI, plus mastering and analysis (chord detection, note transcription) and the waveform display</td></tr>
-    <tr><td><code>OwnAudioSharp.Mobile</code></td><td>Android, iOS</td><td>The same feature set built for mobile, including matchering and the waveform display — minus the ONNX-based analysis (no chord detection, no note transcription)</td></tr>
-    <tr><td><code>OwnAudioSharp.Basic</code></td><td>Windows, Linux, macOS</td><td>Audio in and out, and nothing that could be left out — playback, recording, mixing, effects and VST3, with no analysis features, no ONNX models and no UI dependency</td></tr>
-    <tr><td><code>OwnAudioSharp.Midi</code></td><td>Windows, Linux, macOS</td><td>Standalone AOT-compatible MIDI library</td></tr>
-    <tr><td><code>OwnVocalRemover</code> <span class="pkg-badge pkg-addon">Add-on</span></td><td>Windows, Linux, macOS</td><td>Optional ONNX-based vocal separation, split out of the core API — reference only when needed</td></tr>
-  </tbody>
-</table></div>
-<div class="code-block"><div class="code-header"><span>Shell</span><button class="copy-btn">Copy</button></div><pre><code class="language-bash">dotnet add package OwnAudioSharp          # Desktop — everything
-dotnet add package OwnAudioSharp.Mobile   # Android / iOS
-dotnet add package OwnAudioSharp.Basic    # Desktop — minimal engine
-dotnet add package OwnVocalRemover        # Optional vocal separation add-on</code></pre></div>
+<div class="code-block"><div class="code-header"><span>Shell</span><button class="copy-btn">Copy</button></div><pre><code class="language-bash">dotnet new console -o MyPlayer
+cd MyPlayer
+dotnet add package OwnAudioSharp</code></pre></div>
 
-<div class="callout callout-success"><div class="callout-icon">🎵</div><p><strong>Formats out of the box:</strong> the pure-Rust decoder handles MP3, FLAC, WAV (PCM/ADPCM), AAC, ALAC, MP4/M4A, OGG/Vorbis and AIFF on every platform — no FFmpeg, no system dependencies. FFmpeg 8+ remains supported as an optional legacy fallback for exotic formats; see <a href="api-reference.html#ffmpeg">FFmpeg Integration</a>.</p></div>
+<div class="callout callout-success"><div class="callout-icon">🎵</div><p><strong>No codecs to install.</strong> MP3, FLAC, WAV, AAC, ALAC, MP4/M4A, OGG/Vorbis and AIFF all decode natively on every platform. No FFmpeg, no system dependencies.</p></div>
 
-<h2 id="architecture">Architecture</h2>
-<p>OwnAudioSharp is a thin C# surface over a native Rust engine. The design keeps the real-time audio thread — now entirely inside Rust — completely separate from your application code and the managed runtime.</p>
-<div class="code-block"><div class="code-header"><span>Thread diagram</span><button class="copy-btn">Copy</button></div><pre><code>UI / Main Thread
-  └─> OwnaudioNet.Send()     [lock-free ring buffer, &lt;0.1ms]
-       └─> AudioEngineWrapper   [managed bridge, non-blocking]
-            └─> Native Rust engine   [ownaudio-ffi + ownaudio-core]
-                 └─> Audio RT Thread  [WASAPI / CoreAudio / ALSA — fully native]</code></pre></div>
-<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p><strong>Never call blocking engine methods from the UI thread.</strong> Use <code>InitializeAsync()</code>, <code>StopAsync()</code>, and <code>ShutdownAsync()</code> in all UI applications (WPF, WinForms, MAUI, Avalonia).</p></div>
+<h2 id="step-2">2 · Paste this into Program.cs</h2>
+<p>Drop an audio file next to the project and point the path at it.</p>
 
-<h2 id="basic-playback">Basic Playback</h2>
-<p>The minimal setup to play an audio file:</p>
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnaudioNET;
+<div class="code-block"><div class="code-header"><span>C# — Program.cs</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnaudioNET;
 using OwnaudioNET.Mixing;
 using OwnaudioNET.Sources;
 
-// 1. Initialize (async is required in UI apps)
+// Open the sound card — 48 kHz, stereo, 512-frame buffer
 await OwnaudioNet.InitializeAsync();
 OwnaudioNet.Start();
 
-// 2. Create the mixer
+// The bus every source gets summed into
 var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine);
 mixer.Start();
 
-// 3. Load and play
+// Adding a source also starts it, so this is already playing
 var track = new FileSource("song.mp3");
 mixer.AddSource(track);
 
-// 4. Cleanup on app exit
+Console.WriteLine("Playing. Press Enter to stop.");
+Console.ReadLine();
+
+// Give the device back
+track.Dispose();
 mixer.Dispose();
 await OwnaudioNet.ShutdownAsync();</code></pre></div>
 
-<h2 id="custom-config">Custom Configuration</h2>
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Select WASAPI on Windows, use low latency
-var config = new AudioConfig
-{
-    SampleRate = 48000,
-    Channels   = 2,
-    BufferSize = 256,   // ~5.3ms latency
-    HostType   = OperatingSystem.IsWindows()
-                    ? EngineHostType.WASAPI
-                    : EngineHostType.None,
-    EnableInput  = false,
-    EnableOutput = true
-};
+<h2 id="step-3">3 · Run it</h2>
+<div class="code-block"><div class="code-header"><span>Shell</span><button class="copy-btn">Copy</button></div><pre><code class="language-bash">dotnet run</code></pre></div>
 
-await OwnaudioNet.InitializeAsync(config);
-OwnaudioNet.Start();</code></pre></div>
+<div class="callout callout-info"><div class="callout-icon">🔇</div><p>Silence? Nine times out of ten it's the file path or the wrong output device. <a href="troubleshooting.html#no-sound">Walk down the chain →</a></p></div>
 
-<h2 id="multi-track">Multi-Track with Sync</h2>
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine, bufferSizeInFrames: 1024);
-mixer.Start();
+<h2 id="what-happened">What just happened</h2>
+<p>Four lines did all the work, and they map exactly onto the four things you will keep using.</p>
 
-// Load tracks
-var sr = OwnaudioNet.Engine!.Config.SampleRate;
-var ch = OwnaudioNet.Engine!.Config.Channels;
+<div class="table-wrap"><table>
+  <thead><tr><th>Line</th><th>What it is</th></tr></thead>
+  <tbody>
+    <tr><td><code>InitializeAsync()</code></td><td>Opens the audio device and starts the native engine. One per app. <a href="api-core.html">Engine &amp; Config →</a></td></tr>
+    <tr><td><code>new AudioMixer(…)</code></td><td>The bus. Sums sources, holds master volume, effects, meters and the clock. <a href="api-mixer.html">Mixer →</a></td></tr>
+    <tr><td><code>new FileSource(…)</code></td><td>One thing that makes sound. Files, microphones, buffers and your own generators are all sources. <a href="api-sources.html">Sources →</a></td></tr>
+    <tr><td><code>AddSource(track)</code></td><td>Puts it on the bus and starts it. Safe to call while other audio is playing.</td></tr>
+  </tbody>
+</table></div>
 
-var vocals  = new FileSource("vocals.wav",  targetSampleRate: sr, targetChannels: ch);
-var backing = new FileSource("backing.mp3", targetSampleRate: sr, targetChannels: ch);
+<h2 id="add-an-effect">Add an effect</h2>
+<p>Effects go in two places: on the whole mix, or on one track. Here's the whole mix.</p>
 
-// Attach to master clock for sample-accurate sync
-vocals.AttachToClock(mixer.MasterClock);
-backing.AttachToClock(mixer.MasterClock);
-
-// Set volume and stereo pan
-vocals.Volume  = 0.9f;
-backing.Volume = 0.8f;
-vocals.Pan  = -0.2f;   // slightly left
-backing.Pan =  0.2f;   // slightly right
-
-// Seek and play
-vocals.Seek(0);
-backing.Seek(0);
-vocals.Play();
-backing.Play();
-
-mixer.AddSource(vocals);
-mixer.AddSource(backing);</code></pre></div>
-
-<h2 id="effects">Add Effects</h2>
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnaudioNET.Effects;
-using OwnaudioNET.Sources;
-
-// Per-track effect
-var source = new FileSource("guitar.wav");
-var trackFx = new SourceWithEffects(source);
-trackFx.AddEffect(new ReverbEffect { RoomSize = 0.6f, Mix = 0.25f });
-trackFx.AddEffect(new CompressorEffect { Ratio = 4f, AttackTimeMs = 10f });
-mixer.AddSource(trackFx);
-
-// Master bus effect
-mixer.AddMasterEffect(new LimiterEffect());
-mixer.AddMasterEffect(new EqualizerEffect());</code></pre></div>
-
-<h2 id="vst3-quick">VST3 Plugin</h2>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnaudioNET.Effects;
 
-var host = await VST3PluginHost.CreateAsync("/path/to/reverb.vst3");
-int sr = OwnaudioNet.Engine!.Config.SampleRate;
-await host.InitializeAudioAsync(sr, maxBlockSize: 1024);
+mixer.AddMasterEffect(new ReverbEffect { RoomSize = 0.7f, Mix = 0.3f });
+mixer.AddMasterEffect(new LimiterEffect());   // runs after the reverb</code></pre></div>
 
-// Use as master effect
-mixer.AddMasterEffect(host.GetProcessor());</code></pre></div>
+<p>And here's one track, wrapped in its own chain:</p>
 
-<h2 id="next-steps">Next Steps</h2>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var chain = new SourceWithEffects(new FileSource("guitar.wav"));
+chain.AddEffect(new CompressorEffect { Ratio = 4f, AttackTimeMs = 10f });
+chain.AddEffect(new ReverbEffect { RoomSize = 0.6f, Mix = 0.25f });
+
+mixer.AddSource(chain);   // add the wrapper, not the source inside it</code></pre></div>
+
+<h2 id="ui-apps">If you're building a UI app</h2>
+<p>One rule, and it covers WPF, WinForms, Avalonia and MAUI alike: <strong>use the async methods</strong>. Opening and closing a device blocks, and on Linux it can block for seconds.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Startup — off the UI thread
+var config = OwnaudioNet.CreateDefaultConfig();
+config.EnableInput = false;
+
+await OwnaudioNet.InitializeAsync(config, bufferMultiplier: 16);
+OwnaudioNet.Start();
+
+_mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine, bufferSizeInFrames: 1024);
+_mixer.Start();
+
+// Shutdown
+_mixer?.Stop();
+_mixer?.Dispose();
+await OwnaudioNet.ShutdownAsync();</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>Everything else — <code>Play</code>, <code>Seek</code>, <code>Volume</code>, <code>AddSource</code> — is non-blocking and safe straight from a button click or a slider. <a href="recipes.html#engine-service">A ready-made engine service →</a></p></div>
+
+<h2 id="packages">Which package</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>Package</th><th>Platforms</th><th>What's in it</th></tr></thead>
+  <tbody>
+    <tr><td><code>OwnAudioSharp</code></td><td>Windows · macOS · Linux</td><td>Everything: mixing, effects, VST3, network sync, recording, MIDI, mastering, analysis, waveform display</td></tr>
+    <tr><td><code>OwnAudioSharp.Mobile</code></td><td>Android · iOS</td><td>The same, minus the ONNX-based analysis</td></tr>
+    <tr><td><code>OwnAudioSharp.Basic</code></td><td>Windows · macOS · Linux</td><td>Audio in and out only — no analysis, no ONNX, no UI dependency</td></tr>
+    <tr><td><code>OwnAudioSharp.Midi</code></td><td>Windows · macOS · Linux</td><td>Standalone AOT-compatible MIDI library</td></tr>
+    <tr><td><code>OwnVocalRemover</code> <span class="pkg-badge pkg-addon">Add-on</span></td><td>Windows · macOS · Linux</td><td>Optional ONNX vocal separation</td></tr>
+  </tbody>
+</table></div>
+
+<div class="code-block"><div class="code-header"><span>Shell</span><button class="copy-btn">Copy</button></div><pre><code class="language-bash">dotnet add package OwnAudioSharp          # Desktop — everything
+dotnet add package OwnAudioSharp.Mobile   # Android / iOS
+dotnet add package OwnAudioSharp.Basic    # Desktop — minimal engine
+dotnet add package OwnAudioSharp.Midi     # MIDI only
+dotnet add package OwnVocalRemover        # Optional vocal separation</code></pre></div>
+
+<h2 id="next-steps">Next steps</h2>
 <div class="card-grid">
-  <a href="api-core.html" class="card"><div class="card-icon">🔧</div><div class="card-title">OwnaudioNet API</div><div class="card-desc">Full initialization and device management reference.</div></a>
-  <a href="api-mixer.html" class="card"><div class="card-icon">🎚️</div><div class="card-title">AudioMixer</div><div class="card-desc">Recording, metering, master effects.</div></a>
-  <a href="api-sync.html" class="card"><div class="card-icon">⏱️</div><div class="card-title">Synchronization</div><div class="card-desc">Sample-accurate multi-track clock.</div></a>
-  <a href="api-midi.html" class="card"><div class="card-icon">🎹</div><div class="card-title">MIDI API</div><div class="card-desc">Real-time I/O, SMF files, hardware clock.</div></a>
+  <a href="concepts.html" class="card"><div class="card-icon">🧭</div><div class="card-title">Core Concepts</div><div class="card-desc">The five pieces the whole API is built from.</div></a>
+  <a href="recipes.html" class="card"><div class="card-icon">🍳</div><div class="card-title">Recipes</div><div class="card-desc">Multi-track sync, meters, recording, VST3 — complete and copyable.</div></a>
+  <a href="api-core.html" class="card"><div class="card-icon">🔧</div><div class="card-title">The API</div><div class="card-desc">Every type and parameter, in the order you'll meet them.</div></a>
+  <a href="troubleshooting.html" class="card"><div class="card-icon">🩺</div><div class="card-title">Troubleshooting</div><div class="card-desc">When it doesn't do what you expected.</div></a>
 </div>
 
 </main>

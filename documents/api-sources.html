@@ -6,6 +6,7 @@
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Audio Sources — OwnAudioSharp</title>
+  <meta name="description" content="FileSource, SampleSource, StreamingSource, InputSource and SourceWithEffects — every way to make sound in OwnAudioSharp.">
   <link rel="stylesheet" href="../assets/docs.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 </head>
@@ -13,26 +14,37 @@
 <nav class="topnav">
   <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
   <a class="topnav-logo" href="../index.html"><img src="../ownaudio-logo.svg" alt="OwnAudioSharp" height="24"></a>
-  <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="api-core.html" class="active">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
+  <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="concepts.html">Concepts</a></li><li><a href="recipes.html">Recipes</a></li><li><a href="api-core.html" class="active">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
   <div class="topnav-right"><span class="badge-version">v4.0.3</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
 </nav>
 <div id="sidebar-overlay" class="sidebar-overlay"></div>
 <div class="layout">
 <nav id="sidebar" class="sidebar">
-  <div class="sidebar-section"><span class="sidebar-label">Getting Started</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">High-Level API</span><ul class="sidebar-nav"><li><a href="api-core.html">OwnaudioNet</a></li><li><a href="api-core.html#logging" class="sub">Logging</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-mixer.html">AudioMixer</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Audio Sources</span><ul class="sidebar-nav"><li><a href="api-sources.html">Source Overview</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#streamingsource" class="sub">StreamingSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#sourcewitheffects" class="sub">SourceWithEffects</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel Routing</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Processing</span><ul class="sidebar-nav"><li><a href="api-sync.html">Synchronization</a></li><li><a href="api-effects.html">Built-in Effects</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 Plugins</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Network &amp; Features</span><ul class="sidebar-nav"><li><a href="api-network.html">Network Sync</a></li><li><a href="api-advanced.html">Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal Remover</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord Detection</a></li><li><a href="api-advanced.html#mt3" class="sub">MT3 Transcription</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">MIDI</span><ul class="sidebar-nav"><li><a href="api-midi.html">MIDI Overview</a></li><li><a href="api-midi.html#port-management" class="sub">Port Management</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI File</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI Clock</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Reference</span><ul class="sidebar-nav"><li><a href="api-reference.html">Events &amp; Types</a></li><li><a href="api-reference.html#architecture" class="sub">Architecture</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#best-practices" class="sub">Best Practices</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Start here</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li><li><a href="concepts.html">🧭 Core Concepts</a></li><li><a href="concepts.html#glossary" class="sub">Glossary</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Build something</span><ul class="sidebar-nav"><li><a href="recipes.html">🍳 Recipes</a></li><li><a href="recipes.html#play-file" class="sub">Play a file</a></li><li><a href="recipes.html#backing-player" class="sub">Multi-track player</a></li><li><a href="recipes.html#transport" class="sub">Play / pause / stop</a></li><li><a href="recipes.html#meters" class="sub">Position &amp; meters</a></li><li><a href="recipes.html#tempo-pitch" class="sub">Tempo &amp; pitch</a></li><li><a href="recipes.html#fx-live" class="sub">Effects while playing</a></li><li><a href="recipes.html#record" class="sub">Record &amp; monitor</a></li><li><a href="recipes.html#metronome" class="sub">Generate audio</a></li><li><a href="recipes.html#render" class="sub">Render to WAV</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">The API, in order</span><ul class="sidebar-nav"><li><a href="api-core.html">1 · Engine &amp; Config</a></li><li><a href="api-core.html#lifecycle" class="sub">Start &amp; shut down</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-core.html#devices" class="sub">Devices</a></li><li><a href="api-core.html#logging" class="sub">Logging</a></li><li><a href="api-mixer.html">2 · Mixer</a></li><li><a href="api-mixer.html#sources" class="sub">Sources on the bus</a></li><li><a href="api-mixer.html#master-effects" class="sub">Master effects</a></li><li><a href="api-mixer.html#recording" class="sub">Recording</a></li><li><a href="api-sources.html">3 · Sources</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#streamingsource" class="sub">StreamingSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel routing</a></li><li><a href="api-effects.html">4 · Effects &amp; VST3</a></li><li><a href="api-effects.html#all-effects" class="sub">The effect list</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 plugins</a></li><li><a href="api-sync.html">5 · Timeline &amp; Sync</a></li><li><a href="api-sync.html#masterclock" class="sub">MasterClock</a></li><li><a href="api-sync.html#drift-zones" class="sub">Drift correction</a></li><li><a href="api-sync.html#offline-mode" class="sub">Offline render</a></li><li><a href="api-network.html">6 · Network Sync</a></li><li><a href="api-advanced.html">7 · Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal remover</a></li><li><a href="api-advanced.html#mt3" class="sub">MT3 transcription</a></li><li><a href="api-midi.html">8 · MIDI</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI files</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI clock</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">When it breaks</span><ul class="sidebar-nav"><li><a href="troubleshooting.html">🩺 Troubleshooting</a></li><li><a href="troubleshooting.html#faq" class="sub">FAQ</a></li><li><a href="api-reference.html">📋 Reference</a></li><li><a href="api-reference.html#architecture" class="sub">Architecture</a></li><li><a href="api-reference.html#events" class="sub">Events</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#threading" class="sub">Threading rules</a></li></ul></div>
 </nav>
 <main class="main">
 
+<p class="section-eyebrow">Step 3 of 8</p>
 <h1 class="page-title">Audio Sources</h1>
-<p class="page-subtitle">All sources implement <code>IAudioSource</code> and inherit from <code>BaseAudioSource</code>. Namespace: <code>OwnaudioNET.Sources</code></p>
+<p class="page-subtitle">Everything that makes a sound. Namespace: <code>OwnaudioNET.Sources</code></p>
 
-<h2 id="common-api">Common API (all sources)</h2>
+<p>There are four kinds of source and one wrapper. They all implement <code>IAudioSource</code>, so learning one teaches you the rest.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Type</th><th>Reach for it when…</th></tr></thead>
+  <tbody>
+    <tr><td><a href="#filesource"><code>FileSource</code></a></td><td>You have a file. Streamed from disk, seekable, tempo- and pitch-shiftable.</td></tr>
+    <tr><td><a href="#samplesource"><code>SampleSource</code></a></td><td>The audio is already a <code>float[]</code> in memory — short clips, one-shots.</td></tr>
+    <tr><td><a href="#streamingsource"><code>StreamingSource</code></a></td><td>You want to generate audio — a synth, a metronome, a network stream.</td></tr>
+    <tr><td><a href="#inputsource"><code>InputSource</code></a></td><td>The audio is arriving live from a mic or line input.</td></tr>
+    <tr><td><a href="#sourcewitheffects"><code>SourceWithEffects</code></a></td><td>Not a source — a wrapper that gives any of the above its own effect chain.</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="common-api">What they all share</h2>
 <div class="table-wrap"><table class="prop-table">
   <thead><tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
   <tbody>
@@ -299,6 +311,13 @@ var source = new FileSource("mono.wav", targetChannels: 2);
 
 source.RouteToChannels(2, 3); // spread to output channels 2+3
 mixer.AddSource(source);</code></pre></div>
+
+<h2 id="next">Next</h2>
+<div class="card-grid">
+  <a href="api-effects.html" class="card"><div class="card-icon">🎛️</div><div class="card-title">4 · Effects &amp; VST3</div><div class="card-desc">What you can hang off a source.</div></a>
+  <a href="api-sync.html" class="card"><div class="card-icon">⏱️</div><div class="card-title">5 · Timeline &amp; Sync</div><div class="card-desc">Keeping several sources on one timeline.</div></a>
+  <a href="recipes.html#metronome" class="card"><div class="card-icon">🍳</div><div class="card-title">Generate audio</div><div class="card-desc">A working StreamingSource metronome.</div></a>
+</div>
 
 <div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Setting <code>OutputChannelMapping</code> to an array whose length does not match <code>Config.Channels</code> throws <code>ArgumentException</code>. Always set <code>targetChannels</code> first if you need a different channel count.</p></div>
 

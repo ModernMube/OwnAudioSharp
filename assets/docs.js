@@ -104,6 +104,17 @@ document.addEventListener('DOMContentLoaded', () => {
     h.appendChild(a);
   });
 
+  /* "Edit this page" — doc pages only, they all live under /documents */
+  const main = document.querySelector('main.main');
+  if (main && location.pathname.includes('/documents/')) {
+    const foot = document.createElement('div');
+    foot.className = 'page-edit';
+    foot.innerHTML =
+      '<a href="https://github.com/ModernMube/OwnAudioSharp/edit/master/documents/' +
+      currentPage + '" target="_blank" rel="noopener">✏️ Found a mistake? Edit this page on GitHub</a>';
+    main.appendChild(foot);
+  }
+
 });
 
 function sunIcon() {

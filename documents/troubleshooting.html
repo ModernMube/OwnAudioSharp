@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <script>(function(){var t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);})();</script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Troubleshooting &amp; FAQ — OwnAudioSharp</title>
+  <meta name="description" content="No sound, crackling, drift, plugin and device problems in OwnAudioSharp — what happened, why, and the fix.">
+  <link rel="stylesheet" href="../assets/docs.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+</head>
+<body>
+<nav class="topnav">
+  <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+  <a class="topnav-logo" href="../index.html"><img src="../ownaudio-logo.svg" alt="OwnAudioSharp" height="24"></a>
+  <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="concepts.html">Concepts</a></li><li><a href="recipes.html">Recipes</a></li><li><a href="api-core.html" class="active">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
+  <div class="topnav-right"><span class="badge-version">v4.0.3</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
+</nav>
+<div id="sidebar-overlay" class="sidebar-overlay"></div>
+<div class="layout">
+<nav id="sidebar" class="sidebar">
+  <div class="sidebar-section"><span class="sidebar-label">Start here</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li><li><a href="concepts.html">🧭 Core Concepts</a></li><li><a href="concepts.html#glossary" class="sub">Glossary</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Build something</span><ul class="sidebar-nav"><li><a href="recipes.html">🍳 Recipes</a></li><li><a href="recipes.html#play-file" class="sub">Play a file</a></li><li><a href="recipes.html#backing-player" class="sub">Multi-track player</a></li><li><a href="recipes.html#transport" class="sub">Play / pause / stop</a></li><li><a href="recipes.html#meters" class="sub">Position &amp; meters</a></li><li><a href="recipes.html#tempo-pitch" class="sub">Tempo &amp; pitch</a></li><li><a href="recipes.html#fx-live" class="sub">Effects while playing</a></li><li><a href="recipes.html#record" class="sub">Record &amp; monitor</a></li><li><a href="recipes.html#metronome" class="sub">Generate audio</a></li><li><a href="recipes.html#render" class="sub">Render to WAV</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">The API, in order</span><ul class="sidebar-nav"><li><a href="api-core.html">1 · Engine &amp; Config</a></li><li><a href="api-core.html#lifecycle" class="sub">Start &amp; shut down</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-core.html#devices" class="sub">Devices</a></li><li><a href="api-core.html#logging" class="sub">Logging</a></li><li><a href="api-mixer.html">2 · Mixer</a></li><li><a href="api-mixer.html#sources" class="sub">Sources on the bus</a></li><li><a href="api-mixer.html#master-effects" class="sub">Master effects</a></li><li><a href="api-mixer.html#recording" class="sub">Recording</a></li><li><a href="api-sources.html">3 · Sources</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#streamingsource" class="sub">StreamingSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel routing</a></li><li><a href="api-effects.html">4 · Effects &amp; VST3</a></li><li><a href="api-effects.html#all-effects" class="sub">The effect list</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 plugins</a></li><li><a href="api-sync.html">5 · Timeline &amp; Sync</a></li><li><a href="api-sync.html#masterclock" class="sub">MasterClock</a></li><li><a href="api-sync.html#drift-zones" class="sub">Drift correction</a></li><li><a href="api-sync.html#offline-mode" class="sub">Offline render</a></li><li><a href="api-network.html">6 · Network Sync</a></li><li><a href="api-advanced.html">7 · Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal remover</a></li><li><a href="api-advanced.html#mt3" class="sub">MT3 transcription</a></li><li><a href="api-midi.html">8 · MIDI</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI files</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI clock</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">When it breaks</span><ul class="sidebar-nav"><li><a href="troubleshooting.html">🩺 Troubleshooting</a></li><li><a href="troubleshooting.html#faq" class="sub">FAQ</a></li><li><a href="api-reference.html">📋 Reference</a></li><li><a href="api-reference.html#architecture" class="sub">Architecture</a></li><li><a href="api-reference.html#events" class="sub">Events</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#threading" class="sub">Threading rules</a></li></ul></div>
+</nav>
+<main class="main">
+
+<h1 class="page-title">Troubleshooting</h1>
+<p class="page-subtitle">What happened, why it happened, and the line of code that fixes it.</p>
+
+<div class="callout callout-info"><div class="callout-icon">🔦</div><p><strong>Before anything else, turn the log on.</strong> It is silent by default and it will usually tell you the answer outright.</p></div>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using Logger;
+
+await OwnaudioNet.InitializeAsync(config, logLevel: Log.Level.Info);
+
+// or flip it at any time while running
+Log.LoggerLevel = Log.Level.Info;</code></pre></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="no-sound">Nothing plays</h2>
+<p><strong>Why:</strong> almost always one of four things — the engine never started, the mixer never started, the source was never added, or something is at zero volume.</p>
+
+<div class="code-block"><div class="code-header"><span>C# — walk down the chain</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">Console.WriteLine(OwnaudioNet.IsInitialized);   // false → InitializeAsync never completed
+Console.WriteLine(OwnaudioNet.IsRunning);       // false → you forgot Start()
+Console.WriteLine(mixer.IsRunning);             // false → mixer.Start()
+Console.WriteLine(mixer.SourceCount);           // 0     → AddSource()
+Console.WriteLine(mixer.MasterVolume);          // 0     → there it is
+Console.WriteLine(source.State);                // Stopped → Play()
+Console.WriteLine(mixer.LeftPeak);              // 0 while playing → nothing reaching the bus</code></pre></div>
+
+<p>Two more that catch people out:</p>
+<ul>
+  <li><strong>Output went to a device nobody is listening to.</strong> Check <code>OwnaudioNet.GetOutputDevices()</code> and which one is actually connected to speakers.</li>
+  <li><strong>The file finished instantly.</strong> If <code>source.Duration</code> is 0 the file didn't decode — see <a href="#file-wont-load">the file won't load</a>.</li>
+</ul>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="crackling">Crackling, clicks or stuttering</h2>
+<p><strong>Why:</strong> the engine asked for the next block of audio and it wasn't ready. The mix thread is not keeping up with the buffer size you gave it.</p>
+
+<p>Fix it in this order — each step costs a little more latency than the last.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Step</th><th>Do this</th><th>Costs</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Raise <code>bufferMultiplier</code> to 16 or 32 at initialization</td><td>Nothing audible — it only deepens the internal safety buffer</td></tr>
+    <tr><td>2</td><td>Raise <code>AudioConfig.BufferSize</code> from 512 to 1024</td><td>~10 ms more latency</td></tr>
+    <tr><td>3</td><td>Raise the mixer's <code>bufferSizeInFrames</code> to 1024 for 20+ tracks</td><td>Slightly coarser position updates</td></tr>
+    <tr><td>4</td><td>Look at what your own code is doing on the audio path</td><td>—</td></tr>
+  </tbody>
+</table></div>
+
+<div class="code-block"><div class="code-header"><span>C# — the usual cure</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// 8+ sources, or 2+ VST plugins on the master bus
+await OwnaudioNet.InitializeAsync(config, bufferMultiplier: 32);
+OwnaudioNet.Start();
+
+var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine, bufferSizeInFrames: 1024);
+mixer.Start();</code></pre></div>
+
+<p>To find out whether it really is an underrun, ask:</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">mixer.BufferUnderrun += (_, e) =&gt;
+    Console.WriteLine($"Underrun: {e.MissedFrames} frames at {e.Position}");
+
+mixer.TrackDropout += (_, e) =&gt;
+    Console.WriteLine($"{e.TrackName} fell behind: {e.Reason} ({e.MissedFrames} frames)");</code></pre></div>
+
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>If you wrote a <code>StreamingSource</code> generator, check it for allocations first. A <code>new</code>, a LINQ query or an interpolated string inside the render callback is the most common cause of clicks that survive every buffer increase.</p></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="freeze">The app freezes at startup</h2>
+<p><strong>Why:</strong> a blocking engine call on the UI thread. Opening a device is not instant — on Linux, PulseAudio enumeration alone can take five seconds.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// ❌ freezes the window
+OwnaudioNet.Initialize(config);
+OwnaudioNet.Shutdown();
+
+// ✅
+await OwnaudioNet.InitializeAsync(config);
+await OwnaudioNet.ShutdownAsync();</code></pre></div>
+
+<p>The same applies to <code>Stop()</code> / <code>StopAsync()</code>, which waits for the audio thread to join. Everything else — <code>Play</code>, <code>Seek</code>, <code>Volume</code>, <code>AddSource</code> — is safe to call from anywhere.</p>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="device-lost">The audio interface was unplugged</h2>
+<p><strong>Why:</strong> the device vanished mid-stream. By default the engine hops to the system default and hops back when the device returns; if you turned that off it parks in <code>DeviceDisconnected</code> and waits.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">config.FallbackToDefaultOnDisconnect = true;   // the default — keep playing on built-in output
+
+// Be told when the stream itself dies, instead of just going quiet
+mixer.StreamFaulted += (_, e) =&gt;
+{
+    if (e.Kind == AudioStreamFaultKind.DeviceNotAvailable)
+        ShowToast("Audio device disconnected");
+};
+
+// Be told when the engine moves to a different device
+OwnaudioNet.Engine!.OutputDeviceChanged += (_, e) =&gt;
+    Console.WriteLine($"Now playing on {e.NewDeviceInfo.Name}");</code></pre></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="drift">Tracks drift apart</h2>
+<p><strong>Why:</strong> the sources were never attached to the master clock, so each one is free-running on its own decoder. They start together and slowly separate.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Attach BEFORE Play() — attaching afterwards does not retro-fix the drift
+foreach (var src in sources)
+{
+    src.AttachToClock(mixer.MasterClock);
+    mixer.AddSourcePrepared(src);
+}
+mixer.StartPreparedSources(0.0);</code></pre></div>
+
+<p>If they are attached and <em>still</em> drift, the engine is telling you it's under pressure:</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var diag = fileSource.SyncDiagnostics;
+
+if (diag.IsRelaxed)
+    Console.WriteLine($"Tolerances widened {diag.AdaptiveScale:F1}× — the mix thread is struggling");</code></pre></div>
+
+<p>A scale above <code>1.0</code> means the sync engine had to relax its thresholds to keep up. Treat it as the same symptom as <a href="#crackling">crackling</a> and give the mix thread more headroom.</p>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="file-wont-load">A file won't load</h2>
+<p><strong>Why:</strong> either the format isn't in the built-in set, or the file is damaged, or the path is wrong. A <code>DecoderException</code> means the decoder saw the file and gave up on it.</p>
+
+<p>Handled natively, on every platform, with no extra install: <strong>MP3, FLAC, WAV (PCM/ADPCM), AAC, ALAC, MP4/M4A, OGG/Vorbis, AIFF</strong>.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">try
+{
+    var source = new FileSource(path, targetSampleRate: sr, targetChannels: ch);
+    if (source.Duration &lt;= 0)
+        Console.WriteLine("Decoded, but empty — the file is probably truncated.");
+}
+catch (DecoderException ex)
+{
+    Console.WriteLine($"Cannot decode {path}: {ex.Message}");
+}</code></pre></div>
+
+<p>For anything outside that list — Opus, WMA, AC3 — install FFmpeg 8+ and it is picked up automatically as a fallback. See <a href="api-reference.html#ffmpeg">FFmpeg integration</a>.</p>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="effect-silent">An effect does nothing</h2>
+<p><strong>Why:</strong> three candidates, in order of likelihood.</p>
+
+<ul>
+  <li><strong>You added effects to a source that is already in the mixer.</strong> A raw source has no chain — the mixer has to be holding the <code>SourceWithEffects</code> wrapper, not the source inside it.</li>
+  <li><strong><code>Enabled</code> is false</strong>, or <code>Mix</code> is at 0.</li>
+  <li><strong>The effect isn't ready.</strong> VST3 processors must have <code>InitializeAudioAsync()</code> completed before they are added; <code>IsReady</code> tells you.</li>
+</ul>
+
+<div class="code-block"><div class="code-header"><span>C# — the wrapper swap</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var chain = new SourceWithEffects(source);
+chain.AddEffect(new ReverbEffect { Mix = 0.3f });
+
+mixer.RemoveSource(source.Id);   // the raw one comes out
+mixer.AddSource(chain);          // the wrapper goes in</code></pre></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="vst-fails">A VST3 plugin won't load</h2>
+<p><strong>Why:</strong> it's an instrument, its architecture doesn't match, or its audio setup failed for the current sample rate.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">VST3PluginHost host;
+try { host = await VST3PluginHost.CreateAsync(path); }
+catch (Exception ex) { ShowError($"Could not load the plugin: {ex.Message}"); return; }
+
+if (!host.IsEffect)
+{
+    host.Dispose();
+    ShowError(host.IsInstrument
+        ? "That's an instrument — only effect plugins can go in a slot."
+        : "Unknown plugin type.");
+    return;
+}
+
+if (!await host.InitializeAudioAsync(OwnaudioNet.Engine!.Config.SampleRate, maxBlockSize: 4096))
+{
+    host.Dispose();
+    ShowError("The plugin could not run at this sample rate.");
+    return;
+}</code></pre></div>
+
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>A 64-bit process cannot load a 32-bit plugin, and vice versa. On Apple Silicon an Intel-only plugin will not load either.</p></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="memory">Memory keeps growing</h2>
+<p><strong>Why:</strong> something that owns native memory is never being released. Two usual suspects.</p>
+
+<div class="code-block"><div class="code-header"><span>C# — always return input buffers</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">float[]? buffer = OwnaudioNet.Receive(out int sampleCount);
+if (buffer != null)
+{
+    try     { /* use buffer[0..sampleCount-1] */ }
+    finally { OwnaudioNet.ReturnInputBuffer(buffer); }   // never skip this
+}</code></pre></div>
+
+<p>And dispose sources you replace. Loading a new file into a track without disposing the old <code>FileSource</code> leaks its decoder and ring buffer every time.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">mixer.RemoveSource(oldSource.Id);
+oldSource.Dispose();</code></pre></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="recording-off">The recording is empty or out of time</h2>
+<p><strong>Why:</strong> recording captures what leaves the mixer. If nothing was on the bus, the file is silence. If a live take lands late, that's the hardware capture delay.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Trim the capture delay off the front so the take lines up with the click
+mixer.StartRecording("take.wav", compensateInputLatency: true);
+// ...
+mixer.StopRecording();
+
+int trimmed = mixer.LastRecordingLatencyOffsetFrames;   // what was dropped</code></pre></div>
+
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p><code>StopRecording()</code> is what finalizes and closes the WAV header. Kill the process without it and you get an unplayable file.</p></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="exceptions">Exceptions you may see</h2>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Type</th><th>What it means</th><th>What to do</th></tr></thead>
+  <tbody>
+    <tr><td><code>DeviceException</code></td><td>The requested device could not be opened — wrong ID, in exclusive use, or gone.</td><td>Fall back to <code>OutputDeviceId = null</code> and re-enumerate.</td></tr>
+    <tr><td><code>DecoderException</code></td><td>The file could not be decoded.</td><td>Check the format against the supported list; try FFmpeg as a fallback.</td></tr>
+    <tr><td><code>StreamException</code></td><td>The native audio stream failed to open or died.</td><td>Try a larger buffer or a different host type.</td></tr>
+    <tr><td><code>HostApiNotAvailableException</code></td><td>The <code>HostType</code> you asked for doesn't exist on this machine.</td><td>Use <code>EngineHostType.None</code> and let the engine choose.</td></tr>
+    <tr><td><code>AsioDriverNotFoundException</code></td><td>No ASIO driver installed.</td><td>Install the interface's driver, or use WASAPI.</td></tr>
+    <tr><td><code>AbiVersionMismatchException</code></td><td>The managed package and the native library are different versions.</td><td>Clear <code>bin/</code> and <code>obj/</code>, restore, and make sure only one OwnAudioSharp version is referenced.</td></tr>
+    <tr><td><code>AudioEngineException</code></td><td>A general engine-level failure.</td><td>Turn on <code>Log.Level.Error</code> — the message names the stage that failed.</td></tr>
+  </tbody>
+</table></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="faq">FAQ</h2>
+
+<h3>Which package do I need?</h3>
+<p><code>OwnAudioSharp</code> for desktop with everything. <code>OwnAudioSharp.Mobile</code> for Android and iOS. <code>OwnAudioSharp.Basic</code> when you only want audio in and out and care about size. MIDI is its own package, and vocal separation and MT3 are optional add-ons.</p>
+
+<h3>Do I need FFmpeg?</h3>
+<p>No. The Rust decoder handles the common formats out of the box. FFmpeg 8+ is only picked up as an optional fallback for exotic formats if it happens to be installed.</p>
+
+<h3>How many sources can one mixer hold?</h3>
+<p>25 — <code>AudioConstants.MaxAudioSources</code>. Past about eight, give the mix thread more headroom with <code>bufferMultiplier</code>.</p>
+
+<h3>What latency can I expect?</h3>
+<p><code>BufferSize ÷ SampleRate</code>. 512 frames at 48 kHz is ~10.6 ms; the low-latency preset's 128 frames is ~2.7 ms. Add the driver's own hardware latency, readable from <code>OwnaudioNet.InputLatencyFrames</code> and <code>OutputLatencyFrames</code> once audio is flowing.</p>
+
+<h3>Can I run two mixers at once?</h3>
+<p>Yes, but one is almost always the right answer. If you do, register the one network sync should follow with <code>OwnaudioNet.SetPrimaryAudioMixer()</code>.</p>
+
+<h3>Does it work with AOT and trimming?</h3>
+<p>Yes — the managed side is AOT-compatible and trimmable, and the engine is native anyway.</p>
+
+<h3>Can I test without a sound card?</h3>
+<p>Yes. <code>OwnaudioNet.Initialize(config, useMockEngine: true)</code> gives you the whole API against a mock engine, which is how the library's own ~290 tests run in CI.</p>
+
+<h3>Why is my tempo change ignored?</h3>
+<p><code>Tempo</code> and <code>PitchShift</code> are wired on <code>FileSource</code>. The other source types accept the value for compatibility but don't apply it. Tempo is also clamped to 0.8–1.2.</p>
+
+<h2 id="still-stuck">Still stuck</h2>
+<p>Turn on <code>Log.Level.Info</code>, reproduce it, and <a href="https://github.com/ModernMube/OwnAudioSharp/issues" target="_blank">open an issue</a> with the log, your <code>AudioConfig</code>, and the platform. That is usually enough to spot it from the outside.</p>
+
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+<script src="../assets/docs.js"></script>
+</body></html>

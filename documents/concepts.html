@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <script>(function(){var t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);})();</script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Core Concepts — OwnAudioSharp</title>
+  <meta name="description" content="The five pieces of OwnAudioSharp — engine, mixer, sources, effects and clock — and the audio vocabulary you need to read the rest of the docs.">
+  <link rel="stylesheet" href="../assets/docs.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+</head>
+<body>
+<nav class="topnav">
+  <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+  <a class="topnav-logo" href="../index.html"><img src="../ownaudio-logo.svg" alt="OwnAudioSharp" height="24"></a>
+  <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="concepts.html" class="active">Concepts</a></li><li><a href="recipes.html">Recipes</a></li><li><a href="api-core.html">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
+  <div class="topnav-right"><span class="badge-version">v4.0.3</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
+</nav>
+<div id="sidebar-overlay" class="sidebar-overlay"></div>
+<div class="layout">
+<nav id="sidebar" class="sidebar">
+  <div class="sidebar-section"><span class="sidebar-label">Start here</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li><li><a href="concepts.html">🧭 Core Concepts</a></li><li><a href="concepts.html#glossary" class="sub">Glossary</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Build something</span><ul class="sidebar-nav"><li><a href="recipes.html">🍳 Recipes</a></li><li><a href="recipes.html#play-file" class="sub">Play a file</a></li><li><a href="recipes.html#backing-player" class="sub">Multi-track player</a></li><li><a href="recipes.html#transport" class="sub">Play / pause / stop</a></li><li><a href="recipes.html#meters" class="sub">Position &amp; meters</a></li><li><a href="recipes.html#tempo-pitch" class="sub">Tempo &amp; pitch</a></li><li><a href="recipes.html#fx-live" class="sub">Effects while playing</a></li><li><a href="recipes.html#record" class="sub">Record &amp; monitor</a></li><li><a href="recipes.html#metronome" class="sub">Generate audio</a></li><li><a href="recipes.html#render" class="sub">Render to WAV</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">The API, in order</span><ul class="sidebar-nav"><li><a href="api-core.html">1 · Engine &amp; Config</a></li><li><a href="api-core.html#lifecycle" class="sub">Start &amp; shut down</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-core.html#devices" class="sub">Devices</a></li><li><a href="api-core.html#logging" class="sub">Logging</a></li><li><a href="api-mixer.html">2 · Mixer</a></li><li><a href="api-mixer.html#sources" class="sub">Sources on the bus</a></li><li><a href="api-mixer.html#master-effects" class="sub">Master effects</a></li><li><a href="api-mixer.html#recording" class="sub">Recording</a></li><li><a href="api-sources.html">3 · Sources</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#streamingsource" class="sub">StreamingSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel routing</a></li><li><a href="api-effects.html">4 · Effects &amp; VST3</a></li><li><a href="api-effects.html#all-effects" class="sub">The effect list</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 plugins</a></li><li><a href="api-sync.html">5 · Timeline &amp; Sync</a></li><li><a href="api-sync.html#masterclock" class="sub">MasterClock</a></li><li><a href="api-sync.html#drift-zones" class="sub">Drift correction</a></li><li><a href="api-sync.html#offline-mode" class="sub">Offline render</a></li><li><a href="api-network.html">6 · Network Sync</a></li><li><a href="api-advanced.html">7 · Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal remover</a></li><li><a href="api-advanced.html#mt3" class="sub">MT3 transcription</a></li><li><a href="api-midi.html">8 · MIDI</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI files</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI clock</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">When it breaks</span><ul class="sidebar-nav"><li><a href="troubleshooting.html">🩺 Troubleshooting</a></li><li><a href="troubleshooting.html#faq" class="sub">FAQ</a></li><li><a href="api-reference.html">📋 Reference</a></li><li><a href="api-reference.html#architecture" class="sub">Architecture</a></li><li><a href="api-reference.html#events" class="sub">Events</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#threading" class="sub">Threading rules</a></li></ul></div>
+</nav>
+<main class="main">
+
+<h1 class="page-title">Core Concepts</h1>
+<p class="page-subtitle">Five pieces. Learn what each one is for and the rest of the API is just detail.</p>
+
+<p>OwnAudioSharp has a small vocabulary: an <strong>engine</strong> that owns the sound card, a <strong>mixer</strong> that combines audio, <strong>sources</strong> that produce it, <strong>effects</strong> that shape it, and a <strong>clock</strong> that keeps everything on the same timeline. Everything else in these docs hangs off those five.</p>
+
+<h2 id="signal-flow">How audio flows</h2>
+<p>Sound moves in one direction, from your sources down to the speakers. Every feature in the library plugs in somewhere on this path.</p>
+
+<div class="stack">
+  <div class="stack-layer">
+    <div><div class="stack-layer-title">Sources</div><div class="stack-layer-desc">Where audio comes from — a file, a mic, a buffer, your own generator</div></div>
+    <span class="stack-tag">FileSource</span>
+  </div>
+  <div class="stack-arrow">↓</div>
+  <div class="stack-layer">
+    <div><div class="stack-layer-title">Track effects</div><div class="stack-layer-desc">Optional per-source chain — reverb on the vocal only, say</div></div>
+    <span class="stack-tag">SourceWithEffects</span>
+  </div>
+  <div class="stack-arrow">↓</div>
+  <div class="stack-layer is-csharp">
+    <div><div class="stack-layer-title">Mixer</div><div class="stack-layer-desc">Sums every source into one signal · volume · pan · meters · clock</div></div>
+    <span class="stack-tag">AudioMixer</span>
+  </div>
+  <div class="stack-arrow">↓</div>
+  <div class="stack-layer">
+    <div><div class="stack-layer-title">Master effects</div><div class="stack-layer-desc">Applied to the finished mix — EQ, compressor, limiter, VST3</div></div>
+    <span class="stack-tag">master chain</span>
+  </div>
+  <div class="stack-arrow">↓</div>
+  <div class="stack-layer is-rust">
+    <div><div class="stack-layer-title">Engine</div><div class="stack-layer-desc">Native Rust — owns the device and the real-time thread</div></div>
+    <span class="stack-tag">OwnaudioNet</span>
+  </div>
+  <div class="stack-arrow">↓</div>
+  <div class="stack-layer">
+    <div><div class="stack-layer-title">Speakers</div><div class="stack-layer-desc">WASAPI · CoreAudio · ALSA · ASIO</div></div>
+    <span class="stack-tag">OS</span>
+  </div>
+</div>
+
+<h2 id="engine">1 · The engine</h2>
+<p><code>OwnaudioNet</code> is a static class and there is exactly one engine per application. It opens the audio device, starts the real-time thread, and stays out of your way after that.</p>
+<p>Three calls make up its whole life: <strong>initialize</strong> (pick the format and device), <strong>start</strong> (audio begins to flow), <strong>shut down</strong> (release the device). Nothing else works before initialization.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">await OwnaudioNet.InitializeAsync();   // 48 kHz, stereo, 512 frames
+OwnaudioNet.Start();
+
+// ... your app runs ...
+
+await OwnaudioNet.ShutdownAsync();</code></pre></div>
+
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Use the <code>Async</code> variants in anything with a window. Opening a device can block for seconds — on Linux, PulseAudio alone can take five. <a href="api-core.html#lifecycle">More on the lifecycle →</a></p></div>
+
+<h2 id="mixer">2 · The mixer</h2>
+<p><code>AudioMixer</code> is the bus. You hand it sources, it sums them into a single signal and pushes that to the engine. One mixer is enough for almost every app.</p>
+<p>It also owns the things that belong to "the whole mix": master volume and pan, peak levels for your VU meters, the master effect chain, WAV recording of the output, and the <a href="#clock">master clock</a>.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine);
+mixer.Start();
+
+mixer.AddSource(track);        // hot-swappable, safe while playing
+mixer.MasterVolume = 0.85f;    // 0.0 – 1.0</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>Adding and removing sources is lock-free — you can do it mid-playback without a click. <a href="api-mixer.html">The mixer in full →</a></p></div>
+
+<h2 id="sources">3 · Sources</h2>
+<p>A source is anything that produces audio. They all implement <code>IAudioSource</code>, so once you know one you know all of them: <code>Play()</code>, <code>Pause()</code>, <code>Stop()</code>, <code>Seek()</code>, plus <code>Volume</code>, <code>Pan</code>, <code>Loop</code>, <code>Position</code> and <code>Duration</code>.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Type</th><th>Reach for it when…</th></tr></thead>
+  <tbody>
+    <tr><td><code>FileSource</code></td><td>You have a file. MP3, FLAC, WAV, AAC, ALAC, MP4, OGG, AIFF — decoded natively, streamed from disk, seekable, tempo- and pitch-shiftable.</td></tr>
+    <tr><td><code>SampleSource</code></td><td>The audio is already a <code>float[]</code> in memory. Short clips, sound effects, one-shots.</td></tr>
+    <tr><td><code>StreamingSource</code></td><td>You want to <em>generate</em> audio — a synth, a metronome, a test tone, a network stream. You write a callback, it asks you for samples.</td></tr>
+    <tr><td><code>InputSource</code></td><td>The audio is coming in live from a microphone or line input.</td></tr>
+    <tr><td><code>SourceWithEffects</code></td><td>Not a source of its own — a wrapper that gives any of the above its own effect chain.</td></tr>
+  </tbody>
+</table></div>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Match the engine's format so nothing has to be resampled later
+int sr = OwnaudioNet.Engine!.Config.SampleRate;
+int ch = OwnaudioNet.Engine!.Config.Channels;
+
+var vocals = new FileSource("vocals.wav", targetSampleRate: sr, targetChannels: ch);
+vocals.Volume = 0.9f;
+vocals.Pan    = -0.2f;   // a touch to the left
+
+mixer.AddSource(vocals);
+vocals.Play();</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>A source keeps playing on its own once started — the mixer only decides whether it can be <em>heard</em>. <a href="api-sources.html">All source types →</a></p></div>
+
+<h2 id="effects">4 · Effects</h2>
+<p>An effect is anything implementing <code>IEffectProcessor</code>: the 17 built-ins, <a href="api-effects.html#smartmaster">SmartMaster</a>, or a <a href="api-effects.html#vst3">VST3 plugin</a>. They all go in the same two places.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>Where</th><th>How</th><th>Affects</th></tr></thead>
+  <tbody>
+    <tr><td><strong>One track</strong></td><td><code>new SourceWithEffects(source)</code>, then <code>AddEffect()</code></td><td>Only that source</td></tr>
+    <tr><td><strong>The whole mix</strong></td><td><code>mixer.AddMasterEffect()</code></td><td>Everything, after summing</td></tr>
+  </tbody>
+</table></div>
+
+<p>Order matters — effects run in the order you add them, exactly like pedals on a board.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Compressor first, then reverb — on the vocal only
+var vocalChain = new SourceWithEffects(vocals);
+vocalChain.AddEffect(new CompressorEffect { Ratio = 4f, AttackTimeMs = 10f });
+vocalChain.AddEffect(new ReverbEffect { RoomSize = 0.6f, Mix = 0.25f });
+
+mixer.AddSource(vocalChain);   // add the wrapper, not the raw source
+
+// Catch the peaks on the way out
+mixer.AddMasterEffect(new LimiterEffect());</code></pre></div>
+
+<h2 id="clock">5 · The clock</h2>
+<p>Start two files at "the same time" and they will drift apart — different decoders, different buffer boundaries, different rounding. Over three minutes that becomes audible flam.</p>
+<p>The <code>MasterClock</code> fixes this. Every mixer owns one, and it is the single source of truth for "where are we on the timeline". Attach a source to it and the engine continuously compares that source's position to the clock and nudges it back into line.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Attach BEFORE Play()
+vocals.AttachToClock(mixer.MasterClock);
+backing.AttachToClock(mixer.MasterClock);
+
+backing.StartOffset = 2.5;   // this one enters 2.5 s into the song
+
+mixer.Seek(0);               // moves the clock and every attached source
+vocals.Play();
+backing.Play();
+
+double now = mixer.MasterClock.CurrentTimestamp;   // seconds — what your playhead reads</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>Correction happens in three zones: under 5 ms nothing is done, 5–25 ms is smoothed out with a tiny tempo nudge, above that the source is snapped back hard. <a href="api-sync.html#drift-zones">Drift correction →</a></p></div>
+
+<h2 id="threads">What runs where</h2>
+<p>Two rules cover nearly everything you need to know about threading.</p>
+
+<div class="code-block"><div class="code-header"><span>Threads</span><button class="copy-btn">Copy</button></div><pre><code>Your UI thread     →  Play / Seek / Volume / AddSource      (fast, non-blocking)
+Engine thread      →  decode · mix · effects · device I/O    (native Rust, never yours)</code></pre></div>
+
+<ul>
+  <li><strong>Never block the UI thread.</strong> <code>InitializeAsync()</code>, <code>StopAsync()</code> and <code>ShutdownAsync()</code> exist for exactly this reason; heavy loads belong in <code>Task.Run</code>.</li>
+  <li><strong>Never allocate in a render callback.</strong> If you write a <code>StreamingSource</code> generator, no <code>new</code>, no LINQ, no string building — it runs against a deadline.</li>
+</ul>
+
+<p>Everything else — setting <code>Volume</code>, adding a source, seeking — is safe from any thread and designed to be called from a slider's event handler.</p>
+
+<h2 id="glossary">Glossary</h2>
+<p>The words that show up in every audio API, in plain terms.</p>
+
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Term</th><th>What it means</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Sample</strong></td><td>One number describing the signal at one instant. In this library, a <code>float</code> between −1.0 and +1.0.</td></tr>
+    <tr><td><strong>Frame</strong></td><td>One sample for <em>every</em> channel. In stereo, 1 frame = 2 samples. Buffer sizes are counted in frames.</td></tr>
+    <tr><td><strong>Sample rate</strong></td><td>Frames per second. 48000 is the default and the safest choice; 44100 is CD audio.</td></tr>
+    <tr><td><strong>Channels</strong></td><td>1 = mono, 2 = stereo. More than 2 means a multi-output interface.</td></tr>
+    <tr><td><strong>Interleaved</strong></td><td>How samples are laid out in memory: <code>L R L R L R…</code>, not all-left-then-all-right. Every buffer you touch is interleaved.</td></tr>
+    <tr><td><strong>Buffer size</strong></td><td>How many frames the engine hands the sound card at a time. Smaller = lower latency but more chances to fall behind.</td></tr>
+    <tr><td><strong>Latency</strong></td><td>The delay between a sample being produced and being heard. <code>bufferSize ÷ sampleRate</code> — 512 frames at 48 kHz is ~10.6 ms.</td></tr>
+    <tr><td><strong>Underrun / dropout</strong></td><td>The engine needed audio and it wasn't ready. You hear a click or a gap. Almost always means the buffer is too small for the work being done.</td></tr>
+    <tr><td><strong>dBFS</strong></td><td>Level in decibels where 0 is the loudest a digital signal can go. Everything useful is negative. <code>20 × log10(peak)</code>.</td></tr>
+    <tr><td><strong>Host / backend</strong></td><td>The OS audio system the engine talks to: WASAPI or ASIO on Windows, CoreAudio on macOS, ALSA on Linux. Leave it on auto unless you have a reason.</td></tr>
+    <tr><td><strong>Device</strong></td><td>A specific input or output — built-in speakers, an audio interface, a virtual cable. Identified by <code>DeviceId</code>.</td></tr>
+    <tr><td><strong>Real-time thread</strong></td><td>The thread that must deliver audio on schedule, every time. In 4.0 it lives entirely in Rust, which is why a garbage collection can no longer interrupt your sound.</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="next">Where next</h2>
+<div class="card-grid">
+  <a href="recipes.html" class="card"><div class="card-icon">🍳</div><div class="card-title">Recipes</div><div class="card-desc">Complete, working answers to the ten things people actually build.</div></a>
+  <a href="api-core.html" class="card"><div class="card-icon">🔧</div><div class="card-title">Engine &amp; Config</div><div class="card-desc">Initialization, devices, latency, logging.</div></a>
+  <a href="api-mixer.html" class="card"><div class="card-icon">🎚️</div><div class="card-title">Mixer</div><div class="card-desc">Sources, master effects, recording, metering.</div></a>
+  <a href="troubleshooting.html" class="card"><div class="card-icon">🩺</div><div class="card-title">Troubleshooting</div><div class="card-desc">No sound? Crackling? Start here.</div></a>
+</div>
+
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+<script src="../assets/docs.js"></script>
+</body></html>

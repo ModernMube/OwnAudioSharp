@@ -40,6 +40,8 @@
   <ul class="topnav-links">
     <li><a href="index.html" class="active">Home</a></li>
     <li><a href="documents/quickstart.html">Quick Start</a></li>
+    <li><a href="documents/concepts.html">Concepts</a></li>
+    <li><a href="documents/recipes.html">Recipes</a></li>
     <li><a href="documents/api-core.html">API</a></li>
     <li><a href="documents/api-midi.html">MIDI</a></li>
     <li><a href="documents/api-reference.html">Reference</a></li>
@@ -357,49 +359,61 @@ dotnet add package OwnVocalRemover        # Optional vocal separation add-on</co
   <!-- ─── BROWSE THE API ───────────────────────────────────────────────── -->
   <section class="section">
     <p class="section-eyebrow">Documentation</p>
-    <h2 class="section-title">Browse the API.</h2>
-    <p class="section-lead">Every public type, method, property and event — verified against source code.</p>
+    <h2 class="section-title">Start anywhere. It's in order.</h2>
+    <p class="section-lead">Three minutes to first sound, five concepts that explain the rest, and an API walked through in the order you actually meet it.</p>
 
     <div class="api-grid">
       <a href="documents/quickstart.html" class="api-card">
         <div class="api-card-title">⚡ Quick Start</div>
-        <div class="api-card-desc">Installation, first project, and the 4.0 architecture overview.</div>
+        <div class="api-card-desc">Empty folder to playing audio in three steps.</div>
+      </a>
+      <a href="documents/concepts.html" class="api-card">
+        <div class="api-card-title">🧭 Core Concepts</div>
+        <div class="api-card-desc">Engine, mixer, sources, effects, clock — plus the audio vocabulary.</div>
+      </a>
+      <a href="documents/recipes.html" class="api-card">
+        <div class="api-card-title">🍳 Recipes</div>
+        <div class="api-card-desc">Complete, copyable answers to the things people actually build.</div>
       </a>
       <a href="documents/api-core.html" class="api-card">
-        <div class="api-card-title">🔧 OwnaudioNet &amp; Config</div>
-        <div class="api-card-desc">Static API entry point, initialization, device management, AudioConfig.</div>
+        <div class="api-card-title">1 · Engine &amp; Config</div>
+        <div class="api-card-desc">Initialization, devices, latency, diagnostic logging.</div>
       </a>
       <a href="documents/api-mixer.html" class="api-card">
-        <div class="api-card-title">🎚️ AudioMixer</div>
-        <div class="api-card-desc">Multi-track mixing engine, master effects, recording, VU metering.</div>
+        <div class="api-card-title">2 · AudioMixer</div>
+        <div class="api-card-desc">The bus: sources, master effects, recording, VU metering.</div>
       </a>
       <a href="documents/api-sources.html" class="api-card">
-        <div class="api-card-title">🎵 Audio Sources</div>
-        <div class="api-card-desc">FileSource, SampleSource, InputSource, SourceWithEffects, channel routing.</div>
-      </a>
-      <a href="documents/api-sync.html" class="api-card">
-        <div class="api-card-title">⏱️ Synchronization</div>
-        <div class="api-card-desc">MasterClock, sample-accurate multi-track sync, ISynchronizable.</div>
+        <div class="api-card-title">3 · Audio Sources</div>
+        <div class="api-card-desc">Files, buffers, generators, live input, per-track effect chains.</div>
       </a>
       <a href="documents/api-effects.html" class="api-card">
-        <div class="api-card-title">🎛️ Effects &amp; VST3</div>
+        <div class="api-card-title">4 · Effects &amp; VST3</div>
         <div class="api-card-desc">17 built-in DSP effects, SmartMaster, VST3 plugin hosting.</div>
       </a>
+      <a href="documents/api-sync.html" class="api-card">
+        <div class="api-card-title">5 · Timeline &amp; Sync</div>
+        <div class="api-card-desc">MasterClock, drift correction, offline rendering.</div>
+      </a>
       <a href="documents/api-network.html" class="api-card">
-        <div class="api-card-title">🌐 Network Sync</div>
+        <div class="api-card-title">6 · Network Sync</div>
         <div class="api-card-desc">Multi-device LAN synchronization &lt;5 ms, server &amp; client modes.</div>
       </a>
       <a href="documents/api-advanced.html" class="api-card">
-        <div class="api-card-title">🧠 Analysis &amp; Mastering</div>
-        <div class="api-card-desc">Chord Detection, Audio Matchering, and the OwnVocalRemover add-on.</div>
+        <div class="api-card-title">7 · Analysis &amp; Mastering</div>
+        <div class="api-card-desc">Chord detection, matchering, vocal separation, MT3 transcription.</div>
       </a>
       <a href="documents/api-midi.html" class="api-card">
-        <div class="api-card-title">🎹 MIDI API</div>
+        <div class="api-card-title">8 · MIDI</div>
         <div class="api-card-desc">Real-time MIDI I/O, SMF file read/write, hardware timing clock.</div>
+      </a>
+      <a href="documents/troubleshooting.html" class="api-card">
+        <div class="api-card-title">🩺 Troubleshooting &amp; FAQ</div>
+        <div class="api-card-desc">No sound, crackling, drift — what happened, why, and the fix.</div>
       </a>
       <a href="documents/api-reference.html" class="api-card">
         <div class="api-card-title">📋 Reference</div>
-        <div class="api-card-desc">Events, enumerations, threading rules, and best practices.</div>
+        <div class="api-card-desc">Architecture, events, enumerations, threading rules.</div>
       </a>
     </div>
   </section>
@@ -447,7 +461,7 @@ dotnet add package OwnVocalRemover        # Optional vocal separation add-on</co
   <div style="display:flex; gap:1.25rem;">
     <a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank">GitHub</a>
     <a href="https://www.nuget.org/packages/OwnAudioSharp" target="_blank">NuGet</a>
-    <a href="documents/api-reference.html#best-practices">Best Practices</a>
+    <a href="documents/api-reference.html#threading">Threading Rules</a>
   </div>
 </footer>
 

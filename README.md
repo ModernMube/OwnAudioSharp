@@ -37,6 +37,27 @@ Decoding is pure Rust too — no external codecs, no FFmpeg, no system dependenc
 
 ---
 
+## 🆕 The documentation site has been rebuilt
+
+<div align="center">
+  <a href="https://modernmube.github.io/OwnAudioSharp">
+    <img src="https://img.shields.io/badge/📚%20Read%20the%20docs-modernmube.github.io%2FOwnAudioSharp-2997ff?style=for-the-badge" alt="OwnAudioSharp documentation">
+  </a>
+</div>
+
+It is no longer a flat list of classes. The site now walks you through the API in the order you
+actually meet it, and answers "how do I build this?" as well as "what does this method do?".
+
+| | |
+|---|---|
+| ⚡ **[Quick Start](https://modernmube.github.io/OwnAudioSharp/documents/quickstart.html)** | Empty folder to playing audio in three steps. |
+| 🧭 **[Core Concepts](https://modernmube.github.io/OwnAudioSharp/documents/concepts.html)** | The five pieces — engine, mixer, sources, effects, clock — plus the audio vocabulary. |
+| 🍳 **[Recipes](https://modernmube.github.io/OwnAudioSharp/documents/recipes.html)** | Complete, copyable answers: multi-track sync, transport, meters, live effects, recording, generated audio, offline rendering. |
+| 📘 **[The API, in order](https://modernmube.github.io/OwnAudioSharp/documents/api-core.html)** | Eight numbered steps from initialization to MIDI, each with a "why and when". |
+| 🩺 **[Troubleshooting & FAQ](https://modernmube.github.io/OwnAudioSharp/documents/troubleshooting.html)** | No sound, crackling, drift, plugin problems — what happened, why, and the fix. |
+
+---
+
 ## What you get
 
 | Category | Capability |

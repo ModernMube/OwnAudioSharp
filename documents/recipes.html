@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <script>(function(){var t=localStorage.getItem('theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);})();</script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-93P1X5V4Z5"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recipes — OwnAudioSharp</title>
+  <meta name="description" content="Complete, working C# recipes for OwnAudioSharp: playback, multi-track sync, transport, meters, effects, recording, generated audio and offline rendering.">
+  <link rel="stylesheet" href="../assets/docs.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+</head>
+<body>
+<nav class="topnav">
+  <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+  <a class="topnav-logo" href="../index.html"><img src="../ownaudio-logo.svg" alt="OwnAudioSharp" height="24"></a>
+  <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="concepts.html">Concepts</a></li><li><a href="recipes.html" class="active">Recipes</a></li><li><a href="api-core.html">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
+  <div class="topnav-right"><span class="badge-version">v4.0.3</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
+</nav>
+<div id="sidebar-overlay" class="sidebar-overlay"></div>
+<div class="layout">
+<nav id="sidebar" class="sidebar">
+  <div class="sidebar-section"><span class="sidebar-label">Start here</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li><li><a href="concepts.html">🧭 Core Concepts</a></li><li><a href="concepts.html#glossary" class="sub">Glossary</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Build something</span><ul class="sidebar-nav"><li><a href="recipes.html">🍳 Recipes</a></li><li><a href="recipes.html#play-file" class="sub">Play a file</a></li><li><a href="recipes.html#backing-player" class="sub">Multi-track player</a></li><li><a href="recipes.html#transport" class="sub">Play / pause / stop</a></li><li><a href="recipes.html#meters" class="sub">Position &amp; meters</a></li><li><a href="recipes.html#tempo-pitch" class="sub">Tempo &amp; pitch</a></li><li><a href="recipes.html#fx-live" class="sub">Effects while playing</a></li><li><a href="recipes.html#record" class="sub">Record &amp; monitor</a></li><li><a href="recipes.html#metronome" class="sub">Generate audio</a></li><li><a href="recipes.html#render" class="sub">Render to WAV</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">The API, in order</span><ul class="sidebar-nav"><li><a href="api-core.html">1 · Engine &amp; Config</a></li><li><a href="api-core.html#lifecycle" class="sub">Start &amp; shut down</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-core.html#devices" class="sub">Devices</a></li><li><a href="api-core.html#logging" class="sub">Logging</a></li><li><a href="api-mixer.html">2 · Mixer</a></li><li><a href="api-mixer.html#sources" class="sub">Sources on the bus</a></li><li><a href="api-mixer.html#master-effects" class="sub">Master effects</a></li><li><a href="api-mixer.html#recording" class="sub">Recording</a></li><li><a href="api-sources.html">3 · Sources</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#streamingsource" class="sub">StreamingSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel routing</a></li><li><a href="api-effects.html">4 · Effects &amp; VST3</a></li><li><a href="api-effects.html#all-effects" class="sub">The effect list</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 plugins</a></li><li><a href="api-sync.html">5 · Timeline &amp; Sync</a></li><li><a href="api-sync.html#masterclock" class="sub">MasterClock</a></li><li><a href="api-sync.html#drift-zones" class="sub">Drift correction</a></li><li><a href="api-sync.html#offline-mode" class="sub">Offline render</a></li><li><a href="api-network.html">6 · Network Sync</a></li><li><a href="api-advanced.html">7 · Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal remover</a></li><li><a href="api-advanced.html#mt3" class="sub">MT3 transcription</a></li><li><a href="api-midi.html">8 · MIDI</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI files</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI clock</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">When it breaks</span><ul class="sidebar-nav"><li><a href="troubleshooting.html">🩺 Troubleshooting</a></li><li><a href="troubleshooting.html#faq" class="sub">FAQ</a></li><li><a href="api-reference.html">📋 Reference</a></li><li><a href="api-reference.html#architecture" class="sub">Architecture</a></li><li><a href="api-reference.html#events" class="sub">Events</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#threading" class="sub">Threading rules</a></li></ul></div>
+</nav>
+<main class="main">
+
+<h1 class="page-title">Recipes</h1>
+<p class="page-subtitle">Complete, working answers to the things people actually build. Copy one, run it, then bend it into shape.</p>
+
+<p>Nothing on this page is a fragment. Each recipe either runs on its own or slots into an app whose engine is already up — and every one of them is a pattern taken from a real player built on this library.</p>
+
+<div class="callout callout-info"><div class="callout-icon">🧭</div><p>New here? <a href="quickstart.html">Quick Start</a> gets you to sound in three minutes, and <a href="concepts.html">Core Concepts</a> explains the five pieces these recipes keep referring to.</p></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="play-file">Play an audio file</h2>
+<p>The smallest thing that makes noise. A complete console program.</p>
+
+<div class="code-block"><div class="code-header"><span>C# — Program.cs</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnaudioNET;
+using OwnaudioNET.Mixing;
+using OwnaudioNET.Sources;
+
+// Open the sound card: 48 kHz, stereo, 512-frame buffer
+await OwnaudioNet.InitializeAsync();
+OwnaudioNet.Start();
+
+// The bus everything gets summed into
+var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine);
+mixer.Start();
+
+// AddSource starts the source, so this is already playing
+var track = new FileSource("song.mp3");
+mixer.AddSource(track);
+
+Console.WriteLine("Playing. Press Enter to stop.");
+Console.ReadLine();
+
+track.Dispose();
+mixer.Dispose();
+await OwnaudioNet.ShutdownAsync();</code></pre></div>
+
+<p>To wait for the track to finish instead of for a keypress, let the mixer tell you:</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var finished = new TaskCompletionSource();
+mixer.PlaybackEnded += (_, _) =&gt; finished.TrySetResult();
+
+mixer.AddSource(track);
+await finished.Task;</code></pre></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="engine-service">One engine for the whole app</h2>
+<p>In anything bigger than a demo, the engine and the mixer belong to a single object that owns their lifetime. Everything else asks that object for the mixer.</p>
+
+<div class="code-block"><div class="code-header"><span>C# — AudioEngineService.cs</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using Logger;
+using OwnaudioNET;
+using OwnaudioNET.Mixing;
+
+public sealed class AudioEngineService : IDisposable
+{
+    private static readonly Lazy&lt;AudioEngineService&gt; _lazy = new(() =&gt; new AudioEngineService());
+    public static AudioEngineService Instance =&gt; _lazy.Value;
+
+    private AudioMixer? _mixer;
+    private bool _initialized;
+
+    public AudioMixer? Mixer =&gt; _mixer;
+    public bool IsInitialized =&gt; _initialized;
+
+    private AudioEngineService() { }
+
+    public async Task InitializeAsync(string? outputDeviceId = null,
+                                      Log.Level logLevel = Log.Level.Disabled)
+    {
+        if (_initialized) return;
+        Log.LoggerLevel = logLevel;
+
+        var config = OwnaudioNet.CreateDefaultConfig();
+        config.EnableInput = false;
+        config.OutputDeviceId = outputDeviceId;          // null = system default
+        config.FallbackToDefaultOnDisconnect = true;     // survive an unplugged interface
+
+        // bufferMultiplier buys the mix thread headroom — raise it if you
+        // run many tracks or VST plugins on the master bus
+        await OwnaudioNet.InitializeAsync(config, bufferMultiplier: 32, logLevel: logLevel);
+        OwnaudioNet.Start();
+
+        _mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine, bufferSizeInFrames: 1024);
+        _mixer.Start();
+        _initialized = true;
+    }
+
+    public void Dispose()
+    {
+        _mixer?.Stop();
+        _mixer?.Dispose();
+        _mixer = null;
+
+        OwnaudioNet.Stop();
+        OwnaudioNet.Shutdown();
+        _initialized = false;
+    }
+}</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>Call <code>InitializeAsync()</code> off the UI thread and only flip your "ready" flag once it returns — device enumeration on Linux can take seconds, and a half-initialized engine is the number one source of mystery null references.</p></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="backing-player">A multi-track player that stays in sync</h2>
+<p>Four stems, one timeline, no drift. Three details do the work: attach every source to the master clock, add them <em>prepared</em> so none of them starts early, and pre-buffer the decoders before the downbeat.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var mixer = AudioEngineService.Instance.Mixer!;
+
+int sr = OwnaudioNet.Engine!.Config.SampleRate;
+int ch = OwnaudioNet.Engine!.Config.Channels;
+
+string[] stems = { "drums.wav", "bass.wav", "keys.wav", "vocals.wav" };
+
+var sources = stems
+    .Select(path =&gt; new FileSource(path, bufferSizeInFrames: 8192,
+                                   targetSampleRate: sr, targetChannels: ch))
+    .ToArray();
+
+mixer.Pause();
+mixer.Seek(0);
+
+foreach (var src in sources)
+{
+    src.Volume = 0.8f;
+    src.AttachToClock(mixer.MasterClock);   // BEFORE Play — this is what kills drift
+    mixer.AddSourcePrepared(src);           // queued, not started
+}
+
+// Fill every decoder's ring buffer at once so the first block is never late
+Parallel.ForEach(sources, s =&gt; s.PreBuffer());
+
+mixer.StartPreparedSources(startPosition: 0.0);   // they all begin on the same frame
+mixer.Start();</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>Loading the sources at the engine's own sample rate and channel count means the decoder resamples once, up front, instead of the mixer converting on every block.</p></div>
+
+<p>Tracks that shouldn't start at zero get a timeline offset:</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">solo.StartOffset = 48.0;   // enters at 0:48 on the project timeline</code></pre></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="transport">Play, pause and stop that survive fast clicking</h2>
+<p>Transport commands run partly on background threads, so a quick Stop → Play can let the stop finish <em>after</em> the play has already added its sources. One semaphore removes the whole class of bug.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">private readonly SemaphoreSlim _transportLock = new(1, 1);
+private IAudioSource[] _live = Array.Empty&lt;IAudioSource&gt;();
+
+public async Task PlayAsync(IReadOnlyList&lt;FileSource&gt; tracks, double startSeconds)
+{
+    await _transportLock.WaitAsync();
+    try
+    {
+        await Task.Run(() =&gt;
+        {
+            _mixer.Pause();
+            _mixer.Seek(startSeconds);
+
+            foreach (var t in tracks)
+            {
+                t.AttachToClock(_mixer.MasterClock);
+                _mixer.AddSourcePrepared(t);
+            }
+
+            Parallel.ForEach(tracks, t =&gt; t.PreBuffer());
+            _mixer.StartPreparedSources(startSeconds);
+            _mixer.Start();
+        });
+
+        _live = tracks.Cast&lt;IAudioSource&gt;().ToArray();
+    }
+    finally { _transportLock.Release(); }
+}
+
+// Pause leaves everything in the mixer, so resuming is instant
+public async Task PauseAsync()
+{
+    await _transportLock.WaitAsync();
+    try
+    {
+        await Task.Run(() =&gt;
+        {
+            _mixer.Pause();
+            foreach (var s in _live) s.Pause();
+        });
+    }
+    finally { _transportLock.Release(); }
+}
+
+// Stop rewinds and empties the bus
+public async Task StopAsync()
+{
+    await _transportLock.WaitAsync();
+    try
+    {
+        await Task.Run(() =&gt;
+        {
+            foreach (var s in _live)
+            {
+                s.Stop();
+                if (s is IMasterClockSource clocked) clocked.DetachFromClock();
+                _mixer.RemoveSource(s.Id);
+            }
+            _mixer.Seek(0.0);
+        });
+        _live = Array.Empty&lt;IAudioSource&gt;();
+    }
+    finally { _transportLock.Release(); }
+}</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>Resuming from pause is just <code>Play()</code> on the cached sources plus <code>mixer.Start()</code> — don't rebuild the source list, or you lose the position and pay for the decode again.</p></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="meters">A playhead and VU meters that look right</h2>
+<p>The engine reports its position once per block, which at a large buffer is only a dozen times a second. Poll that straight into a slider and the playhead visibly stutters. Interpolate with a stopwatch between reports and it glides.</p>
+
+<div class="code-block"><div class="code-header"><span>C# — position, ~30 Hz</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">private double _lastEnginePos;
+private double _lastEnginePosAt;
+private readonly Stopwatch _watch = Stopwatch.StartNew();
+
+private void OnPositionTick()   // 33 ms timer
+{
+    double enginePos = _mixer.MasterClock.CurrentTimestamp;
+    double now       = _watch.Elapsed.TotalSeconds;
+
+    if (enginePos != _lastEnginePos)     // a fresh report landed
+    {
+        _lastEnginePos   = enginePos;
+        _lastEnginePosAt = now;
+    }
+
+    // between reports, let wall-clock time carry the playhead forward
+    PositionSeconds = _lastEnginePos + (now - _lastEnginePosAt);
+}</code></pre></div>
+
+<p>Meters are a different beast: 10 Hz is plenty, and levels are read as linear peaks that you convert to dBFS yourself.</p>
+
+<div class="code-block"><div class="code-header"><span>C# — meters, ~10 Hz</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">private static double ToDbFs(float linear)
+    =&gt; linear &gt; 0f ? Math.Max(20.0 * Math.Log10(linear), -60.0) : -60.0;
+
+private void OnVuTick()   // 100 ms timer
+{
+    // master bus
+    MasterLeftDb  = ToDbFs(_mixer.LeftPeak);
+    MasterRightDb = ToDbFs(_mixer.RightPeak);
+
+    // per track — every source exposes OutputLevels as a linear peak pair
+    foreach (var track in Tracks)
+    {
+        if (track.Source is null) continue;
+        (float l, float r) = track.Source.OutputLevels;
+
+        double leftDb = ToDbFs(l), rightDb = ToDbFs(r);
+
+        // only push a change the eye can see — saves a lot of binding churn
+        if (Math.Abs(leftDb  - track.LeftDb)  &gt;= 0.5) track.LeftDb  = leftDb;
+        if (Math.Abs(rightDb - track.RightDb) &gt;= 0.5) track.RightDb = rightDb;
+    }
+}</code></pre></div>
+
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Stop both timers when playback stops and zero the meters, otherwise the last peak stays frozen on screen and looks like a stuck signal.</p></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="tempo-pitch">Tempo and pitch from a slider</h2>
+<p>Both go straight to the native track: no buffer flush, no silence gap, safe to fire on every slider tick.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// tempoPercent 80–120, pitchSemitones -12…+12
+void OnTempoChanged(int tempoPercent)
+{
+    float ratio = tempoPercent / 100f;
+    foreach (var src in _live.OfType&lt;FileSource&gt;())
+        src.SetTempoSmooth(ratio);
+}
+
+void OnPitchChanged(int semitones)
+{
+    foreach (var src in _live.OfType&lt;FileSource&gt;())
+        src.SetPitchSmooth(semitones);
+}
+
+// Once the user lets go of a clock-synced slider, reseek away any leftover drift
+void OnTempoCommitted(int tempoPercent)
+{
+    foreach (var src in _live.OfType&lt;FileSource&gt;())
+        src.SetTempoSynced(tempoPercent / 100f);
+}</code></pre></div>
+
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Tempo is clamped to 0.8–1.2 and pitch to ±12 semitones. Changing tempo changes how long the song lasts, so if you show a total duration remember to divide it by the ratio.</p></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="fx-live">Add an effect while the music is playing</h2>
+<p>A raw source has no effect chain — you wrap it in a <code>SourceWithEffects</code> and swap the wrapper in for the original. The mixer handles the swap without a click.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// One-time upgrade: raw source → source with a chain
+SourceWithEffects EnsureChain(FileSource source)
+{
+    if (_chains.TryGetValue(source.Id, out var existing)) return existing;
+
+    var chain = new SourceWithEffects(source);
+    _mixer.RemoveSource(source.Id);   // out with the raw one
+    _mixer.AddSource(chain);          // in with the wrapper
+    _chains[source.Id] = chain;
+    return chain;
+}
+
+var chain = EnsureChain(vocals);
+chain.AddEffect(new CompressorEffect { Ratio = 4f, AttackTimeMs = 10f });
+chain.AddEffect(new ReverbEffect { RoomSize = 0.6f, Mix = 0.25f });</code></pre></div>
+
+<p>Bypassing is cheaper than removing, and it keeps the chain order intact:</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">reverb.Enabled = false;   // stays in the chain, stops processing</code></pre></div>
+
+<div class="callout callout-danger"><div class="callout-icon">🚫</div><p>Don't dispose an effect the instant you remove it — the audio thread may still be inside <code>Process()</code>. Take it out of the chain first, then dispose it a moment later.</p></div>
+
+<div class="code-block"><div class="code-header"><span>C# — safe removal</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">chain.RemoveEffect(reverb);
+
+var doomed = reverb;
+_ = Task.Run(async () =&gt;
+{
+    await Task.Delay(100).ConfigureAwait(false);
+    doomed.Dispose();
+});</code></pre></div>
+
+<p>A VST3 plugin goes into the very same slot — load it, initialize its audio, hand over its processor:</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var host = await VST3PluginHost.CreateAsync("/path/to/plugin.vst3");
+
+if (!host.IsEffect) { host.Dispose(); return; }   // instruments aren't supported
+
+if (!await host.InitializeAudioAsync(OwnaudioNet.Engine!.Config.SampleRate, maxBlockSize: 4096))
+{
+    host.Dispose();
+    return;
+}
+
+chain.AddEffect(host.GetProcessor());
+await host.OpenEditorAsync("Reverb");   // the plugin's own UI, from the UI thread</code></pre></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="record">Record from the microphone</h2>
+<p>Input has to be switched on at initialization time — it decides which streams the engine opens. After that a microphone is just another source.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var config = OwnaudioNet.CreateDefaultConfig();
+config.EnableInput = true;
+
+await OwnaudioNet.InitializeAsync(config);
+OwnaudioNet.Start();
+
+var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine);
+mixer.Start();
+
+// Live input, monitored through the speakers
+var mic = new InputSource(OwnaudioNet.Engine!, bufferSizeInFrames: 8192);
+mixer.AddSource(mic);
+
+// Capture the finished mix — post master effects
+mixer.StartRecording("take-01.wav", compensateInputLatency: true);
+
+Console.WriteLine("Recording. Enter to finish.");
+Console.ReadLine();
+
+mixer.StopRecording();</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">💡</div><p><code>compensateInputLatency</code> trims the hardware capture delay off the front of the file, so an overdub lands on the beat instead of a few milliseconds behind it. Check what was trimmed with <code>mixer.LastRecordingLatencyOffsetFrames</code>.</p></div>
+
+<div class="callout callout-warning"><div class="callout-icon">🎧</div><p>Monitoring a mic through the same speakers it can hear will feed back. Use headphones, or keep <code>mic.Volume = 0f</code> and record without monitoring.</p></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="metronome">Generate audio yourself — a metronome</h2>
+<p><code>StreamingSource</code> asks you for samples and you fill the buffer. Derive your phase from <code>framePosition</code>, not from a counter of your own, and a seek automatically lands the click on the right beat.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">private readonly AudioConfig _config = OwnaudioNet.CreateDefaultConfig();
+
+// ClickPattern is your own class — bpm, frames per beat, click length.
+// Swapped as one reference, so the callback never sees half a pattern.
+private volatile ClickPattern _pattern = ClickPattern.Create(bpm: 120, beatsPerBar: 4);
+
+private void RenderClick(Span&lt;float&gt; buffer, int frameCount, long framePosition)
+{
+    var p  = _pattern;                // one read, then work from the local
+    int ch = _config.Channels;
+
+    for (int f = 0; f &lt; frameCount; f++)
+    {
+        long abs = framePosition + f;
+        long intoBeat = abs % p.FramesPerBeat;
+
+        // a short decaying blip at the top of every beat
+        float s = 0f;
+        if (intoBeat &lt; p.ClickFrames)
+        {
+            bool downbeat = (abs / p.FramesPerBeat) % p.BeatsPerBar == 0;
+            float env = 1f - (float)intoBeat / p.ClickFrames;
+            s = MathF.Sin(intoBeat * (downbeat ? p.HighStep : p.LowStep)) * env * 0.5f;
+        }
+
+        for (int c = 0; c &lt; ch; c++)
+            buffer[f * ch + c] = s;
+    }
+}
+
+var click = new StreamingSource(RenderClick, _config) { Volume = 0.7f };
+mixer.AddSource(click);
+click.Play();
+
+// Tempo change: build a new pattern and swap it in. No restart, no gap.
+_pattern = ClickPattern.Create(bpm: 140, beatsPerBar: 4);</code></pre></div>
+
+<div class="callout callout-danger"><div class="callout-icon">🚫</div><p>No allocation inside the callback — no <code>new</code>, no LINQ, no interpolated strings. It runs against a deadline, and a garbage collection at the wrong moment is a click in the audio.</p></div>
+
+<p>Keep the click aligned after a seek by seeking the source too:</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">mixer.Seek(positionSeconds);
+click.Seek(positionSeconds);</code></pre></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="render">Render a mix to a WAV file</h2>
+<p>Realtime mode drops audio it can't produce in time — fine for playback, wrong for a bounce. Offline mode makes the mix thread wait for every source, so the result is deterministic no matter how slow the machine is.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">mixer.RenderingMode = ClockMode.Offline;
+
+foreach (var src in sources)
+{
+    src.AttachToClock(mixer.MasterClock);
+    mixer.AddSourcePrepared(src);
+}
+
+mixer.StartRecording("bounce.wav");
+mixer.StartPreparedSources(0.0);
+mixer.Start();
+
+// wait for the longest source to finish
+var done = new TaskCompletionSource();
+mixer.PlaybackEnded += (_, _) =&gt; done.TrySetResult();
+await done.Task;
+
+mixer.Stop();
+mixer.StopRecording();</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>Master effects are printed into the file — the recording is taken after the master chain, so what you hear is what you get.</p></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="devices">Let the user pick an output device</h2>
+<p>Enumerate, show the names, store the <code>DeviceId</code>. Switching device means re-initializing the engine, so do it while nothing is playing.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Fill a combo box
+List&lt;AudioDeviceInfo&gt; outputs = await OwnaudioNet.GetOutputDevicesAsync();
+
+foreach (var d in outputs)
+    Console.WriteLine($"{d.Name}  [{d.EngineName}]{(d.IsDefault ? "  (default)" : "")}");
+
+// Apply a choice — full restart of the audio stack
+await StopEverythingAsync();
+await OwnaudioNet.ShutdownAsync();
+
+var config = OwnaudioNet.CreateDefaultConfig();
+config.OutputDeviceId = selected.DeviceId;
+config.FallbackToDefaultOnDisconnect = true;   // don't die if it gets unplugged
+
+await OwnaudioNet.InitializeAsync(config);
+OwnaudioNet.Start();</code></pre></div>
+
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Opening a VST3 editor while device hot-plug monitoring is running can interfere with enumeration. Wrap it: <code>PauseDeviceMonitoring()</code> before, <code>ResumeDeviceMonitoring()</code> after.</p></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="multi-out">Send tracks to separate outputs</h2>
+<p>On a multi-channel interface each source can be pinned to specific hardware channels — click into the drummer's cans, the band into the mains.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var config = OwnaudioNet.CreateDefaultConfig();
+config.Channels = 4;                 // bus channel 0..3 → physical 0..3
+
+await OwnaudioNet.InitializeAsync(config);
+OwnaudioNet.Start();
+
+band.RouteToChannels(0, 1);          // front of house
+click.RouteToChannels(2, 3);         // in-ear monitors
+
+mixer.AddSource(band);
+mixer.AddSource(click);</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>The mapping array must be as long as the source's own channel count. Need to change that count, use <code>targetChannels</code> when you construct the <code>FileSource</code> — it up- or downmixes in the decoder. <a href="api-sources.html#channel-routing">Channel routing →</a></p></div>
+
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="next">Where next</h2>
+<div class="card-grid">
+  <a href="api-sources.html" class="card"><div class="card-icon">🎵</div><div class="card-title">Sources</div><div class="card-desc">Every constructor parameter and property, in detail.</div></a>
+  <a href="api-effects.html" class="card"><div class="card-icon">🎛️</div><div class="card-title">Effects &amp; VST3</div><div class="card-desc">All 17 built-ins with their presets, plus plugin hosting.</div></a>
+  <a href="api-sync.html" class="card"><div class="card-icon">⏱️</div><div class="card-title">Timeline &amp; Sync</div><div class="card-desc">How drift correction actually works, and offline rendering.</div></a>
+  <a href="troubleshooting.html" class="card"><div class="card-icon">🩺</div><div class="card-title">Troubleshooting</div><div class="card-desc">When one of these doesn't do what you expected.</div></a>
+</div>
+
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+<script src="../assets/docs.js"></script>
+</body></html>

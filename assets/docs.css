@@ -819,3 +819,13 @@ h2:hover .anchor-link, h3:hover .anchor-link { opacity: .5; }
 .tool-card img { flex: none; }
 .tool-vendor { display: block; font-size: .72rem; color: var(--text-muted); letter-spacing: .02em; }
 .tool-name   { display: block; font-size: .9rem; font-weight: 600; letter-spacing: -.01em; }
+
+/* ─── "Edit this page" footer on doc pages ───────────────────────────────── */
+.page-edit {
+  margin-top: 3.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  font-size: .82rem;
+}
+.page-edit a { color: var(--text-muted); text-decoration: none; }
+.page-edit a:hover { color: var(--accent); }
