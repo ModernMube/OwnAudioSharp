@@ -118,10 +118,10 @@ namespace OwnaudioNET.Effects.SmartMaster
 
             SetEQCurve(config, new float[]
             {
-                1.5f,  1.5f,  1.2f,  0.8f,  0.4f,  0.0f,  0.0f,  0.0f,
+                1.2f,  1.6f,  1.9f,  1.9f,  1.6f,  1.0f,  0.5f,  0.0f,
                 0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.4f,  0.6f,  0.6f,
-                0.4f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f
+                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f, -0.6f, -0.9f,
+               -0.6f, -0.2f,  0.2f,  0.8f,  1.2f,  1.2f
             });
 
             return config;
@@ -155,10 +155,10 @@ namespace OwnaudioNET.Effects.SmartMaster
 
             SetEQCurve(config, new float[]
             {
-                1.0f,  1.0f,  0.8f,  0.5f,  0.0f,  0.0f,  0.0f,  0.0f,
+                0.0f,  0.4f,  1.0f,  1.8f,  1.9f,  1.8f,  1.2f,  0.5f,
                 0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,
-                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f, -0.5f,
-               -1.2f, -1.5f, -1.0f, -0.3f,  0.4f,  0.5f
+                0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f, -1.8f, -3.4f,
+               -3.8f, -3.4f, -1.6f,  0.8f,  1.8f,  2.0f
             });
 
             return config;
@@ -230,10 +230,10 @@ namespace OwnaudioNET.Effects.SmartMaster
 
             SetEQCurve(config, new float[]
             {
-                1.0f,  1.8f,  2.5f,  2.5f,  2.2f,  1.5f,  0.8f,  0.0f,
-                0.0f,  0.0f,  0.0f, -1.5f, -1.5f, -1.2f, -0.5f,  0.0f,
-                0.0f,  0.0f,  0.0f,  0.4f,  0.8f,  1.2f,  1.2f,  1.0f,
-                0.5f,  0.0f,  0.0f, -0.5f, -1.0f, -1.0f
+                1.5f,  3.2f,  4.2f,  4.4f,  4.2f,  3.4f,  2.0f,  0.8f,
+                0.0f,  0.0f, -1.0f, -2.0f, -2.2f, -2.2f, -1.6f, -0.6f,
+                0.0f,  0.0f,  0.0f,  0.0f,  1.0f,  2.2f,  2.5f,  2.5f,
+                1.8f,  0.6f,  1.0f,  2.2f,  2.5f,  2.5f
             });
 
             config.OutputGains[0] = 0.0f;
@@ -279,10 +279,10 @@ namespace OwnaudioNET.Effects.SmartMaster
 
             SetEQCurve(config, new float[]
             {
-                0.0f,  0.8f,  1.5f,  1.8f,  1.8f,  1.5f,  1.0f,  0.4f,
-                0.0f,  0.0f, -0.8f, -1.8f, -1.8f, -1.5f, -0.8f,  0.0f,
-                0.4f,  0.8f,  1.2f,  1.5f,  1.5f,  1.2f,  1.0f,  0.6f,
-                0.0f, -0.4f, -0.8f, -1.2f, -1.2f, -1.0f
+               -1.0f, -0.5f,  0.0f,  0.5f,  1.2f,  2.0f,  2.2f,  2.0f,
+                1.0f, -1.0f, -2.4f, -3.1f, -3.1f, -2.4f, -1.2f,  0.0f,
+                0.0f,  0.8f,  2.0f,  2.8f,  2.8f,  2.6f,  1.6f,  0.5f,
+                0.0f, -0.8f, -2.0f, -2.2f, -2.2f, -2.2f
             });
 
             config.OutputGains[0] = 0.0f;
