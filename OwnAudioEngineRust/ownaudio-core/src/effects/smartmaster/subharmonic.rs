@@ -402,12 +402,11 @@ mod tests {
     #[test]
     fn sub_stays_below_the_source_level() {
         for f0 in [55.0f32, 60.0, 80.0, 100.0] {
-            let dry = tone(f0, 0.25, 96_000);
-            let wet = run(f0, 0.25, 96_000);
-            let sub = magnitude_at(&wet, f0 / 2.0);
+            let dry = magnitude_at(&tone(f0, 0.25, 96_000), f0);
+            let sub = magnitude_at(&run(f0, 0.25, 96_000), f0 / 2.0);
             assert!(
-                sub < 0.25,
-                "{f0} Hz: sub {sub} is not below the 0.25 source"
+                sub < dry,
+                "{f0} Hz: sub {sub} is not below the source {dry}"
             );
         }
         // And it is actually doing something at all.
