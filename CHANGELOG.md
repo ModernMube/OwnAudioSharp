@@ -3,6 +3,32 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.4-preview.2 — 2026-08-09
+
+### Added
+
+- **Effect chain tap.** `mixer.CreateEffectTap(sourceId)` and `mixer.CreateMasterEffectTap()` hand
+  back an `EffectTap` carrying the same block of audio twice — as the chain received it and as the
+  chain left it. The Rust mixer mirrors each rendered block into a pair of lock-free rings on both
+  sides of the chain; a slow drain drops whole pre/post pairs rather than one side alone, so the
+  two streams can never slide apart. The tap sits ahead of gain, pan and delay compensation, and
+  holds the dry side back by the running effects' latency, so a look-ahead limiter or a hosted
+  VST3 does not smear the comparison.
+- `EffectSpectrumAnalyzer` — a live before/after spectrum over a tap. Hann-windowed, sine
+  calibrated (a full-scale tone reads 0 dBFS), with the magnitudes exposed as dBFS spans and the
+  bin centres in Hz.
+- `SourceWithEffects.ActiveEffectLatencySamples` — the latency of the effects actually running,
+  as opposed to `EffectLatencySamples`, which counts bypassed ones too so PDC alignment stays put
+  across a bypass toggle.
+
+### Documentation
+
+- The site claimed 17 built-in DSP effects on the pages that describe the C# API, but only 15 of
+  the Rust engine's 17 are surfaced there — `Gate` and `PitchShift` have no managed wrapper, and
+  the effect table on the same page always listed 15. Corrected everywhere the count refers to the
+  managed API; the architecture table still says 17 for `ownaudio-core`, now with the split spelled
+  out.
+
 ## 4.0.4-preview.1 — 2026-08-09
 
 ### Added
