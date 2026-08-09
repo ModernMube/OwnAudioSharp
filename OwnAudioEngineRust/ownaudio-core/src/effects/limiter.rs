@@ -97,11 +97,16 @@ pub struct Limiter {
     release: f32,
     /// Attack coefficient — a one-pole that completes within the look-ahead.
     attack: f32,
-    /// Maximum look-ahead window, in frames (the deque capacity).
+    /// Maximum look-ahead window plus the write slot, in frames (the deque
+    /// capacity and the delay line's frame capacity).
     max_buffer_size: usize,
-    /// Current look-ahead, in frames.
+    /// Current look-ahead, in frames — the delay the audio is held by, and the
+    /// latency reported to the mixer.
     lookahead_frames: usize,
-    /// Active detection/delay window, in frames.
+    /// Ring length and detection window, `lookahead_frames + 1` frames. The `+ 1`
+    /// is what makes the delay real: the current frame occupies the write slot,
+    /// so a ring of exactly `lookahead_frames` wraps the read straight back onto
+    /// it and the audio comes out undelayed.
     active_buffer_size: usize,
     /// Channel count the delay line is currently laid out for (0 = none yet).
     channels: usize,
@@ -144,10 +149,12 @@ impl Limiter {
         } else {
             44_100.0
         };
-        let max_buffer_size = ((MAX_LOOKAHEAD_MS * sample_rate / 1000.0) as usize).max(1);
+        // One slot over the widest look-ahead, so the write position never
+        // collides with the read position at maximum settings.
+        let max_buffer_size = ((MAX_LOOKAHEAD_MS * sample_rate / 1000.0) as usize).max(1) + 1;
         let lookahead_ms = 5.0f32;
         let lookahead_frames =
-            ((lookahead_ms * sample_rate / 1000.0) as usize).clamp(1, max_buffer_size);
+            ((lookahead_ms * sample_rate / 1000.0) as usize).clamp(1, max_buffer_size - 1);
 
         let mut limiter = Self {
             enabled: true,
@@ -162,7 +169,7 @@ impl Limiter {
             attack: attack_coeff(lookahead_ms, sample_rate),
             max_buffer_size,
             lookahead_frames,
-            active_buffer_size: lookahead_frames,
+            active_buffer_size: lookahead_frames + 1,
             channels: 0,
             delay_buffer: vec![0.0; max_buffer_size * PREALLOC_CHANNELS],
             delay_index: 0,
@@ -218,10 +225,10 @@ impl Limiter {
     /// changes (reference parity).
     fn update_lookahead(&mut self) {
         let new_frames = ((self.lookahead_ms * self.sample_rate / 1000.0) as usize)
-            .clamp(1, self.max_buffer_size);
+            .clamp(1, self.max_buffer_size - 1);
         if new_frames != self.lookahead_frames {
             self.lookahead_frames = new_frames;
-            self.active_buffer_size = new_frames;
+            self.active_buffer_size = new_frames + 1;
             self.reset_state();
         }
     }
@@ -382,8 +389,12 @@ impl Effect for Limiter {
                 self.target_gain = 1.0;
             }
 
-            // 3. Apply the shared, smoothed gain to every channel of the delayed
-            //    frame, then hard-clamp each channel to the ceiling.
+            // 3. Apply the shared, smoothed gain to the frame that entered
+            //    `lookahead_frames` ago, then hard-clamp each channel to the
+            //    ceiling. Emitting the delayed frame is the whole point: the gain
+            //    was derived from a window that reaches up to the *current* input,
+            //    so the attack ramp is already down by the time the peak that
+            //    triggered it arrives at the output.
             let delayed = (self.delay_index + self.active_buffer_size - self.lookahead_frames)
                 % self.active_buffer_size;
             let dslot = delayed * ch;
@@ -501,9 +512,9 @@ mod tests {
             channels: usize,
         ) -> Self {
             let max_buffer_size =
-                ((MAX_LOOKAHEAD_MS as f64 * sample_rate / 1000.0) as usize).max(1);
+                ((MAX_LOOKAHEAD_MS as f64 * sample_rate / 1000.0) as usize).max(1) + 1;
             let lookahead_frames =
-                ((lookahead_ms * sample_rate / 1000.0) as usize).clamp(1, max_buffer_size);
+                ((lookahead_ms * sample_rate / 1000.0) as usize).clamp(1, max_buffer_size - 1);
             Self {
                 threshold_lin: 10.0f64.powf(threshold_db / 20.0),
                 ceiling_lin: 10.0f64.powf(ceiling_db / 20.0),
@@ -514,7 +525,7 @@ mod tests {
                 },
                 max_buffer_size,
                 lookahead_frames,
-                active_buffer_size: lookahead_frames,
+                active_buffer_size: lookahead_frames + 1,
                 channels,
                 delay_buffer: vec![0.0; max_buffer_size * channels],
                 envelope_buffer: vec![1.0; max_buffer_size],
@@ -808,6 +819,65 @@ mod tests {
         let mut second = input.clone();
         l.process(&mut second, 2);
         assert_eq!(first, second);
+    }
+
+    /// The delay line has to actually delay, otherwise nothing "looks ahead" and
+    /// the reported latency is a lie the mixer's delay compensation acts on.
+    #[test]
+    fn output_is_delayed_by_the_reported_latency() {
+        let mut l = Limiter::new(48_000.0);
+        l.set_param(PARAM_LOOKAHEAD, 5.0);
+        let latency = l.latency_samples() as usize;
+        assert!(latency > 0);
+
+        // A quiet impulse, well under the threshold, so no gain reduction moves it.
+        let frames = latency * 4;
+        let mut buf = vec![0.0f32; frames * 2];
+        buf[0] = 0.25;
+        buf[1] = 0.25;
+        l.process(&mut buf, 2);
+
+        let hit = buf
+            .chunks(2)
+            .position(|f| f[0].abs() > 1e-6)
+            .expect("the impulse vanished");
+        assert_eq!(
+            hit, latency,
+            "impulse landed at frame {hit}, want {latency}"
+        );
+        assert!((buf[hit * 2] - 0.25).abs() < 1e-6, "impulse was altered");
+    }
+
+    /// What the look-ahead is *for*: when a transient arrives the gain must
+    /// already be down, so the ceiling clamp has nothing left to shave off.
+    /// Without the delay the ramp started only as the peak was leaving and the
+    /// clamp hard-clipped every transient instead.
+    #[test]
+    fn transient_is_attenuated_by_gain_not_by_the_clamp() {
+        let mut l = Limiter::new(48_000.0);
+        l.set_param(PARAM_THRESHOLD, -12.0);
+        l.set_param(PARAM_CEILING, 0.0);
+        l.set_param(PARAM_LOOKAHEAD, 5.0);
+        let threshold = db_to_linear(-12.0);
+        let latency = l.latency_samples() as usize;
+
+        // Silence, then a sustained full-scale tone starting abruptly.
+        let frames = latency * 8;
+        let mut buf = vec![0.0f32; frames * 2];
+        for i in (frames / 2)..frames {
+            let v = 0.95 * (2.0 * std::f32::consts::PI * 400.0 * i as f32 / 48_000.0).sin();
+            buf[i * 2] = v;
+            buf[i * 2 + 1] = v;
+        }
+        l.process(&mut buf, 2);
+
+        // The ceiling sits at 0 dBFS and cannot help here, so anything much over
+        // the threshold means the gain arrived late.
+        let worst = buf.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+        assert!(
+            worst < threshold * 1.35,
+            "transient peaked at {worst}, threshold {threshold}"
+        );
     }
 
     #[test]
