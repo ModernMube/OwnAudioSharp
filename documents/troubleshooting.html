@@ -159,7 +159,7 @@ catch (DecoderException ex)
     Console.WriteLine($"Cannot decode {path}: {ex.Message}");
 }</code></pre></div>
 
-<p>For anything outside that list — Opus, WMA, AC3 — install FFmpeg 8+ and it is picked up automatically as a fallback. See <a href="api-reference.html#ffmpeg">FFmpeg integration</a>.</p>
+<p>Anything outside that list — Opus, WMA, AC3 — will not open, and there is no fallback decoder to install. Convert the file ahead of time instead. See <a href="api-reference.html#ffmpeg">Decoding</a>.</p>
 
 <!-- ───────────────────────────────────────────────────────────────────── -->
 <h2 id="effect-silent">An effect does nothing</h2>
@@ -248,7 +248,7 @@ int trimmed = mixer.LastRecordingLatencyOffsetFrames;   // what was dropped</cod
   <thead><tr><th>Type</th><th>What it means</th><th>What to do</th></tr></thead>
   <tbody>
     <tr><td><code>DeviceException</code></td><td>The requested device could not be opened — wrong ID, in exclusive use, or gone.</td><td>Fall back to <code>OutputDeviceId = null</code> and re-enumerate.</td></tr>
-    <tr><td><code>DecoderException</code></td><td>The file could not be decoded.</td><td>Check the format against the supported list; try FFmpeg as a fallback.</td></tr>
+    <tr><td><code>DecoderException</code></td><td>The file could not be decoded.</td><td>Check the format against the supported list; convert the file if it falls outside.</td></tr>
     <tr><td><code>StreamException</code></td><td>The native audio stream failed to open or died.</td><td>Try a larger buffer or a different host type.</td></tr>
     <tr><td><code>HostApiNotAvailableException</code></td><td>The <code>HostType</code> you asked for doesn't exist on this machine.</td><td>Use <code>EngineHostType.None</code> and let the engine choose.</td></tr>
     <tr><td><code>AsioDriverNotFoundException</code></td><td>No ASIO driver installed.</td><td>Install the interface's driver, or use WASAPI.</td></tr>
@@ -264,7 +264,7 @@ int trimmed = mixer.LastRecordingLatencyOffsetFrames;   // what was dropped</cod
 <p><code>OwnAudioSharp</code> for desktop with everything. <code>OwnAudioSharp.Mobile</code> for Android and iOS. <code>OwnAudioSharp.Basic</code> when you only want audio in and out and care about size. MIDI is its own package, and vocal separation and MT3 are optional add-ons.</p>
 
 <h3>Do I need FFmpeg?</h3>
-<p>No. The Rust decoder handles the common formats out of the box. FFmpeg 8+ is only picked up as an optional fallback for exotic formats if it happens to be installed.</p>
+<p>No — and you cannot use it either. The Rust decoder handles the common formats out of the box and is the only decoder there is; the FFmpeg fallback of earlier versions was removed in 4.0.</p>
 
 <h3>How many sources can one mixer hold?</h3>
 <p>25 — <code>AudioConstants.MaxAudioSources</code>. Past about eight, give the mix thread more headroom with <code>bufferMultiplier</code>.</p>

@@ -1,11 +1,9 @@
 //! Decoder backend implementations and the backend-selection factory.
 //!
-//! Only the pure-Rust Symphonia backend lives here.  FFmpeg-backed decoding is
-//! intentionally *not* compiled into the native library: it is provided by the
-//! managed C# layer, which loads the system FFmpeg shared libraries dynamically
-//! at runtime (system locations or a user-configured path) and only when they
-//! are actually present.  This keeps the native binary free of any build- or
-//! load-time FFmpeg dependency, so it loads on every platform out of the box.
+//! Only the pure-Rust Symphonia backend lives here, and it is the only one in
+//! the product - the managed layer's FFmpeg fallback went away in 4.0.  Keeps
+//! the native binary free of any build- or load-time FFmpeg dependency, so it
+//! loads on every platform out of the box.
 
 pub(crate) mod resample;
 pub(crate) mod symphonia_backend;

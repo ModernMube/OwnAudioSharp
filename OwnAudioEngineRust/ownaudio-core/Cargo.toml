@@ -19,8 +19,8 @@ ownaudio-soundtouch = { path = "../ownaudio-soundtouch" }
 
 # Pure-Rust streaming audio decoder. Always compiled in and dependency-free at
 # runtime, so the native library loads on every platform without FFmpeg.
-# FFmpeg-backed decoding is handled separately by the managed C# layer, which
-# loads the system FFmpeg libraries dynamically only when they are present.
+# This is the only decoder in the product - the managed side has no FFmpeg
+# fallback behind it since 4.0.
 symphonia = { version = "0.5", features = [
     "mp3", "flac", "wav", "pcm", "adpcm", "ogg", "vorbis", "aac", "alac", "isomp4", "aiff",
 ] }

@@ -3,6 +3,50 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## Unreleased
+
+### Fixed
+
+- **SmartMaster measured the low end against an absolute level.** The subwoofer step compared a
+  broadband RMS to a fixed −40 dBFS, so the verdict moved with playback volume, mic gain and
+  distance, and room rumble could carry it on its own. It now falls out of the pink noise pass in
+  three tiers: a capture-level gate so a dead mic cannot read as a healthy system, a weak-low case
+  left to the EQ, and a subharmonic case limited to systems that carry 40–80 Hz but run out under
+  it — the synth is an octave divider, so on a box already down at 60 Hz it would only write
+  energy further down. `SubharmonicMix` ramps 0.08–0.18 with the deficit instead of snapping to a
+  fixed 0.15. The separate 2 second low-frequency pass is gone, which also makes the measurement
+  shorter.
+- **The spectrum analyzer read the wrong frequencies.** The captured audio went into the FFT
+  interleaved, which drags every band down an octave, and each band averaged over its bins, which
+  tilted the whole readout by 1.5 dB per octave. Both skewed the EQ correction, not just the low
+  end verdict. The per-band deviation is now taken against the same noise run through the same
+  analyzer, so the window's low-frequency smearing cancels too and a perfect system reads 0 dB at
+  every band.
+
+### Changed
+
+- The `HiFi` speaker preset drops its subharmonic mix from 0.12 to 0.06 — a bookshelf pair may not
+  reach where the octave divider writes.
+
+### Documentation
+
+- `SmartMasterConfig` in the effects API page listed a `SubharmonicFreqRange` field that does not
+  exist; replaced with the real `SubharmonicLowLevel` / `SubharmonicHighLevel` band levels.
+- **The FFmpeg fallback described everywhere was removed in 4.0 and never came back.** There is no
+  FFmpeg code left in the product — no library loading, no process invocation, in either the
+  managed or the native layer — but the package READMEs still told users to `brew install ffmpeg`
+  for "any format the native backend cannot handle", and the reference page documented an
+  `FFmpegConfig.CustomLibraryPath` / `IsAvailable` API that does not exist. Corrected in
+  `README.Desktop.md`, `README.Basic.md`, `Ownaudio.Core/README.md`, `index.html`,
+  `api-reference.html` and `troubleshooting.html`; the misleading comments in `RustNativeDecoder`
+  and in four places on the Rust side, all claiming FFmpeg decoding lived in the other layer, are
+  gone too. A format outside the Symphonia list now honestly fails.
+- The desktop and mobile package READMEs advertised vocal removal as a feature of the package and
+  opened their quick start with `using OwnaudioNET.Features.Vocalremover;` — a namespace neither
+  package contains, so the sample did not compile. Vocal separation now points at the separate
+  `OwnVocalRemover` add-on, as the site already did; the mobile README says outright that it is
+  desktop only.
+
 ## 4.0.4-preview.2 — 2026-08-09
 
 ### Added

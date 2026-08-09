@@ -12,7 +12,6 @@ OwnAudioSharp.Mobile is a professional-grade audio engine providing high-perform
 - **Advanced Audio Features**:
   - **Network Synchronization**: Multi-device audio sync across WiFi (< 20ms accuracy)
   - **Master Clock**: Sample-accurate timeline synchronization for multi-track playback
-  - AI-powered vocal removal (ONNX-based neural separation)
   - Audio matchering and mastering
   - Real-time chord detection
   - Built-in effects and DSP routines
@@ -21,7 +20,6 @@ OwnAudioSharp.Mobile is a professional-grade audio engine providing high-perform
 
 ```csharp
 using OwnaudioNET;
-using OwnaudioNET.Features.Vocalremover;
 
 // Initialize the audio engine
 OwnaudioNet.Initialize();
@@ -62,19 +60,9 @@ await OwnaudioNet.StartNetworkSyncClientAsync(
 
 // All devices play in perfect sync over WiFi
 // Automatic reconnection if WiFi drops
-
-// AI Vocal Removal
-var options = new SimpleSeparationOptions 
-{ 
-    Model = InternalModel.Best, 
-    OutputDirectory = "output" 
-};
-
-using var separator = new SimpleAudioSeparationService(options);
-separator.Initialize();
-var result = separator.Separate("song.mp3");
-// result.VocalsPath and result.InstrumentalPath contain the output files
 ```
+
+> **Vocal separation is not available on mobile.** It ships as the separate `OwnVocalRemover` package, which targets Windows, macOS and Linux only.
 
 ## Platform Support
 

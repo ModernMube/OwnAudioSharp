@@ -9,8 +9,8 @@ using CoreStreamInfo = Ownaudio.AudioStreamInfo;
 namespace OwnaudioNET.Engine;
 
 /// <summary>
-/// Puts the Rust StreamingAudioDecoder behind IAudioDecoder, so the Symphonia backend (WAV, MP3, FLAC,
-/// OGG, AAC/M4A, ALAC/M4A, AIFF) is the primary decoder. FFmpeg only steps in for what it can't handle.
+/// Puts the Rust StreamingAudioDecoder behind IAudioDecoder. The Symphonia backend (WAV, MP3, FLAC,
+/// OGG, AAC/M4A, ALAC/M4A, AIFF) is the only decoder there is - nothing else picks up what it can't open.
 /// </summary>
 internal sealed class RustNativeDecoder : IAudioDecoder
 {

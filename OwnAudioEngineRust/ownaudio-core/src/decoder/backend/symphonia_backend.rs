@@ -1,8 +1,8 @@
 //! Pure-Rust streaming decoder built on [Symphonia](https://docs.rs/symphonia).
 //!
 //! Supports the formats enabled in `Cargo.toml`: WAV, MP3, FLAC, OGG/Vorbis,
-//! AAC/M4A, ALAC/M4A and AIFF.  This backend is always compiled in and serves
-//! as the fallback whenever the FFmpeg backend is unavailable.
+//! AAC/M4A, ALAC/M4A and AIFF.  Always compiled in, and the only backend there
+//! is - anything outside that list fails to open.
 
 use std::fs::File;
 use std::path::Path;

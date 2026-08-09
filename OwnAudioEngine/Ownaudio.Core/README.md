@@ -440,11 +440,11 @@ public enum AudioFormat
     Wav     = 1,   // PCM, IEEE Float, ADPCM
     Mp3     = 2,   // MPEG-1/2 Layer III
     Flac    = 3,   // Free Lossless Audio Codec
-    FFmpeg  = 4    // Formats decoded by FFmpeg (OGG, Opus, AAC, ALAC, M4A, WMA, AIFF, …)
+    FFmpeg  = 4    // Everything else the native decoder handles (OGG/Vorbis, AAC, ALAC, M4A, AIFF)
 }
 ```
 
-> `AudioFormat` is used as an **extension hint** for stream decoding (temp-file suffix). The native decoder auto-detects the real format from the file content regardless of this value.
+> `AudioFormat` is used as an **extension hint** for stream decoding (temp-file suffix). The native decoder auto-detects the real format from the file content regardless of this value. The `FFmpeg` member name is historical — since 4.0 nothing routes through FFmpeg.
 
 ## Async Extensions
 

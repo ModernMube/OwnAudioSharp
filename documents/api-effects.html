@@ -137,6 +137,7 @@ comp.SetPreset(CompressorPreset.VocalGentle);</code></pre></div>
 <!-- SmartMaster -->
 <h2 id="smartmaster">SmartMaster</h2>
 <p>A whole mastering chain in one effect for the master bus: 30-band EQ, compressor, subharmonic synth and a brick-wall limiter. Its party trick is measuring the room through a microphone and calibrating the EQ to what the speakers actually do.</p>
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>The measurement judges every band against the midrange rather than against an absolute level, so the same speakers give the same verdict whether you ran the sweep loud or quiet. It also decides for itself whether the subharmonic synth would help: a speaker that carries 40–80 Hz but runs out under it gets it, one that simply cannot do bass does not — the synth is an octave divider, so there it would only write energy further down.</p></div>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var smartMaster = new SmartMasterEffect();
 mixer.AddMasterEffect(smartMaster);
 
@@ -155,6 +156,7 @@ smartMaster.ResetToDefaults();
 await smartMaster.StartMeasurementAsync(); // plays test signal, auto-calibrates EQ
 smartMaster.CancelMeasurement();
 MeasurementStatusInfo status = smartMaster.GetMeasurementStatus();
+// Result is saved to a "measured" preset, never applied on its own
 
 // Edit the live config, then rebuild the chain from it
 SmartMasterConfig cfg = smartMaster.GetConfiguration();
@@ -174,8 +176,9 @@ smartMaster.OnPlaybackStopped(); // call when transport stops</code></pre></div>
     CompressorAttack     = 10f,            // ms
     CompressorRelease    = 100f,           // ms
     SubharmonicEnabled   = false,
-    SubharmonicMix       = 0.0f,           // 0.0–1.0
-    SubharmonicFreqRange = 60.0f,          // max frequency in Hz
+    SubharmonicMix       = 0.0f,           // 0.0–1.0, parallel level
+    SubharmonicLowLevel  = 1.0f,           // 24–36 Hz band
+    SubharmonicHighLevel = 1.0f,           // 36–56 Hz band
     LimiterThreshold     = -0.1f,          // dBFS
     LimiterCeiling       = -0.1f,          // dBFS
     LimiterRelease       = 50f             // ms

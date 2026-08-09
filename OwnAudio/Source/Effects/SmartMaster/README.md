@@ -151,10 +151,23 @@ Reported through `MeasurementStatusInfo` (status enum + 0–1 progress + step te
 1. **Initializing** — verify input is enabled and a device exists.
 2. **Right / Left channel** — play 2 s white noise on one channel, record via
    `InputSource`, measure RMS. Below −60 dBFS ⇒ channel error (aborts).
-3. **Subwoofer** — play 2 s low-frequency noise on all channels; below −40 dBFS
-   flags a weak sub (→ recommends the subharmonic synth).
-4. **Analyzing spectrum** — play 4 s pink noise, record 3 s, FFT to 30 bands,
-   compare against a flat reference to get per-band deviation in dB.
+3. **Analyzing spectrum** — play 4 s pink noise, record 3 s, fold the interleaved
+   capture to mono, FFT to 30 bands. The same noise is run through the same
+   analyzer as a reference, and the per-band deviation is taken against that,
+   gain-aligned on 200 Hz – 2 kHz. Measuring against the analyzer's own answer
+   rather than a flat line takes the window's low-frequency smearing out of the
+   result, so a perfect system reads 0 dB at every band, at any playback volume.
+4. **Checking low end** — the verdict comes out of the same band data, in three
+   tiers, so nothing here depends on how loud the system was playing:
+   - capture below −60 dBFS ⇒ no verdict (a dead mic would otherwise compare
+     noise floor to noise floor and read as a healthy system),
+   - 40–80 Hz more than 12 dB under the midrange ⇒ weak low end, left to the EQ,
+   - 20–31.5 Hz more than 12 dB under a healthy 40–80 Hz ⇒ subharmonic synth,
+     with `Mix` ramped 0.08–0.18 by the size of the deficit.
+
+   The synth is deliberately **not** offered for the weak-low case: it is an
+   octave divider, so on a box that is already down at 60 Hz it only writes
+   energy further down, where even less comes out.
 5. **Calculating correction** — build a fresh `SmartMasterConfig`. The deviation
    is 3-band smoothed first (a single mic position is full of narrow interference
    dips that say nothing about the system), then aimed at a house target curve
@@ -162,8 +175,8 @@ Reported through `MeasurementStatusInfo` (status enum + 0–1 progress + step te
    minimum-phase system, so a 1:1 correction mostly makes it sound worse. Boosts
    are capped short (bass bands 0–4 ≤ +2 dB, others ≤ +6 dB, all ≥ −12 dB)
    because filling a null costs headroom and rarely fills it. Phase-alignment
-   delays / polarity come from the channel results; the subharmonic synth is
-   enabled if the sub was weak.
+   delays / polarity come from the channel results, the subharmonic synth from
+   the low-end verdict above.
 6. Save to `measured.smartmaster.json` and report **Completed** (with any
    warnings). The active chain is reset to defaults; the measured preset is not
    applied automatically.

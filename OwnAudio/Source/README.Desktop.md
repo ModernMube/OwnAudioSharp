@@ -7,13 +7,12 @@ OwnAudioSharp is a professional-grade audio engine providing high-performance au
 ## Key Features
 
 - **Native Rust Audio Engine**: Built on a purpose-built native Rust core for professional-grade, low-latency audio. Device I/O, mixing, and the full effect chain run entirely in native code with a real-time-safe hot path — no PortAudio or MiniAudio dependency.
-- **Multi-format Support**: Native pure-Rust decoder (Symphonia) with built-in support for WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, ALAC/M4A, and AIFF. For any other format, FFmpeg is used automatically as a fallback when installed — no code changes required.
+- **Multi-format Support**: Native pure-Rust decoder (Symphonia) with built-in support for WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, ALAC/M4A, and AIFF — no external codecs, no FFmpeg, no system dependencies.
 - **Real-time Processing**: Zero-allocation design with lock-free buffers and native mixing for professional-grade performance
 - **Advanced Audio Features**:
   - **Network Synchronization**: Multi-device audio sync across local network (< 5ms accuracy on LAN)
   - **Master Clock**: Sample-accurate timeline synchronization for multi-track playback
   - **SmartMaster Effect**: Intelligent audio mastering with auto-calibration
-  - AI-powered vocal removal (ONNX-based neural separation)
   - Audio matchering and mastering
   - Real-time chord detection
   - Built-in effects and DSP routines
@@ -23,7 +22,6 @@ OwnAudioSharp is a professional-grade audio engine providing high-performance au
 
 ```csharp
 using OwnaudioNET;
-using OwnaudioNET.Features.Vocalremover;
 
 // Initialize the audio engine
 OwnaudioNet.Initialize();
@@ -63,18 +61,14 @@ await OwnaudioNet.StartNetworkSyncClientAsync(
 
 // All clients automatically follow server commands
 // Perfect for multi-room audio, DJ setups, installations
+```
 
-// AI Vocal Removal
-var options = new SimpleSeparationOptions 
-{ 
-    Model = InternalModel.Best, 
-    OutputDirectory = "output" 
-};
+### Vocal separation
 
-using var separator = new SimpleAudioSeparationService(options);
-separator.Initialize();
-var result = separator.Separate("song.mp3");
-// result.VocalsPath and result.InstrumentalPath contain the output files
+ONNX-based vocal/instrumental separation is **not** part of this package. It ships separately as `OwnVocalRemover`, which keeps the original `OwnaudioNET.Features.Vocalremover` namespace, so existing code works once the package is referenced:
+
+```bash
+dotnet add package OwnVocalRemover
 ```
 
 ## Audio Decoding
@@ -83,14 +77,7 @@ Decoding is handled by the native Rust engine using a pure-Rust Symphonia backen
 
 **Natively supported (built-in):** WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, ALAC/M4A, AIFF
 
-For any format the native backend cannot handle, OwnAudioSharp transparently falls back to FFmpeg when it is installed on the system. This is **not part of the public API** — the decoder layer selects the best backend automatically, with no code changes required.
-
-**Decoder priority:** native Rust (Symphonia) → FFmpeg (optional fallback)
-
-**Optional FFmpeg installation per platform:**
-- **Windows:** Place the FFmpeg DLLs next to the executable, or anywhere on `PATH`.
-- **macOS:** `brew install ffmpeg`
-- **Linux:** `sudo apt install ffmpeg` (or equivalent)
+There is no second decoder behind this one. Versions before 4.0 could fall back to a system FFmpeg for other formats; that path was removed along with the managed engines, so a format outside the list above will not open.
 
 ## Platform Support
 

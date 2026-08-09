@@ -13,11 +13,9 @@
 //! WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, ALAC/M4A and AIFF without any external
 //! runtime dependency.
 //!
-//! FFmpeg-backed decoding is **not** part of the native library.  As in the
-//! original design, FFmpeg is used only when it is installed on the system (or
-//! found at a user-configured path); that runtime detection and decoding lives
-//! in the managed C# layer, so the native binary never depends on FFmpeg at
-//! build or load time.
+//! This is the only decoder in the product.  The FFmpeg fallback the managed
+//! layer used to carry was dropped in 4.0, so a format Symphonia cannot open
+//! simply fails - nothing else picks it up.
 //!
 //! ## Usage
 //!

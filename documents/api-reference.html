@@ -6,7 +6,7 @@
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Reference — OwnAudioSharp</title>
-  <meta name="description" content="Architecture, event argument types, enumerations, constants, threading rules and FFmpeg integration.">
+  <meta name="description" content="Architecture, event argument types, enumerations, constants, threading rules and decoding.">
   <link rel="stylesheet" href="../assets/docs.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 </head>
@@ -298,35 +298,20 @@ AudioConstants.MaxTempo         // 1.2 — maximum tempo multiplier (120% speed)
 <h3>Pitch Shift Range</h3>
 <p>The <code>PitchShift</code> property on audio sources accepts values from <code>-12</code> to <code>+12</code> semitones. Use in combination with <code>Tempo</code> to time-stretch without changing pitch.</p>
 
-<!-- FFmpeg Integration -->
-<h2 id="ffmpeg">FFmpeg Integration (Optional Legacy Fallback)</h2>
-<p>As of 4.0, decoding is handled entirely by the native Rust engine, which reads <strong>MP3, FLAC, WAV (PCM/ADPCM), AAC, ALAC, MP4/M4A, OGG/Vorbis and AIFF</strong> out of the box with no external dependencies. FFmpeg is <strong>no longer required</strong>. It remains supported as an <strong>optional legacy fallback</strong>: if FFmpeg 8+ dynamic libraries are detected on startup, they can be used to decode exotic formats (Opus, WMA, AC3, and others) that fall outside the built-in set. This is <strong>not part of the public API</strong> — no code changes are required, and FFmpeg is neither bundled nor needed for normal use.</p>
+<!-- Decoding -->
+<h2 id="ffmpeg">Decoding</h2>
+<p>As of 4.0 decoding is handled entirely by the native Rust engine, which reads <strong>MP3, FLAC, WAV (PCM/ADPCM), AAC, ALAC, MP4/M4A, OGG/Vorbis and AIFF</strong> out of the box with no external dependencies. There is exactly one decoder and no fallback behind it: the FFmpeg path that earlier versions could use was removed together with the managed engines, so a format outside the list above will not open.</p>
 
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>Decoder priority:</strong> built-in Rust decoder (MP3 / FLAC / WAV / AAC / ALAC / MP4 / OGG / AIFF) → optional FFmpeg fallback for additional formats when installed.</p></div>
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>The <code>AudioFormat.FFmpeg</code> enum member survives from that era and no longer means anything about how a file is decoded — it is only a hint for the temporary file extension when you decode from a <code>Stream</code>. There is no <code>FFmpegConfig</code> type; documentation describing one was describing a version that no longer exists.</p></div>
 
-<div class="code-block"><div class="code-header"><span>C# — FFmpeg availability check</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using Ownaudio.Core;
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using Ownaudio.Core;
+using Ownaudio.Decoders;
 
-// Optional: set a custom directory before first decoder use (default = empty = system paths)
-FFmpegConfig.CustomLibraryPath = @"C:\ffmpeg\bin"; // Windows example
-// FFmpegConfig.CustomLibraryPath = "/opt/homebrew/lib"; // macOS example
+// Format is sniffed from the content; 0 means "leave it as the source has it"
+using var decoder = AudioDecoderFactory.Create("audio.aac", targetSampleRate: 48000, targetChannels: 2);
 
-// Check availability — FFmpegConfig.IsAvailable is set automatically at load time
-if (FFmpegConfig.IsAvailable)
-    Console.WriteLine("FFmpeg fallback active — extra formats such as Opus, WMA and AC3 are also supported.");
-else
-    Console.WriteLine("FFmpeg not found — using the built-in Rust decoder (MP3 / FLAC / WAV / AAC / ALAC / MP4 / OGG / AIFF).");
-
-// No other changes needed; AudioDecoderFactory picks the best decoder automatically
-using var decoder = AudioDecoderFactory.Create("audio.aac", targetSampleRate: 48000, targetChannels: 2);</code></pre></div>
-
-<div class="table-wrap"><table class="prop-table">
-  <thead><tr><th>Platform</th><th>Automatic search paths</th></tr></thead>
-  <tbody>
-    <tr><td>Windows</td><td>App directory, <code>PATH</code> — e.g. <code>avcodec-62.dll</code>, <code>avutil-60.dll</code></td></tr>
-    <tr><td>macOS</td><td><code>/opt/homebrew/lib</code>, <code>/usr/local/lib</code> — install via <code>brew install ffmpeg</code></td></tr>
-    <tr><td>Linux</td><td><code>/usr/lib/&lt;arch&gt;-linux-gnu</code>, <code>/usr/lib</code>, <code>/usr/local/lib</code> — install via <code>apt install libavcodec-dev</code></td></tr>
-  </tbody>
-</table></div>
+// Anything the Symphonia backend cannot open throws AudioException
+</code></pre></div>
 
 </main>
 </div>

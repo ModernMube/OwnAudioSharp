@@ -26,7 +26,7 @@ Use `OwnAudioSharp.Basic` when you want a lean playback/recording engine and non
 ## Key Features
 
 - **Native Rust Audio Engine**: Built on a purpose-built native Rust core for professional-grade, low-latency audio. Device I/O, mixing, and the full effect chain run entirely in native code with a real-time-safe hot path — no PortAudio or MiniAudio dependency.
-- **Multi-format Support**: Native pure-Rust decoder (Symphonia) with built-in support for WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, ALAC/M4A, and AIFF. For any other format, FFmpeg is used automatically as a fallback when installed — no code changes required.
+- **Multi-format Support**: Native pure-Rust decoder (Symphonia) with built-in support for WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, ALAC/M4A, and AIFF — no external codecs, no FFmpeg, no system dependencies.
 - **Real-time Processing**: Zero-allocation design with lock-free buffers and native mixing for professional-grade performance
 - **Advanced Audio Features**:
   - **Network Synchronization**: Multi-device audio sync across local network (< 5ms accuracy on LAN)
@@ -123,9 +123,7 @@ Decoding is handled by the native Rust engine using a pure-Rust Symphonia backen
 
 **Natively supported (built-in):** WAV, MP3, FLAC, OGG/Vorbis, AAC/M4A, ALAC/M4A, AIFF
 
-For any format the native backend cannot handle, OwnAudioSharp transparently falls back to FFmpeg when it is installed on the system. This is **not part of the public API** — the decoder layer selects the best backend automatically, with no code changes required.
-
-**Decoder priority:** native Rust (Symphonia) → FFmpeg (optional fallback)
+There is no second decoder behind this one. Versions before 4.0 could fall back to a system FFmpeg for other formats; that path was removed along with the managed engines, so a format outside the list above will not open.
 
 ## Architecture
 
