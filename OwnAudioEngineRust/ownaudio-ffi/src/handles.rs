@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64};
 use std::sync::Arc;
 
-use ownaudio_core::multitrack::MixerController;
+use ownaudio_core::multitrack::{FxTapReader, MixerController};
 use ownaudio_core::{
     AudioEngine, FileSourceControl, InputStream, MemorySourceControl, MixerShared, MultiTrackMixer,
     OutputStream, RingBufferReader, RingBufferWriter, StreamingTrack, TrackShared,
@@ -267,6 +267,10 @@ pub(crate) struct MixerWrapper {
     /// `ownaudio_v1_mixer_capture_read`, and dropped by `..._capture_stop`.
     /// The matching writer lives inside the mixer on the audio thread.
     pub capture_reader: Option<ownaudio_core::RingBufferReader>,
+    /// Read sides of the live effect-chain taps, keyed by the track id they
+    /// watch (`MASTER_EFFECT_TARGET` for the master chain). Installed by
+    /// `ownaudio_v1_mixer_fx_tap_start`, dropped by `..._fx_tap_stop`.
+    pub fx_tap_readers: Vec<(u64, FxTapReader)>,
 }
 
 /// References a track inside a mixer by its stable id.

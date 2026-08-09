@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize,
 use std::sync::Arc;
 
 use crate::effects::EffectChain;
+use crate::multitrack::fx_tap::FxTap;
 use crate::ringbuffer::RingBufferReader;
 use crate::smoothing::SmoothedParam;
 
@@ -624,6 +625,11 @@ pub struct Track {
     /// Frame count of sustained unity after which the always-on latch becomes eligible for
     /// release. Derived from the sample rate at construction (~1 second).
     unlatch_after_frames: u64,
+    /// Optional pre/post tap around this track's effect chain, feeding a control-side
+    /// analyser. Installed and cleared through [`MixerCommand::SetFxTap`].
+    ///
+    /// [`MixerCommand::SetFxTap`]: super::MixerCommand::SetFxTap
+    fx_tap: Option<FxTap>,
 }
 
 /// Output peak below which a block counts as effectively silent, so releasing the always-on
@@ -686,6 +692,7 @@ impl Track {
             start_silence_remaining: 0,
             unity_run_frames: 0,
             unlatch_after_frames: (sample_rate as u64).max(1),
+            fx_tap: None,
         }
     }
 
@@ -693,6 +700,12 @@ impl Track {
     /// `max_chain_latency − this_chain_latency`). Zero disables compensation.
     pub(crate) fn set_pdc_delay(&mut self, frames: u32) {
         self.pdc.set_delay(frames as usize);
+    }
+
+    /// The track's effect-chain tap slot, so the mixer can swap it in and retire
+    /// whatever was there.
+    pub(crate) fn fx_tap_slot(&mut self) -> &mut Option<FxTap> {
+        &mut self.fx_tap
     }
 
     /// Replaces the track's audio source, dropping any previous one in place.
@@ -814,7 +827,13 @@ impl Track {
             *s = 0.0;
         }
 
+        if let Some(tap) = self.fx_tap.as_mut() {
+            tap.write_pre(buf);
+        }
         self.effects.process_all(buf, channels);
+        if let Some(tap) = self.fx_tap.as_mut() {
+            tap.write_post(buf);
+        }
 
         // Plugin delay compensation: delay this track's output so it lines up
         // sample-accurately with the highest-latency track. A zero delay (the

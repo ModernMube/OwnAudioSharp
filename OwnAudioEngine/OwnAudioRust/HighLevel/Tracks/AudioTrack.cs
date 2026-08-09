@@ -33,6 +33,7 @@ public sealed class AudioTrack : IDisposable
     private float _tempo           = 1.0f;
     private float _pitchSemitones  = 0.0f;
     private bool  _muted           = false;
+    private bool  _tapping         = false;
 
     #endregion
 
@@ -435,6 +436,70 @@ public sealed class AudioTrack : IDisposable
 
     #endregion
 
+    #region Effect tap
+
+    /// <summary>
+    /// Starts mirroring this track's audio on both sides of its effect chain, so an analyzer can
+    /// see what the chain got and what it made of it. Sits ahead of gain, pan and PDC.
+    /// </summary>
+    /// <param name="capacitySamples">ring size per side, a few blocks is plenty</param>
+    public void StartFxTap(int capacitySamples)
+    {
+        _throwIfDisposed();
+        int code = OwnAudioNative.ownaudio_v1_track_fx_tap_start(
+            _mixerHandle,
+            _handle.DangerousGetHandle(),
+            (nuint)Math.Max(1, capacitySamples));
+        ErrorCodeMapper.ThrowIfError(code, nameof(StartFxTap));
+        _tapping = true;
+    }
+
+    /// <summary>
+    /// Drains a chunk of the tap. Both spans come back filled to the same length, so index i is the
+    /// same instant on either side. Short reads are normal, 0 means nothing new yet.
+    /// </summary>
+    /// <returns>How many samples landed in each span.</returns>
+    public int ReadFxTap(Span<float> pre, Span<float> post)
+    {
+        _throwIfDisposed();
+
+        int len = Math.Min(pre.Length, post.Length);
+        if (len == 0) { return 0; }
+
+        int code;
+        nuint read;
+        unsafe
+        {
+            fixed (float* preptr = pre)
+            fixed (float* postptr = post)
+            {
+                code = OwnAudioNative.ownaudio_v1_track_fx_tap_read(
+                    _mixerHandle,
+                    _handle.DangerousGetHandle(),
+                    preptr,
+                    postptr,
+                    (nuint)len,
+                    out read);
+            }
+        }
+
+        ErrorCodeMapper.ThrowIfError(code, nameof(ReadFxTap));
+        return (int)read;
+    }
+
+    /// <summary>
+    /// Stops the tap. Harmless when nothing is tapping.
+    /// </summary>
+    public void StopFxTap()
+    {
+        if (_disposed || !_tapping) { return; }
+        _tapping = false;
+        int code = OwnAudioNative.ownaudio_v1_track_fx_tap_stop(_mixerHandle, _handle.DangerousGetHandle());
+        ErrorCodeMapper.ThrowIfError(code, nameof(StopFxTap));
+    }
+
+    #endregion
+
     #region IDisposable
 
     /// <summary>
@@ -443,6 +508,7 @@ public sealed class AudioTrack : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
+        StopFxTap();
         _disposed = true;
         _sourceHandle.Dispose();
         _handle.Dispose();

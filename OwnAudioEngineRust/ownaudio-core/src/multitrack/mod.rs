@@ -3,6 +3,7 @@
 pub mod clock;
 pub mod command;
 pub mod file_source;
+pub mod fx_tap;
 pub mod memory_source;
 pub mod stretch;
 pub mod track;
@@ -10,6 +11,7 @@ pub mod track;
 pub use clock::SampleClock;
 pub use command::{command_channel, CommandReceiver, MixerCommand, MixerController, Retired};
 pub use file_source::{FileSourceControl, FileTrackSource};
+pub use fx_tap::{FxTap, FxTapReader};
 pub use memory_source::{MemorySourceControl, MemoryTrackSource};
 pub use track::{Track, TrackShared, TrackSource, TrackState};
 
@@ -185,6 +187,10 @@ pub struct MultiTrackMixer {
     /// cleared through [`MixerCommand::SetCaptureSink`]; overflow is dropped so a
     /// slow drain never blocks rendering.
     capture_sink: Option<crate::ringbuffer::RingBufferWriter>,
+    /// Optional pre/post tap around the master effect chain, feeding a control-side
+    /// analyser. Installed and cleared through [`MixerCommand::SetFxTap`] addressed
+    /// with [`MASTER_EFFECT_TARGET`].
+    master_fx_tap: Option<FxTap>,
 }
 
 impl MultiTrackMixer {
@@ -210,6 +216,7 @@ impl MultiTrackMixer {
             master_gain_smoother: SmoothedParam::new(1.0, sample_rate, DEFAULT_SMOOTH_MS),
             master_pan_smoother: SmoothedParam::new(0.0, sample_rate, DEFAULT_SMOOTH_MS),
             capture_sink: None,
+            master_fx_tap: None,
         }
     }
 
@@ -365,7 +372,13 @@ impl MultiTrackMixer {
         }
 
         // Apply the master effect chain once over the fully summed mix.
+        if let Some(tap) = self.master_fx_tap.as_mut() {
+            tap.write_pre(output);
+        }
         self.master_effects.process_all(output, channels);
+        if let Some(tap) = self.master_fx_tap.as_mut() {
+            tap.write_post(output);
+        }
 
         // Apply the master output gain and pan over the processed mix and measure the
         // output peak levels for metering. Both are ramped per frame (like a track's
@@ -457,6 +470,16 @@ impl MultiTrackMixer {
             Some(&mut self.master_effects)
         } else {
             self.track_mut(track_id).map(|t| &mut t.effects)
+        }
+    }
+
+    /// The tap slot addressed by `track_id`, under the same
+    /// [`MASTER_EFFECT_TARGET`] convention as [`Self::effect_chain_mut`].
+    fn fx_tap_mut(&mut self, track_id: u64) -> Option<&mut Option<FxTap>> {
+        if track_id == MASTER_EFFECT_TARGET {
+            Some(&mut self.master_fx_tap)
+        } else {
+            self.track_mut(track_id).map(|t| t.fx_tap_slot())
         }
     }
 
@@ -567,6 +590,20 @@ impl MultiTrackMixer {
                 }
                 self.capture_sink = sink;
             }
+            MixerCommand::SetFxTap { track_id, tap } => match self.fx_tap_mut(track_id) {
+                Some(slot) => {
+                    if let Some(old) = slot.take() {
+                        let _ = retire.push(Retired::FxTap(old));
+                    }
+                    *slot = tap;
+                }
+                // The track went away between the enqueue and the drain.
+                None => {
+                    if let Some(orphan) = tap {
+                        let _ = retire.push(Retired::FxTap(orphan));
+                    }
+                }
+            },
         }
     }
 }

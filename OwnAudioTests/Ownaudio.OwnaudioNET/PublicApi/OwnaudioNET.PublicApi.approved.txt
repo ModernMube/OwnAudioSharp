@@ -1461,6 +1461,8 @@ namespace OwnaudioNET.Mixing
         public void ApplyPluginDelayCompensation() { }
         public void ClearMasterEffects() { }
         public void ClearSources() { }
+        public OwnaudioNET.Monitoring.EffectTap CreateEffectTap(System.Guid sourceId, int capacitySamples = 0) { }
+        public OwnaudioNET.Monitoring.EffectTap CreateMasterEffectTap(int capacitySamples = 0) { }
         public void Dispose() { }
         public OwnaudioNET.Interfaces.IEffectProcessor[] GetMasterEffects() { }
         public OwnaudioNET.Interfaces.IAudioSource[] GetSources() { }
@@ -1498,6 +1500,26 @@ namespace OwnaudioNET.Monitoring
         public string Reason { get; set; }
         public double Timestamp { get; set; }
         public override string ToString() { }
+    }
+    public sealed class EffectSpectrumAnalyzer : System.IDisposable
+    {
+        public const float FloorDb = -120F;
+        public EffectSpectrumAnalyzer(OwnaudioNET.Monitoring.EffectTap tap, int fftSize = 2048) { }
+        public int BinCount { get; }
+        public System.ReadOnlySpan<float> Frequencies { get; }
+        public System.ReadOnlySpan<float> PostMagnitudesDb { get; }
+        public System.ReadOnlySpan<float> PreMagnitudesDb { get; }
+        public void Dispose() { }
+        public bool Update() { }
+    }
+    public sealed class EffectTap : System.IDisposable
+    {
+        public int Channels { get; }
+        public bool IsActive { get; }
+        public int LatencySamples { get; }
+        public int SampleRate { get; }
+        public void Dispose() { }
+        public int Read(System.Span<float> pre, System.Span<float> post) { }
     }
     public class TrackPerformanceMetrics
     {
@@ -1854,6 +1876,7 @@ namespace OwnaudioNET.Sources
     public sealed class SourceWithEffects : OwnaudioNET.Interfaces.IAudioSource, System.IDisposable
     {
         public SourceWithEffects(OwnaudioNET.Interfaces.IAudioSource source) { }
+        public int ActiveEffectLatencySamples { get; }
         public Ownaudio.Core.AudioConfig Config { get; }
         public double Duration { get; }
         public int EffectCount { get; }

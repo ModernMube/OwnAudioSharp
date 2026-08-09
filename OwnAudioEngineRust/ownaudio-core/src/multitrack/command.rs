@@ -35,6 +35,7 @@ use std::sync::Arc;
 use crate::effects::{Effect, EffectEntry};
 use crate::ringbuffer::{ring_buffer, RingBufferReader, RingBufferWriter};
 
+use super::fx_tap::{fx_tap, FxTap, FxTapReader};
 use super::track::{Track, TrackShared, TrackSource, TrackState};
 
 /// Upper bound (exclusive) of effect parameter ids probed for their default
@@ -116,6 +117,15 @@ pub enum MixerCommand {
         /// New capture writer, or `None` to stop capturing.
         sink: Option<RingBufferWriter>,
     },
+    /// Install (or clear) the pre/post tap around an effect chain, so a
+    /// control-side analyser can compare the audio going in with the audio
+    /// coming out. The previously installed tap, if any, is retired.
+    SetFxTap {
+        /// Target track id, or [`super::MASTER_EFFECT_TARGET`] for the master chain.
+        track_id: u64,
+        /// New tap, or `None` to stop tapping.
+        tap: Option<FxTap>,
+    },
 }
 
 /// A resource removed by the audio thread and handed back to the control thread
@@ -133,6 +143,8 @@ pub enum Retired {
     Source(Box<dyn TrackSource>),
     /// A replaced or cleared master-output capture sink.
     CaptureSink(RingBufferWriter),
+    /// A replaced, cleared or orphaned effect-chain tap.
+    FxTap(FxTap),
 }
 
 /// Error returned when a command cannot be enqueued because the queue is full.
@@ -369,6 +381,41 @@ impl MixerController {
     /// previously installed writer is retired for control-thread drop.
     pub fn stop_capture(&mut self) -> Result<(), CommandError> {
         self.enqueue(MixerCommand::SetCaptureSink { sink: None })
+    }
+
+    /// Starts tapping an effect chain, returning the reader the control thread
+    /// drains for its pre/post pairs.
+    ///
+    /// `track_id` is a live track, or [`super::MASTER_EFFECT_TARGET`] for the
+    /// master chain; anything else yields `None`. `capacity_samples` sizes each
+    /// side of the ring — an analyser wants a couple of blocks, not seconds, since
+    /// stale audio is of no use to it and overflow is dropped anyway.
+    pub fn start_fx_tap(
+        &mut self,
+        track_id: u64,
+        capacity_samples: usize,
+    ) -> Result<Option<FxTapReader>, CommandError> {
+        if track_id != super::MASTER_EFFECT_TARGET
+            && !self.track_registry.iter().any(|(tid, _)| *tid == track_id)
+        {
+            return Ok(None);
+        }
+
+        let (tap, reader) = fx_tap(capacity_samples, self.channels);
+        self.enqueue(MixerCommand::SetFxTap {
+            track_id,
+            tap: Some(tap),
+        })?;
+        Ok(Some(reader))
+    }
+
+    /// Stops tapping the chain, retiring the installed tap. Harmless when nothing
+    /// is tapping.
+    pub fn stop_fx_tap(&mut self, track_id: u64) -> Result<(), CommandError> {
+        self.enqueue(MixerCommand::SetFxTap {
+            track_id,
+            tap: None,
+        })
     }
 
     /// Enqueues a replacement of the track's audio source.
@@ -1056,6 +1103,138 @@ mod tests {
         assert!(ctl.collect_retired() >= 1);
         let mut after = [0.0f32; 4];
         assert_eq!(reader.read(&mut after), 0);
+    }
+
+    #[test]
+    fn fx_tap_shows_the_track_signal_on_both_sides_of_the_chain() {
+        let (mut ctl, mut mixer) = wired();
+        let (id, shared) = ctl.add_track().unwrap();
+        ctl.set_track_source(id, Some(Box::new(ConstSource(0.5))))
+            .unwrap();
+        ctl.add_effect(
+            id,
+            Box::new(ScalarGain {
+                enabled: true,
+                gain: 2.0,
+            }),
+        )
+        .unwrap();
+        shared.set_state(TrackState::Playing);
+
+        let mut reader = ctl.start_fx_tap(id, 64).unwrap().unwrap();
+        let mut out = [0.0f32; 4];
+        mixer.mix(&mut out);
+
+        let mut pre = [0.0f32; 4];
+        let mut post = [0.0f32; 4];
+        assert_eq!(reader.read(&mut pre, &mut post), 4);
+        assert_eq!(pre, [0.5; 4]);
+        assert_eq!(post, [1.0; 4]);
+    }
+
+    #[test]
+    fn fx_tap_on_the_master_chain_sees_the_summed_mix() {
+        let (mut ctl, mut mixer) = wired();
+        let (id, shared) = ctl.add_track().unwrap();
+        ctl.set_track_source(id, Some(Box::new(ConstSource(0.25))))
+            .unwrap();
+        ctl.add_effect(
+            super::super::MASTER_EFFECT_TARGET,
+            Box::new(ScalarGain {
+                enabled: true,
+                gain: 4.0,
+            }),
+        )
+        .unwrap();
+        shared.set_state(TrackState::Playing);
+
+        let mut reader = ctl
+            .start_fx_tap(super::super::MASTER_EFFECT_TARGET, 64)
+            .unwrap()
+            .unwrap();
+        let mut out = [0.0f32; 4];
+        mixer.mix(&mut out);
+
+        let mut pre = [0.0f32; 4];
+        let mut post = [0.0f32; 4];
+        assert_eq!(reader.read(&mut pre, &mut post), 4);
+        assert_eq!(pre, [0.25; 4]);
+        assert_eq!(post, [1.0; 4]);
+    }
+
+    #[test]
+    fn an_empty_chain_taps_the_same_audio_twice() {
+        let (mut ctl, mut mixer) = wired();
+        let (id, shared) = ctl.add_track().unwrap();
+        ctl.set_track_source(id, Some(Box::new(ConstSource(0.3))))
+            .unwrap();
+        shared.set_state(TrackState::Playing);
+
+        let mut reader = ctl.start_fx_tap(id, 64).unwrap().unwrap();
+        let mut out = [0.0f32; 4];
+        mixer.mix(&mut out);
+
+        let mut pre = [0.0f32; 4];
+        let mut post = [0.0f32; 4];
+        assert_eq!(reader.read(&mut pre, &mut post), 4);
+        assert_eq!(pre, post);
+    }
+
+    #[test]
+    fn stopping_the_tap_retires_it_and_the_reader_runs_dry() {
+        let (mut ctl, mut mixer) = wired();
+        let (id, shared) = ctl.add_track().unwrap();
+        ctl.set_track_source(id, Some(Box::new(ConstSource(0.5))))
+            .unwrap();
+        shared.set_state(TrackState::Playing);
+
+        let mut reader = ctl.start_fx_tap(id, 64).unwrap().unwrap();
+        let mut out = [0.0f32; 4];
+        mixer.mix(&mut out);
+
+        ctl.stop_fx_tap(id).unwrap();
+        mixer.mix(&mut out);
+        assert!(ctl.collect_retired() >= 1);
+
+        let mut pre = [0.0f32; 8];
+        let mut post = [0.0f32; 8];
+        assert_eq!(reader.read(&mut pre, &mut post), 4);
+        assert_eq!(reader.read(&mut pre, &mut post), 0);
+    }
+
+    #[test]
+    fn the_wet_side_of_the_tap_lags_by_the_chain_latency() {
+        let (mut ctl, mut mixer) = wired();
+        let (id, shared) = ctl.add_track().unwrap();
+
+        const L: usize = 3;
+        let mut impulse = vec![0.0f32; 16];
+        impulse[0] = 1.0;
+        ctl.set_track_source(id, Some(Box::new(VecSource::new(impulse))))
+            .unwrap();
+        ctl.add_effect(id, Box::new(LatencyDelayEffect::new(L)))
+            .unwrap();
+        shared.set_state(TrackState::Playing);
+
+        let mut reader = ctl.start_fx_tap(id, 64).unwrap().unwrap();
+        let mut out = [0.0f32; 16];
+        mixer.mix(&mut out);
+
+        let mut pre = [0.0f32; 16];
+        let mut post = [0.0f32; 16];
+        assert_eq!(reader.read(&mut pre, &mut post), 16);
+
+        // The impulse enters at 0 and leaves L frames later: the dry side is what a
+        // control-side analyser has to hold back to line the two up again.
+        assert_eq!(pre[0], 1.0);
+        assert_eq!(post[L], 1.0);
+        assert_eq!(post[0], 0.0);
+    }
+
+    #[test]
+    fn tapping_an_unknown_track_hands_back_nothing() {
+        let (mut ctl, _mixer) = wired();
+        assert!(ctl.start_fx_tap(999, 64).unwrap().is_none());
     }
 
     #[test]

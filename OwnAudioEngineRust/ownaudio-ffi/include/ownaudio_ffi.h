@@ -1078,6 +1078,102 @@ int32_t ownaudio_v1_file_source_seek(struct OwnAudioFileSourceHandle *source,
 void ownaudio_v1_file_source_destroy(struct OwnAudioFileSourceHandle *source);
 
 /**
+ * Starts tapping the audio on both sides of a track's effect chain, so the
+ * caller can compare what the chain was given with what it produced.
+ *
+ * The audio thread mirrors each rendered block into a ring right before the
+ * chain runs and again right after; drain both with
+ * [`ownaudio_v1_track_fx_tap_read`]. A slow drain never blocks rendering —
+ * overflow drops whole pre/post pairs, so the two sides stay aligned.
+ *
+ * The tap sits ahead of the track's gain, pan and delay compensation, so a
+ * fader move never shows up as something the effects did.
+ *
+ * - `capacity_samples` — ring capacity per side, in interleaved samples. A few
+ *   render blocks is the right size; an analyser has no use for stale audio.
+ *
+ * Tapping the same track twice replaces the previous tap.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_track_fx_tap_start(struct OwnAudioMixerHandle *mixer,
+                                       struct OwnAudioTrackHandle *track,
+                                       size_t capacity_samples);
+
+/**
+ * Drains up to `len` tapped samples into `pre_out` and `post_out`, reporting the
+ * count that landed in each through `*out_read`.
+ *
+ * Both buffers always receive the same number of samples, so `pre_out[i]` and
+ * `post_out[i]` are the same instant of audio. A short read is normal and `0`
+ * means the ring is empty or nothing is tapping this track.
+ *
+ * Single-consumer: call from one thread at a time, never next to
+ * [`ownaudio_v1_track_fx_tap_stop`].
+ *
+ * # Safety
+ * - `mixer` and `track` must be live handles that have not been destroyed.
+ * - `pre_out` and `post_out` must each be valid for `len` writable `f32` values.
+ * - `out_read` must point to a writable `usize`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_track_fx_tap_read(struct OwnAudioMixerHandle *mixer,
+                                      struct OwnAudioTrackHandle *track,
+                                      float *pre_out,
+                                      float *post_out,
+                                      size_t len,
+                                      size_t *out_read);
+
+/**
+ * Stops tapping the track's chain and releases the read sides. Safe to call when
+ * nothing is tapping (no-op).
+ *
+ * # Safety
+ * - `mixer` and `track` must be live handles that have not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_track_fx_tap_stop(struct OwnAudioMixerHandle *mixer,
+                                      struct OwnAudioTrackHandle *track);
+
+/**
+ * Same as [`ownaudio_v1_track_fx_tap_start`], but around the master chain, which
+ * sees the summed mix. Sits ahead of the master gain and pan.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_mixer_master_fx_tap_start(struct OwnAudioMixerHandle *mixer,
+                                              size_t capacity_samples);
+
+/**
+ * Master-chain counterpart of [`ownaudio_v1_track_fx_tap_read`].
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `pre_out` and `post_out` must each be valid for `len` writable `f32` values.
+ * - `out_read` must point to a writable `usize`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_mixer_master_fx_tap_read(struct OwnAudioMixerHandle *mixer,
+                                             float *pre_out,
+                                             float *post_out,
+                                             size_t len,
+                                             size_t *out_read);
+
+/**
+ * Master-chain counterpart of [`ownaudio_v1_track_fx_tap_stop`].
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_mixer_master_fx_tap_stop(struct OwnAudioMixerHandle *mixer);
+
+/**
  * Opens an input stream on `track`, wiring device capture straight into the
  * track's ring buffer, and writes the control handle to `*out_input`.
  *

@@ -56,6 +56,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_create(
             sample_rate,
             channels,
             capture_reader: None,
+            fx_tap_readers: Vec::new(),
         });
 
         unsafe {

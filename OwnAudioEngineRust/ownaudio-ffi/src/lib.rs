@@ -25,6 +25,7 @@ pub mod ffi_decoder;
 pub mod ffi_device;
 pub mod ffi_effects;
 pub mod ffi_file_source;
+pub mod ffi_fx_tap;
 pub mod ffi_input_source;
 pub mod ffi_memory_source;
 pub mod ffi_source;

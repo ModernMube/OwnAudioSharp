@@ -113,6 +113,72 @@ internal static partial class OwnAudioNative
 
     #endregion
 
+    #region Effect chain tap
+
+    /// <summary>
+    /// Taps the audio on both sides of a track's effect chain. Capacity is per side, in interleaved
+    /// samples — a few blocks is plenty, an analyzer has no use for stale audio.
+    /// </summary>
+    /// <param name="capacitySamples">ring size per side</param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_fx_tap_start(
+        IntPtr mixer,
+        IntPtr track,
+        nuint capacitySamples);
+
+    /// <summary>
+    /// Drains a chunk out of both tap rings. Both buffers get the same count back, so index i is the
+    /// same instant of audio on either side.
+    /// </summary>
+    /// <param name="outRead">how many samples landed in each buffer</param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static unsafe partial int ownaudio_v1_track_fx_tap_read(
+        IntPtr mixer,
+        IntPtr track,
+        float* preOut,
+        float* postOut,
+        nuint len,
+        out nuint outRead);
+
+    /// <summary>
+    /// Stops the track tap and drops the read sides. No-op when nothing is tapping.
+    /// </summary>
+    /// <param name="mixer"></param>
+    /// <param name="track"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_fx_tap_stop(IntPtr mixer, IntPtr track);
+
+    /// <summary>
+    /// Same tap around the master chain, so it sees the summed mix. Sits ahead of the master gain
+    /// and pan.
+    /// </summary>
+    /// <param name="mixer"></param>
+    /// <param name="capacitySamples"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_master_fx_tap_start(
+        IntPtr mixer,
+        nuint capacitySamples);
+
+    /// <summary>
+    /// Master side of the tap read.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static unsafe partial int ownaudio_v1_mixer_master_fx_tap_read(
+        IntPtr mixer,
+        float* preOut,
+        float* postOut,
+        nuint len,
+        out nuint outRead);
+
+    /// <summary>
+    /// Master side of the tap stop.
+    /// </summary>
+    /// <param name="mixer"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_master_fx_tap_stop(IntPtr mixer);
+
+    #endregion
+
     #region Track lifecycle
 
     /// <summary>

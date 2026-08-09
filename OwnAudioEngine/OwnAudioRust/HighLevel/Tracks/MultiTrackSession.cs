@@ -30,6 +30,7 @@ public sealed class MultiTrackSession : IDisposable
     private AudioOutputStream? _outputStream;
     private float _masterGain = 1.0f;
     private float _masterPan = 0.0f;
+    private bool _masterTapping;
     private bool _disposed;
 
     #endregion
@@ -446,6 +447,65 @@ public sealed class MultiTrackSession : IDisposable
         ErrorCodeMapper.ThrowIfError(code, nameof(StopCapture));
     }
 
+    /// <summary>
+    /// Starts mirroring the summed mix on both sides of the master effect chain, for an analyzer
+    /// that wants to see what the master chain does. Sits ahead of the master gain and pan.
+    /// </summary>
+    /// <param name="capacitySamples">ring size per side, a few blocks is plenty</param>
+    public void StartMasterFxTap(int capacitySamples)
+    {
+        _throwIfDisposed();
+
+        int code = OwnAudioNative.ownaudio_v1_mixer_master_fx_tap_start(
+            _mixerHandle.DangerousGetHandle(),
+            (nuint)Math.Max(1, capacitySamples));
+        ErrorCodeMapper.ThrowIfError(code, nameof(StartMasterFxTap));
+        _masterTapping = true;
+    }
+
+    /// <summary>
+    /// Drains a chunk of the master tap. Both spans come back the same length, so index i is the
+    /// same instant on either side.
+    /// </summary>
+    /// <returns>How many samples landed in each span.</returns>
+    public int ReadMasterFxTap(Span<float> pre, Span<float> post)
+    {
+        _throwIfDisposed();
+
+        int len = Math.Min(pre.Length, post.Length);
+        if (len == 0) { return 0; }
+
+        int code;
+        nuint read;
+        unsafe
+        {
+            fixed (float* preptr = pre)
+            fixed (float* postptr = post)
+            {
+                code = OwnAudioNative.ownaudio_v1_mixer_master_fx_tap_read(
+                    _mixerHandle.DangerousGetHandle(),
+                    preptr,
+                    postptr,
+                    (nuint)len,
+                    out read);
+            }
+        }
+
+        ErrorCodeMapper.ThrowIfError(code, nameof(ReadMasterFxTap));
+        return (int)read;
+    }
+
+    /// <summary>
+    /// Stops the master tap. Harmless when nothing is tapping.
+    /// </summary>
+    public void StopMasterFxTap()
+    {
+        if (_disposed || !_masterTapping) { return; }
+        _masterTapping = false;
+        int code = OwnAudioNative.ownaudio_v1_mixer_master_fx_tap_stop(_mixerHandle.DangerousGetHandle());
+        ErrorCodeMapper.ThrowIfError(code, nameof(StopMasterFxTap));
+    }
+
     #endregion
 
     #region IDisposable
@@ -457,6 +517,7 @@ public sealed class MultiTrackSession : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
+        StopMasterFxTap();
         _disposed = true;
 
         _outputStream?.Dispose();

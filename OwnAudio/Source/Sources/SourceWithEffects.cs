@@ -262,6 +262,24 @@ public sealed class SourceWithEffects : IAudioSource
     }
 
     /// <summary>
+    /// Same sum, but only over the effects actually running. A bypassed lookahead limiter delays
+    /// nothing, so this is what an analyzer needs to line the dry and wet signal up - PDC uses the
+    /// figure above instead, which stays put across a bypass toggle.
+    /// </summary>
+    public int ActiveEffectLatencySamples
+    {
+        get
+        {
+            lock (_effectsLock)
+            {
+                int _total = 0;
+                foreach (var e in _effects) if (e.Enabled) _total += e.LatencySamples;
+                return _total;
+            }
+        }
+    }
+
+    /// <summary>
     /// Sets PDC delay in frames (maxLatency - thisTrackLatency). Allocates a samples*channels ring buffer.
     /// Zero disables it and frees the buffer.
     /// </summary>
