@@ -153,11 +153,13 @@ public partial class MainWindowViewModel
             _masterEffectHost = newHost;
             _masterEffect     = newProcessor;
 
-            // Step 4: Add to mixer
-            if (IsMasterEffectEnabled && _audioService.Mixer != null)
-            {
-                _audioService.Mixer.AddMasterEffect(_masterEffect);
-            }
+            // Step 4: Add to mixer. The plugin stays in the chain for as long as it
+            // is loaded — the enable toggle only flips Enabled, which the mixer
+            // mirrors onto the plugin's own bypass. Inserting and removing the node
+            // per toggle would change the master chain's latency each time, and the
+            // whole mix would jump by that many samples.
+            _masterEffect.Enabled = IsMasterEffectEnabled;
+            _audioService.Mixer?.AddMasterEffect(_masterEffect);
 
             // Step 5: Sync transport state
             _masterEffect.SetTransportPlaying(_audioService.Mixer?.IsRunning ?? false);
@@ -309,25 +311,18 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (_audioService.Mixer == null)
+        if (_audioService.Mixer == null || _masterEffect == null)
             return;
 
         try
         {
-            if (value)
-            {
-                // Sync current playback state before inserting into the chain.
-                _masterEffect?.SetTransportPlaying(_audioService.Mixer.IsRunning);
+            // Bypass, not detach: the node stays in the chain so the plugin keeps
+            // getting blocks (a cold plugin stalls the audio thread on its first
+            // resumed block) and the chain latency never changes under the mix.
+            _masterEffect.SetTransportPlaying(_audioService.Mixer.IsRunning);
+            _masterEffect.Enabled = value;
 
-                // AddMasterEffect validates IsReady, calls Initialize, and adds to chain.
-                _audioService.Mixer.AddMasterEffect(_masterEffect!);
-                StatusMessage = "Master effect enabled";
-            }
-            else
-            {
-                _audioService.Mixer.RemoveMasterEffect(_masterEffect!);
-                StatusMessage = "Master effect disabled";
-            }
+            StatusMessage = value ? "Master effect enabled" : "Master effect disabled";
         }
         catch (Exception ex)
         {

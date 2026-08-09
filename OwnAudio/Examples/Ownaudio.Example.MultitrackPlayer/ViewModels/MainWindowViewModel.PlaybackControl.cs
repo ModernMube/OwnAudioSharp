@@ -124,8 +124,8 @@ public partial class MainWindowViewModel
                 _masterEffect?.SetTransportPlaying(true);
             });
 
-            // Ensure the SmartMaster effect is inserted on the master bus if the user enabled it —
-            // idempotent, so a toggle made while stopped or while already playing is honoured here too.
+            // Make sure the SmartMaster effect is on the master bus — idempotent, and the mixer
+            // only exists once playback has been set up, so this is where it usually lands.
             SyncSmartMasterAttachment();
 
             double longestDuration = 0.0;
@@ -233,9 +233,8 @@ public partial class MainWindowViewModel
                 }
             }
 
-            // The SmartMaster effect stays attached across stop/play — its presence in the master chain
-            // is owned by the enable toggle (SyncSmartMasterAttachment), not the transport. Only its
-            // internal playback state is reset here.
+            // The SmartMaster effect stays attached across stop/play, and across the enable toggle
+            // too — that only bypasses it. Only its internal playback state is reset here.
             if (_smartMaster != null)
             {
                 _smartMaster.OnPlaybackStopped();

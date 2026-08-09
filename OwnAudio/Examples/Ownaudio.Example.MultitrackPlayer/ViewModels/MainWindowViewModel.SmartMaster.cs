@@ -23,8 +23,8 @@ public partial class MainWindowViewModel
     private bool _isSmartMasterEnabled;
 
     /// <summary>
-    /// Tracks whether the SmartMaster effect is currently inserted into the mixer's master chain,
-    /// so <see cref="SyncSmartMasterAttachment"/> never double-adds or double-removes it.
+    /// Tracks whether the SmartMaster effect has been inserted into the mixer's master chain,
+    /// so <see cref="SyncSmartMasterAttachment"/> never adds it twice.
     /// </summary>
     private bool _smartMasterInChain;
 
@@ -33,44 +33,37 @@ public partial class MainWindowViewModel
     /// </summary>
     partial void OnIsSmartMasterEnabledChanged(bool value)
     {
+        // Bypass, not detach. The effect's own Enabled flag is mirrored onto the native node,
+        // which passes the signal through untouched while it is off. Pulling the node out of
+        // the chain instead would drop its reported latency out of the master bus and the whole
+        // mix would jump by that many samples on every toggle.
         if (_smartMaster != null)
         {
             _smartMaster.Enabled = value;
         }
 
-        // Enabling/disabling must actually insert or remove the effect on the master bus — in the
-        // Rust-native chain a managed effect only processes audio while it is attached to the mixer.
         SyncSmartMasterAttachment();
     }
 
     /// <summary>
-    /// Reconciles the SmartMaster effect's presence in the mixer master chain with
-    /// <see cref="IsSmartMasterEnabled"/>. Idempotent: adds it only when enabled and not already in
-    /// the chain, removes it only when disabled and currently in the chain. No-op before the mixer
-    /// or the effect exist.
+    /// Makes sure the SmartMaster effect is present in the mixer master chain. It stays there for
+    /// the whole session once added; the enable toggle only bypasses it. No-op before the mixer or
+    /// the effect exist, and idempotent afterwards.
     /// </summary>
     private void SyncSmartMasterAttachment()
     {
         var mixer = _audioService.Mixer;
-        if (mixer == null || _smartMaster == null)
+        if (mixer == null || _smartMaster == null || _smartMasterInChain)
             return;
 
         try
         {
-            if (IsSmartMasterEnabled && !_smartMasterInChain)
-            {
-                mixer.AddMasterEffect(_smartMaster);
-                _smartMasterInChain = true;
-            }
-            else if (!IsSmartMasterEnabled && _smartMasterInChain)
-            {
-                mixer.RemoveMasterEffect(_smartMaster);
-                _smartMasterInChain = false;
-            }
+            mixer.AddMasterEffect(_smartMaster);
+            _smartMasterInChain = true;
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Error toggling SmartMaster: {ex.Message}";
+            StatusMessage = $"Error attaching SmartMaster: {ex.Message}";
         }
     }
 
@@ -152,7 +145,7 @@ public partial class MainWindowViewModel
     private void ToggleSmartMaster()
     {
         // Flipping the property raises OnIsSmartMasterEnabledChanged, which mirrors Enabled onto the
-        // effect and attaches/detaches it on the mixer via SyncSmartMasterAttachment.
+        // effect, which the mixer mirrors onto the native node as a bypass.
         IsSmartMasterEnabled = !IsSmartMasterEnabled;
 
         if (_smartMaster != null)
