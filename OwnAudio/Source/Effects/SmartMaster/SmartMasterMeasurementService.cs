@@ -85,16 +85,21 @@ namespace OwnaudioNET.Effects.SmartMaster
                 AddWarning(results, "Left channel error: no signal or too quiet");
             }
             
-            UpdateStatus(status, statusCallback, MeasurementStatus.CheckingSubwoofer, 0.6f, "Checking subwoofer...");
-            bool subOk = await CheckSubwooferAsync(results, micInputGain, cancellationToken);
-            if (!subOk)
+            UpdateStatus(status, statusCallback, MeasurementStatus.AnalyzingSpectrum, 0.6f, "Spectrum analysis...");
+            var lowEnd = await AnalyzeSpectrumAsync(results, micInputGain, cancellationToken);
+
+            UpdateStatus(status, statusCallback, MeasurementStatus.CheckingSubwoofer, 0.8f, "Checking low end...");
+            results.ChannelLevels[2] = lowEnd.CaptureDb - lowEnd.LowDeficit;
+
+            if (!lowEnd.Valid)
             {
-                AddWarning(results, "Warning: Weak or missing low frequency range");
+                AddWarning(results, "Low end not judged: microphone level too low for a verdict");
             }
-            
-            UpdateStatus(status, statusCallback, MeasurementStatus.AnalyzingSpectrum, 0.75f, "Spectrum analysis...");
-            await AnalyzeSpectrumAsync(results, micInputGain, cancellationToken);
-            
+            else if (lowEnd.WeakLow)
+            {
+                AddWarning(results, $"Warning: low end sits {lowEnd.LowDeficit:F0} dB under the midrange");
+            }
+
             if (!rightOk || !leftOk)
             {
                 UpdateStatus(status, statusCallback, MeasurementStatus.Error, 1.0f, 
@@ -109,7 +114,7 @@ namespace OwnaudioNET.Effects.SmartMaster
             UpdateStatus(status, statusCallback, MeasurementStatus.CalculatingCorrection, 0.9f, "Calculating correction...");
             
             var measuredConfig = new SmartMasterConfig();
-            CalculateCorrectionsToConfig(results, measuredConfig);
+            CalculateCorrectionsToConfig(results, lowEnd, measuredConfig);
             
             measuredConfig.LastMeasurement = results;
             
@@ -287,159 +292,16 @@ namespace OwnaudioNET.Effects.SmartMaster
         }
         
         /// <summary>
-        /// Check subwoofer
+        /// Spectrum analysis, hands back the low end verdict too.
         /// </summary>
-        private async Task<bool> CheckSubwooferAsync(MeasurementResults results, float micInputGain, CancellationToken cancellationToken)
+        private async Task<LowEndReading> AnalyzeSpectrumAsync(MeasurementResults results, float micInputGain, CancellationToken cancellationToken)
         {
             try
             {
                 if (OwnaudioNET.OwnaudioNet.Engine == null)
                 {
                     Log.Warning("[SmartMaster] Audio engine not available for measurement");
-                    return false;
-                }
-                
-                int durationSeconds = 2;
-                int sampleCount = _config.SampleRate * durationSeconds;
-                float[] lowFreqNoise = NoiseGenerator.GenerateLowFrequencyNoise(
-                    sampleCount, _config.SampleRate, 0.4f);
-                
-                float[] channelAudio = new float[sampleCount * _config.Channels];
-                for (int i = 0; i < sampleCount; i++)
-                {
-                    for (int ch = 0; ch < _config.Channels; ch++)
-                    {
-                        channelAudio[i * _config.Channels + ch] = lowFreqNoise[i];
-                    }
-                }
-                
-                var noiseSource = new SampleSource(channelAudio, _config);
-                noiseSource.Loop = false;
-                
-                var inputSource = new InputSource(OwnaudioNET.OwnaudioNet.Engine, 8192);
-                inputSource.Volume = micInputGain;
-                
-                noiseSource.Play();
-                inputSource.Play();
-                
-                int playbackFrames = _config.SampleRate * 2;
-                int playbackSamples = playbackFrames * _config.Channels;
-                const int chunkFrames = 512;
-                float[] playbackBuffer = new float[chunkFrames * _config.Channels];
-                
-                int recordDuration = 1500;
-                int recordFrames = _config.SampleRate * recordDuration / 1000;
-                int recordSamples = recordFrames * _config.Channels;
-                float[] recordedBuffer = new float[recordSamples];
-                
-                int totalPlayed = 0;
-                int totalRead = 0;
-                
-                await Task.Delay(100, cancellationToken);
-                
-                int engineBufferCapacity = OwnaudioNET.OwnaudioNet.Engine.FramesPerBuffer * _config.Channels * 2;
-                
-                while (totalPlayed < playbackSamples && totalRead < recordFrames)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    
-                    int bufferOccupied = OwnaudioNET.OwnaudioNet.Engine.OutputBufferAvailable;
-                    int bufferFree = engineBufferCapacity - bufferOccupied;
-                    
-                    if (bufferFree >= 64 * _config.Channels)
-                    {
-                        int framesSpace = bufferFree / _config.Channels;
-                        int framesToPlay = Math.Min(framesSpace, (playbackSamples - totalPlayed) / _config.Channels);
-                        framesToPlay = Math.Min(framesToPlay, 1024);
-                        
-                        if (framesToPlay > 0)
-                        {
-                            if (playbackBuffer.Length < framesToPlay * _config.Channels)
-                            {
-                                playbackBuffer = new float[framesToPlay * _config.Channels];
-                            }
-
-                            int samplesPlayed = noiseSource.ReadSamples(playbackBuffer.AsSpan(), framesToPlay);
-                            if (samplesPlayed > 0)
-                            {
-                                OwnaudioNET.OwnaudioNet.Send(playbackBuffer.AsSpan(0, samplesPlayed * _config.Channels));
-                                totalPlayed += samplesPlayed * _config.Channels;
-                            }
-                        }
-                    }
-                    
-                    if (totalPlayed > _config.SampleRate * 300 / 1000)
-                    {
-                        int framesToRecord = Math.Min(512, recordFrames - totalRead);
-                        if (framesToRecord > 0)
-                        {
-                            int framesRecorded = inputSource.ReadSamples(
-                                recordedBuffer.AsSpan(totalRead * _config.Channels), 
-                                framesToRecord);
-                            if (framesRecorded > 0)
-                            {
-                                totalRead += framesRecorded;
-                            }
-                        }
-                    }
-                    
-                    await Task.Delay(1, cancellationToken);
-                }
-                
-                await FadeOutSourceAsync(noiseSource, cancellationToken);
-
-                noiseSource.Stop();
-                inputSource.Stop();
-                
-                noiseSource.Dispose();
-                inputSource.Dispose();
-                
-                var analyzer = new SmartMasterSpectrumAnalyzer(_config.SampleRate);
-                
-                float rmsLevel;
-                if (totalRead > 0)
-                {
-                    rmsLevel = analyzer.CalculateRMS(recordedBuffer.AsSpan(0, totalRead * _config.Channels).ToArray());
-                }
-                else
-                {
-                    rmsLevel = 0f;
-                }
-                
-                float rmsDb = 20f * (float)Math.Log10(Math.Max(rmsLevel, 1e-10f));
-                
-                results.ChannelLevels[2] = rmsDb;
-                results.ChannelDelays[2] = 0.0f;
-                results.ChannelPolarity[2] = false;
-                
-                Log.Info($"[SmartMaster] Subwoofer measured: {rmsDb:F1} dB (read {totalRead}/{recordFrames} frames)");
-                
-                if (rmsDb < -40.0f)
-                {
-                    Log.Warning("[SmartMaster] Weak subwoofer response detected, will recommend Subharmonic Synth in measured preset");
-                    return false;
-                }
-                
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Log.Error("[SmartMaster] Subwoofer check error", ex);
-                return false;
-            }
-        }
-        
-        /// <summary>
-        /// Spectrum analysis
-        /// </summary>
-        private async Task AnalyzeSpectrumAsync(MeasurementResults results, float micInputGain, CancellationToken cancellationToken)
-        {
-            try
-            {
-                if (OwnaudioNET.OwnaudioNet.Engine == null)
-                {
-                    Log.Warning("[SmartMaster] Audio engine not available for measurement");
-                    return;
+                    return default;
                 }
                 
                 int durationSeconds = 4;
@@ -539,46 +401,60 @@ namespace OwnaudioNET.Effects.SmartMaster
                 Log.Info($"[SmartMaster] Spectrum recording completed: {totalRead}/{recordFrames} frames");
                 
                 var analyzer = new SmartMasterSpectrumAnalyzer(_config.SampleRate);
-                float[] measuredSpectrum = analyzer.AnalyzeSpectrum(recordedBuffer);
-                
-                float[] idealSpectrum = new float[measuredSpectrum.Length];
-                
-                float avgLevel = 0;
-                for (int i = 0; i < measuredSpectrum.Length; i++)
-                {
-                    avgLevel += measuredSpectrum[i];
-                }
-                avgLevel /= measuredSpectrum.Length;
-                
-                for (int i = 0; i < idealSpectrum.Length; i++)
-                {
-                    idealSpectrum[i] = avgLevel;
-                }
-                
+
+                float[] captured = _monoDownmix(recordedBuffer, totalRead);
+                float[] measuredSpectrum = analyzer.AnalyzeSpectrum(captured);
+                float[] referenceSpectrum = analyzer.AnalyzeSpectrum(pinkNoise);
+
+                float offset = _bandGroupDb(measuredSpectrum, RefBandFirst, RefBandLast)
+                             - _bandGroupDb(referenceSpectrum, RefBandFirst, RefBandLast);
+
                 for (int i = 0; i < SmartMasterConfig.EqBands; i++)
                 {
                     float measuredDb = 20f * (float)Math.Log10(Math.Max(measuredSpectrum[i], 1e-10f));
-                    float idealDb = 20f * (float)Math.Log10(Math.Max(idealSpectrum[i], 1e-10f));
-                    
-                    float deviation = idealDb - measuredDb;
-                    
-                    results.FrequencyResponse[i] = deviation;
+                    float referenceDb = 20f * (float)Math.Log10(Math.Max(referenceSpectrum[i], 1e-10f));
+
+                    results.FrequencyResponse[i] = referenceDb + offset - measuredDb;
                 }
-                
+
                 Log.Info("[SmartMaster] Spectrum analysis completed:");
                 for (int i = 0; i < SmartMasterConfig.EqBands; i++)
                 {
                     Log.Info($"  Band {i}: {results.FrequencyResponse[i]:+0.0;-0.0} dB");
                 }
+
+                return _evaluateLowEnd(measuredSpectrum, referenceSpectrum, analyzer.CalculateRMSdB(captured));
             }
             catch (Exception ex)
             {
                 Log.Error("[SmartMaster] Spectrum analysis error", ex);
 
                 Array.Clear(results.FrequencyResponse);
+                return default;
             }
         }
-        
+
+        /// <summary>
+        /// Interleaved capture folded to one stream - handing the analyzer the
+        /// interleaved buffer drags every band down an octave.
+        /// </summary>
+        private float[] _monoDownmix(float[] interleaved, int frames)
+        {
+            int channels = _config.Channels;
+            var mono = new float[frames];
+
+            for (int i = 0; i < frames; i++)
+            {
+                float sum = 0;
+                for (int c = 0; c < channels; c++)
+                    sum += interleaved[i * channels + c];
+
+                mono[i] = sum / channels;
+            }
+
+            return mono;
+        }
+
         /// <summary>
         /// How much of the measured deviation we actually dial in. A room is not a
         /// minimum phase system, so correcting it 1:1 mostly makes it sound worse.
@@ -603,7 +479,7 @@ namespace OwnaudioNET.Effects.SmartMaster
         /// the channel alignment the sweep found. Boosts stay short because filling
         /// a null costs headroom and rarely fills it.
         /// </summary>
-        private void CalculateCorrectionsToConfig(MeasurementResults results, SmartMasterConfig targetConfig)
+        private void CalculateCorrectionsToConfig(MeasurementResults results, LowEndReading lowEnd, SmartMasterConfig targetConfig)
         {
             float[] deviation = _smoothedDeviation(results.FrequencyResponse);
 
@@ -617,12 +493,100 @@ namespace OwnaudioNET.Effects.SmartMaster
             targetConfig.TimeDelays = results.ChannelDelays;
             targetConfig.PhaseInvert = results.ChannelPolarity;
 
-            if (results.ChannelLevels.Length > 2 && results.ChannelLevels[2] < -40.0f)
+            if (lowEnd.WantsSubharmonic)
             {
                 targetConfig.SubharmonicEnabled = true;
-                targetConfig.SubharmonicMix = 0.15f;
-                Log.Info("[SmartMaster] Enabled Subharmonic Synth in measured preset due to weak subwoofer response");
+                targetConfig.SubharmonicMix = lowEnd.SubharmonicMix;
+                Log.Info($"[SmartMaster] Subharmonic Synth on at mix {lowEnd.SubharmonicMix:F2}, sub band is {lowEnd.SubDeficit:F1} dB under the 40-80Hz range");
             }
+            else if (lowEnd.WeakLow)
+            {
+                Log.Info("[SmartMaster] Low end is weak, leaving it to the EQ");
+            }
+        }
+
+        /// <summary>
+        /// 200Hz-2kHz, everything else is judged against this.
+        /// </summary>
+        private const int RefBandFirst = 10;
+        private const int RefBandLast = 20;
+
+        private const float MinCaptureDb = -60.0f;
+        private const float WeakLowDb = 12.0f;
+        private const float SubDropDb = 12.0f;
+
+        /// <summary>
+        /// Low end verdict, both deficits already relative to what the analyzer makes
+        /// of the same noise.
+        /// </summary>
+        private readonly struct LowEndReading
+        {
+            public readonly float CaptureDb;
+            public readonly float LowDeficit;
+            public readonly float SubDeficit;
+
+            public LowEndReading(float captureDb, float lowDeficit, float subDeficit)
+            {
+                CaptureDb = captureDb;
+                LowDeficit = lowDeficit;
+                SubDeficit = subDeficit;
+            }
+
+            public bool Valid => CaptureDb > MinCaptureDb;
+
+            public bool WeakLow => Valid && LowDeficit > WeakLowDb;
+
+            /// <summary>
+            /// Only if the box does 40-80Hz but runs out under it - a divider on a
+            /// speaker already down at 60Hz just eats headroom.
+            /// </summary>
+            public bool WantsSubharmonic => Valid && !WeakLow && SubDeficit > SubDropDb;
+
+            public float SubharmonicMix => Math.Clamp(0.08f + (SubDeficit - SubDropDb) * 0.01f, 0.08f, 0.18f);
+        }
+
+        /// <summary>
+        /// 20-31.5Hz and 40-80Hz against the midrange, corrected by the reference.
+        /// </summary>
+        private static LowEndReading _evaluateLowEnd(float[] measured, float[] reference, float captureDb)
+        {
+            if (measured.Length < SmartMasterConfig.EqBands || reference.Length < SmartMasterConfig.EqBands)
+            {
+                Log.Warning("[SmartMaster] No spectrum to judge the low end from");
+                return default;
+            }
+
+            float lowDeficit = _groupDeficit(measured, reference, 3, 6);
+            float subDeficit = _groupDeficit(measured, reference, 0, 2) - lowDeficit;
+
+            Log.Info($"[SmartMaster] Low end: capture {captureDb:F1} dBFS, 40-80Hz {lowDeficit:F1} dB under the midrange, 20-31.5Hz {subDeficit:F1} dB under that");
+
+            return new LowEndReading(captureDb, lowDeficit, subDeficit);
+        }
+
+        /// <summary>
+        /// Drop against the midrange, minus the same drop in the reference. Mic gain
+        /// falls out of the first difference, the analyzer's tilt out of the second.
+        /// </summary>
+        private static float _groupDeficit(float[] measured, float[] reference, int first, int last)
+        {
+            float measuredDrop = _bandGroupDb(measured, RefBandFirst, RefBandLast) - _bandGroupDb(measured, first, last);
+            float referenceDrop = _bandGroupDb(reference, RefBandFirst, RefBandLast) - _bandGroupDb(reference, first, last);
+
+            return measuredDrop - referenceDrop;
+        }
+
+        /// <summary>
+        /// Mean band energy over an index range, in dB.
+        /// </summary>
+        private static float _bandGroupDb(float[] spectrum, int first, int last)
+        {
+            double energy = 0;
+            for (int i = first; i <= last; i++)
+                energy += (double)spectrum[i] * spectrum[i];
+
+            energy /= last - first + 1;
+            return 10f * (float)Math.Log10(Math.Max(energy, 1e-20));
         }
 
         /// <summary>

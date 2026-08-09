@@ -88,7 +88,8 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
         }
 
         /// <summary>
-        /// RMS magnitude of the bins falling into a 23% wide band around centerFreq.
+        /// Total magnitude of the bins in a 23% wide band around centerFreq. Summed,
+        /// not averaged - averaging tilted the readout by 1.5dB per octave.
         /// </summary>
         private float _bandEnergy(Complex[] fft, float centerFreq, int fftSize)
         {
@@ -107,8 +108,7 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
                 energySum += magnitude * magnitude;
             }
 
-            double rms = Math.Sqrt(energySum / (endBin - startBin + 1));
-            return (float)(rms / (fftSize / 2.0));
+            return (float)(Math.Sqrt(energySum) / (fftSize / 2.0));
         }
     }
 }

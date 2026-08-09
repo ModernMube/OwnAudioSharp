@@ -97,7 +97,7 @@ namespace OwnaudioNET.Effects.SmartMaster
                 SubsonicFrequency = 28.0f,
 
                 SubharmonicEnabled = true,
-                SubharmonicMix = 0.12f,
+                SubharmonicMix = 0.06f,
                 SubharmonicLowLevel = 0.8f,
                 SubharmonicHighLevel = 1.0f,
 
