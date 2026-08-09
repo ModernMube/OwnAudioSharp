@@ -140,6 +140,7 @@ pub struct SmartMaster {
 
     // Shadow values so get_param reports back exactly what was set.
     comp_threshold_lin: f32,
+    comp_ratio: f32,
     crossover_freq: f32,
     delays_ms: [f32; ALIGN],
     invert: [bool; ALIGN],
@@ -179,7 +180,7 @@ impl SmartMaster {
             l
         };
 
-        Self {
+        let mut sm = Self {
             enabled: true,
             mix: 1.0,
             subsonic: Subsonic::new(sample_rate, 35.0),
@@ -196,6 +197,7 @@ impl SmartMaster {
             sub_limiter: band_limiter(),
             limiter,
             comp_threshold_lin: 0.5,
+            comp_ratio: 4.0,
             crossover_freq: 80.0,
             delays_ms: [0.0; ALIGN],
             invert: [false; ALIGN],
@@ -205,7 +207,10 @@ impl SmartMaster {
             sub_r: vec![0.0; INITIAL_SCRATCH_FRAMES],
             mono_sub: vec![0.0; INITIAL_SCRATCH_FRAMES],
             band_scratch: vec![0.0; INITIAL_SCRATCH_FRAMES * 2],
-        }
+        };
+
+        sm.sync_comp_makeup();
+        sm
     }
 
     /// The crossover section runs when it is switched on, or when an alignment
@@ -273,6 +278,28 @@ impl SmartMaster {
                 buffer[f * ch + 1] = self.band_scratch[f * 2 + 1] + sub;
             }
         }
+    }
+
+    /// Mirrors the C# `CompressorEffect._autoMakeupGain`: guess a makeup from
+    /// threshold and ratio assuming a -12 dBFS average, and only give back 80 %
+    /// of the reduction so the dynamics stay alive. The composite has no makeup
+    /// parameter of its own, and leaving the compressor's own default in place
+    /// applied a flat +1.6 dB to every preset that nobody asked for — which both
+    /// lifted the whole chain and erased a real difference between presets.
+    fn sync_comp_makeup(&mut self) {
+        const TYPICAL_INPUT_DB: f32 = -12.0;
+
+        let threshold_db = lin_to_db(self.comp_threshold_lin);
+        let makeup_db = if TYPICAL_INPUT_DB < threshold_db {
+            0.0
+        } else {
+            let slope = 1.0 / self.comp_ratio - 1.0;
+            let gr_db = slope * (TYPICAL_INPUT_DB - threshold_db) * 0.5;
+            -gr_db * 0.8
+        };
+
+        self.compressor
+            .set_param(compressor::PARAM_MAKEUP, makeup_db);
     }
 
     fn peq_param(&mut self, param_id: u32, value: f32) -> bool {
@@ -361,9 +388,15 @@ impl Effect for SmartMaster {
                     compressor::PARAM_THRESHOLD,
                     lin_to_db(self.comp_threshold_lin),
                 );
+                self.sync_comp_makeup();
                 true
             }
-            PARAM_COMP_RATIO => self.compressor.set_param(compressor::PARAM_RATIO, value),
+            PARAM_COMP_RATIO => {
+                self.comp_ratio = value.max(1.0);
+                let ok = self.compressor.set_param(compressor::PARAM_RATIO, value);
+                self.sync_comp_makeup();
+                ok
+            }
             PARAM_COMP_ATTACK => self.compressor.set_param(compressor::PARAM_ATTACK, value),
             PARAM_COMP_RELEASE => self.compressor.set_param(compressor::PARAM_RELEASE, value),
             PARAM_COMP_KNEE => self.compressor.set_param(compressor::PARAM_KNEE, value),
@@ -556,6 +589,42 @@ mod tests {
         assert!(buf.iter().all(|s| s.is_finite()));
         let ceiling = 10.0f32.powf(-0.1 / 20.0) + 1.0e-4;
         assert!(buf.iter().all(|&s| s.abs() <= ceiling));
+    }
+
+    /// The composite exposes no makeup parameter, so the inner compressor used
+    /// to keep its own +1.6 dB default and apply it to every preset. The managed
+    /// `CompressorEffect` derives one from threshold and ratio instead; these are
+    /// the values that formula gives for the factory presets.
+    #[test]
+    fn compressor_makeup_matches_the_managed_formula() {
+        for (threshold, ratio, want_db) in [
+            (0.158f32, 2.0f32, 0.806f32),
+            (0.200, 1.8, 0.352),
+            (0.126, 1.5, 0.800),
+            (0.251, 3.0, 0.000),
+            (0.200, 2.5, 0.475),
+        ] {
+            let mut sm = SmartMaster::new(SR);
+            sm.set_param(PARAM_COMP_ENABLED, 1.0);
+            sm.set_param(PARAM_COMP_THRESHOLD, threshold);
+            sm.set_param(PARAM_COMP_RATIO, ratio);
+            sm.set_param(PARAM_LIMIT_THRESHOLD, 0.0);
+            sm.set_param(PARAM_LIMIT_CEILING, 0.0);
+
+            // Well under the threshold, so only the makeup shows up.
+            let amp = 0.02;
+            let mut buf = stereo_tone(1_000.0, amp, 24_000);
+            sm.process(&mut buf, 2);
+
+            let peak = buf[buf.len() / 2..]
+                .iter()
+                .fold(0.0f32, |m, s| m.max(s.abs()));
+            let got_db = 20.0 * (peak / amp).log10();
+            assert!(
+                (got_db - want_db).abs() < 0.05,
+                "threshold {threshold} ratio {ratio}: {got_db} dB, want {want_db}"
+            );
+        }
     }
 
     #[test]
