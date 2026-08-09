@@ -17,6 +17,7 @@ OwnAudioSharp is a professional-grade audio engine providing high-performance au
   - Audio matchering and mastering
   - Real-time chord detection
   - Built-in effects and DSP routines
+  - **Effect Analysis**: tap any effect chain for the signal on both sides of it while it plays, with a ready-made before/after spectrum analyzer
 
 ## Quick Start
 

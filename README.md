@@ -4,7 +4,7 @@
 
 <div align="center">
   <a href="https://www.nuget.org/packages/OwnAudioSharp">
-    <img src="https://img.shields.io/badge/NuGet-OwnAudioSharp%204.0.4--preview.1-blue" alt="OwnAudioSharp NuGet Package">
+    <img src="https://img.shields.io/badge/NuGet-OwnAudioSharp%204.0.4--preview.2-blue" alt="OwnAudioSharp NuGet Package">
   </a>
   <a href="https://modernmube.github.io/OwnAudioSharp">
     <img src="https://img.shields.io/badge/Docs-API%20Documentation-darkgreen" alt="Documentation">
@@ -69,7 +69,7 @@ actually meet it, and answers "how do I build this?" as well as "what does this 
 | MIDI | Hardware I/O, SMF file read/write, hardware-accurate clock |
 | Network | Sample-accurate multi-device sync over LAN |
 | Mastering | Reference-based mastering (Audio Matchering) |
-| Analysis | Real-time chord detection, MT3 multi-instrument transcription |
+| Analysis | Real-time chord detection, MT3 multi-instrument transcription, before/after effect spectrum |
 | Calibration | SmartMaster speaker calibration with automatic EQ correction |
 
 **Recommended for:** music players and DAWs, DJ software, music-education tools, broadcast and podcast pipelines, live-performance apps, and low-latency game audio.
@@ -156,6 +156,11 @@ Reverb, equalizer, compressor, limiter, chorus, delay, distortion and more — f
 Load VST3 effect plugins and use their native cross-platform editor GUI, integrated into the effect chain like any built-in effect.
 
 > Full guide: [OwnAudio/Source/Effects/VST/README.md](OwnAudio/Source/Effects/VST/README.md)
+
+### Effect Analysis — See What an Effect Does
+Tap any effect chain and get the signal on both sides of it, block for block, while it plays. `EffectSpectrumAnalyzer` turns that into a live before/after spectrum; effect latency is compensated, so the two sides line up.
+
+> Guide: [Effect analysis](https://modernmube.github.io/OwnAudioSharp/documents/api-effects.html#analysis)
 
 ### Simple Recording & Playback
 Straightforward capture from any input device with configurable sample rate, buffer size and channel count.

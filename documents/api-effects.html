@@ -6,7 +6,7 @@
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Effects &amp; VST3 — OwnAudioSharp</title>
-  <meta name="description" content="The 17 built-in DSP effects, the SmartMaster chain and VST3 plugin hosting in OwnAudioSharp.">
+  <meta name="description" content="The 15 built-in DSP effects, the SmartMaster chain, VST3 plugin hosting and the before/after effect tap in OwnAudioSharp.">
   <link rel="stylesheet" href="../assets/docs.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 </head>
@@ -15,21 +15,21 @@
   <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
   <a class="topnav-logo" href="../index.html"><img src="../ownaudio-logo.svg" alt="OwnAudioSharp" height="24"></a>
   <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="concepts.html">Concepts</a></li><li><a href="recipes.html">Recipes</a></li><li><a href="api-core.html" class="active">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
-  <div class="topnav-right"><span class="badge-version">v4.0.3</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
+  <div class="topnav-right"><span class="badge-version">v4.0.4</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
 </nav>
 <div id="sidebar-overlay" class="sidebar-overlay"></div>
 <div class="layout">
 <nav id="sidebar" class="sidebar">
   <div class="sidebar-section"><span class="sidebar-label">Start here</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li><li><a href="concepts.html">🧭 Core Concepts</a></li><li><a href="concepts.html#glossary" class="sub">Glossary</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">Build something</span><ul class="sidebar-nav"><li><a href="recipes.html">🍳 Recipes</a></li><li><a href="recipes.html#play-file" class="sub">Play a file</a></li><li><a href="recipes.html#backing-player" class="sub">Multi-track player</a></li><li><a href="recipes.html#transport" class="sub">Play / pause / stop</a></li><li><a href="recipes.html#meters" class="sub">Position &amp; meters</a></li><li><a href="recipes.html#tempo-pitch" class="sub">Tempo &amp; pitch</a></li><li><a href="recipes.html#fx-live" class="sub">Effects while playing</a></li><li><a href="recipes.html#record" class="sub">Record &amp; monitor</a></li><li><a href="recipes.html#metronome" class="sub">Generate audio</a></li><li><a href="recipes.html#render" class="sub">Render to WAV</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">The API, in order</span><ul class="sidebar-nav"><li><a href="api-core.html">1 · Engine &amp; Config</a></li><li><a href="api-core.html#lifecycle" class="sub">Start &amp; shut down</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-core.html#devices" class="sub">Devices</a></li><li><a href="api-core.html#logging" class="sub">Logging</a></li><li><a href="api-mixer.html">2 · Mixer</a></li><li><a href="api-mixer.html#sources" class="sub">Sources on the bus</a></li><li><a href="api-mixer.html#master-effects" class="sub">Master effects</a></li><li><a href="api-mixer.html#recording" class="sub">Recording</a></li><li><a href="api-sources.html">3 · Sources</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#streamingsource" class="sub">StreamingSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel routing</a></li><li><a href="api-effects.html">4 · Effects &amp; VST3</a></li><li><a href="api-effects.html#all-effects" class="sub">The effect list</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 plugins</a></li><li><a href="api-sync.html">5 · Timeline &amp; Sync</a></li><li><a href="api-sync.html#masterclock" class="sub">MasterClock</a></li><li><a href="api-sync.html#drift-zones" class="sub">Drift correction</a></li><li><a href="api-sync.html#offline-mode" class="sub">Offline render</a></li><li><a href="api-network.html">6 · Network Sync</a></li><li><a href="api-advanced.html">7 · Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal remover</a></li><li><a href="api-advanced.html#mt3" class="sub">MT3 transcription</a></li><li><a href="api-midi.html">8 · MIDI</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI files</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI clock</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">Build something</span><ul class="sidebar-nav"><li><a href="recipes.html">🍳 Recipes</a></li><li><a href="recipes.html#play-file" class="sub">Play a file</a></li><li><a href="recipes.html#backing-player" class="sub">Multi-track player</a></li><li><a href="recipes.html#transport" class="sub">Play / pause / stop</a></li><li><a href="recipes.html#meters" class="sub">Position &amp; meters</a></li><li><a href="recipes.html#tempo-pitch" class="sub">Tempo &amp; pitch</a></li><li><a href="recipes.html#fx-live" class="sub">Effects while playing</a></li><li><a href="recipes.html#record" class="sub">Record &amp; monitor</a></li><li><a href="recipes.html#metronome" class="sub">Generate audio</a></li><li><a href="recipes.html#render" class="sub">Render to WAV</a></li><li><a href="recipes.html#fx-analyzer" class="sub">Analyze an effect</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">The API, in order</span><ul class="sidebar-nav"><li><a href="api-core.html">1 · Engine &amp; Config</a></li><li><a href="api-core.html#lifecycle" class="sub">Start &amp; shut down</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-core.html#devices" class="sub">Devices</a></li><li><a href="api-core.html#logging" class="sub">Logging</a></li><li><a href="api-mixer.html">2 · Mixer</a></li><li><a href="api-mixer.html#sources" class="sub">Sources on the bus</a></li><li><a href="api-mixer.html#master-effects" class="sub">Master effects</a></li><li><a href="api-mixer.html#recording" class="sub">Recording</a></li><li><a href="api-sources.html">3 · Sources</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#streamingsource" class="sub">StreamingSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel routing</a></li><li><a href="api-effects.html">4 · Effects &amp; VST3</a></li><li><a href="api-effects.html#all-effects" class="sub">The effect list</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 plugins</a></li><li><a href="api-effects.html#analysis" class="sub">Effect analysis</a></li><li><a href="api-sync.html">5 · Timeline &amp; Sync</a></li><li><a href="api-sync.html#masterclock" class="sub">MasterClock</a></li><li><a href="api-sync.html#drift-zones" class="sub">Drift correction</a></li><li><a href="api-sync.html#offline-mode" class="sub">Offline render</a></li><li><a href="api-network.html">6 · Network Sync</a></li><li><a href="api-advanced.html">7 · Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal remover</a></li><li><a href="api-advanced.html#mt3" class="sub">MT3 transcription</a></li><li><a href="api-midi.html">8 · MIDI</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI files</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI clock</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">When it breaks</span><ul class="sidebar-nav"><li><a href="troubleshooting.html">🩺 Troubleshooting</a></li><li><a href="troubleshooting.html#faq" class="sub">FAQ</a></li><li><a href="api-reference.html">📋 Reference</a></li><li><a href="api-reference.html#architecture" class="sub">Architecture</a></li><li><a href="api-reference.html#events" class="sub">Events</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#threading" class="sub">Threading rules</a></li></ul></div>
 </nav>
 <main class="main">
 
 <p class="section-eyebrow">Step 4 of 8</p>
 <h1 class="page-title">Effects &amp; VST3</h1>
-<p class="page-subtitle">Shaping the sound — 17 built-ins, an adaptive mastering chain, and any VST3 plugin. Namespace: <code>OwnaudioNET.Effects</code></p>
+<p class="page-subtitle">Shaping the sound — 15 built-ins, an adaptive mastering chain, any VST3 plugin, and a tap to see what they did. Namespace: <code>OwnaudioNET.Effects</code></p>
 
 <p>Every effect, built-in or plugin, is an <code>IEffectProcessor</code>, and they all go in one of two places:</p>
 
@@ -253,10 +253,70 @@ host.Dispose();</code></pre></div>
 
 <div class="callout callout-danger"><div class="callout-icon">🚫</div><p>Take an effect out of its chain before disposing it, and leave a moment in between — the audio thread may still be inside <code>Process()</code>. <a href="recipes.html#fx-live">Safe removal →</a></p></div>
 
+<!-- ───────────────────────────────────────────────────────────────────── -->
+<h2 id="analysis">Seeing what an effect actually does</h2>
+<p>Effects process in place, so by the time you can reach the buffer the original signal is gone. An <strong>effect tap</strong> asks the engine to keep a copy: it mirrors every rendered block on both sides of the chain, and hands you the two back paired up. Namespace: <code>OwnaudioNET.Monitoring</code>.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>What you want</th><th>Call</th></tr></thead>
+  <tbody>
+    <tr><td>One source's chain</td><td><code>mixer.CreateEffectTap(sourceId)</code></td></tr>
+    <tr><td>The master chain</td><td><code>mixer.CreateMasterEffectTap()</code></td></tr>
+  </tbody>
+</table></div>
+
+<p>For a spectrum comparison — the usual reason to want this — wrap the tap in an <code>EffectSpectrumAnalyzer</code> and poll it from a UI timer:</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using var analyzer = new EffectSpectrumAnalyzer(_mixer.CreateEffectTap(vocals.Id));
+
+// from a 30–60 ms timer
+if (analyzer.Update())
+{
+    ReadOnlySpan&lt;float&gt; dry = analyzer.PreMagnitudesDb;    // going into the chain
+    ReadOnlySpan&lt;float&gt; wet = analyzer.PostMagnitudesDb;   // coming out of it
+    ReadOnlySpan&lt;float&gt; hz  = analyzer.Frequencies;
+    Redraw(hz, dry, wet);
+}</code></pre></div>
+
+<p><code>Update()</code> returns <code>false</code> when not enough new audio has arrived yet, and leaves the previous spectra untouched — so a timer that runs faster than the audio simply redraws the same picture. Magnitudes are dBFS, calibrated against a sine: a full-scale tone reads 0 dBFS, and anything below <code>EffectSpectrumAnalyzer.FloorDb</code> (−120) reads as silence.</p>
+
+<h3>Raw samples</h3>
+<p>Skip the analyzer if you want the audio itself — a scope, a correlation meter, your own DSP:</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using var tap = _mixer.CreateMasterEffectTap();
+
+var pre  = new float[4096];
+var post = new float[4096];
+
+int read = tap.Read(pre, post);   // 0 = nothing new yet; both spans get the same count</code></pre></div>
+
+<h3>What the tap guarantees</h3>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Member</th><th>Type</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>Read(Span, Span)</code></td><td>method</td><td>Drains a chunk into both spans, filled to the same length and lined up in time. Returns the sample count.</td></tr>
+    <tr><td><code>Channels</code></td><td><code>int</code></td><td>Interleaved channel count of the tapped audio.</td></tr>
+    <tr><td><code>SampleRate</code></td><td><code>int</code></td><td>Sample rate of the tapped audio.</td></tr>
+    <tr><td><code>LatencySamples</code></td><td><code>int</code></td><td>Latency of the running effects, in frames. Already compensated for — here so you can display it.</td></tr>
+    <tr><td><code>IsActive</code></td><td><code>bool</code></td><td><code>false</code> once disposed.</td></tr>
+  </tbody>
+</table></div>
+
+<p>Three things are handled for you, and they are the parts that are easy to get wrong by hand:</p>
+<ul>
+  <li><strong>The two sides stay paired.</strong> If the drain falls behind, whole pre/post pairs are dropped — never one side alone, which would slide the streams apart and quietly corrupt every later comparison.</li>
+  <li><strong>Latency is compensated.</strong> A look-ahead limiter or a hosted VST3 answers late; the dry side is held back by exactly that much so <code>pre[i]</code> and <code>post[i]</code> really are the same instant. Bypassed effects are excluded, since a bypassed effect delays nothing.</li>
+  <li><strong>The fader is not in the picture.</strong> The tap sits ahead of gain, pan and delay compensation, so moving a volume slider never shows up as something the effects did.</li>
+</ul>
+
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Taps need the Rust-native chain and a source with a native track behind it. <code>CreateEffectTap</code> throws <code>InvalidOperationException</code> for a source that has none, and <code>CreateMasterEffectTap</code> throws until the session exists — add a source first.</p></div>
+
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>Dispose the tap (or the analyzer, which owns it) when the window closes. Until then the engine keeps mirroring every block, which is cheap but not free. <a href="recipes.html#fx-analyzer">Full analyzer recipe →</a></p></div>
+
 <h2 id="next">Next</h2>
 <div class="card-grid">
   <a href="api-sync.html" class="card"><div class="card-icon">⏱️</div><div class="card-title">5 · Timeline &amp; Sync</div><div class="card-desc">Keeping tracks on one timeline.</div></a>
-  <a href="recipes.html#fx-live" class="card"><div class="card-icon">🍳</div><div class="card-title">Effects while playing</div><div class="card-desc">Swapping in a chain mid-playback without a click.</div></a>
+  <a href="recipes.html#fx-analyzer" class="card"><div class="card-icon">📊</div><div class="card-title">Before/after spectrum</div><div class="card-desc">Watching an effect work, live.</div></a>
   <a href="troubleshooting.html#effect-silent" class="card"><div class="card-icon">🩺</div><div class="card-title">Effect does nothing?</div><div class="card-desc">The three usual causes.</div></a>
 </div>
 
