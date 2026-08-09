@@ -3,12 +3,12 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:MultitrackPlayer.ViewModels"
-        mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="870"
+        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="1000"
         x:Class="MultitrackPlayer.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Ownaudio Multitrack Player"
         Width="1000" Height="870"
-        MinWidth="800" MinHeight="600"
+        MinWidth="1100" MinHeight="600"
         Background="#1E1E1E">
 
     <Design.DataContext>
@@ -57,7 +57,7 @@
         </Border>
 
         <!-- Main Content Area -->
-        <Grid Grid.Row="2" ColumnDefinitions="3*,2*">
+        <Grid Grid.Row="2" ColumnDefinitions="3*,2*,2*">
             <!-- Tracks List -->
             <Border Grid.Column="0" Background="#2D2D30" Padding="10" Margin="5">
                 <Grid RowDefinitions="Auto,*">
@@ -331,9 +331,13 @@
                                       Margin="0,5,0,0"/>
                         </StackPanel>
                     </Border>
+                </Grid>
+            </Border>
 
-                    <!-- SmartMaster Effect Panel -->
-                    <Border Grid.Row="6" Background="#3E3E42" CornerRadius="4" Padding="10" Margin="0,0,0,10">
+            <!-- SmartMaster Effect Panel -->
+            <Border Grid.Column="2" Background="#2D2D30" Padding="10" Margin="5">
+                <ScrollViewer>
+                    <Border Background="#3E3E42" CornerRadius="4" Padding="10">
                         <StackPanel Spacing="8">
                             <!-- Header with Enable/Disable Toggle -->
                             <Grid ColumnDefinitions="Auto,*,Auto">
@@ -487,7 +491,7 @@
                             </StackPanel>
                         </StackPanel>
                     </Border>
-                </Grid>
+                </ScrollViewer>
             </Border>
         </Grid>
 
