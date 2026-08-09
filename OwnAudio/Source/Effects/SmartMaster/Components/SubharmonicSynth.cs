@@ -5,9 +5,14 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
 {
     /// <summary>
     /// Two band octave divider, dbx style: 48-72Hz gives 24-36Hz, 72-112Hz gives
-    /// 36-56Hz, both added in parallel over the dry signal.
-    /// The old build band-passed 40-120Hz into a waveshaper and crossfaded it in,
-    /// which made harmonics (not subharmonics) and dropped the whole mix.
+    /// 36-56Hz, added in parallel over the dry signal.
+    /// Earlier builds got this wrong twice. One band-passed 40-120Hz into a
+    /// waveshaper and crossfaded it in, which makes harmonics rather than
+    /// subharmonics and drops the whole mix. The other was this divider with no
+    /// retrigger lockout and a narrow resonant output filter: the flip-flop could
+    /// toggle twice inside a cycle and slide into period-3 or period-4, dropping
+    /// inharmonic tones under the bass, and the sub level swung about 37dB
+    /// depending on where the note fell in the band.
     /// </summary>
     public class SubharmonicSynth
     {
@@ -17,10 +22,20 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
         private readonly DividerBand _high;
 
         /// <summary>
-        /// The divided square's fundamental is 4/pi of its amplitude, this trims
-        /// it back to roughly the source level.
+        /// Crossfade between the bands, 0 = low, 1 = high. A note near 72Hz drives
+        /// both source bands and their squares are phase independent, so summing
+        /// them partially cancels. Letting the louder band win keeps one clean
+        /// generator running; the glide gives the switch hysteresis.
         /// </summary>
-        private const float SubTrim = 0.55f;
+        private float _bandSel;
+        private readonly float _selGlide;
+
+        /// <summary>
+        /// Headroom scale at mix 1. A square's fundamental is 4/pi of its
+        /// amplitude and the output filters are flat in the passband, so this
+        /// lands the sub around half the source band's level.
+        /// </summary>
+        private const float SubTrim = 0.4f;
 
         public bool Enabled { get; set; }
 
@@ -56,8 +71,11 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
         /// </summary>
         public SubharmonicSynth(float sampleRate)
         {
-            _low = new DividerBand(sampleRate, 48.0f, 72.0f, 24.0f, 36.0f);
-            _high = new DividerBand(sampleRate, 72.0f, 112.0f, 36.0f, 56.0f);
+            float sr = sampleRate > 0.0f ? sampleRate : 44100.0f;
+
+            _low = new DividerBand(sr, 48.0f, 72.0f, 24.0f, 36.0f);
+            _high = new DividerBand(sr, 72.0f, 112.0f, 36.0f, 56.0f);
+            _selGlide = MathF.Exp(-1.0f / (0.050f * sr));
         }
 
         /// <summary>
@@ -80,7 +98,13 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
                 for (int c = 0; c < channels; c++) mono += buffer[b + c];
                 mono *= invCh;
 
-                float sub = (_low.Tick(mono) + _high.Tick(mono)) * amount;
+                float lo = _low.Tick(mono);
+                float hi = _high.Tick(mono);
+
+                float want = _high.Env > _low.Env ? 1.0f : 0.0f;
+                _bandSel = _selGlide * _bandSel + (1.0f - _selGlide) * want;
+
+                float sub = (lo * (1.0f - _bandSel) + hi * _bandSel) * amount;
 
                 for (int c = 0; c < channels; c++)
                     buffer[b + c] = Math.Clamp(buffer[b + c] + sub, -1.5f, 1.5f);
@@ -94,17 +118,26 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
         {
             _low.Reset();
             _high.Reset();
+            _bandSel = 0.0f;
         }
 
         /// <summary>
         /// Isolates a source octave, halves it with a Schmitt trigger driven
-        /// flip-flop, then band-passes the square down to a near sine.
+        /// flip-flop, then filters the square down into the target band.
         /// </summary>
         private sealed class DividerBand
         {
             private readonly BiquadCoeffs _src;
-            private readonly BiquadCoeffs _out;
-            private BiquadState _src1, _src2, _out1, _out2;
+            private BiquadState _src1, _src2;
+
+            /// <summary>
+            /// Flat high-pass / low-pass pair bounding the output to the target
+            /// band. A resonant band-pass here is what made the level depend on
+            /// which note was playing.
+            /// </summary>
+            private readonly BiquadCoeffs _outHp;
+            private readonly BiquadCoeffs _outLp;
+            private BiquadState _outHpState, _outLpState;
 
             private readonly float _envAttack;
             private readonly float _envRelease;
@@ -113,20 +146,33 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
             private float _flip = 1.0f;
             private bool _armed;
 
+            /// <summary>
+            /// Samples since the last toggle, and the minimum that must pass
+            /// before the next one. Without this the divider slips to period-3
+            /// or period-4 on a ripply waveform.
+            /// </summary>
+            private int _sinceFlip;
+            private readonly int _lockout;
+
             private const float Gate = 1e-4f;
 
             public float Level = 1.0f;
 
+            public float Env => _env;
+
             public DividerBand(float sampleRate, float srcLo, float srcHi, float outLo, float outHi)
             {
                 float srcCentre = MathF.Sqrt(srcLo * srcHi);
-                float outCentre = MathF.Sqrt(outLo * outHi);
 
                 _src = BiquadCoeffs.BandPass(sampleRate, srcCentre, srcCentre / (srcHi - srcLo));
-                _out = BiquadCoeffs.BandPass(sampleRate, outCentre, outCentre / (outHi - outLo));
+                _outHp = BiquadCoeffs.HighPass(sampleRate, outLo, 0.707f);
+                _outLp = BiquadCoeffs.LowPass(sampleRate, outHi, 0.707f);
 
                 _envAttack = _timeCoeff(8.0f, sampleRate);
                 _envRelease = _timeCoeff(120.0f, sampleRate);
+
+                // Three quarters of the shortest cycle the band can carry.
+                _lockout = (int)(0.75f * sampleRate / srcHi);
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -138,26 +184,40 @@ namespace OwnaudioNET.Effects.SmartMaster.Components
                 float c = a > _env ? _envAttack : _envRelease;
                 _env = c * _env + (1.0f - c) * a;
 
+                if (_sinceFlip < int.MaxValue) _sinceFlip++;
+
                 if (_env < Gate)
-                    return _out2.Tick(_out, _out1.Tick(_out, 0.0f));
+                    return _shape(0.0f);
 
                 float hyst = 0.25f * _env;
                 if (_armed)
                 {
-                    if (s < -hyst) { _armed = false; _flip = -_flip; }
+                    if (s < -hyst && _sinceFlip >= _lockout)
+                    {
+                        _armed = false;
+                        _flip = -_flip;
+                        _sinceFlip = 0;
+                    }
                 }
                 else if (s > hyst) { _armed = true; }
 
-                return _out2.Tick(_out, _out1.Tick(_out, _flip * _env)) * Level;
+                return _shape(_flip * _env) * Level;
             }
 
             public void Reset()
             {
                 _src1.Clear(); _src2.Clear();
-                _out1.Clear(); _out2.Clear();
+                _outHpState.Clear(); _outLpState.Clear();
                 _env = 0.0f;
                 _flip = 1.0f;
                 _armed = false;
+                _sinceFlip = 0;
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private float _shape(float x)
+            {
+                return _outLpState.Tick(_outLp, _outHpState.Tick(_outHp, x));
             }
 
             private static float _timeCoeff(float ms, float sampleRate)

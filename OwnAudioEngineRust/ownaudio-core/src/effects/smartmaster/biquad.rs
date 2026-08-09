@@ -47,6 +47,16 @@ impl Coeffs {
         )
     }
 
+    /// 2nd-order low-pass at `freq` with the given Q.
+    pub fn lowpass(sample_rate: f32, freq: f32, q: f32) -> Self {
+        let (sin_w, cos_w) = omega(sample_rate, freq);
+        let alpha = sin_w / (2.0 * q);
+        Self::normalize(
+            [(1.0 - cos_w) / 2.0, 1.0 - cos_w, (1.0 - cos_w) / 2.0],
+            [1.0 + alpha, -2.0 * cos_w, 1.0 - alpha],
+        )
+    }
+
     /// Band-pass with unity gain at the centre.
     pub fn bandpass(sample_rate: f32, freq: f32, q: f32) -> Self {
         let (sin_w, cos_w) = omega(sample_rate, freq);
