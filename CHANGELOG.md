@@ -3,6 +3,82 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.4-preview.1 — 2026-08-09
+
+### Added
+
+- SmartMaster is laid out like a dbx DriveRack style PA processor now: everything that shapes
+  the program runs before the crossover, everything that protects the drivers runs after it,
+  per band. New stages are a 24 dB/oct subsonic high-pass, an 8-band sweepable input parametric
+  EQ, and an output section with per-band trim, alignment, polarity and driver-protection
+  limiters behind an explicit `CrossoverEnabled` switch. The native parameter map grew to 0–91
+  with full managed mirroring.
+- `CompressorEffect.KneeWidth` — the soft-knee width, what dbx calls OverEasy.
+- `SmartMasterEffect.SanitizedSampleCount` — how many NaN/Inf samples the chain has had to zero
+  out, since `Process` can no longer log from the audio thread.
+
+### Fixed
+
+- **30-band EQ transfer.** The band Q ran 0.6–1.4 on 1/3-octave centres, so every bell was about
+  1.4 octaves wide and a drawn curve summed to roughly 5× its written values. It is constant-Q
+  (4.318) now, and the built-in preset curves were redrawn against the corrected transfer.
+- **Limiter gain law.** The required gain divided by the excess twice (`thr²/peak²`), so a peak
+  6 dB over threshold was pulled 12 dB down and the output ducked 6 dB *under* the threshold.
+- **Limiter look-ahead.** The ring buffer was exactly the look-ahead long, so the read index
+  landed back on the write index: no delay at all, while `LatencySamples` reported one — and
+  reported it in interleaved samples, double the real figure on stereo. The limiter is
+  frame-based and stereo-linked now, with a window-minimum deque replacing a per-sample linear
+  scan, and `LatencySamples` is in frames.
+- **Subharmonic synth.** It band-passed 40–120 Hz into a waveshaper, which makes harmonics
+  rather than subharmonics, and crossfaded the result over the program — at mix 0.4 the whole
+  mix dropped 4.4 dB. Replaced with a two-band octave divider (48–72 → 24–36 Hz, 72–112 →
+  36–56 Hz) added in parallel.
+- **Compressor detection.** A single envelope walked the interleaved samples, so stereo channels
+  drifted apart and the configured attack/release were effectively halved. Detection is per
+  frame off the loudest channel.
+- **SmartMaster compressor threshold** was fed the config's linear 0–1 value straight into a
+  dB-facing property, pinning it at 0 dBFS in managed mode while the native side converted it
+  properly.
+- **Matchering spectrum measurement.** Band readings averaged bin magnitudes and normalised by
+  the window's coherent gain — correct for an isolated sine, wrong for broadband material, and
+  scaling as `1/sqrt(fftSize)`, so a 44.1k source and a 48k reference came out about 3 dB apart
+  before comparison. Band power is now normalised by the window's noise power, Flat-Top gave way
+  to Hann, band edges are geometric 1/3-octave ones widened where the transform cannot resolve
+  them (the 20 Hz band spanned one bin at 48k and none at 44.1k), the FFT size comes from a
+  fixed 0.35 s window, and outlier statistics moved to dB.
+- **Matchering EQ curve.** The per-band delta carried the broadband level difference with it, so
+  a source 6 dB down got +6 dB on every band — a gain change dressed as EQ, which the AGC then
+  corrected a second time. The offset is removed and handled as gain, the per-band limit is
+  ±9 dB rather than ±18, and the wanted curve is deconvolved against the filter bank's own
+  response so the realised curve lands within 0.11–0.35 dB of the request instead of 1.31–2.41.
+- **Matchering chain order.** The compressor ran before the EQ, controlling the uncorrected
+  signal while the EQ boosted bands underneath it, and its threshold was derived from the
+  original RMS while the audio was pushed down by up to 12 dB of pre-gain.
+- **Segment position weight** read `StartTime / (StartTime + Duration)`, which is not a position
+  in the track — past about 40 s every segment scored above 0.8.
+- 16 and 24 bit WAV writes round instead of truncating toward zero, and carry highpass TPDF
+  dither.
+
+### Changed
+
+- SmartMaster's AutoEQ smooths the measured deviation over three bands, aims at a house target
+  curve and applies 65 % of it, with short boost caps — a room is not minimum phase, and filling
+  a null costs headroom without filling it.
+- Matchering analysis caches its window and FFT context per sample rate, treats segments as
+  views over the shared buffer instead of copies, and runs across cores.
+- The managed SmartMaster chain no longer calls `Parallel.Invoke` or logs from `Process`, and
+  every IIR state is denormal-flushed.
+
+### Breaking
+
+- `SmartMasterConfig.SubharmonicFreqRange` and `ParametricEQGains` are removed. Neither did
+  anything; the parametric stage is `ParametricEQ` (8 `ParametricBand` entries) now, and
+  `ParametricBands` is 8.
+- Existing 30-band EQ presets need retuning: with constant Q the same gain values produce about
+  a third of the boost they used to.
+- `LimiterEffect` genuinely delays by its look-ahead now. Offline callers should flush and shift
+  by `LatencySamples`, as `Matchering` does.
+
 ## 4.0.3 — 2026-08-07
 
 ### API
