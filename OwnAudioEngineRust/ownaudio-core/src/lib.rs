@@ -33,6 +33,7 @@ pub mod effects;
 pub mod engine;
 pub mod error;
 pub mod format;
+pub mod load;
 pub mod mixer;
 pub mod multitrack;
 pub mod resampler;

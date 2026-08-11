@@ -137,6 +137,24 @@ internal static unsafe partial class OwnAudioNative
         IntPtr stream,
         out ulong outFrames);
 
+    /// <summary>
+    /// How long the audio callback is taking against the time its frame count buys.
+    /// Five relaxed atomic loads, safe to poll from a UI timer.
+    /// </summary>
+    /// <param name="stream"></param>
+    /// <param name="outStats"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_output_stream_get_load_stats(
+        IntPtr stream,
+        out NativeLoadStats outStats);
+
+    /// <summary>
+    /// Zeroes the load tallies. Leaves the underrun count alone, that one is a fault log.
+    /// </summary>
+    /// <param name="stream"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_output_stream_reset_load_stats(IntPtr stream);
+
     #endregion
 
     #region Input stream

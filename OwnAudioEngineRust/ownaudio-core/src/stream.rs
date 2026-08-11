@@ -4,6 +4,7 @@ use std::sync::Arc;
 use cpal::traits::StreamTrait;
 
 use crate::error::Result;
+use crate::load::{LoadCounters, LoadSnapshot};
 use crate::stream_error::StreamErrorState;
 
 /// A running or paused audio output stream.
@@ -22,6 +23,8 @@ pub struct OutputStream {
     /// the cpal timestamp (`playback - callback`). 0 until the first callback
     /// fires, or when the backend does not report a latency.
     pub(crate) latency_frames: Arc<AtomicU32>,
+    /// How long each callback took against the budget its frame count buys.
+    pub(crate) load_counters: Arc<LoadCounters>,
 }
 
 impl OutputStream {
@@ -48,6 +51,21 @@ impl OutputStream {
     #[inline]
     pub fn latency_frames(&self) -> u32 {
         self.latency_frames.load(Ordering::Relaxed)
+    }
+
+    /// DSP load since the stream opened or the counters were last reset. The
+    /// underrun tally says a block was already late; this says how close the
+    /// others came.
+    #[inline]
+    pub fn load(&self) -> LoadSnapshot {
+        self.load_counters.snapshot()
+    }
+
+    /// Zeroes the load tallies. Worth calling once playback has settled — the
+    /// first blocks after device start are never representative.
+    #[inline]
+    pub fn reset_load(&self) {
+        self.load_counters.reset();
     }
 }
 

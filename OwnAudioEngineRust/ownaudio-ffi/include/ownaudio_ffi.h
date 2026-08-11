@@ -430,6 +430,37 @@ typedef struct OwnAudioOutputStreamHandle {
 } OwnAudioOutputStreamHandle;
 
 /**
+ * DSP load figures for an output stream. Layout is ABI, the managed
+ * `NativeLoadStats` mirrors it and `tests/layout.rs` pins the offsets.
+ */
+typedef struct OwnAudioLoadStats {
+    /**
+     * Callbacks seen since the stream opened or the counters were last reset.
+     */
+    uint64_t block_count;
+    /**
+     * Longest single callback in nanoseconds.
+     */
+    uint64_t peak_block_ns;
+    /**
+     * Mean callback duration in nanoseconds.
+     */
+    uint64_t average_block_ns;
+    /**
+     * Frames filled with silence because the ring ran dry. 0 in callback mode.
+     */
+    uint64_t underrun_frames;
+    /**
+     * Mean share of the block period spent in the callback, 1.0 = late.
+     */
+    float average_load;
+    /**
+     * Worst single block. This is what predicts dropouts, not the average.
+     */
+    float peak_load;
+} OwnAudioLoadStats;
+
+/**
  * Function pointer the C# side provides for input streams.
  *
  * Called on the audio real-time thread for every captured buffer.
@@ -1744,6 +1775,27 @@ int32_t ownaudio_v1_output_stream_clear(struct OwnAudioOutputStreamHandle *strea
  */
 int32_t ownaudio_v1_output_stream_get_underrun_frames(struct OwnAudioOutputStreamHandle *stream,
                                                       uint64_t *out_frames);
+
+/**
+ * Reads the DSP load tallies. Five relaxed atomic loads, safe to poll from a
+ * UI timer.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_output_stream` that has not been destroyed.
+ * - `out_stats` must point to a writable `OwnAudioLoadStats`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_output_stream_get_load_stats(struct OwnAudioOutputStreamHandle *stream,
+                                                 struct OwnAudioLoadStats *out_stats);
+
+/**
+ * Zeroes the load tallies. Underruns are left alone, those are a fault log.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_output_stream` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_output_stream_reset_load_stats(struct OwnAudioOutputStreamHandle *stream);
 
 /**
  * Destroys an output stream and releases all associated resources.

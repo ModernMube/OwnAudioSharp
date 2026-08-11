@@ -120,10 +120,13 @@ impl Effect for Flanger {
             let delay_time = 0.001 + 0.009 * (1.0 + lfo_value * depth) * 0.5;
             let delay_frames = (delay_time * self.sample_rate).clamp(1.0, (buf_len - 1) as f32);
 
-            // Fractional read position one delay length behind the writer.
+            // The wrap can round back up to buf_len in f32, so bring it down again.
             let mut read_pos = buffer_index as f32 - delay_frames;
             while read_pos < 0.0 {
                 read_pos += buf_len as f32;
+            }
+            while read_pos >= buf_len as f32 {
+                read_pos -= buf_len as f32;
             }
             let idx_a = read_pos as usize;
             let idx_b = if idx_a + 1 >= buf_len { 0 } else { idx_a + 1 };
@@ -271,6 +274,9 @@ mod tests {
                 let mut read_pos = self.buffer_index as f32 - delay_frames;
                 while read_pos < 0.0 {
                     read_pos += buf_len as f32;
+                }
+                while read_pos >= buf_len as f32 {
+                    read_pos -= buf_len as f32;
                 }
                 let idx_a = read_pos as usize;
                 let idx_b = if idx_a + 1 >= buf_len { 0 } else { idx_a + 1 };

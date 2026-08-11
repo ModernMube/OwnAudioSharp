@@ -44,6 +44,7 @@ pub use ffi_abi::ABI_VERSION;
 pub use ffi_config::{OwnAudioSampleFormat, OwnAudioStreamConfig};
 pub use ffi_decoder::OwnAudioStreamInfo;
 pub use ffi_device::OwnAudioDeviceInfo;
+pub use ffi_stream::OwnAudioLoadStats;
 pub use handles::{
     OwnAudioDecoderHandle, OwnAudioEffectHandle, OwnAudioEngineHandle, OwnAudioFileSourceHandle,
     OwnAudioInputStreamHandle, OwnAudioMixerHandle, OwnAudioOutputStreamHandle,

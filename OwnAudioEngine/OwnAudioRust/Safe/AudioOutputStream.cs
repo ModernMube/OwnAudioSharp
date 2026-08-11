@@ -181,6 +181,39 @@ public sealed class AudioOutputStream : IDisposable
         }
     }
 
+    /// <summary>
+    /// DSP load tallies. Cheap enough for a UI timer.
+    /// </summary>
+    public AudioStreamLoad GetLoad()
+    {
+        Guard.NotDisposed(_disposed, nameof(AudioOutputStream));
+
+        int code = OwnAudioNative.ownaudio_v1_output_stream_get_load_stats(
+            _handle.DangerousGetHandle(), out NativeLoadStats _stats);
+        ErrorCodeMapper.ThrowIfError(code, nameof(GetLoad));
+
+        return new AudioStreamLoad
+        {
+            BlockCount = _stats.BlockCount,
+            PeakBlock = TimeSpan.FromTicks((long)(_stats.PeakBlockNs / 100)),
+            AverageBlock = TimeSpan.FromTicks((long)(_stats.AverageBlockNs / 100)),
+            UnderrunFrames = _stats.UnderrunFrames,
+            AverageLoad = _stats.AverageLoad,
+            PeakLoad = _stats.PeakLoad
+        };
+    }
+
+    /// <summary>
+    /// Zeroes the load tallies, underruns stay. Do it once playback has settled.
+    /// </summary>
+    public void ResetLoad()
+    {
+        Guard.NotDisposed(_disposed, nameof(AudioOutputStream));
+
+        int code = OwnAudioNative.ownaudio_v1_output_stream_reset_load_stats(_handle.DangerousGetHandle());
+        ErrorCodeMapper.ThrowIfError(code, nameof(ResetLoad));
+    }
+
     // engine only, the mixer fills every buffer on the audio thread, zero per buffer pinvoke
     internal static unsafe AudioOutputStream OpenMixerDriven(
         AudioEngineHandle engine,

@@ -20,6 +20,7 @@ use ownaudio_ffi::{
     ffi_config::{OwnAudioSampleFormat, OwnAudioStreamConfig},
     ffi_decoder::OwnAudioStreamInfo,
     ffi_device::OwnAudioDeviceInfo,
+    ffi_stream::OwnAudioLoadStats,
     host_api::OwnHostApi,
     VstAudioBuffer,
 };
@@ -257,4 +258,45 @@ fn stream_info_field_offsets() {
     );
     assert_eq!(offset_of!(OwnAudioStreamInfo, bit_depth), 16, "bit_depth");
     // 4 bytes tail padding at offset 20 to round the struct up to 8-byte align.
+}
+
+// ---------------------------------------------------------------------------
+// OwnAudioLoadStats — DSP load figures for an output stream
+// ---------------------------------------------------------------------------
+
+#[test]
+fn load_stats_size_and_align() {
+    // Four u64 then two f32: 32 + 8, already a multiple of 8, so no tail padding.
+    assert_eq!(size_of::<OwnAudioLoadStats>(), 40, "OwnAudioLoadStats size");
+    assert_eq!(
+        align_of::<OwnAudioLoadStats>(),
+        8,
+        "OwnAudioLoadStats align"
+    );
+}
+
+#[test]
+fn load_stats_field_offsets() {
+    assert_eq!(offset_of!(OwnAudioLoadStats, block_count), 0, "block_count");
+    assert_eq!(
+        offset_of!(OwnAudioLoadStats, peak_block_ns),
+        8,
+        "peak_block_ns"
+    );
+    assert_eq!(
+        offset_of!(OwnAudioLoadStats, average_block_ns),
+        16,
+        "average_block_ns"
+    );
+    assert_eq!(
+        offset_of!(OwnAudioLoadStats, underrun_frames),
+        24,
+        "underrun_frames"
+    );
+    assert_eq!(
+        offset_of!(OwnAudioLoadStats, average_load),
+        32,
+        "average_load"
+    );
+    assert_eq!(offset_of!(OwnAudioLoadStats, peak_load), 36, "peak_load");
 }

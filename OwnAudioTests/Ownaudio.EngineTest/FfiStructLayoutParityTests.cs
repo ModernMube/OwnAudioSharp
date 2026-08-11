@@ -62,6 +62,23 @@ public class FfiStructLayoutParityTests
     }
 
     [TestMethod]
+    public void NativeLoadStats_SizeIs40()
+    {
+        Assert.AreEqual(40, Marshal.SizeOf<NativeLoadStats>(), "NativeLoadStats size");
+    }
+
+    [TestMethod]
+    public void NativeLoadStats_FieldOffsets()
+    {
+        Assert.AreEqual(0, (int)Marshal.OffsetOf<NativeLoadStats>(nameof(NativeLoadStats.BlockCount)), "BlockCount");
+        Assert.AreEqual(8, (int)Marshal.OffsetOf<NativeLoadStats>(nameof(NativeLoadStats.PeakBlockNs)), "PeakBlockNs");
+        Assert.AreEqual(16, (int)Marshal.OffsetOf<NativeLoadStats>(nameof(NativeLoadStats.AverageBlockNs)), "AverageBlockNs");
+        Assert.AreEqual(24, (int)Marshal.OffsetOf<NativeLoadStats>(nameof(NativeLoadStats.UnderrunFrames)), "UnderrunFrames");
+        Assert.AreEqual(32, (int)Marshal.OffsetOf<NativeLoadStats>(nameof(NativeLoadStats.AverageLoad)), "AverageLoad");
+        Assert.AreEqual(36, (int)Marshal.OffsetOf<NativeLoadStats>(nameof(NativeLoadStats.PeakLoad)), "PeakLoad");
+    }
+
+    [TestMethod]
     public void NativeDeviceInfo_SizeMatchesPointerWidth()
     {
         int expected = Ptr == 8 ? 24 : 16;

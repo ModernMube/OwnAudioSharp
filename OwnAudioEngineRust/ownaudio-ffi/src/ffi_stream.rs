@@ -683,6 +683,90 @@ pub unsafe extern "C" fn ownaudio_v1_output_stream_get_underrun_frames(
     crate::error_code::finish_catch_unwind(result)
 }
 
+/// DSP load figures for an output stream. Layout is ABI, the managed
+/// `NativeLoadStats` mirrors it and `tests/layout.rs` pins the offsets.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct OwnAudioLoadStats {
+    /// Callbacks seen since the stream opened or the counters were last reset.
+    pub block_count: u64,
+    /// Longest single callback in nanoseconds.
+    pub peak_block_ns: u64,
+    /// Mean callback duration in nanoseconds.
+    pub average_block_ns: u64,
+    /// Frames filled with silence because the ring ran dry. 0 in callback mode.
+    pub underrun_frames: u64,
+    /// Mean share of the block period spent in the callback, 1.0 = late.
+    pub average_load: f32,
+    /// Worst single block. This is what predicts dropouts, not the average.
+    pub peak_load: f32,
+}
+
+/// Reads the DSP load tallies. Five relaxed atomic loads, safe to poll from a
+/// UI timer.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_output_stream` that has not been destroyed.
+/// - `out_stats` must point to a writable `OwnAudioLoadStats`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_output_stream_get_load_stats(
+    stream: *mut OwnAudioOutputStreamHandle,
+    out_stats: *mut OwnAudioLoadStats,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_stats.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let wrapper = match unsafe { output_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        let snapshot = wrapper.inner.load();
+        let underruns = wrapper
+            .render
+            .as_ref()
+            .map_or(0, |b| b.underrun_frames.load(Ordering::Relaxed));
+
+        unsafe {
+            *out_stats = OwnAudioLoadStats {
+                block_count: snapshot.block_count,
+                peak_block_ns: snapshot.peak_block_ns,
+                average_block_ns: snapshot.average_block_ns,
+                underrun_frames: underruns,
+                average_load: snapshot.average_load,
+                peak_load: snapshot.peak_load,
+            };
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Zeroes the load tallies. Underruns are left alone, those are a fault log.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_output_stream` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_output_stream_reset_load_stats(
+    stream: *mut OwnAudioOutputStreamHandle,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        match unsafe { output_stream_from_ptr(stream) } {
+            Some(w) => {
+                w.inner.reset_load();
+                OwnAudioErrorCode::Success as i32
+            }
+            None => OwnAudioErrorCode::InvalidHandle as i32,
+        }
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
 /// Destroys an output stream and releases all associated resources.
 ///
 /// Passing `null` is safe and has no effect.
