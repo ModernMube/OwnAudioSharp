@@ -2,6 +2,7 @@ using Logger;
 using Ownaudio.Core;
 using OwnaudioNET.Core;
 using OwnaudioNET.Effects;
+using OwnaudioNET.Interfaces;
 using OwnaudioNET.Mixing;
 using OwnaudioNET.Sources;
 using System.Reflection;
@@ -91,8 +92,8 @@ public class TestProgram
             Console.WriteLine($"  ✓ Mixer created: {mixer.Config.ToString()}");
             Console.WriteLine($"  ✓ Buffer size: {mixer.Config.BufferSize} frames");
 
-            // Set master volume to 80% (0.8)
-            mixer.MasterVolume = 0.8f;
+            // Output fader sits after the limiter, so this is the final trim
+            mixer.MasterVolume = 0.9f;
             Console.WriteLine($"  ✓ Master volume set to: {mixer.MasterVolume:P0}");
 
             mixer.SourceError += (sender, e) =>
@@ -103,58 +104,41 @@ public class TestProgram
             // Create mastering effects to the mixer
             Console.WriteLine("\n Adding mastering effects to the mixer...");
 
-            var _equalizer = new Equalizer30BandEffect();
-            // Sub-bass region (mély és telt alap, Low-Shelf szerű emeléssel)
-            _equalizer.SetBandGain(band: 0, frequency: 20, q: 0.5f, gainDB: 0.2f);     // 20 Hz Deep sub-bass
-            _equalizer.SetBandGain(band: 1, frequency: 25, q: 0.5f, gainDB: 0.4f);     // 25 Hz Sub-bass foundation
-            _equalizer.SetBandGain(band: 2, frequency: 31, q: 0.6f, gainDB: 0.6f);     // 31 Hz Sub-bass body
-            _equalizer.SetBandGain(band: 3, frequency: 40, q: 0.7f, gainDB: 0.8f);     // 40 Hz Sub-bass warmth
-            _equalizer.SetBandGain(band: 4, frequency: 50, q: 0.7f, gainDB: 0.8f);     // 50 Hz Sub-bass emphasis (a popzene basszus alappillére)
-            _equalizer.SetBandGain(band: 5, frequency: 63, q: 0.7f, gainDB: -0.3f);   // 63 Hz Low bass cleanup (finom vágás a túlzott boom elkerülésére)
+            //Master curve in dB, one value per ISO band from 20 Hz up to 16 kHz.
+            //Nothing gets boosted under 100 Hz, that is what was breaking up in the limiter.
+            float[] _masterCurve =
+            {
+                -4.0f, -3.0f, -2.0f, -1.0f, -0.4f,  0.0f,  0.0f, -0.2f, -0.3f, -0.4f,
+                -0.6f, -0.9f, -0.8f, -0.5f, -0.3f, -0.1f,  0.0f,  0.0f,  0.0f,  0.1f,
+                 0.3f,  0.4f,  0.5f,  0.4f,  0.3f,  0.3f,  0.5f,  0.7f,  0.8f,  0.6f
+            };
 
-            // Bass region (punch és teltség)
-            _equalizer.SetBandGain(band: 6, frequency: 80, q: 0.8f, gainDB: 0.3f);     // 80 Hz Bass foundation (Kick punch)
-            _equalizer.SetBandGain(band: 7, frequency: 100, q: 0.8f, gainDB: 0.5f);    // 100 Hz Bass body
-            _equalizer.SetBandGain(band: 8, frequency: 125, q: 0.9f, gainDB: 0.3f);    // 125 Hz Upper bass punch
-            _equalizer.SetBandGain(band: 9, frequency: 160, q: 0.9f, gainDB: 0.1f);    // 160 Hz Bass definition
+            var _masterEq = new Equalizer30BandEffect(config.SampleRate, _masterCurve);
 
-            // Low-mid region (erősebb vágások a tisztaságért, a pop vokálok érdekében)
-            _equalizer.SetBandGain(band: 10, frequency: 200, q: 1.0f, gainDB: -0.4f); // 200 Hz Low-mid mud cut
-            _equalizer.SetBandGain(band: 11, frequency: 250, q: 1.0f, gainDB: -0.8f); // 250 Hz Mud removal (erősebb vágás)
-            _equalizer.SetBandGain(band: 12, frequency: 315, q: 1.1f, gainDB: -0.7f); // 315 Hz Boxiness cut
-            _equalizer.SetBandGain(band: 13, frequency: 400, q: 1.1f, gainDB: -0.5f); // 400 Hz Honkiness reduction
-            _equalizer.SetBandGain(band: 14, frequency: 500, q: 1.0f, gainDB: -0.2f); // 500 Hz Nasal frequency cut
+            //Glue comp, under 2:1 and barely a dB of gain reduction. Long release, a fast one
+            //rides the bass waveform and that is what turns into distortion.
+            var _glue = new CompressorEffect(
+                threshold: 0.70f,
+                ratio: 1.8f,
+                attackTime: 30f,
+                releaseTime: 400f,
+                makeupGain: 1.06f,
+                sampleRate: config.SampleRate);
 
-            // Mid region (neutrális/enyhe vágás a vokál tisztaságáért)
-            _equalizer.SetBandGain(band: 15, frequency: 630, q: 1.0f, gainDB: -0.1f); // 630 Hz Mid clarity
-            _equalizer.SetBandGain(band: 16, frequency: 800, q: 1.0f, gainDB: 0.0f); // 800 Hz Mid balance
-            _equalizer.SetBandGain(band: 17, frequency: 1000, q: 1.0f, gainDB: 0.0f); // 1 kHz Vocal balance
-            _equalizer.SetBandGain(band: 18, frequency: 1250, q: 1.0f, gainDB: 0.0f); // 1.25 kHz Upper mid balance
-            _equalizer.SetBandGain(band: 19, frequency: 1600, q: 1.0f, gainDB: 0.1f); // 1.6 kHz Neutral reference
+            // Just a hint of sheen on top
+            var _exciter = new EnhancerEffect(mix: 0.07f, cutFreq: 5000f, gain: 1.6f, sampleRate: config.SampleRate);
 
-            // Upper-mid region (kiemelés a vokál jelenlétéért és a mix átvágásáért)
-            _equalizer.SetBandGain(band: 20, frequency: 2000, q: 1.0f, gainDB: 0.3f); // 2 kHz Vocal presence
-            _equalizer.SetBandGain(band: 21, frequency: 2500, q: 0.9f, gainDB: 0.5f);  // 2.5 kHz Clarity boost
-            _equalizer.SetBandGain(band: 22, frequency: 3150, q: 0.9f, gainDB: 0.7f);  // 3.15 kHz Definition (ez a popzene egyik kulcsfrekvenciája)
-            _equalizer.SetBandGain(band: 23, frequency: 4000, q: 0.8f, gainDB: 0.5f);  // 4 kHz Presence boost
-            _equalizer.SetBandGain(band: 24, frequency: 5000, q: 0.7f, gainDB: 0.3f);  // 5 kHz Detail enhancement
+            //Peak safety at -0.5 dBFS. Slow release and a long look-ahead so it doesn't chew on the low end
+            var _limiter = new LimiterEffect(config.SampleRate, threshold: -2.0f, ceiling: -0.5f, release: 180f, lookAheadMs: 10f);
 
-            // High region (erős High-Shelf szerű emelés a "csillogásért" és "levegősségért")
-            _equalizer.SetBandGain(band: 25, frequency: 6300, q: 0.7f, gainDB: 0.3f);  // 6.3 kHz Airiness
-            _equalizer.SetBandGain(band: 26, frequency: 8000, q: 0.6f, gainDB: 0.6f);  // 8 kHz Sparkle
-            _equalizer.SetBandGain(band: 27, frequency: 10000, q: 0.6f, gainDB: 0.8f); // 10 kHz Shimmer
-            _equalizer.SetBandGain(band: 28, frequency: 12500, q: 0.5f, gainDB: 1.0f); // 12.5 kHz Brilliance (erősebb emelés)
-            _equalizer.SetBandGain(band: 29, frequency: 16000, q: 0.5f, gainDB: 1.0f); // 16 kHz Air band (erősebb emelés)
+            mixer.AddMasterEffect(_masterEq);
+            mixer.AddMasterEffect(_glue);
+            mixer.AddMasterEffect(_exciter);
+            mixer.AddMasterEffect(_limiter);
 
-            var _compressor = new CompressorEffect(CompressorPreset.Vintage);
-
-            // Add master effects
-            mixer.AddMasterEffect(_equalizer);
-            mixer.AddMasterEffect(_compressor);
-            mixer.AddMasterEffect(new DynamicAmpEffect(DynamicAmpPreset.Music));
-
-            _equalizer.Enabled = false;
-            _compressor.Enabled = false;
+            _masterEq.Enabled = false;
+            _glue.Enabled = false;
+            _exciter.Enabled = false;
 
 
             // Step 4: Create Audio Source
@@ -180,19 +164,23 @@ public class TestProgram
             fileSource2 = new FileSource(audioFilePath2, 8192, targetSampleRate: targetSampleRate, targetChannels: targetChannels);
             fileSource3 = new FileSource(audioFilePath3, 8192, targetSampleRate: targetSampleRate, targetChannels: targetChannels);
 
-            // Set source volume to 100% (mixer already set to 80%)
             fileSource0.PitchShift = 0.0f;
             fileSource1.PitchShift = 0.0f;
             fileSource2.PitchShift = 0.0f;
             fileSource3.PitchShift = 0.0f;
 
-            fileSource0.Volume = 1.0f;
-            fileSource1.Volume = 1.0f;
-            fileSource2.Volume = 1.0f;
-            fileSource3.Volume = 0.65f;
+            //Stem balance: drums are the reference, the instruments get tucked so the
+            //vocal owns the middle. The vocal comp adds another ~3 dB on top of its fader.
+            fileSource0.Volume = 0.95f;
+            fileSource1.Volume = 0.82f;
+            fileSource2.Volume = 0.75f;
+            fileSource3.Volume = 0.85f;
 
-            // Stereo pan: -1.0 = hard left, 0.0 = center (default), +1.0 = hard right
-            fileSource3.Pan = -0.2f;
+            // Lead vocal belongs dead center, the stems keep their own stereo width
+            fileSource0.Pan = 0.0f;
+            fileSource1.Pan = 0.0f;
+            fileSource2.Pan = 0.0f;
+            fileSource3.Pan = 0.0f;
 
             Console.WriteLine($"  ✓ File source created");
             Console.WriteLine($"  ✓ Format: {fileSource0.Config.ToString()}");
@@ -210,48 +198,105 @@ public class TestProgram
             // Step 5: Start Mixer and Add Source
             Console.WriteLine("\n[5/6] Starting mixer and adding source...");
 
-            // Professional lead-vocal chain: compressor -> delay -> reverb
-            // 1. Compressor - smooth, consistent vocal level
-            CompressorEffect compressor = new CompressorEffect(
-                threshold: 0.30f,     // ~ -10.5 dB, catches vocal peaks early
-                ratio: 3.5f,          // 3.5:1 musical leveling
-                attackTime: 10f,      // 10ms - lets consonant transients through for clarity
-                releaseTime: 120f,    // 120ms - natural, breathing release
-                makeupGain: 1.6f      // ~ +4 dB to restore perceived loudness
-            );
-            compressor.Mix = 0.2f;
+            //DRUM BUS - 4:1 with an attack slow enough to let the kick and snare snap through,
+            //then a little top end back on the cymbals.
+            var _drumComp = new CompressorEffect(
+                threshold: 0.60f,
+                ratio: 3.5f,
+                attackTime: 14f,
+                releaseTime: 110f,
+                makeupGain: 1.10f,
+                sampleRate: targetSampleRate);
 
-            // 2. Delay - eighth-note throw, sitting low behind the voice
-            DelayEffect delay = new DelayEffect(
-                time: 375,            // 375ms (eighth note at 80 BPM / quarter at 160)
-                repeat: 0.20f,        // Subtle feedback, no clutter
-                mix: 0.12f,           // Low in the mix - ambience, not an effect
-                damping: 0.35f        // Dark repeats so they tuck behind the dry vocal
-            );
-            delay.Mix = 0.12f;
+            var _drumAir = new EnhancerEffect(mix: 0.10f, cutFreq: 6000f, gain: 1.5f, sampleRate: targetSampleRate);
 
-            // 3. Reverb - plate-style vocal ambience
-            ReverbEffect reverb = new ReverbEffect(
-                size: 0.55f,          // Medium plate/room
-                damp: 0.5f,           // Natural high-frequency damping
-                wet: 0.30f,           // Reverb amount
-                dry: 0.85f,           // Keep the vocal up front and present
-                stereoWidth: 1.0f,    // Full stereo spread
-                gainLevel: 1.0f,      // Unity input into the reverb tank (audible tail)
-                mix: 0.28f            // Tasteful wet blend
-            );
-            reverb.Mix = 0.18f;
+            var drumBus = new SourceWithEffects(fileSource0);
+            drumBus.AddEffect(_drumComp);
+            drumBus.AddEffect(_drumAir);
 
-            var fileSource3Effect = new SourceWithEffects(fileSource3);
-            fileSource3Effect.AddEffect(compressor);
-            fileSource3Effect.AddEffect(delay);
-            fileSource3Effect.AddEffect(reverb);
+            //BASS BUS - gentle ratio and a long release. Nothing here adds level any more,
+            //the previous +3.5 dB of makeup was driving the master into breakup.
+            //EQ bands are 31.25 / 62.5 / 125 / 250 / 500 / 1k / 2k / 4k / 8k / 16k in dB.
+            var _bassComp = new CompressorEffect(
+                threshold: 0.58f,
+                ratio: 3.0f,
+                attackTime: 25f,
+                releaseTime: 220f,
+                makeupGain: 1.10f,
+                sampleRate: targetSampleRate);
+
+            //Subsonic gone, mud dipped, 1k lifted so the notes read on small speakers
+            var _bassEq = new EqualizerEffect(targetSampleRate,
+                -6.0f, -0.5f, 0.0f, -1.5f, -0.5f, 1.0f, 0.5f, 0.0f, -1.0f, -2.0f);
+
+            var bassBus = new SourceWithEffects(fileSource1);
+            bassBus.AddEffect(_bassComp);
+            bassBus.AddEffect(_bassEq);
+
+            //INSTRUMENT BUS - light glue only, the low-mid dip carves the pocket for the vocal
+            var _instComp = new CompressorEffect(
+                threshold: 0.60f,
+                ratio: 2.5f,
+                attackTime: 25f,
+                releaseTime: 250f,
+                makeupGain: 1.15f,
+                sampleRate: targetSampleRate);
+
+            var _instEq = new EqualizerEffect(targetSampleRate,
+                0.0f, 0.0f, -0.5f, -1.5f, -1.0f, -0.5f, 0.0f, 0.5f, 1.0f, 0.5f);
+
+            var instBus = new SourceWithEffects(fileSource2);
+            instBus.AddEffect(_instComp);
+            instBus.AddEffect(_instEq);
+
+            //VOCAL BUS - compressor -> EQ -> delay -> reverb.
+            //Threshold and makeup go in linear here, that is ~ -10.5 dB and ~ +3.5 dB.
+            var _vocalComp = new CompressorEffect(
+                threshold: 0.30f,
+                ratio: 3.5f,
+                attackTime: 8f,
+                releaseTime: 120f,
+                makeupGain: 1.50f,
+                sampleRate: targetSampleRate);
+
+            //Classic vocal curve: proximity and mud out, presence in. Easy on the air,
+            //the top end is what the reverb tail grabs onto.
+            var _vocalEq = new EqualizerEffect(targetSampleRate,
+                -3.0f, -2.0f, -1.0f, -2.0f, -0.5f, 0.5f, 1.2f, 1.5f, 0.8f, 0.3f);
+
+            //Eighth note throw at 80 BPM, one repeat's worth and dark, just to widen the line
+            var _vocalDelay = new DelayEffect(time: 375, repeat: 0.14f, mix: 0.05f, damping: 0.55f, sampleRate: targetSampleRate);
+
+            //Short dark plate, not a room. Small size and heavy damping keep the tail off the
+            //next word, and dry stays at unity so the vocal never falls back.
+            var _vocalReverb = new ReverbEffect(
+                size: 0.28f,
+                damp: 0.68f,
+                wet: 0.20f,
+                dry: 1.0f,
+                stereoWidth: 0.75f,
+                mix: 0.08f,
+                gainLevel: 1.0f);
+
+            var vocalBus = new SourceWithEffects(fileSource3);
+            vocalBus.AddEffect(_vocalComp);
+            vocalBus.AddEffect(_vocalEq);
+            vocalBus.AddEffect(_vocalDelay);
+            vocalBus.AddEffect(_vocalReverb);
+
+            //Staged demo: the first 15s is the raw mix, then one group joins every 15 seconds
+            IEffectProcessor[] _instrumentFx = { _drumComp, _drumAir, _bassComp, _bassEq, _instComp, _instEq };
+            IEffectProcessor[] _vocalFx = { _vocalComp, _vocalEq, _vocalDelay, _vocalReverb };
+            IEffectProcessor[] _masterFx = { _masterEq, _glue, _exciter };
+
+            foreach (var _fx in _instrumentFx) _fx.Enabled = false;
+            foreach (var _fx in _vocalFx) _fx.Enabled = false;
 
             // Add source to mixer (will automatically start because mixer is running)
-            mixer.AddSource(fileSource0);
-            mixer.AddSource(fileSource1);
-            mixer.AddSource(fileSource2);
-            mixer.AddSource(fileSource3Effect);
+            mixer.AddSource(drumBus);
+            mixer.AddSource(bassBus);
+            mixer.AddSource(instBus);
+            mixer.AddSource(vocalBus);
 
             // Attach sources to Master Clock for sample-accurate synchronization
             fileSource0.AttachToClock(mixer.MasterClock);
@@ -293,14 +338,19 @@ public class TestProgram
 
             // Step 6: Playback Progress Display
             Console.WriteLine("\n[6/6] Playing audio...");
-            Console.WriteLine("VOCAL effects: compressor -> delay -> reverb");
-            Console.WriteLine("MASTER effects (from 30 seconds): equalizer -> compressor -> dynamicamp\n");
+            Console.WriteLine("  0s - 15s : raw mix, no processing (the limiter stays on for peak safety)");
+            Console.WriteLine("     15s   : instruments in - drums comp+enhancer, bass comp+eq, other comp+eq");
+            Console.WriteLine("     30s   : vocals in - comp -> eq -> delay -> reverb");
+            Console.WriteLine("     45s   : master bus in - eq -> glue comp -> exciter\n");
             Console.WriteLine("Press any key to stop playback early.\n");
 
             // Display playback progress
             DateTime startTime = DateTime.Now;
             bool userCancelled = false;
             int statusLine = -1;
+            bool _instIn = false;
+            bool _vocalIn = false;
+            bool _masterIn = false;
 
             // Try to get cursor position (may fail in timeout/redirect scenarios)
             try
@@ -344,22 +394,37 @@ public class TestProgram
                     }
                 }
 
+                string stage = _masterIn ? "+master" : _vocalIn ? "+vocals" : _instIn ? "instruments" : "dry";
+
                 string infoLine = $"  Position: {new TimeSpan(0, 0, (int)position).ToString()} / {new TimeSpan(0, 0, (int)duration).ToString()}s  [{progressBar}] {progressPercent}%  ";
                 string peakLine = $"| Peaks: L={mixer.LeftPeak:F2} R={mixer.RightPeak:F2}  ";
                 string clockLine = $"| MClock: {masterTimestamp:F2}s  ";
+                string stageLine = $"| Fx: {stage}  ";
 
-                Console.Write(infoLine + peakLine + clockLine);
+                Console.Write(infoLine + peakLine + clockLine + stageLine);
 
                 if (statusLine == -1)
                 {
                     Console.WriteLine();
                 }
 
-                // At the 30th second we turn on the master effects
-                if (position > 30 && position < 35)
+                //One group of effects joins every 15 seconds, the limiter was never off
+                if (position >= 15 && !_instIn)
                 {
-                    _equalizer.Enabled = true;
-                    _compressor.Enabled = true;
+                    foreach (var _fx in _instrumentFx) _fx.Enabled = true;
+                    _instIn = true;
+                }
+
+                if (position >= 30 && !_vocalIn)
+                {
+                    foreach (var _fx in _vocalFx) _fx.Enabled = true;
+                    _vocalIn = true;
+                }
+
+                if (position >= 45 && !_masterIn)
+                {
+                    foreach (var _fx in _masterFx) _fx.Enabled = true;
+                    _masterIn = true;
                 }
 
                 // Check for key press (safe check for console availability)
@@ -417,10 +482,10 @@ public class TestProgram
             mixer.Dispose();
 
             Console.WriteLine("  Disposing source...");
-            fileSource0.Dispose();
-            fileSource1.Dispose();
-            fileSource2.Dispose();
-            fileSource3.Dispose();
+            drumBus.Dispose();
+            bassBus.Dispose();
+            instBus.Dispose();
+            vocalBus.Dispose();
 
             Console.WriteLine("  Stopping engine...");
             OwnaudioNet.Stop();
