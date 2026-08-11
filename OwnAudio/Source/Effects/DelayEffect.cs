@@ -128,7 +128,10 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Low-pass in the feedback path, higher = darker repeats.
+        /// Tracking coefficient of the one-pole low-pass in the feedback path, so against
+        /// what the name suggests higher = brighter repeats and lower = darker. At 0 the
+        /// wet path collapses to silence. Same behaviour as the native delay, kept as is
+        /// so existing presets sound the same.
         /// </summary>
         public float Damping
         {
@@ -160,7 +163,7 @@ namespace OwnaudioNET.Effects
         /// insert. Same numbers as the Default preset.
         /// </summary>
         /// <param name="repeat">Feedback amount.</param>
-        /// <param name="damping">How dark the repeats get.</param>
+        /// <param name="damping">Feedback low-pass tracking coefficient, higher = brighter.</param>
         public DelayEffect(int time = 375, float repeat = 0.32f, float mix = 0.25f, float damping = 0.22f, int sampleRate = 44100, bool pingPong = false)
         {
             _id = Guid.NewGuid();
@@ -258,6 +261,10 @@ namespace OwnaudioNET.Effects
 
                 float readPos = _writeIndex - ds;
                 if (readPos < 0) readPos += bufLen;
+
+                //ms to samples rarely lands on a whole number, so readPos can come out a
+                //hair below zero and the wrap rounds it right back up to bufLen in float
+                if (readPos >= bufLen) readPos -= bufLen;
 
                 int readIdxA = (int)readPos;
                 int readIdxB = readIdxA + 1;

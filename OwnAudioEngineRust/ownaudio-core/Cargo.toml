@@ -6,7 +6,7 @@ description = "Cross-platform audio I/O core for OwnAudioSharp (Cpal-based)"
 license = "MIT"
 
 [lib]
-# cdylib csak a 3. lépésben (FFI réteg) kerül hozzá
+# cdylib only comes in at the FFI layer, not here
 crate-type = ["lib"]
 
 [dependencies]
@@ -26,4 +26,6 @@ symphonia = { version = "0.5", features = [
 ] }
 
 [dev-dependencies]
-# az integrációs tesztekben ~1s sleep szükséges
+# Only the dsp_contract test reads the shared OwnAudioTests/dsp-contract.json spec;
+# this never reaches the shipped cdylib.
+serde_json = "1.0"

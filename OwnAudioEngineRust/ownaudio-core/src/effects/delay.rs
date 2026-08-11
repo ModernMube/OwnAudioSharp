@@ -125,11 +125,17 @@ impl Effect for Delay {
                 if read_pos < 0.0 {
                     read_pos += buf_len as f32;
                 }
-                let read_idx_a = read_pos as usize;
-                let mut read_idx_b = read_idx_a + 1;
-                if read_idx_b >= buf_len {
-                    read_idx_b = 0;
+                // `ds` is rarely a whole number of samples, so `read_pos` can land a hair
+                // below zero and the wrap rounds it straight back up to `buf_len` in f32.
+                if read_pos >= buf_len as f32 {
+                    read_pos -= buf_len as f32;
                 }
+                let read_idx_a = read_pos as usize;
+                let read_idx_b = if read_idx_a + 1 >= buf_len {
+                    0
+                } else {
+                    read_idx_a + 1
+                };
                 let frac = read_pos - read_idx_a as f32;
 
                 let delayed = self.delay_buffer_l[read_idx_a]
@@ -170,6 +176,11 @@ impl Effect for Delay {
             let mut read_pos = self.write_index as f32 - ds;
             if read_pos < 0.0 {
                 read_pos += buf_len as f32;
+            }
+            // A fractional `ds` can leave `read_pos` a hair below zero, and the wrap above
+            // then rounds it right back up to `buf_len` in f32 — out of bounds by one.
+            if read_pos >= buf_len as f32 {
+                read_pos -= buf_len as f32;
             }
             let read_idx_a = read_pos as usize;
             let mut read_idx_b = read_idx_a + 1;
@@ -336,6 +347,9 @@ mod tests {
                 let mut read_pos = self.write_index as f64 - self.ds;
                 if read_pos < 0.0 {
                     read_pos += buf_len as f64;
+                }
+                if read_pos >= buf_len as f64 {
+                    read_pos -= buf_len as f64;
                 }
                 let read_idx_a = read_pos as usize;
                 let read_idx_b = if read_idx_a + 1 >= buf_len {
@@ -587,5 +601,50 @@ mod tests {
             "subnormal in damping state: {:e}",
             d.last_output_l
         );
+    }
+
+    #[test]
+    fn fractional_delay_times_survive_the_buffer_wrap() {
+        // 150 ms at 48 kHz is 7200.0005 samples, not 7200.  Once the write index
+        // caught up with that, `read_pos` came out a hair below zero, the negative
+        // wrap rounded it back up to exactly `buf_len` in f32 and the read index
+        // ran one past the end of the delay line.
+        for time_ms in [70.0, 150.0, 300.0, 333.0, 1234.0] {
+            let mut d = Delay::new(48_000.0);
+            d.set_param(PARAM_TIME_MS, time_ms);
+            d.set_param(PARAM_FEEDBACK, 0.5);
+            d.set_param(PARAM_MIX, 0.6);
+
+            let mut buf = vec![0.0f32; 2 * 150_000];
+            for (i, frame) in buf.chunks_mut(2).enumerate().take(960) {
+                let s = (std::f32::consts::TAU * 1000.0 * i as f32 / 48_000.0).sin() * 0.5;
+                frame[0] = s;
+                frame[1] = s;
+            }
+            for block in buf.chunks_mut(2 * 512) {
+                d.process(block, 2);
+            }
+
+            assert!(
+                buf.iter().all(|s| s.is_finite()),
+                "{time_ms} ms delay produced a non-finite sample"
+            );
+        }
+    }
+
+    #[test]
+    fn mono_path_survives_a_fractional_delay_wrap() {
+        let mut d = Delay::new(48_000.0);
+        d.set_param(PARAM_TIME_MS, 150.0);
+        d.set_param(PARAM_FEEDBACK, 0.5);
+        d.set_param(PARAM_MIX, 0.6);
+
+        let mut buf = vec![0.0f32; 120_000];
+        buf[0] = 1.0;
+        for block in buf.chunks_mut(512) {
+            d.process(block, 1);
+        }
+
+        assert!(buf.iter().all(|s| s.is_finite()));
     }
 }

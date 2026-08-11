@@ -1,0 +1,136 @@
+{
+  "_comment": [
+    "Numeric DSP contract. Neither side generates this file — it is a hand-written spec,",
+    "and both the managed effects (OwnAudio/Source/Effects) and the native ones",
+    "(OwnAudioEngineRust/ownaudio-core/src/effects) have to satisfy it.",
+    "",
+    "That makes it a real parity check: comparing the two implementations against each",
+    "other would pass happily if both were wrong in the same way, which is exactly what",
+    "happened with the delay read index. Here they are both measured against a stated",
+    "expectation instead.",
+    "",
+    "C# runner:  OwnAudioTests/Ownaudio.OwnaudioNET/Dsp/Contract/DspContractTests.cs",
+    "Rust runner: OwnAudioEngineRust/ownaudio-core/tests/dsp_contract.rs",
+    "",
+    "Units are dB and Hz throughout. Only effects whose correct number can actually be",
+    "written down are listed; the modulation effects are covered by property tests on the",
+    "managed side instead, where forcing a spec would be false precision."
+  ],
+
+  "sampleRate": 48000,
+  "channels": 2,
+  "settleSeconds": 0.5,
+  "measureSeconds": 1.0,
+
+  "effects": [
+    {
+      "effect": "limiter",
+      "params": { "thresholdDb": -6.0, "ceilingDb": -0.1, "releaseMs": 50.0, "lookaheadMs": 5.0 },
+      "cases": [
+        {
+          "freqHz": 1000.0, "inputDb": -20.0, "measure": "peakDb", "expect": -20.0, "tolerance": 0.2,
+          "note": "under the threshold the limiter is a wire — 4.0.1 shipped this pushing 12 dB below"
+        },
+        { "freqHz": 1000.0, "inputDb": -12.0, "measure": "peakDb", "expect": -12.0, "tolerance": 0.2 },
+        {
+          "freqHz": 1000.0, "inputDb": -3.0, "measure": "peakDb", "expect": -6.0, "tolerance": 0.5,
+          "note": "over the threshold the gain pulls the peak down to the threshold, not to the ceiling"
+        },
+        { "freqHz": 1000.0, "inputDb": 0.0, "measure": "peakDb", "expect": -6.0, "tolerance": 0.5 }
+      ]
+    },
+
+    {
+      "effect": "limiter",
+      "params": { "thresholdDb": -12.0, "ceilingDb": -0.1, "releaseMs": 100.0, "lookaheadMs": 8.0 },
+      "cases": [
+        { "freqHz": 500.0, "inputDb": -18.0, "measure": "peakDb", "expect": -18.0, "tolerance": 0.2 },
+        { "freqHz": 500.0, "inputDb": 0.0, "measure": "peakDb", "expect": -12.0, "tolerance": 0.5 }
+      ]
+    },
+
+    {
+      "effect": "compressor",
+      "params": { "thresholdDb": -20.0, "ratio": 4.0, "attackMs": 5.0, "releaseMs": 200.0, "makeupDb": 0.0, "kneeDb": 0.0 },
+      "cases": [
+        { "freqHz": 1000.0, "inputDb": -30.0, "measure": "peakDb", "expect": -30.0, "tolerance": 0.3 },
+        {
+          "freqHz": 1000.0, "inputDb": -8.0, "measure": "peakDb", "expect": -17.0, "tolerance": 0.8,
+          "note": "12 dB over a -20 dB threshold at 4:1 comes out 3 dB over it"
+        },
+        { "freqHz": 1000.0, "inputDb": -14.0, "measure": "peakDb", "expect": -18.5, "tolerance": 0.8 }
+      ]
+    },
+
+    {
+      "effect": "compressor",
+      "params": { "thresholdDb": -20.0, "ratio": 8.0, "attackMs": 5.0, "releaseMs": 200.0, "makeupDb": 6.0, "kneeDb": 0.0 },
+      "cases": [
+        {
+          "freqHz": 1000.0, "inputDb": -8.0, "measure": "peakDb", "expect": -12.5, "tolerance": 0.8,
+          "note": "-20 + 12/8 = -18.5, plus 6 dB of makeup"
+        }
+      ]
+    },
+
+    {
+      "effect": "equalizer",
+      "params": { "band5Db": 12.0 },
+      "cases": [
+        {
+          "freqHz": 1000.0, "inputDb": -30.0, "measure": "gainDb", "expect": 12.0, "tolerance": 0.6,
+          "note": "band 5 is the 1 kHz bell; asking for +12 has to give +12"
+        },
+        { "freqHz": 60.0, "inputDb": -30.0, "measure": "gainDb", "expect": 0.0, "tolerance": 1.0 },
+        { "freqHz": 12000.0, "inputDb": -30.0, "measure": "gainDb", "expect": 0.0, "tolerance": 1.0 }
+      ]
+    },
+
+    {
+      "effect": "equalizer",
+      "params": { "band2Db": -12.0 },
+      "cases": [
+        { "freqHz": 125.0, "inputDb": -12.0, "measure": "gainDb", "expect": -12.0, "tolerance": 0.6 }
+      ]
+    },
+
+    {
+      "effect": "equalizer",
+      "params": {},
+      "cases": [
+        { "freqHz": 100.0, "inputDb": -20.0, "measure": "gainDb", "expect": 0.0, "tolerance": 0.1 },
+        { "freqHz": 1000.0, "inputDb": -20.0, "measure": "gainDb", "expect": 0.0, "tolerance": 0.1 },
+        { "freqHz": 8000.0, "inputDb": -20.0, "measure": "gainDb", "expect": 0.0, "tolerance": 0.1 }
+      ]
+    },
+
+    {
+      "effect": "equalizer30",
+      "params": { "band17Db": 12.0 },
+      "cases": [
+        {
+          "freqHz": 1000.0, "inputDb": -30.0, "measure": "gainDb", "expect": 12.0, "tolerance": 0.7,
+          "note": "the constant-Q regression: this measured about a third of the requested gain"
+        },
+        { "freqHz": 6300.0, "inputDb": -30.0, "measure": "gainDb", "expect": 0.0, "tolerance": 1.0 }
+      ]
+    },
+
+    {
+      "effect": "equalizer30",
+      "params": { "band23Db": -9.0 },
+      "cases": [
+        { "freqHz": 4000.0, "inputDb": -12.0, "measure": "gainDb", "expect": -9.0, "tolerance": 0.7 }
+      ]
+    },
+
+    {
+      "effect": "equalizer30",
+      "params": {},
+      "cases": [
+        { "freqHz": 250.0, "inputDb": -20.0, "measure": "gainDb", "expect": 0.0, "tolerance": 0.1 },
+        { "freqHz": 2000.0, "inputDb": -20.0, "measure": "gainDb", "expect": 0.0, "tolerance": 0.1 }
+      ]
+    }
+  ]
+}

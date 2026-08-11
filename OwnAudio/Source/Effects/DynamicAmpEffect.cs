@@ -75,6 +75,14 @@ namespace OwnaudioNET.Effects
         private float _lastGainDb;
 
         /// <summary>
+        /// What the ctor primed the RMS with. Reset has to come back here, not to zero,
+        /// or the AGC starts from "silence" and slams the gain on the next block.
+        /// </summary>
+        private float _initialRmsState;
+
+        private float _initialGain = 1.0f;
+
+        /// <summary>
         /// Gate state, kept between blocks so the hysteresis works.
         /// </summary>
         private bool _isAboveNoiseGate;
@@ -212,6 +220,8 @@ namespace OwnaudioNET.Effects
             _currentGain = initialGain;
             _rmsState = 0.0f;
             _lastGainDb = LinearToDb(initialGain);
+            _initialGain = initialGain;
+            _initialRmsState = 0.0f;
             _isAboveNoiseGate = false;
         }
 
@@ -237,6 +247,8 @@ namespace OwnaudioNET.Effects
 
             float startRms = DbToLinear(-20.0f);
             _rmsState = startRms * startRms;
+            _initialGain = 1.0f;
+            _initialRmsState = _rmsState;
             _isAboveNoiseGate = false;
         }
 
@@ -419,9 +431,9 @@ namespace OwnaudioNET.Effects
         /// </summary>
         public void Reset()
         {
-            _currentGain = 1.0f;
-            _rmsState = 0.0f;
-            _lastGainDb = 0.0f;
+            _currentGain = _initialGain;
+            _rmsState = _initialRmsState;
+            _lastGainDb = LinearToDb(_initialGain);
             _isAboveNoiseGate = false;
         }
 

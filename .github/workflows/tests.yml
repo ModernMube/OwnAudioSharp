@@ -1,0 +1,77 @@
+name: Tests
+
+on:
+  push:
+    branches: [ "develop_rust_audio", "master" ]
+  pull_request:
+    branches: [ "master", "develop_rust_audio" ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  rust:
+    name: Rust / ownaudio-core + ffi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install system ALSA dev headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            OwnAudioEngineRust/target
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('OwnAudioEngineRust/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-
+
+      - name: Check formatting
+        working-directory: OwnAudioEngineRust
+        run: cargo fmt --all --check
+
+      - name: Run tests
+        working-directory: OwnAudioEngineRust
+        run: cargo test --workspace
+
+  managed:
+    name: .NET / OwnaudioNET suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install system ALSA runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2t64
+
+      - name: Restore
+        run: dotnet restore OwnAudioTests/Ownaudio.OwnaudioNET/Ownaudio.Test.OwnaudioNET.csproj
+
+      - name: Run tests
+        run: >
+          dotnet test OwnAudioTests/Ownaudio.OwnaudioNET/Ownaudio.Test.OwnaudioNET.csproj
+          --no-restore --verbosity normal --logger "console;verbosity=normal"
