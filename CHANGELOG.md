@@ -26,6 +26,20 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 
 ### Fixed
 
+- **The equalizer's "soft" limiter was a step, not a knee.** Above 0.95 it computed
+  `0.95 * tanh(x)` instead of scaling into the headroom, so a sample crossing the threshold
+  did not saturate — it dropped from 0.95 to 0.70, a 2.6 dB notch cut straight out of the
+  waveform, and the output could never reach past 0.95 however hard it was driven. It now
+  squeezes everything past the threshold into what is left below unity, joining the linear
+  part with a continuous knee (same value and same slope at 0.95) and asymptoting at 1.0.
+  **This changes how the EQ sounds** on anything it boosts past 0.95; below that nothing
+  moves. Both the managed `EqualizerEffect` and the native port carried it, as did the f64
+  reference the native port is tested against — which is why comparing the two to each other
+  never caught it. Both sides now have a test that measures the knee itself.
+- That step is also what made the native reference comparison platform-dependent: one sample
+  landing on the far side of the discontinuity is worth −54.3 dB of RMS error against a
+  −60 dB budget, so 1 ulp of libm difference between glibc and Apple's decided whether the
+  test passed. It was green on aarch64 and red on x86_64 for the same commit.
 - **The phaser barely did anything.** Its all-pass coefficient is built correctly —
   `a = (t−1)/(t+1)` for `t = tan(πf/fs)`, which comes out negative anywhere well under Nyquist —
   but the difference equation applied `−a`, and flipping that sign moves the stage's corner from

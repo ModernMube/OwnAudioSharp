@@ -7,8 +7,8 @@
 //! filter (`b0/b1/b2/a1/a2`, 20 filters); each channel keeps its own
 //! Transposed-Direct-Form-II state (`z1/z2`).  Only bands with non-zero gain are
 //! evaluated (a 0 dB peaking filter is an exact identity, so skipping it is
-//! numerically lossless), the wet sample is soft-limited with `0.95·tanh` above
-//! 0.95, then blended with the dry signal by `mix`.  Parameter identifiers,
+//! numerically lossless), the wet sample is soft-limited above 0.95, then blended
+//! with the dry signal by `mix`.  Parameter identifiers,
 //! ranges and defaults mirror the C# effect so the two implementations are
 //! numerically equivalent (the basis of the 2.2 reference comparison).
 //!
@@ -56,7 +56,7 @@ const GAIN_MAX_DB: f32 = 12.0;
 /// exceeds this threshold, mirroring the reference active-band optimization.
 const ACTIVE_GAIN_THRESHOLD_DB: f32 = 0.01;
 
-/// Above this magnitude the wet sample is soft-limited with `0.95·tanh`.
+/// Above this magnitude the wet sample is soft-limited.
 ///
 /// **Note (B.6.1):** this is a hidden nonlinearity — a user expects an EQ to be
 /// linear, but a hot signal (peaks above 0.95 after boosting bands) is softly
@@ -65,6 +65,25 @@ const ACTIVE_GAIN_THRESHOLD_DB: f32 = 0.01;
 /// to the master limiter) is a deliberate sound change best gated behind an
 /// engine-level quality option.
 const SOFT_LIMIT_THRESHOLD: f32 = 0.95;
+
+/// What is left between the threshold and unity.  Everything past the threshold is
+/// squeezed into this, so the limiter asymptotes at 1.0 instead of overshooting.
+const SOFT_LIMIT_HEADROOM: f32 = 1.0 - SOFT_LIMIT_THRESHOLD;
+
+/// Soft-clips a sample that ran past the threshold.
+///
+/// The knee is continuous: at the threshold this gives back the threshold and its
+/// slope is still 1, so the curve joins the linear part smoothly.  The old form
+/// multiplied `tanh` by the threshold rather than scaling into it, which sent
+/// anything crossing 0.95 straight down to 0.70 — a 2.6 dB step cut out of the
+/// waveform, not a soft knee.
+#[inline]
+fn soft_limit(sample: f32) -> f32 {
+    let over = sample.abs() - SOFT_LIMIT_THRESHOLD;
+    let limited = SOFT_LIMIT_THRESHOLD + SOFT_LIMIT_HEADROOM * (over / SOFT_LIMIT_HEADROOM).tanh();
+
+    limited.copysign(sample)
+}
 
 /// Mix values below this bypass processing entirely (mirrors C#).
 const MIX_BYPASS_THRESHOLD: f32 = 0.01;
@@ -280,7 +299,7 @@ impl Effect for Equalizer {
                 }
 
                 if sample.abs() > SOFT_LIMIT_THRESHOLD {
-                    sample = SOFT_LIMIT_THRESHOLD * sample.tanh();
+                    sample = soft_limit(sample);
                 }
 
                 buffer[i] = input * dry + sample * mix;
@@ -438,7 +457,10 @@ mod tests {
                         }
                     }
                     if x.abs() > SOFT_LIMIT_THRESHOLD as f64 {
-                        x = SOFT_LIMIT_THRESHOLD as f64 * x.tanh();
+                        let threshold = SOFT_LIMIT_THRESHOLD as f64;
+                        let headroom = SOFT_LIMIT_HEADROOM as f64;
+                        x = (threshold + headroom * ((x.abs() - threshold) / headroom).tanh())
+                            .copysign(x);
                     }
                     out[i] = (dry * (1.0 - self.mix) + x * self.mix) as f32;
                 }
@@ -631,7 +653,8 @@ mod tests {
     #[test]
     fn output_is_soft_limited() {
         // Stacked boosts on a loud tone must keep the wet path bounded by the
-        // soft limiter (well under unity; the tanh asymptote × 0.95 ≈ 0.95).
+        // soft limiter — it squeezes everything past 0.95 into what is left below
+        // unity, so the output asymptotes at 1.0 and never runs past it.
         let mut eq = Equalizer::new(48_000.0);
         for band in 3..7 {
             eq.set_param(PARAM_BAND_0 + band as u32, 12.0);
@@ -643,7 +666,32 @@ mod tests {
             })
             .collect();
         eq.process(&mut buf, 1);
-        assert!(buf.iter().all(|&s| s.abs() <= 0.95 + 1e-6));
+        assert!(buf.iter().all(|&s| s.abs() <= 1.0 + 1e-6));
+        assert!(
+            buf.iter().any(|&s| s.abs() > SOFT_LIMIT_THRESHOLD),
+            "the limiter never engaged, so this proves nothing"
+        );
+    }
+
+    #[test]
+    fn soft_limit_knee_is_continuous() {
+        // This is what made the reference comparison platform-dependent: the old form
+        // dropped anything crossing the threshold from 0.95 straight to 0.70, so a single
+        // sample landing on the other side of that step was worth -54 dB of RMS error and
+        // 1 ulp of libm difference decided which side it fell on.
+        let below = SOFT_LIMIT_THRESHOLD - f32::EPSILON;
+        let above = soft_limit(SOFT_LIMIT_THRESHOLD + f32::EPSILON);
+        assert!(
+            (above - below).abs() < 1.0e-5,
+            "the knee steps by {} at the threshold",
+            above - below
+        );
+
+        // However hard it is driven it approaches unity and never runs past it.
+        for drive in [1.0f32, 2.0, 10.0, 100.0] {
+            assert!(soft_limit(drive) > SOFT_LIMIT_THRESHOLD && soft_limit(drive) <= 1.0);
+            assert!(soft_limit(-drive) < -SOFT_LIMIT_THRESHOLD && soft_limit(-drive) >= -1.0);
+        }
     }
 
     #[test]

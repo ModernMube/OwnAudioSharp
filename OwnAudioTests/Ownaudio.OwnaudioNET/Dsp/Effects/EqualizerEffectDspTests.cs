@@ -156,4 +156,51 @@ public class EqualizerEffectDspTests
                 .Should().BeLessThan(0.001, "a biquad is linear, it has no business making harmonics");
         }
     }
+
+    /// <summary>
+    /// The soft limiter above 0.95 has to join the linear part smoothly. It used to
+    /// multiply Tanh by the threshold instead of scaling into it, so anything crossing
+    /// 0.95 dropped to 0.70 - a step carved out of the waveform. A slow ramp walks the
+    /// transfer curve through the knee, where the band is set just active enough to keep
+    /// the limiter in the path while leaving the signal alone.
+    /// </summary>
+    [Fact]
+    public void SoftLimiterKneeHasNoStep()
+    {
+        const int Steps = 30000;
+        const float From = 0.85f, To = 1.15f;
+        float _step = (To - From) / Steps;
+
+        using (var _eq = new EqualizerEffect(Rate))
+        {
+            _eq.SetBandGain(0, Centres[0], 1.0f, 0.05f);
+
+            float[] _in = new float[Steps * EffectHarness.Channels];
+            for (int f = 0; f < Steps; f++)
+            {
+                float _v = From + _step * f;
+                for (int c = 0; c < EffectHarness.Channels; c++) _in[f * EffectHarness.Channels + c] = _v;
+            }
+
+            float[] _out = EffectHarness.Render(_eq, _in, EffectHarness.Channels);
+
+            float _peak = 0f;
+            float _biggestJump = 0f;
+
+            for (int f = 1; f < Steps; f++)
+            {
+                float _now = _out[f * EffectHarness.Channels];
+                float _prev = _out[(f - 1) * EffectHarness.Channels];
+
+                _peak = Math.Max(_peak, _now);
+                _biggestJump = Math.Max(_biggestJump, Math.Abs(_now - _prev));
+            }
+
+            _biggestJump.Should().BeLessThan(_step * 20f,
+                "the ramp climbs by {0:E2} per sample, so a bigger jump than that is a step in the knee", _step);
+
+            _peak.Should().BeGreaterThan(0.95f, "the limiter has to engage or this proves nothing");
+            _peak.Should().BeLessThanOrEqualTo(1.0f + 1e-5f, "it must not run past unity");
+        }
+    }
 }

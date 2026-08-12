@@ -65,6 +65,31 @@ namespace OwnaudioNET.Effects
         private const int FiltersPerBand = 2;
 
         /// <summary>
+        /// Where the wet path starts saturating.
+        /// </summary>
+        private const float SoftLimitThreshold = 0.95f;
+
+        /// <summary>
+        /// What is left up to unity - everything past the threshold gets squeezed into
+        /// this, so the limiter asymptotes at 1.0.
+        /// </summary>
+        private const float SoftLimitHeadroom = 1.0f - SoftLimitThreshold;
+
+        /// <summary>
+        /// Soft clip with a continuous knee: at the threshold this gives back the
+        /// threshold and the slope is still 1, so it joins the linear part smoothly.
+        /// The old form multiplied Tanh by the threshold instead of scaling into it,
+        /// which dropped anything crossing 0.95 to 0.70 - a step cut out of the wave.
+        /// </summary>
+        private static float _softLimit(float sample)
+        {
+            float over = Math.Abs(sample) - SoftLimitThreshold;
+            float limited = SoftLimitThreshold + SoftLimitHeadroom * MathF.Tanh(over / SoftLimitHeadroom);
+
+            return MathF.CopySign(limited, sample);
+        }
+
+        /// <summary>
         /// Biquad coefficients per filter, a0 already normalized out.
         /// </summary>
         private readonly float[] _b0;
@@ -368,7 +393,7 @@ namespace OwnaudioNET.Effects
                         sample = output;
                     }
 
-                    if (Math.Abs(sample) > 0.95f) sample = 0.95f * MathF.Tanh(sample);
+                    if (Math.Abs(sample) > SoftLimitThreshold) sample = _softLimit(sample);
 
                     buffer[i] = dry * (1.0f - mix) + sample * mix;
                 }
