@@ -31,7 +31,7 @@
 <h1 class="page-title">Analysis &amp; Mastering</h1>
 <p class="page-subtitle">Working out what is <em>in</em> the audio, and making it sound like something else.</p>
 
-<p>Everything on this page is offline work, not part of the real-time path: hand it a file, get back chords, notes, separated stems or a mastered copy. Run it off the UI thread — some of it takes minutes.</p>
+<p>Everything on this page is offline work, not part of the real-time path: hand it a file, get back chords, notes, separated stems or a mastered copy. Run it off the UI thread — some of it takes minutes. The matcher is the one that reaches back into the live path: it can hand its result to a running chain as <a href="#matchering-profile">settings</a> rather than render a file, though the analysis behind it is still offline work.</p>
 
 <div class="callout callout-info"><div class="callout-icon">🧠</div><p><strong>Chord Detection</strong> ships only in the full <span class="pkg-badge pkg-full">OwnAudioSharp</span> package. <strong>Audio Matchering</strong> is in <code>OwnAudioSharp.Mobile</code> too, but neither is in <code>OwnAudioSharp.Basic</code>, which is a playback/recording engine only. <strong>Vocal separation</strong> and <strong>MT3 transcription</strong> live in their own add-on packages — <span class="pkg-badge pkg-addon">OwnVocalRemover</span> and <span class="pkg-badge pkg-addon">OwnAudioSharp.Mt3</span> — reference them only when you need them.</p></div>
 
@@ -248,38 +248,94 @@ foreach (var n in notes.Where(n =&gt; !n.IsDrum))
 
 <!-- Matchering -->
 <h2 id="matchering">Auto-Mastering (Matchering)</h2>
-<p>Point it at a reference track you like the sound of, and it moves your mix's spectral and dynamic character towards it. Namespace: <code>OwnaudioNET.Features</code></p>
+<p>Point it at a reference track you like the sound of, and it moves your mix's spectral and dynamic character towards it. Namespace: <code>OwnaudioNET.Features.Matchering</code>. Everything below is an instance method on <code>AudioAnalyzer</code> — default-construct one and keep it, it caches its FFT setup and its preset targets.</p>
 
-<div class="code-block"><div class="code-header"><span>C# — Analyze spectrum</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">AudioSpectrum spectrum = AudioAnalyzer.AnalyzeAudioFile("track.wav");</code></pre></div>
+<div class="code-block"><div class="code-header"><span>C# — Analyze spectrum</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var analyzer = new AudioAnalyzer();
 
-<div class="code-block"><div class="code-header"><span>C# — EQ match to reference</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">AudioAnalyzer.ProcessEQMatching(
+AudioSpectrum spectrum = analyzer.AnalyzeAudioFile("track.wav");</code></pre></div>
+
+<div class="code-block"><div class="code-header"><span>C# — EQ match to reference</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">analyzer.ProcessEQMatching(
     sourceFile: "my-mix.wav",
     targetFile: "reference.wav",   // the "sound" to match
     outputFile: "mastered.wav");</code></pre></div>
 
-<div class="code-block"><div class="code-header"><span>C# — Apply playback system preset</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">AudioAnalyzer.ProcessWithEnhancedPreset(
+<div class="code-block"><div class="code-header"><span>C# — Apply playback system preset</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">analyzer.ProcessWithEnhancedPreset(
     sourceFile: "my-mix.wav",
     outputFile: "for-club.wav",
-    system:     PlaybackSystem.Club,  // Club, Car, Studio, HomeTheater
+    system:     PlaybackSystem.ClubPA,
     eqOnlyMode: true);</code></pre></div>
 
-<div class="code-block"><div class="code-header"><span>C# — Batch process</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">AudioAnalyzer.BatchProcessWithEnhancedPreset(
+<div class="code-block"><div class="code-header"><span>C# — Batch process</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">analyzer.BatchProcessWithEnhancedPreset(
     sourceFiles:    new[] { "track1.wav", "track2.wav", "track3.wav" },
     baseSampleFile: "reference.wav",
     outputDirectory: "output/",
-    system:         PlaybackSystem.Studio,
+    system:         PlaybackSystem.StudioMonitors,
     fileNameSuffix: "_mastered");</code></pre></div>
 
 <h3>PlaybackSystem Values</h3>
 <div class="table-wrap"><table>
   <thead><tr><th>Value</th><th>Description</th></tr></thead>
   <tbody>
-    <tr><td><code>PlaybackSystem.Club</code></td><td>Optimized for nightclub / dance floor sound systems</td></tr>
-    <tr><td><code>PlaybackSystem.Car</code></td><td>Optimized for in-car audio systems</td></tr>
-    <tr><td><code>PlaybackSystem.Studio</code></td><td>Neutral studio monitor reference</td></tr>
-    <tr><td><code>PlaybackSystem.HomeTheater</code></td><td>Home theater speaker systems</td></tr>
+    <tr><td><code>PlaybackSystem.ConcertPA</code></td><td>Large venue sound reinforcement</td></tr>
+    <tr><td><code>PlaybackSystem.ClubPA</code></td><td>Club / DJ rig, dance music</td></tr>
+    <tr><td><code>PlaybackSystem.HiFiSpeakers</code></td><td>Hi-Fi home speakers</td></tr>
+    <tr><td><code>PlaybackSystem.StudioMonitors</code></td><td>Near-field studio monitors</td></tr>
+    <tr><td><code>PlaybackSystem.Headphones</code></td><td>Over-ear headphones</td></tr>
+    <tr><td><code>PlaybackSystem.Earbuds</code></td><td>IEMs and earbuds</td></tr>
+    <tr><td><code>PlaybackSystem.CarStereo</code></td><td>Car audio, compensated for road noise</td></tr>
+    <tr><td><code>PlaybackSystem.Television</code></td><td>TV or soundbar, dialogue first</td></tr>
+    <tr><td><code>PlaybackSystem.RadioBroadcast</code></td><td>FM/AM broadcast chain</td></tr>
+    <tr><td><code>PlaybackSystem.Smartphone</code></td><td>Phone or tablet speaker</td></tr>
   </tbody>
 </table></div>
+
+<p><code>GetAvailablePresets()</code> is static and hands back a copy of the whole table — name, description, the 30-band curve and the dynamics settings — which is what you want for a preset picker.</p>
+
+<h3 id="matchering-profile">Matching a live chain instead of a file</h3>
+<p>The four methods above are offline renderers: file in, file out. To drive a <em>real-time</em> mastering chain you need the step before the render — the numbers the effects have to be set to. Three additions hand that over, without changing anything the offline path does.</p>
+
+<div class="code-block"><div class="code-header"><span>C# — Analyze a buffer, get settings back</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var analyzer = new AudioAnalyzer();
+
+// The mix as it currently sounds - no temp wav, no decode round trip
+AudioSpectrum mix = analyzer.AnalyzeAudioBuffer(masterSum, 48000, 2);
+
+// The sound to move towards: a reference file...
+AudioSpectrum reference = analyzer.AnalyzeAudioFile("reference.wav");
+// ...or a playback system preset, built entirely in memory
+AudioSpectrum preset = analyzer.GetPresetTargetSpectrum(PlaybackSystem.ClubPA);
+
+MatcheringProfile profile = analyzer.CalculateProfile(mix, reference, sampleRate: 48000);
+
+for (int band = 0; band &lt; 30; band++)
+    eq.SetBandGain(band, BandCentre(band), profile.QFactors[band], profile.BandGainsDb[band]);
+
+compressor.Threshold = CompressorEffect.DbToLinear(profile.CompThresholdDb);
+compressor.Ratio     = profile.CompRatio;
+dynamicAmp.TargetLevel = profile.TargetLoudness;</code></pre></div>
+
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Member</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>WantedCurveDb[30]</code></td><td>The curve we want to hear, dB. This is the one worth drawing.</td></tr>
+    <tr><td><code>BandGainsDb[30]</code></td><td>What the filter bank has to be <em>set to</em> for that curve to come out of it. A 1/3-octave bell bleeds into its neighbours, so setting each band to its wanted value overshoots by 60–120%; these gains come from solving the bank's response matrix.</td></tr>
+    <tr><td><code>QFactors[30]</code></td><td>The Q the solution assumed per band.</td></tr>
+    <tr><td><code>CompThresholdDb</code>, <code>CompRatio</code></td><td>Compressor settings. The threshold is in dB — <code>CompressorEffect</code> wants it linear, so run it through <code>CompressorEffect.DbToLinear</code>.</td></tr>
+    <tr><td><code>TargetLoudness</code>, <code>MaxGain</code></td><td>AGC target and gain ceiling for <code>DynamicAmpEffect</code>.</td></tr>
+    <tr><td><code>SourceLoudness</code>, <code>SourceCrestDb</code>, <code>TargetCrestDb</code></td><td>Measured values, for a status readout.</td></tr>
+    <tr><td><code>CutOnlyShiftDb</code></td><td>How far the curve got pushed down; 0 when <code>cutOnly</code> was off.</td></tr>
+  </tbody>
+</table></div>
+
+<p>There is no audio in a <code>MatcheringProfile</code>, so it serializes into a project file as is.</p>
+
+<h4>fixedQ — solve against the Q that actually plays</h4>
+<p><code>CalculateProfile</code> defaults <code>fixedQ</code> to <code>AudioAnalyzer.NativeBandQ</code> (4.318474), the constant Q of the <em>native</em> 30-band equalizer. The engine has no per-band Q parameter, so that is the only Q a real-time chain ever plays; handing the solver the optimized per-band Qs instead would solve for a filter bank that is not the one making the sound. Pass <code>fixedQ: 0</code> to get the per-band Qs anyway — that is what the offline render uses, since it runs the managed EQ where the Q does get through.</p>
+
+<h4>cutOnly — headroom without a gain stage</h4>
+<p>The offline chain buys headroom with a pre-gain stage before the EQ. A real-time chain assembled from native effects has no such stage, so <code>cutOnly: true</code> (the default) subtracts the curve's maximum from all 30 bands: the loudest band lands on 0 dB, everything else goes negative, and the <code>DynamicAmpEffect</code> behind it brings the level back to <code>TargetLoudness</code>. The broadband offset is already out of the curve by then, so this is a pure level change and leaves the tonal shape alone.</p>
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>The shift stops short if it would push the deepest cut past the ±9 dB per-band clamp — a curve that hits the rail is no longer the curve that was measured, just a flattened version of it. <code>CutOnlyShiftDb</code> reports what was actually applied.</p></div>
+
+<div class="callout callout-warning"><div class="callout-icon">⏱️</div><p>Analysis is <strong>seconds of work on a full song</strong>, and <code>AnalyzeAudioFile</code> takes a static lock so only one file analysis runs at a time. Call all of this off the UI thread. Material shorter than one ~10 s segment throws — check the length before you start.</p></div>
 
 <h2 id="next">Next</h2>
 <div class="card-grid">

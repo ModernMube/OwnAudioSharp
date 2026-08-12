@@ -5,6 +5,25 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 
 ## Unreleased
 
+### Added
+
+- **Matchering can drive a live chain instead of rendering a file.** The whole matching pipeline
+  was only reachable as an offline renderer — file in, 24-bit wav out — with the interesting part,
+  the settings it computed on the way, private. Three additions expose it without touching the
+  offline path: `AnalyzeAudioBuffer(float[], int, int)` runs the same segmented analysis on samples
+  already in memory (no `FileSource`, no static lock, no decode round trip — `AnalyzeAudioFile` now
+  delegates to it, so the two cannot drift apart), `CalculateProfile` returns a `MatcheringProfile`
+  carrying the 30 band gains, Q factors, compressor and AGC settings, and `GetPresetTargetSpectrum`
+  builds a preset's target spectrum entirely in memory instead of writing two temp wavs, cached per
+  system.
+- `CalculateProfile` defaults its `fixedQ` to `AudioAnalyzer.NativeBandQ` (4.318474), the constant Q
+  of the native 30-band equalizer, because the engine has no per-band Q parameter — solving the
+  filter bank against the optimized per-band Qs would model a bank that is not the one making the
+  sound. `fixedQ: 0` still gets the per-band Qs, which is what the offline render uses.
+- `cutOnly` (on by default) drops the whole curve so no band is boosted, for chains with no gain
+  stage in front of the EQ; the AGC behind it takes the level back. The shift stops short of
+  pushing the deepest cut into the ±9 dB clamp, and `CutOnlyShiftDb` reports what was applied.
+
 ### Fixed
 
 - **The phaser barely did anything.** Its all-pass coefficient is built correctly —
@@ -16,6 +35,19 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
   on both the managed and the native side, which carried the same equation. **This changes how
   every phaser preset sounds** — the effect is audible now, so settings dialled in against the
   broken version will be far stronger than before.
+- **The delay crashed on the real-time thread for most delay times.** A time that is not a whole
+  number of samples — 150 ms at 48 kHz is 7200.0005 — leaves the read position a hair below zero,
+  and the negative wrap rounds it straight back up to exactly the buffer length in f32. The
+  interpolation's second index was clamped, the first was not, so it indexed one past the end the
+  moment the write pointer caught up with the delay length. Both the managed and the native delay
+  carried it, the native one on all three code paths.
+- **The native flanger had the same overrun**, and hit it far more easily: its LFO makes the delay
+  fractional on every single sample. The managed flanger uses an integer delay and was never
+  affected.
+- **`DynamicAmpEffect.Reset()` did not restore the state the constructor set.** The preset
+  constructor primes the level estimate at −20 dBFS so the AGC does not slam the gain on the first
+  block; reset zeroed it instead, so an effect that had been reset behaved differently from a fresh
+  one for about a second.
 - **SmartMaster measured the low end against an absolute level.** The subwoofer step compared a
   broadband RMS to a fixed −40 dBFS, so the verdict moved with playback volume, mic gain and
   distance, and room rumble could carry it on its own. It now falls out of the pink noise pass in
@@ -50,6 +82,12 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
   `api-reference.html` and `troubleshooting.html`; the misleading comments in `RustNativeDecoder`
   and in four places on the Rust side, all claiming FFmpeg decoding lived in the other layer, are
   gone too. A format outside the Symphonia list now honestly fails.
+- **The Matchering page called every entry point static and named four `PlaybackSystem` values that
+  do not exist.** `AudioAnalyzer`'s methods are instance methods, the namespace is
+  `OwnaudioNET.Features.Matchering` rather than `OwnaudioNET.Features`, and the enum has ten members
+  (`ConcertPA`, `ClubPA`, `HiFiSpeakers`, `StudioMonitors`, `Headphones`, `Earbuds`, `CarStereo`,
+  `Television`, `RadioBroadcast`, `Smartphone`) — not `Club` / `Car` / `Studio` / `HomeTheater`. None
+  of the samples in `api-advanced.html` compiled as printed.
 - The desktop and mobile package READMEs advertised vocal removal as a feature of the package and
   opened their quick start with `using OwnaudioNET.Features.Vocalremover;` — a namespace neither
   package contains, so the sample did not compile. Vocal separation now points at the separate

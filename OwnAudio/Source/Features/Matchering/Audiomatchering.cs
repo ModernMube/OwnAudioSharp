@@ -78,22 +78,7 @@ namespace OwnaudioNET.Features.Matchering
 
                 Log.Info($"Analyzing {filePath} ({channels} ch, {sampleRate}Hz)...");
 
-                if (channels == 1) return _analyzeMono(audioData, sampleRate);
-
-                int perChannel = audioData.Length / channels;
-                var channelSpectra = new List<AudioSpectrum>(channels);
-
-                for (int c = 0; c < channels; c++)
-                {
-                    float[] scratch = new float[perChannel];
-                    for (int i = 0; i < perChannel; i++)
-                        scratch[i] = audioData[i * channels + c];
-
-                    Log.Info($"Analyzing Channel {c + 1}...");
-                    channelSpectra.Add(_analyzeMono(scratch, sampleRate));
-                }
-
-                return _averageSpectra(channelSpectra);
+                return AnalyzeAudioBuffer(audioData, sampleRate, channels);
             }
         }
 

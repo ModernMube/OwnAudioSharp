@@ -1127,9 +1127,13 @@ namespace OwnaudioNET.Features.Matchering
 {
     public class AudioAnalyzer
     {
+        public const float NativeBandQ = 4.318474F;
         public AudioAnalyzer() { }
+        public OwnaudioNET.Features.Matchering.AudioSpectrum AnalyzeAudioBuffer(float[] interleaved, int sampleRate, int channels) { }
         public OwnaudioNET.Features.Matchering.AudioSpectrum AnalyzeAudioFile(string filePath) { }
         public void BatchProcessWithEnhancedPreset(string[] sourceFiles, string baseSampleFile, string outputDirectory, OwnaudioNET.Features.Matchering.PlaybackSystem system, string? fileNameSuffix = null) { }
+        public OwnaudioNET.Features.Matchering.MatcheringProfile CalculateProfile(OwnaudioNET.Features.Matchering.AudioSpectrum source, OwnaudioNET.Features.Matchering.AudioSpectrum target, int sampleRate, float fixedQ = 4.318474, bool cutOnly = true) { }
+        public OwnaudioNET.Features.Matchering.AudioSpectrum GetPresetTargetSpectrum(OwnaudioNET.Features.Matchering.PlaybackSystem system, bool eqOnlyMode = true) { }
         public void ProcessEQMatching(string sourceFile, string targetFile, string outputFile) { }
         public void ProcessWithEnhancedPreset(string sourceFile, string outputFile, OwnaudioNET.Features.Matchering.PlaybackSystem system, string? tempDirectory = null, bool eqOnlyMode = true) { }
         public static System.Collections.Generic.Dictionary<OwnaudioNET.Features.Matchering.PlaybackSystem, OwnaudioNET.Features.Matchering.PlaybackPreset> GetAvailablePresets() { }
@@ -1180,6 +1184,21 @@ namespace OwnaudioNET.Features.Matchering
         public float Loudness { get; set; }
         public float Peak { get; set; }
         public float RMS { get; set; }
+    }
+    public sealed class MatcheringProfile
+    {
+        public MatcheringProfile() { }
+        public float[] BandGainsDb { get; init; }
+        public float CompRatio { get; init; }
+        public float CompThresholdDb { get; init; }
+        public float CutOnlyShiftDb { get; init; }
+        public float MaxGain { get; init; }
+        public float[] QFactors { get; init; }
+        public float SourceCrestDb { get; init; }
+        public float SourceLoudness { get; init; }
+        public float TargetCrestDb { get; init; }
+        public float TargetLoudness { get; init; }
+        public float[] WantedCurveDb { get; init; }
     }
     public class PlaybackPreset
     {

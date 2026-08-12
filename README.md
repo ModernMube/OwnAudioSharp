@@ -176,6 +176,22 @@ Synchronizes playback across devices on the local network with sample-accurate p
 ### Audio Matchering — Reference-Based Mastering
 Analyzes a reference track and applies its spectral and dynamic characteristics to your audio for professional mastering results.
 
+Besides the offline renderers (file in, file out) it can stop one step earlier and hand back the *settings* instead — the numbers a live mastering chain has to be set to. The reference can be a file or one of the ten built-in playback-system presets, and nothing touches the disk:
+
+```csharp
+var analyzer = new AudioAnalyzer();
+
+AudioSpectrum mix = analyzer.AnalyzeAudioBuffer(masterSum, 48000, 2);
+AudioSpectrum target = analyzer.GetPresetTargetSpectrum(PlaybackSystem.ClubPA);
+
+MatcheringProfile profile = analyzer.CalculateProfile(mix, target, 48000);
+
+for (int band = 0; band < 30; band++)
+    eq.SetBandGain(band, BandCentre(band), profile.QFactors[band], profile.BandGainsDb[band]);
+```
+
+`BandGainsDb` is what the filter bank has to be *set to*, not the curve you asked for — the two differ because a 1/3-octave bell bleeds into its neighbours. Analysis is seconds of work on a full song, so run it off the UI thread.
+
 > Full guide: [OwnAudio/Source/Features/Matchering/README.md](OwnAudio/Source/Features/Matchering/README.md)
 
 ### Chord Detection — Real-Time Musical Analysis

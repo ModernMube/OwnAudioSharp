@@ -20,6 +20,7 @@ Entry class: `AudioAnalyzer` (one `partial class` split across the files below).
 | [Audiomatchering.dynamics.cs](Audiomatchering.dynamics.cs) | Crest-factor-based dynamic-amp and compressor settings. |
 | [Audiomatchering.qfactors.cs](Audiomatchering.qfactors.cs) | Per-band Q-factor optimization for the 30-band EQ. |
 | [Audiomatchering.preset.cs](Audiomatchering.preset.cs) | Playback-system preset processing (single + batch), embedded base-sample. |
+| [Audiomatchering.profile.cs](Audiomatchering.profile.cs) | Buffer analysis, `MatcheringProfile` (settings instead of a rendered file), in-memory preset targets. |
 | [Audiomatchering.presetdata.cs](Audiomatchering.presetdata.cs) | `PlaybackSystem` enum and the preset definitions (EQ curves, loudness, compression). |
 | [Audiomatchering.data.cs](Audiomatchering.data.cs) | Plain data classes (`AudioSpectrum`, `DynamicsInfo`, `AudioSegment`, config, …). |
 
@@ -95,6 +96,90 @@ deletes the temp directory.
 ### `GetAvailablePresets() → Dictionary<PlaybackSystem, PlaybackPreset>` *(static)*
 
 Returns a copy of all built-in presets for inspection/UI listing.
+
+---
+
+## Real-time API — settings instead of a rendered file
+
+The four methods above are offline renderers: file in, file out. A live mastering
+chain needs the *intermediate* result — the numbers the effects have to be set to.
+That is what [Audiomatchering.profile.cs](Audiomatchering.profile.cs) exposes. All
+of it is additive; the offline path is unchanged.
+
+### `AnalyzeAudioBuffer(float[] interleaved, int sampleRate, int channels) → AudioSpectrum`
+
+Exactly what `AnalyzeAudioFile` does, on samples you already have in memory — no
+`FileSource`, no static lock, no decode round trip. `AnalyzeAudioFile` now delegates
+to it after loading the file, so the two can never drift apart.
+
+Throws `ArgumentException` on an empty buffer, and the usual
+`InvalidOperationException` if the material is shorter than one ~10 s segment.
+
+### `CalculateProfile(source, target, sampleRate, fixedQ = NativeBandQ, cutOnly = true) → MatcheringProfile`
+
+Runs the whole match but stops before the render:
+
+```csharp
+var analyzer = new AudioAnalyzer();
+
+AudioSpectrum mix = analyzer.AnalyzeAudioBuffer(masterSum, 48000, 2);
+AudioSpectrum reference = analyzer.AnalyzeAudioFile("reference.wav");
+
+MatcheringProfile profile = analyzer.CalculateProfile(mix, reference, 48000);
+
+for (int band = 0; band < 30; band++)
+    eq.SetBandGain(band, Centre(band), profile.QFactors[band], profile.BandGainsDb[band]);
+
+compressor.Threshold = CompressorEffect.DbToLinear(profile.CompThresholdDb);
+compressor.Ratio = profile.CompRatio;
+```
+
+**`fixedQ`** — the Q the deconvolution assumes on every band. It defaults to
+`AudioAnalyzer.NativeBandQ` (4.318474), the constant Q of the *native* 30-band
+equalizer, because the engine has no per-band Q parameter: that is the only Q that
+ever actually plays. Handing the deconvolution the optimized per-band Qs would solve
+for a filter bank that isn't the one making the sound. Pass `fixedQ: 0` to get the
+per-band Qs anyway (that is what the offline render uses, since it runs the managed
+EQ where the Q does get through).
+
+**`cutOnly`** — subtracts the curve's maximum from all 30 bands, so the loudest band
+lands on 0 dB and everything else goes negative. The offline chain buys its headroom
+with a pre-gain stage; a real-time chain built from native effects has no gain stage,
+so the level comes off the EQ instead and the `DynamicAmpEffect` behind it brings it
+back to `TargetLoudness`. Since `_calcEqAdjustments` has already removed the broadband
+offset, this shift is a pure level change and leaves the tonal shape alone. The shift
+stops short if it would push the deepest cut past the ±9 dB clamp — a curve that hits
+the rail is no longer the curve that was measured. `CutOnlyShiftDb` reports what was
+actually applied.
+
+### `MatcheringProfile`
+
+| Member | Meaning |
+| --- | --- |
+| `WantedCurveDb[30]` | The curve we want to hear, dB. The one worth drawing. |
+| `BandGainsDb[30]` | What the filter bank has to be *set to* for that curve to come out (deconvolved). |
+| `QFactors[30]` | The Q the deconvolution assumed per band. |
+| `CompThresholdDb`, `CompRatio` | Compressor settings. The threshold is dB — `CompressorEffect` wants it linear, run it through `CompressorEffect.DbToLinear`. |
+| `TargetLoudness`, `MaxGain` | AGC target and gain ceiling for `DynamicAmpEffect`. |
+| `SourceLoudness`, `SourceCrestDb`, `TargetCrestDb` | Measured values, for a status readout. |
+| `CutOnlyShiftDb` | How far the curve got pushed down; 0 when `cutOnly` was off. |
+
+No audio in it, so it serializes into a project file as is.
+
+### `GetPresetTargetSpectrum(PlaybackSystem system, bool eqOnlyMode = true) → AudioSpectrum`
+
+The target spectrum a preset is asking for, without touching the disk. Same steps
+as `ProcessWithEnhancedPreset` — embedded base sample, conservative curve, preset
+Q factors, offline EQ — but entirely in memory, ending in `AnalyzeAudioBuffer`
+instead of two temp wavs. Cached per `(system, eqOnlyMode)` and handed out as a
+copy, since `AudioSpectrum` has public setters.
+
+```csharp
+AudioSpectrum target = analyzer.GetPresetTargetSpectrum(PlaybackSystem.ClubPA);
+MatcheringProfile profile = analyzer.CalculateProfile(mix, target, 48000);
+```
+
+Analysis is seconds of work on a full song — call all of this off the UI thread.
 
 ---
 
@@ -243,6 +328,8 @@ matchering *target* rather than overdriving the source, and
 | `smoothingFactor` | `SmoothSpectrum` | Curve smoothness before diffing. |
 | Q clamp (2.5…8.0) | `CalculateOptimalQFactors` | EQ band width limits. |
 | `eqOnlyMode` | `ProcessWithEnhancedPreset` | EQ-only vs. full effects for presets. |
+| `fixedQ` | `CalculateProfile` | Q the deconvolution solves against; `NativeBandQ` for the native EQ, `0` for per-band Qs. |
+| `cutOnly` | `CalculateProfile` | Cut-only curve for a chain with no gain stage in front. |
 
 ## Requirements & notes
 

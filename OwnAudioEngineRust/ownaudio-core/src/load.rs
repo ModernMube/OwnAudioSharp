@@ -41,11 +41,10 @@ impl LoadCounters {
     #[inline]
     pub fn record(&self, elapsed_ns: u64, frames: u64) {
         let budget_ns = frames * 1_000_000_000 / self.sample_rate as u64;
-        let load_ppm = if budget_ns > 0 {
-            elapsed_ns.saturating_mul(PPM) / budget_ns
-        } else {
-            0
-        };
+        let load_ppm = elapsed_ns
+            .saturating_mul(PPM)
+            .checked_div(budget_ns)
+            .unwrap_or(0);
 
         self.block_count.fetch_add(1, Ordering::Relaxed);
         self.total_block_ns.fetch_add(elapsed_ns, Ordering::Relaxed);
@@ -65,7 +64,7 @@ impl LoadCounters {
         LoadSnapshot {
             block_count: blocks,
             peak_block_ns: self.peak_block_ns.load(Ordering::Relaxed),
-            average_block_ns: if blocks > 0 { total_ns / blocks } else { 0 },
+            average_block_ns: total_ns.checked_div(blocks).unwrap_or(0),
             average_load: if budget_ns > 0 {
                 total_ns as f32 / budget_ns as f32
             } else {

@@ -65,8 +65,6 @@ namespace OwnaudioNET.Features.Matchering
         private void _applyPresetToBase(string baseSampleFile, string processedBaseSample,
             PlaybackSystem system, bool eqOnlyMode = false)
         {
-            var preset = _systemPresets[system];
-
             float[] audioData;
             int channels;
             int sampleRate;
@@ -84,6 +82,22 @@ namespace OwnaudioNET.Features.Matchering
             }
 
             Log.Info($"Base sample loaded: {audioData.Length / channels / sampleRate:F1}s, {channels}ch, {sampleRate}Hz");
+
+            _bakePresetIntoBase(audioData, sampleRate, channels, system, eqOnlyMode);
+
+            OwnaudioNET.Recording.WaveFile.Create(processedBaseSample, audioData, sampleRate, channels, 24);
+
+            Log.Info($"Enhanced base sample created: {processedBaseSample}");
+        }
+
+        /// <summary>
+        /// Bakes the preset curve - and its compressor unless eqOnlyMode - into the buffer
+        /// in place, then puts the level back where it started.
+        /// </summary>
+        private void _bakePresetIntoBase(float[] audioData, int sampleRate, int channels,
+            PlaybackSystem system, bool eqOnlyMode)
+        {
+            var preset = _systemPresets[system];
 
             float originalRMS = _calcRms(audioData);
 
@@ -156,10 +170,6 @@ namespace OwnaudioNET.Features.Matchering
 
             Log.Info($"Level compensation applied: {20 * Math.Log10(levelCompensation):F1}dB");
             Log.Info($"Final max level: {20 * Math.Log10(finalMax):F1}dB");
-
-            OwnaudioNET.Recording.WaveFile.Create(processedBaseSample, audioData, sampleRate, channels, 24);
-
-            Log.Info($"Enhanced base sample created: {processedBaseSample}");
         }
 
         /// <summary>
