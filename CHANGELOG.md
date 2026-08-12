@@ -7,6 +7,15 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 
 ### Fixed
 
+- **The phaser barely did anything.** Its all-pass coefficient is built correctly —
+  `a = (t−1)/(t+1)` for `t = tan(πf/fs)`, which comes out negative anywhere well under Nyquist —
+  but the difference equation applied `−a`, and flipping that sign moves the stage's corner from
+  the nominal frequency to about 23 kHz. Six cascaded stages shifted roughly 3° across the audio
+  band instead of 540°, so the dry signal and the phase-shifted copy never cancelled and there was
+  no notch to sweep: a steady tone moved 0.007 dB where a working phaser moves several dB. Fixed
+  on both the managed and the native side, which carried the same equation. **This changes how
+  every phaser preset sounds** — the effect is audible now, so settings dialled in against the
+  broken version will be far stronger than before.
 - **SmartMaster measured the low end against an absolute level.** The subwoofer step compared a
   broadband RMS to a fixed −40 dBFS, so the verdict moved with playback volume, mic gain and
   distance, and room rumble could carry it on its own. It now falls out of the pink noise pass in

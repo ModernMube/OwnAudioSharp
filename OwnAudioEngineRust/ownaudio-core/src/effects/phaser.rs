@@ -47,9 +47,12 @@ struct AllPass {
 }
 
 impl AllPass {
+    /// `y[n] = c·x[n] + x[n-1] - c·y[n-1]`, i.e. `H(z) = (c + z⁻¹)/(1 + c z⁻¹)`.
+    /// The sign matters: negating `c` here moves the corner to ~23 kHz and the
+    /// chain stops shifting phase in the audio band (B.4.1).
     #[inline]
     fn process(&mut self, input: f32, coefficient: f32) -> f32 {
-        let output = -coefficient * input + self.x1 + coefficient * self.y1;
+        let output = coefficient * input + self.x1 - coefficient * self.y1;
         self.x1 = input;
         self.y1 = denormal::flush(output);
         self.y1
@@ -288,7 +291,7 @@ mod tests {
                     let mut processed = input;
                     for s in 0..self.stages {
                         let output =
-                            -coefficient * processed + self.x1[c][s] + coefficient * self.y1[c][s];
+                            coefficient * processed + self.x1[c][s] - coefficient * self.y1[c][s];
                         self.x1[c][s] = processed;
                         self.y1[c][s] = output;
                         processed = output;
@@ -490,5 +493,93 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Phase of one frequency component, in degrees.
+    fn phase_deg(signal: &[f32], freq: f64, rate: f64) -> f64 {
+        let w = std::f64::consts::TAU * freq / rate;
+        let (re, im) = signal
+            .iter()
+            .enumerate()
+            .fold((0.0, 0.0), |(re, im), (i, &s)| {
+                (
+                    re + s as f64 * (w * i as f64).cos(),
+                    im - s as f64 * (w * i as f64).sin(),
+                )
+            });
+        im.atan2(re).to_degrees()
+    }
+
+    fn sine(freq: f64, frames: usize, rate: f64) -> Vec<f32> {
+        (0..frames)
+            .map(|i| 0.25 * (std::f64::consts::TAU * freq * i as f64 / rate).sin() as f32)
+            .collect()
+    }
+
+    /// A first-order all-pass has to sit at -90 degrees at the corner its coefficient
+    /// was built for. This is the one that would have caught the flipped sign: the
+    /// broken version read about -0.5 degrees here, and six of those come to -3
+    /// instead of -540, which is why the phaser had no audible sweep.
+    #[test]
+    fn all_pass_corner_sits_at_ninety_degrees() {
+        let rate = 48_000.0;
+        let p = Phaser::new(rate as f32);
+
+        for corner in [200.0, 1000.0, 4000.0] {
+            let coefficient = p.all_pass_coefficient(corner as f32);
+            let input = sine(corner, 48_000, rate);
+
+            let mut stage = AllPass::default();
+            let output: Vec<f32> = input
+                .iter()
+                .map(|&x| stage.process(x, coefficient))
+                .collect();
+
+            // Skip the settling transient before comparing phase.
+            let shift =
+                phase_deg(&output[4096..], corner, rate) - phase_deg(&input[4096..], corner, rate);
+            let shift = if shift > 0.0 { shift - 360.0 } else { shift };
+
+            assert!(
+                (shift + 90.0).abs() < 2.0,
+                "all-pass at its {corner} Hz corner shifted {shift:.2} deg, expected -90"
+            );
+        }
+    }
+
+    /// Dry plus a phase-shifted copy makes a notch, and the LFO drags it across the
+    /// band, so a steady tone has to wobble in level.
+    #[test]
+    fn sweeping_notch_moves_the_level() {
+        let rate = 48_000.0f32;
+        let mut p = Phaser::new(rate);
+        p.set_param(PARAM_RATE, 0.6);
+        p.set_param(PARAM_DEPTH, 0.9);
+        p.set_param(PARAM_FEEDBACK, 0.0);
+        p.set_param(PARAM_STAGES, 6.0);
+        p.set_param(PARAM_MIX, 0.5);
+
+        let frames = 48_000 * 4;
+        let mut buf: Vec<f32> = sine(1000.0, frames, rate as f64)
+            .into_iter()
+            .flat_map(|s| [s, s])
+            .collect();
+        for block in buf.chunks_mut(512 * 2) {
+            p.process(block, 2);
+        }
+
+        let (mut min, mut max) = (f64::MAX, f64::MIN);
+        for window in buf.chunks(2400 * 2).skip(4) {
+            let sum: f64 = window.iter().map(|&s| (s as f64) * (s as f64)).sum();
+            let db = 20.0 * (sum / window.len() as f64).sqrt().max(1e-12).log10();
+            min = min.min(db);
+            max = max.max(db);
+        }
+
+        assert!(
+            max - min > 3.0,
+            "the notch has to sweep through 1 kHz, but the level only moved {:.2} dB",
+            max - min
+        );
     }
 }

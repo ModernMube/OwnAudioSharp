@@ -127,27 +127,36 @@ public class ModulationEffectsDspTests
     }
 
     /// <summary>
-    /// Characterisation, not a spec: the phaser currently produces almost no sweep. The
-    /// all-pass stages use a = (1-t)/(1+t) where t = tan(pi*f/fs), which places the corner
-    /// near 23 kHz for a nominal 1 kHz setting instead of at 1 kHz — the sign of the
-    /// coefficient is the wrong way round, so the chain barely shifts phase in the audio
-    /// band and dry plus wet never cancels. The native Phaser is a line-for-line port and
-    /// behaves the same, so this is not a managed-versus-native gap.
-    ///
-    /// Fixing it changes how every phaser preset sounds, so the number below is what ships
-    /// today. If someone corrects the coefficient this test fails, which is the point.
+    /// The sweeping notch, which is the whole point of a phaser. The all-pass coefficient
+    /// used to reach the filter with its sign flipped, which put the corner near 23 kHz
+    /// and left the chain shifting about 3 degrees across six stages instead of 540 - so
+    /// dry plus wet never cancelled and the effect was inaudible.
     /// </summary>
     [Theory]
     [InlineData(300.0)]
     [InlineData(1000.0)]
     [InlineData(4000.0)]
-    public void PhaserSweepIsCurrentlyAlmostInaudible(double probeHz)
+    public void PhaserSweepsANotchAcrossTheBand(double probeHz)
     {
         double _swing = _levelSwingAt(new PhaserEffect(0.6f, 0.9f, 0.7f, 0.5f, 6, Rate), probeHz);
 
-        _swing.Should().BeLessThan(0.5,
-            $"the notch never reaches {probeHz:F0} Hz with the current all-pass coefficient " +
-            $"(measured {_swing:F3} dB of level movement; a working phaser would swing several dB)");
+        _swing.Should().BeGreaterThan(3.0,
+            $"the notch has to pass through {probeHz:F0} Hz and move the level, but it only " +
+            $"varied {_swing:F3} dB");
+    }
+
+    /// <summary>
+    /// Half wet is where the notches are deepest - all dry or all wet and there is nothing
+    /// for the phase-shifted copy to cancel against.
+    /// </summary>
+    [Fact]
+    public void PhaserNotchesAreDeepestAroundHalfMix()
+    {
+        double _half = _levelSwingAt(new PhaserEffect(0.6f, 0.9f, 0.0f, 0.5f, 6, Rate), Tone);
+        double _mostlyDry = _levelSwingAt(new PhaserEffect(0.6f, 0.9f, 0.0f, 0.1f, 6, Rate), Tone);
+
+        _half.Should().BeGreaterThan(_mostlyDry,
+            $"a 50/50 blend ({_half:F1} dB) cancels harder than 10% wet ({_mostlyDry:F1} dB)");
     }
 
     /// <summary>

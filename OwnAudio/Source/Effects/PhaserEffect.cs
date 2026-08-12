@@ -266,7 +266,7 @@ namespace OwnaudioNET.Effects
                 float processed = input;
                 for (int s = 0; s < stages; s++)
                 {
-                    float output = -coeff * processed + _apX1[s] + coeff * _apY1[s];
+                    float output = coeff * processed + _apX1[s] - coeff * _apY1[s];
                     _apX1[s] = processed;
                     _apY1[s] = output;
                     processed = output;
@@ -310,7 +310,8 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Bilinear all-pass coefficient for the given corner frequency.
+        /// Bilinear all-pass coefficient for the given corner frequency. Comes out negative
+        /// for anything well under Nyquist, and the sign has to survive into the filter.
         /// </summary>
         private float _allPassCoeff(float frequency)
         {
