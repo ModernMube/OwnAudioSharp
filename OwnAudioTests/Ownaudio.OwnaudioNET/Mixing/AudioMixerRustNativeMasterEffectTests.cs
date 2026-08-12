@@ -208,8 +208,8 @@ public sealed class AudioMixerRustNativeMasterEffectTests : IDisposable
         sm.LoadSpeakerPreset(global::OwnaudioNET.Effects.SmartMaster.SpeakerType.Club);
         mixer.MirrorRustMasterEffectsOnce();
 
-        chain.GetParam(2).Should().BeApproximately(4.0f, 0.01f,
-            "loading the Club preset after attach must mirror its +4 dB 20 Hz band onto the native effect");
+        chain.GetParam(2).Should().BeApproximately(1.5f, 0.01f,
+            "loading the Club preset after attach must mirror its +1.5 dB 20 Hz band onto the native effect");
     }
 
     /// <summary>Reads native master effect params off the first (only) master effect under test.</summary>

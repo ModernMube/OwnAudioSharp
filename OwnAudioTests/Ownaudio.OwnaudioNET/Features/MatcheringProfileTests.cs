@@ -8,8 +8,7 @@ using System.Numerics;
 namespace Ownaudio.Test.OwnaudioNET.Features
 {
     /// <summary>
-    /// The settings-returning side of the matcher: buffer analysis, the profile the live
-    /// chain gets, and the preset targets. Nothing here writes a file.
+    /// The settings-returning side of the matcher. Nothing here writes a file.
     /// </summary>
     public class MatcheringProfileTests : IDisposable
     {
@@ -35,9 +34,6 @@ namespace Ownaudio.Test.OwnaudioNET.Features
             if (Directory.Exists(_dir)) Directory.Delete(_dir, true);
         }
 
-        /// <summary>
-        /// Stereo noise, both channels the same seed so the two paths can be compared.
-        /// </summary>
         private static float[] Noise(int sampleRate, int channels)
         {
             int frames = (int)(Duration * sampleRate);
@@ -54,8 +50,7 @@ namespace Ownaudio.Test.OwnaudioNET.Features
         }
 
         /// <summary>
-        /// A spectrum built straight from per band dB levels - lets the profile tests skip
-        /// the FFT entirely and feed the maths exactly what they want.
+        /// A spectrum straight from per band dB levels, so the profile tests skip the FFT.
         /// </summary>
         private static AudioSpectrum SpectrumFrom(float[] bandDb, float rms = 0.1f, float peak = 0.5f)
         {
@@ -179,8 +174,7 @@ namespace Ownaudio.Test.OwnaudioNET.Features
         }
 
         /// <summary>
-        /// The whole point of the deconvolution: the solved gains, played through the real
-        /// filter bank, have to add up to the curve we asked for.
+        /// The solved gains, played through the real bank, must add up to the wanted curve.
         /// </summary>
         [Fact]
         public void SolvedGainsRealizeTheWantedCurve()
@@ -241,9 +235,6 @@ namespace Ownaudio.Test.OwnaudioNET.Features
                 $"the club preset only has {lowDiff:F2} dB more low end than the concert one - the curves are not getting baked in");
         }
 
-        /// <summary>
-        /// Something with a shape to it, so the delta is not all zeros.
-        /// </summary>
         private static float[] Tilt()
         {
             float[] curve = new float[Bands];
@@ -255,8 +246,7 @@ namespace Ownaudio.Test.OwnaudioNET.Features
         private static float Db(float linear) => 20f * MathF.Log10(Math.Max(linear, 1e-10f));
 
         /// <summary>
-        /// RBJ peaking magnitude at one frequency, per dB of gain - the same model the
-        /// deconvolution builds its matrix from.
+        /// RBJ peaking magnitude per dB of gain, the model the deconvolution uses.
         /// </summary>
         private static float BellDb(float centreFreq, float q, float atFreq, int sampleRate)
         {

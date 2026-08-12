@@ -1,11 +1,8 @@
-/// Smoke test: open the default output device, play a 440 Hz sine wave for
-/// ~1 second, then stop cleanly.  The test passes if no panic or error occurs.
+/// Open the default output, play a 440 Hz sine for ~1 second, stop cleanly.
 ///
-/// This test requires a real audio device.  On headless CI without audio
-/// hardware (or a virtual sink), run with:
-///   CPAL_ASOUND_CARD=default   (Linux / ALSA)
-/// or configure a virtual audio device before running.
+/// Ignored by default — headless CI has no device to open.  Run with `-- --ignored`.
 #[test]
+#[ignore = "needs a real output device"]
 fn sine_wave_output_smoke() {
     use ownaudio_core::{AudioEngine, StreamConfig};
     use std::f32::consts::TAU;

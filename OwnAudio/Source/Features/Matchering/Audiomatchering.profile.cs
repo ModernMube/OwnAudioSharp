@@ -16,8 +16,7 @@ namespace OwnaudioNET.Features.Matchering
         #region Constants and Fields
 
         /// <summary>
-        /// Constant Q of the native 30 band equalizer, 1 / (2*sinh(ln2/6)). The engine has
-        /// no per band Q parameter, so this is the only Q that ever actually plays.
+        /// Constant Q of the native 30 band equalizer - the only Q that ever plays.
         /// </summary>
         public const float NativeBandQ = 4.318474f;
 
@@ -29,8 +28,7 @@ namespace OwnaudioNET.Features.Matchering
         #region Buffer Analysis
 
         /// <summary>
-        /// What AnalyzeAudioFile does, on interleaved samples we already have. No FileSource
-        /// here, so no analyzer lock and no decode round trip either.
+        /// What AnalyzeAudioFile does, on samples we already have in memory.
         /// </summary>
         /// <returns>Weighted average spectrum of the buffer.</returns>
         public AudioSpectrum AnalyzeAudioBuffer(float[] interleaved, int sampleRate, int channels)
@@ -64,10 +62,8 @@ namespace OwnaudioNET.Features.Matchering
         #region Profile Calculation
 
         /// <summary>
-        /// Runs the whole match but stops before the render and hands back the numbers.
-        /// fixedQ is the Q the deconvolution assumes on every band - pass 0 to let the
-        /// analyzer pick per band Qs like the offline path does. cutOnly drops the curve so
-        /// no band is boosted, which is what a chain without a gain stage in front wants.
+        /// The match, stopped before the render. fixedQ is the Q the deconvolution assumes
+        /// on every band (0 for per band Qs); cutOnly drops the curve so nothing is boosted.
         /// </summary>
         public MatcheringProfile CalculateProfile(AudioSpectrum source, AudioSpectrum target, int sampleRate,
             float fixedQ = NativeBandQ, bool cutOnly = true)
@@ -107,9 +103,7 @@ namespace OwnaudioNET.Features.Matchering
         }
 
         /// <summary>
-        /// How far the curve may be dropped so the loudest band lands on 0 dB. Stops short
-        /// if that would push the deepest cut past the clamp - a curve that hits the rail
-        /// is no longer the curve we measured, it's a flattened version of it.
+        /// Drops the loudest band to 0 dB, but not so far that the deepest cut hits the clamp.
         /// </summary>
         private static float _cutOnlyShift(float[] wanted)
         {
@@ -124,9 +118,6 @@ namespace OwnaudioNET.Features.Matchering
             return Math.Max(0f, Math.Min(peak, MaxBandCorrectionDb + trough));
         }
 
-        /// <summary>
-        /// One Q for every band.
-        /// </summary>
         private static float[] _flatQ(float q)
         {
             float[] qFactors = new float[_freqBands.Length];
@@ -143,9 +134,7 @@ namespace OwnaudioNET.Features.Matchering
         #region Preset Targets
 
         /// <summary>
-        /// The spectrum a preset is asking for, without touching the disk: the preset curve
-        /// baked into the embedded base sample, then analyzed. Cached per system, since the
-        /// base sample and the curves never move.
+        /// The spectrum a preset asks for, built in memory and cached per system.
         /// </summary>
         /// <param name="system"></param>
         /// <param name="eqOnlyMode">Leaves the preset compressor out of the bake.</param>
@@ -165,8 +154,7 @@ namespace OwnaudioNET.Features.Matchering
         }
 
         /// <summary>
-        /// The embedded base sample as floats. The blob is a raw float dump at 48k stereo -
-        /// same thing _loadBaseSample writes out to a wav, just without the detour.
+        /// The embedded base sample as floats - the blob is a raw float dump, 48k stereo.
         /// </summary>
         private static (float[] Data, int SampleRate, int Channels) _baseSampleData()
         {
@@ -183,8 +171,7 @@ namespace OwnaudioNET.Features.Matchering
         }
 
         /// <summary>
-        /// Cached spectra go out as copies - AudioSpectrum has public setters and nothing
-        /// stops a caller from writing into the one we keep.
+        /// Cached spectra go out as copies; AudioSpectrum has public setters.
         /// </summary>
         private static AudioSpectrum _copyOf(AudioSpectrum spectrum)
         {
@@ -202,13 +189,12 @@ namespace OwnaudioNET.Features.Matchering
     }
 
     /// <summary>
-    /// Everything a real time matchering chain has to be set to for one match. No audio in
-    /// it, so it serializes into a project file as is.
+    /// What a real time matchering chain has to be set to. No audio in it, so it serializes.
     /// </summary>
     public sealed class MatcheringProfile
     {
         /// <summary>
-        /// The 30 band curve we want to hear, dB. This is the one worth drawing.
+        /// The 30 band curve we want to hear, dB. The one worth drawing.
         /// </summary>
         public float[] WantedCurveDb { get; init; } = new float[30];
 
@@ -223,14 +209,10 @@ namespace OwnaudioNET.Features.Matchering
         public float[] QFactors { get; init; } = new float[30];
 
         /// <summary>
-        /// Compressor threshold in dB - the effect wants it linear, run it through
-        /// CompressorEffect.DbToLinear first.
+        /// Threshold in dB; CompressorEffect wants it linear, see DbToLinear.
         /// </summary>
         public float CompThresholdDb { get; init; }
 
-        /// <summary>
-        /// Ratio, x:1.
-        /// </summary>
         public float CompRatio { get; init; }
 
         /// <summary>
@@ -243,24 +225,14 @@ namespace OwnaudioNET.Features.Matchering
         /// </summary>
         public float MaxGain { get; init; }
 
-        /// <summary>
-        /// Measured source loudness, dBFS.
-        /// </summary>
         public float SourceLoudness { get; init; }
 
-        /// <summary>
-        /// Source crest factor in dB.
-        /// </summary>
         public float SourceCrestDb { get; init; }
 
-        /// <summary>
-        /// Target crest factor in dB.
-        /// </summary>
         public float TargetCrestDb { get; init; }
 
         /// <summary>
-        /// How far the curve got pushed down to keep it cut only, dB. Zero when cut only
-        /// was off or the curve had nothing to boost anyway.
+        /// How far the curve got pushed down, dB. Zero when cutOnly was off.
         /// </summary>
         public float CutOnlyShiftDb { get; init; }
     }

@@ -66,17 +66,11 @@ const ACTIVE_GAIN_THRESHOLD_DB: f32 = 0.01;
 /// engine-level quality option.
 const SOFT_LIMIT_THRESHOLD: f32 = 0.95;
 
-/// What is left between the threshold and unity.  Everything past the threshold is
-/// squeezed into this, so the limiter asymptotes at 1.0 instead of overshooting.
+/// What is left up to unity; everything past the threshold is squeezed into it.
 const SOFT_LIMIT_HEADROOM: f32 = 1.0 - SOFT_LIMIT_THRESHOLD;
 
-/// Soft-clips a sample that ran past the threshold.
-///
-/// The knee is continuous: at the threshold this gives back the threshold and its
-/// slope is still 1, so the curve joins the linear part smoothly.  The old form
-/// multiplied `tanh` by the threshold rather than scaling into it, which sent
-/// anything crossing 0.95 straight down to 0.70 — a 2.6 dB step cut out of the
-/// waveform, not a soft knee.
+/// Soft-clips past the threshold, continuous knee — same value and slope at 0.95,
+/// asymptote at 1.0.
 #[inline]
 fn soft_limit(sample: f32) -> f32 {
     let over = sample.abs() - SOFT_LIMIT_THRESHOLD;
@@ -652,9 +646,7 @@ mod tests {
 
     #[test]
     fn output_is_soft_limited() {
-        // Stacked boosts on a loud tone must keep the wet path bounded by the
-        // soft limiter — it squeezes everything past 0.95 into what is left below
-        // unity, so the output asymptotes at 1.0 and never runs past it.
+        // Stacked boosts on a loud tone stay bounded by the limiter's 1.0 asymptote.
         let mut eq = Equalizer::new(48_000.0);
         for band in 3..7 {
             eq.set_param(PARAM_BAND_0 + band as u32, 12.0);
@@ -675,10 +667,8 @@ mod tests {
 
     #[test]
     fn soft_limit_knee_is_continuous() {
-        // This is what made the reference comparison platform-dependent: the old form
-        // dropped anything crossing the threshold from 0.95 straight to 0.70, so a single
-        // sample landing on the other side of that step was worth -54 dB of RMS error and
-        // 1 ulp of libm difference decided which side it fell on.
+        // A step here is worth -54 dB of RMS error on a single sample, which is what
+        // made the reference comparison platform-dependent.
         let below = SOFT_LIMIT_THRESHOLD - f32::EPSILON;
         let above = soft_limit(SOFT_LIMIT_THRESHOLD + f32::EPSILON);
         assert!(
@@ -687,7 +677,6 @@ mod tests {
             above - below
         );
 
-        // However hard it is driven it approaches unity and never runs past it.
         for drive in [1.0f32, 2.0, 10.0, 100.0] {
             assert!(soft_limit(drive) > SOFT_LIMIT_THRESHOLD && soft_limit(drive) <= 1.0);
             assert!(soft_limit(-drive) < -SOFT_LIMIT_THRESHOLD && soft_limit(-drive) >= -1.0);

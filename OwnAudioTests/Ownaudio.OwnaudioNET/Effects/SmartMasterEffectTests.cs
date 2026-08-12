@@ -321,22 +321,23 @@ namespace Ownaudio.Test.OwnaudioNET.Effects
             effect.Initialize(config);
             effect.LoadSpeakerPreset(SpeakerType.HiFi);
 
-            float[] buffer = CreateTestBuffer(1000f, 0.25f, FrameCount, Channels);
-            float firstBlockRMS = 0.0f;
+            //The opening blocks are the chain settling in, so we read after it arrived
+            const int SettleBlocks = 10;
+            float settledRMS = 0.0f;
             float lastBlockRMS = 0.0f;
 
-            for (int block = 0; block < 10; block++)
+            for (int block = 0; block < SettleBlocks + 20; block++)
             {
                 float[] blockBuffer = CreateTestBuffer(1000f, 0.25f, FrameCount, Channels);
                 effect.Process(blockBuffer, FrameCount);
-                
-                if (block == 0)
-                    firstBlockRMS = CalculateSteadyRMS(blockBuffer, effect);
-                if (block == 9)
+
+                if (block == SettleBlocks)
+                    settledRMS = CalculateSteadyRMS(blockBuffer, effect);
+                if (block == SettleBlocks + 19)
                     lastBlockRMS = CalculateSteadyRMS(blockBuffer, effect);
             }
 
-            float drift = MathF.Abs(LinearToDb(firstBlockRMS) - LinearToDb(lastBlockRMS));
+            float drift = MathF.Abs(LinearToDb(settledRMS) - LinearToDb(lastBlockRMS));
             Assert.True(drift < 0.5f,
                 $"Effect showed instability over time: drift = {drift:F2} dB");
         }

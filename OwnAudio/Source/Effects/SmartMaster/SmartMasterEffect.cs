@@ -77,19 +77,29 @@ namespace OwnaudioNET.Effects.SmartMaster
             _configuration = new SmartMasterConfig();
             _measurementStatus = new MeasurementStatusInfo();
         }
+
+        private static string _defaultPresetsDirectory()
+        {
+            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+            return System.IO.Path.Combine(userProfile, ".ownaudio", "smartmasterpresets");
+        }
         
         #endregion
         
         #region Initialization
         
+        /// <summary>
+        /// Somewhere other than the user profile to keep presets. Tests use a temp folder.
+        /// </summary>
+        internal static string? PresetsDirectoryOverride { get; set; }
+
         public void Initialize(AudioConfig config)
         {
             _config = config ?? throw new ArgumentNullException(nameof(config));
-            
-            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            string ownaudioFolder = System.IO.Path.Combine(userProfile, ".ownaudio");
-            string presetsDirectory = System.IO.Path.Combine(ownaudioFolder, "smartmasterpresets");
-            
+
+            string presetsDirectory = PresetsDirectoryOverride ?? _defaultPresetsDirectory();
+
             _presetManager = new SmartMasterPresetManager(presetsDirectory);
             _presetManager.CreateFactoryPresetsIfNeeded();
             

@@ -40,6 +40,21 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
   landing on the far side of the discontinuity is worth −54.3 dB of RMS error against a
   −60 dB budget, so 1 ulp of libm difference between glibc and Apple's decided whether the
   test passed. It was green on aarch64 and red on x86_64 for the same commit.
+- **The test suite read the developer's own SmartMaster presets.** `SmartMasterEffect` loads
+  presets from `~/.ownaudio/smartmasterpresets` and only falls back to the factory curves when
+  that fails, so any test calling `LoadSpeakerPreset` measured whatever happened to be saved on
+  the machine. A Club preset saved months earlier held +4 dB at 20 Hz where the factory curve
+  has +1.5, which kept a stale expectation green locally and red on CI — and it masked a second
+  failure entirely. Presets now take an internal directory override (the public surface is
+  unchanged) and every test run gets its own empty folder.
+- The SmartMaster long-duration stability test compared the very first block against the tenth.
+  The chain starts from zeroed filter states with the compressor not yet engaged, so those
+  blocks are it settling in — it converges monotonically and is within 0.05 dB by the tenth.
+  Reading the transient as drift, the test measured 1.47 dB against a 0.5 dB budget. Both
+  readings are now taken after the chain has arrived, which is what "maintains stability" means.
+- The `sine_wave_output_smoke` integration test is `#[ignore]`d: it opens a real output device,
+  which a headless CI runner does not have, so it failed the whole Rust job. Run it with
+  `--ignored` on a machine with a sound card.
 - **The phaser barely did anything.** Its all-pass coefficient is built correctly —
   `a = (t−1)/(t+1)` for `t = tan(πf/fs)`, which comes out negative anywhere well under Nyquist —
   but the difference equation applied `−a`, and flipping that sign moves the stage's corner from

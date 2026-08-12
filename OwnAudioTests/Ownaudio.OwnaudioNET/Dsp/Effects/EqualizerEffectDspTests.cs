@@ -158,11 +158,8 @@ public class EqualizerEffectDspTests
     }
 
     /// <summary>
-    /// The soft limiter above 0.95 has to join the linear part smoothly. It used to
-    /// multiply Tanh by the threshold instead of scaling into it, so anything crossing
-    /// 0.95 dropped to 0.70 - a step carved out of the waveform. A slow ramp walks the
-    /// transfer curve through the knee, where the band is set just active enough to keep
-    /// the limiter in the path while leaving the signal alone.
+    /// A slow ramp walks the transfer curve through the knee, with the band set just
+    /// active enough to keep the limiter in the path.
     /// </summary>
     [Fact]
     public void SoftLimiterKneeHasNoStep()
