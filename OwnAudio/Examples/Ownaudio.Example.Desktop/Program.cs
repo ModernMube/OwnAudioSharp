@@ -298,23 +298,18 @@ public class TestProgram
             mixer.AddSource(instBus);
             mixer.AddSource(vocalBus);
 
-            // Attach sources to Master Clock for sample-accurate synchronization
-            fileSource0.AttachToClock(mixer.MasterClock);
-            fileSource1.AttachToClock(mixer.MasterClock);
-            fileSource2.AttachToClock(mixer.MasterClock);
-            fileSource3.AttachToClock(mixer.MasterClock);
-
             // Optional: Set timeline positions (all start at 0.0 by default)
-            fileSource0.StartOffset = 0.0;  // Drums start immediately
-            fileSource1.StartOffset = 0.0;  // Bass start immediately
-            fileSource2.StartOffset = 0.0;  // Other start immediately
-            fileSource3.StartOffset = 0.0;  // Vocals start immediately
+            drumBus.StartOffset = 0.0;   // Drums start immediately
+            bassBus.StartOffset = 0.0;   // Bass start immediately
+            instBus.StartOffset = 0.0;   // Other start immediately
+            vocalBus.StartOffset = 0.0;  // Vocals start immediately
 
             Console.WriteLine($"  ✓ Sources added to mixer");
             Console.WriteLine($"  ✓ Sources attached to Master Clock");
             Console.WriteLine($"  ✓ Active sources: {mixer.SourceCount}");
             Console.WriteLine($"  ✓ Master Clock mode: {mixer.MasterClock.Mode}");
-            Console.WriteLine($"  ✓ File source state: {fileSource0.State}");
+            Console.WriteLine($"  ✓ Drum bus attached to clock: {drumBus.IsAttachedToClock}");
+            Console.WriteLine($"  ✓ File source state: {drumBus.State}");
 
             // Subscribe to dropout events for monitoring
             mixer.TrackDropout += (sender, e) =>
@@ -328,10 +323,10 @@ public class TestProgram
             mixer.Start();
 
             // Start all sources for playback
-            fileSource0.Play();
-            fileSource1.Play();
-            fileSource2.Play();
-            fileSource3.Play();
+            drumBus.Play();
+            bassBus.Play();
+            instBus.Play();
+            vocalBus.Play();
 
             Console.WriteLine($"  ✓ Mixer started: {mixer.IsRunning}");
             Console.WriteLine($"  ✓ All sources playing");
@@ -359,7 +354,7 @@ public class TestProgram
             }
             catch (IOException) { }
 
-            while (fileSource0.State == AudioState.Playing && !userCancelled)
+            while (drumBus.State == AudioState.Playing && !userCancelled)
             {
                 // Update progress every 100ms
                 Thread.Sleep(100);
@@ -368,8 +363,8 @@ public class TestProgram
                 double masterTimestamp = mixer.MasterClock.CurrentTimestamp;
                 long masterSamplePosition = mixer.MasterClock.CurrentSamplePosition;
 
-                double position = fileSource0.Position;
-                double duration = fileSource0.Duration;
+                double position = drumBus.Position;
+                double duration = drumBus.Duration;
                 int progressPercent = (int)((position / duration) * 100);
                 int barWidth = 40;
                 int filledWidth = (int)((position / duration) * barWidth);
@@ -441,7 +436,7 @@ public class TestProgram
 
             Console.WriteLine("\n\n  ✓ Playback completed!");
             TimeSpan elapsed = DateTime.Now - startTime;
-            double finalPosition = fileSource0.Position;
+            double finalPosition = drumBus.Position;
             Console.WriteLine($"  ✓ Real-time elapsed: {elapsed.TotalSeconds:F2} seconds");
             Console.WriteLine($"  ✓ Audio position reached: {finalPosition:F2} seconds");
 
@@ -467,8 +462,8 @@ public class TestProgram
             Console.WriteLine($"  Total mixed frames: {mixer.TotalMixedFrames}");
             Console.WriteLine($"  Total underruns: {mixer.TotalUnderruns}");
             Console.WriteLine($"  Master volume: {mixer.MasterVolume:P0}");
-            Console.WriteLine($"  Source state: {fileSource0.State}");
-            Console.WriteLine($"  Final position: {fileSource0.Position:F2}s / {fileSource0.Duration:F2}s");
+            Console.WriteLine($"  Source state: {drumBus.State}");
+            Console.WriteLine($"  Final position: {drumBus.Position:F2}s / {drumBus.Duration:F2}s");
             Console.WriteLine($"  Master Clock timestamp: {mixer.MasterClock.CurrentTimestamp:F2}s");
             Console.WriteLine($"  Master Clock sample position: {mixer.MasterClock.CurrentSamplePosition}");
 

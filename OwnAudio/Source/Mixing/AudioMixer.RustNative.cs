@@ -278,6 +278,15 @@ public sealed partial class AudioMixer
         source as StreamingSource ?? (source as SourceWithEffects)?.InnerSource as StreamingSource;
 
     /// <summary>
+    /// Digs out the source carrying the routing map, unwrapping SourceWithEffects. The wrapper
+    /// is no BaseAudioSource, so a plain cast would read null off every effect-wrapped track.
+    /// </summary>
+    /// <param name="source"></param>
+    /// <returns></returns>
+    private static BaseAudioSource? _resolveMapOwner(IAudioSource source) =>
+        source as BaseAudioSource ?? (source as SourceWithEffects)?.InnerSource as BaseAudioSource;
+
+    /// <summary>
     /// Hooks a source onto the shared session: file to a native file track, samples to a
     /// memory track, input to a capture track. Anything else is ignored.
     /// </summary>
@@ -460,58 +469,69 @@ public sealed partial class AudioMixer
     /// <summary>
     /// One pass of mirroring volume/pan/loop onto every attached track, and pulling the
     /// track's peaks back for metering (the managed OnSamplesRead path that used to feed
-    /// them doesn't run here). Public-ish for deterministic tests.
+    /// them doesn't run here). Goes through the resolvers so an effect-wrapped track isn't
+    /// skipped. Public-ish for deterministic tests.
     /// </summary>
     internal void SyncRustControlStateOnce()
     {
         IAudioSource[] _sources = Volatile.Read(ref _rustSourceSnapshot);
         foreach (IAudioSource source in _sources)
         {
-            if (source is FileSource fs)
+            FileSource? _fs = _resolveFileSource(source);
+            if (_fs is not null)
             {
-                AudioTrack? _track = fs.RustTrack;
+                AudioTrack? _track = _fs.RustTrack;
                 if (_track is null) continue;
 
-                _track.Gain = fs.Volume;
-                _track.Pan = fs.Pan;
+                _track.Gain = _fs.Volume;
+                _track.Pan = _fs.Pan;
 
-                FileTrack? _fileTrack = fs.RustFileTrack;
-                if (_fileTrack is not null) _fileTrack.Loop = fs.Loop;
+                FileTrack? _fileTrack = _fs.RustFileTrack;
+                if (_fileTrack is not null) _fileTrack.Loop = _fs.Loop;
 
-                fs.SetOutputLevels(fs.State == AudioState.Playing ? _track.Peaks : (0f, 0f));
+                _fs.SetOutputLevels(_fs.State == AudioState.Playing ? _track.Peaks : (0f, 0f));
+                continue;
             }
-            else if (source is SampleSource ss)
+
+            SampleSource? _ss = _resolveSampleSource(source);
+            if (_ss is not null)
             {
-                AudioTrack? _track = ss.RustTrack;
+                AudioTrack? _track = _ss.RustTrack;
                 if (_track is null) continue;
 
-                _track.Gain = ss.Volume;
-                _track.Pan = ss.Pan;
+                _track.Gain = _ss.Volume;
+                _track.Pan = _ss.Pan;
 
-                MemoryTrack? _memTrack = ss.RustMemoryTrack;
-                if (_memTrack is not null) _memTrack.Loop = ss.Loop;
+                MemoryTrack? _memTrack = _ss.RustMemoryTrack;
+                if (_memTrack is not null) _memTrack.Loop = _ss.Loop;
 
-                ss.SetOutputLevels(ss.State == AudioState.Playing ? _track.Peaks : (0f, 0f));
+                _ss.SetOutputLevels(_ss.State == AudioState.Playing ? _track.Peaks : (0f, 0f));
+                continue;
             }
-            else if (source is InputSource ins)
+
+            InputSource? _ins = _resolveInputSource(source);
+            if (_ins is not null)
             {
-                AudioTrack? _track = ins.RustTrack;
+                AudioTrack? _track = _ins.RustTrack;
                 if (_track is null) continue;
 
-                _track.Gain = ins.Volume;
-                _track.Pan = ins.Pan;
+                _track.Gain = _ins.Volume;
+                _track.Pan = _ins.Pan;
 
-                ins.SetOutputLevels(ins.State == AudioState.Playing ? _track.Peaks : (0f, 0f));
+                _ins.SetOutputLevels(_ins.State == AudioState.Playing ? _track.Peaks : (0f, 0f));
+                continue;
             }
-            else if (source is StreamingSource sts)
+
+            StreamingSource? _sts = _resolveStreamingSource(source);
+            if (_sts is not null)
             {
-                AudioTrack? _track = sts.RustTrack;
+                AudioTrack? _track = _sts.RustTrack;
                 if (_track is null) continue;
 
-                _track.Gain = sts.Volume;
-                _track.Pan = sts.Pan;
+                _track.Gain = _sts.Volume;
+                _track.Pan = _sts.Pan;
 
-                sts.SetOutputLevels(sts.State == AudioState.Playing ? _track.Peaks : (0f, 0f));
+                _sts.SetOutputLevels(_sts.State == AudioState.Playing ? _track.Peaks : (0f, 0f));
             }
         }
     }
@@ -581,15 +601,16 @@ public sealed partial class AudioMixer
         {
             foreach (IAudioSource source in _sources)
             {
-                if (source is not FileSource fs || fs.RustTrack is null)
+                FileSource? _fs = _resolveFileSource(source);
+                if (_fs?.RustTrack is null)
                     continue;
 
-                bool _known = _rustAppliedStartOffsets.TryGetValue(fs.Id, out double _applied);
-                if (_known && _applied == fs.StartOffset)
+                bool _known = _rustAppliedStartOffsets.TryGetValue(_fs.Id, out double _applied);
+                if (_known && _applied == _fs.StartOffset)
                     continue;
 
-                try { _applyRustStartOffset(fs, _project); }
-                catch (Exception ex) { _logRustApplyError("Start offset", fs.Id, ex); }
+                try { _applyRustStartOffset(_fs, _project); }
+                catch (Exception ex) { _logRustApplyError("Start offset", _fs.Id, ex); }
             }
         }
     }
@@ -607,7 +628,7 @@ public sealed partial class AudioMixer
         if (track is null)
             return;
 
-        int[]? _current = (source as BaseAudioSource)?.OutputChannelMapping;
+        int[]? _current = _resolveMapOwner(source)?.OutputChannelMapping;
 
         if (_current is null && !_rustAppliedChannelMaps.ContainsKey(key))
             return;
@@ -671,6 +692,9 @@ public sealed partial class AudioMixer
 
         InputSource? _ins = _resolveInputSource(source);
         if (_ins is not null) return (_ins.Id, _ins.RustTrack);
+
+        StreamingSource? _sts = _resolveStreamingSource(source);
+        if (_sts is not null) return (_sts.Id, _sts.RustTrack);
 
         return (Guid.Empty, null);
     }
@@ -882,7 +906,7 @@ public sealed partial class AudioMixer
         IAudioSource[] _sources = Volatile.Read(ref _rustSourceSnapshot);
         foreach (IAudioSource source in _sources)
         {
-            if (source is FileSource fs) fs.ApplyRustNativeSync();
+            _resolveFileSource(source)?.ApplyRustNativeSync();
         }
     }
 
@@ -970,15 +994,16 @@ public sealed partial class AudioMixer
         IAudioSource[] _sources = Volatile.Read(ref _rustSourceSnapshot);
         foreach (IAudioSource source in _sources)
         {
-            if (source is FileSource fs && fs.State == AudioState.Playing)
+            FileSource? _fs = _resolveFileSource(source);
+            if (_fs is not null && _fs.State == AudioState.Playing)
             {
                 //A track still sitting in its start-offset silence would drag the clock to its offset
-                if (fs.StartOffset > 0.0 && (fs.RustTrack?.RenderedFrames ?? 0UL) == 0UL)
+                if (_fs.StartOffset > 0.0 && (_fs.RustTrack?.RenderedFrames ?? 0UL) == 0UL)
                     continue;
 
                 //Project position, not content Position: a stretched track must not run the shared
                 //clock at its own content rate and desync everyone else
-                double _p = fs.StartOffset + fs.RustNativeRealPosition;
+                double _p = _fs.StartOffset + _fs.RustNativeRealPosition;
                 if (_p > _projectPos) _projectPos = _p;
             }
         }
@@ -1037,11 +1062,12 @@ public sealed partial class AudioMixer
         {
             foreach (IAudioSource source in _sources.Values)
             {
-                if (source is not FileSource fs)
+                FileSource? _fs = _resolveFileSource(source);
+                if (_fs is null)
                     continue;
 
-                try { _applyRustStartOffset(fs, projectSeconds); }
-                catch (Exception ex) { Log.Error($"[Mixer] Seek of native track '{fs.Id}' to {projectSeconds:F3}s failed", ex); }
+                try { _applyRustStartOffset(_fs, projectSeconds); }
+                catch (Exception ex) { Log.Error($"[Mixer] Seek of native track '{_fs.Id}' to {projectSeconds:F3}s failed", ex); }
             }
         }
     }
@@ -1087,24 +1113,25 @@ public sealed partial class AudioMixer
             double _project = _masterClock.CurrentTimestamp;
             foreach (IAudioSource source in _sources.Values)
             {
-                if (source is not FileSource fs || fs.RustTrack is null)
+                FileSource? _fs = _resolveFileSource(source);
+                if (_fs?.RustTrack is null)
                     continue;
 
                 try
                 {
-                    if (fs.StartOffset != 0.0)
+                    if (_fs.StartOffset != 0.0)
                     {
-                        _applyRustStartOffset(fs, _project);
+                        _applyRustStartOffset(_fs, _project);
                     }
                     else
                     {
-                        fs.RustTrack.SetStartDelayFrames(0);
-                        _rustAppliedStartOffsets[fs.Id] = 0.0;
+                        _fs.RustTrack.SetStartDelayFrames(0);
+                        _rustAppliedStartOffsets[_fs.Id] = 0.0;
                     }
                 }
                 catch (Exception ex)
                 {
-                    Log.Error($"[Mixer] Track '{fs.Id}' starts misaligned, its offset could not be applied", ex);
+                    Log.Error($"[Mixer] Track '{_fs.Id}' starts misaligned, its offset could not be applied", ex);
                 }
             }
 

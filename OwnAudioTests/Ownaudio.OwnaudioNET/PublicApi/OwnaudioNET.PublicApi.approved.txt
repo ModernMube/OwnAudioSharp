@@ -1892,7 +1892,7 @@ namespace OwnaudioNET.Sources
         public override void Stop() { }
         public void SubmitSamples(System.ReadOnlySpan<float> samples) { }
     }
-    public sealed class SourceWithEffects : OwnaudioNET.Interfaces.IAudioSource, System.IDisposable
+    public sealed class SourceWithEffects : OwnaudioNET.Interfaces.IAudioSource, OwnaudioNET.Interfaces.IMasterClockSource, System.IDisposable
     {
         public SourceWithEffects(OwnaudioNET.Interfaces.IAudioSource source) { }
         public int ActiveEffectLatencySamples { get; }
@@ -1901,26 +1901,34 @@ namespace OwnaudioNET.Sources
         public int EffectCount { get; }
         public int EffectLatencySamples { get; }
         public System.Guid Id { get; }
+        public bool IsAttachedToClock { get; }
         public bool IsEndOfStream { get; }
         public bool Loop { get; set; }
+        public int[]? OutputChannelMapping { get; set; }
         public float Pan { get; set; }
         public float PitchShift { get; set; }
         public double Position { get; }
+        public double StartOffset { get; set; }
         public OwnaudioNET.Core.AudioState State { get; }
         public Ownaudio.AudioStreamInfo StreamInfo { get; }
+        public bool SupportsMasterClock { get; }
         public float Tempo { get; set; }
         public float Volume { get; set; }
         public event System.EventHandler<OwnaudioNET.Events.BufferUnderrunEventArgs>? BufferUnderrun;
         public event System.EventHandler<OwnaudioNET.Events.AudioErrorEventArgs>? Error;
         public event System.EventHandler<OwnaudioNET.Events.AudioStateChangedEventArgs>? StateChanged;
         public void AddEffect(OwnaudioNET.Interfaces.IEffectProcessor effect) { }
+        public void AttachToClock(OwnaudioNET.Synchronization.MasterClock clock) { }
         public void ClearEffects() { }
+        public void DetachFromClock() { }
         public void Dispose() { }
         public OwnaudioNET.Interfaces.IEffectProcessor[] GetEffects() { }
         public void Pause() { }
         public void Play() { }
         public int ReadSamples(System.Span<float> buffer, int frameCount) { }
+        public bool ReadSamplesAtTime(double masterTimestamp, System.Span<float> buffer, int frameCount, out OwnaudioNET.Interfaces.ReadResult result) { }
         public bool RemoveEffect(OwnaudioNET.Interfaces.IEffectProcessor effect) { }
+        public OwnaudioNET.Sources.SourceWithEffects RouteToChannels(params int[] channels) { }
         public bool Seek(double positionInSeconds) { }
         public void SetDelayCompensation(int samples) { }
         public void Stop() { }

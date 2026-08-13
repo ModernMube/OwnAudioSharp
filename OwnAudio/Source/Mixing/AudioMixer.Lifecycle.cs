@@ -153,7 +153,7 @@ public sealed partial class AudioMixer
 
             if (source is IMasterClockSource mcs)
             {
-                float _tempo = source is FileSource fs ? fs.Tempo : 1.0f;
+                float _tempo = source.Tempo <= 0f ? 1.0f : source.Tempo;
 
                 if (positionInSeconds >= mcs.StartOffset + _duration / _tempo)
                     continue;

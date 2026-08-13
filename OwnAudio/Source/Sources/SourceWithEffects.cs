@@ -6,6 +6,7 @@ using Ownaudio.Core;
 using OwnaudioNET.Core;
 using OwnaudioNET.Events;
 using OwnaudioNET.Interfaces;
+using OwnaudioNET.Synchronization;
 
 namespace OwnaudioNET.Sources;
 
@@ -13,9 +14,22 @@ namespace OwnaudioNET.Sources;
 /// Decorator that bolts an effect chain onto any IAudioSource. Delegates everything to the inner
 /// source, intercepts ReadSamples to run the fx. Effect list is thread-safe.
 /// </summary>
-public sealed class SourceWithEffects : IAudioSource
+public sealed class SourceWithEffects : IAudioSource, IMasterClockSource
 {
     private readonly IAudioSource _innerSource;
+
+    /// <summary>
+    /// The inner source when it can ride a master clock, null otherwise. Cached so the
+    /// clock members don't type-test on every call.
+    /// </summary>
+    private readonly IMasterClockSource? _clockInner;
+
+    /// <summary>
+    /// The inner source as a BaseAudioSource, null for a hand-rolled IAudioSource. Channel
+    /// routing lives there, not on the interface.
+    /// </summary>
+    private readonly BaseAudioSource? _baseInner;
+
     private readonly List<IEffectProcessor> _effects;
     private readonly object _effectsLock = new();
     private bool _disposed;
@@ -71,6 +85,8 @@ public sealed class SourceWithEffects : IAudioSource
     public SourceWithEffects(IAudioSource source)
     {
         _innerSource = source ?? throw new ArgumentNullException(nameof(source));
+        _clockInner = source as IMasterClockSource;
+        _baseInner = source as BaseAudioSource;
         _effects = new List<IEffectProcessor>();
     }
 
@@ -136,6 +152,109 @@ public sealed class SourceWithEffects : IAudioSource
     {
         get => _innerSource.PitchShift;
         set => _innerSource.PitchShift = value;
+    }
+
+    #endregion
+
+    #region MasterClock (delegated to inner source)
+
+    /// <summary>
+    /// True when the wrapped source can ride a master clock at all. A decorator over a plain
+    /// IAudioSource still exposes the clock surface, it just has nothing to hand the calls to.
+    /// </summary>
+    public bool SupportsMasterClock => _clockInner is not null;
+
+    /// <inheritdoc/>
+    public double StartOffset
+    {
+        get => _clockInner?.StartOffset ?? 0.0;
+        set
+        {
+            if (_clockInner is null) { _warnNoClock(nameof(StartOffset)); return; }
+            _clockInner.StartOffset = value;
+        }
+    }
+
+    /// <inheritdoc/>
+    public bool IsAttachedToClock => _clockInner?.IsAttachedToClock ?? false;
+
+    /// <inheritdoc/>
+    public void AttachToClock(MasterClock clock)
+    {
+        _throwIfDisposed();
+
+        if (_clockInner is null) { _warnNoClock(nameof(AttachToClock)); return; }
+        _clockInner.AttachToClock(clock);
+    }
+
+    /// <inheritdoc/>
+    public void DetachFromClock() => _clockInner?.DetachFromClock();
+
+    /// <summary>
+    /// Clock-aligned read with the fx chain on top. Falls back to a plain read when the inner
+    /// source doesn't do timestamps - the effects still run either way.
+    /// </summary>
+    /// <param name="masterTimestamp"></param>
+    /// <param name="buffer"></param>
+    /// <param name="frameCount"></param>
+    /// <param name="result"></param>
+    public bool ReadSamplesAtTime(double masterTimestamp, Span<float> buffer, int frameCount, out ReadResult result)
+    {
+        _throwIfDisposed();
+
+        bool _ok = true;
+
+        if (_clockInner is not null)
+            _ok = _clockInner.ReadSamplesAtTime(masterTimestamp, buffer, frameCount, out result);
+        else
+            result = ReadResult.CreateSuccess(_innerSource.ReadSamples(buffer, frameCount));
+
+        result.FramesRead = _runEffectChain(buffer, result.FramesRead);
+        return _ok;
+    }
+
+    /// <summary>
+    /// One line per wrapper about a clock call the inner source can't take.
+    /// </summary>
+    /// <param name="member"></param>
+    private void _warnNoClock(string member)
+    {
+        Log.Warning($"[SourceFx] {member} ignored on source '{Id}': {_innerSource.GetType().Name} does not ride a master clock");
+    }
+
+    #endregion
+
+    #region Channel Routing (delegated to inner source)
+
+    /// <summary>
+    /// Per-source output routing, straight through to the wrapped source. Null when the inner
+    /// one isn't a BaseAudioSource - there's nowhere to keep a map then.
+    /// </summary>
+    public int[]? OutputChannelMapping
+    {
+        get => _baseInner?.OutputChannelMapping;
+        set
+        {
+            if (_baseInner is null)
+            {
+                Log.Warning($"[SourceFx] Channel map ignored on source '{Id}': {_innerSource.GetType().Name} has no routing");
+                return;
+            }
+
+            _baseInner.OutputChannelMapping = value;
+        }
+    }
+
+    /// <summary>
+    /// Fluent shortcut for OutputChannelMapping, hands the wrapper back so the fx chain
+    /// can keep being built on it.
+    /// </summary>
+    /// <param name="channels"></param>
+    /// <returns></returns>
+    public SourceWithEffects RouteToChannels(params int[] channels)
+    {
+        OutputChannelMapping = channels;
+        return this;
     }
 
     #endregion
@@ -318,9 +437,18 @@ public sealed class SourceWithEffects : IAudioSource
     public int ReadSamples(Span<float> buffer, int frameCount)
     {
         _throwIfDisposed();
+        return _runEffectChain(buffer, _innerSource.ReadSamples(buffer, frameCount));
+    }
 
-        int framesRead = _innerSource.ReadSamples(buffer, frameCount);
-
+    /// <summary>
+    /// Runs the chain plus PDC over what the inner source just gave us. Hot path, zero-alloc
+    /// after warmup.
+    /// </summary>
+    /// <param name="buffer"></param>
+    /// <param name="framesRead"></param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private int _runEffectChain(Span<float> buffer, int framesRead)
+    {
         if (framesRead == 0) return 0;
 
         if (_effectsChanged)

@@ -131,13 +131,8 @@ public partial class MainWindowViewModel
             double longestDuration = 0.0;
             for (int i = 0; i < _cachedSourceArray.Length; i++)
             {
-                if (_cachedSourceArray[i] is FileSource fileSource)
-                {
-                    if (fileSource.Duration > longestDuration)
-                    {
-                        longestDuration = fileSource.Duration;
-                    }
-                }
+                double _duration = _cachedSourceArray[i].Duration;
+                if (_duration > longestDuration) longestDuration = _duration;
             }
             TrackDurationSeconds = longestDuration;
 
