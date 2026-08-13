@@ -999,7 +999,7 @@ mod input_source {
 mod master_effect {
     use ownaudio_ffi::error_code::OwnAudioErrorCode;
     use ownaudio_ffi::ffi_effects::{
-        ownaudio_v1_effect_get_param, ownaudio_v1_effect_set_param,
+        ownaudio_v1_effect_get_param, ownaudio_v1_effect_reset, ownaudio_v1_effect_set_param,
         ownaudio_v1_mixer_add_master_effect, ownaudio_v1_mixer_remove_master_effect,
     };
     use ownaudio_ffi::ffi_track::{ownaudio_v1_mixer_create, ownaudio_v1_mixer_destroy};
@@ -1007,6 +1007,16 @@ mod master_effect {
 
     const EFFECT_TYPE_COMPRESSOR: u32 = 2;
     const PARAM_THRESHOLD: u32 = 2;
+
+    #[test]
+    fn reset_null_args_are_null_pointer() {
+        unsafe {
+            assert_eq!(
+                ownaudio_v1_effect_reset(std::ptr::null_mut(), std::ptr::null_mut()),
+                OwnAudioErrorCode::NullPointer as i32
+            );
+        }
+    }
 
     #[test]
     fn add_master_effect_null_args_are_null_pointer() {
@@ -1063,6 +1073,17 @@ mod master_effect {
                 OwnAudioErrorCode::Success as i32
             );
             let mut value: f32 = 0.0;
+            assert_eq!(
+                ownaudio_v1_effect_get_param(mixer, effect, PARAM_THRESHOLD, &mut value),
+                OwnAudioErrorCode::Success as i32
+            );
+            assert_eq!(value, -18.0);
+
+            // A reset queues fine and leaves the params where they were.
+            assert_eq!(
+                ownaudio_v1_effect_reset(mixer, effect),
+                OwnAudioErrorCode::Success as i32
+            );
             assert_eq!(
                 ownaudio_v1_effect_get_param(mixer, effect, PARAM_THRESHOLD, &mut value),
                 OwnAudioErrorCode::Success as i32

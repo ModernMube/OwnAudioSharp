@@ -310,10 +310,16 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Ticks up on every Reset, that is how the native twin hears about it.
+        /// </summary>
+        public int ResetGeneration { get; private set; }
+
+        /// <summary>
         /// Empties both lines and the crossover, parameters stay.
         /// </summary>
         public void Reset()
         {
+            ResetGeneration++;
             Array.Clear(_hornDelayBuffer, 0, _hornDelayBuffer.Length);
             Array.Clear(_rotorDelayBuffer, 0, _rotorDelayBuffer.Length);
             _hornBufferIndex = 0;

@@ -331,10 +331,16 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Ticks up on every Reset, that is how the native twin hears about it.
+        /// </summary>
+        public int ResetGeneration { get; private set; }
+
+        /// <summary>
         /// Empties the ring and opens the gain back up.
         /// </summary>
         public void Reset()
         {
+            ResetGeneration++;
             Array.Clear(_delayBuffer);
 
             _currentGain = 1.0f;

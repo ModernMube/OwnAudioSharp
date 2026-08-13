@@ -281,10 +281,16 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Ticks up on every Reset, that is how the native twin hears about it.
+        /// </summary>
+        public int ResetGeneration { get; private set; }
+
+        /// <summary>
         /// Clears every stage and parks the LFO.
         /// </summary>
         public void Reset()
         {
+            ResetGeneration++;
             _lfoPhase = 0.0f;
             Array.Clear(_apX1, 0, _apX1.Length);
             Array.Clear(_apY1, 0, _apY1.Length);

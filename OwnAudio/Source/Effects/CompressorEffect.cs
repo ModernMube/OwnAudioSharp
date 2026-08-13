@@ -337,10 +337,16 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Ticks up on every Reset, that is how the native twin hears about it.
+        /// </summary>
+        public int ResetGeneration { get; private set; }
+
+        /// <summary>
         /// Drops the envelope, keeps the parameters.
         /// </summary>
         public void Reset()
         {
+            ResetGeneration++;
             _envelope = 0.0f;
         }
 

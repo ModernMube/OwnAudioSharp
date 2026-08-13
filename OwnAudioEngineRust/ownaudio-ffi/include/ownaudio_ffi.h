@@ -973,6 +973,20 @@ int32_t ownaudio_v1_effect_set_param(struct OwnAudioMixerHandle *mixer,
                                      float value);
 
 /**
+ * Kills an effect's tail — delay lines, reverb, envelopes, LFO phases — leaving every
+ * parameter where it was. Lands on the next block; the engine never fires it by itself,
+ * the caller decides when a tail has to go.
+ *
+ * `OwnAudioErrorCode::InternalError` (1) means the command queue was full.
+ *
+ * # Safety
+ * - `mixer` and `effect` must be live handles that have not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_effect_reset(struct OwnAudioMixerHandle *mixer,
+                                 struct OwnAudioEffectHandle *effect);
+
+/**
  * Reads the current value of an effect parameter.
  *
  * - `effect` — valid effect handle.

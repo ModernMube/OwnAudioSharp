@@ -83,6 +83,7 @@ namespace OwnaudioNET.Effects
         public float Mix { get; set; }
         public string Name { get; set; }
         public float ReleaseCoefficient { get; set; }
+        public int ResetGeneration { get; }
         public float TargetLevel { get; set; }
         public void Dispose() { }
         public void Initialize(Ownaudio.Core.AudioConfig config) { }
@@ -109,6 +110,7 @@ namespace OwnaudioNET.Effects
         public float Mix { get; set; }
         public string Name { get; set; }
         public float Rate { get; set; }
+        public int ResetGeneration { get; }
         public int Voices { get; set; }
         public void Dispose() { }
         public void Initialize(Ownaudio.Core.AudioConfig config) { }
@@ -142,6 +144,7 @@ namespace OwnaudioNET.Effects
         public string Name { get; set; }
         public float Ratio { get; set; }
         public float ReleaseTime { get; set; }
+        public int ResetGeneration { get; }
         public float SampleRate { get; set; }
         public float Threshold { get; set; }
         public void Dispose() { }
@@ -174,6 +177,7 @@ namespace OwnaudioNET.Effects
         public string Name { get; set; }
         public bool PingPong { get; set; }
         public float Repeat { get; set; }
+        public int ResetGeneration { get; }
         public int SampleRate { get; set; }
         public int Time { get; set; }
         public void Dispose() { }
@@ -205,6 +209,7 @@ namespace OwnaudioNET.Effects
         public float Mix { get; set; }
         public string Name { get; set; }
         public float OutputGain { get; set; }
+        public int ResetGeneration { get; }
         public void Dispose() { }
         public void Initialize(Ownaudio.Core.AudioConfig config) { }
         public void Process(System.Span<float> buffer, int frameCount) { }
@@ -239,6 +244,7 @@ namespace OwnaudioNET.Effects
         public string Name { get; }
         public float NoiseGateThresholdDb { get; set; }
         public float ReleaseTime { get; set; }
+        public int ResetGeneration { get; }
         public float RmsWindowSeconds { get; set; }
         public float TargetRmsLevelDb { get; set; }
         public void Dispose() { }
@@ -268,6 +274,7 @@ namespace OwnaudioNET.Effects
         public System.Guid Id { get; }
         public float Mix { get; set; }
         public string Name { get; set; }
+        public int ResetGeneration { get; }
         public float SampleRate { get; set; }
         public void Dispose() { }
         public void Initialize(Ownaudio.Core.AudioConfig config) { }
@@ -294,6 +301,7 @@ namespace OwnaudioNET.Effects
         public float this[int band] { get; set; }
         public float Mix { get; set; }
         public string Name { get; }
+        public int ResetGeneration { get; }
         public float SampleRate { get; }
         public void Dispose() { }
         public float[] GetAllGains() { }
@@ -338,6 +346,7 @@ namespace OwnaudioNET.Effects
         public System.Guid Id { get; }
         public float Mix { get; set; }
         public string Name { get; set; }
+        public int ResetGeneration { get; }
         public void Dispose() { }
         public void Initialize(Ownaudio.Core.AudioConfig config) { }
         public void Process(System.Span<float> buffer, int frameCount) { }
@@ -368,6 +377,7 @@ namespace OwnaudioNET.Effects
         public float Mix { get; set; }
         public string Name { get; }
         public float Rate { get; set; }
+        public int ResetGeneration { get; }
         public int SampleRate { get; }
         public void Dispose() { }
         public void Initialize(Ownaudio.Core.AudioConfig config) { }
@@ -400,6 +410,7 @@ namespace OwnaudioNET.Effects
         public float Mix { get; set; }
         public string Name { get; }
         public float Release { get; set; }
+        public int ResetGeneration { get; }
         public float SampleRate { get; }
         public float Threshold { get; set; }
         public void Dispose() { }
@@ -432,6 +443,7 @@ namespace OwnaudioNET.Effects
         public float Mix { get; set; }
         public string Name { get; }
         public float OutputLevel { get; set; }
+        public int ResetGeneration { get; }
         public float Tone { get; set; }
         public void Dispose() { }
         public void Initialize(Ownaudio.Core.AudioConfig config) { }
@@ -462,6 +474,7 @@ namespace OwnaudioNET.Effects
         public float Mix { get; set; }
         public string Name { get; }
         public float Rate { get; set; }
+        public int ResetGeneration { get; }
         public int SampleRate { get; }
         public int Stages { get; set; }
         public void Dispose() { }
@@ -493,6 +506,7 @@ namespace OwnaudioNET.Effects
         public System.Guid Id { get; }
         public float Mix { get; set; }
         public string Name { get; set; }
+        public int ResetGeneration { get; }
         public float RoomSize { get; set; }
         public float StereoWidth { get; set; }
         public float WetLevel { get; set; }
@@ -529,6 +543,7 @@ namespace OwnaudioNET.Effects
         public bool IsFast { get; set; }
         public float Mix { get; set; }
         public string Name { get; }
+        public int ResetGeneration { get; }
         public float RotorSpeed { get; set; }
         public void Dispose() { }
         public void Initialize(Ownaudio.Core.AudioConfig config) { }
@@ -690,6 +705,7 @@ namespace OwnaudioNET.Effects.SmartMaster
         public int LatencySamples { get; }
         public float Mix { get; set; }
         public string Name { get; set; }
+        public int ResetGeneration { get; }
         public long SanitizedSampleCount { get; }
         public void ApplyConfiguration() { }
         public void ApplyConfiguration(OwnaudioNET.Effects.SmartMaster.SmartMasterConfig configuration) { }
@@ -1422,6 +1438,7 @@ namespace OwnaudioNET.Interfaces
         int LatencySamples { get; }
         float Mix { get; set; }
         string Name { get; }
+        int ResetGeneration { get; }
         void Initialize(Ownaudio.Core.AudioConfig config);
         void Process(System.Span<float> buffer, int frameCount);
         void Reset();

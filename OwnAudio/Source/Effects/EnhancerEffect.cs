@@ -256,10 +256,16 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Ticks up on every Reset, that is how the native twin hears about it.
+        /// </summary>
+        public int ResetGeneration { get; private set; }
+
+        /// <summary>
         /// Clears the filter memory, leaves the settings alone.
         /// </summary>
         public void Reset()
         {
+            ResetGeneration++;
             _xPrev = 0.0f;
             _yPrev = 0.0f;
         }

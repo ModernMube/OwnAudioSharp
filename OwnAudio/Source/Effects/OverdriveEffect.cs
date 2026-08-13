@@ -230,10 +230,16 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Ticks up on every Reset, that is how the native twin hears about it.
+        /// </summary>
+        public int ResetGeneration { get; private set; }
+
+        /// <summary>
         /// Clears the tone filter memory.
         /// </summary>
         public void Reset()
         {
+            ResetGeneration++;
             _lowPassState = 0.0f;
             _highPassState = 0.0f;
         }

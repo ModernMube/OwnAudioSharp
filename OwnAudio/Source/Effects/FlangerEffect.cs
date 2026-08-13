@@ -270,10 +270,16 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Ticks up on every Reset, that is how the native twin hears about it.
+        /// </summary>
+        public int ResetGeneration { get; private set; }
+
+        /// <summary>
         /// Empties the delay line and parks the LFO.
         /// </summary>
         public void Reset()
         {
+            ResetGeneration++;
             Array.Clear(_delayBuffer, 0, _delayBuffer.Length);
             _bufferIndex = 0;
             _lfoPhase = 0.0f;

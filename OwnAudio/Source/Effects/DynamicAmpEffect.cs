@@ -427,10 +427,16 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Ticks up on every Reset, that is how the native twin hears about it.
+        /// </summary>
+        public int ResetGeneration { get; private set; }
+
+        /// <summary>
         /// Back to unity gain with a closed gate.
         /// </summary>
         public void Reset()
         {
+            ResetGeneration++;
             _currentGain = _initialGain;
             _rmsState = _initialRmsState;
             _lastGainDb = LinearToDb(_initialGain);

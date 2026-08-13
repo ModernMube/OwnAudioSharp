@@ -76,6 +76,7 @@ public sealed partial class AudioMixer
             Native = native;
             _masterChain = chain;
             Sink = _pushParam;
+            LastResetGeneration = managed.ResetGeneration;
         }
 
         /// <summary>
@@ -90,6 +91,7 @@ public sealed partial class AudioMixer
             Native = native;
             _trackChain = chain;
             Sink = _pushParam;
+            LastResetGeneration = managed.ResetGeneration;
         }
 
         /// <summary>
@@ -111,6 +113,22 @@ public sealed partial class AudioMixer
         /// Change-detecting param sink, bound once so the tick stays alloc-free.
         /// </summary>
         public RustEffectAdapters.ParamSink Sink { get; }
+
+        /// <summary>
+        /// Managed reset counter last carried over, so one Reset() call fires one native reset.
+        /// </summary>
+        public int LastResetGeneration { get; set; }
+
+        /// <summary>
+        /// Clears the native twin's tail. Only fired when the managed side asks for it.
+        /// </summary>
+        public void ResetNative()
+        {
+            if (_masterChain is not null)
+                _masterChain.Reset(Native);
+            else
+                _trackChain?.Reset(Native);
+        }
 
         /// <summary>
         /// Drops the native twin off its chain, shrugging off a transient failure
@@ -839,6 +857,13 @@ public sealed partial class AudioMixer
             pair.LastParams[_enabledId] = _enabled;
             vst.SetNativeBypass(!vst.Enabled);
             return;
+        }
+
+        int _generation = pair.Managed.ResetGeneration;
+        if (_generation != pair.LastResetGeneration)
+        {
+            pair.LastResetGeneration = _generation;
+            pair.ResetNative();
         }
 
         RustEffectAdapters.Mirror(pair.Managed, pair.Sink);

@@ -324,10 +324,16 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Ticks up on every Reset, that is how the native twin hears about it.
+        /// </summary>
+        public int ResetGeneration { get; private set; }
+
+        /// <summary>
         /// Empties the lines and the filter state.
         /// </summary>
         public void Reset()
         {
+            ResetGeneration++;
             if (_delayBufferL != null) Array.Clear(_delayBufferL, 0, _delayBufferL.Length);
             if (_delayBufferR != null) Array.Clear(_delayBufferR, 0, _delayBufferR.Length);
             _writeIndex = 0;

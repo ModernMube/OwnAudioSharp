@@ -44,6 +44,29 @@ public class MasterEffectChainTests
     }
 
     [TestMethod]
+    public void ResetMasterEffect_KeepsParameters()
+    {
+        using var session = new MultiTrackSession(SampleRate, Channels);
+
+        var compressor = (CompressorEffect)session.MasterEffects.Add(EffectType.Compressor, SampleRate);
+        compressor.ThresholdDb = -18.0f;
+
+        Assert.IsTrue(session.MasterEffects.Reset(compressor));
+        Assert.AreEqual(-18.0f, compressor.ThresholdDb, 0.0001f);
+    }
+
+    [TestMethod]
+    public void ResetMasterEffect_UnknownEffectIsRefused()
+    {
+        using var session = new MultiTrackSession(SampleRate, Channels);
+        using var other = new MultiTrackSession(SampleRate, Channels);
+
+        var stranger = other.MasterEffects.Add<ReverbEffect>(SampleRate);
+
+        Assert.IsFalse(session.MasterEffects.Reset(stranger));
+    }
+
+    [TestMethod]
     public void RemoveMasterEffect_ClearsChain()
     {
         using var session = new MultiTrackSession(SampleRate, Channels);

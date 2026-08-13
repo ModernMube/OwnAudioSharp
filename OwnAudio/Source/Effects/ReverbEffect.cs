@@ -477,10 +477,16 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Ticks up on every Reset, that is how the native twin hears about it.
+        /// </summary>
+        public int ResetGeneration { get; private set; }
+
+        /// <summary>
         /// Empties the whole tank.
         /// </summary>
         public void Reset()
         {
+            ResetGeneration++;
             lock (_lock)
             {
                 if (_preDelayBuffer != null) Array.Clear(_preDelayBuffer, 0, _preDelayBuffer.Length);

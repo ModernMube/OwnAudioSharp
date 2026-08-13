@@ -434,10 +434,16 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Ticks up on every Reset, that is how the native twin hears about it.
+        /// </summary>
+        public int ResetGeneration { get; private set; }
+
+        /// <summary>
         /// Clears the filter memory of every channel.
         /// </summary>
         public void Reset()
         {
+            ResetGeneration++;
             for (int i = 0; i < _z1.Length; i++)
             {
                 Array.Clear(_z1[i], 0, _z1[i].Length);

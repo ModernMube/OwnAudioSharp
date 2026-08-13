@@ -291,10 +291,16 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Ticks up on every Reset, that is how the native twin hears about it.
+        /// </summary>
+        public int ResetGeneration { get; private set; }
+
+        /// <summary>
         /// Back to unity gain, empty ring.
         /// </summary>
         public void Reset()
         {
+            ResetGeneration++;
             _currentGain = 1.0f;
             _rmsLevel = 0.0f;
             _rmsAccumulator = 0.0f;

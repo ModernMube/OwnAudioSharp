@@ -93,6 +93,13 @@ pub enum MixerCommand {
         /// New value (the effect clamps it).
         value: f32,
     },
+    /// Clear an effect's internal state; its parameters stay put.
+    ResetEffect {
+        /// Target track id.
+        track_id: u64,
+        /// Target effect id.
+        effect_id: u64,
+    },
     /// Enable or bypass an effect.
     SetEffectEnabled {
         /// Target track id.
@@ -583,6 +590,15 @@ impl MixerController {
             .and_then(|s| s.get(param_id))
     }
 
+    /// Queues a state reset; the audio thread drops the effect's tail on the next
+    /// block. No parameter moves, so the shadow stays valid.
+    pub fn reset_effect(&mut self, track_id: u64, effect_id: u64) -> Result<(), CommandError> {
+        self.enqueue(MixerCommand::ResetEffect {
+            track_id,
+            effect_id,
+        })
+    }
+
     /// Enqueues an enable/bypass change on an effect, keeping the control-side
     /// shadow's [`PARAM_ENABLED`](crate::effects::PARAM_ENABLED) entry in step.
     pub fn set_effect_enabled(
@@ -747,7 +763,10 @@ mod tests {
         fn get_param(&self, _param_id: u32) -> Option<f32> {
             None
         }
-        fn reset(&mut self) {}
+        fn reset(&mut self) {
+            self.buf.iter_mut().for_each(|s| *s = 0.0);
+            self.idx = 0;
+        }
         fn is_enabled(&self) -> bool {
             true
         }
@@ -957,6 +976,30 @@ mod tests {
         let mut out2 = [0.0f32; 4];
         mixer.mix(&mut out2);
         assert_eq!(out2, [5.0, 5.0, 5.0, 5.0]);
+    }
+
+    #[test]
+    fn reset_effect_drops_the_tail() {
+        let (mut ctl, mut mixer) = wired();
+        let (id, shared) = ctl.add_track().unwrap();
+        ctl.set_track_source(id, Some(Box::new(VecSource::new(vec![1.0; 8]))))
+            .unwrap();
+        let eid = ctl
+            .add_effect(id, Box::new(LatencyDelayEffect::new(4)))
+            .unwrap();
+        shared.set_state(TrackState::Playing);
+
+        let mut out = [0.0f32; 4];
+        mixer.mix(&mut out);
+        assert_eq!(out, [0.0; 4]);
+
+        // The first four ones come back out — that is the tail we are about to kill.
+        mixer.mix(&mut out);
+        assert_eq!(out, [1.0; 4]);
+
+        ctl.reset_effect(id, eid).unwrap();
+        mixer.mix(&mut out);
+        assert_eq!(out, [0.0; 4]);
     }
 
     #[test]

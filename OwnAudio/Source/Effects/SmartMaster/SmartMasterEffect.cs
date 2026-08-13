@@ -152,10 +152,16 @@ namespace OwnaudioNET.Effects.SmartMaster
         #region Reset and Dispose
         
         /// <summary>
+        /// Ticks up on every Reset, that is how the native twin hears about it.
+        /// </summary>
+        public int ResetGeneration { get; private set; }
+
+        /// <summary>
         /// Full reset including measurement status
         /// </summary>
         public void Reset()
         {
+            ResetGeneration++;
             lock (_configLock)
             {
                 _audioChain?.Reset();

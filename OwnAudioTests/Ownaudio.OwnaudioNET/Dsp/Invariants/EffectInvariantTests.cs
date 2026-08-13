@@ -72,6 +72,24 @@ public class EffectInvariantTests
     }
 
     /// <summary>
+    /// Every Reset has to move the counter the mixer polls, otherwise the native twin
+    /// keeps its tail while the managed object looks clean.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EffectCatalog.Names), MemberType = typeof(EffectCatalog))]
+    public void ResetBumpsTheGeneration(string name)
+    {
+        using IEffectProcessor _fx = EffectCatalog.Get(name).Create();
+
+        int _before = _fx.ResetGeneration;
+        _fx.Reset();
+        _fx.Reset();
+
+        _fx.ResetGeneration.Should().Be(_before + 2,
+            $"{name}.Reset() has to be visible to the rust-native mirror");
+    }
+
+    /// <summary>
     /// Disabled means untouched, bit for bit.
     /// </summary>
     [Theory]

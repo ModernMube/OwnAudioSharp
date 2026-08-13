@@ -123,6 +123,21 @@ public sealed class MasterEffectChain
     }
 
     /// <summary>
+    /// Clears the effect's internal state on the native side, params left alone.
+    /// </summary>
+    /// <returns>false when we don't know that effect.</returns>
+    public bool Reset(object effect)
+    {
+        int index = _effects.IndexOf(effect);
+        if (index < 0) { return false; }
+
+        int code = OwnAudioNative.ownaudio_v1_effect_reset(
+            _mixerHandle,
+            _handles[index].DangerousGetHandle());
+        return code == 0;
+    }
+
+    /// <summary>
     /// Reads back what was last set. Mostly for verification.
     /// </summary>
     /// <returns>null when the effect or the param id is unknown.</returns>

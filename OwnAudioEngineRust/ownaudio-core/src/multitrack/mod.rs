@@ -563,6 +563,16 @@ impl MultiTrackMixer {
                     }
                 }
             }
+            MixerCommand::ResetEffect {
+                track_id,
+                effect_id,
+            } => {
+                if let Some(chain) = self.effect_chain_mut(track_id) {
+                    if let Some(effect) = chain.effect_mut_by_id(effect_id) {
+                        effect.reset();
+                    }
+                }
+            }
             MixerCommand::SetEffectEnabled {
                 track_id,
                 effect_id,

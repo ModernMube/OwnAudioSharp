@@ -52,6 +52,12 @@ public interface IEffectProcessor : IDisposable
     bool IsReady => true;
 
     /// <summary>
+    /// Bumped by every Reset() call. The mixer polls it to carry the reset over to the
+    /// Rust twin — without it the native tail would survive a managed Reset().
+    /// </summary>
+    int ResetGeneration => 0;
+
+    /// <summary>
     /// Latency this effect adds, in samples. Zero-latency stuff (EQ, comp,
     /// reverb) is 0; lookahead effects report their lookahead. Used by the
     /// mixer's plugin delay compensation to keep tracks aligned.

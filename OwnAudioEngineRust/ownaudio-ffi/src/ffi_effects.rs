@@ -571,6 +571,50 @@ pub unsafe extern "C" fn ownaudio_v1_effect_set_param(
     crate::error_code::finish_catch_unwind(result)
 }
 
+/// Kills an effect's tail — delay lines, reverb, envelopes, LFO phases — leaving every
+/// parameter where it was. Lands on the next block; the engine never fires it by itself,
+/// the caller decides when a tail has to go.
+///
+/// `OwnAudioErrorCode::InternalError` (1) means the command queue was full.
+///
+/// # Safety
+/// - `mixer` and `effect` must be live handles that have not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_effect_reset(
+    mixer: *mut OwnAudioMixerHandle,
+    effect: *mut OwnAudioEffectHandle,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if mixer.is_null() || effect.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let effect_wrapper = match unsafe { effect_from_ptr(effect) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        match mixer_wrapper
+            .controller
+            .reset_effect(effect_wrapper.track_id, effect_wrapper.effect_id)
+        {
+            Ok(()) => OwnAudioErrorCode::Success as i32,
+            Err(_) => {
+                set_last_error("mixer command queue is full; effect not reset");
+                OwnAudioErrorCode::InternalError as i32
+            }
+        }
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
 /// Reads the current value of an effect parameter.
 ///
 /// - `effect` — valid effect handle.

@@ -145,5 +145,15 @@ internal static partial class OwnAudioNative
         uint paramId,
         out float outValue);
 
+    /// <summary>
+    /// Drops the effect's tail, params untouched. Lands on the next block.
+    /// </summary>
+    /// <param name="mixer"></param>
+    /// <param name="effect"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_effect_reset(
+        IntPtr mixer,
+        IntPtr effect);
+
     #endregion
 }
