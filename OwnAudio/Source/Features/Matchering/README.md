@@ -75,14 +75,23 @@ var analyzer = new AudioAnalyzer();
 analyzer.ProcessEQMatching("mix.wav", "reference.wav", "mastered.wav");
 ```
 
-### `ProcessWithEnhancedPreset(sourceFile, outputFile, PlaybackSystem, tempDirectory = null, eqOnlyMode = true)`
+### `ProcessWithEnhancedPreset(sourceFile, outputFile, PlaybackSystem, tempDirectory = null, eqOnlyMode = false)`
 
 Preset-based mastering. Instead of an external reference it:
 
 1. Extracts the **embedded base sample** (`OwnaudioNET.basesample.bin`).
-2. Applies the chosen preset's EQ curve (optionally + compression) to that base
-   sample to build an enhanced *target*.
-3. Runs `ProcessEQMatching` from the source to that enhanced base.
+2. Bakes the whole preset into that base sample — the declared EQ curve, the
+   preset's own compressor (unless `eqOnlyMode`), then the level pushed to the
+   preset's `TargetLoudness` behind a limiter. The result is a *rendered example*
+   of what the preset is supposed to sound like.
+3. Matches the source to that baked base, with the AGC block taken from the
+   preset's `DynamicAmp` rather than from the measurement.
+
+The EQ curve is fed through `_deconvolveToBandGains` before it is applied, so the
+declared response is what the target actually *measures*. Setting each band to its
+declared value instead overshoots by 60–120% because neighbouring 1/3-octave bells
+add up — which is what the old "conservative curve" (0.75–0.85 scaling, ±3.5 dB
+caps) was compensating for at the wrong end.
 
 Temporary files are created in `tempDirectory` (defaults to the system temp
 path) and cleaned up in a `finally` block.
@@ -161,22 +170,33 @@ actually applied.
 | `QFactors[30]` | The Q the deconvolution assumed per band. |
 | `CompThresholdDb`, `CompRatio` | Compressor settings. The threshold is dB — `CompressorEffect` wants it linear, run it through `CompressorEffect.DbToLinear`. |
 | `TargetLoudness`, `MaxGain` | AGC target and gain ceiling for `DynamicAmpEffect`. |
+| `AmpAttackSeconds`, `AmpReleaseSeconds` | AGC timing. Comes off the preset on the preset overload, otherwise the 0.1 / 0.5 default. |
 | `SourceLoudness`, `SourceCrestDb`, `TargetCrestDb` | Measured values, for a status readout. |
 | `CutOnlyShiftDb` | How far the curve got pushed down; 0 when `cutOnly` was off. |
 
 No audio in it, so it serializes into a project file as is.
 
-### `GetPresetTargetSpectrum(PlaybackSystem system, bool eqOnlyMode = true) → AudioSpectrum`
+### `GetPresetTargetSpectrum(PlaybackSystem system, bool eqOnlyMode = false) → AudioSpectrum`
 
 The target spectrum a preset is asking for, without touching the disk. Same steps
-as `ProcessWithEnhancedPreset` — embedded base sample, conservative curve, preset
-Q factors, offline EQ — but entirely in memory, ending in `AnalyzeAudioBuffer`
-instead of two temp wavs. Cached per `(system, eqOnlyMode)` and handed out as a
-copy, since `AudioSpectrum` has public setters.
+as `ProcessWithEnhancedPreset` — embedded base sample, deconvolved preset curve,
+preset compressor, loudness normalization — but entirely in memory, ending in
+`AnalyzeAudioBuffer` instead of two temp wavs. Cached per `(system, eqOnlyMode)`
+and handed out as a copy, since `AudioSpectrum` has public setters.
+
+The returned spectrum carries the preset's loudness (±1 dB of `TargetLoudness`) and
+its crest, so the compressor settings `CalculateProfile` derives from the source /
+target crest difference are the preset's, not the base sample's.
+
+### `CalculateProfile(AudioSpectrum source, PlaybackSystem system, int sampleRate, …) → MatcheringProfile`
+
+The preset overload. Builds the target itself and stamps `TargetLoudness`,
+`MaxGain`, `AmpAttackSeconds` and `AmpReleaseSeconds` from the preset's own
+`DynamicAmp` block — the curve and the compressor stay measured, so a preset
+still behaves like matchering rather than like a fixed EQ.
 
 ```csharp
-AudioSpectrum target = analyzer.GetPresetTargetSpectrum(PlaybackSystem.ClubPA);
-MatcheringProfile profile = analyzer.CalculateProfile(mix, target, 48000);
+MatcheringProfile profile = analyzer.CalculateProfile(mix, PlaybackSystem.ClubPA, 48000);
 ```
 
 Analysis is seconds of work on a full song — call all of this off the UI thread.
@@ -297,10 +317,17 @@ settings):
 `ConcertPA`, `ClubPA`, `HiFiSpeakers`, `StudioMonitors`, `Headphones`,
 `Earbuds`, `CarStereo`, `Television`, `RadioBroadcast`, `Smartphone`.
 
-When applied, `CreateConservativePresetCurve` scales the raw preset curve down
-per frequency range and caps boosts (~3–3.5 dB) so it makes a realistic
-matchering *target* rather than overdriving the source, and
-`CalculateEnhancedPresetQFactors` picks preset-appropriate Q values.
+All of it is live. `FrequencyResponse` is applied at full strength (clamped only by
+the ±9 dB `MaxBandCorrectionDb` rail, which no preset reaches) through the
+deconvolution, `Compression` drives the compressor on the baked base sample,
+`TargetLoudness` is where that sample is normalized to, and `DynamicAmp` is stamped
+onto the profile by the preset overload. `_presetQFactors` picks the Q values the
+bake solves against.
+
+`DynamicRange` is the one field that stays advisory: it is a ceiling the system can
+take, and a bake can compress a sample but cannot invent crest that the base sample
+never had. `StudioMonitors` declares 24 dB and the baked target measures ~12 dB —
+the base sample's own crest.
 
 ---
 
@@ -327,7 +354,7 @@ matchering *target* rather than overdriving the source, and
 | `MaxBandCorrectionDb` (±9 dB) | `_calcEqAdjustments` | Per-band correction limit. |
 | `smoothingFactor` | `SmoothSpectrum` | Curve smoothness before diffing. |
 | Q clamp (2.5…8.0) | `CalculateOptimalQFactors` | EQ band width limits. |
-| `eqOnlyMode` | `ProcessWithEnhancedPreset` | EQ-only vs. full effects for presets. |
+| `eqOnlyMode` | `ProcessWithEnhancedPreset`, `GetPresetTargetSpectrum` | Leaves the preset compressor out of the bake; the loudness normalization runs either way. |
 | `fixedQ` | `CalculateProfile` | Q the deconvolution solves against; `NativeBandQ` for the native EQ, `0` for per-band Qs. |
 | `cutOnly` | `CalculateProfile` | Cut-only curve for a chain with no gain stage in front. |
 

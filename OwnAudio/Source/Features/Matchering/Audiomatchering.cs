@@ -148,6 +148,15 @@ namespace OwnaudioNET.Features.Matchering
         /// <param name="outputFile"></param>
         public void ProcessEQMatching(string sourceFile, string targetFile, string outputFile)
         {
+            _matchToTarget(sourceFile, targetFile, outputFile, null);
+        }
+
+        /// <summary>
+        /// The match itself. With a preset in hand the AGC numbers come off the preset rather
+        /// than off the measurement - the curve and the compressor are still measured.
+        /// </summary>
+        private void _matchToTarget(string sourceFile, string targetFile, string outputFile, PlaybackPreset? preset)
+        {
             Log.Info("=== SEGMENTED EQ MATCHING ===");
 
             Log.Info("Analyzing source audio (segmented)...");
@@ -157,8 +166,11 @@ namespace OwnaudioNET.Features.Matchering
             AudioSpectrum targetSpectrum = AnalyzeAudioFile(targetFile);
 
             float[] eqAdjustments = _calcEqAdjustments(sourceSpectrum, targetSpectrum);
-            DynamicAmpSettings ampSettings = _ampSettings(sourceSpectrum, targetSpectrum);
+            DynamicAmpSettings ampSettings = preset?.DynamicAmp ?? _ampSettings(sourceSpectrum, targetSpectrum);
             var compSettings = _compSettings(sourceSpectrum, targetSpectrum);
+
+            if (preset is not null)
+                Log.Info($"AGC from the {preset.Name} preset: {ampSettings.TargetLevel:F1}dB target, max {ampSettings.MaxGain:F2}x");
 
             Log.Info("Processing audio with segmented-based EQ...");
             _applyEqProcessing(sourceFile, outputFile, eqAdjustments, ampSettings, compSettings, sourceSpectrum, targetSpectrum);

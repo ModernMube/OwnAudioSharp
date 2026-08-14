@@ -263,7 +263,7 @@ AudioSpectrum spectrum = analyzer.AnalyzeAudioFile("track.wav");</code></pre></d
     sourceFile: "my-mix.wav",
     outputFile: "for-club.wav",
     system:     PlaybackSystem.ClubPA,
-    eqOnlyMode: true);</code></pre></div>
+    eqOnlyMode: false);</code></pre></div>
 
 <div class="code-block"><div class="code-header"><span>C# — Batch process</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">analyzer.BatchProcessWithEnhancedPreset(
     sourceFiles:    new[] { "track1.wav", "track2.wav", "track3.wav" },
@@ -305,6 +305,9 @@ AudioSpectrum reference = analyzer.AnalyzeAudioFile("reference.wav");
 AudioSpectrum preset = analyzer.GetPresetTargetSpectrum(PlaybackSystem.ClubPA);
 
 MatcheringProfile profile = analyzer.CalculateProfile(mix, reference, sampleRate: 48000);
+
+// Against a preset there is an overload that also brings the preset's own AGC block
+MatcheringProfile presetProfile = analyzer.CalculateProfile(mix, PlaybackSystem.ClubPA, sampleRate: 48000);
 
 for (int band = 0; band &lt; 30; band++)
     eq.SetBandGain(band, BandCentre(band), profile.QFactors[band], profile.BandGainsDb[band]);

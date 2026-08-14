@@ -23,7 +23,7 @@ namespace OwnaudioNET.Features.Matchering
         /// <param name="tempDirectory">Where the intermediate wavs go, temp path if null.</param>
         /// <param name="eqOnlyMode">Skip the compressor on the base sample.</param>
         public void ProcessWithEnhancedPreset(string sourceFile, string outputFile,
-            PlaybackSystem system, string? tempDirectory = null, bool eqOnlyMode = true)
+            PlaybackSystem system, string? tempDirectory = null, bool eqOnlyMode = false)
         {
             if (string.IsNullOrEmpty(tempDirectory))
                 tempDirectory = Path.GetTempPath();
@@ -40,7 +40,7 @@ namespace OwnaudioNET.Features.Matchering
                 Log.Info($"Mode: {(eqOnlyMode ? "EQ Only" : "Full Effects Chain")}");
 
                 _applyPresetToBase(baseSampleFile, processedBaseSample, system, eqOnlyMode);
-                ProcessEQMatching(sourceFile, processedBaseSample, outputFile);
+                _matchToTarget(sourceFile, processedBaseSample, outputFile, _systemPresets[system]);
 
                 Log.Info($"Enhanced preset processing completed: {outputFile}");
             }
@@ -91,36 +91,44 @@ namespace OwnaudioNET.Features.Matchering
         }
 
         /// <summary>
-        /// Bakes the preset curve - and its compressor unless eqOnlyMode - into the buffer
-        /// in place, then puts the level back where it started.
+        /// Bakes the whole preset into the buffer in place - EQ, its own compressor unless
+        /// eqOnlyMode, then the level pushed to the preset's target loudness. What comes out
+        /// is what the preset is meant to sound like, so the matcher has something real to chase.
         /// </summary>
         private void _bakePresetIntoBase(float[] audioData, int sampleRate, int channels,
             PlaybackSystem system, bool eqOnlyMode)
         {
             var preset = _systemPresets[system];
 
-            float originalRMS = _calcRms(audioData);
+            float[] wanted = new float[_freqBands.Length];
+            for (int i = 0; i < wanted.Length; i++)
+                wanted[i] = Math.Clamp(preset.FrequencyResponse[i], -MaxBandCorrectionDb, MaxBandCorrectionDb);
 
-            var curve = _conservativeCurve(preset.FrequencyResponse);
-            var qFactors = _presetQFactors(curve);
+            float[] qFactors = _presetQFactors(wanted);
+            float[] bandGains = _deconvolveToBandGains(wanted, qFactors, sampleRate);
 
-            float totalBoosts = 0f;
-            foreach (float g in curve) if (g > 0) totalBoosts += g;
+            float maxBoost = 0f;
+            foreach (float g in bandGains) if (g > maxBoost) maxBoost = g;
 
-            float protectiveGain = 0.95f * Math.Max(0.7f, 1.0f - (totalBoosts * 0.03f));
+            if (maxBoost > 0f)
+            {
+                float preGain = MathF.Pow(10f, Math.Clamp(-(maxBoost + 2f), -12f, 0f) / 20f);
+                for (int i = 0; i < audioData.Length; i++) audioData[i] *= preGain;
 
-            for (int i = 0; i < audioData.Length; i++)
-                audioData[i] *= protectiveGain;
-
-            Log.Info($"Applied protective gain: {20 * Math.Log10(protectiveGain):F1}dB (total boosts: {totalBoosts:F1}dB)");
+                Log.Info($"Headroom for the preset boosts: {20 * MathF.Log10(preGain):F1}dB (max band {maxBoost:F1}dB)");
+            }
 
             var presetEQ = new Equalizer30BandEffect(sampleRate);
             for (int i = 0; i < _freqBands.Length; i++)
-                presetEQ.SetBandGain(i, _freqBands[i], qFactors[i], curve[i]);
+                presetEQ.SetBandGain(i, _freqBands[i], qFactors[i], bandGains[i]);
 
-            CompressorEffect? compressor = eqOnlyMode
-                ? null
-                : new CompressorEffect(CompressorEffect.DbToLinear(-15f), 1.8f, 50f, 200f, 2.0f, sampleRate);
+            CompressorEffect? compressor = eqOnlyMode ? null : new CompressorEffect(
+                CompressorEffect.DbToLinear(preset.Compression.Threshold),
+                preset.Compression.Ratio,
+                preset.Compression.AttackTime,
+                preset.Compression.ReleaseTime,
+                CompressorEffect.DbToLinear(preset.Compression.MakeupGain),
+                sampleRate);
 
             var audioConfig = new Ownaudio.Core.AudioConfig
             {
@@ -132,11 +140,14 @@ namespace OwnaudioNET.Features.Matchering
             presetEQ.Initialize(audioConfig);
             compressor?.Initialize(audioConfig);
 
-            Log.Info($"Applying {(eqOnlyMode ? "EQ-only" : "full")} {preset.Name} effects to base sample...");
+            Log.Info($"Applying {(eqOnlyMode ? "EQ-only" : "full")} {preset.Name} chain to base sample...");
+
+            if (compressor is not null)
+                Log.Info($"Preset compressor: {preset.Compression.Threshold:F1}dB, {preset.Compression.Ratio:F1}:1, " +
+                         $"{preset.Compression.AttackTime:F0}/{preset.Compression.ReleaseTime:F0}ms, makeup {preset.Compression.MakeupGain:F1}dB");
 
             int samplesPerChunk = 512 * channels;
             int totalSamples = (audioData.Length / channels) * channels;
-            float maxLevel = 0f;
 
             for (int offset = 0; offset < totalSamples; offset += samplesPerChunk)
             {
@@ -146,30 +157,53 @@ namespace OwnaudioNET.Features.Matchering
 
                 presetEQ.Process(chunk, frames);
                 compressor?.Process(chunk, frames);
-
-                for (int i = 0; i < chunk.Length; i++)
-                {
-                    float abs = Math.Abs(chunk[i]);
-                    if (abs > maxLevel) maxLevel = abs;
-
-                    if (abs > 0.95f)
-                        chunk[i] = Math.Sign(chunk[i]) * (0.95f + 0.05f * MathF.Tanh((abs - 0.95f) * 4f));
-                }
             }
 
-            Log.Info($"\nBase sample processed. Max level: {20 * Math.Log10(maxLevel):F1}dB");
+            _normalizeToPreset(audioData, totalSamples, channels, sampleRate, preset);
+        }
 
-            float levelCompensation = originalRMS / Math.Max(_calcRms(audioData), 1e-10f);
-            float finalMax = 0f;
+        /// <summary>
+        /// Pulls the baked sample up to the preset's target loudness and lets a limiter hold
+        /// the peaks - the way a loud master is actually made. The crest we measure afterwards
+        /// is then the preset's, which is what drives the compressor settings downstream.
+        /// </summary>
+        private void _normalizeToPreset(float[] audioData, int totalSamples, int channels,
+            int sampleRate, PlaybackPreset preset)
+        {
+            float wantedRms = MathF.Pow(10f, preset.TargetLoudness / 20f);
+            float gain = wantedRms / Math.Max(_calcRms(audioData), 1e-10f);
 
-            for (int i = 0; i < audioData.Length; i++)
+            for (int i = 0; i < audioData.Length; i++) audioData[i] *= gain;
+
+            Log.Info($"Level pushed by {20 * MathF.Log10(gain):+0.0;-0.0}dB toward {preset.TargetLoudness:F1}dBFS");
+
+            var limiter = new LimiterEffect(sampleRate, threshold: -0.5f, ceiling: -0.2f, release: 60f, lookAheadMs: 5f);
+            limiter.Initialize(new Ownaudio.Core.AudioConfig
             {
-                audioData[i] *= levelCompensation;
-                finalMax = Math.Max(finalMax, Math.Abs(audioData[i]));
+                SampleRate = sampleRate,
+                Channels = channels,
+                BufferSize = 512
+            });
+
+            int samplesPerChunk = 512 * channels;
+
+            for (int offset = 0; offset < totalSamples; offset += samplesPerChunk)
+            {
+                int count = Math.Min(samplesPerChunk, totalSamples - offset);
+                limiter.Process(audioData.AsSpan(offset, count), count / channels);
             }
 
-            Log.Info($"Level compensation applied: {20 * Math.Log10(levelCompensation):F1}dB");
-            Log.Info($"Final max level: {20 * Math.Log10(finalMax):F1}dB");
+            _compensateLimiterLatency(audioData, totalSamples, channels, limiter);
+
+            float peak = 0f;
+            for (int i = 0; i < audioData.Length; i++) peak = Math.Max(peak, Math.Abs(audioData[i]));
+
+            float trim = Math.Min(wantedRms / Math.Max(_calcRms(audioData), 1e-10f), 0.99f / Math.Max(peak, 1e-10f));
+            for (int i = 0; i < audioData.Length; i++) audioData[i] *= trim;
+
+            float achieved = _calcRms(audioData);
+            Log.Info($"Baked base sample: {20 * MathF.Log10(achieved):F1}dBFS RMS, crest {20 * MathF.Log10(peak * trim / achieved):F1}dB " +
+                     $"(preset asks {preset.TargetLoudness:F1}dBFS, {preset.DynamicRange:F1}dB)");
         }
 
         /// <summary>
@@ -191,52 +225,6 @@ namespace OwnaudioNET.Features.Matchering
                 Log.Error($"[Matchering] Embedded base sample could not be written to '{path}'", ex);
                 throw new Exception("Load error target audio data!", ex);
             }
-        }
-
-        /// <summary>
-        /// Tames the preset curve before it's used as a matchering target - full strength
-        /// presets overdrive the matcher badly.
-        /// </summary>
-        private float[] _conservativeCurve(float[] originalCurve)
-        {
-            var curve = new float[originalCurve.Length];
-
-            for (int i = 0; i < originalCurve.Length; i++)
-            {
-                float freq = _freqBands[i];
-
-                float factor = freq switch
-                {
-                    <= 63f => 0.75f,
-                    <= 250f => 0.8f,
-                    <= 1000f => 0.85f,
-                    <= 4000f => 0.85f,
-                    <= 8000f => 0.8f,
-                    _ => 0.75f
-                };
-
-                float maxBoost = freq switch
-                {
-                    < 100f => 3f,
-                    < 500f => 3f,
-                    < 2000f => 3.5f,
-                    < 5000f => 3.5f,
-                    < 10000f => 3f,
-                    _ => 3f
-                };
-
-                curve[i] = Math.Clamp(originalCurve[i] * factor, -4f, maxBoost);
-            }
-
-            Log.Info("Conservative preset curve created for matchering:");
-
-            for (int i = 0; i < curve.Length; i++)
-            {
-                if (Math.Abs(curve[i]) > 0.5f)
-                    Log.Info($"{_bandNames[i]}: {curve[i]:+0.1;-0.1}dB (was {originalCurve[i]:+0.1;-0.1}dB)");
-            }
-
-            return curve;
         }
 
         /// <summary>

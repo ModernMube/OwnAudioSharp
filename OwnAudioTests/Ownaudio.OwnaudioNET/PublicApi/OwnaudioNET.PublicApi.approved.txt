@@ -1149,9 +1149,10 @@ namespace OwnaudioNET.Features.Matchering
         public OwnaudioNET.Features.Matchering.AudioSpectrum AnalyzeAudioFile(string filePath) { }
         public void BatchProcessWithEnhancedPreset(string[] sourceFiles, string baseSampleFile, string outputDirectory, OwnaudioNET.Features.Matchering.PlaybackSystem system, string? fileNameSuffix = null) { }
         public OwnaudioNET.Features.Matchering.MatcheringProfile CalculateProfile(OwnaudioNET.Features.Matchering.AudioSpectrum source, OwnaudioNET.Features.Matchering.AudioSpectrum target, int sampleRate, float fixedQ = 4.318474, bool cutOnly = true) { }
-        public OwnaudioNET.Features.Matchering.AudioSpectrum GetPresetTargetSpectrum(OwnaudioNET.Features.Matchering.PlaybackSystem system, bool eqOnlyMode = true) { }
+        public OwnaudioNET.Features.Matchering.MatcheringProfile CalculateProfile(OwnaudioNET.Features.Matchering.AudioSpectrum source, OwnaudioNET.Features.Matchering.PlaybackSystem system, int sampleRate, float fixedQ = 4.318474, bool cutOnly = true, bool eqOnlyMode = false) { }
+        public OwnaudioNET.Features.Matchering.AudioSpectrum GetPresetTargetSpectrum(OwnaudioNET.Features.Matchering.PlaybackSystem system, bool eqOnlyMode = false) { }
         public void ProcessEQMatching(string sourceFile, string targetFile, string outputFile) { }
-        public void ProcessWithEnhancedPreset(string sourceFile, string outputFile, OwnaudioNET.Features.Matchering.PlaybackSystem system, string? tempDirectory = null, bool eqOnlyMode = true) { }
+        public void ProcessWithEnhancedPreset(string sourceFile, string outputFile, OwnaudioNET.Features.Matchering.PlaybackSystem system, string? tempDirectory = null, bool eqOnlyMode = false) { }
         public static System.Collections.Generic.Dictionary<OwnaudioNET.Features.Matchering.PlaybackSystem, OwnaudioNET.Features.Matchering.PlaybackPreset> GetAvailablePresets() { }
     }
     public class AudioSegment
@@ -1204,6 +1205,8 @@ namespace OwnaudioNET.Features.Matchering
     public sealed class MatcheringProfile
     {
         public MatcheringProfile() { }
+        public float AmpAttackSeconds { get; init; }
+        public float AmpReleaseSeconds { get; init; }
         public float[] BandGainsDb { get; init; }
         public float CompRatio { get; init; }
         public float CompThresholdDb { get; init; }

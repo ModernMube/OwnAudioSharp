@@ -71,6 +71,27 @@ namespace OwnaudioNET.Features.Matchering
             if (source is null) throw new ArgumentNullException(nameof(source));
             if (target is null) throw new ArgumentNullException(nameof(target));
 
+            return _profile(source, target, sampleRate, fixedQ, cutOnly, null);
+        }
+
+        /// <summary>
+        /// The same match, against a playback system preset. The target is the baked preset
+        /// sample, and the AGC numbers are the preset's own instead of the measured ones.
+        /// </summary>
+        /// <param name="eqOnlyMode">Leaves the preset compressor out of the target.</param>
+        public MatcheringProfile CalculateProfile(AudioSpectrum source, PlaybackSystem system, int sampleRate,
+            float fixedQ = NativeBandQ, bool cutOnly = true, bool eqOnlyMode = false)
+        {
+            if (source is null) throw new ArgumentNullException(nameof(source));
+
+            AudioSpectrum target = GetPresetTargetSpectrum(system, eqOnlyMode);
+
+            return _profile(source, target, sampleRate, fixedQ, cutOnly, _systemPresets[system]);
+        }
+
+        private MatcheringProfile _profile(AudioSpectrum source, AudioSpectrum target, int sampleRate,
+            float fixedQ, bool cutOnly, PlaybackPreset? preset)
+        {
             float[] wanted = _calcEqAdjustments(source, target);
             float shift = cutOnly ? _cutOnlyShift(wanted) : 0f;
 
@@ -83,8 +104,11 @@ namespace OwnaudioNET.Features.Matchering
             float[] qFactors = fixedQ > 0f ? _flatQ(fixedQ) : _optimalQFactors(wanted, source, target);
             float[] bandGains = _deconvolveToBandGains(wanted, qFactors, sampleRate);
 
-            DynamicAmpSettings amp = _ampSettings(source, target);
+            DynamicAmpSettings amp = preset?.DynamicAmp ?? _ampSettings(source, target);
             var comp = _compSettings(source, target);
+
+            if (preset is not null)
+                Log.Info($"AGC from the {preset.Name} preset: {amp.TargetLevel:F1}dB target, max {amp.MaxGain:F2}x");
 
             return new MatcheringProfile
             {
@@ -95,6 +119,8 @@ namespace OwnaudioNET.Features.Matchering
                 CompRatio = comp.Ratio,
                 TargetLoudness = amp.TargetLevel,
                 MaxGain = amp.MaxGain,
+                AmpAttackSeconds = amp.AttackTime,
+                AmpReleaseSeconds = amp.ReleaseTime,
                 SourceLoudness = source.Loudness,
                 SourceCrestDb = _crestDb(source),
                 TargetCrestDb = _crestDb(target),
@@ -138,7 +164,7 @@ namespace OwnaudioNET.Features.Matchering
         /// </summary>
         /// <param name="system"></param>
         /// <param name="eqOnlyMode">Leaves the preset compressor out of the bake.</param>
-        public AudioSpectrum GetPresetTargetSpectrum(PlaybackSystem system, bool eqOnlyMode = true)
+        public AudioSpectrum GetPresetTargetSpectrum(PlaybackSystem system, bool eqOnlyMode = false)
         {
             AudioSpectrum cached = _presetTargets.GetOrAdd((system, eqOnlyMode), key =>
             {
@@ -224,6 +250,16 @@ namespace OwnaudioNET.Features.Matchering
         /// Gain ceiling for the AGC.
         /// </summary>
         public float MaxGain { get; init; }
+
+        /// <summary>
+        /// AGC attack in seconds.
+        /// </summary>
+        public float AmpAttackSeconds { get; init; } = 0.1f;
+
+        /// <summary>
+        /// AGC release in seconds.
+        /// </summary>
+        public float AmpReleaseSeconds { get; init; } = 0.5f;
 
         public float SourceLoudness { get; init; }
 

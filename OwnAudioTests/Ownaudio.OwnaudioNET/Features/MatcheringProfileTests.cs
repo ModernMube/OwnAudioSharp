@@ -235,6 +235,83 @@ namespace Ownaudio.Test.OwnaudioNET.Features
                 $"the club preset only has {lowDiff:F2} dB more low end than the concert one - the curves are not getting baked in");
         }
 
+        /// <summary>
+        /// The declared preset curve has to be what the baked target actually measures -
+        /// that is the whole point of a preset. Compared between two presets so whatever
+        /// tilt the base sample has of its own cancels out.
+        /// </summary>
+        [Fact]
+        public void PresetCurveLandsInTheTarget()
+        {
+            var analyzer = new AudioAnalyzer();
+            var presets = AudioAnalyzer.GetAvailablePresets();
+
+            float[] club = analyzer.GetPresetTargetSpectrum(PlaybackSystem.ClubPA).FrequencyBands;
+            float[] studio = analyzer.GetPresetTargetSpectrum(PlaybackSystem.StudioMonitors).FrequencyBands;
+
+            float[] measured = new float[Bands];
+            float[] declared = new float[Bands];
+            float measuredOffset = 0f, declaredOffset = 0f;
+
+            for (int i = 0; i < Bands; i++)
+            {
+                measured[i] = Db(club[i]) - Db(studio[i]);
+                declared[i] = presets[PlaybackSystem.ClubPA].FrequencyResponse[i]
+                            - presets[PlaybackSystem.StudioMonitors].FrequencyResponse[i];
+
+                measuredOffset += measured[i];
+                declaredOffset += declared[i];
+            }
+
+            measuredOffset /= Bands;
+            declaredOffset /= Bands;
+
+            for (int i = 0; i < Bands; i++)
+            {
+                float err = (measured[i] - measuredOffset) - (declared[i] - declaredOffset);
+
+                Assert.True(Math.Abs(err) < 2.0f,
+                    $"{_centres[i]}Hz: the baked target is {err:F2} dB off the declared preset difference");
+            }
+        }
+
+        /// <summary>
+        /// The baked target has to carry the preset's own loudness, otherwise the AGC
+        /// downstream has nothing to chase.
+        /// </summary>
+        [Theory]
+        [InlineData(PlaybackSystem.ClubPA)]
+        [InlineData(PlaybackSystem.StudioMonitors)]
+        [InlineData(PlaybackSystem.RadioBroadcast)]
+        public void PresetTargetCarriesItsLoudness(PlaybackSystem system)
+        {
+            var analyzer = new AudioAnalyzer();
+            float wanted = AudioAnalyzer.GetAvailablePresets()[system].TargetLoudness;
+
+            float measured = analyzer.GetPresetTargetSpectrum(system).Loudness;
+
+            Assert.True(Math.Abs(measured - wanted) < 1.5f,
+                $"{system}: baked to {measured:F1} dBFS where the preset asks for {wanted:F1} dBFS");
+        }
+
+        /// <summary>
+        /// The preset overload stamps the AGC block from the preset itself, not from the
+        /// measured target.
+        /// </summary>
+        [Fact]
+        public void PresetProfileTakesItsAgcFromThePreset()
+        {
+            var analyzer = new AudioAnalyzer();
+            var amp = AudioAnalyzer.GetAvailablePresets()[PlaybackSystem.ClubPA].DynamicAmp;
+
+            var profile = analyzer.CalculateProfile(SpectrumFrom(Flat(-30f)), PlaybackSystem.ClubPA, 48000);
+
+            Assert.Equal(amp.TargetLevel, profile.TargetLoudness);
+            Assert.Equal(amp.MaxGain, profile.MaxGain);
+            Assert.Equal(amp.AttackTime, profile.AmpAttackSeconds);
+            Assert.Equal(amp.ReleaseTime, profile.AmpReleaseSeconds);
+        }
+
         private static float[] Tilt()
         {
             float[] curve = new float[Bands];

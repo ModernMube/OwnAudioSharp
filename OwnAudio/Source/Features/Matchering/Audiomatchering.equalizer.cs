@@ -290,8 +290,8 @@ namespace OwnaudioNET.Features.Matchering
 
             var dynamicAmplifier = new DynamicAmpEffect(
                 targetLevel: dynamicAmp.TargetLevel,
-                attackTimeSeconds: 0.2f,
-                releaseTimeSeconds: 0.8f,
+                attackTimeSeconds: dynamicAmp.AttackTime,
+                releaseTimeSeconds: dynamicAmp.ReleaseTime,
                 noiseThresholdDbOrLinear: -50.0f,
                 maxGainValue: maxGain,
                 sampleRateHz: sampleRate,
@@ -303,7 +303,7 @@ namespace OwnaudioNET.Features.Matchering
 
             Log.Info($"\n[3] DYNAMIC AMPLIFIER (AGC - Optimized):");
             Log.Info($"    Target Level: {dynamicAmp.TargetLevel:F1} dB");
-            Log.Info($"    Attack: 0.2s, Release: 0.8s (Fast & Musical)");
+            Log.Info($"    Attack: {dynamicAmp.AttackTime:F2}s, Release: {dynamicAmp.ReleaseTime:F2}s");
             Log.Info($"    Max Gain: {maxGain:F2}x ({20 * MathF.Log10(maxGain):+F1} dB - CAPPED)");
             Log.Info($"    Initial Gain: {headroomRecoveryGain:F2}x ({20 * MathF.Log10(headroomRecoveryGain):+F1} dB compensation)");
 

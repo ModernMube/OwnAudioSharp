@@ -182,9 +182,8 @@ Besides the offline renderers (file in, file out) it can stop one step earlier a
 var analyzer = new AudioAnalyzer();
 
 AudioSpectrum mix = analyzer.AnalyzeAudioBuffer(masterSum, 48000, 2);
-AudioSpectrum target = analyzer.GetPresetTargetSpectrum(PlaybackSystem.ClubPA);
 
-MatcheringProfile profile = analyzer.CalculateProfile(mix, target, 48000);
+MatcheringProfile profile = analyzer.CalculateProfile(mix, PlaybackSystem.ClubPA, 48000);
 
 for (int band = 0; band < 30; band++)
     eq.SetBandGain(band, BandCentre(band), profile.QFactors[band], profile.BandGainsDb[band]);
