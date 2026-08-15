@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using Ownaudio;
 using Ownaudio.Core;
-using OwnaudioNET.Monitoring;
 using OwnaudioNET.Synchronization;
 using OwnaudioNET.Core;
 using OwnaudioNET.Engine;
@@ -45,16 +44,6 @@ public sealed partial class AudioMixer : IDisposable
     /// Shared timeline clock every attached source syncs to.
     /// </summary>
     private readonly MasterClock _masterClock;
-
-    /// <summary>
-    /// Per-track metrics by id. Touched under _metricsLock from both mix and main thread.
-    /// </summary>
-    private readonly Dictionary<Guid, TrackPerformanceMetrics> _trackMetrics;
-
-    /// <summary>
-    /// Guards _trackMetrics. Held briefly, never across a blocking call.
-    /// </summary>
-    private readonly object _metricsLock = new();
 
     /// <summary>
     /// Kept around for the stop-without-dispose lifecycle.
@@ -206,6 +195,8 @@ public sealed partial class AudioMixer : IDisposable
     /// <summary>
     /// Underrun total — reserved, currently always zero.
     /// </summary>
+    [Obsolete("Nothing counts underruns on the mixer since the native chain took over rendering, so this " +
+        "always reads zero. Use AudioEngineWrapper.TotalUnderruns for the engine's own counter.")]
     public long TotalUnderruns => Interlocked.Read(ref _totalUnderruns);
 
     /// <summary>
@@ -231,6 +222,8 @@ public sealed partial class AudioMixer : IDisposable
     /// Fires when the device reports a buffer underrun.
     /// </summary>
 #pragma warning disable CS0067
+    [Obsolete("Never raised: the managed MixThread that used to detect underruns is gone. Subscribe to " +
+        "AudioEngineWrapper.BufferUnderrun, or to StreamFaulted for a native output fault.")]
     public event EventHandler<BufferUnderrunEventArgs>? BufferUnderrun;
 #pragma warning restore CS0067
 
@@ -242,7 +235,11 @@ public sealed partial class AudioMixer : IDisposable
     /// <summary>
     /// Fires when a clock-attached source can't hand over its frames in time (audible dropout).
     /// </summary>
+#pragma warning disable CS0067
+    [Obsolete("Never raised: dropout detection lived in the managed MixThread, which the native chain " +
+        "replaced. The native side reports faults through StreamFaulted instead.")]
     public event EventHandler<TrackDropoutEventArgs>? TrackDropout;
+#pragma warning restore CS0067
 
     /// <summary>
     /// Fires once when every source has hit EndOfStream. Resets when a new source is added.
@@ -312,8 +309,6 @@ public sealed partial class AudioMixer : IDisposable
             sampleRate: sampleRate,
             channels: channels,
             mode: ClockMode.Realtime);
-
-        _trackMetrics = new Dictionary<Guid, TrackPerformanceMetrics>();
 
         _masterEffects = new List<IEffectProcessor>();
 

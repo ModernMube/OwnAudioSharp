@@ -81,34 +81,27 @@ namespace OwnaudioNET.Effects.SmartMaster
                     return;
                 }
                 
-                var inputSource = new InputSource(OwnaudioNET.OwnaudioNet.Engine, 2048);
-                inputSource.Volume = _micInputGain;
-                inputSource.Play();
-                
-                int frameCount = 512;
-                int sampleCount = frameCount * _config.Channels;
-                float[] buffer = new float[sampleCount];
-                
                 var analyzer = new SmartMasterSpectrumAnalyzer(_config.SampleRate);
-                
+
+                //We pull the engine's capture queue directly - InputSource.ReadSamples is silence
+                //since the capture writes straight into the native track ring.
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    int framesRead = inputSource.ReadSamples(buffer.AsSpan(), frameCount);
-                    
-                    if (framesRead > 0)
+                    float[]? captured = OwnaudioNET.OwnaudioNet.Receive(out int sampleCount);
+
+                    if (captured != null)
                     {
-                        int actualSampleCount = framesRead * _config.Channels;
-                        float rmsLevel = analyzer.CalculateRMS(buffer.AsSpan(0, actualSampleCount));
-                        float rmsDb = 20f * (float)Math.Log10(Math.Max(rmsLevel, 1e-10f));
-                        
-                        _lastMicLevel = rmsDb;
+                        if (sampleCount > 0)
+                        {
+                            float rmsLevel = analyzer.CalculateRMS(captured.AsSpan(0, sampleCount)) * _micInputGain;
+                            _lastMicLevel = 20f * (float)Math.Log10(Math.Max(rmsLevel, 1e-10f));
+                        }
+
+                        OwnaudioNET.OwnaudioNet.ReturnInputBuffer(captured);
                     }
-                    
+
                     Thread.Sleep(50); // Update ~20 times per second
                 }
-                
-                inputSource.Stop();
-                inputSource.Dispose();
             }
             catch (Exception ex)
             {

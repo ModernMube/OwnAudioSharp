@@ -214,6 +214,9 @@ public sealed partial class AudioMixer
     /// (maxLatency - itsLatency) samples so they land together at the output.
     /// Call it after all sources are in and before Start().
     /// </summary>
+    [Obsolete("The PDC ring it sets up only runs in the managed SourceWithEffects.ReadSamples path, which " +
+        "the rust-native chain bypasses — calling this changes nothing you can hear. A hosted VST3 stays " +
+        "time-aligned on its own through the native bypass.")]
     public void ApplyPluginDelayCompensation()
     {
         _throwIfDisposed();
@@ -240,7 +243,11 @@ public sealed partial class AudioMixer
         foreach (var src in _sources.Values)
         {
             if (src is SourceWithEffects swe)
+            {
+#pragma warning disable CS0618
                 swe.SetDelayCompensation(_maxLatency - swe.EffectLatencySamples);
+#pragma warning restore CS0618
+            }
         }
 
         Log.Info($"[Mixer] Plugin delay compensation applied to {_count} tracks, aligned to {_maxLatency} samples");

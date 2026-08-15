@@ -149,6 +149,45 @@ public sealed partial class StreamingSource : IRustNativeChainSource
         if (_rustTrack == null) return;
 
         _rustTrack.Gain = Volume;
+        _rustTrack.Pan = Pan;
+        _rustTrack.SetStretchAlwaysOn(true);
+        _rustTrack.Tempo = _tempo;
+        _rustTrack.PitchSemitones = _pitchShift;
+    }
+
+    private float _tempo = 1.0f;
+    private float _pitchShift = 0.0f;
+
+    /// <summary>
+    /// Tempo multiplier, mirrored onto the native track.
+    /// </summary>
+    public override float Tempo
+    {
+        get => _tempo;
+        set
+        {
+            _tempo = Math.Clamp(value, AudioConstants.MinTempo, AudioConstants.MaxTempo);
+            lock (_rustBackendLock)
+            {
+                if (_rustTrack is not null) _rustTrack.Tempo = _tempo;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Pitch shift in semitones, -12..+12.
+    /// </summary>
+    public override float PitchShift
+    {
+        get => _pitchShift;
+        set
+        {
+            _pitchShift = Math.Clamp(value, -12.0f, 12.0f);
+            lock (_rustBackendLock)
+            {
+                if (_rustTrack is not null) _rustTrack.PitchSemitones = _pitchShift;
+            }
+        }
     }
 
     /// <summary>

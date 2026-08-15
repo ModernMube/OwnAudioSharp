@@ -14,7 +14,7 @@ namespace OwnaudioNET.Sources;
 /// Decorator that bolts an effect chain onto any IAudioSource. Delegates everything to the inner
 /// source, intercepts ReadSamples to run the fx. Effect list is thread-safe.
 /// </summary>
-public sealed class SourceWithEffects : IAudioSource, IMasterClockSource
+public sealed class SourceWithEffects : IAudioSource, IMasterClockSource, ISynchronizable
 {
     private readonly IAudioSource _innerSource;
 
@@ -23,6 +23,11 @@ public sealed class SourceWithEffects : IAudioSource, IMasterClockSource
     /// clock members don't type-test on every call.
     /// </summary>
     private readonly IMasterClockSource? _clockInner;
+
+    /// <summary>
+    /// The inner source when it can be sync-grouped, null for a hand-rolled IAudioSource.
+    /// </summary>
+    private readonly ISynchronizable? _syncInner;
 
     /// <summary>
     /// The inner source as a BaseAudioSource, null for a hand-rolled IAudioSource. Channel
@@ -86,6 +91,7 @@ public sealed class SourceWithEffects : IAudioSource, IMasterClockSource
     {
         _innerSource = source ?? throw new ArgumentNullException(nameof(source));
         _clockInner = source as IMasterClockSource;
+        _syncInner = source as ISynchronizable;
         _baseInner = source as BaseAudioSource;
         _effects = new List<IEffectProcessor>();
     }
@@ -259,6 +265,101 @@ public sealed class SourceWithEffects : IAudioSource, IMasterClockSource
 
     #endregion
 
+    #region Sync group (delegated to inner source)
+
+    /// <summary>
+    /// True when the wrapped source can be sync-grouped at all. A decorator over a plain
+    /// IAudioSource still exposes the surface, it just has nothing to hand the calls to.
+    /// </summary>
+    public bool SupportsSyncGroup => _syncInner is not null;
+
+    /// <inheritdoc/>
+    public long SamplePosition => _syncInner?.SamplePosition ?? 0L;
+
+    /// <inheritdoc/>
+    public string? SyncGroupId
+    {
+        get => _syncInner?.SyncGroupId;
+        set
+        {
+            if (_syncInner is null) { _warnNoSync(nameof(SyncGroupId)); return; }
+            _syncInner.SyncGroupId = value;
+        }
+    }
+
+    /// <inheritdoc/>
+    public bool IsSynchronized
+    {
+        get => _syncInner?.IsSynchronized ?? false;
+        set
+        {
+            if (_syncInner is null) { _warnNoSync(nameof(IsSynchronized)); return; }
+            _syncInner.IsSynchronized = value;
+        }
+    }
+
+    /// <summary>
+    /// Snaps the wrapped source back, then drops the effect tails — after a jump they'd
+    /// smear audio from the old position over the new one.
+    /// </summary>
+    /// <param name="samplePosition"></param>
+    public void ResyncTo(long samplePosition)
+    {
+        _throwIfDisposed();
+
+        if (_syncInner is null) { _warnNoSync(nameof(ResyncTo)); return; }
+
+        _syncInner.ResyncTo(samplePosition);
+        _resetEffectsAndDelay();
+    }
+
+    /// <summary>
+    /// One line per wrapper about a sync call the inner source can't take.
+    /// </summary>
+    /// <param name="member"></param>
+    private void _warnNoSync(string member)
+    {
+        Log.Warning($"[SourceFx] {member} ignored on source '{Id}': {_innerSource.GetType().Name} cannot be sync-grouped");
+    }
+
+    #endregion
+
+    #region Metering (delegated to inner source)
+
+    /// <summary>
+    /// L/R levels of the wrapped source. Zero for a hand-rolled IAudioSource, which keeps
+    /// no meters. Post-fx metering has to come off an EffectTap, not from here — the
+    /// native track's peaks are what this reads.
+    /// </summary>
+    public (float left, float right) OutputLevels => _baseInner?.OutputLevels ?? (0f, 0f);
+
+    /// <summary>
+    /// Fires when the wrapped source's position moved noticeably. Throttled by the source.
+    /// </summary>
+    public event EventHandler? PositionChanged
+    {
+        add
+        {
+            if (_baseInner is null) { _warnNoMeters(nameof(PositionChanged)); return; }
+            _baseInner.PositionChanged += value;
+        }
+        remove
+        {
+            if (_baseInner is not null) _baseInner.PositionChanged -= value;
+        }
+    }
+
+    /// <summary>
+    /// Same idea as _warnNoClock, for the metering surface.
+    /// </summary>
+    /// <param name="member"></param>
+    private void _warnNoMeters(string member)
+    {
+        Log.Warning($"[SourceFx] {member} ignored on source '{Id}': {_innerSource.GetType().Name} keeps no meters");
+    }
+
+    #endregion
+
     #region Effect Management
 
     /// <summary>
@@ -403,6 +504,8 @@ public sealed class SourceWithEffects : IAudioSource, IMasterClockSource
     /// Zero disables it and frees the buffer.
     /// </summary>
     /// <param name="samples"></param>
+    [Obsolete("The ring it feeds only runs in the managed ReadSamples path; the rust-native chain renders " +
+        "the track natively and never touches it, so this has no audible effect.")]
     public void SetDelayCompensation(int samples)
     {
         _throwIfDisposed();

@@ -176,15 +176,8 @@ namespace OwnaudioNET.Effects.SmartMaster
                     }
                 }
                 
-                var noiseSource = new SampleSource(channelAudio, _config);
-                noiseSource.Loop = false;
-                
-                var inputSource = new InputSource(OwnaudioNET.OwnaudioNet.Engine, 8192);
-                inputSource.Volume = micInputGain;
-                
-                noiseSource.Play();
-                inputSource.Play();
-                
+                int noiseCursor = 0;
+
                 int playbackFrames = _config.SampleRate * 2;
                 int playbackSamples = playbackFrames * _config.Channels;
                 const int chunkFrames = 512;
@@ -222,7 +215,7 @@ namespace OwnaudioNET.Effects.SmartMaster
                                 playbackBuffer = new float[framesToPlay * _config.Channels];
                             }
 
-                            int samplesPlayed = noiseSource.ReadSamples(playbackBuffer.AsSpan(), framesToPlay);
+                            int samplesPlayed = _takeNoise(channelAudio, ref noiseCursor, playbackBuffer.AsSpan(), framesToPlay);
                             if (samplesPlayed > 0)
                             {
                                 OwnaudioNET.OwnaudioNet.Send(playbackBuffer.AsSpan(0, samplesPlayed * _config.Channels));
@@ -230,33 +223,19 @@ namespace OwnaudioNET.Effects.SmartMaster
                             }
                         }
                     }
-                    
+
                     if (totalPlayed > _config.SampleRate * 300 / 1000)
                     {
                         int framesToRecord = Math.Min(512, recordFrames - totalRead);
                         if (framesToRecord > 0)
-                        {
-                            int framesRecorded = inputSource.ReadSamples(
-                                recordedBuffer.AsSpan(totalRead * _config.Channels), 
-                                framesToRecord);
-                            if (framesRecorded > 0)
-                            {
-                                totalRead += framesRecorded;
-                            }
-                        }
+                            totalRead += _captureInto(recordedBuffer, totalRead, framesToRecord, micInputGain);
                     }
-                    
+
                     await Task.Delay(1, cancellationToken);
                 }
-                
-                await FadeOutSourceAsync(noiseSource, cancellationToken);
-                
-                noiseSource.Stop();
-                inputSource.Stop();
-                
-                noiseSource.Dispose();
-                inputSource.Dispose();
-                
+
+                await FadeOutSourceAsync(channelAudio, noiseCursor, cancellationToken);
+
                 var analyzer = new SmartMasterSpectrumAnalyzer(_config.SampleRate);
                 
                 float rmsLevel;
@@ -317,15 +296,8 @@ namespace OwnaudioNET.Effects.SmartMaster
                     }
                 }
                 
-                var noiseSource = new SampleSource(channelAudio, _config);
-                noiseSource.Loop = false;
-                
-                var inputSource = new InputSource(OwnaudioNET.OwnaudioNet.Engine, 16384);
-                inputSource.Volume = micInputGain;
-                
-                noiseSource.Play();
-                inputSource.Play();
-                
+                int noiseCursor = 0;
+
                 int playbackFrames = _config.SampleRate * 4;
                 int playbackSamples = playbackFrames * _config.Channels;
                 const int chunkFrames = 512;
@@ -363,7 +335,7 @@ namespace OwnaudioNET.Effects.SmartMaster
                                 playbackBuffer = new float[framesToPlay * _config.Channels];
                             }
 
-                            int samplesPlayed = noiseSource.ReadSamples(playbackBuffer.AsSpan(), framesToPlay);
+                            int samplesPlayed = _takeNoise(channelAudio, ref noiseCursor, playbackBuffer.AsSpan(), framesToPlay);
                             if (samplesPlayed > 0)
                             {
                                 OwnaudioNET.OwnaudioNet.Send(playbackBuffer.AsSpan(0, samplesPlayed * _config.Channels));
@@ -371,33 +343,19 @@ namespace OwnaudioNET.Effects.SmartMaster
                             }
                         }
                     }
-                    
+
                     if (totalPlayed > _config.SampleRate * 500 / 1000)
                     {
                         int framesToRecord = Math.Min(512, recordFrames - totalRead);
                         if (framesToRecord > 0)
-                        {
-                            int framesRecorded = inputSource.ReadSamples(
-                                recordedBuffer.AsSpan(totalRead * _config.Channels), 
-                                framesToRecord);
-                            if (framesRecorded > 0)
-                            {
-                                totalRead += framesRecorded;
-                            }
-                        }
+                            totalRead += _captureInto(recordedBuffer, totalRead, framesToRecord, micInputGain);
                     }
-                    
+
                     await Task.Delay(1, cancellationToken);
                 }
-                
-                await FadeOutSourceAsync(noiseSource, cancellationToken);
 
-                noiseSource.Stop();
-                inputSource.Stop();
-                
-                noiseSource.Dispose();
-                inputSource.Dispose();
-                
+                await FadeOutSourceAsync(channelAudio, noiseCursor, cancellationToken);
+
                 Log.Info($"[SmartMaster] Spectrum recording completed: {totalRead}/{recordFrames} frames");
                 
                 var analyzer = new SmartMasterSpectrumAnalyzer(_config.SampleRate);
@@ -639,9 +597,61 @@ namespace OwnaudioNET.Effects.SmartMaster
         }
 
         /// <summary>
-        /// Continues playing the source for a short time with a fade-out to prevent clicks.
+        /// Copies the next chunk out of the pre-rendered noise and moves the cursor on.
+        /// We push the noise ourselves through Send instead of letting a source play it —
+        /// a played SampleSource would render on its own native track and we'd hear it twice.
         /// </summary>
-        private async Task FadeOutSourceAsync(SampleSource source, CancellationToken cancellationToken)
+        /// <param name="noise">interleaved noise buffer</param>
+        /// <param name="cursor">sample cursor into it, advanced by what we took</param>
+        private int _takeNoise(float[] noise, ref int cursor, Span<float> dest, int frames)
+        {
+            int _want = Math.Min(frames * _config.Channels, noise.Length - cursor);
+            if (_want <= 0) return 0;
+
+            noise.AsSpan(cursor, _want).CopyTo(dest);
+            cursor += _want;
+
+            return _want / _config.Channels;
+        }
+
+        /// <summary>
+        /// Drains whatever the engine captured into dest at frameOffset, scaled by gain.
+        /// InputSource can't do this any more — its ReadSamples is silence on the native
+        /// chain — so we pull the engine's own capture queue.
+        /// </summary>
+        /// <param name="maxFrames">how much room is left in dest</param>
+        private int _captureInto(float[] dest, int frameOffset, int maxFrames, float gain)
+        {
+            int _channels = _config.Channels;
+            int _written = 0;
+
+            while (_written < maxFrames)
+            {
+                float[]? _captured = OwnaudioNET.OwnaudioNet.Receive(out int _sampleCount);
+                if (_captured == null || _sampleCount <= 0)
+                {
+                    if (_captured != null) OwnaudioNET.OwnaudioNet.ReturnInputBuffer(_captured);
+                    break;
+                }
+
+                int _frames = Math.Min(_sampleCount / _channels, maxFrames - _written);
+                int _at = (frameOffset + _written) * _channels;
+
+                for (int i = 0; i < _frames * _channels; i++)
+                    dest[_at + i] = _captured[i] * gain;
+
+                OwnaudioNET.OwnaudioNet.ReturnInputBuffer(_captured);
+                _written += _frames;
+            }
+
+            return _written;
+        }
+
+        /// <summary>
+        /// Pushes a short fade-out tail from where the noise cursor stopped, so the run
+        /// doesn't end on a click.
+        /// </summary>
+        private async Task FadeOutSourceAsync(float[] noise, int cursor, CancellationToken cancellationToken)
         {
             try
             {
@@ -651,7 +661,7 @@ namespace OwnaudioNET.Effects.SmartMaster
                 int channels = _config.Channels;
                 float[] buffer = new float[fadeFrames * channels];
 
-                int framesRead = source.ReadSamples(buffer.AsSpan(), fadeFrames);
+                int framesRead = _takeNoise(noise, ref cursor, buffer.AsSpan(), fadeFrames);
 
                 if (framesRead > 0)
                 {

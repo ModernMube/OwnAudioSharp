@@ -246,6 +246,11 @@ public sealed partial class AudioMixer
     private ulong _rustLastStreamErrorCount;
 
     /// <summary>
+    /// Latches PlaybackEnded so the tick raises it once per run, not every 15ms.
+    /// </summary>
+    private bool _rustPlaybackEndedRaised;
+
+    /// <summary>
     /// Engine whose own push output we closed while the session drives the device.
     /// </summary>
     private RustAudioEngine? _rustReleasedEngine;
@@ -990,6 +995,7 @@ public sealed partial class AudioMixer
                 ReconcileRustTrackEffectsOnce();
                 DriveRustNativeSyncOnce();
                 _advanceMasterClockFromTracks();
+                PollRustPlaybackEndedOnce();
                 PollRustStreamFaultOnce();
 
                 _rustSyncConsecutiveErrors = 0;
@@ -1003,6 +1009,38 @@ public sealed partial class AudioMixer
 
             Thread.Sleep(RustControlSyncIntervalMs);
         }
+    }
+
+    /// <summary>
+    /// Raises PlaybackEnded once every attached source has run out. Sources sit on the native
+    /// EOS latch, so this is just the tick noticing that none of them is playing any more.
+    /// A source still Playing (or a fresh one showing up) re-arms the latch.
+    /// </summary>
+    internal void PollRustPlaybackEndedOnce()
+    {
+        IAudioSource[] _sources = Volatile.Read(ref _rustSourceSnapshot);
+        if (_sources.Length == 0)
+        {
+            _rustPlaybackEndedRaised = false;
+            return;
+        }
+
+        bool _allDone = true;
+        foreach (IAudioSource source in _sources)
+        {
+            if (source.State != AudioState.EndOfStream) { _allDone = false; break; }
+        }
+
+        if (!_allDone)
+        {
+            _rustPlaybackEndedRaised = false;
+            return;
+        }
+
+        if (_rustPlaybackEndedRaised) return;
+
+        _rustPlaybackEndedRaised = true;
+        RaisePlaybackEnded();
     }
 
     /// <summary>

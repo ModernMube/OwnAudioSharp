@@ -131,7 +131,10 @@ public sealed class FileTrack : IDisposable
 
             int code = OwnAudioNative.ownaudio_v1_file_source_seek(_sourceHandle.DangerousGetHandle(), frame);
             ErrorCodeMapper.ThrowIfError(code, nameof(Seek));
+
+            //The poll stopped itself when it last fired, so a seek after EOS has to wind it back up
             _completedRaised = false;
+            _finishPoll?.Change(FinishPollMilliseconds, FinishPollMilliseconds);
         }
     }
 

@@ -101,6 +101,7 @@ public sealed partial class SampleSource : IRustNativeChainSource
             {
                 MemoryTrack _memoryTrack = _session.AddMemoryTrack(GetRustSampleSnapshot(), Loop);
                 _ownedRustSession = _session;
+                _rebindFinishedHandler(_memoryTrack);
                 _rustMemoryTrack = _memoryTrack;
                 _rustTrack = _memoryTrack.Track;
                 _rustBackendAttached = false;
@@ -132,12 +133,14 @@ public sealed partial class SampleSource : IRustNativeChainSource
             //Played standalone before being added to a mixer? Kill that transient backend, re-home onto the shared track.
             if (_ownedRustSession != null)
             {
+                _rebindFinishedHandler(null);
                 _ownedRustSession.Dispose();
                 _ownedRustSession = null;
                 _rustMemoryTrack = null;
                 _rustTrack = null;
             }
 
+            _rebindFinishedHandler(memoryTrack);
             _rustTrack = track;
             _rustMemoryTrack = memoryTrack;
             _rustBackendAttached = true;
@@ -156,6 +159,7 @@ public sealed partial class SampleSource : IRustNativeChainSource
         {
             if(!_rustBackendAttached) return;
 
+            _rebindFinishedHandler(null);
             _rustTrack = null;
             _rustMemoryTrack = null;
             _rustBackendAttached = false;
@@ -164,14 +168,74 @@ public sealed partial class SampleSource : IRustNativeChainSource
     }
 
     /// <summary>
-    /// Pushes our control state (gain, loop) onto the backing track. Call under the backend lock.
+    /// Moves our EOS handler over to another memory track, dropping it off the old one.
+    /// Call under the backend lock.
+    /// </summary>
+    /// <param name="next">the track to listen on, null to only unhook</param>
+    private void _rebindFinishedHandler(MemoryTrack? next)
+    {
+        if (_rustMemoryTrack is not null) _rustMemoryTrack.Completed -= _onRustTrackCompleted;
+        if (next is not null) next.Completed += _onRustTrackCompleted;
+    }
+
+    /// <summary>
+    /// Native end of buffer. Fires on a timer thread.
+    /// </summary>
+    private void _onRustTrackCompleted(object? sender, TrackFeedCompletedEventArgs e)
+    {
+        if (_disposed || Loop) return;
+
+        State = AudioState.EndOfStream;
+    }
+
+    /// <summary>
+    /// Pushes our control state (gain, pan, loop) onto the backing track. Call under the backend lock.
     /// </summary>
     private void _applyControlState()
     {
         if (_rustTrack == null) return;
 
         _rustTrack.Gain = Volume;
+        _rustTrack.Pan = Pan;
+        _rustTrack.SetStretchAlwaysOn(true);
+        _rustTrack.Tempo = _tempo;
+        _rustTrack.PitchSemitones = _pitchShift;
         if (_rustMemoryTrack != null) _rustMemoryTrack.Loop = Loop;
+    }
+
+    private float _tempo = 1.0f;
+    private float _pitchShift = 0.0f;
+
+    /// <summary>
+    /// Tempo multiplier, mirrored onto the native track.
+    /// </summary>
+    public override float Tempo
+    {
+        get => _tempo;
+        set
+        {
+            _tempo = Math.Clamp(value, AudioConstants.MinTempo, AudioConstants.MaxTempo);
+            lock (_rustBackendLock)
+            {
+                if (_rustTrack is not null) _rustTrack.Tempo = _tempo;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Pitch shift in semitones, -12..+12. Goes straight to the native stretch stage.
+    /// </summary>
+    public override float PitchShift
+    {
+        get => _pitchShift;
+        set
+        {
+            _pitchShift = Math.Clamp(value, -12.0f, 12.0f);
+            lock (_rustBackendLock)
+            {
+                if (_rustTrack is not null) _rustTrack.PitchSemitones = _pitchShift;
+            }
+        }
     }
 
     /// <summary>
@@ -267,6 +331,8 @@ public sealed partial class SampleSource : IRustNativeChainSource
     {
         lock (_rustBackendLock)
         {
+            _rebindFinishedHandler(null);
+
             if (!_rustBackendAttached) _ownedRustSession?.Dispose();
 
             _ownedRustSession = null;

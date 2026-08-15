@@ -218,6 +218,8 @@ namespace OwnaudioNET.Effects
         /// <summary>
         /// Input gain in front of the tank.
         /// </summary>
+        [Obsolete("The native reverb has no input-gain param, so this never reaches the engine — it only " +
+            "moves the managed Process path. Drive the send with Mix instead.")]
         public float Gain
         {
             get => _gain;

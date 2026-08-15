@@ -73,9 +73,14 @@ public partial class BaseAudioSource
         {
             _lastPositionReported = Position;
             _lastPositionUpdate = _now;
-            PositionChanged?.Invoke(this, EventArgs.Empty);
+            OnPositionChanged();
         }
     }
+
+    /// <summary>
+    /// Fires PositionChanged, no throttling.
+    /// </summary>
+    protected void OnPositionChanged() => PositionChanged?.Invoke(this, EventArgs.Empty);
 
     /// <summary>
     /// Hook for derived classes - metering + position event after a read.

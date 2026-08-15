@@ -68,6 +68,7 @@ public sealed partial class InputSource : IRustNativeChainSource
             _rustTrack = track;
             _rustInputTrack = inputTrack;
             _rustTrack.Gain = Volume;
+            _rustTrack.Pan = Pan;
 
             //Already playing before attach? Start capture and track so it's audible right away.
             if (State == AudioState.Playing)

@@ -164,6 +164,26 @@ public class CompressorEffectDspTests
     }
 
     /// <summary>
+    /// The managed threshold has to clamp where the native one does, otherwise what you read
+    /// back off the effect is not what the engine is running.
+    /// </summary>
+    [Theory]
+    [InlineData(-80.0f, -60.0f)]
+    [InlineData(-60.0f, -60.0f)]
+    [InlineData(-20.0f, -20.0f)]
+    [InlineData(0.0f, 0.0f)]
+    [InlineData(12.0f, 0.0f)]
+    public void ThresholdClampsToTheNativeWindow(float set, float expected)
+    {
+        using (var _fx = new CompressorEffect(CompressorPreset.Default, Rate))
+        {
+            _fx.Threshold = set;
+
+            _fx.Threshold.Should().BeApproximately(expected, 0.01f);
+        }
+    }
+
+    /// <summary>
     /// Compressing a steady tone should not turn it into a different waveform.
     /// </summary>
     [Fact]

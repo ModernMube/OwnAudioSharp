@@ -133,6 +133,17 @@ public abstract partial class BaseAudioSource : IAudioSource
     }
 
     /// <summary>
+    /// Drops the source into EndOfStream without waiting for the native latch. Test hook —
+    /// nothing renders under the mock engine, so the real EOS never arrives there.
+    /// </summary>
+    internal void MarkEndOfStreamForTests() => State = AudioState.EndOfStream;
+
+    /// <summary>
+    /// Fires PositionChanged without the throttle. Test hook.
+    /// </summary>
+    internal void RaisePositionChangedForTests() => OnPositionChanged();
+
+    /// <summary>
     /// Fires StateChanged.
     /// </summary>
     /// <param name="e"></param>

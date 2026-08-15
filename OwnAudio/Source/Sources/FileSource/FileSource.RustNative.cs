@@ -111,6 +111,7 @@ public partial class FileSource : IRustNativeChainSource
             {
                 FileTrack _fileTrack = _session.AddFileTrack(_path);
                 _ownedRustSession = _session;
+                _rebindFinishedHandler(_fileTrack);
                 _rustFileTrack = _fileTrack;
                 _rustTrack = _fileTrack.Track;
                 _rustBackendAttached = false;
@@ -145,12 +146,14 @@ public partial class FileSource : IRustNativeChainSource
             //We drop the private session if Play() ran before AddSource, the mixer track takes over
             if (_ownedRustSession is not null)
             {
+                _rebindFinishedHandler(null);
                 _ownedRustSession.Dispose();
                 _ownedRustSession = null;
                 _rustFileTrack = null;
                 _rustTrack = null;
             }
 
+            _rebindFinishedHandler(fileTrack);
             _rustTrack = track;
             _rustFileTrack = fileTrack;
             _rustBackendAttached = true;
@@ -170,12 +173,36 @@ public partial class FileSource : IRustNativeChainSource
         {
             if (!_rustBackendAttached) return;
 
+            _rebindFinishedHandler(null);
             _rustTrack = null;
             _rustFileTrack = null;
             _rustBackendAttached = false;
             _rustPositionBaseSeconds = 0.0;
             _rustProjectBaseSeconds = 0.0;
         }
+    }
+
+    /// <summary>
+    /// Hooks our EOS handler onto a file track and drops it off the previous one. The native
+    /// decoder latches the end itself, we just listen. Call under _rustBackendLock.
+    /// </summary>
+    /// <param name="next">the file track to listen on, null to only unhook</param>
+    private void _rebindFinishedHandler(FileTrack? next)
+    {
+        if (_rustFileTrack is not null) _rustFileTrack.Completed -= _onRustTrackCompleted;
+        if (next is not null) next.Completed += _onRustTrackCompleted;
+    }
+
+    /// <summary>
+    /// Native end-of-stream: the decoder is done and the prefetch ring is drained. Fires on a
+    /// timer thread, so StateChanged handlers have to cope with that.
+    /// </summary>
+    private void _onRustTrackCompleted(object? sender, TrackFeedCompletedEventArgs e)
+    {
+        if (_disposed || Loop) return;
+
+        _isEndOfStream = true;
+        State = AudioState.EndOfStream;
     }
 
     /// <summary>
@@ -186,6 +213,7 @@ public partial class FileSource : IRustNativeChainSource
         if (_rustTrack is null) return;
 
         _rustTrack.Gain = Volume;
+        _rustTrack.Pan = Pan;
         //Stretch stage pinned on so the first tempo change lands on a warm FIFO, no click
         _rustTrack.SetStretchAlwaysOn(true);
         _rustTrack.Tempo = _tempo;
@@ -214,6 +242,7 @@ public partial class FileSource : IRustNativeChainSource
     private void _rustNativePlay()
     {
         _ensureRustBackendForTransport();
+        _isEndOfStream = false;
 
         lock (_rustBackendLock)
         {
@@ -347,6 +376,8 @@ public partial class FileSource : IRustNativeChainSource
     {
         lock (_rustBackendLock)
         {
+            _rebindFinishedHandler(null);
+
             if (!_rustBackendAttached) _ownedRustSession?.Dispose();
 
             _ownedRustSession = null;

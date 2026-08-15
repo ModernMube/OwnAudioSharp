@@ -61,11 +61,13 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Fires TrackDropout with the given details.
+    /// Fires TrackDropout with the given details. Nothing calls it since the mix thread went away.
     /// </summary>
     /// <param name="e"></param>
     internal void RaiseTrackDropout(TrackDropoutEventArgs e)
     {
+#pragma warning disable CS0618
         TrackDropout?.Invoke(this, e);
+#pragma warning restore CS0618
     }
 }

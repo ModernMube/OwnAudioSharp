@@ -141,7 +141,10 @@ public sealed class MemoryTrack : IDisposable
 
             int code = OwnAudioNative.ownaudio_v1_memory_source_seek(_sourceHandle.DangerousGetHandle(), frame);
             ErrorCodeMapper.ThrowIfError(code, nameof(Seek));
+
+            //Same as Reload: the poll shut itself off when it fired, a seek has to wake it up
             _completedRaised = false;
+            _finishPoll?.Change(FinishPollMilliseconds, FinishPollMilliseconds);
         }
     }
 

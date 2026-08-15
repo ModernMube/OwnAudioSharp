@@ -337,6 +337,8 @@ public partial class FileSource : BaseAudioSource, ISynchronizable, IMasterClock
     /// <summary>
     /// Kept for API compatibility, the native engine buffers on its own so this is a no-op.
     /// </summary>
+    [Obsolete("Empty since 4.0 — the native file track runs its own prefetch, there is nothing left to " +
+        "pre-buffer from managed code.")]
     public void PreBuffer()
     {
         ThrowIfDisposed();

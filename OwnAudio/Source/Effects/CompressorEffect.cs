@@ -51,6 +51,13 @@ namespace OwnaudioNET.Effects
     /// </summary>
     public sealed class CompressorEffect : IEffectProcessor
     {
+        /// <summary>
+        /// Threshold window, mirrors the native compressor's clamp.
+        /// </summary>
+        private const float MinThresholdDb = -60.0f;
+        private const float MaxThresholdDb = 0.0f;
+        private const float MinThresholdLinear = 0.001f;
+
         private readonly Guid _id;
         private string _name;
         private bool _enabled;
@@ -126,7 +133,8 @@ namespace OwnaudioNET.Effects
             _name = "Compressor";
             _enabled = true;
 
-            _threshold = FastClamp(threshold, 0.0f, 1.0f);
+            //Linear floor is the -60 dB the Threshold property and the native side agree on
+            _threshold = FastClamp(threshold, MinThresholdLinear, 1.0f);
             _ratio = FastClamp(ratio, 1.0f, 100.0f);
             _attackTime = FastClamp(attackTime, 0.1f, 1000f) / 1000f;
             _releaseTime = FastClamp(releaseTime, 1f, 2000f) / 1000f;
@@ -362,17 +370,18 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
-        /// Threshold in dB, roughly -60 to 0.
+        /// Threshold in dB, -60 to 0 — same window the native compressor clamps to, so what you
+        /// read back is what the engine actually runs.
         /// </summary>
         public float Threshold
         {
             get => LinearToDb(_threshold);
             set
             {
-                float newLinear = DbToLinear(value);
-                if (Math.Abs(_threshold - newLinear) > 0.001f)
+                float newLinear = DbToLinear(FastClamp(value, MinThresholdDb, MaxThresholdDb));
+                if (Math.Abs(_threshold - newLinear) > 0.000001f)
                 {
-                    _threshold = FastClamp(newLinear, 0.000001f, 1.0f);
+                    _threshold = newLinear;
                     _recalcCoeffs(true);
                 }
             }

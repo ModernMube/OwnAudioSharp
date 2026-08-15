@@ -502,6 +502,8 @@ namespace OwnaudioNET.Effects
         public float Damping { get; set; }
         public float DryLevel { get; set; }
         public bool Enabled { get; set; }
+        [System.Obsolete("The native reverb has no input-gain param, so this never reaches the engine — it " +
+            "only moves the managed Process path. Drive the send with Mix instead.")]
         public float Gain { get; set; }
         public System.Guid Id { get; }
         public float Mix { get; set; }
@@ -1488,15 +1490,26 @@ namespace OwnaudioNET.Mixing
         public float RightPeak { get; }
         public int SourceCount { get; }
         public long TotalMixedFrames { get; }
+        [System.Obsolete("Nothing counts underruns on the mixer since the native chain took over rendering," +
+            " so this always reads zero. Use AudioEngineWrapper.TotalUnderruns for the engine" +
+            "\'s own counter.")]
         public long TotalUnderruns { get; }
+        [System.Obsolete("Never raised: the managed MixThread that used to detect underruns is gone. Subscr" +
+            "ibe to AudioEngineWrapper.BufferUnderrun, or to StreamFaulted for a native outpu" +
+            "t fault.")]
         public event System.EventHandler<OwnaudioNET.Events.BufferUnderrunEventArgs>? BufferUnderrun;
         public event System.EventHandler? PlaybackEnded;
         public event System.EventHandler<OwnaudioNET.Events.AudioErrorEventArgs>? SourceError;
         public event System.EventHandler<OwnaudioNET.Events.AudioStreamFaultEventArgs>? StreamFaulted;
+        [System.Obsolete("Never raised: dropout detection lived in the managed MixThread, which the native " +
+            "chain replaced. The native side reports faults through StreamFaulted instead.")]
         public event System.EventHandler<OwnaudioNET.Events.TrackDropoutEventArgs>? TrackDropout;
         public void AddMasterEffect(OwnaudioNET.Interfaces.IEffectProcessor effect) { }
         public bool AddSource(OwnaudioNET.Interfaces.IAudioSource source) { }
         public bool AddSourcePrepared(OwnaudioNET.Interfaces.IAudioSource source) { }
+        [System.Obsolete("The PDC ring it sets up only runs in the managed SourceWithEffects.ReadSamples pa" +
+            "th, which the rust-native chain bypasses — calling this changes nothing you can " +
+            "hear. A hosted VST3 stays time-aligned on its own through the native bypass.")]
         public void ApplyPluginDelayCompensation() { }
         public void ClearMasterEffects() { }
         public void ClearSources() { }
@@ -1560,6 +1573,9 @@ namespace OwnaudioNET.Monitoring
         public void Dispose() { }
         public int Read(System.Span<float> pre, System.Span<float> post) { }
     }
+    [System.Obsolete("The mixer stopped feeding these when the managed MixThread went away, so an insta" +
+        "nce only ever holds what you put in it yourself. Track health natively instead (" +
+        "AudioTrack peaks, AudioMixer.StreamFaulted).")]
     public class TrackPerformanceMetrics
     {
         public TrackPerformanceMetrics(System.Guid trackId, string trackName, int maxCpuSamples = 100, int maxDropoutHistory = 50) { }
@@ -1817,6 +1833,7 @@ namespace OwnaudioNET.Sources
         protected virtual void Dispose(bool disposing) { }
         protected virtual void OnBufferUnderrun(OwnaudioNET.Events.BufferUnderrunEventArgs e) { }
         protected virtual void OnError(OwnaudioNET.Events.AudioErrorEventArgs e) { }
+        protected void OnPositionChanged() { }
         protected virtual void OnSamplesRead(System.Span<float> buffer, int samplesRead) { }
         protected virtual void OnStateChanged(OwnaudioNET.Events.AudioStateChangedEventArgs e) { }
         public virtual void Pause() { }
@@ -1864,6 +1881,8 @@ namespace OwnaudioNET.Sources
         public System.ValueTuple<float, float>? GetOutputLevels() { }
         public override void Pause() { }
         public override void Play() { }
+        [System.Obsolete("Empty since 4.0 — the native file track runs its own prefetch, there is nothing l" +
+            "eft to pre-buffer from managed code.")]
         public void PreBuffer() { }
         public override int ReadSamples(System.Span<float> buffer, int frameCount) { }
         public bool ReadSamplesAtTime(double masterTimestamp, System.Span<float> buffer, int frameCount, out OwnaudioNET.Interfaces.ReadResult result) { }
@@ -1889,6 +1908,9 @@ namespace OwnaudioNET.Sources
         public System.ValueTuple<float, float> GetInputLevels() { }
         public override void Pause() { }
         public override void Play() { }
+        [System.Obsolete("Hands back silence, always: the capture is written straight into the native track" +
+            " ring. Use OwnaudioNet.Receive() to pull captured samples, or GetInputLevels() f" +
+            "or metering.")]
         public override int ReadSamples(System.Span<float> buffer, int frameCount) { }
         public override bool Seek(double positionInSeconds) { }
         public override void Stop() { }
@@ -1901,8 +1923,10 @@ namespace OwnaudioNET.Sources
         public override Ownaudio.Core.AudioConfig Config { get; }
         public override double Duration { get; }
         public override bool IsEndOfStream { get; }
+        public override float PitchShift { get; set; }
         public override double Position { get; }
         public override Ownaudio.AudioStreamInfo StreamInfo { get; }
+        public override float Tempo { get; set; }
         public void Clear() { }
         protected override void Dispose(bool disposing) { }
         public override void Pause() { }
@@ -1912,7 +1936,7 @@ namespace OwnaudioNET.Sources
         public override void Stop() { }
         public void SubmitSamples(System.ReadOnlySpan<float> samples) { }
     }
-    public sealed class SourceWithEffects : OwnaudioNET.Interfaces.IAudioSource, OwnaudioNET.Interfaces.IMasterClockSource, System.IDisposable
+    public sealed class SourceWithEffects : OwnaudioNET.Interfaces.IAudioSource, OwnaudioNET.Interfaces.IMasterClockSource, OwnaudioNET.Interfaces.ISynchronizable, System.IDisposable
     {
         public SourceWithEffects(OwnaudioNET.Interfaces.IAudioSource source) { }
         public int ActiveEffectLatencySamples { get; }
@@ -1923,19 +1947,28 @@ namespace OwnaudioNET.Sources
         public System.Guid Id { get; }
         public bool IsAttachedToClock { get; }
         public bool IsEndOfStream { get; }
+        public bool IsSynchronized { get; set; }
         public bool Loop { get; set; }
         public int[]? OutputChannelMapping { get; set; }
+        [System.Runtime.CompilerServices.TupleElementNames(new string[] {
+                "left",
+                "right"})]
+        public System.ValueTuple<float, float> OutputLevels { get; }
         public float Pan { get; set; }
         public float PitchShift { get; set; }
         public double Position { get; }
+        public long SamplePosition { get; }
         public double StartOffset { get; set; }
         public OwnaudioNET.Core.AudioState State { get; }
         public Ownaudio.AudioStreamInfo StreamInfo { get; }
         public bool SupportsMasterClock { get; }
+        public bool SupportsSyncGroup { get; }
+        public string? SyncGroupId { get; set; }
         public float Tempo { get; set; }
         public float Volume { get; set; }
         public event System.EventHandler<OwnaudioNET.Events.BufferUnderrunEventArgs>? BufferUnderrun;
         public event System.EventHandler<OwnaudioNET.Events.AudioErrorEventArgs>? Error;
+        public event System.EventHandler? PositionChanged;
         public event System.EventHandler<OwnaudioNET.Events.AudioStateChangedEventArgs>? StateChanged;
         public void AddEffect(OwnaudioNET.Interfaces.IEffectProcessor effect) { }
         public void AttachToClock(OwnaudioNET.Synchronization.MasterClock clock) { }
@@ -1948,8 +1981,12 @@ namespace OwnaudioNET.Sources
         public int ReadSamples(System.Span<float> buffer, int frameCount) { }
         public bool ReadSamplesAtTime(double masterTimestamp, System.Span<float> buffer, int frameCount, out OwnaudioNET.Interfaces.ReadResult result) { }
         public bool RemoveEffect(OwnaudioNET.Interfaces.IEffectProcessor effect) { }
+        public void ResyncTo(long samplePosition) { }
         public OwnaudioNET.Sources.SourceWithEffects RouteToChannels(params int[] channels) { }
         public bool Seek(double positionInSeconds) { }
+        [System.Obsolete("The ring it feeds only runs in the managed ReadSamples path; the rust-native chai" +
+            "n renders the track natively and never touches it, so this has no audible effect" +
+            ".")]
         public void SetDelayCompensation(int samples) { }
         public void Stop() { }
         public override string ToString() { }
@@ -1960,8 +1997,10 @@ namespace OwnaudioNET.Sources
         public override Ownaudio.Core.AudioConfig Config { get; }
         public override double Duration { get; }
         public override bool IsEndOfStream { get; }
+        public override float PitchShift { get; set; }
         public override double Position { get; }
         public override Ownaudio.AudioStreamInfo StreamInfo { get; }
+        public override float Tempo { get; set; }
         protected override void Dispose(bool disposing) { }
         public override void Pause() { }
         public override void Play() { }

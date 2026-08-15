@@ -6,6 +6,9 @@ namespace OwnaudioNET.Monitoring
     /// <summary>
     /// Per-track health counters for the mixer: rolling CPU average, buffer fill and dropout log.
     /// </summary>
+    [Obsolete("The mixer stopped feeding these when the managed MixThread went away, so an instance only " +
+        "ever holds what you put in it yourself. Track health natively instead (AudioTrack peaks, " +
+        "AudioMixer.StreamFaulted).")]
     public class TrackPerformanceMetrics
     {
         private readonly object _lock = new object();

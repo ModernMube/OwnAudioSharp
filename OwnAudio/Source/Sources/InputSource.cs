@@ -61,6 +61,9 @@ public sealed partial class InputSource : BaseAudioSource
     /// <param name="buffer"></param>
     /// <param name="frameCount"></param>
     /// <returns></returns>
+#pragma warning disable CS0809
+    [Obsolete("Hands back silence, always: the capture is written straight into the native track ring. " +
+        "Use OwnaudioNet.Receive() to pull captured samples, or GetInputLevels() for metering.")]
     public override int ReadSamples(Span<float> buffer, int frameCount)
     {
         ThrowIfDisposed();
@@ -68,6 +71,7 @@ public sealed partial class InputSource : BaseAudioSource
         FillWithSilence(buffer, frameCount * _config.Channels);
         return frameCount;
     }
+#pragma warning restore CS0809
 
     /// <summary>
     /// No seeking on live input.
