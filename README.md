@@ -185,8 +185,13 @@ AudioSpectrum mix = analyzer.AnalyzeAudioBuffer(masterSum, 48000, 2);
 
 MatcheringProfile profile = analyzer.CalculateProfile(mix, PlaybackSystem.ClubPA, 48000);
 
+// The profile is 30 third-octave bands, so it needs the 30-band EQ —
+// the same filter bank the offline renderer drives. Its band centres
+// already sit on the profile's frequencies, so read them back per band.
+var eq = new Equalizer30BandEffect(sampleRate: 48000f);
+
 for (int band = 0; band < 30; band++)
-    eq.SetBandGain(band, BandCentre(band), profile.QFactors[band], profile.BandGainsDb[band]);
+    eq.SetBandGain(band, eq.GetBandFrequency(band), profile.QFactors[band], profile.BandGainsDb[band]);
 ```
 
 `BandGainsDb` is what the filter bank has to be *set to*, not the curve you asked for — the two differ because a 1/3-octave bell bleeds into its neighbours. Analysis is seconds of work on a full song, so run it off the UI thread.

@@ -6,7 +6,7 @@
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Analysis &amp; Mastering — OwnAudioSharp</title>
-  <meta name="description" content="Chord detection, reference-based mastering, vocal separation and MT3 transcription.">
+  <meta name="description" content="Chord detection, reference-based mastering and MT3 transcription.">
   <link rel="stylesheet" href="../assets/docs.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 </head>
@@ -22,7 +22,7 @@
 <nav id="sidebar" class="sidebar">
   <div class="sidebar-section"><span class="sidebar-label">Start here</span><ul class="sidebar-nav"><li><a href="../index.html">🏠 Overview</a></li><li><a href="quickstart.html">⚡ Quick Start</a></li><li><a href="concepts.html">🧭 Core Concepts</a></li><li><a href="concepts.html#glossary" class="sub">Glossary</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">Build something</span><ul class="sidebar-nav"><li><a href="recipes.html">🍳 Recipes</a></li><li><a href="recipes.html#play-file" class="sub">Play a file</a></li><li><a href="recipes.html#backing-player" class="sub">Multi-track player</a></li><li><a href="recipes.html#transport" class="sub">Play / pause / stop</a></li><li><a href="recipes.html#meters" class="sub">Position &amp; meters</a></li><li><a href="recipes.html#tempo-pitch" class="sub">Tempo &amp; pitch</a></li><li><a href="recipes.html#fx-live" class="sub">Effects while playing</a></li><li><a href="recipes.html#record" class="sub">Record &amp; monitor</a></li><li><a href="recipes.html#metronome" class="sub">Generate audio</a></li><li><a href="recipes.html#render" class="sub">Render to WAV</a></li><li><a href="recipes.html#fx-analyzer" class="sub">Analyze an effect</a></li></ul></div>
-  <div class="sidebar-section"><span class="sidebar-label">The API, in order</span><ul class="sidebar-nav"><li><a href="api-core.html">1 · Engine &amp; Config</a></li><li><a href="api-core.html#lifecycle" class="sub">Start &amp; shut down</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-core.html#devices" class="sub">Devices</a></li><li><a href="api-core.html#logging" class="sub">Logging</a></li><li><a href="api-mixer.html">2 · Mixer</a></li><li><a href="api-mixer.html#sources" class="sub">Sources on the bus</a></li><li><a href="api-mixer.html#master-effects" class="sub">Master effects</a></li><li><a href="api-mixer.html#recording" class="sub">Recording</a></li><li><a href="api-sources.html">3 · Sources</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#streamingsource" class="sub">StreamingSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel routing</a></li><li><a href="api-effects.html">4 · Effects &amp; VST3</a></li><li><a href="api-effects.html#all-effects" class="sub">The effect list</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 plugins</a></li><li><a href="api-effects.html#analysis" class="sub">Effect analysis</a></li><li><a href="api-sync.html">5 · Timeline &amp; Sync</a></li><li><a href="api-sync.html#masterclock" class="sub">MasterClock</a></li><li><a href="api-sync.html#drift-zones" class="sub">Drift correction</a></li><li><a href="api-sync.html#offline-mode" class="sub">Offline render</a></li><li><a href="api-network.html">6 · Network Sync</a></li><li><a href="api-advanced.html">7 · Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li><li><a href="api-advanced.html#vocal-remover" class="sub">Vocal remover</a></li><li><a href="api-advanced.html#mt3" class="sub">MT3 transcription</a></li><li><a href="api-midi.html">8 · MIDI</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI files</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI clock</a></li></ul></div>
+  <div class="sidebar-section"><span class="sidebar-label">The API, in order</span><ul class="sidebar-nav"><li><a href="api-core.html">1 · Engine &amp; Config</a></li><li><a href="api-core.html#lifecycle" class="sub">Start &amp; shut down</a></li><li><a href="api-core.html#audioconfig" class="sub">AudioConfig</a></li><li><a href="api-core.html#devices" class="sub">Devices</a></li><li><a href="api-core.html#logging" class="sub">Logging</a></li><li><a href="api-mixer.html">2 · Mixer</a></li><li><a href="api-mixer.html#sources" class="sub">Sources on the bus</a></li><li><a href="api-mixer.html#master-effects" class="sub">Master effects</a></li><li><a href="api-mixer.html#recording" class="sub">Recording</a></li><li><a href="api-sources.html">3 · Sources</a></li><li><a href="api-sources.html#filesource" class="sub">FileSource</a></li><li><a href="api-sources.html#samplesource" class="sub">SampleSource</a></li><li><a href="api-sources.html#streamingsource" class="sub">StreamingSource</a></li><li><a href="api-sources.html#inputsource" class="sub">InputSource</a></li><li><a href="api-sources.html#channel-routing" class="sub">Channel routing</a></li><li><a href="api-effects.html">4 · Effects &amp; VST3</a></li><li><a href="api-effects.html#all-effects" class="sub">The effect list</a></li><li><a href="api-effects.html#smartmaster" class="sub">SmartMaster</a></li><li><a href="api-effects.html#vst3" class="sub">VST3 plugins</a></li><li><a href="api-effects.html#analysis" class="sub">Effect analysis</a></li><li><a href="api-sync.html">5 · Timeline &amp; Sync</a></li><li><a href="api-sync.html#masterclock" class="sub">MasterClock</a></li><li><a href="api-sync.html#drift-zones" class="sub">Drift correction</a></li><li><a href="api-sync.html#offline-mode" class="sub">Offline render</a></li><li><a href="api-network.html">6 · Network Sync</a></li><li><a href="api-advanced.html">7 · Analysis &amp; Mastering</a></li><li><a href="api-advanced.html#chord-detection" class="sub">Chord detection</a></li><li><a href="api-advanced.html#matchering" class="sub">Matchering</a></li><li><a href="api-advanced.html#mt3" class="sub">MT3 transcription</a></li><li><a href="api-midi.html">8 · MIDI</a></li><li><a href="api-midi.html#receiving" class="sub">Receiving MIDI</a></li><li><a href="api-midi.html#sending" class="sub">Sending MIDI</a></li><li><a href="api-midi.html#midi-file" class="sub">MIDI files</a></li><li><a href="api-midi.html#midi-clock" class="sub">MIDI clock</a></li></ul></div>
   <div class="sidebar-section"><span class="sidebar-label">When it breaks</span><ul class="sidebar-nav"><li><a href="troubleshooting.html">🩺 Troubleshooting</a></li><li><a href="troubleshooting.html#faq" class="sub">FAQ</a></li><li><a href="api-reference.html">📋 Reference</a></li><li><a href="api-reference.html#architecture" class="sub">Architecture</a></li><li><a href="api-reference.html#events" class="sub">Events</a></li><li><a href="api-reference.html#enumerations" class="sub">Enumerations</a></li><li><a href="api-reference.html#threading" class="sub">Threading rules</a></li></ul></div>
 </nav>
 <main class="main">
@@ -31,76 +31,9 @@
 <h1 class="page-title">Analysis &amp; Mastering</h1>
 <p class="page-subtitle">Working out what is <em>in</em> the audio, and making it sound like something else.</p>
 
-<p>Everything on this page is offline work, not part of the real-time path: hand it a file, get back chords, notes, separated stems or a mastered copy. Run it off the UI thread — some of it takes minutes. The matcher is the one that reaches back into the live path: it can hand its result to a running chain as <a href="#matchering-profile">settings</a> rather than render a file, though the analysis behind it is still offline work.</p>
+<p>Everything on this page is offline work, not part of the real-time path: hand it a file, get back chords, notes or a mastered copy. Run it off the UI thread — some of it takes minutes. The matcher is the one that reaches back into the live path: it can hand its result to a running chain as <a href="#matchering-profile">settings</a> rather than render a file, though the analysis behind it is still offline work.</p>
 
-<div class="callout callout-info"><div class="callout-icon">🧠</div><p><strong>Chord Detection</strong> ships only in the full <span class="pkg-badge pkg-full">OwnAudioSharp</span> package. <strong>Audio Matchering</strong> is in <code>OwnAudioSharp.Mobile</code> too, but neither is in <code>OwnAudioSharp.Basic</code>, which is a playback/recording engine only. <strong>Vocal separation</strong> and <strong>MT3 transcription</strong> live in their own add-on packages — <span class="pkg-badge pkg-addon">OwnVocalRemover</span> and <span class="pkg-badge pkg-addon">OwnAudioSharp.Mt3</span> — reference them only when you need them.</p></div>
-
-<!-- Vocal Remover -->
-<h2 id="vocal-remover">Vocal Remover <span class="pkg-badge pkg-addon">OwnVocalRemover</span></h2>
-<p>Separates vocals from instrumental using ONNX neural network models. Shipped as the separate <code>OwnVocalRemover</code> NuGet package — the API surface below is unchanged from earlier versions, so existing code keeps working once the package is referenced. Namespace: <code>OwnaudioNET.Features.Vocalremover</code></p>
-
-<div class="callout callout-info"><div class="callout-icon">📦</div><p>Add the package with <code>dotnet add package OwnVocalRemover</code>. <strong>ONNX model files are not bundled</strong> — they are downloaded automatically on first use via <code>VocalRemoverModelManager.DownloadModelAsync()</code> and stored in the user's local application data folder. No manual setup is required.</p></div>
-
-<div class="code-block"><div class="code-header"><span>C# — Download model &amp; separate</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using OwnaudioNET.Features.Vocalremover;
-
-// Download the model on first run (skipped automatically if already present)
-if (!VocalRemoverModelManager.IsModelAvailable(InternalModel.Best))
-{
-    await VocalRemoverModelManager.DownloadModelAsync(
-        InternalModel.Best,
-        new Progress&lt;ModelDownloadProgress&gt;(p =&gt;
-            Console.Write($"\rDownloading: {p.Percentage:F1}%")));
-}
-
-var options = new SimpleSeparationOptions
-{
-    Model                = InternalModel.Best,  // see model table below
-    OutputDirectory      = "output/",
-    DisableNoiseReduction = false               // true = skip noise reduction
-};
-
-using var separator = new SimpleAudioSeparationService(options);
-separator.Initialize();
-
-var result = separator.Separate("song.mp3");
-
-Console.WriteLine(result.VocalsPath);       // path to vocals-only file
-Console.WriteLine(result.InstrumentalPath); // path to instrumental-only file</code></pre></div>
-
-<h3>VocalRemoverModelManager</h3>
-<div class="table-wrap"><table class="prop-table">
-  <thead><tr><th>Member</th><th>Description</th></tr></thead>
-  <tbody>
-    <tr><td><code>DefaultModelsDirectory</code></td><td>Get/set the local folder where model files are stored. Defaults to <code>LocalApplicationData/OwnAudio/models/</code>. Override at startup to redirect storage.</td></tr>
-    <tr><td><code>IsModelAvailable(model)</code></td><td>Returns <code>true</code> if the model file is already present on disk.</td></tr>
-    <tr><td><code>DownloadModelAsync(model, progress, cancel)</code></td><td>Downloads a single model from HuggingFace. Skips silently if the file already exists. Reports <code>ModelDownloadProgress</code> with byte count and percentage.</td></tr>
-    <tr><td><code>EnsureModelsAvailableAsync(models, progress, cancel)</code></td><td>Downloads all models in the collection that are not yet present. Models are fetched sequentially.</td></tr>
-  </tbody>
-</table></div>
-
-<h3>Available Models</h3>
-<div class="table-wrap"><table>
-  <thead><tr><th>Model</th><th>Size</th><th>Speed</th><th>Quality</th><th>Best for</th></tr></thead>
-  <tbody>
-    <tr><td><code>InternalModel.Default</code></td><td>~28 MB</td><td>Medium</td><td>Very Good</td><td>General purpose</td></tr>
-    <tr><td><code>InternalModel.Best</code></td><td>~50 MB</td><td>Slow</td><td>Excellent</td><td>Final quality separation</td></tr>
-    <tr><td><code>InternalModel.Karaoke</code></td><td>~28 MB</td><td>Medium</td><td>Excellent</td><td>Karaoke tracks, preserves vocals</td></tr>
-    <tr><td><code>InternalModel.HTDemucs</code></td><td>~166 MB</td><td>Slowest</td><td>Highest</td><td>Multi-stem (vocals, bass, drums, other)</td></tr>
-  </tbody>
-</table></div>
-
-<h3>SimpleSeparationOptions</h3>
-<div class="table-wrap"><table class="prop-table">
-  <thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead>
-  <tbody>
-    <tr><td><code>Model</code></td><td><code>InternalModel</code></td><td>Which ONNX model to use for separation.</td></tr>
-    <tr><td><code>ModelPath</code></td><td><code>string?</code></td><td>Optional path to a custom ONNX file. Takes precedence over <code>Model</code> when set and the file exists.</td></tr>
-    <tr><td><code>OutputDirectory</code></td><td><code>string</code></td><td>Directory where output files are written.</td></tr>
-    <tr><td><code>DisableNoiseReduction</code></td><td><code>bool</code></td><td>Set to <code>true</code> to skip post-processing noise reduction (default: <code>false</code>).</td></tr>
-    <tr><td><code>EnableGPU</code></td><td><code>bool</code></td><td>Use GPU acceleration via CoreML (macOS) or CUDA (Windows/Linux). Default: <code>true</code>.</td></tr>
-    <tr><td><code>ChunkSizeSeconds</code></td><td><code>int</code></td><td>Audio chunk size in seconds. <code>0</code> processes the entire file at once. Default: <code>15</code>.</td></tr>
-  </tbody>
-</table></div>
+<div class="callout callout-info"><div class="callout-icon">🧠</div><p><strong>Chord Detection</strong> ships only in the full <span class="pkg-badge pkg-full">OwnAudioSharp</span> package. <strong>Audio Matchering</strong> is in <code>OwnAudioSharp.Mobile</code> too, but neither is in <code>OwnAudioSharp.Basic</code>, which is a playback/recording engine only. <strong>MT3 transcription</strong> lives in its own add-on package — <span class="pkg-badge pkg-addon">OwnAudioSharp.Mt3</span> — reference it only when you need it.</p></div>
 
 <!-- Chord Detection -->
 <h2 id="chord-detection">Chord Detection</h2>
@@ -309,12 +242,17 @@ MatcheringProfile profile = analyzer.CalculateProfile(mix, reference, sampleRate
 // Against a preset there is an overload that also brings the preset's own AGC block
 MatcheringProfile presetProfile = analyzer.CalculateProfile(mix, PlaybackSystem.ClubPA, sampleRate: 48000);
 
+// The profile is 30 third-octave bands, so it needs the 30-band EQ —
+// the same filter bank the offline renderer drives. Its band centres
+// already sit on the profile's frequencies, so read them back per band.
+var eq = new Equalizer30BandEffect(sampleRate: 48000f);
+
 for (int band = 0; band &lt; 30; band++)
-    eq.SetBandGain(band, BandCentre(band), profile.QFactors[band], profile.BandGainsDb[band]);
+    eq.SetBandGain(band, eq.GetBandFrequency(band), profile.QFactors[band], profile.BandGainsDb[band]);
 
 compressor.Threshold = CompressorEffect.DbToLinear(profile.CompThresholdDb);
 compressor.Ratio     = profile.CompRatio;
-dynamicAmp.TargetLevel = profile.TargetLoudness;</code></pre></div>
+dynamicAmp.TargetRmsLevelDb = profile.TargetLoudness;</code></pre></div>
 
 <div class="table-wrap"><table class="prop-table">
   <thead><tr><th>Member</th><th>Meaning</th></tr></thead>

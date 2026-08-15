@@ -62,8 +62,6 @@ await OwnaudioNet.StartNetworkSyncClientAsync(
 // Automatic reconnection if WiFi drops
 ```
 
-> **Vocal separation is not available on mobile.** It ships as the separate `OwnVocalRemover` package, which targets Windows, macOS and Linux only.
-
 ## Platform Support
 
 - **Android**: Android 7.0 (API 24)+ — `arm64-v8a`, `armeabi-v7a`, `x86_64`, running on AAudio

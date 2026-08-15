@@ -63,14 +63,6 @@ await OwnaudioNet.StartNetworkSyncClientAsync(
 // Perfect for multi-room audio, DJ setups, installations
 ```
 
-### Vocal separation
-
-ONNX-based vocal/instrumental separation is **not** part of this package. It ships separately as `OwnVocalRemover`, which keeps the original `OwnaudioNET.Features.Vocalremover` namespace, so existing code works once the package is referenced:
-
-```bash
-dotnet add package OwnVocalRemover
-```
-
 ## Audio Decoding
 
 Decoding is handled by the native Rust engine using a pure-Rust Symphonia backend — no managed decoder and no external runtime is required for the common formats:
