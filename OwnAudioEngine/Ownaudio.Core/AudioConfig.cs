@@ -24,6 +24,14 @@ namespace Ownaudio.Core
         public int BufferSize { get; set; } = 512;
 
         /// <summary>
+        /// How much audio the engine keeps queued ahead of the DAC, in ms. This is the bulk of
+        /// the output latency — the producer keeps the ring topped up, so it's paid on every
+        /// buffer regardless of BufferSize. 100 is the safe default; live monitoring wants
+        /// 10-20. Anything under three device buffers gets pulled back up.
+        /// </summary>
+        public int OutputRingMilliseconds { get; set; } = 100;
+
+        /// <summary>
         /// Recording on/off.
         /// </summary>
         public bool EnableInput { get; set; } = false;
@@ -74,6 +82,7 @@ namespace Ownaudio.Core
             if (SampleRate <= 0 || SampleRate > 192000) return false;
             if (Channels <= 0 || Channels > 256) return false;
             if (BufferSize <= 0 || BufferSize > 16384) return false;
+            if (OutputRingMilliseconds <= 0 || OutputRingMilliseconds > 2000) return false;
             if (!EnableInput && !EnableOutput) return false;
 
             return _selectorsOk(InputChannelSelectors) && _selectorsOk(OutputChannelSelectors);

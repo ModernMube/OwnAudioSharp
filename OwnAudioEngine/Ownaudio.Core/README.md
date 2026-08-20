@@ -361,6 +361,11 @@ public sealed class AudioConfig
     public int    SampleRate   { get; set; } = 48000;  // Hz
     public int    Channels     { get; set; } = 2;       // 1=Mono, 2=Stereo
     public int    BufferSize   { get; set; } = 512;     // Frames (~10.6 ms @ 48 kHz)
+
+    // Render ring depth — the bulk of the output latency, on top of BufferSize.
+    // 100 is the safe default; live monitoring wants 10-20.
+    public int    OutputRingMilliseconds { get; set; } = 100;
+
     public bool   EnableInput  { get; set; } = false;   // Recording
     public bool   EnableOutput { get; set; } = true;    // Playback
     public string? OutputDeviceId { get; set; } = null; // null = system default
@@ -389,6 +394,19 @@ var config = new AudioConfig
     InputChannelSelectors = new[] { 2, 3 }
 };
 ```
+
+**`OutputRingMilliseconds`**: playback headroom the engine keeps queued ahead of the DAC. The
+producer keeps the ring topped up, so this is paid on every buffer on top of `BufferSize` — for
+live monitoring it is usually the largest term. A depth shallower than three device buffers is
+pulled back up, so read back what the engine settled on:
+
+```csharp
+int ringFrames = OwnaudioNet.Engine!.OutputRingFrames;      // after clamping
+int queued     = OwnaudioNet.Engine!.OutputBufferAvailable; // samples in flight right now
+```
+
+Watch `AudioEngineWrapper.TotalUnderruns` after lowering it — a climbing count means the ring is
+too shallow for your producer.
 
 **`FallbackToDefaultOnDisconnect`**:
 - `true` (default): engine automatically switches to the system default device on disconnect and switches back when the original reconnects — no interruption.

@@ -91,12 +91,13 @@ public sealed class AudioOutputStream : IDisposable
 
         try
         {
-            code = OwnAudioNative.ownaudio_v1_open_output_stream(
+            code = OwnAudioNative.ownaudio_v1_open_output_stream_ex(
                 engine.DangerousGetHandle(),
                 deviceNamePtr,
                 in nativeConfig,
                 IntPtr.Zero,
                 IntPtr.Zero,
+                (uint)config.RenderRingFrames,
                 out rawStream);
         }
         finally
@@ -161,6 +162,24 @@ public sealed class AudioOutputStream : IDisposable
             ErrorCodeMapper.ThrowIfError(code, nameof(QueuedSamples));
 
             return (int)_samples;
+        }
+    }
+
+    /// <summary>
+    /// Render ring depth in frames, what the engine settled on after clamping our request.
+    /// 0 on a callback mode stream, there is no ring there.
+    /// </summary>
+    public int RingFrames
+    {
+        get
+        {
+            Guard.NotDisposed(_disposed, nameof(AudioOutputStream));
+
+            int code = OwnAudioNative.ownaudio_v1_output_stream_get_ring_frames(
+                _handle.DangerousGetHandle(), out uint _frames);
+            ErrorCodeMapper.ThrowIfError(code, nameof(RingFrames));
+
+            return (int)_frames;
         }
     }
 

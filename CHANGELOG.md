@@ -7,6 +7,18 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 
 ### Added
 
+- **The output render ring depth is configurable.** It was a fixed 0.1 s in the FFI layer, and
+  because the producer keeps the ring topped up, that depth was paid as output latency on every
+  buffer no matter how small the device buffer was — for live monitoring it was the single biggest
+  term. `AudioConfig.OutputRingMilliseconds` sets it, defaulting to 100 so nothing moves for
+  existing users. Underneath it is a new additive export, `ownaudio_v1_open_output_stream_ex`,
+  taking the depth in frames; the old entry point delegates to it with 0 = default, so the ABI
+  version stays put and C consumers are untouched. A request shallower than three device buffers
+  is pulled back up — a ring under one callback period underruns every time — and
+  `AudioEngineWrapper.OutputRingFrames` reports the depth that was actually used, so a clamped
+  request is visible rather than silent. That floor also fixes a latent case: an 8192-frame device
+  buffer used to get a 4800-frame ring and partial-read on every callback.
+
 - **Matchering can drive a live chain instead of rendering a file.** The whole matching pipeline
   was only reachable as an offline renderer — file in, 24-bit wav out — with the interesting part,
   the settings it computed on the way, private. Three additions expose it without touching the

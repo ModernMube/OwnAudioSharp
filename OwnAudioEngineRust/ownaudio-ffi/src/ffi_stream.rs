@@ -22,10 +22,34 @@ use crate::host_api::{resolve_host, OwnHostApi};
 /// first read, and the ring is what stands between that and lost audio.
 const CAPTURE_RING_SECONDS: f32 = 2.0;
 
-/// How deep the buffered-mode render ring is, in seconds. Kept short on purpose:
-/// a producer that pushes as fast as it can keeps the ring full, so the depth is
-/// what the host pays in output latency.
+/// Default depth of the buffered-mode render ring, in seconds, used when the host
+/// does not ask for a specific one. Kept short on purpose: a producer that pushes as
+/// fast as it can keeps the ring full, so the depth is what the host pays in output
+/// latency. Live monitoring wants less than this — see
+/// [`ownaudio_v1_open_output_stream_ex`].
 const RENDER_RING_SECONDS: f32 = 0.1;
+
+/// Floor for the render ring when the config carries no explicit buffer size, in
+/// frames. Roughly 20 ms at 48 kHz; anyone chasing lower than that is setting a
+/// device buffer size anyway.
+const RENDER_RING_FLOOR_FRAMES: usize = 1024;
+
+/// Effective render ring depth in frames. `requested == 0` means the default depth;
+/// anything shallower than a few device periods underruns on every callback, so a
+/// caller-supplied depth gets pulled up to that floor.
+fn render_ring_depth(requested: u32, config: &ownaudio_core::StreamConfig) -> usize {
+    let wanted = if requested == 0 {
+        (config.sample_rate.max(1) as f32 * RENDER_RING_SECONDS) as usize
+    } else {
+        requested as usize
+    };
+
+    let floor = config
+        .buffer_size_frames
+        .map_or(RENDER_RING_FLOOR_FRAMES, |b| b as usize * 3);
+
+    wanted.max(floor)
+}
 
 // Engine lifecycle
 
@@ -159,6 +183,9 @@ pub unsafe extern "C" fn ownaudio_v1_engine_destroy(handle: *mut OwnAudioEngineH
 /// The stream starts in the paused state; call
 /// `ownaudio_v1_output_stream_play` to begin audio output.
 ///
+/// A buffered stream gets the default render ring depth; call
+/// [`ownaudio_v1_open_output_stream_ex`] to pick it yourself.
+///
 /// Returns `OwnAudioErrorCode::Success` (0) on success.
 ///
 /// # Safety
@@ -175,6 +202,44 @@ pub unsafe extern "C" fn ownaudio_v1_open_output_stream(
     config: *const OwnAudioStreamConfig,
     callback: OwnAudioOutputCallback,
     user_data: *mut std::os::raw::c_void,
+    out_stream: *mut *mut OwnAudioOutputStreamHandle,
+) -> i32 {
+    unsafe {
+        ownaudio_v1_open_output_stream_ex(
+            engine,
+            device_name,
+            config,
+            callback,
+            user_data,
+            0,
+            out_stream,
+        )
+    }
+}
+
+/// Same as [`ownaudio_v1_open_output_stream`], but the depth of the buffered-mode
+/// render ring is yours to choose.
+///
+/// - `render_ring_frames` — ring depth in frames; `0` keeps the ~100 ms default.
+///   A producer that pushes as fast as it can keeps the ring full, so this depth is
+///   exactly what the host pays in output latency on top of the device buffer, and
+///   it is the knob live monitoring wants. The request is pulled up to three device
+///   buffers — or 1024 frames when `config` leaves the buffer size to the
+///   platform — because a ring shallower than one callback underruns every
+///   period. `ownaudio_v1_output_stream_get_ring_frames` hands back what was used.
+///
+/// Ignored on callback-driven streams: those have no ring.
+///
+/// # Safety
+/// Same as [`ownaudio_v1_open_output_stream`].
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_open_output_stream_ex(
+    engine: *mut OwnAudioEngineHandle,
+    device_name: *const c_char,
+    config: *const OwnAudioStreamConfig,
+    callback: OwnAudioOutputCallback,
+    user_data: *mut std::os::raw::c_void,
+    render_ring_frames: u32,
     out_stream: *mut *mut OwnAudioOutputStreamHandle,
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -204,10 +269,8 @@ pub unsafe extern "C" fn ownaudio_v1_open_output_stream(
             }
             None => {
                 let ch = channels.max(1) as usize;
-                let capacity = ((core_config.sample_rate.max(1) as f32)
-                    * (ch as f32)
-                    * RENDER_RING_SECONDS) as usize;
-                let (writer, mut reader) = ring_buffer_frames(capacity.max(ch), ch);
+                let frames = render_ring_depth(render_ring_frames, &core_config);
+                let (writer, mut reader) = ring_buffer_frames(frames * ch, ch);
 
                 let underruns = Arc::new(AtomicU64::new(0));
                 let clear = Arc::new(AtomicBool::new(false));
@@ -237,6 +300,7 @@ pub unsafe extern "C" fn ownaudio_v1_open_output_stream(
                     opened,
                     Some(RenderBridge {
                         writer,
+                        ring_frames: frames as u32,
                         underrun_frames: underruns,
                         clear_requested: clear,
                     }),
@@ -613,6 +677,38 @@ pub unsafe extern "C" fn ownaudio_v1_output_stream_get_queued_samples(
         };
         unsafe {
             *out_samples = wrapper.render.as_ref().map_or(0, |b| b.writer.queued());
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Writes the render ring's depth in frames to `*out_frames`.
+///
+/// This is what `ownaudio_v1_open_output_stream_ex` settled on after clamping, so a
+/// host that asked for an aggressively short ring can check what it really got.
+/// `0` on a callback-mode stream, which has no ring.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_output_stream` that has not been destroyed.
+/// - `out_frames` must point to a writable `u32`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_output_stream_get_ring_frames(
+    stream: *mut OwnAudioOutputStreamHandle,
+    out_frames: *mut u32,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_frames.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let wrapper = match unsafe { output_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        unsafe {
+            *out_frames = wrapper.render.as_ref().map_or(0, |b| b.ring_frames);
         }
         OwnAudioErrorCode::Success as i32
     }));
@@ -1186,4 +1282,39 @@ pub(crate) fn parse_device_name(device_name: *const c_char) -> Option<AudioDevic
         max_input_channels: 0,
         default_sample_rate: 0,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ownaudio_core::{SampleFormat, StreamConfig};
+
+    fn cfg(buffer_size_frames: Option<u32>) -> StreamConfig {
+        StreamConfig {
+            sample_rate: 48_000,
+            channels: 2,
+            sample_format: SampleFormat::F32,
+            buffer_size_frames,
+        }
+    }
+
+    #[test]
+    fn zero_means_the_hundred_millisecond_default() {
+        assert_eq!(render_ring_depth(0, &cfg(Some(128))), 4_800);
+    }
+
+    #[test]
+    fn a_short_ring_is_honoured_when_it_clears_three_periods() {
+        assert_eq!(render_ring_depth(512, &cfg(Some(128))), 512);
+    }
+
+    #[test]
+    fn too_short_gets_pulled_up_to_three_device_buffers() {
+        assert_eq!(render_ring_depth(64, &cfg(Some(256))), 768);
+    }
+
+    #[test]
+    fn without_a_buffer_size_the_flat_floor_applies() {
+        assert_eq!(render_ring_depth(64, &cfg(None)), RENDER_RING_FLOOR_FRAMES);
+    }
 }

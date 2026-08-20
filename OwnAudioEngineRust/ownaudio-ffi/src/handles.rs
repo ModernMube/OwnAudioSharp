@@ -73,6 +73,9 @@ pub(crate) struct OutputStreamWrapper {
 /// Write side of the native render ring, plus what the callback reports back.
 pub(crate) struct RenderBridge {
     pub writer: RingBufferWriter,
+    /// Depth the ring was actually opened with, after the caller's request was
+    /// clamped up to a workable minimum.
+    pub ring_frames: u32,
     /// Frames the callback had to fill with silence because the ring ran dry.
     pub underrun_frames: Arc<AtomicU64>,
     /// Set by the host, honoured by the callback — only the reader may move the

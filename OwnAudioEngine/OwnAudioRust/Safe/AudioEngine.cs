@@ -149,7 +149,8 @@ public sealed class AudioEngine : IDisposable
     /// <summary>
     /// Opens an output stream in buffered mode, paused. You push samples with
     /// AudioOutputStream.Write and the render callback drains a native ring — no managed code
-    /// on the audio thread, so a GC pause can't turn into a dropout.
+    /// on the audio thread, so a GC pause can't turn into a dropout. The ring depth comes from
+    /// config.RenderRingFrames and is the bulk of the output latency.
     /// </summary>
     public AudioOutputStream OpenBufferedOutputStream(AudioDevice? device, AudioStreamConfig config)
     {

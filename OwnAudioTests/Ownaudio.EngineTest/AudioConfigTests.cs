@@ -27,6 +27,29 @@ namespace Ownaudio.EngineTest
         }
 
         [TestMethod]
+        public void DefaultConfig_ShouldKeepTheHundredMillisecondRenderRing()
+        {
+            var config = AudioConfig.Default;
+
+            Assert.AreEqual(100, config.OutputRingMilliseconds, "Default render ring should stay at 100 ms");
+        }
+
+        [TestMethod]
+        public void Validate_OutputRingOutOfRange_ShouldReturnFalse()
+        {
+            var config = AudioConfig.Default;
+
+            config.OutputRingMilliseconds = 0;
+            Assert.IsFalse(config.Validate(), "Zero render ring is not a valid depth");
+
+            config.OutputRingMilliseconds = 2001;
+            Assert.IsFalse(config.Validate(), "Render ring above 2000 ms should be rejected");
+
+            config.OutputRingMilliseconds = 10;
+            Assert.IsTrue(config.Validate(), "A 10 ms monitoring ring should be accepted");
+        }
+
+        [TestMethod]
         public void LowLatencyConfig_ShouldHaveLowLatencySettings()
         {
             // Arrange & Act

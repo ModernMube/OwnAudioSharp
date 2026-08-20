@@ -1593,6 +1593,9 @@ void ownaudio_v1_engine_destroy(struct OwnAudioEngineHandle *handle);
  * The stream starts in the paused state; call
  * `ownaudio_v1_output_stream_play` to begin audio output.
  *
+ * A buffered stream gets the default render ring depth; call
+ * [`ownaudio_v1_open_output_stream_ex`] to pick it yourself.
+ *
  * Returns `OwnAudioErrorCode::Success` (0) on success.
  *
  * # Safety
@@ -1609,6 +1612,31 @@ int32_t ownaudio_v1_open_output_stream(struct OwnAudioEngineHandle *engine,
                                        OwnAudioOutputCallback callback,
                                        void *user_data,
                                        struct OwnAudioOutputStreamHandle **out_stream);
+
+/**
+ * Same as [`ownaudio_v1_open_output_stream`], but the depth of the buffered-mode
+ * render ring is yours to choose.
+ *
+ * - `render_ring_frames` — ring depth in frames; `0` keeps the ~100 ms default.
+ *   A producer that pushes as fast as it can keeps the ring full, so this depth is
+ *   exactly what the host pays in output latency on top of the device buffer, and
+ *   it is the knob live monitoring wants. The request is pulled up to three device
+ *   buffers — or 1024 frames when `config` leaves the buffer size to the
+ *   platform — because a ring shallower than one callback underruns every
+ *   period. `ownaudio_v1_output_stream_get_ring_frames` hands back what was used.
+ *
+ * Ignored on callback-driven streams: those have no ring.
+ *
+ * # Safety
+ * Same as [`ownaudio_v1_open_output_stream`].
+ */
+int32_t ownaudio_v1_open_output_stream_ex(struct OwnAudioEngineHandle *engine,
+                                          const char *device_name,
+                                          const struct OwnAudioStreamConfig *config,
+                                          OwnAudioOutputCallback callback,
+                                          void *user_data,
+                                          uint32_t render_ring_frames,
+                                          struct OwnAudioOutputStreamHandle **out_stream);
 
 /**
  * Opens an output stream **driven by a multi-track mixer** and writes its
@@ -1760,6 +1788,21 @@ int32_t ownaudio_v1_output_stream_write(struct OwnAudioOutputStreamHandle *strea
  */
 int32_t ownaudio_v1_output_stream_get_queued_samples(struct OwnAudioOutputStreamHandle *stream,
                                                      size_t *out_samples);
+
+/**
+ * Writes the render ring's depth in frames to `*out_frames`.
+ *
+ * This is what `ownaudio_v1_open_output_stream_ex` settled on after clamping, so a
+ * host that asked for an aggressively short ring can check what it really got.
+ * `0` on a callback-mode stream, which has no ring.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_output_stream` that has not been destroyed.
+ * - `out_frames` must point to a writable `u32`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_output_stream_get_ring_frames(struct OwnAudioOutputStreamHandle *stream,
+                                                  uint32_t *out_frames);
 
 /**
  * Asks a buffered stream to drop whatever is queued in its render ring.

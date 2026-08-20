@@ -56,6 +56,12 @@ public sealed class AudioEngineWrapper : IDisposable
     public int OutputBufferAvailable => (_engine as RustAudioEngine)?.OutputQueuedSamples ?? 0;
 
     /// <summary>
+    /// Depth of the engine's render ring in frames, i.e. the playback headroom we're paying for
+    /// in latency. Comes from AudioConfig.OutputRingMilliseconds, clamped by the engine.
+    /// </summary>
+    public int OutputRingFrames => (_engine as RustAudioEngine)?.OutputRingFrames ?? 0;
+
+    /// <summary>
     /// How many times a Send couldn't queue everything because playback was already buffered up.
     /// </summary>
     public long TotalUnderruns => Interlocked.Read(ref _totalUnderruns);

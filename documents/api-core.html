@@ -86,7 +86,7 @@ await OwnaudioNet.InitializeAsync(engine, config, cancellationToken: cancellatio
 await OwnaudioNet.StopAsync(cancellationToken);
 await OwnaudioNet.ShutdownAsync(cancellationToken);</code></pre></div>
 
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>bufferMultiplier</strong> is still accepted, but it no longer changes anything. Playback headroom moved into the engine's native render ring in 4.0 and is not tunable from managed code. For a heavy mix, raise <code>AudioConfig.BufferSize</code> or the mixer's <code>bufferSizeInFrames</code> instead.</p></div>
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>bufferMultiplier</strong> is still accepted, but it no longer changes anything. Playback headroom moved into the engine's native render ring in 4.0 — tune it with <code>AudioConfig.OutputRingMilliseconds</code>. For a heavy mix, raise that, <code>AudioConfig.BufferSize</code>, or the mixer's <code>bufferSizeInFrames</code>.</p></div>
 
 <h2 id="logging">Logging — turn this on first when something is wrong</h2>
 <p>The library reports every initialization, teardown and parameter change to the console, together with any error it would otherwise swallow. It is <strong>off by default</strong> — pass <code>logLevel</code> to <code>Initialize</code> whenever you want to see what is happening under the hood.</p>
@@ -182,6 +182,19 @@ double inMs = inFrames * 1000.0 / config.SampleRate;
 long trueCapturePosition = playbackPosition - inFrames;</code></pre></div>
 <div class="callout callout-info"><div class="callout-icon">💡</div><p>Mainly useful when you line captured audio up against a timeline or a backing track — recording and overdub work. Pure playback doesn't need it. On ASIO the driver reports real figures; some WASAPI/CoreAudio setups report <code>0</code> when the number isn't available.</p></div>
 
+<h3>Render ring depth</h3>
+<p>On top of the hardware latency the engine keeps a render ring queued ahead of the DAC, sized by <code>AudioConfig.OutputRingMilliseconds</code> (default 100 ms). Since the producer keeps it topped up, that depth is paid on every buffer, and for live monitoring it is usually the largest single term. A request shallower than three device buffers is pulled back up, so read back what the engine settled on:</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var config = new AudioConfig { BufferSize = 128, OutputRingMilliseconds = 10 };
+OwnaudioNet.Initialize(config);
+
+// What the engine actually opened the ring with, after clamping
+int ringFrames = OwnaudioNet.Engine!.OutputRingFrames;
+double ringMs  = ringFrames * 1000.0 / config.SampleRate;
+
+// How full it is right now — how far ahead of the DAC you've pushed
+int queued = OwnaudioNet.Engine!.OutputBufferAvailable / config.Channels;</code></pre></div>
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>Going shorter trades headroom for latency. Watch <code>AudioEngineWrapper.TotalUnderruns</code> after a change — if it starts climbing, the ring is too shallow for your producer.</p></div>
+
 <h2 id="direct-io">Direct Audio I/O</h2>
 <p>These methods bypass the mixer. Prefer <a href="api-mixer.html">AudioMixer</a> + sources for most use cases.</p>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Send interleaved samples to output
@@ -214,6 +227,7 @@ AudioMixer? active = OwnaudioNet.GetRegisteredAudioMixer();</code></pre></div>
     <tr><td><code>SampleRate</code></td><td><code>int</code></td><td><code>48000</code></td><td>Sample rate in Hz. Common values: 44100, 48000, 96000.</td></tr>
     <tr><td><code>Channels</code></td><td><code>int</code></td><td><code>2</code></td><td><code>1</code> = mono, <code>2</code> = stereo.</td></tr>
     <tr><td><code>BufferSize</code></td><td><code>int</code></td><td><code>512</code></td><td>Desired frames per buffer. Actual size negotiated with driver.</td></tr>
+    <tr><td><code>OutputRingMilliseconds</code></td><td><code>int</code></td><td><code>100</code></td><td>Playback headroom the engine keeps queued ahead of the DAC. The producer keeps it topped up, so this is the bulk of the output latency, on top of <code>BufferSize</code>. Live monitoring wants 10–20; anything shallower than three device buffers gets pulled back up. Read the effective depth from <code>AudioEngineWrapper.OutputRingFrames</code>.</td></tr>
     <tr><td><code>EnableOutput</code></td><td><code>bool</code></td><td><code>true</code></td><td>Enable audio output (playback).</td></tr>
     <tr><td><code>EnableInput</code></td><td><code>bool</code></td><td><code>false</code></td><td>Enable audio input (recording / microphone).</td></tr>
     <tr><td><code>OutputDeviceId</code></td><td><code>string?</code></td><td><code>null</code></td><td>Output device ID from <code>AudioDeviceInfo.DeviceId</code>. <code>null</code> = system default.</td></tr>

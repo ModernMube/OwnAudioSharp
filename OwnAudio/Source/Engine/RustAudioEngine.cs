@@ -353,6 +353,11 @@ internal sealed class RustAudioEngine : IAudioEngine
     internal int OutputQueuedSamples => _outputStream?.QueuedSamples ?? 0;
 
     /// <summary>
+    /// Ring depth the engine actually opened with, in frames. Zero before Start.
+    /// </summary>
+    internal int OutputRingFrames => _outputStream?.RingFrames ?? 0;
+
+    /// <summary>
     /// Throws away everything queued for playback.
     /// </summary>
     internal void ClearOutput() => _outputStream?.Clear();
@@ -666,9 +671,21 @@ internal sealed class RustAudioEngine : IAudioEngine
             config.SampleRate,
             config.Channels,
             RustSafe.SampleFormat.F32,
-            _clampStreamBuffer(config.BufferSize));
+            _clampStreamBuffer(config.BufferSize),
+            _ringFrames(config));
 
         _outputStream = _engine!.OpenBufferedOutputStream(_selectedOutputDevice, _cfg);
+    }
+
+    /// <summary>
+    /// Render ring depth in frames from the config's ms. Out of range means "engine default".
+    /// </summary>
+    private static int _ringFrames(AudioConfig config)
+    {
+        if (config.OutputRingMilliseconds <= 0 || config.OutputRingMilliseconds > 2000) return 0;
+
+        long _frames = (long)config.SampleRate * config.OutputRingMilliseconds / 1000;
+        return (int)Math.Clamp(_frames, 16, 384_000);
     }
 
     /// <summary>

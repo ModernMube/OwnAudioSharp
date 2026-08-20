@@ -33,6 +33,28 @@ internal static unsafe partial class OwnAudioNative
         out IntPtr outStream);
 
     /// <summary>
+    /// Same, but renderRingFrames picks how deep the buffered-mode render ring is. Zero keeps the
+    /// ~100ms default. The native side pulls it up to three device buffers if it's shallower than
+    /// that, so read it back with get_ring_frames. Ignored when callback is non-zero.
+    /// </summary>
+    /// <param name="engine"></param>
+    /// <param name="deviceName">utf8 name, zero means system default</param>
+    /// <param name="config"></param>
+    /// <param name="callback"></param>
+    /// <param name="userData"></param>
+    /// <param name="renderRingFrames"></param>
+    /// <param name="outStream"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_open_output_stream_ex(
+        IntPtr engine,
+        IntPtr deviceName,
+        in NativeStreamConfig config,
+        IntPtr callback,
+        IntPtr userData,
+        uint renderRingFrames,
+        out IntPtr outStream);
+
+    /// <summary>
     /// Output stream driven by a mixer instead of a managed callback. The mixer moves onto the audio
     /// thread and renders every buffer itself, so its rate/channels have to match config.
     /// Destroy the stream before the mixer.
@@ -118,6 +140,16 @@ internal static unsafe partial class OwnAudioNative
     internal static partial int ownaudio_v1_output_stream_get_queued_samples(
         IntPtr stream,
         out nuint outSamples);
+
+    /// <summary>
+    /// Depth of the render ring in frames, after the clamp. Zero on callback driven streams.
+    /// </summary>
+    /// <param name="stream"></param>
+    /// <param name="outFrames"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_output_stream_get_ring_frames(
+        IntPtr stream,
+        out uint outFrames);
 
     /// <summary>
     /// Asks the render callback to drop whatever is queued. Takes effect on its next run.

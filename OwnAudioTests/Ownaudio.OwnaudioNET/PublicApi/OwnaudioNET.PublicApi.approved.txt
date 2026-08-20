@@ -853,6 +853,7 @@ namespace OwnaudioNET.Engine
         public bool IsRunning { get; }
         public int OutputBufferAvailable { get; }
         public int OutputLatencyFrames { get; }
+        public int OutputRingFrames { get; }
         public long TotalInputOverflowFrames { get; }
         public long TotalPumpedFrames { get; }
         public long TotalUnderruns { get; }
