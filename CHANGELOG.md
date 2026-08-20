@@ -3,7 +3,7 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
-## Unreleased
+## 4.0.5-preview.1 — 2026-08-20
 
 ### Added
 
