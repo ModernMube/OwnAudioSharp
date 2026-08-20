@@ -269,7 +269,7 @@ int trimmed = mixer.LastRecordingLatencyOffsetFrames;   // what was dropped</cod
 <p>25 — <code>AudioConstants.MaxAudioSources</code>. Past about eight, give the mixer a larger <code>bufferSizeInFrames</code>.</p>
 
 <h3>What latency can I expect?</h3>
-<p><code>BufferSize ÷ SampleRate</code>. 512 frames at 48 kHz is ~10.6 ms; the low-latency preset's 128 frames is ~2.7 ms. On playback add the render ring — <code>AudioConfig.OutputRingMilliseconds</code>, 100 ms by default, and the largest term of the three unless you lower it. Then add the driver's own hardware latency. All three are readable once audio is flowing: <code>OwnaudioNet.Engine!.OutputRingFrames</code> for the ring the engine settled on, <code>OwnaudioNet.InputLatencyFrames</code> and <code>OutputLatencyFrames</code> for the driver.</p>
+<p><code>BufferSize ÷ SampleRate</code>. 512 frames at 48 kHz is ~10.6 ms; the low-latency preset's 128 frames is ~2.7 ms. On playback add the render ring — <code>AudioConfig.OutputRingMilliseconds</code>, 100 ms by default, and the largest term of the three unless you lower it. Then add the driver's own hardware latency. All three are readable once audio is flowing: <code>OwnaudioNet.Engine!.OutputRingFrames</code> for the ring the engine settled on, <code>OwnaudioNet.InputLatencyFrames</code> and <code>OutputLatencyFrames</code> for the driver. And check <code>OutputCallbackFrames</code> against <code>FramesPerBuffer</code> — a driver that rounded your requested buffer size shows up nowhere else.</p>
 
 <h3>Can I run two mixers at once?</h3>
 <p>Yes, but one is almost always the right answer. If you do, register the one network sync should follow with <code>OwnaudioNet.SetPrimaryAudioMixer()</code>.</p>

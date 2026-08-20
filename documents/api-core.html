@@ -195,6 +195,17 @@ double ringMs  = ringFrames * 1000.0 / config.SampleRate;
 int queued = OwnaudioNet.Engine!.OutputBufferAvailable / config.Channels;</code></pre></div>
 <div class="callout callout-info"><div class="callout-icon">💡</div><p>Going shorter trades headroom for latency. Watch <code>AudioEngineWrapper.TotalUnderruns</code> after a change — if it starts climbing, the ring is too shallow for your producer.</p></div>
 
+<h3>Granted buffer size</h3>
+<p><code>FramesPerBuffer</code> is the size the engine was configured with — the request. Drivers are free to round it, ASIO especially, and the backend has no way to report the granted size at init: the only ground truth is what the callback is handed. So the engine records it as audio runs:</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">int asked   = OwnaudioNet.Engine!.FramesPerBuffer;         // known from init
+int granted = OwnaudioNet.Engine!.OutputCallbackFrames;    // 0 until audio runs
+
+if (granted != 0 && granted != asked)
+    Console.WriteLine($"Driver rounded {asked} to {granted} frames");
+
+int capture = OwnaudioNet.Engine!.InputCallbackFrames;     // capture side</code></pre></div>
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>These read the most recent callback, not a fixed contract. ASIO holds one size; WASAPI shared and CoreAudio may vary the block from callback to callback. Input and output need not match outside ASIO — that's why they're two properties.</p></div>
+
 <h2 id="direct-io">Direct Audio I/O</h2>
 <p>These methods bypass the mixer. Prefer <a href="api-mixer.html">AudioMixer</a> + sources for most use cases.</p>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Send interleaved samples to output

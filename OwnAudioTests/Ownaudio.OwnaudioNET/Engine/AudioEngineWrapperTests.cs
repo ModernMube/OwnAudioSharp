@@ -324,6 +324,20 @@ public class AudioEngineWrapperTests : IDisposable
     }
 
     [Fact]
+    public void CallbackFrames_BeforeAudioRuns_ShouldBeZero()
+    {
+        // Arrange
+        var engine = AudioEngineFactory.CreateMockEngine(_testConfig);
+        _wrapper = new AudioEngineWrapper(engine, _testConfig);
+
+        // Assert — FramesPerBuffer is the request and is known right away, the granted
+        // size only shows up once a callback has actually run.
+        _wrapper.FramesPerBuffer.Should().Be(_testConfig.BufferSize);
+        _wrapper.OutputCallbackFrames.Should().Be(0);
+        _wrapper.InputCallbackFrames.Should().Be(0);
+    }
+
+    [Fact]
     public void TotalUnderruns_InitialValue_ShouldBeZero()
     {
         // Arrange

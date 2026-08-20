@@ -1805,6 +1805,23 @@ int32_t ownaudio_v1_output_stream_get_ring_frames(struct OwnAudioOutputStreamHan
                                                   uint32_t *out_frames);
 
 /**
+ * Writes the frame count the device handed the last render callback to `*out_frames`.
+ *
+ * `ownaudio_v1_open_output_stream`'s `buffer_size_frames` is a request the driver may
+ * round or ignore — ASIO in particular — and this is where the granted size shows up.
+ * `0` until the first callback has run. A backend that varies its block size reports
+ * the most recent block rather than a fixed contract.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_output_stream` or
+ *   `ownaudio_v1_mixer_open_output_stream`, not yet destroyed.
+ * - `out_frames` must point to a writable `u32`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_output_stream_get_callback_frames(struct OwnAudioOutputStreamHandle *stream,
+                                                      uint32_t *out_frames);
+
+/**
  * Asks a buffered stream to drop whatever is queued in its render ring.
  *
  * The flush happens on the next callback, because only the reader may move the
@@ -1953,6 +1970,19 @@ int32_t ownaudio_v1_input_stream_get_error_state(struct OwnAudioInputStreamHandl
  */
 int32_t ownaudio_v1_input_stream_get_latency_frames(struct OwnAudioInputStreamHandle *stream,
                                                     uint32_t *out_frames);
+
+/**
+ * Capture-side counterpart of `ownaudio_v1_output_stream_get_callback_frames`:
+ * the frame count the device handed the last capture callback, `0` before the
+ * first one runs.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+ * - `out_frames` must point to a writable `u32`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_input_stream_get_callback_frames(struct OwnAudioInputStreamHandle *stream,
+                                                     uint32_t *out_frames);
 
 /**
  * Drains captured samples from a stream opened in buffered mode (null callback)

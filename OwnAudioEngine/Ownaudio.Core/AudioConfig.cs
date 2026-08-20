@@ -18,8 +18,8 @@ namespace Ownaudio.Core
         public int Channels { get; set; } = 2;
 
         /// <summary>
-        /// Wanted buffer size in frames. The device may hand back something else,
-        /// check FramesPerBuffer after init. Smaller = less latency, more CPU.
+        /// Wanted buffer size in frames. The driver may round it — compare FramesPerBuffer
+        /// against OutputCallbackFrames once audio runs. Smaller = less latency, more CPU.
         /// </summary>
         public int BufferSize { get; set; } = 512;
 

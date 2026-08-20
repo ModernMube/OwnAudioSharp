@@ -152,6 +152,17 @@ internal static unsafe partial class OwnAudioNative
         out uint outFrames);
 
     /// <summary>
+    /// Frames the device handed the last render callback. This is the size the driver granted,
+    /// which the requested buffer size only asks for. Zero before the first callback.
+    /// </summary>
+    /// <param name="stream"></param>
+    /// <param name="outFrames"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_output_stream_get_callback_frames(
+        IntPtr stream,
+        out uint outFrames);
+
+    /// <summary>
     /// Asks the render callback to drop whatever is queued. Takes effect on its next run.
     /// </summary>
     /// <param name="stream"></param>
@@ -243,6 +254,16 @@ internal static unsafe partial class OwnAudioNative
     /// <param name="outFrames">receives the latency in frames</param>
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_input_stream_get_latency_frames(
+        IntPtr stream,
+        out uint outFrames);
+
+    /// <summary>
+    /// Same on the capture side: frames the device handed the last input callback.
+    /// </summary>
+    /// <param name="stream"></param>
+    /// <param name="outFrames"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_input_stream_get_callback_frames(
         IntPtr stream,
         out uint outFrames);
 

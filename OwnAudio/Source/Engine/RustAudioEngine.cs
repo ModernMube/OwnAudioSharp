@@ -358,6 +358,16 @@ internal sealed class RustAudioEngine : IAudioEngine
     internal int OutputRingFrames => _outputStream?.RingFrames ?? 0;
 
     /// <summary>
+    /// Frames the driver actually hands the render callback. Zero until audio runs.
+    /// </summary>
+    internal int OutputCallbackFrames => _outputStream?.CallbackFrames ?? 0;
+
+    /// <summary>
+    /// Same on capture.
+    /// </summary>
+    internal int InputCallbackFrames => _inputStream?.CallbackFrames ?? 0;
+
+    /// <summary>
     /// Throws away everything queued for playback.
     /// </summary>
     internal void ClearOutput() => _outputStream?.Clear();

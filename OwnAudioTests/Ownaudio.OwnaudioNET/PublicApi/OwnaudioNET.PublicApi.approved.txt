@@ -849,9 +849,11 @@ namespace OwnaudioNET.Engine
         public AudioEngineWrapper(Ownaudio.Core.IAudioEngine engine, Ownaudio.Core.AudioConfig config, int bufferMultiplier = 8) { }
         public Ownaudio.Core.AudioConfig Config { get; }
         public int FramesPerBuffer { get; }
+        public int InputCallbackFrames { get; }
         public int InputLatencyFrames { get; }
         public bool IsRunning { get; }
         public int OutputBufferAvailable { get; }
+        public int OutputCallbackFrames { get; }
         public int OutputLatencyFrames { get; }
         public int OutputRingFrames { get; }
         public long TotalInputOverflowFrames { get; }

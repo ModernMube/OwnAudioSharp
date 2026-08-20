@@ -184,6 +184,24 @@ public sealed class AudioOutputStream : IDisposable
     }
 
     /// <summary>
+    /// Frames the device asked for on the last render callback — the size the driver granted,
+    /// not the one we requested. 0 until audio has actually run.
+    /// </summary>
+    public int CallbackFrames
+    {
+        get
+        {
+            Guard.NotDisposed(_disposed, nameof(AudioOutputStream));
+
+            int code = OwnAudioNative.ownaudio_v1_output_stream_get_callback_frames(
+                _handle.DangerousGetHandle(), out uint _frames);
+            ErrorCodeMapper.ThrowIfError(code, nameof(CallbackFrames));
+
+            return (int)_frames;
+        }
+    }
+
+    /// <summary>
     /// Frames that came out silent because the ring ran dry. Cumulative, 0 on a callback mode stream.
     /// </summary>
     public ulong UnderrunFrames

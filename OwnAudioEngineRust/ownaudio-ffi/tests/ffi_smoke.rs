@@ -13,9 +13,10 @@ use ownaudio_ffi::{
         ownaudio_v1_list_output_devices, OwnAudioDeviceInfo,
     },
     ffi_stream::{
-        ownaudio_v1_engine_create, ownaudio_v1_engine_destroy, ownaudio_v1_open_output_stream,
-        ownaudio_v1_output_stream_destroy, ownaudio_v1_output_stream_pause,
-        ownaudio_v1_output_stream_play,
+        ownaudio_v1_engine_create, ownaudio_v1_engine_destroy,
+        ownaudio_v1_input_stream_get_callback_frames, ownaudio_v1_open_output_stream,
+        ownaudio_v1_output_stream_destroy, ownaudio_v1_output_stream_get_callback_frames,
+        ownaudio_v1_output_stream_pause, ownaudio_v1_output_stream_play,
     },
     handles::{OwnAudioEngineHandle, OwnAudioOutputStreamHandle},
 };
@@ -68,6 +69,28 @@ fn output_stream_pause_null_is_invalid_handle() {
     unsafe {
         let code = ownaudio_v1_output_stream_pause(std::ptr::null_mut());
         assert_eq!(code, OwnAudioErrorCode::InvalidHandle as i32);
+    }
+}
+
+#[test]
+fn callback_frames_rejects_bad_pointers() {
+    unsafe {
+        let mut frames: u32 = 7;
+        assert_eq!(
+            ownaudio_v1_output_stream_get_callback_frames(std::ptr::null_mut(), &mut frames),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        assert_eq!(
+            ownaudio_v1_input_stream_get_callback_frames(std::ptr::null_mut(), &mut frames),
+            OwnAudioErrorCode::InvalidHandle as i32
+        );
+        assert_eq!(
+            ownaudio_v1_output_stream_get_callback_frames(
+                std::ptr::null_mut(),
+                std::ptr::null_mut()
+            ),
+            OwnAudioErrorCode::NullPointer as i32
+        );
     }
 }
 

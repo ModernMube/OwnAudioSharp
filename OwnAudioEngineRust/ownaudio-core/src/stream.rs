@@ -23,6 +23,9 @@ pub struct OutputStream {
     /// the cpal timestamp (`playback - callback`). 0 until the first callback
     /// fires, or when the backend does not report a latency.
     pub(crate) latency_frames: Arc<AtomicU32>,
+    /// Frames the last callback actually asked for. The driver is free to ignore
+    /// the size we requested, and this is the only place that shows up.
+    pub(crate) callback_frames: Arc<AtomicU32>,
     /// How long each callback took against the budget its frame count buys.
     pub(crate) load_counters: Arc<LoadCounters>,
 }
@@ -51,6 +54,14 @@ impl OutputStream {
     #[inline]
     pub fn latency_frames(&self) -> u32 {
         self.latency_frames.load(Ordering::Relaxed)
+    }
+
+    /// Frames the device handed the last render callback. `0` until the first one
+    /// fires. Backends that vary the block size report the most recent one, so this
+    /// is what the driver granted, not what we asked for.
+    #[inline]
+    pub fn callback_frames(&self) -> u32 {
+        self.callback_frames.load(Ordering::Relaxed)
     }
 
     /// DSP load since the stream opened or the counters were last reset. The
@@ -83,6 +94,8 @@ pub struct InputStream {
     /// the cpal timestamp (`callback - capture`). 0 until the first callback
     /// fires, or when the backend does not report a latency.
     pub(crate) latency_frames: Arc<AtomicU32>,
+    /// Frames the last callback actually delivered.
+    pub(crate) callback_frames: Arc<AtomicU32>,
 }
 
 impl InputStream {
@@ -110,5 +123,13 @@ impl InputStream {
     #[inline]
     pub fn latency_frames(&self) -> u32 {
         self.latency_frames.load(Ordering::Relaxed)
+    }
+
+    /// Frames the device handed the last capture callback. `0` until the first one
+    /// fires. Same caveat as on the render side: a backend with a variable block
+    /// size reports the most recent block, not a fixed contract.
+    #[inline]
+    pub fn callback_frames(&self) -> u32 {
+        self.callback_frames.load(Ordering::Relaxed)
     }
 }

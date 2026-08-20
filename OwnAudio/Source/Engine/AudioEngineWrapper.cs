@@ -36,7 +36,8 @@ public sealed class AudioEngineWrapper : IDisposable
     private bool _disposed;
 
     /// <summary>
-    /// Frames per buffer the device actually gave us, may differ from what we asked for.
+    /// The buffer size we run with, in frames. Known from init on, but it's the request —
+    /// see OutputCallbackFrames for what the driver granted.
     /// </summary>
     public int FramesPerBuffer { get; }
 
@@ -60,6 +61,18 @@ public sealed class AudioEngineWrapper : IDisposable
     /// in latency. Comes from AudioConfig.OutputRingMilliseconds, clamped by the engine.
     /// </summary>
     public int OutputRingFrames => (_engine as RustAudioEngine)?.OutputRingFrames ?? 0;
+
+    /// <summary>
+    /// Frames the driver actually hands the render callback, as opposed to FramesPerBuffer, which
+    /// is what we asked for. 0 until audio has run; drivers that vary the block size report the
+    /// last one. Worth comparing against FramesPerBuffer to catch a silent ASIO rounding.
+    /// </summary>
+    public int OutputCallbackFrames => (_engine as RustAudioEngine)?.OutputCallbackFrames ?? 0;
+
+    /// <summary>
+    /// Same on the capture side. Need not match the render side outside ASIO.
+    /// </summary>
+    public int InputCallbackFrames => (_engine as RustAudioEngine)?.InputCallbackFrames ?? 0;
 
     /// <summary>
     /// How many times a Send couldn't queue everything because playback was already buffered up.

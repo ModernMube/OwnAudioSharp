@@ -626,7 +626,11 @@ float[] samples = GenerateAudioSamples(512 * 2); // 512 frames × 2 ch
 engine.Send(samples);
 
 Console.WriteLine(engine.Status);          // Running
-Console.WriteLine(engine.FramesPerBuffer); // actual negotiated buffer size
+Console.WriteLine(engine.FramesPerBuffer); // the buffer size we asked for
+
+// What the driver granted — ASIO in particular is free to round the request.
+// 0 until audio has actually run, so read it after Start().
+Console.WriteLine(OwnaudioNet.Engine!.OutputCallbackFrames);
 
 await engine.StopAsync();
 ```

@@ -7,6 +7,19 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 
 ### Added
 
+- **The buffer size the driver granted is readable.** `FramesPerBuffer` echoed the size that was
+  requested even when the driver rounded it, while its own documentation promised "what the device
+  actually gave us" — so the contract said one thing and the code did another, and a host had to
+  infer the real size from callback drain sizes. cpal treats a fixed buffer size as a request and
+  never reports back what was settled on, and `FramesPerBuffer` is read at init (the engine wrapper
+  and the mixer size their buffers from it), so it has to stay the request. The callback length —
+  the only ground truth — is now recorded on both directions and surfaced as
+  `AudioEngineWrapper.OutputCallbackFrames` and `InputCallbackFrames`, 0 until audio has run. Two
+  properties rather than one because outside ASIO the render and capture sides need not agree, and
+  they report the most recent callback rather than a fixed contract: ASIO holds one size, WASAPI
+  shared and CoreAudio may vary the block. No extra work on the audio thread — the frame count was
+  already being computed for the load counters.
+
 - **The output render ring depth is configurable.** It was a fixed 0.1 s in the FFI layer, and
   because the producer keeps the ring topped up, that depth was paid as output latency on every
   buffer no matter how small the device buffer was — for live monitoring it was the single biggest

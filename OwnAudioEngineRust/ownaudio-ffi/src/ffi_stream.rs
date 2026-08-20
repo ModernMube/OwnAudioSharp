@@ -716,6 +716,40 @@ pub unsafe extern "C" fn ownaudio_v1_output_stream_get_ring_frames(
     crate::error_code::finish_catch_unwind(result)
 }
 
+/// Writes the frame count the device handed the last render callback to `*out_frames`.
+///
+/// `ownaudio_v1_open_output_stream`'s `buffer_size_frames` is a request the driver may
+/// round or ignore — ASIO in particular — and this is where the granted size shows up.
+/// `0` until the first callback has run. A backend that varies its block size reports
+/// the most recent block rather than a fixed contract.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_output_stream` or
+///   `ownaudio_v1_mixer_open_output_stream`, not yet destroyed.
+/// - `out_frames` must point to a writable `u32`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_output_stream_get_callback_frames(
+    stream: *mut OwnAudioOutputStreamHandle,
+    out_frames: *mut u32,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_frames.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let wrapper = match unsafe { output_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        unsafe {
+            *out_frames = wrapper.inner.callback_frames();
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
 /// Asks a buffered stream to drop whatever is queued in its render ring.
 ///
 /// The flush happens on the next callback, because only the reader may move the
@@ -1124,6 +1158,36 @@ pub unsafe extern "C" fn ownaudio_v1_input_stream_get_latency_frames(
         };
         unsafe {
             *out_frames = wrapper.inner.latency_frames();
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Capture-side counterpart of `ownaudio_v1_output_stream_get_callback_frames`:
+/// the frame count the device handed the last capture callback, `0` before the
+/// first one runs.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+/// - `out_frames` must point to a writable `u32`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_input_stream_get_callback_frames(
+    stream: *mut OwnAudioInputStreamHandle,
+    out_frames: *mut u32,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_frames.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let wrapper = match unsafe { input_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        unsafe {
+            *out_frames = wrapper.inner.callback_frames();
         }
         OwnAudioErrorCode::Success as i32
     }));

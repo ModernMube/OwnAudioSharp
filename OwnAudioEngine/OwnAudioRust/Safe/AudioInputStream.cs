@@ -177,6 +177,24 @@ public sealed class AudioInputStream : IDisposable
     }
 
     /// <summary>
+    /// Frames the device delivered on the last capture callback — what the driver granted,
+    /// not what we asked for. 0 until audio has actually run.
+    /// </summary>
+    public int CallbackFrames
+    {
+        get
+        {
+            Guard.NotDisposed(_disposed, nameof(AudioInputStream));
+
+            int code = OwnAudioNative.ownaudio_v1_input_stream_get_callback_frames(
+                _handle.DangerousGetHandle(), out uint _frames);
+            ErrorCodeMapper.ThrowIfError(code, nameof(CallbackFrames));
+
+            return (int)_frames;
+        }
+    }
+
+    /// <summary>
     /// Native stream goes first so the callback is quiet before we drop the delegate pin.
     /// Idempotent.
     /// </summary>

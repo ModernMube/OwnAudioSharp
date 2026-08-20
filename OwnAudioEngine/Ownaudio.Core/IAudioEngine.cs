@@ -17,7 +17,9 @@ namespace Ownaudio.Core
         IntPtr GetStream();
 
         /// <summary>
-        /// What the device actually gave us, which may not be what AudioConfig asked for.
+        /// The buffer size the engine was configured with, in frames. Available right after
+        /// Initialize, but it's the request: a driver may round it. AudioEngineWrapper's
+        /// OutputCallbackFrames / InputCallbackFrames report what it granted once audio runs.
         /// </summary>
         int FramesPerBuffer { get; }
 
