@@ -198,7 +198,7 @@ internal sealed class RustAudioEngine : IAudioEngine
             try
             {
                 _config = config;
-                _channels = config.Channels;
+                _channels = config.EffectiveOutputChannels;
                 _framesPerBuffer = config.BufferSize;
                 _outputEnabled = config.EnableOutput;
                 _inputEnabled = config.EnableInput;
@@ -224,7 +224,7 @@ internal sealed class RustAudioEngine : IAudioEngine
                     _openOutputStream(config);
                 }
 
-                Log.Info($"[RustEngine] Initialized on {config.HostType}: {config.SampleRate}Hz {_channels}ch, "
+                Log.Info($"[RustEngine] Initialized on {config.HostType}: {config.SampleRate}Hz {_channels}ch out / {config.EffectiveInputChannels}ch in, "
                     + $"out '{_selectedOutputDevice?.Name ?? "(default)"}' in '{_selectedInputDevice?.Name ?? "(none)"}', "
                     + $"latency out/in {_outputStream?.LatencyFrames ?? 0}/{_inputStream?.LatencyFrames ?? 0} frames");
 
@@ -366,6 +366,37 @@ internal sealed class RustAudioEngine : IAudioEngine
     /// Same on capture.
     /// </summary>
     internal int InputCallbackFrames => _inputStream?.CallbackFrames ?? 0;
+
+    /// <summary>
+    /// Channels the playback device really opened with. The requested width is only a request —
+    /// a device that can't serve it gets adapted to the nearest it supports — so anything drawing
+    /// physical output sockets, or deciding how far a per-track route may reach, has to read this
+    /// rather than the config. Falls back to the requested width before Start.
+    /// </summary>
+    public int ActualOutputChannels
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _outputStream is { } _s ? _s.ChannelCount : _config?.EffectiveOutputChannels ?? 0;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Same on capture.
+    /// </summary>
+    public int ActualInputChannels
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _inputStream is { } _s ? _s.ChannelCount : _config?.EffectiveInputChannels ?? 0;
+            }
+        }
+    }
 
     /// <summary>
     /// Throws away everything queued for playback.
@@ -679,7 +710,7 @@ internal sealed class RustAudioEngine : IAudioEngine
     {
         var _cfg = new RustSafe.AudioStreamConfig(
             config.SampleRate,
-            config.Channels,
+            config.EffectiveOutputChannels,
             RustSafe.SampleFormat.F32,
             _clampStreamBuffer(config.BufferSize),
             _ringFrames(config));
@@ -706,7 +737,7 @@ internal sealed class RustAudioEngine : IAudioEngine
     {
         var _cfg = new RustSafe.AudioStreamConfig(
             config.SampleRate,
-            config.Channels,
+            config.EffectiveInputChannels,
             RustSafe.SampleFormat.F32,
             _clampStreamBuffer(config.BufferSize));
 

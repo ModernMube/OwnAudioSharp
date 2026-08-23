@@ -27,6 +27,14 @@ public sealed partial class InputSource : IRustNativeChainSource
     private InputTrack? _rustInputTrack;
 
     /// <summary>
+    /// The shared capture bridge we tap, when the mixer went that way instead of opening a
+    /// stream per track. Exactly one of this and _rustInputTrack is ever set.
+    /// </summary>
+    private CaptureBridge? _rustCapture;
+
+    private int[]? _captureChannels;
+
+    /// <summary>
     /// Native track rendering us, null before attach.
     /// </summary>
     private AudioTrack? _rustTrack;
@@ -80,6 +88,56 @@ public sealed partial class InputSource : IRustNativeChainSource
     }
 
     /// <summary>
+    /// Attaches us to a mixer-session track fed by the shared capture bridge. Same deal as
+    /// AttachRustTrack, except the device stream belongs to every input track at once, so we
+    /// never pause it - only our own track.
+    /// </summary>
+    /// <param name="track"></param>
+    /// <param name="bridge"></param>
+    internal void AttachRustCapture(AudioTrack track, CaptureBridge bridge)
+    {
+        lock (_rustBackendLock)
+        {
+            _rustTrack = track;
+            _rustCapture = bridge;
+            _rustTrack.Gain = Volume;
+            _rustTrack.Pan = Pan;
+
+            if (State == AudioState.Playing)
+            {
+                bridge.Play();
+                _rustTrack.Play();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Which physical capture channels feed us: CaptureChannels[i] becomes our channel i, and
+    /// the length is our own width. null means the mixer's default (the first N of the device,
+    /// duplicating a mono input the way it always did). Only means anything on the shared
+    /// bridge; the mixer picks a change up on its next control tick.
+    /// </summary>
+    public int[]? CaptureChannels
+    {
+        get { lock (_rustBackendLock) return _captureChannels; }
+        set
+        {
+            if (value is { Length: 0 })
+                throw new ArgumentException("A capture tap needs at least one channel.", nameof(value));
+
+            lock (_rustBackendLock) _captureChannels = value is null ? null : (int[])value.Clone();
+        }
+    }
+
+    /// <summary>
+    /// The bridge we tap, null when we're on a per-track capture or not attached yet.
+    /// </summary>
+    internal CaptureBridge? RustCapture
+    {
+        get { lock (_rustBackendLock) return _rustCapture; }
+    }
+
+    /// <summary>
     /// Detaches from a mixer-owned track. The mixer owns it, we just drop the refs.
     /// </summary>
     internal void DetachRustTrack()
@@ -88,6 +146,7 @@ public sealed partial class InputSource : IRustNativeChainSource
         {
             _rustTrack = null;
             _rustInputTrack = null;
+            _rustCapture = null;
         }
     }
 
@@ -101,6 +160,7 @@ public sealed partial class InputSource : IRustNativeChainSource
         lock (_rustBackendLock)
         {
             _rustInputTrack?.Play();
+            _rustCapture?.Play();
             _rustTrack?.Play();
         }
     }
@@ -140,8 +200,16 @@ public sealed partial class InputSource : IRustNativeChainSource
     private (float left, float right) _rustInputLevels()
     {
         InputTrack? _input;
-        lock (_rustBackendLock) _input = _rustInputTrack;
+        AudioTrack? _track;
+        lock (_rustBackendLock)
+        {
+            _input = _rustInputTrack;
+            _track = _rustCapture is null ? null : _rustTrack;
+        }
 
+        //On the shared bridge the device meter is everyone's, so our own track's peaks are
+        //the only per-source level - and they're already post gain, hence no extra scaling.
+        if (_track is not null) return _track.Peaks;
         if (_input == null) return (0f, 0f);
 
         (float _left, float _right) = _input.GetInputPeaks();
@@ -157,6 +225,7 @@ public sealed partial class InputSource : IRustNativeChainSource
         {
             _rustTrack = null;
             _rustInputTrack = null;
+            _rustCapture = null;
         }
     }
 }

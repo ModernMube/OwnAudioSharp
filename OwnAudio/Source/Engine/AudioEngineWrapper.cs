@@ -75,6 +75,21 @@ public sealed class AudioEngineWrapper : IDisposable
     public int InputCallbackFrames => (_engine as RustAudioEngine)?.InputCallbackFrames ?? 0;
 
     /// <summary>
+    /// Channels the playback device really opened with, as opposed to AudioConfig.OutputChannels,
+    /// which is only a request — a device that can't serve it gets adapted to the nearest it
+    /// supports. Anything drawing physical output sockets, or deciding how far a per-track route
+    /// may reach, has to read this. Falls back to the requested width before Start.
+    /// </summary>
+    public int ActualOutputChannels =>
+        (_engine as RustAudioEngine)?.ActualOutputChannels ?? _config.EffectiveOutputChannels;
+
+    /// <summary>
+    /// Same on capture, and the range an InputSource.CaptureChannels map may address.
+    /// </summary>
+    public int ActualInputChannels =>
+        (_engine as RustAudioEngine)?.ActualInputChannels ?? _config.EffectiveInputChannels;
+
+    /// <summary>
     /// How many times a Send couldn't queue everything because playback was already buffered up.
     /// </summary>
     public long TotalUnderruns => Interlocked.Read(ref _totalUnderruns);
@@ -144,9 +159,9 @@ public sealed class AudioEngineWrapper : IDisposable
         if (FramesPerBuffer <= 0)
             throw new AudioEngineException("Engine FramesPerBuffer must be positive.", -1);
 
-        int _engineBufferSize = FramesPerBuffer * _config.Channels;
+        int _engineBufferSize = FramesPerBuffer * _config.EffectiveOutputChannels;
 
-        _bufferController = new AudioBufferController(_engineBufferSize, _config.Channels);
+        _bufferController = new AudioBufferController(_engineBufferSize, _config.EffectiveOutputChannels);
 
         _subscribeEngineEvents();
 
@@ -243,9 +258,9 @@ public sealed class AudioEngineWrapper : IDisposable
             _queued = _engine.TrySend(samples);
         }
 
-        Interlocked.Add(ref _queuedFrames, _queued / _config.Channels);
+        Interlocked.Add(ref _queuedFrames, _queued / _config.EffectiveOutputChannels);
 
-        if (_queued < samples.Length) _raiseUnderrun((samples.Length - _queued) / _config.Channels);
+        if (_queued < samples.Length) _raiseUnderrun((samples.Length - _queued) / _config.EffectiveOutputChannels);
     }
 
     /// <summary>

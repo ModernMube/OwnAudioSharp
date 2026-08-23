@@ -847,6 +847,8 @@ namespace OwnaudioNET.Engine
     public sealed class AudioEngineWrapper : System.IDisposable
     {
         public AudioEngineWrapper(Ownaudio.Core.IAudioEngine engine, Ownaudio.Core.AudioConfig config, int bufferMultiplier = 8) { }
+        public int ActualInputChannels { get; }
+        public int ActualOutputChannels { get; }
         public Ownaudio.Core.AudioConfig Config { get; }
         public int FramesPerBuffer { get; }
         public int InputCallbackFrames { get; }
@@ -1485,6 +1487,7 @@ namespace OwnaudioNET.Mixing
         public bool IsRunning { get; }
         public int LastRecordingLatencyOffsetFrames { get; }
         public float LeftPeak { get; }
+        public int[] MasterChannelScope { get; set; }
         public OwnaudioNET.Synchronization.MasterClock MasterClock { get; }
         public float MasterPan { get; set; }
         public float MasterVolume { get; set; }
@@ -1815,6 +1818,7 @@ namespace OwnaudioNET.Sources
                 "left",
                 "right"})]
         public System.ValueTuple<float, float> OutputLevels { get; }
+        public OwnaudioNET.Sources.OutputRoute? OutputRoute { get; set; }
         public float Pan { get; set; }
         public virtual float PitchShift { get; set; }
         public abstract double Position { get; }
@@ -1844,6 +1848,7 @@ namespace OwnaudioNET.Sources
         public abstract int ReadSamples(System.Span<float> buffer, int frameCount);
         protected void ResetSamplePosition() { }
         public virtual void ResyncTo(long samplePosition) { }
+        public OwnaudioNET.Sources.BaseAudioSource RouteTo(int[] sourceForChannel, float[]? gains = null) { }
         public OwnaudioNET.Sources.BaseAudioSource RouteToChannels(params int[] channels) { }
         public abstract bool Seek(double positionInSeconds);
         protected void SetSamplePosition(long position) { }
@@ -1861,6 +1866,7 @@ namespace OwnaudioNET.Sources
         public FileSource(string filePath, int bufferSizeInFrames = 8192, int targetSampleRate = 48000, int targetChannels = 2) { }
         public FileSource(System.IO.Stream stream, Ownaudio.Decoders.AudioFormat format, int bufferSizeInFrames = 8192, int targetSampleRate = 48000, int targetChannels = 2) { }
         public override Ownaudio.Core.AudioConfig Config { get; }
+        public int? DecodeChannels { get; set; }
         public override double Duration { get; }
         public bool IsAttachedToClock { get; }
         public override bool IsEndOfStream { get; }
@@ -1899,6 +1905,7 @@ namespace OwnaudioNET.Sources
     public sealed class InputSource : OwnaudioNET.Sources.BaseAudioSource
     {
         public InputSource(OwnaudioNET.Engine.AudioEngineWrapper engine, int bufferSizeInFrames = 8192) { }
+        public int[]? CaptureChannels { get; set; }
         public override Ownaudio.Core.AudioConfig Config { get; }
         public override double Duration { get; }
         public override bool IsEndOfStream { get; }
@@ -1917,6 +1924,14 @@ namespace OwnaudioNET.Sources
         public override int ReadSamples(System.Span<float> buffer, int frameCount) { }
         public override bool Seek(double positionInSeconds) { }
         public override void Stop() { }
+    }
+    public sealed class OutputRoute
+    {
+        public OutputRoute(int[] sourceForChannel, float[]? gains = null) { }
+        public float[]? Gains { get; }
+        public int[] SourceForChannel { get; }
+        public static bool Equal(OwnaudioNET.Sources.OutputRoute? a, OwnaudioNET.Sources.OutputRoute? b) { }
+        public static OwnaudioNET.Sources.OutputRoute Identity(int channelCount) { }
     }
     public sealed class SampleSource : OwnaudioNET.Sources.BaseAudioSource
     {
@@ -1957,6 +1972,7 @@ namespace OwnaudioNET.Sources
                 "left",
                 "right"})]
         public System.ValueTuple<float, float> OutputLevels { get; }
+        public OwnaudioNET.Sources.OutputRoute? OutputRoute { get; set; }
         public float Pan { get; set; }
         public float PitchShift { get; set; }
         public double Position { get; }
@@ -1985,6 +2001,7 @@ namespace OwnaudioNET.Sources
         public bool ReadSamplesAtTime(double masterTimestamp, System.Span<float> buffer, int frameCount, out OwnaudioNET.Interfaces.ReadResult result) { }
         public bool RemoveEffect(OwnaudioNET.Interfaces.IEffectProcessor effect) { }
         public void ResyncTo(long samplePosition) { }
+        public OwnaudioNET.Sources.SourceWithEffects RouteTo(int[] sourceForChannel, float[]? gains = null) { }
         public OwnaudioNET.Sources.SourceWithEffects RouteToChannels(params int[] channels) { }
         public bool Seek(double positionInSeconds) { }
         [System.Obsolete("The ring it feeds only runs in the managed ReadSamples path; the rust-native chai" +

@@ -267,6 +267,24 @@ public abstract partial class BaseAudioSource : IAudioSource
         return this;
     }
 
+    /// <summary>
+    /// Destination indexed routing, and the only way to fan one source channel out to several
+    /// outputs. Set, it wins over OutputChannelMapping; null (the default) leaves that in charge.
+    /// The mixer picks a change up on its next control tick, no stream reopens.
+    /// </summary>
+    public OutputRoute? OutputRoute { get; set; }
+
+    /// <summary>
+    /// Fluent shortcut for OutputRoute, returns this.
+    /// </summary>
+    /// <param name="sourceForChannel">source channel per bus channel, -1 for unbound</param>
+    /// <param name="gains"></param>
+    public BaseAudioSource RouteTo(int[] sourceForChannel, float[]? gains = null)
+    {
+        OutputRoute = new OutputRoute(sourceForChannel, gains);
+        return this;
+    }
+
     #endregion
 
     /// <summary>

@@ -47,6 +47,15 @@ public partial class FileSource : IRustNativeChainSource
     private bool _rustBackendAttached;
 
     /// <summary>
+    /// Width the native side decodes and effects us at. null (the default) means the session's,
+    /// which is what it always was. Set it to the file's own width and a stereo song on an 8
+    /// channel bus costs a stereo chain instead of an eight channel one — where it lands on the
+    /// bus is <see cref="BaseAudioSource.OutputRoute"/>'s business, not this. Read when the
+    /// source is attached, so set it before adding it to a mixer.
+    /// </summary>
+    public int? DecodeChannels { get; set; }
+
+    /// <summary>
     /// Content time (sec) of the last seek, the track position restarts at zero after a seek.
     /// </summary>
     private double _rustPositionBaseSeconds;

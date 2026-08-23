@@ -293,7 +293,8 @@ public sealed partial class AudioMixer : IDisposable
         _mixerId = Guid.NewGuid();
 
         int sampleRate = OwnaudioNet.Engine?.Config.SampleRate ?? 48000;
-        int channels = OwnaudioNet.Engine?.Config.Channels ?? 2;
+        //The mix bus is the output width, which is Channels unless the config split the two
+        int channels = OwnaudioNet.Engine?.Config.EffectiveOutputChannels ?? 2;
 
         _config = new AudioConfig
         {

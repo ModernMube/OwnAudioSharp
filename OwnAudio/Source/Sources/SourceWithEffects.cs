@@ -263,6 +263,36 @@ public sealed class SourceWithEffects : IAudioSource, IMasterClockSource, ISynch
         return this;
     }
 
+    /// <summary>
+    /// Destination indexed routing, straight through to the wrapped source. Same story as
+    /// OutputChannelMapping: null when there's nowhere to keep it.
+    /// </summary>
+    public OutputRoute? OutputRoute
+    {
+        get => _baseInner?.OutputRoute;
+        set
+        {
+            if (_baseInner is null)
+            {
+                Log.Warning($"[SourceFx] Output route ignored on source '{Id}': {_innerSource.GetType().Name} has no routing");
+                return;
+            }
+
+            _baseInner.OutputRoute = value;
+        }
+    }
+
+    /// <summary>
+    /// Fluent shortcut for OutputRoute, hands the wrapper back.
+    /// </summary>
+    /// <param name="sourceForChannel">source channel per bus channel, -1 for unbound</param>
+    /// <param name="gains"></param>
+    public SourceWithEffects RouteTo(int[] sourceForChannel, float[]? gains = null)
+    {
+        OutputRoute = new OutputRoute(sourceForChannel, gains);
+        return this;
+    }
+
     #endregion
 
     #region Sync group (delegated to inner source)

@@ -351,12 +351,13 @@ public sealed partial class AudioMixer
     {
         lock (_rustSessionLock)
         {
-            _rustSession ??= new MultiTrackSession((float)_config.SampleRate, (ushort)_config.Channels);
+            _ensureRustSession();
 
             AudioTrack _track = _rustSession.AddTrack();
             sts.AttachRustTrack(_track);
 
             _applyChannelMap(source, sts.Id, sts.RustTrack);
+            _applyOutputRoute(source, sts.Id, sts.RustTrack);
 
             if (source is SourceWithEffects swe)
                 _rustEffectSources.Add(new RustTrackEffectRouting(swe, sts));
@@ -372,13 +373,17 @@ public sealed partial class AudioMixer
     {
         lock (_rustSessionLock)
         {
-            _rustSession ??= new MultiTrackSession((float)_config.SampleRate, (ushort)_config.Channels);
+            _ensureRustSession();
 
-            FileTrack _track = _rustSession.AddFileTrack(fs.FilePath!);
+            //The source decides its own decode width; unset means the session's, as always
+            FileTrack _track = _rustSession.AddFileTrack(
+                fs.FilePath!,
+                (ushort)(fs.DecodeChannels ?? _config.Channels));
             fs.AttachRustTrack(_track.Track, _track);
 
             //Routing set before the add still has to land on the very first rendered block
             _applyChannelMap(source, fs.Id, fs.RustTrack);
+            _applyOutputRoute(source, fs.Id, fs.RustTrack);
 
             if (source is SourceWithEffects swe)
                 _rustEffectSources.Add(new RustTrackEffectRouting(swe, fs));
@@ -394,12 +399,13 @@ public sealed partial class AudioMixer
     {
         lock (_rustSessionLock)
         {
-            _rustSession ??= new MultiTrackSession((float)_config.SampleRate, (ushort)_config.Channels);
+            _ensureRustSession();
 
             MemoryTrack _track = _rustSession.AddMemoryTrack(ss.GetRustSampleSnapshot(), ss.Loop);
             ss.AttachRustTrack(_track.Track, _track);
 
             _applyChannelMap(source, ss.Id, ss.RustTrack);
+            _applyOutputRoute(source, ss.Id, ss.RustTrack);
 
             if (source is SourceWithEffects swe)
                 _rustEffectSources.Add(new RustTrackEffectRouting(swe, ss));
@@ -421,15 +427,23 @@ public sealed partial class AudioMixer
             if (_nativeEngine is null)
                 return;
 
-            _rustSession ??= new MultiTrackSession((float)_config.SampleRate, (ushort)_config.Channels);
+            _ensureRustSession();
 
-            _rustEngine!.ReleaseInput();
+            //One device stream for every input track, not one each. On ASIO that's the whole
+            //ballgame - a driver takes one client - and everywhere else it's just cheaper.
+            if (_rustCapture is null)
+            {
+                _rustEngine!.ReleaseInput();
+                _rustCapture = _rustSession.OpenCapture(
+                    _nativeEngine, _rustEngine.SelectedInputDevice, bufferFrames: (uint)_config.BufferSize);
+            }
 
-            InputTrack _track = _rustSession.AddInputTrack(
-                _nativeEngine, _rustEngine.SelectedInputDevice, bufferFrames: (uint)_config.BufferSize);
-            ins.AttachRustTrack(_track.Track, _track);
+            AudioTrack _track = _rustSession.AddTrack();
+            ins.AttachRustCapture(_track, _rustCapture);
 
+            _applyCaptureChannels(ins, _track);
             _applyChannelMap(source, ins.Id, ins.RustTrack);
+            _applyOutputRoute(source, ins.Id, ins.RustTrack);
 
             if (source is SourceWithEffects swe)
                 _rustEffectSources.Add(new RustTrackEffectRouting(swe, ins));
@@ -481,6 +495,10 @@ public sealed partial class AudioMixer
             _rustEffectSources.RemoveAll(r => ReferenceEquals(r.Source, source));
             _rustAppliedStartOffsets.Remove(id);
             _rustAppliedChannelMaps.Remove(id);
+            _rustAppliedRoutes.Remove(id);
+
+            if (_rustAppliedCaptureMaps.Remove(id) && track is not null)
+                _rustCapture?.Detach(track);
 
             detach();
 
@@ -701,6 +719,162 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
+    /// OutputRoute last applied per source id. Own clone, same reason as the channel maps:
+    /// an in-place edit of the caller's arrays has to be noticed. null means the route is off.
+    /// </summary>
+    private readonly Dictionary<Guid, OutputRoute?> _rustAppliedRoutes = new Dictionary<Guid, OutputRoute?>();
+
+    /// <summary>
+    /// Mirrors a source's OutputRoute onto its track: bus channel dst takes source channel
+    /// map[dst] at gain[dst], unbound destinations get nothing from us. Only re-applied when it
+    /// changed. Call under _rustSessionLock.
+    /// </summary>
+    /// <param name="source">the outermost mixer source carrying the route</param>
+    /// <param name="key">bookkeeping key of the backed source</param>
+    /// <param name="track"></param>
+    private void _applyOutputRoute(IAudioSource source, Guid key, AudioTrack? track)
+    {
+        if (track is null)
+            return;
+
+        OutputRoute? _current = _resolveMapOwner(source)?.OutputRoute;
+
+        if (_current is null && !_rustAppliedRoutes.ContainsKey(key))
+            return;
+
+        if (_rustAppliedRoutes.TryGetValue(key, out OutputRoute? _applied) && OutputRoute.Equal(_applied, _current))
+            return;
+
+        if (_current is null || _current.SourceForChannel.Length == 0)
+            track.ClearOutputRoute();
+        else
+            track.SetOutputRoute(_current.SourceForChannel, _current.Gains ?? ReadOnlySpan<float>.Empty);
+
+        _rustAppliedRoutes[key] = _current is null ? null : new OutputRoute(_current.SourceForChannel, _current.Gains);
+    }
+
+    /// <summary>
+    /// Re-applies every changed output route so a live re-cable lands on the next tick — a route
+    /// write, not a stream reopen, which is what ASIO needs.
+    /// </summary>
+    internal void SyncRustOutputRoutesOnce()
+    {
+        IAudioSource[] _sources = Volatile.Read(ref _rustSourceSnapshot);
+        lock (_rustSessionLock)
+        {
+            foreach (IAudioSource source in _sources)
+            {
+                (Guid _id, AudioTrack? _track) = _resolveRustBacked(source);
+                if (_track is null) continue;
+
+                try { _applyOutputRoute(source, _id, _track); }
+                catch (Exception ex) { _logRustApplyError("Output route", _id, ex); }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Which bus channels the master chain, gain and pan run over. Empty (the default) is the
+    /// whole bus. Narrow it to [0,1] and a click on 3/4 reaches the driver as mixed, so the
+    /// limiter on the main pair doesn't squash the direct out.
+    /// </summary>
+    public int[] MasterChannelScope
+    {
+        get => _masterChannelScope;
+        set
+        {
+            _masterChannelScope = value ?? Array.Empty<int>();
+            lock (_rustSessionLock)
+            {
+                if (_rustSession is not null)
+                    _rustSession.MasterChannelScope = _masterChannelScope;
+            }
+        }
+    }
+
+    private int[] _masterChannelScope = Array.Empty<int>();
+
+    /// <summary>
+    /// The one capture stream every live input track taps. Opened with the first input source,
+    /// owned by the session. Guarded by _rustSessionLock.
+    /// </summary>
+    private CaptureBridge? _rustCapture;
+
+    /// <summary>
+    /// Capture map last applied per source id, so a live re-cable is a tap swap and nothing else.
+    /// </summary>
+    private readonly Dictionary<Guid, int[]> _rustAppliedCaptureMaps = new Dictionary<Guid, int[]>();
+
+    /// <summary>
+    /// Points an input source at its physical capture channels. Null CaptureChannels means the
+    /// default: the first N of the device, repeating the last one so a mono mic still fills a
+    /// stereo track exactly the way the per-track capture used to. Call under _rustSessionLock.
+    /// </summary>
+    /// <param name="ins"></param>
+    /// <param name="track"></param>
+    private void _applyCaptureChannels(InputSource ins, AudioTrack? track)
+    {
+        if (track is null || _rustCapture is null) return;
+
+        int[] _wanted = ins.CaptureChannels ?? _defaultCaptureMap(_rustCapture.ChannelCount);
+
+        if (_rustAppliedCaptureMaps.TryGetValue(ins.Id, out int[]? _applied) && _channelMapsEqual(_applied, _wanted))
+            return;
+
+        _rustCapture.Attach(track, _wanted);
+        _rustAppliedCaptureMaps[ins.Id] = (int[])_wanted.Clone();
+    }
+
+    /// <summary>
+    /// First N device channels for a session-wide track, clamped so a narrower device duplicates
+    /// its last channel instead of falling off the end.
+    /// </summary>
+    /// <param name="captureChannels"></param>
+    private int[] _defaultCaptureMap(int captureChannels)
+    {
+        int[] _map = new int[Math.Max(1, _config.Channels)];
+        for (int i = 0; i < _map.Length; i++)
+            _map[i] = Math.Min(i, Math.Max(0, captureChannels - 1));
+
+        return _map;
+    }
+
+    /// <summary>
+    /// Re-taps any input source whose CaptureChannels changed, so a live re-cable lands on the
+    /// next tick without touching a stream.
+    /// </summary>
+    internal void SyncRustCaptureChannelsOnce()
+    {
+        IAudioSource[] _sources = Volatile.Read(ref _rustSourceSnapshot);
+        lock (_rustSessionLock)
+        {
+            if (_rustCapture is null) return;
+
+            foreach (IAudioSource source in _sources)
+            {
+                InputSource? _ins = _resolveInputSource(source);
+                if (_ins?.RustTrack is null || _ins.RustCapture is null) continue;
+
+                try { _applyCaptureChannels(_ins, _ins.RustTrack); }
+                catch (Exception ex) { _logRustApplyError("Capture channels", _ins.Id, ex); }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Builds the shared session on first use and hands the master scope down with it, so a
+    /// scope set before any source was attached isn't lost. Call under _rustSessionLock.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_rustSession))]
+    private void _ensureRustSession()
+    {
+        if (_rustSession is not null) return;
+        _rustSession = new MultiTrackSession((float)_config.SampleRate, (ushort)_config.Channels);
+        if (_masterChannelScope.Length > 0)
+            _rustSession.MasterChannelScope = _masterChannelScope;
+    }
+
+    /// <summary>
     /// Resolves the native-backed source behind a mixer source to its id and current track.
     /// </summary>
     /// <param name="source"></param>
@@ -747,7 +921,7 @@ public sealed partial class AudioMixer
 
             lock (_rustSessionLock)
             {
-                _rustSession ??= new MultiTrackSession((float)_config.SampleRate, (ushort)_config.Channels);
+                _ensureRustSession();
 
                 MasterEffectChain _chain = _rustSession.MasterEffects;
                 object _native = _chain.AddVst(
@@ -775,7 +949,7 @@ public sealed partial class AudioMixer
 
         lock (_rustSessionLock)
         {
-            _rustSession ??= new MultiTrackSession((float)_config.SampleRate, (ushort)_config.Channels);
+            _ensureRustSession();
 
             MasterEffectChain _chain = _rustSession.MasterEffects;
             object _native = _chain.Add(effectType, _config.SampleRate);
@@ -991,6 +1165,8 @@ public sealed partial class AudioMixer
                 SyncRustMasterOnce();
                 SyncRustStartOffsetsOnce();
                 SyncRustChannelMapsOnce();
+                SyncRustOutputRoutesOnce();
+                SyncRustCaptureChannelsOnce();
                 MirrorRustMasterEffectsOnce();
                 ReconcileRustTrackEffectsOnce();
                 DriveRustNativeSyncOnce();
@@ -1261,6 +1437,9 @@ public sealed partial class AudioMixer
             catch (Exception ex) { Log.Error("[Mixer] Native session dispose failed, native tracks may leak", ex); }
 
             _rustSession = null;
+            _rustCapture = null;
+            _rustAppliedCaptureMaps.Clear();
+            _rustAppliedRoutes.Clear();
             _rustOutputStream = null;
 
             _rustReleasedEngine?.RestoreOutput();
