@@ -359,8 +359,13 @@ writer.Dispose(); // returns buffer to pool
 public sealed class AudioConfig
 {
     public int    SampleRate   { get; set; } = 48000;  // Hz
-    public int    Channels     { get; set; } = 2;       // 1=Mono, 2=Stereo
+    public int    Channels     { get; set; } = 2;       // 1=Mono, 2=Stereo; default for both directions
     public int    BufferSize   { get; set; } = 512;     // Frames (~10.6 ms @ 48 kHz)
+
+    // Per-direction width, for interfaces where the two differ (2 in / 8 out).
+    // null = use Channels, which is the pre-existing behaviour.
+    public int?   OutputChannels { get; set; } = null;
+    public int?   InputChannels  { get; set; } = null;
 
     // Render ring depth — the bulk of the output latency, on top of BufferSize.
     // 100 is the safe default; live monitoring wants 10-20.
@@ -375,12 +380,19 @@ public sealed class AudioConfig
     public EngineHostType HostType { get; set; } = EngineHostType.None;
 
     // Channel routing — null = sequential (0, 1, 2, …)
-    // Length must equal Channels when non-null
+    // Length must equal that direction's width; indices below MaxRouteChannels
     public int[]? InputChannelSelectors  { get; set; } = null;
     public int[]? OutputChannelSelectors { get; set; } = null;
 
     // Device disconnect behaviour
     public bool FallbackToDefaultOnDisconnect { get; set; } = true;
+
+    // What the two directions really resolve to
+    public int EffectiveOutputChannels => OutputChannels ?? Channels;
+    public int EffectiveInputChannels  => InputChannels  ?? Channels;
+
+    // Per-source route limit, matching the engine's MAX_ROUTE_CHANNELS
+    public const int MaxRouteChannels = 16;
 }
 ```
 
@@ -394,6 +406,21 @@ var config = new AudioConfig
     InputChannelSelectors = new[] { 2, 3 }
 };
 ```
+
+**Asymmetric interfaces** — a 2-in / 8-out box cannot be described by `Channels` alone:
+
+```csharp
+var config = new AudioConfig
+{
+    OutputChannels = 8,
+    InputChannels  = 2,
+    EnableInput    = true
+};
+```
+
+What you ask for is a request: a device that cannot serve the width is adapted to the nearest
+one it supports. Read what actually opened from `AudioEngineWrapper.ActualOutputChannels` /
+`ActualInputChannels` — the config does not know.
 
 **`OutputRingMilliseconds`**: playback headroom the engine keeps queued ahead of the DAC. The
 producer keeps the ring topped up, so this is paid on every buffer on top of `BufferSize` — for

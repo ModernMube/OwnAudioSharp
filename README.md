@@ -63,7 +63,8 @@ actually meet it, and answers "how do I build this?" as well as "what does this 
 | Category | Capability |
 |---|---|
 | Playback & Mixing | Multi-track sync, real-time tempo/pitch, per-track volume |
-| Recording | Low-latency capture with device selection |
+| Recording | Low-latency capture with device selection, WAV writing |
+| Channel routing | Per-source routing onto a multi-channel interface, with fan-out |
 | Effects | 15 real-time DSP effects (reverb, EQ, compressor, limiter, …) |
 | Plugins | VST3 effect plugins with cross-platform editor GUI |
 | MIDI | Hardware I/O, SMF file read/write, hardware-accurate clock |
@@ -164,6 +165,38 @@ Tap any effect chain and get the signal on both sides of it, block for block, wh
 
 ### Simple Recording & Playback
 Straightforward capture from any input device with configurable sample rate, buffer size and channel count.
+
+### Writing WAV Files
+`mixer.StartRecording("session.wav")` captures the finished mix — post master-effects — straight to disk while it plays, with optional input-latency compensation so a live take lands on the beat. Set `mixer.RenderingMode = ClockMode.Offline` first and the same call becomes a deterministic bounce that never drops a block.
+
+For anything that is not the master bus — one source on its own, a generated signal, the result of your own processing — `WaveFileWriter` is the same writer exposed directly. It streams Float32 PCM to disk instead of holding the take in memory:
+
+```csharp
+using OwnaudioNET.Mixing;
+
+var source = new FileSource("song.flac");
+source.Play();
+
+using (var wav = new WaveFileWriter("bounce.wav", source.Config))
+{
+    float[] buffer = new float[4096 * source.Config.Channels];
+
+    while (!source.IsEndOfStream)
+    {
+        int frames = source.ReadSamples(buffer, 4096);
+        if (frames <= 0) break;
+
+        wav.WriteSamples(buffer.AsSpan(0, frames * source.Config.Channels));
+    }
+}   // the RIFF header is patched here — close the file before reading it back
+```
+
+> Guide: [Recording](https://modernmube.github.io/OwnAudioSharp/documents/api-mixer.html#recording)
+
+### Channel Routing on a Multi-Channel Interface
+Place each source on the outputs you choose: playback on 1/2, a click on 3/4, a cue mix somewhere else. `OutputChannelMapping` covers the simple case; `OutputRoute` is destination-indexed, so one mono signal can reach several outputs at once, each with its own gain. `MasterChannelScope` keeps the master chain on the main pair, leaving the other channels a clean direct out, and `InputSource.CaptureChannels` picks the physical inputs a live source takes — several live inputs share one capture stream. Routing changes take effect while audio runs, without reopening a stream.
+
+> Guide: [Channel routing](https://modernmube.github.io/OwnAudioSharp/documents/api-sources.html#channel-routing)
 
 ### SmartMaster — Automatic Speaker Calibration
 Measures your speakers with a microphone and corrects the output automatically. Includes speaker profiles (HiFi, Headphone, Studio, Club, Concert), a 30-band EQ, multiband compression and a brick-wall limiter.
