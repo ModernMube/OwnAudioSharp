@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use cpal::traits::DeviceTrait;
 
 use crate::{
-    config::{validate_input_config_adaptive, validate_output_config, StreamConfig},
+    config::{validate_input_config_adaptive, validate_output_config_adaptive, StreamConfig},
     device::{
         collect_input_devices, collect_output_devices, resolve_duplex_device, resolve_input_device,
         resolve_output_device, AudioDeviceInfo,
@@ -177,7 +177,8 @@ impl AudioEngine {
                 None => resolve_output_device(&self.host, None)?,
             }
         };
-        let (stream_config, sample_format) = validate_output_config(&cpal_device, config)?;
+        let (stream_config, sample_format, device_channels) =
+            validate_output_config_adaptive(&cpal_device, config)?;
 
         // Shared error state: the cpal error callback records device-lost /
         // backend failures here, and the returned stream hands the same Arc to
@@ -200,8 +201,28 @@ impl AudioEngine {
         // sub-slice (`tmp[..data.len()]`); the buffer is grown solely if the OS
         // hands us a larger buffer than anticipated — a one-time amortized cost,
         // never a per-callback allocation in steady state.
-        let pre_alloc =
-            config.buffer_size_frames.unwrap_or(4096) as usize * config.channels as usize;
+        let frames_hint = config.buffer_size_frames.unwrap_or(4096) as usize;
+        let pre_alloc = frames_hint * device_channels as usize;
+
+        // The mix keeps the session's own width; only the last step widens it to what
+        // the driver asked for, so per-track channel routing still addresses the
+        // session's channels and nothing downstream sees the device count.
+        let src_channels = config.channels.max(1) as usize;
+        let dst_channels = device_channels.max(1) as usize;
+        let mut mix_scratch: Vec<f32> = vec![0.0; frames_hint * src_channels];
+        let mut adapted = move |data: &mut [f32]| {
+            if src_channels == dst_channels {
+                callback(data);
+                return;
+            }
+            let needed = data.len() / dst_channels * src_channels;
+            if needed > mix_scratch.len() {
+                mix_scratch.resize(needed, 0.0);
+            }
+            let mix = &mut mix_scratch[..needed];
+            callback(mix);
+            crate::format::spread_channels_into(mix, src_channels, data, dst_channels);
+        };
 
         // Hardware playback latency, refreshed from the cpal timestamp on every
         // callback (`playback - callback`). The Arc is cloned into whichever
@@ -214,7 +235,6 @@ impl AudioEngine {
         // wall-clock budget its frame count buys. Same Arc goes to the returned
         // stream so the control side can read it while audio runs.
         let load_counters = Arc::new(crate::load::LoadCounters::new(sample_rate));
-        let out_channels = config.channels.max(1) as usize;
 
         // What the driver really hands us per callback. cpal takes BufferSize::Fixed
         // as a request, not a promise, so the callback length is the only truth here.
@@ -235,10 +255,10 @@ impl AudioEngine {
                     stream_config,
                     move |data: &mut [f32], info: &cpal::OutputCallbackInfo| {
                         store_output_latency(&lat, info, sample_rate);
-                        let frames = (data.len() / out_channels) as u64;
+                        let frames = (data.len() / dst_channels) as u64;
                         cb_frames.store(frames as u32, Ordering::Relaxed);
                         crate::load::measured(&load, frames, || {
-                            crate::rt_guard::guard_output(data, 0.0, |buf| callback(buf));
+                            crate::rt_guard::guard_output(data, 0.0, |buf| adapted(buf));
                         });
                     },
                     err_fn,
@@ -254,7 +274,7 @@ impl AudioEngine {
                     stream_config,
                     move |data: &mut [i16], info: &cpal::OutputCallbackInfo| {
                         store_output_latency(&lat, info, sample_rate);
-                        let frames = (data.len() / out_channels) as u64;
+                        let frames = (data.len() / dst_channels) as u64;
                         cb_frames.store(frames as u32, Ordering::Relaxed);
                         crate::load::measured(&load, frames, || {
                             crate::rt_guard::guard_output(data, 0i16, |data| {
@@ -262,7 +282,7 @@ impl AudioEngine {
                                     tmp.resize(data.len(), 0.0);
                                 }
                                 let buf = &mut tmp[..data.len()];
-                                callback(buf);
+                                adapted(buf);
                                 crate::format::f32_to_i16(buf, data);
                             });
                         });
@@ -280,7 +300,7 @@ impl AudioEngine {
                     stream_config,
                     move |data: &mut [i32], info: &cpal::OutputCallbackInfo| {
                         store_output_latency(&lat, info, sample_rate);
-                        let frames = (data.len() / out_channels) as u64;
+                        let frames = (data.len() / dst_channels) as u64;
                         cb_frames.store(frames as u32, Ordering::Relaxed);
                         crate::load::measured(&load, frames, || {
                             crate::rt_guard::guard_output(data, 0i32, |data| {
@@ -288,7 +308,7 @@ impl AudioEngine {
                                     tmp.resize(data.len(), 0.0);
                                 }
                                 let buf = &mut tmp[..data.len()];
-                                callback(buf);
+                                adapted(buf);
                                 crate::format::f32_to_i32(buf, data);
                             });
                         });
@@ -306,7 +326,7 @@ impl AudioEngine {
                     stream_config,
                     move |data: &mut [u16], info: &cpal::OutputCallbackInfo| {
                         store_output_latency(&lat, info, sample_rate);
-                        let frames = (data.len() / out_channels) as u64;
+                        let frames = (data.len() / dst_channels) as u64;
                         cb_frames.store(frames as u32, Ordering::Relaxed);
                         crate::load::measured(&load, frames, || {
                             // u16 silence is the mid-point (32768), not 0.
@@ -315,7 +335,7 @@ impl AudioEngine {
                                     tmp.resize(data.len(), 0.0);
                                 }
                                 let buf = &mut tmp[..data.len()];
-                                callback(buf);
+                                adapted(buf);
                                 crate::format::f32_to_u16(buf, data);
                             });
                         });

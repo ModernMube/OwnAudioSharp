@@ -43,13 +43,14 @@ impl StreamConfig {
 
 // Internal conversions — not part of the public API
 
-/// Validates `config` against the output capabilities of `device` and returns
-/// the Cpal representation if the config is supported.
-pub(crate) fn validate_output_config(
+/// Playback counterpart of [`validate_input_config_adaptive`]. CoreAudio offers a
+/// single channel count per device, so a 2-in/4-out interface only ever reports 4 —
+/// an exact match would reject every non-stereo box on macOS.
+pub(crate) fn validate_output_config_adaptive(
     device: &cpal::Device,
     config: &StreamConfig,
-) -> Result<(cpal::StreamConfig, cpal::SampleFormat)> {
-    validate_config(device.supported_output_configs()?, config)
+) -> Result<(cpal::StreamConfig, cpal::SampleFormat, u16)> {
+    validate_config_adaptive(device.supported_output_configs()?, config)
 }
 
 /// Validates `config` against the input capabilities of `device`, adapting the
@@ -103,47 +104,6 @@ fn choose_format(
         .iter()
         .copied()
         .find(|fmt| candidates.iter().any(|r| r.sample_format() == *fmt))
-}
-
-fn validate_config(
-    supported: impl Iterator<Item = cpal::SupportedStreamConfigRange>,
-    config: &StreamConfig,
-) -> Result<(cpal::StreamConfig, cpal::SampleFormat)> {
-    let target_fmt = to_cpal_format(config.sample_format);
-    // In cpal 0.18, SampleRate is a plain u32 type alias.
-    let target_rate: u32 = config.sample_rate;
-
-    // Keep every range matching the channel count and sample rate in any
-    // format the engine can convert; the format is adapted afterwards.
-    let candidates: Vec<cpal::SupportedStreamConfigRange> = supported
-        .filter(|r| {
-            FORMAT_FALLBACK_ORDER.contains(&r.sample_format())
-                && r.channels() == config.channels
-                && r.min_sample_rate() <= target_rate
-                && target_rate <= r.max_sample_rate()
-        })
-        .collect();
-
-    match choose_format(&candidates, target_fmt) {
-        Some(chosen_fmt) => {
-            let buffer_size = match config.buffer_size_frames {
-                Some(frames) => cpal::BufferSize::Fixed(frames),
-                None => cpal::BufferSize::Default,
-            };
-            Ok((
-                cpal::StreamConfig {
-                    channels: config.channels,
-                    sample_rate: target_rate,
-                    buffer_size,
-                },
-                chosen_fmt,
-            ))
-        }
-        None => Err(AudioError::UnsupportedConfig(format!(
-            "{}ch {}Hz {:?} not supported by device",
-            config.channels, config.sample_rate, config.sample_format
-        ))),
-    }
 }
 
 fn validate_config_adaptive(
@@ -218,5 +178,52 @@ pub(crate) fn to_cpal_format(fmt: SampleFormat) -> cpal::SampleFormat {
         SampleFormat::I16 => cpal::SampleFormat::I16,
         SampleFormat::U16 => cpal::SampleFormat::U16,
         SampleFormat::I32 => cpal::SampleFormat::I32,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn range(channels: u16, rate: u32) -> cpal::SupportedStreamConfigRange {
+        cpal::SupportedStreamConfigRange::new(
+            channels,
+            rate,
+            rate,
+            cpal::SupportedBufferSize::Unknown,
+            cpal::SampleFormat::F32,
+        )
+    }
+
+    /// What CoreAudio hands us for a UMC204HD: one 4-channel output, nothing else.
+    #[test]
+    fn stereo_request_takes_the_only_offered_width() {
+        let (opened, _, device_channels) = validate_config_adaptive(
+            [range(4, 48_000)].into_iter(),
+            &StreamConfig::stereo_f32(48_000),
+        )
+        .expect("a 4-out device must open for a stereo session");
+        assert_eq!(device_channels, 4);
+        assert_eq!(opened.channels, 4);
+    }
+
+    /// ASIO and ALSA enumerate every width, so the exact match must still win there.
+    #[test]
+    fn exact_width_wins_when_offered() {
+        let supported = [range(1, 48_000), range(2, 48_000), range(10, 48_000)];
+        let (opened, _, device_channels) =
+            validate_config_adaptive(supported.into_iter(), &StreamConfig::stereo_f32(48_000))
+                .unwrap();
+        assert_eq!(device_channels, 2);
+        assert_eq!(opened.channels, 2);
+    }
+
+    #[test]
+    fn unreachable_sample_rate_is_still_rejected() {
+        let err = validate_config_adaptive(
+            [range(4, 44_100)].into_iter(),
+            &StreamConfig::stereo_f32(48_000),
+        );
+        assert!(matches!(err, Err(AudioError::UnsupportedConfig(_))));
     }
 }

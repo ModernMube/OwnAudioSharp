@@ -139,6 +139,50 @@ pub fn remap_channels_into(
     }
 }
 
+/// Playback counterpart of [`remap_channels_into`]: places a `src_channels`-wide mix
+/// into a `dst_channels`-wide device buffer, writing straight into `out` (which the
+/// driver already owns) instead of a scratch `Vec`.
+///
+/// Channel `i` goes to channel `i` and anything the mix does not reach is silenced —
+/// on a 4-out interface a stereo session drives outputs 1/2 and leaves 3/4 quiet.
+/// Narrowing to mono averages instead of dropping, so a mono device keeps both sides.
+pub fn spread_channels_into(
+    src: &[f32],
+    src_channels: usize,
+    out: &mut [f32],
+    dst_channels: usize,
+) {
+    if src_channels == 0 || dst_channels == 0 {
+        out.fill(0.0);
+        return;
+    }
+
+    let frames = (src.len() / src_channels).min(out.len() / dst_channels);
+
+    if dst_channels == 1 {
+        let inv = 1.0 / src_channels as f32;
+        for (o, frame) in out
+            .iter_mut()
+            .zip(src.chunks_exact(src_channels))
+            .take(frames)
+        {
+            *o = frame.iter().sum::<f32>() * inv;
+        }
+    } else {
+        let common = src_channels.min(dst_channels);
+        for (out_frame, in_frame) in out
+            .chunks_exact_mut(dst_channels)
+            .zip(src.chunks_exact(src_channels))
+            .take(frames)
+        {
+            out_frame[..common].copy_from_slice(&in_frame[..common]);
+            out_frame[common..].fill(0.0);
+        }
+    }
+
+    out[frames * dst_channels..].fill(0.0);
+}
+
 /// Converts planar audio (one slice per channel) to interleaved layout in `out`.
 ///
 /// `out.len()` must equal `sum of channel slice lengths * number_of_channels`.
@@ -318,6 +362,38 @@ mod tests {
         let mut out = Vec::new();
         remap_channels_into(&stereo, 2, 4, &mut out);
         assert_eq!(out, vec![1.0, 2.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn spread_channels_widens_and_silences_the_rest() {
+        let stereo = vec![1.0f32, 2.0, 3.0, 4.0];
+        let mut out = vec![9.0f32; 8];
+        spread_channels_into(&stereo, 2, &mut out, 4);
+        assert_eq!(out, vec![1.0, 2.0, 0.0, 0.0, 3.0, 4.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn spread_channels_equal_counts_copies_verbatim() {
+        let stereo = vec![1.0f32, 2.0, 3.0, 4.0];
+        let mut out = vec![0.0f32; 4];
+        spread_channels_into(&stereo, 2, &mut out, 2);
+        assert_eq!(out, stereo);
+    }
+
+    #[test]
+    fn spread_channels_to_mono_averages() {
+        let stereo = vec![1.0f32, 3.0, -2.0, 2.0];
+        let mut out = vec![9.0f32; 2];
+        spread_channels_into(&stereo, 2, &mut out, 1);
+        assert_eq!(out, vec![2.0, 0.0]);
+    }
+
+    /// A short mix must not leave the driver's tail holding the previous block.
+    #[test]
+    fn spread_channels_silences_the_tail() {
+        let mut out = vec![9.0f32; 8];
+        spread_channels_into(&[1.0f32, 2.0], 2, &mut out, 4);
+        assert_eq!(out, vec![1.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
     }
 
     #[test]
