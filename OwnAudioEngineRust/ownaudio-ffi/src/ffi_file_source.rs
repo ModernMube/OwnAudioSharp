@@ -103,6 +103,14 @@ pub unsafe extern "C" fn ownaudio_v1_track_open_file(
                 }
             };
 
+        // The track processes at the width the file actually decoded to, not at the bus
+        // width — which for a caller passing the session channel count (everyone, today) is
+        // the same number, and for a narrower file on a wide bus is the difference between a
+        // stereo effect chain and an eight-channel one.
+        track_wrapper
+            .shared
+            .set_source_channels(source.stream_info().channels.min(u16::MAX as u32) as u16);
+
         // Hand the decoding source to the audio thread via the command queue; it
         // becomes the track's source on the next render block (the old one is
         // retired off the real-time path).

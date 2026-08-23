@@ -174,6 +174,48 @@ typedef struct OwnAudioBpmHandle {
 } OwnAudioBpmHandle;
 
 /**
+ * Opaque handle to an [`AudioEngine`] instance.
+ *
+ * The C# side holds this as `IntPtr`.  Create with
+ * `ownaudio_v1_engine_create`; release with `ownaudio_v1_engine_destroy`.
+ */
+typedef struct OwnAudioEngineHandle {
+    uint8_t _private[0];
+} OwnAudioEngineHandle;
+
+/**
+ * Opaque handle to a shared capture bridge — one input stream fanned out to several
+ * tracks.
+ *
+ * Create with `ownaudio_v1_capture_open`; release with `ownaudio_v1_capture_close`.
+ * Where [`OwnAudioInputSourceHandle`] is one stream per track, this is one stream for all
+ * of them, each track taking the physical channels it names. On ASIO that is the
+ * difference between working and not: a driver is a single-client affair, and every extra
+ * registered callback walks its channel buffers again.
+ */
+typedef struct OwnAudioCaptureHandle {
+    uint8_t _private[0];
+} OwnAudioCaptureHandle;
+
+/**
+ * Opaque handle to a [`MultiTrackMixer`] instance.
+ *
+ * Create with `ownaudio_v1_mixer_create`; release with `ownaudio_v1_mixer_destroy`.
+ */
+typedef struct OwnAudioMixerHandle {
+    uint8_t _private[0];
+} OwnAudioMixerHandle;
+
+/**
+ * Opaque handle to a single audio [`Track`] inside a mixer.
+ *
+ * Create with `ownaudio_v1_track_create`; release with `ownaudio_v1_track_destroy`.
+ */
+typedef struct OwnAudioTrackHandle {
+    uint8_t _private[0];
+} OwnAudioTrackHandle;
+
+/**
  * Opaque handle to a streaming audio file decoder.
  *
  * Create with `ownaudio_v1_decoder_open`; release with
@@ -240,34 +282,6 @@ typedef struct OwnAudioDeviceInfo {
      */
     uint32_t default_sample_rate;
 } OwnAudioDeviceInfo;
-
-/**
- * Opaque handle to an [`AudioEngine`] instance.
- *
- * The C# side holds this as `IntPtr`.  Create with
- * `ownaudio_v1_engine_create`; release with `ownaudio_v1_engine_destroy`.
- */
-typedef struct OwnAudioEngineHandle {
-    uint8_t _private[0];
-} OwnAudioEngineHandle;
-
-/**
- * Opaque handle to a [`MultiTrackMixer`] instance.
- *
- * Create with `ownaudio_v1_mixer_create`; release with `ownaudio_v1_mixer_destroy`.
- */
-typedef struct OwnAudioMixerHandle {
-    uint8_t _private[0];
-} OwnAudioMixerHandle;
-
-/**
- * Opaque handle to a single audio [`Track`] inside a mixer.
- *
- * Create with `ownaudio_v1_track_create`; release with `ownaudio_v1_track_destroy`.
- */
-typedef struct OwnAudioTrackHandle {
-    uint8_t _private[0];
-} OwnAudioTrackHandle;
 
 /**
  * Opaque handle to an audio effect inside a track's effect chain.
@@ -594,6 +608,137 @@ int32_t ownaudio_v1_bpm_get_bpm(struct OwnAudioBpmHandle *handle, float *out_bpm
  * - Null pointers are rejected with an error code rather than dereferenced.
  */
 void ownaudio_v1_bpm_destroy(struct OwnAudioBpmHandle *handle);
+
+/**
+ * Opens the shared capture bridge on `device_name` and writes its handle to `*out_capture`.
+ *
+ * The device is opened at **its own** channel count — all the physical inputs at once —
+ * so each track can pick its channels out of the single stream; ask
+ * [`ownaudio_v1_capture_channel_count`] what that turned out to be. Resolution goes through
+ * exactly the path a normal input stream takes, which on ASIO means the same `cpal::Device`
+ * as the output: the bridge never lands on a card the configuration did not name.
+ *
+ * The stream starts paused; call `ownaudio_v1_capture_play`.
+ *
+ * - `engine` — valid engine handle owning the input device.
+ * - `device_name` — null-terminated UTF-8 device name, or null for the default.
+ * - `sample_rate` — capture sample rate in Hz.
+ * - `buffer_frames` — device buffer size in frames; `0` lets the engine choose.
+ * - `out_capture` — receives the bridge handle on success.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `engine` must be a live handle from `ownaudio_v1_engine_create` that has not been destroyed.
+ * - `device_name` must be a NUL-terminated UTF-8 string.
+ * - `out_capture` must point to a writable pointer slot; it receives the new handle.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_capture_open(struct OwnAudioEngineHandle *engine,
+                                 const char *device_name,
+                                 uint32_t sample_rate,
+                                 uint32_t buffer_frames,
+                                 struct OwnAudioCaptureHandle **out_capture);
+
+/**
+ * Writes the bridge's physical capture channel count to `*out_channels`.
+ *
+ * This is the range a tap's channel map may address, and the number of input sockets a UI
+ * should draw — the requested width adapted to what the device actually offers.
+ *
+ * # Safety
+ * - `capture` must be a live handle from `ownaudio_v1_capture_open` that has not been destroyed.
+ * - `out_channels` must point to a writable `u16`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_capture_channel_count(struct OwnAudioCaptureHandle *capture,
+                                          uint16_t *out_channels);
+
+/**
+ * Attaches `track` to the capture bridge, taking capture channel `map[i]` as the track's
+ * channel `i`.
+ *
+ * Installs a fresh ring as the track's source and sets the track's processing width to
+ * `len`, so a mono vocal input costs a mono chain no matter how wide the bus is.
+ * Re-attaching the same track replaces its map — that is how a live re-route works, with
+ * no stream anywhere near it.
+ *
+ * - `mixer` — valid mixer handle that owns the track.
+ * - `track` — valid track handle whose source is installed.
+ * - `capture` — valid bridge handle.
+ * - `map` — `len` zero-based capture-channel indices, one per track channel.
+ * - `len` — track-side channel count, at most [`MAX_ROUTE_CHANNELS`].
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer`, `track` and `capture` must be live handles that have not been destroyed.
+ * - `map` must be valid for `len` `u32` values (readable).
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_track_attach_capture(struct OwnAudioMixerHandle *mixer,
+                                         struct OwnAudioTrackHandle *track,
+                                         struct OwnAudioCaptureHandle *capture,
+                                         const uint32_t *map,
+                                         size_t len);
+
+/**
+ * Stops feeding `track_id` from the bridge. The track keeps its ring reader until its
+ * source is cleared or it is removed, so it simply underruns into silence.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `capture` must be a live handle from `ownaudio_v1_capture_open` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_track_detach_capture(struct OwnAudioCaptureHandle *capture,
+                                         struct OwnAudioTrackHandle *track);
+
+/**
+ * Starts (or resumes) capture on the bridge, feeding every attached tap.
+ *
+ * # Safety
+ * - `capture` must be a live handle from `ownaudio_v1_capture_open` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_capture_play(struct OwnAudioCaptureHandle *capture);
+
+/**
+ * Pauses capture. Whatever is already in the taps' rings still plays out.
+ *
+ * # Safety
+ * - `capture` must be a live handle from `ownaudio_v1_capture_open` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_capture_pause(struct OwnAudioCaptureHandle *capture);
+
+/**
+ * Writes the bridge's most recent capture peaks — measured over the first two physical
+ * channels — to `*out_left` / `*out_right`.
+ *
+ * Per-track levels come from the track's own peaks; this is the device-side meter.
+ *
+ * # Safety
+ * - `capture` must be a live handle from `ownaudio_v1_capture_open` that has not been destroyed.
+ * - `out_left` and `out_right` must point to writable `f32`s.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_capture_get_peaks(struct OwnAudioCaptureHandle *capture,
+                                      float *out_left,
+                                      float *out_right);
+
+/**
+ * Closes the bridge, stopping capture and releasing the input stream.
+ *
+ * Passing `null` is safe and has no effect. Attached tracks keep their ring readers until
+ * their sources are cleared or they are removed; after this call those simply underrun.
+ *
+ * # Safety
+ * - `capture` must be a live handle from `ownaudio_v1_capture_open` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+void ownaudio_v1_capture_close(struct OwnAudioCaptureHandle *capture);
 
 /**
  * Opens an audio file for streaming decoding and writes the handle to
@@ -1822,6 +1967,23 @@ int32_t ownaudio_v1_output_stream_get_callback_frames(struct OwnAudioOutputStrea
                                                       uint32_t *out_frames);
 
 /**
+ * Writes the channel count the output device was actually opened with to `*out_channels`.
+ *
+ * The requested width is only a request: a device that cannot serve it gets adapted to the
+ * nearest count it supports, and nothing until now reported which one that was. Anything
+ * drawing physical output sockets — or deciding how far a per-track route may reach — has
+ * to ask here rather than trust what it asked for.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_output_stream` or
+ *   `ownaudio_v1_mixer_open_output_stream`, not yet destroyed.
+ * - `out_channels` must point to a writable `u16`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_output_stream_get_channel_count(struct OwnAudioOutputStreamHandle *stream,
+                                                    uint16_t *out_channels);
+
+/**
  * Asks a buffered stream to drop whatever is queued in its render ring.
  *
  * The flush happens on the next callback, because only the reader may move the
@@ -1983,6 +2145,18 @@ int32_t ownaudio_v1_input_stream_get_latency_frames(struct OwnAudioInputStreamHa
  */
 int32_t ownaudio_v1_input_stream_get_callback_frames(struct OwnAudioInputStreamHandle *stream,
                                                      uint32_t *out_frames);
+
+/**
+ * Capture-side counterpart of `ownaudio_v1_output_stream_get_channel_count`: the channel
+ * count the input device was actually opened with, after config adaptation.
+ *
+ * # Safety
+ * - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+ * - `out_channels` must point to a writable `u16`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_input_stream_get_channel_count(struct OwnAudioInputStreamHandle *stream,
+                                                   uint16_t *out_channels);
 
 /**
  * Drains captured samples from a stream opened in buffered mode (null callback)
@@ -2463,6 +2637,88 @@ int32_t ownaudio_v1_track_set_output_channel_map(struct OwnAudioTrackHandle *tra
  * - Null pointers are rejected with an error code rather than dereferenced.
  */
 int32_t ownaudio_v1_track_clear_output_channel_map(struct OwnAudioTrackHandle *track);
+
+/**
+ * Installs a destination-indexed output route on `track`: bus channel `dst` takes
+ * source channel `map[dst]`, scaled by `gain[dst]`, and a negative entry leaves that
+ * bus channel untouched by this track.
+ *
+ * Unlike `ownaudio_v1_track_set_output_channel_map`, several destinations may name the
+ * same source channel — that fan-out (one mono click onto two physical outputs, say) is
+ * exactly what a source-indexed map cannot express.
+ *
+ * - `track` — valid track handle.
+ * - `map` — `len` source-channel indices, one per bus channel, or null when `len` is 0.
+ * - `gain` — `len` linear gains, or null for unity throughout.
+ * - `len` — how many bus channels the route covers; entries past the mixer's channel
+ *   count are ignored at render time.
+ *
+ * Passing `len == 0` clears the route. Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - `map` must be valid for `len` `i32` values, and `gain` — when non-null — for `len` `f32` values.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_track_set_output_route(struct OwnAudioTrackHandle *track,
+                                           const int32_t *map,
+                                           const float *gain,
+                                           size_t len);
+
+/**
+ * Clears a destination-indexed route installed by `ownaudio_v1_track_set_output_route`,
+ * returning the track to the straight identity mix.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_track_clear_output_route(struct OwnAudioTrackHandle *track);
+
+/**
+ * Sets the width the track decodes, stretches, effects and pans at, independently of the
+ * mixer's bus width. `0` — the default — means "follow the bus", which is what every
+ * caller got before this existed.
+ *
+ * This is what keeps a wide session cheap: a stereo file on an eight-channel bus still
+ * costs a stereo decode and a stereo effect chain, and only the summation into the bus
+ * touches eight channels. `ownaudio_v1_track_open_file` / `_open_memory` already set it
+ * from what they actually decoded, so this is for callers wiring their own sources.
+ *
+ * Set it while binding a source, not mid-playback: the per-track SoundTouch stage is built
+ * for the bus width up front, and a change makes the next block rebuild it.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_track_set_source_channels(struct OwnAudioTrackHandle *track, uint16_t channels);
+
+/**
+ * Confines the master effect chain, master gain and master pan to `channels` of the bus.
+ *
+ * Everything outside the scope reaches the driver exactly as mixed — a clean direct out,
+ * so a click feed on channels 3/4 is not squashed by the limiter sitting on the main pair.
+ * Passing `len == 0` restores the default, where the master stage owns the whole bus.
+ *
+ * - `mixer` — valid mixer handle.
+ * - `channels` — `len` zero-based bus-channel indices, or null when `len` is 0.
+ * - `len` — how many channels are in scope.
+ *
+ * Returns `OwnAudioErrorCode::Success` (0) on success.
+ *
+ * # Safety
+ * - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+ * - `channels` must be valid for `len` `u32` values (readable).
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_mixer_set_master_channel_scope(struct OwnAudioMixerHandle *mixer,
+                                                   const uint32_t *channels,
+                                                   size_t len);
 
 /**
  * Sets the track gain (linear amplitude multiplier; 1.0 = unity).

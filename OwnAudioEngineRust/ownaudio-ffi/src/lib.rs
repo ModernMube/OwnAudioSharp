@@ -20,6 +20,7 @@ pub mod error_code;
 pub mod ffi_abi;
 pub mod ffi_android;
 pub mod ffi_bpm;
+pub mod ffi_capture;
 pub mod ffi_config;
 pub mod ffi_decoder;
 pub mod ffi_device;
@@ -46,9 +47,9 @@ pub use ffi_decoder::OwnAudioStreamInfo;
 pub use ffi_device::OwnAudioDeviceInfo;
 pub use ffi_stream::OwnAudioLoadStats;
 pub use handles::{
-    OwnAudioDecoderHandle, OwnAudioEffectHandle, OwnAudioEngineHandle, OwnAudioFileSourceHandle,
-    OwnAudioInputStreamHandle, OwnAudioMixerHandle, OwnAudioOutputStreamHandle,
-    OwnAudioTrackHandle, OwnAudioTrackSourceHandle,
+    OwnAudioCaptureHandle, OwnAudioDecoderHandle, OwnAudioEffectHandle, OwnAudioEngineHandle,
+    OwnAudioFileSourceHandle, OwnAudioInputStreamHandle, OwnAudioMixerHandle,
+    OwnAudioOutputStreamHandle, OwnAudioTrackHandle, OwnAudioTrackSourceHandle,
 };
 pub use host_api::OwnHostApi;
 pub use ownaudio_core::effects::{VstAudioBuffer, VstProcessFn};

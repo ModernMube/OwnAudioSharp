@@ -750,6 +750,40 @@ pub unsafe extern "C" fn ownaudio_v1_output_stream_get_callback_frames(
     crate::error_code::finish_catch_unwind(result)
 }
 
+/// Writes the channel count the output device was actually opened with to `*out_channels`.
+///
+/// The requested width is only a request: a device that cannot serve it gets adapted to the
+/// nearest count it supports, and nothing until now reported which one that was. Anything
+/// drawing physical output sockets — or deciding how far a per-track route may reach — has
+/// to ask here rather than trust what it asked for.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_output_stream` or
+///   `ownaudio_v1_mixer_open_output_stream`, not yet destroyed.
+/// - `out_channels` must point to a writable `u16`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_output_stream_get_channel_count(
+    stream: *mut OwnAudioOutputStreamHandle,
+    out_channels: *mut u16,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_channels.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let wrapper = match unsafe { output_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        unsafe {
+            *out_channels = wrapper.inner.channel_count();
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
 /// Asks a buffered stream to drop whatever is queued in its render ring.
 ///
 /// The flush happens on the next callback, because only the reader may move the
@@ -1188,6 +1222,35 @@ pub unsafe extern "C" fn ownaudio_v1_input_stream_get_callback_frames(
         };
         unsafe {
             *out_frames = wrapper.inner.callback_frames();
+        }
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Capture-side counterpart of `ownaudio_v1_output_stream_get_channel_count`: the channel
+/// count the input device was actually opened with, after config adaptation.
+///
+/// # Safety
+/// - `stream` must be a live handle from `ownaudio_v1_open_input_stream` that has not been destroyed.
+/// - `out_channels` must point to a writable `u16`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_input_stream_get_channel_count(
+    stream: *mut OwnAudioInputStreamHandle,
+    out_channels: *mut u16,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if out_channels.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+        let wrapper = match unsafe { input_stream_from_ptr(stream) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+        unsafe {
+            *out_channels = wrapper.inner.channel_count();
         }
         OwnAudioErrorCode::Success as i32
     }));

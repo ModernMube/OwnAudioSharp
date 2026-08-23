@@ -238,6 +238,11 @@ fn output_stream_create_play_pause_destroy_smoke() {
 
 mod track_source {
     use ownaudio_ffi::error_code::OwnAudioErrorCode;
+    use ownaudio_ffi::ffi_capture::{
+        ownaudio_v1_capture_channel_count, ownaudio_v1_capture_close, ownaudio_v1_capture_pause,
+        ownaudio_v1_capture_play, ownaudio_v1_track_attach_capture,
+        ownaudio_v1_track_detach_capture,
+    };
     use ownaudio_ffi::ffi_source::{
         ownaudio_v1_track_clear_source, ownaudio_v1_track_set_ring_source,
         ownaudio_v1_track_source_destroy, ownaudio_v1_track_source_free_samples,
@@ -253,6 +258,10 @@ mod track_source {
         ownaudio_v1_track_reset_position, ownaudio_v1_track_set_gain,
         ownaudio_v1_track_set_output_channel_map, ownaudio_v1_track_set_pan,
         ownaudio_v1_track_set_start_delay_frames,
+    };
+    use ownaudio_ffi::ffi_track::{
+        ownaudio_v1_mixer_set_master_channel_scope, ownaudio_v1_track_clear_output_route,
+        ownaudio_v1_track_set_output_route, ownaudio_v1_track_set_source_channels,
     };
     use ownaudio_ffi::handles::{
         OwnAudioMixerHandle, OwnAudioTrackHandle, OwnAudioTrackSourceHandle,
@@ -308,6 +317,174 @@ mod track_source {
             ownaudio_v1_track_destroy(track_a);
             ownaudio_v1_track_destroy(track_b);
             ownaudio_v1_mixer_destroy(mixer);
+        }
+    }
+
+    #[test]
+    fn output_route_and_source_channels_smoke() {
+        unsafe {
+            // Null handles are rejected before anything is dereferenced.
+            let route: [i32; 4] = [0, -1, 0, 1];
+            assert_eq!(
+                ownaudio_v1_track_set_output_route(
+                    std::ptr::null_mut(),
+                    route.as_ptr(),
+                    std::ptr::null(),
+                    route.len()
+                ),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+            assert_eq!(
+                ownaudio_v1_track_clear_output_route(std::ptr::null_mut()),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+            assert_eq!(
+                ownaudio_v1_track_set_source_channels(std::ptr::null_mut(), 2),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+
+            let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+            assert_eq!(
+                ownaudio_v1_mixer_create(48_000.0, 4, &mut mixer),
+                OwnAudioErrorCode::Success as i32
+            );
+            let mut track: *mut OwnAudioTrackHandle = std::ptr::null_mut();
+            assert_eq!(
+                ownaudio_v1_track_create(mixer, &mut track),
+                OwnAudioErrorCode::Success as i32
+            );
+
+            let gains: [f32; 4] = [1.0, 1.0, 0.5, 1.0];
+            assert_eq!(
+                ownaudio_v1_track_set_output_route(
+                    track,
+                    route.as_ptr(),
+                    gains.as_ptr(),
+                    route.len()
+                ),
+                OwnAudioErrorCode::Success as i32
+            );
+            // Null gains mean unity, and a positive length with a null map is a null-pointer error.
+            assert_eq!(
+                ownaudio_v1_track_set_output_route(
+                    track,
+                    route.as_ptr(),
+                    std::ptr::null(),
+                    route.len()
+                ),
+                OwnAudioErrorCode::Success as i32
+            );
+            assert_eq!(
+                ownaudio_v1_track_set_output_route(track, std::ptr::null(), std::ptr::null(), 2),
+                OwnAudioErrorCode::NullPointer as i32
+            );
+            // Both ways of clearing.
+            assert_eq!(
+                ownaudio_v1_track_set_output_route(track, std::ptr::null(), std::ptr::null(), 0),
+                OwnAudioErrorCode::Success as i32
+            );
+            assert_eq!(
+                ownaudio_v1_track_clear_output_route(track),
+                OwnAudioErrorCode::Success as i32
+            );
+
+            assert_eq!(
+                ownaudio_v1_track_set_source_channels(track, 2),
+                OwnAudioErrorCode::Success as i32
+            );
+            assert_eq!(
+                ownaudio_v1_track_set_source_channels(track, 0),
+                OwnAudioErrorCode::Success as i32
+            );
+
+            ownaudio_v1_track_destroy(track);
+            ownaudio_v1_mixer_destroy(mixer);
+        }
+    }
+
+    #[test]
+    fn master_channel_scope_smoke() {
+        unsafe {
+            let scope: [u32; 2] = [0, 1];
+            assert_eq!(
+                ownaudio_v1_mixer_set_master_channel_scope(
+                    std::ptr::null_mut(),
+                    scope.as_ptr(),
+                    scope.len()
+                ),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+
+            let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+            assert_eq!(
+                ownaudio_v1_mixer_create(48_000.0, 4, &mut mixer),
+                OwnAudioErrorCode::Success as i32
+            );
+
+            assert_eq!(
+                ownaudio_v1_mixer_set_master_channel_scope(mixer, scope.as_ptr(), scope.len()),
+                OwnAudioErrorCode::Success as i32
+            );
+            assert_eq!(
+                ownaudio_v1_mixer_set_master_channel_scope(mixer, std::ptr::null(), 2),
+                OwnAudioErrorCode::NullPointer as i32
+            );
+            // len == 0 hands the whole bus back to the master stage.
+            assert_eq!(
+                ownaudio_v1_mixer_set_master_channel_scope(mixer, std::ptr::null(), 0),
+                OwnAudioErrorCode::Success as i32
+            );
+
+            ownaudio_v1_mixer_destroy(mixer);
+        }
+    }
+
+    #[test]
+    fn capture_bridge_rejects_bad_handles_without_a_device() {
+        // No audio hardware in CI, so this only proves the guards: every capture entry point
+        // must refuse a null handle rather than dereference it, and closing null is a no-op.
+        unsafe {
+            let mut channels: u16 = 0;
+            assert_eq!(
+                ownaudio_v1_capture_channel_count(std::ptr::null_mut(), &mut channels),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+            assert_eq!(
+                ownaudio_v1_capture_play(std::ptr::null_mut()),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+            assert_eq!(
+                ownaudio_v1_capture_pause(std::ptr::null_mut()),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+            assert_eq!(
+                ownaudio_v1_track_detach_capture(std::ptr::null_mut(), std::ptr::null_mut()),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+
+            let map: [u32; 2] = [0, 1];
+            assert_eq!(
+                ownaudio_v1_track_attach_capture(
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    map.as_ptr(),
+                    map.len()
+                ),
+                OwnAudioErrorCode::InvalidHandle as i32
+            );
+            assert_eq!(
+                ownaudio_v1_track_attach_capture(
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null(),
+                    2
+                ),
+                OwnAudioErrorCode::NullPointer as i32
+            );
+
+            ownaudio_v1_capture_close(std::ptr::null_mut());
         }
     }
 

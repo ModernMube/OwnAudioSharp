@@ -3,8 +3,9 @@ use std::sync::Arc;
 
 use ownaudio_core::multitrack::{FxTapReader, MixerController};
 use ownaudio_core::{
-    AudioEngine, FileSourceControl, InputStream, MemorySourceControl, MixerShared, MultiTrackMixer,
-    OutputStream, RingBufferReader, RingBufferWriter, StreamingTrack, TrackShared,
+    AudioEngine, CaptureController, FileSourceControl, InputStream, MemorySourceControl,
+    MixerShared, MultiTrackMixer, OutputStream, RingBufferReader, RingBufferWriter, StreamingTrack,
+    TrackShared,
 };
 
 /// Opaque handle to an [`AudioEngine`] instance.
@@ -238,6 +239,19 @@ pub struct OwnAudioInputSourceHandle {
     _private: [u8; 0],
 }
 
+/// Opaque handle to a shared capture bridge — one input stream fanned out to several
+/// tracks.
+///
+/// Create with `ownaudio_v1_capture_open`; release with `ownaudio_v1_capture_close`.
+/// Where [`OwnAudioInputSourceHandle`] is one stream per track, this is one stream for all
+/// of them, each track taking the physical channels it names. On ASIO that is the
+/// difference between working and not: a driver is a single-client affair, and every extra
+/// registered callback walks its channel buffers again.
+#[repr(C)]
+pub struct OwnAudioCaptureHandle {
+    _private: [u8; 0],
+}
+
 // Internal wrappers
 
 /// Owns one multi-track mixer's control- and audio-side state.
@@ -373,6 +387,39 @@ pub(crate) struct InputSourceWrapper {
     pub stream: InputStream,
     /// Shared capture peak metering.
     pub peaks: Arc<InputPeaks>,
+}
+
+/// Owns the control side of a shared capture bridge.
+///
+/// The [`InputStream`] captures on its own thread and hands each block to the
+/// [`CaptureHub`] living inside its callback; this side only starts/stops it, reads peaks,
+/// and attaches or detaches per-track taps through `controller`. No audio data passes
+/// through here.
+///
+/// [`CaptureHub`]: ownaudio_core::CaptureHub
+pub(crate) struct CaptureWrapper {
+    /// The one input stream every attached track feeds off.
+    pub stream: InputStream,
+    /// Attach / detach channel into the capture callback.
+    pub controller: CaptureController,
+    /// Physical capture channels this bridge fans out.
+    pub channels: u16,
+    /// Shared capture peak metering, measured over the first two physical channels.
+    pub peaks: Arc<InputPeaks>,
+}
+
+unsafe impl Send for CaptureWrapper {}
+unsafe impl Sync for CaptureWrapper {}
+
+/// Casts a raw `*mut OwnAudioCaptureHandle` back to `&mut CaptureWrapper`.
+pub(crate) unsafe fn capture_from_ptr<'a>(
+    ptr: *mut OwnAudioCaptureHandle,
+) -> Option<&'a mut CaptureWrapper> {
+    if ptr.is_null() {
+        None
+    } else {
+        Some(&mut *(ptr as *mut CaptureWrapper))
+    }
 }
 
 unsafe impl Send for MixerWrapper {}

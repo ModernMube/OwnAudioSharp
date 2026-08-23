@@ -92,6 +92,12 @@ pub unsafe extern "C" fn ownaudio_v1_track_open_memory(
         let (source, control) = MemoryTrackSource::new(buffer, channels);
         control.set_loop(loop_enabled != 0);
 
+        // The buffer's own interleaving is the track's processing width; passing the session
+        // channel count (what every caller does today) leaves this exactly as it was.
+        track_wrapper
+            .shared
+            .set_source_channels(channels.min(u16::MAX as u32) as u16);
+
         // Hand the serving source to the audio thread via the command queue; it
         // becomes the track's source on the next render block (the old one is
         // retired off the real-time path).

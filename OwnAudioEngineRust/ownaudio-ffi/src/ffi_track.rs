@@ -891,6 +891,170 @@ pub unsafe extern "C" fn ownaudio_v1_track_clear_output_channel_map(
     crate::error_code::finish_catch_unwind(result)
 }
 
+/// Installs a destination-indexed output route on `track`: bus channel `dst` takes
+/// source channel `map[dst]`, scaled by `gain[dst]`, and a negative entry leaves that
+/// bus channel untouched by this track.
+///
+/// Unlike `ownaudio_v1_track_set_output_channel_map`, several destinations may name the
+/// same source channel — that fan-out (one mono click onto two physical outputs, say) is
+/// exactly what a source-indexed map cannot express.
+///
+/// - `track` — valid track handle.
+/// - `map` — `len` source-channel indices, one per bus channel, or null when `len` is 0.
+/// - `gain` — `len` linear gains, or null for unity throughout.
+/// - `len` — how many bus channels the route covers; entries past the mixer's channel
+///   count are ignored at render time.
+///
+/// Passing `len == 0` clears the route. Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - `map` must be valid for `len` `i32` values, and `gain` — when non-null — for `len` `f32` values.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_track_set_output_route(
+    track: *mut OwnAudioTrackHandle,
+    map: *const i32,
+    gain: *const f32,
+    len: usize,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { track_from_ptr(track) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        if len == 0 {
+            wrapper.shared.clear_output_route();
+            return OwnAudioErrorCode::Success as i32;
+        }
+
+        if map.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let route = unsafe { std::slice::from_raw_parts(map, len) };
+        let gains = if gain.is_null() {
+            None
+        } else {
+            Some(unsafe { std::slice::from_raw_parts(gain, len) })
+        };
+        wrapper.shared.set_output_route(route, gains);
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Clears a destination-indexed route installed by `ownaudio_v1_track_set_output_route`,
+/// returning the track to the straight identity mix.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_track_clear_output_route(
+    track: *mut OwnAudioTrackHandle,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { track_from_ptr(track) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        wrapper.shared.clear_output_route();
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Sets the width the track decodes, stretches, effects and pans at, independently of the
+/// mixer's bus width. `0` — the default — means "follow the bus", which is what every
+/// caller got before this existed.
+///
+/// This is what keeps a wide session cheap: a stereo file on an eight-channel bus still
+/// costs a stereo decode and a stereo effect chain, and only the summation into the bus
+/// touches eight channels. `ownaudio_v1_track_open_file` / `_open_memory` already set it
+/// from what they actually decoded, so this is for callers wiring their own sources.
+///
+/// Set it while binding a source, not mid-playback: the per-track SoundTouch stage is built
+/// for the bus width up front, and a change makes the next block rebuild it.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_track_set_source_channels(
+    track: *mut OwnAudioTrackHandle,
+    channels: u16,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { track_from_ptr(track) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        wrapper.shared.set_source_channels(channels);
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
+/// Confines the master effect chain, master gain and master pan to `channels` of the bus.
+///
+/// Everything outside the scope reaches the driver exactly as mixed — a clean direct out,
+/// so a click feed on channels 3/4 is not squashed by the limiter sitting on the main pair.
+/// Passing `len == 0` restores the default, where the master stage owns the whole bus.
+///
+/// - `mixer` — valid mixer handle.
+/// - `channels` — `len` zero-based bus-channel indices, or null when `len` is 0.
+/// - `len` — how many channels are in scope.
+///
+/// Returns `OwnAudioErrorCode::Success` (0) on success.
+///
+/// # Safety
+/// - `mixer` must be a live handle from `ownaudio_v1_mixer_create` that has not been destroyed.
+/// - `channels` must be valid for `len` `u32` values (readable).
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_mixer_set_master_channel_scope(
+    mixer: *mut OwnAudioMixerHandle,
+    channels: *const u32,
+    len: usize,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        if len == 0 {
+            wrapper.master_shared.clear_master_channel_scope();
+            return OwnAudioErrorCode::Success as i32;
+        }
+
+        if channels.is_null() {
+            return OwnAudioErrorCode::NullPointer as i32;
+        }
+
+        let scope = unsafe { std::slice::from_raw_parts(channels, len) };
+        wrapper.master_shared.set_master_channel_scope(scope);
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
 // Track parameters
 
 /// Sets the track gain (linear amplitude multiplier; 1.0 = unity).
