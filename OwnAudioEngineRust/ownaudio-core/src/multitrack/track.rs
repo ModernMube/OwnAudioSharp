@@ -1,7 +1,9 @@
 //! Single audio track: an audio source, a shared atomic parameter block, and
 //! an effect chain.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{
+    AtomicBool, AtomicI32, AtomicU16, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering,
+};
 use std::sync::Arc;
 
 use crate::effects::EffectChain;
@@ -18,12 +20,58 @@ const GAIN_SMOOTH_MS: f32 = 5.0;
 /// the chain up to this many effects.
 pub const MAX_EFFECTS_PER_TRACK: usize = 32;
 
-/// Maximum number of source channels a per-track output-channel routing map can
-/// cover. A map assigns each source channel `i` (`i < route_len`) to a physical
-/// output channel; source channels beyond this cap are dropped. Sixteen is far
-/// above any realistic per-track source width while keeping [`TrackShared`] a
-/// fixed, allocation-free size.
+/// Maximum number of channels a per-track output routing table can cover, in either
+/// direction — source channels for the legacy source-indexed map, bus channels for the
+/// destination-indexed route. Sixteen is far above any realistic per-track width while
+/// keeping [`TrackShared`] a fixed, allocation-free size.
 pub const MAX_ROUTE_CHANNELS: usize = 16;
+
+/// Sentinel in a destination-indexed route meaning "this bus channel gets nothing from
+/// this track". Any negative value reads the same way; this is the one to write.
+pub const ROUTE_UNBOUND: i32 = -1;
+
+/// How many times the audio thread re-reads a routing table that came back torn before it
+/// gives up and keeps the previous block's. The control-side write is a few dozen relaxed
+/// stores, so one retry is already generous; the cap is what keeps the render bounded.
+const ROUTE_LOAD_ATTEMPTS: usize = 8;
+
+/// A block's worth of per-track routing, read off [`TrackShared`] in one seqlock pass.
+///
+/// Both tables live here because only one of them is ever active, and reading them together
+/// is what lets a single version counter cover the pair.
+#[derive(Clone, Copy)]
+pub struct RouteSnapshot {
+    /// Source-indexed map: source channel `i` → bus channel `map[i]`.
+    pub map: [u32; MAX_ROUTE_CHANNELS],
+    /// Live entries in [`RouteSnapshot::map`]; `0` means no source-indexed routing.
+    pub map_len: usize,
+    /// Destination-indexed route: bus channel `dst` ← source channel `route[dst]`, or
+    /// [`ROUTE_UNBOUND`].
+    pub route: [i32; MAX_ROUTE_CHANNELS],
+    /// Per-destination linear gain that goes with [`RouteSnapshot::route`].
+    pub gain: [f32; MAX_ROUTE_CHANNELS],
+    /// Live entries in [`RouteSnapshot::route`]; `0` means no destination-indexed route.
+    pub route_len: usize,
+}
+
+impl RouteSnapshot {
+    /// An empty snapshot — no routing either way, i.e. the identity mix.
+    pub fn new() -> Self {
+        Self {
+            map: [0; MAX_ROUTE_CHANNELS],
+            map_len: 0,
+            route: [ROUTE_UNBOUND; MAX_ROUTE_CHANNELS],
+            gain: [1.0; MAX_ROUTE_CHANNELS],
+            route_len: 0,
+        }
+    }
+}
+
+impl Default for RouteSnapshot {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Playback state of a single track.
 ///
@@ -178,6 +226,16 @@ pub struct TrackShared {
     /// Latch: `true` when the control thread has written a new
     /// [`TrackShared::pending_start_silence`] the audio thread has not yet taken.
     start_silence_pending: AtomicBool,
+    /// Seqlock guarding both routing tables: odd while the control thread is rewriting
+    /// one, even when it is settled. The audio thread reads it either side of its
+    /// snapshot and retries when the two differ, so it never renders a block from half
+    /// of one table and half of another.
+    ///
+    /// Dropping the length to zero for the duration of a write — the older trick here —
+    /// only protects a reader that happens to load the length inside the write window;
+    /// one that loaded it just before still walks a table being rewritten under it, and
+    /// a stress test catches exactly that.
+    route_version: AtomicU32,
     /// Number of active entries in [`TrackShared::route_map`], i.e. how many
     /// source channels the per-track output routing covers. `0` means no routing:
     /// the track sums straight through, source channel `i` → output channel `i`
@@ -187,10 +245,34 @@ pub struct TrackShared {
     /// track (silence), matching the managed mixer's selective channel routing.
     route_len: AtomicUsize,
     /// Per-source-channel destination output-channel indices, valid for the first
-    /// [`TrackShared::route_len`] entries. Written by the control thread (map first,
-    /// `route_len` last with `Release`) and read by the audio thread (`route_len`
-    /// first with `Acquire`), so the audio thread never observes a half-written map.
+    /// [`TrackShared::route_len`] entries.
     route_map: [AtomicU32; MAX_ROUTE_CHANNELS],
+    /// Number of active entries in [`TrackShared::out_route_map`] — how many *bus*
+    /// channels the destination-indexed route covers. `0` means the route is off, and
+    /// the track falls back to the legacy source-indexed map (or, when that is off too,
+    /// to the identity fast path).
+    ///
+    /// The two routing modes are deliberately separate rather than one being folded
+    /// into the other: the source-indexed map can sum several source channels into one
+    /// bus channel (fan-in), which a destination-indexed table cannot express, so
+    /// converting would silently change what existing callers get.
+    out_route_len: AtomicUsize,
+    /// Destination-indexed route: bus channel `dst` takes source channel
+    /// `out_route_map[dst]`, or nothing at all when the entry is [`ROUTE_UNBOUND`].
+    /// Several destinations may name the same source — that is the fan-out the
+    /// source-indexed map could never do.
+    out_route_map: [AtomicI32; MAX_ROUTE_CHANNELS],
+    /// Per-destination linear gain as `f32` bits, applied on top of the track gain and
+    /// pan. Unity for every entry unless the caller asked for otherwise.
+    out_route_gain: [AtomicU32; MAX_ROUTE_CHANNELS],
+    /// The track's own processing width: how many interleaved channels it decodes,
+    /// stretches, effects and pans at. `0` (the default) means "whatever the mixer's bus
+    /// is", which is exactly the pre-routing behaviour.
+    ///
+    /// Decoupling this from the bus is what keeps a wide session cheap — a stereo file on
+    /// an eight-channel bus still costs a stereo decode, stretch and effect chain, and
+    /// only the final summation touches eight channels.
+    src_channels: AtomicU16,
 }
 
 impl TrackShared {
@@ -213,8 +295,13 @@ impl TrackShared {
             peak_r_bits: AtomicU32::new(0.0f32.to_bits()),
             pending_start_silence: AtomicU64::new(0),
             start_silence_pending: AtomicBool::new(false),
+            route_version: AtomicU32::new(0),
             route_len: AtomicUsize::new(0),
             route_map: std::array::from_fn(|_| AtomicU32::new(0)),
+            out_route_len: AtomicUsize::new(0),
+            out_route_map: std::array::from_fn(|_| AtomicI32::new(ROUTE_UNBOUND)),
+            out_route_gain: std::array::from_fn(|_| AtomicU32::new(1.0f32.to_bits())),
+            src_channels: AtomicU16::new(0),
         }
     }
 
@@ -223,37 +310,126 @@ impl TrackShared {
     /// channel not named receives no contribution from this track. Passing an
     /// empty slice is equivalent to [`TrackShared::clear_output_channel_map`].
     ///
-    /// Entries beyond [`MAX_ROUTE_CHANNELS`] are ignored. The map is disabled for
-    /// the instant it is being rewritten (`route_len` dropped to `0` first, then
-    /// restored last) so the audio thread only ever sees a fully-written map or
-    /// none — never a torn one.
+    /// Entries beyond [`MAX_ROUTE_CHANNELS`] are ignored. Installing the map also clears any
+    /// destination-indexed route, so the two forms never fight over the same track.
     pub fn set_output_channel_map(&self, map: &[u32]) {
-        self.route_len.store(0, Ordering::Release);
-        let n = map.len().min(MAX_ROUTE_CHANNELS);
-        for (i, &v) in map.iter().take(n).enumerate() {
-            self.route_map[i].store(v, Ordering::Relaxed);
-        }
-        self.route_len.store(n, Ordering::Release);
+        self.write_routing(|| {
+            let n = map.len().min(MAX_ROUTE_CHANNELS);
+            for (i, &v) in map.iter().take(n).enumerate() {
+                self.route_map[i].store(v, Ordering::Relaxed);
+            }
+            self.route_len.store(n, Ordering::Relaxed);
+            self.out_route_len.store(0, Ordering::Relaxed);
+        });
     }
 
     /// Clears any per-track output-channel routing, returning the track to the
     /// straight-through identity mix (source channel `i` → output channel `i`).
     pub fn clear_output_channel_map(&self) {
-        self.route_len.store(0, Ordering::Release);
+        self.write_routing(|| self.route_len.store(0, Ordering::Relaxed));
     }
 
-    /// Copies the active routing map into `out` and returns its length (`0` when
-    /// no routing is set). Called on the audio thread once per block.
+    /// Copies the active source-indexed routing map into `out` and returns its length
+    /// (`0` when no routing is set, or when the table was being rewritten).
     #[inline]
     pub fn load_output_channel_map(&self, out: &mut [u32; MAX_ROUTE_CHANNELS]) -> usize {
-        let n = self
-            .route_len
-            .load(Ordering::Acquire)
-            .min(MAX_ROUTE_CHANNELS);
-        for (i, slot) in out.iter_mut().enumerate().take(n) {
-            *slot = self.route_map[i].load(Ordering::Relaxed);
+        let mut snapshot = RouteSnapshot::new();
+        self.load_routing(&mut snapshot);
+        *out = snapshot.map;
+        snapshot.map_len
+    }
+
+    /// Installs a destination-indexed output route: bus channel `dst` takes source channel
+    /// `map[dst]` scaled by `gain[dst]`, and [`ROUTE_UNBOUND`] (any negative entry) leaves
+    /// that bus channel untouched by this track.
+    ///
+    /// Unlike [`TrackShared::set_output_channel_map`], two destinations may name the same
+    /// source — that is fan-out, and it is the whole point of this form. Omitting `gain`
+    /// (or running past its end) means unity. An empty `map` clears the route, and setting
+    /// one clears any source-indexed map.
+    ///
+    /// Entries beyond [`MAX_ROUTE_CHANNELS`] are ignored.
+    pub fn set_output_route(&self, map: &[i32], gain: Option<&[f32]>) {
+        self.write_routing(|| {
+            let n = map.len().min(MAX_ROUTE_CHANNELS);
+            for (dst, &src) in map.iter().take(n).enumerate() {
+                self.out_route_map[dst].store(src, Ordering::Relaxed);
+                let g = gain.and_then(|g| g.get(dst)).copied().unwrap_or(1.0);
+                self.out_route_gain[dst].store(g.to_bits(), Ordering::Relaxed);
+            }
+            self.out_route_len.store(n, Ordering::Relaxed);
+            self.route_len.store(0, Ordering::Relaxed);
+        });
+    }
+
+    /// Drops the destination-indexed route, returning the track to the identity mix.
+    pub fn clear_output_route(&self) {
+        self.write_routing(|| self.out_route_len.store(0, Ordering::Relaxed));
+    }
+
+    /// Snapshots both routing tables onto `out`, returning `false` when the control thread
+    /// was mid-rewrite and every retry came back torn — the caller then keeps whatever it
+    /// read last, which costs a block of staleness rather than a block of wrong routing.
+    ///
+    /// Audio thread, once per block.
+    #[inline]
+    pub fn load_routing(&self, out: &mut RouteSnapshot) -> bool {
+        for _ in 0..ROUTE_LOAD_ATTEMPTS {
+            let before = self.route_version.load(Ordering::Acquire);
+            if before & 1 != 0 {
+                continue;
+            }
+
+            let map_len = self
+                .route_len
+                .load(Ordering::Relaxed)
+                .min(MAX_ROUTE_CHANNELS);
+            for (i, slot) in out.map.iter_mut().enumerate().take(map_len) {
+                *slot = self.route_map[i].load(Ordering::Relaxed);
+            }
+
+            let route_len = self
+                .out_route_len
+                .load(Ordering::Relaxed)
+                .min(MAX_ROUTE_CHANNELS);
+            for dst in 0..route_len {
+                out.route[dst] = self.out_route_map[dst].load(Ordering::Relaxed);
+                out.gain[dst] = f32::from_bits(self.out_route_gain[dst].load(Ordering::Relaxed));
+            }
+
+            if self.route_version.load(Ordering::Acquire) == before {
+                out.map_len = map_len;
+                out.route_len = route_len;
+                return true;
+            }
         }
-        n
+        false
+    }
+
+    /// Runs one routing edit inside the seqlock. Control thread only — two writers at once
+    /// would leave the version in the wrong parity, which is the same single-writer contract
+    /// every other parameter here has.
+    fn write_routing(&self, edit: impl FnOnce()) {
+        self.route_version.fetch_add(1, Ordering::AcqRel);
+        edit();
+        self.route_version.fetch_add(1, Ordering::Release);
+    }
+
+    /// The track's own processing width, or `0` for "follow the mixer's bus".
+    #[inline]
+    pub fn source_channels(&self) -> u16 {
+        self.src_channels.load(Ordering::Relaxed)
+    }
+
+    /// Sets the width the track decodes and processes at; `0` restores the default of
+    /// following the bus.
+    ///
+    /// The per-track SoundTouch stage is built for the bus width when the track is
+    /// constructed, so the first block after a change rebuilds it — do this while binding a
+    /// source, not mid-playback.
+    #[inline]
+    pub fn set_source_channels(&self, channels: u16) {
+        self.src_channels.store(channels, Ordering::Relaxed);
     }
 
     /// Returns the current playback state.
@@ -630,6 +806,10 @@ pub struct Track {
     ///
     /// [`MixerCommand::SetFxTap`]: super::MixerCommand::SetFxTap
     fx_tap: Option<FxTap>,
+    /// Last routing the audio thread read cleanly off [`Track::shared`]. Kept here so a
+    /// snapshot that lands mid-rewrite can fall back to the previous block's tables instead
+    /// of dropping the track's routing for a block.
+    routing: RouteSnapshot,
 }
 
 /// Output peak below which a block counts as effectively silent, so releasing the always-on
@@ -666,6 +846,24 @@ pub(crate) fn equal_power_pan(p: f32) -> (f32, f32) {
     )
 }
 
+/// Folds one source frame into the running per-channel peak of a track's own contribution.
+/// Left and right follow source channels 0 and 1 — nothing above them carries a stereo
+/// image — and `gain_l` / `gain_r` are whatever scaling that frame was placed with, so the
+/// meter reads the level a listener actually gets.
+#[inline]
+fn accumulate_peaks(frame: &[f32], gain_l: f32, gain_r: f32, peak_l: &mut f32, peak_r: &mut f32) {
+    let l = (frame[0] * gain_l).abs();
+    if l > *peak_l {
+        *peak_l = l;
+    }
+    if let Some(&s) = frame.get(1) {
+        let r = (s * gain_r).abs();
+        if r > *peak_r {
+            *peak_r = r;
+        }
+    }
+}
+
 impl Track {
     /// Creates a new idle track with the given id, sample rate (for gain
     /// smoothing), interleaved channel count, and pre-sized scratch buffer.
@@ -693,6 +891,7 @@ impl Track {
             unity_run_frames: 0,
             unlatch_after_frames: (sample_rate as u64).max(1),
             fx_tap: None,
+            routing: RouteSnapshot::new(),
         }
     }
 
@@ -761,13 +960,15 @@ impl Track {
     /// blocks fades in over a few milliseconds instead of clicking.
     #[inline]
     pub(crate) fn process_additive(&mut self, output: &mut [f32], channels: u16) {
-        let frame_len = output.len();
-        if self.scratch.len() < frame_len {
-            self.scratch.resize(frame_len, 0.0);
-        }
-
         let ch = channels.max(1) as usize;
-        let total_frames = frame_len / ch;
+        // The track works at its own width and only the summation step steps up to the bus,
+        // so a stereo file on an eight-channel bus still decodes and stretches in stereo.
+        let src_ch = match self.shared.source_channels() {
+            0 => ch,
+            n => n as usize,
+        };
+        let src_channels = src_ch as u16;
+        let total_frames = output.len() / ch;
 
         // Consume a pending start-offset silence request (control thread) once, then
         // emit that many output frames of silence at the head of the block WITHOUT
@@ -791,9 +992,13 @@ impl Track {
             return;
         }
 
-        let active_samples = active_frames * ch;
+        let src_samples = active_frames * src_ch;
+        let out_samples = active_frames * ch;
         let out_off = sil * ch;
-        let buf = &mut self.scratch[..active_samples];
+        if self.scratch.len() < src_samples {
+            self.scratch.resize(src_samples, 0.0);
+        }
+        let buf = &mut self.scratch[..src_samples];
 
         // Honor a pending seek: drop the stretch FIFO's pre-seek tail before rendering so the
         // jump is clean.
@@ -819,7 +1024,7 @@ impl Track {
             None => 0,
             Some(_) if needs_stretch => {
                 self.stretch
-                    .fill(&mut self.source, buf, channels, tempo, pitch)
+                    .fill(&mut self.source, buf, src_channels, tempo, pitch)
             }
             Some(ref mut src) => src.read(buf),
         };
@@ -830,7 +1035,7 @@ impl Track {
         if let Some(tap) = self.fx_tap.as_mut() {
             tap.write_pre(buf);
         }
-        self.effects.process_all(buf, channels);
+        self.effects.process_all(buf, src_channels);
         if let Some(tap) = self.fx_tap.as_mut() {
             tap.write_post(buf);
         }
@@ -838,7 +1043,7 @@ impl Track {
         // Plugin delay compensation: delay this track's output so it lines up
         // sample-accurately with the highest-latency track. A zero delay (the
         // common case) is a passthrough.
-        self.pdc.process(buf, channels);
+        self.pdc.process(buf, src_channels);
 
         self.gain_smoother.set_target(self.shared.gain());
         self.pan_smoother.set_target(self.shared.pan());
@@ -850,16 +1055,17 @@ impl Track {
         // Advance the gain and pan once per frame so both channels of a stereo frame
         // share the same (smoothed) gain. The active region is written starting at
         // `out_off` so any start-offset silence prefix is left untouched.
-        let out_active = &mut output[out_off..out_off + active_samples];
+        let out_active = &mut output[out_off..out_off + out_samples];
 
-        // Per-track output-channel routing: an empty map (the common case) sums the
-        // track straight through (source channel i → output channel i); a non-empty
-        // map routes source channel `c` to output channel `route_buf[c]` and leaves
-        // every unmapped output channel silent for this track — the native port of
-        // the managed mixer's selective channel routing. The map is snapshotted once
-        // per block onto the stack (allocation-free).
-        let mut route_buf = [0u32; MAX_ROUTE_CHANNELS];
-        let route_len = self.shared.load_output_channel_map(&mut route_buf);
+        // Both routing tables come off the shared block in one seqlock pass; a torn read
+        // leaves last block's routing in place rather than glitching the audio. The
+        // destination-indexed route wins where it is set — it is the only one that can fan
+        // a source channel out to several bus channels; the source-indexed map is the
+        // fallback, and with neither set the track sums straight through.
+        self.shared.load_routing(&mut self.routing);
+        let routing = self.routing;
+        let (route_buf, out_route, out_gain) = (routing.map, routing.route, routing.gain);
+        let (route_len, out_route_len) = (routing.map_len, routing.route_len);
 
         let settled_unity = self.gain_smoother.is_settled(GAIN_SETTLE_EPS)
             && (self.gain_smoother.target() - 1.0).abs() <= GAIN_SETTLE_EPS;
@@ -874,7 +1080,105 @@ impl Track {
         let pan_settled = self.pan_smoother.is_settled(PAN_SETTLE_EPS);
         let (const_pan_l, const_pan_r) = equal_power_pan(self.pan_smoother.current());
 
-        if route_len == 0 {
+        if out_route_len > 0 {
+            // Destination-indexed routing: every bus channel the route names pulls from its
+            // source channel, so nothing stops two destinations naming the same source —
+            // that is the fan-out the source-indexed map cannot express.
+            let n = out_route_len.min(ch);
+            if bypass {
+                for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(src_ch)) {
+                    for (dst, &src) in out_route.iter().enumerate().take(n) {
+                        if let Some(&s) = usize::try_from(src).ok().and_then(|s| in_frame.get(s)) {
+                            out_frame[dst] += s * out_gain[dst];
+                        }
+                    }
+                    accumulate_peaks(in_frame, 1.0, 1.0, &mut peak_l, &mut peak_r);
+                }
+            } else {
+                for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(src_ch)) {
+                    let gain = self.gain_smoother.advance();
+                    let p = self.pan_smoother.advance();
+                    let (pan_l, pan_r) = if pan_settled {
+                        (const_pan_l, const_pan_r)
+                    } else {
+                        equal_power_pan(p)
+                    };
+                    for (dst, &src) in out_route.iter().enumerate().take(n) {
+                        let Ok(src) = usize::try_from(src) else {
+                            continue;
+                        };
+                        let Some(&s) = in_frame.get(src) else {
+                            continue;
+                        };
+                        // Pan follows the SOURCE channel, so a routed left/right channel keeps
+                        // its weight wherever on the bus it lands.
+                        let ch_pan = if src == 0 {
+                            pan_l
+                        } else if src == 1 {
+                            pan_r
+                        } else {
+                            1.0
+                        };
+                        out_frame[dst] += s * gain * ch_pan * out_gain[dst];
+                    }
+                    accumulate_peaks(
+                        in_frame,
+                        gain * pan_l,
+                        gain * pan_r,
+                        &mut peak_l,
+                        &mut peak_r,
+                    );
+                }
+            }
+        } else if route_len > 0 {
+            // Legacy source-indexed routing: source channel `c` is summed into output channel
+            // `route_buf[c]`, several sources may share one destination (fan-in), and every
+            // output the map does not name stays silent for this track.
+            let n = route_len.min(src_ch);
+            if bypass {
+                for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(src_ch)) {
+                    for c in 0..n {
+                        let dst = route_buf[c] as usize;
+                        if dst < ch {
+                            out_frame[dst] += in_frame[c];
+                        }
+                    }
+                    accumulate_peaks(in_frame, 1.0, 1.0, &mut peak_l, &mut peak_r);
+                }
+            } else {
+                for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(src_ch)) {
+                    let gain = self.gain_smoother.advance();
+                    let p = self.pan_smoother.advance();
+                    let (pan_l, pan_r) = if pan_settled {
+                        (const_pan_l, const_pan_r)
+                    } else {
+                        equal_power_pan(p)
+                    };
+                    for c in 0..n {
+                        let dst = route_buf[c] as usize;
+                        if dst < ch {
+                            // Pan by source channel index, so a routed left/right source
+                            // channel keeps its pan weight regardless of its destination.
+                            let ch_pan = if c == 0 {
+                                pan_l
+                            } else if c == 1 {
+                                pan_r
+                            } else {
+                                1.0
+                            };
+                            out_frame[dst] += in_frame[c] * gain * ch_pan;
+                        }
+                    }
+                    accumulate_peaks(
+                        in_frame,
+                        gain * pan_l,
+                        gain * pan_r,
+                        &mut peak_l,
+                        &mut peak_r,
+                    );
+                }
+            }
+        } else if src_ch == ch {
             // Fast path: once gain has settled at unity and pan is centered, every frame would
             // multiply by 1.0 and re-advance no-op ramps. Skip both with a flat additive copy the
             // compiler can vectorise cleanly, measuring the per-channel peak in a separate pass.
@@ -883,16 +1187,7 @@ impl Track {
                     *o += s;
                 }
                 for frame in buf.chunks(ch) {
-                    let l = frame[0].abs();
-                    if l > peak_l {
-                        peak_l = l;
-                    }
-                    if ch > 1 {
-                        let r = frame[1].abs();
-                        if r > peak_r {
-                            peak_r = r;
-                        }
-                    }
+                    accumulate_peaks(frame, 1.0, 1.0, &mut peak_l, &mut peak_r);
                 }
             } else {
                 for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(ch)) {
@@ -927,67 +1222,42 @@ impl Track {
                 }
             }
         } else {
-            // Selective routing. Only source channels the map covers are placed, and
-            // only onto in-range output channels; the source width is `ch` (the track
-            // decodes at the mixer's channel count), so cap the map at `ch`.
-            let n = route_len.min(ch);
-            if bypass {
-                for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(ch)) {
-                    for c in 0..n {
-                        let dst = route_buf[c] as usize;
-                        if dst < ch {
-                            out_frame[dst] += in_frame[c];
-                        }
-                    }
-                    let l = in_frame[0].abs();
-                    if l > peak_l {
-                        peak_l = l;
-                    }
-                    if ch > 1 {
-                        let r = in_frame[1].abs();
-                        if r > peak_r {
-                            peak_r = r;
-                        }
-                    }
-                }
-            } else {
-                for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(ch)) {
-                    let gain = self.gain_smoother.advance();
+            // Unrouted track that is narrower (or wider) than the bus: still the identity mix,
+            // just over the channels the two have in common.
+            let n = src_ch.min(ch);
+            for (out_frame, in_frame) in out_active.chunks_mut(ch).zip(buf.chunks(src_ch)) {
+                let (gain, pan_l, pan_r) = if bypass {
+                    (1.0, 1.0, 1.0)
+                } else {
+                    let g = self.gain_smoother.advance();
                     let p = self.pan_smoother.advance();
-                    let (pan_l, pan_r) = if pan_settled {
+                    let (l, r) = if pan_settled {
                         (const_pan_l, const_pan_r)
                     } else {
                         equal_power_pan(p)
                     };
-                    for c in 0..n {
-                        let dst = route_buf[c] as usize;
-                        if dst < ch {
-                            // Pan by source channel index, so a routed left/right source
-                            // channel keeps its pan weight regardless of its destination.
-                            let ch_pan = if c == 0 {
-                                pan_l
-                            } else if c == 1 {
-                                pan_r
-                            } else {
-                                1.0
-                            };
-                            out_frame[dst] += in_frame[c] * gain * ch_pan;
-                        }
-                    }
-                    let l = (in_frame[0] * gain * pan_l).abs();
-                    if l > peak_l {
-                        peak_l = l;
-                    }
-                    if ch > 1 {
-                        let r = (in_frame[1] * gain * pan_r).abs();
-                        if r > peak_r {
-                            peak_r = r;
-                        }
-                    }
+                    (g, l, r)
+                };
+                for i in 0..n {
+                    let ch_pan = if i == 0 {
+                        pan_l
+                    } else if i == 1 {
+                        pan_r
+                    } else {
+                        1.0
+                    };
+                    out_frame[i] += in_frame[i] * gain * ch_pan;
                 }
+                accumulate_peaks(
+                    in_frame,
+                    gain * pan_l,
+                    gain * pan_r,
+                    &mut peak_l,
+                    &mut peak_r,
+                );
             }
         }
-        if ch == 1 {
+        if src_ch == 1 {
             peak_r = peak_l;
         }
         self.shared.store_peaks(peak_l, peak_r);
@@ -1191,6 +1461,172 @@ mod tests {
         b.process_additive(&mut out, 4);
 
         assert_eq!(out, vec![0.25, 0.25, 0.75, 0.75]);
+    }
+
+    #[test]
+    fn output_route_fans_one_source_channel_out_to_several_buses() {
+        // The whole point of the destination-indexed form: bus channels 0 and 2 both take
+        // source channel 0, which the source-indexed map could never express.
+        let mut track = Track::new(24, 48_000.0, 4, 64);
+        track.set_source(Some(Box::new(ConstSource(0.5))));
+        track.shared.set_state(TrackState::Playing);
+        track
+            .shared
+            .set_output_route(&[0, ROUTE_UNBOUND, 0, 1], None);
+
+        let mut out = vec![0.0f32; 8];
+        track.process_additive(&mut out, 4);
+
+        for frame in out.chunks(4) {
+            assert_eq!(frame[0], 0.5);
+            assert_eq!(frame[1], 0.0, "an unbound destination must stay silent");
+            assert_eq!(frame[2], 0.5, "fan-out: same source, second destination");
+            assert_eq!(frame[3], 0.5);
+        }
+    }
+
+    #[test]
+    fn unbound_destination_keeps_another_track_contribution() {
+        // A destination this track does not name must be left alone, not zeroed — the
+        // additive-mix contract has to survive the routing path.
+        let mut a = Track::new(25, 48_000.0, 4, 64);
+        a.set_source(Some(Box::new(ConstSource(0.25))));
+        a.shared.set_state(TrackState::Playing);
+        a.shared.set_output_route(&[0, ROUTE_UNBOUND], None);
+
+        let mut b = Track::new(26, 48_000.0, 4, 64);
+        b.set_source(Some(Box::new(ConstSource(0.75))));
+        b.shared.set_state(TrackState::Playing);
+        b.shared.set_output_route(&[ROUTE_UNBOUND, 1], None);
+
+        let mut out = vec![0.0f32; 4];
+        a.process_additive(&mut out, 4);
+        b.process_additive(&mut out, 4);
+
+        assert_eq!(out, vec![0.25, 0.75, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn output_route_gain_scales_per_destination() {
+        let mut track = Track::new(27, 48_000.0, 4, 64);
+        track.set_source(Some(Box::new(ConstSource(1.0))));
+        track.shared.set_state(TrackState::Playing);
+        track
+            .shared
+            .set_output_route(&[0, 0, 0], Some(&[1.0, 0.5, 0.25]));
+
+        let mut out = vec![0.0f32; 4];
+        track.process_additive(&mut out, 4);
+        assert_eq!(&out[..3], &[1.0, 0.5, 0.25]);
+    }
+
+    #[test]
+    fn narrow_track_on_a_wide_bus_matches_the_wide_render() {
+        // E1: a stereo track set to its own width must land on a 4-channel bus exactly as a
+        // bus-width track would — same samples, a quarter of the decode/effect work.
+        let mut wide = Track::new(28, 48_000.0, 4, 64);
+        wide.set_source(Some(Box::new(ConstSource(0.3))));
+        wide.shared.set_state(TrackState::Playing);
+        wide.shared.set_output_route(&[0, 1], None);
+
+        let mut narrow = Track::new(29, 48_000.0, 4, 64);
+        narrow.set_source(Some(Box::new(ConstSource(0.3))));
+        narrow.shared.set_state(TrackState::Playing);
+        narrow.shared.set_source_channels(2);
+        narrow.shared.set_output_route(&[0, 1], None);
+
+        let mut a = vec![0.0f32; 16];
+        let mut b = vec![0.0f32; 16];
+        wide.process_additive(&mut a, 4);
+        narrow.process_additive(&mut b, 4);
+
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn narrow_track_without_a_route_is_the_identity_over_shared_channels() {
+        let mut track = Track::new(32, 48_000.0, 4, 64);
+        track.set_source(Some(Box::new(ConstSource(0.5))));
+        track.shared.set_state(TrackState::Playing);
+        track.shared.set_source_channels(2);
+
+        let mut out = vec![0.0f32; 8];
+        track.process_additive(&mut out, 4);
+
+        for frame in out.chunks(4) {
+            assert_eq!(&frame[..2], &[0.5, 0.5]);
+            assert_eq!(
+                &frame[2..],
+                &[0.0, 0.0],
+                "no route, no reach past the source"
+            );
+        }
+    }
+
+    #[test]
+    fn source_channels_pulls_only_its_own_width_from_the_source() {
+        // The cost argument behind E1: a 2-channel track on a 4-channel bus must ask its
+        // source for half as many samples as a bus-width track does.
+        let block = 512usize;
+        let wide_reads = Arc::new(AtomicU64::new(0));
+        let mut wide = Track::new(33, 48_000.0, 4, block);
+        wide.set_source(Some(Box::new(CountingSource {
+            read_samples: wide_reads.clone(),
+        })));
+        wide.shared.set_state(TrackState::Playing);
+
+        let narrow_reads = Arc::new(AtomicU64::new(0));
+        let mut narrow = Track::new(34, 48_000.0, 4, block);
+        narrow.set_source(Some(Box::new(CountingSource {
+            read_samples: narrow_reads.clone(),
+        })));
+        narrow.shared.set_state(TrackState::Playing);
+        narrow.shared.set_source_channels(2);
+
+        let mut out = vec![0.0f32; block];
+        wide.process_additive(&mut out, 4);
+        out.iter_mut().for_each(|s| *s = 0.0);
+        narrow.process_additive(&mut out, 4);
+
+        assert_eq!(wide_reads.load(Ordering::Relaxed), block as u64);
+        assert_eq!(narrow_reads.load(Ordering::Relaxed), block as u64 / 2);
+    }
+
+    #[test]
+    fn output_route_write_is_never_observed_half_finished() {
+        // The audio thread snapshots the route while the control thread rewrites it, over and
+        // over. It may see the old table or the new one, never a mix of the two.
+        use std::sync::atomic::AtomicBool;
+
+        let shared = Arc::new(TrackShared::new());
+        shared.set_output_route(&[0, 1, 2, 3], None);
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let writer = {
+            let shared = Arc::clone(&shared);
+            let stop = Arc::clone(&stop);
+            std::thread::spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    shared.set_output_route(&[0, 1, 2, 3], None);
+                    shared.set_output_route(&[3, 2, 1, 0], None);
+                }
+            })
+        };
+
+        let mut snapshot = RouteSnapshot::new();
+        for _ in 0..200_000 {
+            if !shared.load_routing(&mut snapshot) {
+                continue;
+            }
+            assert_eq!(snapshot.route_len, 4);
+            let route = &snapshot.route[..4];
+            assert!(
+                route == [0, 1, 2, 3] || route == [3, 2, 1, 0],
+                "torn route observed: {route:?}"
+            );
+        }
+        stop.store(true, Ordering::Relaxed);
+        writer.join().unwrap();
     }
 
     #[test]

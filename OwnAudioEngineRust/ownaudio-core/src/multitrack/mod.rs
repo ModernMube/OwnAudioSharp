@@ -1,5 +1,6 @@
 //! Multi-track mixer with a shared sample-accurate transport clock.
 
+pub mod capture;
 pub mod clock;
 pub mod command;
 pub mod file_source;
@@ -8,17 +9,20 @@ pub mod memory_source;
 pub mod stretch;
 pub mod track;
 
+pub use capture::{capture_channel, CaptureController, CaptureHub, CaptureTap};
 pub use clock::SampleClock;
 pub use command::{command_channel, CommandReceiver, MixerCommand, MixerController, Retired};
 pub use file_source::{FileSourceControl, FileTrackSource};
 pub use fx_tap::{FxTap, FxTapReader};
 pub use memory_source::{MemorySourceControl, MemoryTrackSource};
-pub use track::{Track, TrackShared, TrackSource, TrackState};
+pub use track::{
+    RouteSnapshot, Track, TrackShared, TrackSource, TrackState, MAX_ROUTE_CHANNELS, ROUTE_UNBOUND,
+};
 
 use crate::effects::{EffectChain, EffectEntry};
 use crate::smoothing::{SmoothedParam, DEFAULT_SMOOTH_MS};
 use rtrb::Producer;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use self::track::MAX_EFFECTS_PER_TRACK;
@@ -48,6 +52,15 @@ pub struct MixerShared {
     master_peak_l_bits: AtomicU32,
     /// Most recent right-channel output peak as `f32` bits (absolute, 0.0–…).
     master_peak_r_bits: AtomicU32,
+    /// Number of active entries in [`MixerShared::master_scope`]. `0` — the default —
+    /// means the master chain, gain and pan run over the whole bus, exactly as before
+    /// the scope existed.
+    master_scope_len: AtomicUsize,
+    /// Bus channels the master stage is confined to, valid for the first
+    /// `master_scope_len` entries. Written by the control thread (channels first, the
+    /// length last with `Release`) and read length-first with `Acquire` on the audio
+    /// thread, so a half-written scope is never observed.
+    master_scope: [AtomicU32; MAX_ROUTE_CHANNELS],
 }
 
 impl MixerShared {
@@ -58,7 +71,43 @@ impl MixerShared {
             master_pan_bits: AtomicU32::new(0.0f32.to_bits()),
             master_peak_l_bits: AtomicU32::new(0.0f32.to_bits()),
             master_peak_r_bits: AtomicU32::new(0.0f32.to_bits()),
+            master_scope_len: AtomicUsize::new(0),
+            master_scope: std::array::from_fn(|_| AtomicU32::new(0)),
         }
+    }
+
+    /// Confines the master effect chain, master gain and master pan to `channels` of the
+    /// bus. Everything outside the scope passes to the driver untouched — a clean direct
+    /// out, so a click feed on channels 3/4 is not squashed by the limiter sitting on the
+    /// main pair.
+    ///
+    /// An empty slice restores the default: the master stage owns the whole bus.
+    pub fn set_master_channel_scope(&self, channels: &[u32]) {
+        self.master_scope_len.store(0, Ordering::Release);
+        let n = channels.len().min(MAX_ROUTE_CHANNELS);
+        for (i, &c) in channels.iter().take(n).enumerate() {
+            self.master_scope[i].store(c, Ordering::Relaxed);
+        }
+        self.master_scope_len.store(n, Ordering::Release);
+    }
+
+    /// Returns the master stage to the whole bus.
+    pub fn clear_master_channel_scope(&self) {
+        self.master_scope_len.store(0, Ordering::Release);
+    }
+
+    /// Snapshots the master scope onto the caller's stack, returning `0` when the whole
+    /// bus is in scope. Audio thread, once per block.
+    #[inline]
+    pub fn load_master_channel_scope(&self, out: &mut [u32; MAX_ROUTE_CHANNELS]) -> usize {
+        let n = self
+            .master_scope_len
+            .load(Ordering::Acquire)
+            .min(MAX_ROUTE_CHANNELS);
+        for (i, slot) in out.iter_mut().enumerate().take(n) {
+            *slot = self.master_scope[i].load(Ordering::Relaxed);
+        }
+        n
     }
 
     /// Returns the linear master gain.
@@ -191,6 +240,10 @@ pub struct MultiTrackMixer {
     /// analyser. Installed and cleared through [`MixerCommand::SetFxTap`] addressed
     /// with [`MASTER_EFFECT_TARGET`].
     master_fx_tap: Option<FxTap>,
+    /// Interleaved scratch the scoped master stage lifts its channels into. Pre-sized at
+    /// construction and grown only if a bigger block than any seen before arrives, so the
+    /// scoped path costs two memcpys per block and no allocation.
+    scope_scratch: Vec<f32>,
 }
 
 impl MultiTrackMixer {
@@ -217,6 +270,7 @@ impl MultiTrackMixer {
             master_pan_smoother: SmoothedParam::new(0.0, sample_rate, DEFAULT_SMOOTH_MS),
             capture_sink: None,
             master_fx_tap: None,
+            scope_scratch: vec![0.0f32; max_buffer_size.max(1)],
         }
     }
 
@@ -371,31 +425,54 @@ impl MultiTrackMixer {
             }
         }
 
-        // Apply the master effect chain once over the fully summed mix.
-        if let Some(tap) = self.master_fx_tap.as_mut() {
-            tap.write_pre(output);
-        }
-        self.master_effects.process_all(output, channels);
-        if let Some(tap) = self.master_fx_tap.as_mut() {
-            tap.write_post(output);
+        // Where the master stage runs: the whole bus by default, or — when a scope is set —
+        // only the named channels, leaving everything else a clean direct out.
+        let ch = channels.max(1) as usize;
+        let mut scope_buf = [0u32; MAX_ROUTE_CHANNELS];
+        let scope_len = self.master_shared.load_master_channel_scope(&mut scope_buf);
+        let (peak_l, peak_r) = if scope_len == 0 {
+            if let Some(tap) = self.master_fx_tap.as_mut() {
+                tap.write_pre(output);
+            }
+            self.master_effects.process_all(output, channels);
+            if let Some(tap) = self.master_fx_tap.as_mut() {
+                tap.write_post(output);
+            }
+            self.master_stage(output, ch)
+        } else {
+            self.mix_scoped_master(output, ch, &scope_buf[..scope_len])
+        };
+        self.master_shared.store_master_peaks(peak_l, peak_r);
+
+        // Tap the fully rendered master block for any active capture sink (e.g. a
+        // recorder). Non-blocking: overflow is dropped rather than stalling the
+        // audio thread when the control-side drain falls behind.
+        if let Some(sink) = self.capture_sink.as_mut() {
+            sink.write(output);
         }
 
-        // Apply the master output gain and pan over the processed mix and measure the
-        // output peak levels for metering. Both are ramped per frame (like a track's
-        // gain/pan) so a live master change fades rather than clicks; at unity gain and
-        // center pan the smoothers rest at their neutral values and the multiply is a
-        // no-op, so a mixer whose master gain/pan is never touched stays bit-exact.
+        self.clock.advance(frames);
+    }
+
+    /// Applies the master gain and pan over `buf` (already through the master chain) and
+    /// returns the block's left/right peaks.
+    ///
+    /// Both are ramped per frame — like a track's — so a live master change fades rather
+    /// than clicks; at unity gain and center pan the smoothers rest at their neutral values
+    /// and the whole multiply is skipped, so a mixer whose master is never touched stays
+    /// bit-exact. `ch` is the width of `buf`, which under a scope is the scope width, not
+    /// the bus width.
+    fn master_stage(&mut self, buf: &mut [f32], ch: usize) -> (f32, f32) {
+        const MASTER_GAIN_SETTLE_EPS: f32 = 1.0e-6;
+        const MASTER_PAN_SETTLE_EPS: f32 = 1.0e-6;
+
         self.master_gain_smoother
             .set_target(self.master_shared.master_gain());
         self.master_pan_smoother
             .set_target(self.master_shared.master_pan());
-        let ch = channels.max(1) as usize;
+
         let mut peak_l = 0.0f32;
         let mut peak_r = 0.0f32;
-        // Fast path: a master gain at unity AND pan centered would multiply every sample by 1.0 and
-        // advance no-op ramps. Skip both and only measure the output peaks over a branch-light pass.
-        const MASTER_GAIN_SETTLE_EPS: f32 = 1.0e-6;
-        const MASTER_PAN_SETTLE_EPS: f32 = 1.0e-6;
         let gain_unity = self.master_gain_smoother.is_settled(MASTER_GAIN_SETTLE_EPS)
             && (self.master_gain_smoother.target() - 1.0).abs() <= MASTER_GAIN_SETTLE_EPS;
         let pan_centered = self.master_pan_smoother.is_settled(MASTER_PAN_SETTLE_EPS)
@@ -403,8 +480,9 @@ impl MultiTrackMixer {
         let pan_settled = self.master_pan_smoother.is_settled(MASTER_PAN_SETTLE_EPS);
         let (const_pan_l, const_pan_r) =
             crate::multitrack::track::equal_power_pan(self.master_pan_smoother.current());
+
         if gain_unity && pan_centered {
-            for frame in output.chunks(ch) {
+            for frame in buf.chunks(ch) {
                 let l = frame[0].abs();
                 if l > peak_l {
                     peak_l = l;
@@ -417,7 +495,7 @@ impl MultiTrackMixer {
                 }
             }
         } else {
-            for frame in output.chunks_mut(ch) {
+            for frame in buf.chunks_mut(ch) {
                 let gain = self.master_gain_smoother.advance();
                 let p = self.master_pan_smoother.advance();
                 let (pan_l, pan_r) = if pan_settled {
@@ -450,16 +528,56 @@ impl MultiTrackMixer {
         if ch == 1 {
             peak_r = peak_l;
         }
-        self.master_shared.store_master_peaks(peak_l, peak_r);
+        (peak_l, peak_r)
+    }
 
-        // Tap the fully rendered master block for any active capture sink (e.g. a
-        // recorder). Non-blocking: overflow is dropped rather than stalling the
-        // audio thread when the control-side drain falls behind.
-        if let Some(sink) = self.capture_sink.as_mut() {
-            sink.write(output);
+    /// Runs the master chain, gain and pan over just the scoped bus channels.
+    ///
+    /// The scope is lifted into a pre-allocated interleaved scratch, processed there at the
+    /// scope's own width (so a stereo-minded limiter stays stereo on a wide bus), and written
+    /// back. Two memcpys per block, no allocation; channels outside the scope are never read
+    /// and never written, which is what makes a direct out actually direct.
+    fn mix_scoped_master(&mut self, output: &mut [f32], ch: usize, scope: &[u32]) -> (f32, f32) {
+        let width = scope.len();
+        let frames = output.len() / ch;
+        let needed = frames * width;
+        if self.scope_scratch.len() < needed {
+            self.scope_scratch.resize(needed, 0.0);
         }
 
-        self.clock.advance(frames);
+        // Taken out of `self` so the smoothers and the tap can be borrowed alongside it;
+        // `mem::take` leaves an empty Vec behind and allocates nothing.
+        let mut scratch = std::mem::take(&mut self.scope_scratch);
+        {
+            let work = &mut scratch[..needed];
+            for (f, frame) in work.chunks_mut(width).enumerate() {
+                for (i, slot) in frame.iter_mut().enumerate() {
+                    let src = scope[i] as usize;
+                    *slot = if src < ch { output[f * ch + src] } else { 0.0 };
+                }
+            }
+
+            if let Some(tap) = self.master_fx_tap.as_mut() {
+                tap.write_pre(work);
+            }
+            self.master_effects.process_all(work, width as u16);
+            if let Some(tap) = self.master_fx_tap.as_mut() {
+                tap.write_post(work);
+            }
+        }
+
+        let peaks = self.master_stage(&mut scratch[..needed], width);
+
+        for (f, frame) in scratch[..needed].chunks(width).enumerate() {
+            for (i, &s) in frame.iter().enumerate() {
+                let dst = scope[i] as usize;
+                if dst < ch {
+                    output[f * ch + dst] = s;
+                }
+            }
+        }
+        self.scope_scratch = scratch;
+        peaks
     }
 
     /// Returns the effect chain addressed by `track_id`: the master chain when
@@ -971,6 +1089,95 @@ mod tests {
         let mut out = [0.0f32; 4];
         mixer.mix(&mut out);
         assert_eq!(out, [1.5, 2.5, 3.5, 4.5]);
+    }
+
+    #[test]
+    fn uncabled_stereo_session_is_bit_exact() {
+        // The acceptance criterion for the whole routing feature: with nothing routed, no source
+        // width set and no master scope, the mix has to come out bit-for-bit as it did before any
+        // of it existed. Every fast path stays intact or this fails on the first sample.
+        let mut mixer = MultiTrackMixer::new(48_000.0, 2);
+        let (a, sa) = mixer.add_track();
+        let (b, sb) = mixer.add_track();
+        mixer.set_track_source(
+            a,
+            Some(Box::new(VecSource::new(vec![0.1, -0.2, 0.3, -0.4]))),
+        );
+        mixer.set_track_source(
+            b,
+            Some(Box::new(VecSource::new(vec![0.5, 0.5, -0.5, -0.5]))),
+        );
+        sa.set_state(TrackState::Playing);
+        sb.set_state(TrackState::Playing);
+
+        let mut out = [0.0f32; 4];
+        mixer.mix(&mut out);
+
+        // Exact f32 sums, not rounded literals — the point is that nothing touched the samples
+        // beyond the plain addition.
+        assert_eq!(out, [0.1 + 0.5, -0.2 + 0.5, 0.3 - 0.5, -0.4 - 0.5]);
+    }
+
+    #[test]
+    fn master_scope_leaves_the_direct_out_untouched() {
+        // A click feed on channels 2/3 must reach the driver exactly as mixed, while the main
+        // pair still gets the master gain — that is what makes a direct out direct.
+        let mut mixer = MultiTrackMixer::new(48_000.0, 4);
+        let (a, shared) = mixer.add_track();
+        mixer.set_track_source(a, Some(Box::new(VecSource::new(vec![1.0f32; 8192]))));
+        shared.set_state(TrackState::Playing);
+        mixer.master_shared().set_master_gain(0.5);
+        mixer.master_shared().set_master_channel_scope(&[0, 1]);
+
+        let mut out = vec![0.0f32; 8192];
+        mixer.mix(&mut out);
+
+        // Past the 5 ms master ramp the scoped pair sits at the target, the rest is bit-exact.
+        let tail = &out[out.len() - 4..];
+        assert!((tail[0] - 0.5).abs() < 1e-3, "L not scoped: {}", tail[0]);
+        assert!((tail[1] - 0.5).abs() < 1e-3, "R not scoped: {}", tail[1]);
+        assert_eq!(tail[2], 1.0, "channel 2 must bypass the master stage");
+        assert_eq!(tail[3], 1.0, "channel 3 must bypass the master stage");
+    }
+
+    #[test]
+    fn empty_master_scope_is_the_whole_bus() {
+        // The default has to stay what it always was: the master stage owns every channel.
+        let mut mixer = MultiTrackMixer::new(48_000.0, 4);
+        let (a, shared) = mixer.add_track();
+        mixer.set_track_source(a, Some(Box::new(VecSource::new(vec![1.0f32; 8192]))));
+        shared.set_state(TrackState::Playing);
+        mixer.master_shared().set_master_gain(0.5);
+
+        let mut out = vec![0.0f32; 8192];
+        mixer.mix(&mut out);
+
+        for &s in &out[out.len() - 4..] {
+            assert!((s - 0.5).abs() < 1e-3, "every channel takes the gain: {s}");
+        }
+    }
+
+    #[test]
+    fn cleared_master_scope_goes_back_to_the_whole_bus() {
+        let mut mixer = MultiTrackMixer::new(48_000.0, 4);
+        let (a, shared) = mixer.add_track();
+        mixer.set_track_source(a, Some(Box::new(VecSource::new(vec![1.0f32; 16_384]))));
+        shared.set_state(TrackState::Playing);
+        let master = mixer.master_shared();
+        master.set_master_gain(0.5);
+        master.set_master_channel_scope(&[0, 1]);
+
+        let mut out = vec![0.0f32; 8192];
+        mixer.mix(&mut out);
+        master.clear_master_channel_scope();
+        mixer.mix(&mut out);
+
+        for &s in &out[out.len() - 4..] {
+            assert!(
+                (s - 0.5).abs() < 1e-3,
+                "scope cleared, gain everywhere: {s}"
+            );
+        }
     }
 
     #[test]

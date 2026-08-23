@@ -28,6 +28,8 @@ pub struct OutputStream {
     pub(crate) callback_frames: Arc<AtomicU32>,
     /// How long each callback took against the budget its frame count buys.
     pub(crate) load_counters: Arc<LoadCounters>,
+    /// Channel count the device was actually opened with, after config adaptation.
+    pub(crate) device_channels: u16,
 }
 
 impl OutputStream {
@@ -64,6 +66,15 @@ impl OutputStream {
         self.callback_frames.load(Ordering::Relaxed)
     }
 
+    /// Channels the device really opened with. The requested width is only a request —
+    /// [`crate::config`] adapts it to the nearest the device supports — so anything drawing
+    /// output sockets (or deciding how far a route may reach) has to ask here, not look at
+    /// what it asked for.
+    #[inline]
+    pub fn channel_count(&self) -> u16 {
+        self.device_channels
+    }
+
     /// DSP load since the stream opened or the counters were last reset. The
     /// underrun tally says a block was already late; this says how close the
     /// others came.
@@ -96,6 +107,8 @@ pub struct InputStream {
     pub(crate) latency_frames: Arc<AtomicU32>,
     /// Frames the last callback actually delivered.
     pub(crate) callback_frames: Arc<AtomicU32>,
+    /// Channel count the capture device was actually opened with.
+    pub(crate) device_channels: u16,
 }
 
 impl InputStream {
@@ -131,5 +144,12 @@ impl InputStream {
     #[inline]
     pub fn callback_frames(&self) -> u32 {
         self.callback_frames.load(Ordering::Relaxed)
+    }
+
+    /// Capture channels the device really opened with — the counterpart of
+    /// [`OutputStream::channel_count`], and what a capture bridge fans out from.
+    #[inline]
+    pub fn channel_count(&self) -> u16 {
+        self.device_channels
     }
 }

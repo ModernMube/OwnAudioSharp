@@ -55,8 +55,9 @@ pub use engine::AudioEngine;
 pub use error::{AudioError, Result};
 pub use mixer::Mixer;
 pub use multitrack::{
-    FileSourceControl, FileTrackSource, MemorySourceControl, MemoryTrackSource, MixerShared,
-    MultiTrackMixer, SampleClock, Track, TrackShared, TrackSource, TrackState,
+    capture_channel, CaptureController, CaptureHub, CaptureTap, FileSourceControl, FileTrackSource,
+    MemorySourceControl, MemoryTrackSource, MixerShared, MultiTrackMixer, RouteSnapshot,
+    SampleClock, Track, TrackShared, TrackSource, TrackState, MAX_ROUTE_CHANNELS, ROUTE_UNBOUND,
 };
 pub use resampler::Resampler;
 pub use ringbuffer::{ring_buffer, ring_buffer_frames, RingBufferReader, RingBufferWriter};

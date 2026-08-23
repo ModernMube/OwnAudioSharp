@@ -357,7 +357,50 @@ impl AudioEngine {
             latency_frames,
             callback_frames,
             load_counters,
+            device_channels,
         })
+    }
+
+    /// The device an input stream would be built on, resolved exactly the way
+    /// [`AudioEngine::open_input_stream`] resolves it: shared with the output on ASIO (where
+    /// both directions must sit on one `cpal::Device`), cached or freshly looked up
+    /// everywhere else.
+    ///
+    /// Having this in one place is what keeps a capture bridge from quietly landing on a
+    /// different card than the one the configuration names.
+    fn resolve_input_target(&self, device: Option<&AudioDeviceInfo>) -> Result<cpal::Device> {
+        if self.is_asio() {
+            return self.resolve_shared_device(device.map(|d| d.name.as_str()));
+        }
+        match device.map(|d| d.name.as_str()) {
+            Some(name) => match self.cached_input_device(name) {
+                Some(cached) => Ok(cached),
+                None => resolve_input_device(&self.host, Some(name)),
+            },
+            None => resolve_input_device(&self.host, None),
+        }
+    }
+
+    /// Widest capture configuration the given input device offers, asked of the device
+    /// itself rather than of the host — so it still answers on ASIO, where enumeration is
+    /// off the table once a driver is loaded.
+    ///
+    /// This is what a capture bridge opens at: all the physical inputs at once, so each live
+    /// track can pick its own channels out of the one stream.
+    pub fn max_input_channels(&self, device: Option<&AudioDeviceInfo>) -> Result<u16> {
+        let cpal_device = self.resolve_input_target(device)?;
+        let widest = cpal_device
+            .supported_input_configs()?
+            .map(|range| range.channels())
+            .max()
+            .unwrap_or(0);
+
+        match widest {
+            0 => Err(AudioError::UnsupportedConfig(
+                "device reports no input configuration".into(),
+            )),
+            n => Ok(n),
+        }
     }
 
     /// Opens an input stream on the given device (or the system default if
@@ -374,17 +417,7 @@ impl AudioEngine {
         config: &StreamConfig,
         mut callback: impl FnMut(&[f32]) + Send + 'static,
     ) -> Result<InputStream> {
-        let cpal_device = if self.is_asio() {
-            self.resolve_shared_device(device.map(|d| d.name.as_str()))?
-        } else {
-            match device.map(|d| d.name.as_str()) {
-                Some(name) => match self.cached_input_device(name) {
-                    Some(cached) => cached,
-                    None => resolve_input_device(&self.host, Some(name))?,
-                },
-                None => resolve_input_device(&self.host, None)?,
-            }
-        };
+        let cpal_device = self.resolve_input_target(device)?;
         let (stream_config, sample_format, device_channels) =
             validate_input_config_adaptive(&cpal_device, config)?;
 
@@ -532,6 +565,7 @@ impl AudioEngine {
             error_state,
             latency_frames,
             callback_frames,
+            device_channels,
         })
     }
 }
