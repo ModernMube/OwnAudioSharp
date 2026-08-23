@@ -195,6 +195,24 @@ public sealed class AudioInputStream : IDisposable
     }
 
     /// <summary>
+    /// Capture channels the device really opened with, after the config was adapted to what it
+    /// actually offers.
+    /// </summary>
+    public int ChannelCount
+    {
+        get
+        {
+            Guard.NotDisposed(_disposed, nameof(AudioInputStream));
+
+            int code = OwnAudioNative.ownaudio_v1_input_stream_get_channel_count(
+                _handle.DangerousGetHandle(), out ushort _channels);
+            ErrorCodeMapper.ThrowIfError(code, nameof(ChannelCount));
+
+            return _channels;
+        }
+    }
+
+    /// <summary>
     /// Native stream goes first so the callback is quiet before we drop the delegate pin.
     /// Idempotent.
     /// </summary>

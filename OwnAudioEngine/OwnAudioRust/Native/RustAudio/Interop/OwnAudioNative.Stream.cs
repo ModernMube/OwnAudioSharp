@@ -163,6 +163,17 @@ internal static unsafe partial class OwnAudioNative
         out uint outFrames);
 
     /// <summary>
+    /// Channels the output device really opened with. The requested width is only a request -
+    /// a device that can't serve it gets adapted, and this is where that shows up.
+    /// </summary>
+    /// <param name="stream"></param>
+    /// <param name="outChannels"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_output_stream_get_channel_count(
+        IntPtr stream,
+        out ushort outChannels);
+
+    /// <summary>
     /// Asks the render callback to drop whatever is queued. Takes effect on its next run.
     /// </summary>
     /// <param name="stream"></param>
@@ -266,6 +277,16 @@ internal static unsafe partial class OwnAudioNative
     internal static partial int ownaudio_v1_input_stream_get_callback_frames(
         IntPtr stream,
         out uint outFrames);
+
+    /// <summary>
+    /// Same on the capture side: channels the input device really opened with.
+    /// </summary>
+    /// <param name="stream"></param>
+    /// <param name="outChannels"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_input_stream_get_channel_count(
+        IntPtr stream,
+        out ushort outChannels);
 
     /// <summary>
     /// Drains a buffered-mode stream (one opened with a zero callback) into dst. Whole frames only,

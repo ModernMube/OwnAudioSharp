@@ -348,6 +348,134 @@ internal static partial class OwnAudioNative
     [LibraryImport(NativeLibraryLoader.LogicalName)]
     internal static partial int ownaudio_v1_track_clear_output_channel_map(IntPtr track);
 
+    /// <summary>
+    /// Destination indexed routing: bus channel dst takes source channel map[dst] at gain[dst],
+    /// negative means nothing. Two destinations may name the same source, that's the fan out.
+    /// </summary>
+    /// <param name="map">first source channel index, one per bus channel</param>
+    /// <param name="gain">first linear gain, or null ref for unity</param>
+    /// <param name="len">how many bus channels the route covers, 0 clears it</param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_set_output_route(
+        IntPtr track,
+        in int map,
+        in float gain,
+        nuint len);
+
+    /// <summary>
+    /// Drops the destination indexed route.
+    /// </summary>
+    /// <param name="track"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_clear_output_route(IntPtr track);
+
+    /// <summary>
+    /// The width the track decodes, stretches and effects at, independent of the bus. 0 follows
+    /// the bus, which is what everyone got before this existed.
+    /// </summary>
+    /// <param name="track"></param>
+    /// <param name="channels"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_set_source_channels(IntPtr track, ushort channels);
+
+    /// <summary>
+    /// Confines the master chain, gain and pan to these bus channels. Everything outside reaches
+    /// the driver as mixed, so a direct out stays clean. len 0 gives the whole bus back.
+    /// </summary>
+    /// <param name="mixer"></param>
+    /// <param name="channels">first zero based bus channel index</param>
+    /// <param name="len"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_mixer_set_master_channel_scope(
+        IntPtr mixer,
+        in uint channels,
+        nuint len);
+
+    #endregion
+
+    #region Shared capture bridge
+
+    /// <summary>
+    /// Opens the input device once at its full physical width, handle in outCapture. Every live
+    /// track then taps this one stream instead of opening its own - on ASIO that's the only way.
+    /// Starts paused.
+    /// </summary>
+    /// <param name="engine"></param>
+    /// <param name="deviceName">null for the default</param>
+    /// <param name="sampleRate">Hz</param>
+    /// <param name="bufferFrames">0 lets the engine pick</param>
+    /// <param name="outCapture"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName, StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int ownaudio_v1_capture_open(
+        IntPtr engine,
+        string? deviceName,
+        uint sampleRate,
+        uint bufferFrames,
+        out IntPtr outCapture);
+
+    /// <summary>
+    /// How many physical capture channels the bridge actually opened.
+    /// </summary>
+    /// <param name="capture"></param>
+    /// <param name="outChannels"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_capture_channel_count(IntPtr capture, out ushort outChannels);
+
+    /// <summary>
+    /// Hangs a track off the bridge: capture channel map[i] becomes the track's channel i. Also
+    /// sets the track's own width to len. Attaching again replaces the map, that's a live reroute.
+    /// </summary>
+    /// <param name="mixer"></param>
+    /// <param name="track"></param>
+    /// <param name="capture"></param>
+    /// <param name="map">first zero based capture channel index</param>
+    /// <param name="len">track side channel count</param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_attach_capture(
+        IntPtr mixer,
+        IntPtr track,
+        IntPtr capture,
+        in uint map,
+        nuint len);
+
+    /// <summary>
+    /// Stops feeding this track from the bridge, it just underruns into silence afterwards.
+    /// </summary>
+    /// <param name="capture"></param>
+    /// <param name="track"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_track_detach_capture(IntPtr capture, IntPtr track);
+
+    /// <summary>
+    /// Starts or resumes capture for every attached tap.
+    /// </summary>
+    /// <param name="capture"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_capture_play(IntPtr capture);
+
+    /// <summary>
+    /// Pauses capture, whatever is already in the rings still plays out.
+    /// </summary>
+    /// <param name="capture"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_capture_pause(IntPtr capture);
+
+    /// <summary>
+    /// Device side peaks over the first two physical channels.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_capture_get_peaks(
+        IntPtr capture,
+        out float outLeft,
+        out float outRight);
+
+    /// <summary>
+    /// Closes the bridge and releases the stream. Zero handle is fine.
+    /// </summary>
+    /// <param name="capture"></param>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial void ownaudio_v1_capture_close(IntPtr capture);
+
     #endregion
 
     #region Track source feed

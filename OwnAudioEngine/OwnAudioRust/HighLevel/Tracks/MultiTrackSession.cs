@@ -26,10 +26,12 @@ public sealed class MultiTrackSession : IDisposable
     private readonly List<FileTrack> _fileTracks = new();
     private readonly List<MemoryTrack> _memoryTracks = new();
     private readonly List<InputTrack> _inputTracks = new();
+    private readonly List<CaptureBridge> _captureBridges = new();
     private readonly MasterEffectChain _masterEffects;
     private AudioOutputStream? _outputStream;
     private float _masterGain = 1.0f;
     private float _masterPan = 0.0f;
+    private int[] _masterScope = Array.Empty<int>();
     private bool _masterTapping;
     private bool _disposed;
 
@@ -141,7 +143,17 @@ public sealed class MultiTrackSession : IDisposable
     /// file track and its track belong to the session.
     /// </summary>
     /// <param name="filePath"></param>
-    public FileTrack AddFileTrack(string filePath)
+    public FileTrack AddFileTrack(string filePath) => AddFileTrack(filePath, _channels);
+
+    /// <summary>
+    /// Same, but decoding to a width of your choosing instead of the session's. A stereo file
+    /// on an 8 channel bus stays a stereo decode, stretch and effect chain - only the summation
+    /// into the bus is wide, which is what keeps a wide session from costing four times the CPU.
+    /// Where it lands on the bus is the track's routing, not this.
+    /// </summary>
+    /// <param name="filePath"></param>
+    /// <param name="channels">decode width, 0 keeps the file's own</param>
+    public FileTrack AddFileTrack(string filePath, ushort channels)
     {
         _throwIfDisposed();
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
@@ -155,7 +167,7 @@ public sealed class MultiTrackSession : IDisposable
                 track.GetNativeHandle(),
                 filePath,
                 (uint)_sampleRate,
-                _channels,
+                channels,
                 prefetchFrames: 0,
                 out IntPtr rawSource);
             ErrorCodeMapper.ThrowIfError(code, nameof(AddFileTrack));
@@ -257,6 +269,78 @@ public sealed class MultiTrackSession : IDisposable
         {
             RemoveTrack(track);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Opens the shared capture bridge on the given input device, at the device's own physical
+    /// width. Live input tracks then tap it with <see cref="CaptureBridge.Attach"/> instead of
+    /// each opening a stream of its own - one driver client, however many inputs. Starts paused.
+    /// The session disposes it with everything else.
+    /// </summary>
+    /// <param name="engine">The engine owning the input device.</param>
+    /// <param name="device">null = system default.</param>
+    /// <param name="bufferFrames">Device buffer in frames, 0 lets the engine pick.</param>
+    public CaptureBridge OpenCapture(Safe.AudioEngine engine, Safe.AudioDevice? device = null, uint bufferFrames = 0)
+    {
+        _throwIfDisposed();
+        ArgumentNullException.ThrowIfNull(engine);
+
+        int code = OwnAudioNative.ownaudio_v1_capture_open(
+            engine.NativeHandle,
+            device?.Name,
+            (uint)_sampleRate,
+            bufferFrames,
+            out IntPtr rawCapture);
+        ErrorCodeMapper.ThrowIfError(code, nameof(OpenCapture));
+
+        var handle = new CaptureHandle();
+        Marshal.InitHandle(handle, rawCapture);
+
+        code = OwnAudioNative.ownaudio_v1_capture_channel_count(rawCapture, out ushort channels);
+        if (code != 0)
+        {
+            handle.Dispose();
+            ErrorCodeMapper.ThrowIfError(code, nameof(OpenCapture));
+        }
+
+        var bridge = new CaptureBridge(handle, _mixerHandle.DangerousGetHandle(), channels);
+        _captureBridges.Add(bridge);
+        return bridge;
+    }
+
+    /// <summary>
+    /// Which bus channels the master chain, gain and pan run over. Empty (the default) is the
+    /// whole bus, exactly as it always was. Narrow it to [0,1] and a click feed on 3/4 reaches
+    /// the driver as mixed - a limiter on the main pair no longer squashes the direct out.
+    /// </summary>
+    public int[] MasterChannelScope
+    {
+        get => _masterScope;
+        set
+        {
+            int[] _scope = value ?? Array.Empty<int>();
+            foreach (int ch in _scope)
+                if (ch < 0 || ch >= _channels)
+                    throw new ArgumentOutOfRangeException(nameof(value), ch,
+                        $"Master scope channel is outside the session's {_channels}.");
+
+            _masterScope = _scope;
+            if (_disposed) { return; }
+
+            Span<uint> scope = stackalloc uint[_scope.Length];
+            for (int i = 0; i < _scope.Length; i++)
+                scope[i] = (uint)_scope[i];
+
+            ref readonly uint first = ref scope.IsEmpty
+                ? ref Unsafe.NullRef<uint>()
+                : ref MemoryMarshal.GetReference(scope);
+
+            int code = OwnAudioNative.ownaudio_v1_mixer_set_master_channel_scope(
+                _mixerHandle.DangerousGetHandle(),
+                in first,
+                (nuint)scope.Length);
+            ErrorCodeMapper.ThrowIfError(code, nameof(MasterChannelScope));
         }
     }
 
@@ -531,6 +615,9 @@ public sealed class MultiTrackSession : IDisposable
 
         foreach (InputTrack inputTrack in _inputTracks) inputTrack.Dispose();
         _inputTracks.Clear();
+
+        foreach (CaptureBridge bridge in _captureBridges) bridge.Dispose();
+        _captureBridges.Clear();
 
         foreach (AudioTrack track in _tracks) track.Dispose();
 

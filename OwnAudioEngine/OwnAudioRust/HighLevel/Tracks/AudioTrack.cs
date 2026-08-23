@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Ownaudio.Native.RustAudio.Interop;
 using Ownaudio.Safe.Exceptions;
@@ -34,6 +35,7 @@ public sealed class AudioTrack : IDisposable
     private float _pitchSemitones  = 0.0f;
     private bool  _muted           = false;
     private bool  _tapping         = false;
+    private int   _sourceChannels  = 0;
 
     #endregion
 
@@ -318,6 +320,73 @@ public sealed class AudioTrack : IDisposable
         int code = OwnAudioNative.ownaudio_v1_track_clear_output_channel_map(
             _handle.DangerousGetHandle());
         ErrorCodeMapper.ThrowIfError(code, nameof(ClearOutputChannelMap));
+    }
+
+    /// <summary>
+    /// Destination indexed routing: bus channel dst takes source channel sourceForChannel[dst] at
+    /// gains[dst], negative means that bus channel gets nothing from us. Two destinations may name
+    /// the same source - that's the fan out a source indexed map can't do. Empty span clears it.
+    /// </summary>
+    /// <param name="sourceForChannel">source channel index per bus channel, -1 for unbound</param>
+    /// <param name="gains">linear gain per bus channel, empty for unity</param>
+    public void SetOutputRoute(ReadOnlySpan<int> sourceForChannel, ReadOnlySpan<float> gains = default)
+    {
+        if (_disposed) { return; }
+
+        if (sourceForChannel.IsEmpty)
+        {
+            ClearOutputRoute();
+            return;
+        }
+
+        if (!gains.IsEmpty && gains.Length != sourceForChannel.Length)
+            throw new ArgumentException(
+                $"Gain count ({gains.Length}) must match the route length ({sourceForChannel.Length}).", nameof(gains));
+
+        ref readonly float firstGain = ref gains.IsEmpty
+            ? ref Unsafe.NullRef<float>()
+            : ref MemoryMarshal.GetReference(gains);
+
+        int code = OwnAudioNative.ownaudio_v1_track_set_output_route(
+            _handle.DangerousGetHandle(),
+            in sourceForChannel[0],
+            in firstGain,
+            (nuint)sourceForChannel.Length);
+        ErrorCodeMapper.ThrowIfError(code, nameof(SetOutputRoute));
+    }
+
+    /// <summary>
+    /// Drops the destination indexed route.
+    /// </summary>
+    public void ClearOutputRoute()
+    {
+        if (_disposed) { return; }
+
+        int code = OwnAudioNative.ownaudio_v1_track_clear_output_route(_handle.DangerousGetHandle());
+        ErrorCodeMapper.ThrowIfError(code, nameof(ClearOutputRoute));
+    }
+
+    /// <summary>
+    /// The width we decode, stretch and effect at, independent of the bus. 0 follows the bus.
+    /// A stereo file on an 8 channel bus stays a stereo chain - that's the whole point.
+    /// Set it while binding a source, not mid playback.
+    /// </summary>
+    public int SourceChannels
+    {
+        get => _sourceChannels;
+        set
+        {
+            if (value < 0 || value > ushort.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(value), value, "Source channel count is out of range.");
+
+            _sourceChannels = value;
+            if (_disposed) { return; }
+
+            int code = OwnAudioNative.ownaudio_v1_track_set_source_channels(
+                _handle.DangerousGetHandle(),
+                (ushort)value);
+            ErrorCodeMapper.ThrowIfError(code, nameof(SourceChannels));
+        }
     }
 
     #endregion

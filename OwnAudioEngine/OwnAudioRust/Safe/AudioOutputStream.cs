@@ -202,6 +202,25 @@ public sealed class AudioOutputStream : IDisposable
     }
 
     /// <summary>
+    /// Channels the device really opened with. The requested width is only a request — a device
+    /// that can't serve it gets adapted — so anything drawing physical output sockets has to ask
+    /// here, not trust what it asked for.
+    /// </summary>
+    public int ChannelCount
+    {
+        get
+        {
+            Guard.NotDisposed(_disposed, nameof(AudioOutputStream));
+
+            int code = OwnAudioNative.ownaudio_v1_output_stream_get_channel_count(
+                _handle.DangerousGetHandle(), out ushort _channels);
+            ErrorCodeMapper.ThrowIfError(code, nameof(ChannelCount));
+
+            return _channels;
+        }
+    }
+
+    /// <summary>
     /// Frames that came out silent because the ring ran dry. Cumulative, 0 on a callback mode stream.
     /// </summary>
     public ulong UnderrunFrames
