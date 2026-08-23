@@ -22,10 +22,8 @@ fn env(name: &str) -> Option<String> {
 
 fn read_f32(path: &str) -> Vec<f32> {
     let bytes = std::fs::read(path).expect("audio file should be readable");
-    bytes
-        .chunks_exact(4)
-        .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-        .collect()
+    let (frames, _tail) = bytes.as_chunks::<4>();
+    frames.iter().copied().map(f32::from_le_bytes).collect()
 }
 
 #[test]
