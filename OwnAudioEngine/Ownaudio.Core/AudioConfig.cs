@@ -18,6 +18,18 @@ namespace Ownaudio.Core
         public int Channels { get; set; } = 2;
 
         /// <summary>
+        /// Playback width, when it differs from Channels. null (the default) means "use Channels",
+        /// which is what everyone got before this existed. A 2 in / 8 out interface needs the two
+        /// directions described separately, and Channels alone can't do that.
+        /// </summary>
+        public int? OutputChannels { get; set; } = null;
+
+        /// <summary>
+        /// Capture width, same deal. null = Channels.
+        /// </summary>
+        public int? InputChannels { get; set; } = null;
+
+        /// <summary>
         /// Wanted buffer size in frames. The driver may round it — compare FramesPerBuffer
         /// against OutputCallbackFrames once audio runs. Smaller = less latency, more CPU.
         /// </summary>
@@ -81,30 +93,49 @@ namespace Ownaudio.Core
         {
             if (SampleRate <= 0 || SampleRate > 192000) return false;
             if (Channels <= 0 || Channels > 256) return false;
+            if (OutputChannels is int _out && (_out <= 0 || _out > 256)) return false;
+            if (InputChannels is int _in && (_in <= 0 || _in > 256)) return false;
             if (BufferSize <= 0 || BufferSize > 16384) return false;
             if (OutputRingMilliseconds <= 0 || OutputRingMilliseconds > 2000) return false;
             if (!EnableInput && !EnableOutput) return false;
 
-            return _selectorsOk(InputChannelSelectors) && _selectorsOk(OutputChannelSelectors);
+            return _selectorsOk(InputChannelSelectors, EffectiveInputChannels)
+                && _selectorsOk(OutputChannelSelectors, EffectiveOutputChannels);
         }
 
         /// <summary>
-        /// Channel map has to be as long as Channels, in range, and no channel twice.
+        /// The playback width actually asked of the device.
         /// </summary>
-        private bool _selectorsOk(int[]? map)
+        public int EffectiveOutputChannels => OutputChannels ?? Channels;
+
+        /// <summary>
+        /// The capture width actually asked of the device.
+        /// </summary>
+        public int EffectiveInputChannels => InputChannels ?? Channels;
+
+        /// <summary>
+        /// Channel map has to be as long as that direction's width, in range, and no channel twice.
+        /// The 16 cap is the engine's per-track route limit, nothing routes past it.
+        /// </summary>
+        private static bool _selectorsOk(int[]? map, int channels)
         {
             if (map == null || map.Length == 0) return true;
-            if (map.Length != Channels) return false;
+            if (map.Length != channels) return false;
 
             for (int i = 0; i < map.Length; i++)
             {
-                if (map[i] < 0 || map[i] > 256) return false;
+                if (map[i] < 0 || map[i] >= MaxRouteChannels) return false;
                 for (int j = i + 1; j < map.Length; j++)
                     if (map[i] == map[j]) return false;
             }
 
             return true;
         }
+
+        /// <summary>
+        /// How many channels a per-track route can reach, matching the engine's MAX_ROUTE_CHANNELS.
+        /// </summary>
+        public const int MaxRouteChannels = 16;
 
         /// <summary>
         /// 48kHz, stereo, 512 frames.

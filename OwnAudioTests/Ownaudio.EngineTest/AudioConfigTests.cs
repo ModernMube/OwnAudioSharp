@@ -471,5 +471,74 @@ namespace Ownaudio.EngineTest
                 Assert.IsTrue(config.Validate(), $"Sample rate {sampleRate} should be valid");
             }
         }
+
+        [TestMethod]
+        public void EffectiveChannels_DefaultToChannels()
+        {
+            var config = new AudioConfig { Channels = 2 };
+
+            Assert.IsNull(config.OutputChannels);
+            Assert.IsNull(config.InputChannels);
+            Assert.AreEqual(2, config.EffectiveOutputChannels);
+            Assert.AreEqual(2, config.EffectiveInputChannels);
+        }
+
+        [TestMethod]
+        public void EffectiveChannels_DescribeTheTwoDirectionsSeparately()
+        {
+            // A 2 in / 8 out interface, which Channels alone could never describe.
+            var config = new AudioConfig
+            {
+                Channels = 2,
+                OutputChannels = 8,
+                InputChannels = 2,
+                BufferSize = 512
+            };
+
+            Assert.AreEqual(8, config.EffectiveOutputChannels);
+            Assert.AreEqual(2, config.EffectiveInputChannels);
+            Assert.IsTrue(config.Validate());
+        }
+
+        [TestMethod]
+        public void Validate_OutOfRangeDirectionalChannels_ShouldReturnFalse()
+        {
+            var tooWide = new AudioConfig { Channels = 2, BufferSize = 512, OutputChannels = 300 };
+            var zero = new AudioConfig { Channels = 2, BufferSize = 512, InputChannels = 0 };
+
+            Assert.IsFalse(tooWide.Validate());
+            Assert.IsFalse(zero.Validate());
+        }
+
+        [TestMethod]
+        public void Validate_SelectorsFollowTheirOwnDirectionWidth()
+        {
+            // The output selectors are checked against OutputChannels, not Channels.
+            var config = new AudioConfig
+            {
+                Channels = 2,
+                OutputChannels = 4,
+                BufferSize = 512,
+                OutputChannelSelectors = new[] { 0, 1, 2, 3 }
+            };
+
+            Assert.IsTrue(config.Validate(), "four selectors for a four channel output is right");
+
+            config.OutputChannelSelectors = new[] { 0, 1 };
+            Assert.IsFalse(config.Validate(), "two selectors no longer match a four channel output");
+        }
+
+        [TestMethod]
+        public void Validate_SelectorPastTheRouteLimit_ShouldReturnFalse()
+        {
+            var config = new AudioConfig
+            {
+                Channels = 2,
+                BufferSize = 512,
+                OutputChannelSelectors = new[] { 0, AudioConfig.MaxRouteChannels }
+            };
+
+            Assert.IsFalse(config.Validate(), "nothing routes past MAX_ROUTE_CHANNELS");
+        }
     }
 }
