@@ -139,10 +139,12 @@ public sealed class WaveFileWriter : IDisposable
         try
         {
             long dataChunkSize = _totalSamplesWritten * 4;
-            long fileSize = 36 + dataChunkSize;
 
+            //RIFF size is everything after the first 8 bytes: the 36 byte header remainder
+            //plus the data. Subtracting another 8 here used to hand players a file 8 bytes
+            //shorter than it is, which trims the last two stereo frames on the strict ones.
             _stream.Seek(4, SeekOrigin.Begin);
-            _writer.Write((int)(fileSize - 8));
+            _writer.Write((int)(36 + dataChunkSize));
             _stream.Seek(_dataChunkSizePosition, SeekOrigin.Begin);
             _writer.Write((int)dataChunkSize);
             _writer.Flush();
