@@ -144,13 +144,13 @@ mixer.AddMasterEffect(new LimiterEffect(sampleRate: 48000f));</code></pre></div>
 
 <h2 id="clock">5 · The clock</h2>
 <p>Start two files at "the same time" and they will drift apart — different decoders, different buffer boundaries, different rounding. Over three minutes that becomes audible flam.</p>
-<p>The <code>MasterClock</code> fixes this. Every mixer owns one, and it is the single source of truth for "where are we on the timeline". Attach a source to it and the engine continuously compares that source's position to the clock and nudges it back into line.</p>
+<p>The <code>MasterClock</code> fixes this. Every mixer owns one, and it is the single source of truth for "where are we on the timeline". The mixer attaches each source to it as you add it, and from then on the engine continuously compares that source's position to the clock and nudges it back into line.</p>
 
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Attach BEFORE Play()
-vocals.AttachToClock(mixer.MasterClock);
-backing.AttachToClock(mixer.MasterClock);
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">backing.StartOffset = 2.5;   // this one enters 2.5 s into the song
 
-backing.StartOffset = 2.5;   // this one enters 2.5 s into the song
+// Adding a source is what attaches it — and it has to happen before Play()
+mixer.AddSource(vocals);
+mixer.AddSource(backing);
 
 mixer.Seek(0);               // moves the clock and every attached source
 vocals.Play();

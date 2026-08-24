@@ -49,9 +49,7 @@ await OwnaudioNet.StartNetworkSyncServerAsync(port: 9876, useLocalTimeOnly: true
 // From this point, control playback normally:
 mixer.Seek(0);
 var track = new FileSource("backing.mp3");
-track.AttachToClock(mixer.MasterClock);
-track.Play();
-mixer.AddSource(track);
+mixer.AddSource(track);   // attaches to MasterClock — and starts it, the mixer is already running
 
 // Stop network sync when done
 OwnaudioNet.StopNetworkSync();</code></pre></div>
@@ -71,9 +69,7 @@ await OwnaudioNet.StartNetworkSyncClientAsync(
 
 // Load client's own audio — clock is controlled by server
 var clientTrack = new FileSource("client-audio.mp3");
-clientTrack.AttachToClock(mixer.MasterClock);
-clientTrack.Play();
-mixer.AddSource(clientTrack);</code></pre></div>
+mixer.AddSource(clientTrack);   // attached to the server-driven clock on registration</code></pre></div>
 
 <h2 id="stop">Stop Network Sync</h2>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">OwnaudioNet.StopNetworkSync();</code></pre></div>

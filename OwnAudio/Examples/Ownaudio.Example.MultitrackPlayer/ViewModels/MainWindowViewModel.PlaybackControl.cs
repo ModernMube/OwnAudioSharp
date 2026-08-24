@@ -98,27 +98,16 @@ public partial class MainWindowViewModel
             {
                 _audioService.Mixer.MasterClock.SeekTo(startPosition);
 
-                for (int i = 0; i < _cachedSourceArray.Length; i++)
-                {
-                    if (_cachedSourceArray[i] is IMasterClockSource clockSource)
-                    {
-                        clockSource.AttachToClock(_audioService.Mixer.MasterClock);
-                    }
-                }
-
-                // System.Threading.Tasks.Parallel.ForEach(_cachedSourceArray, source =>
-                // {
-                //     source.Seek(startPosition);
-                // });
-
+                // Register first: AddSource attaches every IMasterClockSource to the mixer's
+                // clock and seeks it to the clock position, so the tracks enter together.
                 System.Threading.Tasks.Parallel.ForEach(_cachedSourceArray, source =>
                 {
-                    source.Play();
+                    _audioService.Mixer.AddSource(source);
                 });
 
                 System.Threading.Tasks.Parallel.ForEach(_cachedSourceArray, source =>
                 {
-                    _audioService.Mixer.AddSource(source);
+                    source.Play();
                 });
 
                 _masterEffect?.SetTransportPlaying(true);

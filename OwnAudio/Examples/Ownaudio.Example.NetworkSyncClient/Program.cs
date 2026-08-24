@@ -68,16 +68,11 @@ public class ClientProgram
 
             Log.Info($"  ✓ Loaded 4 tracks ({_drums.Duration:F1}s duration)");
 
-            // Add sources to mixer and attach to MasterClock
+            // Adding a source also attaches it to the mixer's MasterClock
             _mixer.AddSource(_drums);
             _mixer.AddSource(_bass);
             _mixer.AddSource(_other);
             _mixer.AddSource(_vocals);
-
-            _drums.AttachToClock(_mixer.MasterClock);
-            _bass.AttachToClock(_mixer.MasterClock);
-            _other.AttachToClock(_mixer.MasterClock);
-            _vocals.AttachToClock(_mixer.MasterClock);
 
             _mixer.Start();
             Log.Info($"  ✓ Sources synchronized with MasterClock");

@@ -125,7 +125,7 @@ public sealed class AudioEngineService : IDisposable
 
 <!-- ───────────────────────────────────────────────────────────────────── -->
 <h2 id="backing-player">A multi-track player that stays in sync</h2>
-<p>Four stems, one timeline, no drift. Two details do the work: attach every source to the master clock, and add them <em>prepared</em> so none of them starts early. The native file tracks run their own prefetch, so there is nothing to warm up from managed code.</p>
+<p>Four stems, one timeline, no drift. One detail does the work: add every source <em>prepared</em>, so none of them starts early. Registering a source is also what attaches it to the mixer's master clock — <code>AddSource</code> and <code>AddSourcePrepared</code> both do it, so there is no <code>AttachToClock</code> call to remember. The native file tracks run their own prefetch, so there is nothing to warm up from managed code.</p>
 
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var mixer = AudioEngineService.Instance.Mixer!;
 
@@ -145,8 +145,7 @@ mixer.Seek(0);
 foreach (var src in sources)
 {
     src.Volume = 0.8f;
-    src.AttachToClock(mixer.MasterClock);   // BEFORE Play — this is what kills drift
-    mixer.AddSourcePrepared(src);           // queued, not started
+    mixer.AddSourcePrepared(src);   // queued, not started — and attached to the master clock here
 }
 
 mixer.StartPreparedSources(startPosition: 0.0);   // they all begin on the same frame
@@ -176,10 +175,7 @@ public async Task PlayAsync(IReadOnlyList&lt;FileSource&gt; tracks, double start
             _mixer.Seek(startSeconds);
 
             foreach (var t in tracks)
-            {
-                t.AttachToClock(_mixer.MasterClock);
                 _mixer.AddSourcePrepared(t);
-            }
 
             _mixer.StartPreparedSources(startSeconds);
             _mixer.Start();
@@ -439,10 +435,7 @@ click.Seek(positionSeconds);</code></pre></div>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">mixer.RenderingMode = ClockMode.Offline;
 
 foreach (var src in sources)
-{
-    src.AttachToClock(mixer.MasterClock);
-    mixer.AddSourcePrepared(src);
-}
+    mixer.AddSourcePrepared(src);   // registering also attaches the source to mixer.MasterClock
 
 mixer.StartRecording("bounce.wav");
 mixer.StartPreparedSources(0.0);

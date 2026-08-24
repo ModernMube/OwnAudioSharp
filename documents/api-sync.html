@@ -62,18 +62,19 @@ long   samples = mixer.MasterClock.TimestampToSamplePosition(5.0);  // 5 seconds
 double seconds = mixer.MasterClock.SamplePositionToTimestamp(240000L);</code></pre></div>
 
 <h2 id="attach">Attaching sources</h2>
-<p><code>FileSource</code> implements both <code>IMasterClockSource</code> and <code>ISynchronizable</code>. Attach <em>before</em> calling <code>Play()</code> — attaching afterwards will not undo drift that already happened.</p>
+<p><code>FileSource</code> implements both <code>IMasterClockSource</code> and <code>ISynchronizable</code>. You rarely call <code>AttachToClock</code> yourself: <code>AudioMixer.AddSource</code> and <code>AddSourcePrepared</code> attach every <code>IMasterClockSource</code> they register to the mixer's clock. What still matters is the order — a source has to be attached <em>before</em> <code>Play()</code>, because attaching afterwards will not undo drift that already happened. Register first, start second.</p>
 
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var mixer   = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine, 1024);
 var vocals  = new FileSource("vocals.wav",  targetSampleRate: 48000, targetChannels: 2);
 var backing = new FileSource("backing.mp3", targetSampleRate: 48000, targetChannels: 2);
 
-// 1. Attach to clock (BEFORE Seek and Play)
-vocals.AttachToClock(mixer.MasterClock);
-backing.AttachToClock(mixer.MasterClock);
-
-// 2. Optional: timeline offsets (backing starts 2.5 seconds into the session)
+// 1. Optional: timeline offsets (backing starts 2.5 seconds into the session).
+//    Set this before the source is attached — attachment seeks it to clock minus offset.
 backing.StartOffset = 2.5;
+
+// 2. Register — each source is attached to mixer.MasterClock right here
+mixer.AddSource(vocals);
+mixer.AddSource(backing);
 
 // 3. Seek and play
 mixer.MasterClock.SeekTo(0.0);
@@ -82,9 +83,15 @@ backing.Seek(0);
 vocals.Play();
 backing.Play();
 
-mixer.AddSource(vocals);
-mixer.AddSource(backing);
 mixer.Start();</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>If the mixer is <em>already</em> running when you add a source, <code>AddSource</code> starts it for you as well — the explicit <code>Play()</code> calls above are only needed because <code>mixer.Start()</code> comes last.</p></div>
+
+<h3>Attaching by hand</h3>
+<p>Call <code>AttachToClock</code> directly only when the source is not going through a mixer — you drive it yourself with <code>ReadSamplesAtTime</code>, or you want it riding a clock it was not registered against. It is idempotent: it detaches first, then seeks the source to the clock's position minus its <code>StartOffset</code>.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">vocals.AttachToClock(mixer.MasterClock);
+bool onClock = vocals.IsAttachedToClock;   // true</code></pre></div>
 
 <h3>Detach on Stop</h3>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">vocals.Stop();

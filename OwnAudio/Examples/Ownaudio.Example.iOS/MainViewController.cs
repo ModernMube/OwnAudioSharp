@@ -206,16 +206,11 @@ namespace OwnaudioIosExample
 
                 _log("+ Vocal chain added");
 
-                _log("[5/6] Attaching to master clock...");
+                _log("[5/6] Adding sources — each one is attached to the master clock here...");
                 _mixer.AddSource(_drums);
                 _mixer.AddSource(_bass);
                 _mixer.AddSource(_other);
-                _mixer.AddSource(_vocalsWithFx);
-
-                _drums.AttachToClock(_mixer.MasterClock);
-                _bass.AttachToClock(_mixer.MasterClock);
-                _other.AttachToClock(_mixer.MasterClock);
-                _vocals.AttachToClock(_mixer.MasterClock);
+                _mixer.AddSource(_vocalsWithFx);   // the wrapper attaches the inner source too
 
                 _mixer.TrackDropout += (s, e) => _log($"! Dropout: {e.TrackName} at {e.MasterTimestamp:F3}s");
 

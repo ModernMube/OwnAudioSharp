@@ -73,7 +73,7 @@ UI Thread
                  │    └─> CurrentTimestamp (physical time)
                  │
                  ├─> Track 1 (FileSource + IMasterClockSource)
-                 │    ├─> AttachToClock(MasterClock)
+                 │    ├─> Attached to MasterClock by AddSource
                  │    ├─> StartOffset (timeline position)
                  │    ├─> ReadSamplesAtTime(timestamp)
                  │    └─> Automatic drift correction (10ms)
@@ -214,13 +214,12 @@ mixer.StartSyncGroup("MainTracks");
 
 **NEW (v2.4.0+):**
 ```csharp
-// NEW: MasterClock direct attachment
+// NEW: MasterClock attachment, done by the mixer
 foreach (var source in sources) {
     if (source is IMasterClockSource clockSource) {
-        clockSource.AttachToClock(mixer.MasterClock);
-        clockSource.StartOffset = 0.0; // Optional: DAW regions
+        clockSource.StartOffset = 0.0; // Optional: DAW regions — set before adding
     }
-    mixer.AddSource(source);
+    mixer.AddSource(source);           // attaches the source to mixer.MasterClock
     source.Play();
 }
 ```

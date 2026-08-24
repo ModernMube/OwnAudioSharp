@@ -122,15 +122,16 @@ OwnaudioNet.Engine!.OutputDeviceChanged += (_, e) =&gt;
 
 <!-- ───────────────────────────────────────────────────────────────────── -->
 <h2 id="drift">Tracks drift apart</h2>
-<p><strong>Why:</strong> the sources were never attached to the master clock, so each one is free-running on its own decoder. They start together and slowly separate.</p>
+<p><strong>Why:</strong> the sources are free-running on their own decoders instead of riding the master clock. They start together and slowly separate. <code>AddSource</code> and <code>AddSourcePrepared</code> attach every source they register, so this shows up when a track was started <em>before</em> it reached the mixer — attaching afterwards does not retro-fix the drift.</p>
 
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Attach BEFORE Play() — attaching afterwards does not retro-fix the drift
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Register first, start second
 foreach (var src in sources)
-{
-    src.AttachToClock(mixer.MasterClock);
-    mixer.AddSourcePrepared(src);
-}
-mixer.StartPreparedSources(0.0);</code></pre></div>
+    mixer.AddSourcePrepared(src);   // attaches to mixer.MasterClock
+
+mixer.StartPreparedSources(0.0);
+
+// Not sure a track made it onto the clock? Ask it.
+Console.WriteLine(sources[0].IsAttachedToClock);   // false = free-running</code></pre></div>
 
 <p>If they are attached and <em>still</em> drift, the engine is telling you it's under pressure:</p>
 

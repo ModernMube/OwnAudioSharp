@@ -41,12 +41,9 @@ mixer.AddSource(music);
 var vocals = new FileSource("vocals.wav");
 var backing = new FileSource("backing.mp3");
 
+// AddSource attaches each source to the Master Clock for sample-accurate sync
 mixer.AddSource(vocals);
 mixer.AddSource(backing);
-
-// Attach sources to the Master Clock for sample-accurate sync
-vocals.AttachToClock(mixer.MasterClock);
-backing.AttachToClock(mixer.MasterClock);
 
 // Start sources individually
 vocals.Play();

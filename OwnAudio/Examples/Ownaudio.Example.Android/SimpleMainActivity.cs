@@ -246,23 +246,18 @@ namespace OwnaudioAndroidExample
                 // Step 5: Add sources to mixer and setup Master Clock sync
                 UpdateStatus("\n[5/6] Setting up Master Clock synchronization...");
 
-                _mixer.AddSource(_fileSource0);
-                _mixer.AddSource(_fileSource1);
-                _mixer.AddSource(_fileSource2);
-                _mixer.AddSource(_fileSource3Effect);
-
-                // NEW MASTER CLOCK ARCHITECTURE (v2.1.0+)
-                // Attach sources to Master Clock for sample-accurate synchronization
-                _fileSource0.AttachToClock(_mixer.MasterClock);
-                _fileSource1.AttachToClock(_mixer.MasterClock);
-                _fileSource2.AttachToClock(_mixer.MasterClock);
-                _fileSource3.AttachToClock(_mixer.MasterClock);
-
-                // Optional: Set timeline positions (all start at 0.0 by default)
+                // Optional: Set timeline positions (all start at 0.0 by default).
+                // Set them before adding — the offset is read when the source is attached.
                 _fileSource0.StartOffset = 0.0;  // Drums start immediately
                 _fileSource1.StartOffset = 0.0;  // Bass start immediately
                 _fileSource2.StartOffset = 0.0;  // Other start immediately
                 _fileSource3.StartOffset = 0.0;  // Vocals start immediately
+
+                // Adding a source attaches it to the Master Clock for sample-accurate synchronization
+                _mixer.AddSource(_fileSource0);
+                _mixer.AddSource(_fileSource1);
+                _mixer.AddSource(_fileSource2);
+                _mixer.AddSource(_fileSource3Effect);   // the wrapper attaches _fileSource3 too
 
                 // Subscribe to dropout events for monitoring
                 _mixer.TrackDropout += (sender, e) =>
