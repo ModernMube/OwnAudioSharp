@@ -9,15 +9,16 @@ using System.Threading.Tasks;
 namespace Ownaudio.EngineTest
 {
     /// <summary>
-    /// Tests for the device disconnect / reconnect hot-plug feature introduced in v2.1.
+    /// The engine's device and status surface as the rust backend actually implements it.
     ///
-    /// IMPORTANT: These tests cannot simulate a real physical USB unplug event.
-    /// Instead they verify:
-    ///   1. The new EngineStatus enum and Status property behave correctly.
-    ///   2. The new events (DeviceStateChanged, DeviceReconnected) are subscribable.
-    ///   3. Send() operates correctly in Running and DeviceDisconnected states.
-    ///   4. The engine state machine transitions are correct via reflection-based
-    ///      internal state injection (whitebox tests for the disconnect path).
+    /// Hot-plug is NOT implemented since 4.0: Status only walks Idle/Running/Error, the four
+    /// device events are declared for IAudioEngine and never raised, and Pause/ResumeDeviceMonitoring
+    /// are no-ops. The tests here pin that down, so adding hot-plug back trips them on purpose.
+    ///
+    /// The real device-fault path lives one layer up now: the native output stream latches a
+    /// fault, AudioMixer.PollRustStreamFaultOnce picks it up and raises StreamFaulted with
+    /// AudioStreamFaultKind.DeviceNotAvailable. That needs a live session, so it belongs with
+    /// the mixer tests rather than here.
     /// </summary>
     [TestClass]
     public class DeviceDisconnectTests
@@ -225,132 +226,82 @@ namespace Ownaudio.EngineTest
                 $"Send() on a non-running engine should be a safe no-op, but threw {caught?.GetType().Name}: {caught?.Message}");
         }
 
-        /// <summary>
-        /// Injects the DeviceDisconnected status into a running NativeAudioEngine
-        /// by setting internal volatile fields via reflection. This simulates what
-        /// HandleDeviceRemoved() does internally (without the hardware interaction).
-        /// </summary>
-        private static void InjectDisconnectedState(IAudioEngine engine)
-        {
-            Type engineType = engine.GetType();
-
-            SetPrivateField(engineType, engine, "_engineStatusValue", (int)EngineStatus.DeviceDisconnected);
-            SetPrivateField(engineType, engine, "_isDeviceDisconnected", 1);
-            SetPrivateField(engineType, engine, "_disconnectedOutputDeviceName", "Simulated USB Device");
-        }
-
-        /// <summary>
-        /// Restores the Running state (simulates what HandleDeviceReconnected does).
-        /// </summary>
-        private static void InjectReconnectedState(IAudioEngine engine)
-        {
-            Type engineType = engine.GetType();
-
-            SetPrivateField(engineType, engine, "_engineStatusValue", (int)EngineStatus.Running);
-            SetPrivateField(engineType, engine, "_isDeviceDisconnected", 0);
-            SetPrivateField(engineType, engine, "_disconnectedOutputDeviceName", null);
-        }
-
-        private static void SetPrivateField(Type type, object instance, string fieldName, object? value)
-        {
-            FieldInfo? field = type.GetField(fieldName,
-                BindingFlags.NonPublic | BindingFlags.Instance);
-
-            if (field == null)
-            {
-                // These volatile fields were internal to the removed NativeAudioEngine; the Rust
-                // engine handles device disconnect differently and exposes no such injectable state,
-                // so the injection-based tests are skipped rather than failed on it.
-                Assert.Inconclusive($"Field '{fieldName}' is not present on {type.Name}; device-disconnect " +
-                    "state injection targeted the removed NativeAudioEngine internals and does not apply to the Rust engine.");
-                return;
-            }
-
-            field.SetValue(instance, value);
-        }
-
         [TestMethod]
         [TestCategory("DeviceDisconnect")]
-        public void EngineStatus_DeviceDisconnected_AfterStateInjection()
+        public void EngineStatus_StaysRunning_NoDisconnectStateOnRustEngine()
         {
-            // Arrange
-            using var engine = AudioEngineFactory.Create(AudioConfig.Default);
+            using var engine = EngineTestSupport.CreateOrSkip(AudioConfig.Default);
             engine.Start();
-
-            // Act – simulate disconnect
-            InjectDisconnectedState(engine);
-
-            // Assert
-            Assert.AreEqual(EngineStatus.DeviceDisconnected, engine.Status,
-                "Status should reflect DeviceDisconnected after state injection.");
-
-            // Engine must still report as 'running' (data pipeline is alive)
-            Assert.AreEqual(1, engine.OwnAudioEngineActivate(),
-                "OwnAudioEngineActivate() must still return 1 during DeviceDisconnected \u2014 data pipeline continues.");
-
-            // Cleanup
-            InjectReconnectedState(engine);
-            engine.Stop();
-        }
-
-        [TestMethod]
-        [TestCategory("DeviceDisconnect")]
-        public void EngineStatus_Running_AfterReconnectStateInjection()
-        {
-            // Arrange
-            using var engine = AudioEngineFactory.Create(AudioConfig.Default);
-            engine.Start();
-
-            // Simulate: disconnect → reconnect
-            InjectDisconnectedState(engine);
-            Assert.AreEqual(EngineStatus.DeviceDisconnected, engine.Status, "Pre-condition: must be disconnected.");
-
-            InjectReconnectedState(engine);
-
-            // Assert
-            Assert.AreEqual(EngineStatus.Running, engine.Status,
-                "Status should return to Running after reconnect state injection.");
-
-            engine.Stop();
-        }
-
-        [TestMethod]
-        [TestCategory("DeviceDisconnect")]
-        public void Send_DuringDisconnect_StillRunning_DataAccumulates()
-        {
-            // Arrange
-            var config = AudioConfig.Default;
-            config.BufferSize = 256;
-            using var engine = AudioEngineFactory.Create(config);
-            engine.Start();
-            Thread.Sleep(50); // let buffering settle
-
-            // Inject disconnect — hardware stream is "gone" (simulated)
-            InjectDisconnectedState(engine);
-
-            Assert.AreEqual(EngineStatus.DeviceDisconnected, engine.Status,
-                "Pre-condition: engine must be in DeviceDisconnected state.");
-
-            // Act: Send a small chunk while disconnected.
-            float[] smallChunk = TestHelpers.GenerateSineWave(440f, config.SampleRate, config.Channels, 0.005);
-            Exception? caughtEx = null;
 
             try
             {
-                engine.Send(smallChunk.AsSpan());
+                //The status machine only walks Idle/Running/Error, nothing ever sets DeviceDisconnected
+                for (int i = 0; i < 5; i++)
+                {
+                    Assert.AreEqual(EngineStatus.Running, engine.Status,
+                        "The rust engine has no disconnect state, a healthy run must stay Running.");
+                    Thread.Sleep(20);
+                }
+
+                Assert.AreEqual(1, engine.OwnAudioEngineActivate(),
+                    "OwnAudioEngineActivate() must report 1 while the engine is Running.");
             }
-            catch (AudioException ex)
+            finally
             {
-                caughtEx = ex;
+                engine.Stop();
             }
+        }
 
-            // Assert: no exception for a tiny 5ms chunk (ring buffer is 4x buffer, ~4x5ms capacity)
-            Assert.IsNull(caughtEx,
-                $"Send() should not throw for a small chunk during DeviceDisconnected. Error: {caughtEx?.Message}");
+        [TestMethod]
+        [TestCategory("DeviceDisconnect")]
+        public void DeviceEvents_NeverFire_OnRustEngine()
+        {
+            using var engine = EngineTestSupport.CreateOrSkip(AudioConfig.Default);
 
-            // Cleanup
-            InjectReconnectedState(engine);
+            string? _fired = null;
+
+            engine.DeviceStateChanged += (s, e) => _fired = "DeviceStateChanged";
+            engine.DeviceReconnected += (s, e) => _fired = "DeviceReconnected";
+            engine.OutputDeviceChanged += (s, e) => _fired = "OutputDeviceChanged";
+            engine.InputDeviceChanged += (s, e) => _fired = "InputDeviceChanged";
+
+            engine.Start();
+            engine.GetOutputDevices();
+            engine.GetInputDevices();
+            engine.PauseDeviceMonitoring();
+            Thread.Sleep(100);
+            engine.ResumeDeviceMonitoring();
             engine.Stop();
+
+            //Pins what the rust backend actually does: the four hot-plug events are declared for
+            //IAudioEngine and never raised, there is no device monitoring behind them. The day
+            //hot-plug lands this fails on purpose and the docs need a pass too.
+            Assert.IsNull(_fired,
+                $"'{_fired}' fired, but the rust engine declares the device events without ever raising them.");
+        }
+
+        [TestMethod]
+        [TestCategory("DeviceDisconnect")]
+        public void Send_WhileMonitoringPaused_StillGoesThrough()
+        {
+            var _config = AudioConfig.Default;
+            _config.BufferSize = 256;
+
+            using var engine = EngineTestSupport.CreateOrSkip(_config);
+            engine.Start();
+            Thread.Sleep(50);
+
+            engine.PauseDeviceMonitoring();
+
+            float[] _chunk = TestHelpers.GenerateSineWave(440f, _config.SampleRate, _config.Channels, 0.005);
+            Exception? _caught = null;
+
+            try { engine.Send(_chunk.AsSpan()); }
+            catch (AudioException ex) { _caught = ex; }
+            finally { engine.ResumeDeviceMonitoring(); engine.Stop(); }
+
+            Assert.IsNull(_caught,
+                $"Pause/ResumeDeviceMonitoring are no-ops on the rust engine and must not touch the transport. Error: {_caught?.Message}");
         }
 
         [TestMethod]
@@ -487,53 +438,25 @@ namespace Ownaudio.EngineTest
 
         [TestMethod]
         [TestCategory("DeviceDisconnect")]
-        public void Start_NoLongerPausesDeviceMonitoring()
+        public void StartStopStart_WalksIdleRunningIdle()
         {
-            // Arrange
-            using var engine = AudioEngineFactory.Create(AudioConfig.Default);
+            using var engine = EngineTestSupport.CreateOrSkip(AudioConfig.Default);
 
-            // Act
+            Assert.AreEqual(EngineStatus.Idle, engine.Status, "A fresh engine sits Idle.");
+
             engine.Start();
-
-            Type engineType = engine.GetType();
-            FieldInfo? field = engineType.GetField("_isMonitoringPaused",
-                BindingFlags.NonPublic | BindingFlags.Instance);
-
-            bool isPaused = (bool)(field?.GetValue(engine) ?? false);
-
-            // Assert
-            Assert.IsFalse(isPaused,
-                "Start() must no longer pause device monitoring. " +
-                "Monitoring must stay active to detect unexpected disconnections.");
+            Assert.AreEqual(EngineStatus.Running, engine.Status);
 
             engine.Stop();
-        }
+            Assert.AreEqual(EngineStatus.Idle, engine.Status, "Stop() must land back on Idle, never on a stale state.");
 
-        [TestMethod]
-        [TestCategory("DeviceDisconnect")]
-        public void Stop_ClearsDisconnectState()
-        {
-            // Arrange
-            using var engine = AudioEngineFactory.Create(AudioConfig.Default);
+            //Restart has to come up clean, the old engine kept a disconnect latch that survived Stop
             engine.Start();
+            Assert.AreEqual(EngineStatus.Running, engine.Status, "A restarted engine must report Running again.");
+            Assert.AreEqual(1, engine.OwnAudioEngineActivate());
 
-            InjectDisconnectedState(engine);
-            Assert.AreEqual(EngineStatus.DeviceDisconnected, engine.Status, "Pre-condition failed.");
-
-            // Act
             engine.Stop();
-
-            // Assert: after Stop(), engine must be Idle, not DeviceDisconnected
-            Assert.AreEqual(EngineStatus.Idle, engine.Status,
-                "Stop() must clear the DeviceDisconnected state and return to Idle.");
-
-            Type engineType = engine.GetType();
-            FieldInfo? disconnField = engineType.GetField("_isDeviceDisconnected",
-                BindingFlags.NonPublic | BindingFlags.Instance);
-
-            int disconnValue = (int)(disconnField?.GetValue(engine) ?? -1);
-            Assert.AreEqual(0, disconnValue,
-                "_isDeviceDisconnected must be 0 after Stop().");
+            Assert.AreEqual(1, engine.OwnAudioEngineStopped());
         }
     }
 }

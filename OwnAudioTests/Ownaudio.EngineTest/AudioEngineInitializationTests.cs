@@ -250,19 +250,16 @@ namespace Ownaudio.EngineTest
         }
 
         [TestMethod]
-        public void GetStream_AfterInitialization_ShouldReturnNonZero()
+        public void GetStream_OnRustEngine_ReturnsZero()
         {
-            // Arrange
             using var engine = AudioEngineFactory.CreateDefault();
 
-            // Act
-            IntPtr stream = engine.GetStream();
+            IntPtr _stream = engine.GetStream();
 
-            // The Rust engine manages its native streams through SafeHandles internally and does
-            // not surface a raw stream pointer through GetStream (it returns Zero); the raw-pointer
-            // contract was specific to the removed PortAudio/MiniAudio engine.
-            Assert.Inconclusive(
-                $"GetStream raw pointer is not exposed by the Rust engine (returned {stream}); not applicable after the cut-over.");
+            //The raw-pointer contract belonged to the removed PortAudio/MiniAudio engine. The rust
+            //one keeps its streams behind SafeHandles and hands nothing out, on purpose.
+            Assert.AreEqual(IntPtr.Zero, _stream,
+                "The rust engine must not leak a raw stream pointer through GetStream().");
         }
 
         [TestMethod]
