@@ -33,12 +33,24 @@ namespace OwnaudioNET.Interfaces
         /// <summary>
         /// Hook this source onto a master clock.
         /// </summary>
+        /// <remarks>
+        /// You rarely need to call this: <c>AudioMixer.AddSource</c> and
+        /// <c>AddSourcePrepared</c> attach every source they register to the mixer's clock.
+        /// Call it directly only for a source that does not go through a mixer - one you pull
+        /// yourself with <see cref="ReadSamplesAtTime"/>, or one that has to ride a clock it was
+        /// not registered against. Attaching seeks the source to the clock position minus its
+        /// <see cref="StartOffset"/>, so set the offset first. Re-attaching to the clock the
+        /// source is already on does nothing.
+        /// </remarks>
         /// <param name="clock"></param>
         void AttachToClock(MasterClock clock);
 
         /// <summary>
         /// Unhook from the current clock.
         /// </summary>
+        /// <remarks>
+        /// <c>AudioMixer.RemoveSource</c> does this for the sources it owns.
+        /// </remarks>
         void DetachFromClock();
     }
 

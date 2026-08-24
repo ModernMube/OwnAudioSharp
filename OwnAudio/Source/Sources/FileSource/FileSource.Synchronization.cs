@@ -17,6 +17,9 @@ public partial class FileSource
     {
         ArgumentNullException.ThrowIfNull(clock);
 
+        if (ReferenceEquals(_masterClock, clock))
+            return;
+
         DetachFromClock();
 
         _masterClock = clock;
