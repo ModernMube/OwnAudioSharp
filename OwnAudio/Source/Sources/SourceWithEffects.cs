@@ -49,6 +49,20 @@ public sealed class SourceWithEffects : IAudioSource, IMasterClockSource, ISynch
     private int _effectsVersion;
 
     /// <summary>
+    /// Set by the mixer while this wrapper sits on a native track: rebuilds the native chain
+    /// right here on the caller thread. Without it the tick would only catch up 15 ms later,
+    /// and a removed effect would keep running — straight into a use-after-free if the caller
+    /// disposes it in the meantime. No-op while we're not on a mixer.
+    /// </summary>
+    internal Action NativeChainReconciler { get; set; } = NoNativeChain;
+
+    /// <summary>
+    /// What NativeChainReconciler falls back to off a mixer. Non-null on purpose, a nullable
+    /// member here flips the type's nullable context and churns the frozen api baseline.
+    /// </summary>
+    internal static readonly Action NoNativeChain = static () => { };
+
+    /// <summary>
     /// Throwing effects are counted, not logged per buffer — the read path runs at audio rate.
     /// First hit gets a line, the rest are summed up and reported on reset/dispose.
     /// </summary>
@@ -420,10 +434,13 @@ public sealed class SourceWithEffects : IAudioSource, IMasterClockSource, ISynch
             Log.Info($"[SourceFx] '{effect.Name}' added to source '{Id}' ({_effects.Count} in chain, "
                 + $"{effect.LatencySamples} samples latency)");
         }
+
+        NativeChainReconciler();
     }
 
     /// <summary>
-    /// Drops an effect from the chain.
+    /// Drops an effect from the chain. The native twin is gone by the time this returns,
+    /// so disposing the effect right after is safe.
     /// </summary>
     /// <param name="effect"></param>
     /// <returns></returns>
@@ -431,9 +448,10 @@ public sealed class SourceWithEffects : IAudioSource, IMasterClockSource, ISynch
     {
         _throwIfDisposed();
 
+        bool _removed;
         lock (_effectsLock)
         {
-            bool _removed = _effects.Remove(effect);
+            _removed = _effects.Remove(effect);
             if (_removed)
             {
                 _effectsChanged = true;
@@ -444,27 +462,33 @@ public sealed class SourceWithEffects : IAudioSource, IMasterClockSource, ISynch
             {
                 Log.Warning($"[SourceFx] '{effect?.Name}' is not on source '{Id}', remove ignored");
             }
-
-            return _removed;
         }
+
+        //Outside the lock on purpose: the tick grabs the session lock first, we'd deadlock
+        if (_removed) NativeChainReconciler();
+
+        return _removed;
     }
 
     /// <summary>
-    /// Wipes the whole chain.
+    /// Wipes the whole chain, native twins included.
     /// </summary>
     public void ClearEffects()
     {
         _throwIfDisposed();
 
+        int _had;
         lock (_effectsLock)
         {
-            int _had = _effects.Count;
+            _had = _effects.Count;
             _effects.Clear();
             _effectsChanged = true;
             _effectsVersion++;
 
             if (_had > 0) Log.Info($"[SourceFx] Chain of source '{Id}' cleared ({_had} effects)");
         }
+
+        if (_had > 0) NativeChainReconciler();
     }
 
     /// <summary>
@@ -766,14 +790,21 @@ public sealed class SourceWithEffects : IAudioSource, IMasterClockSource, ISynch
 
         _reportEffectFaults();
 
+        IEffectProcessor[] _doomed;
         lock (_effectsLock)
         {
-            foreach (var effect in _effects)
-            {
-                try { effect?.Dispose(); }
-                catch (Exception ex) { Log.Error($"[SourceFx] Effect '{effect?.Name}' dispose failed", ex); }
-            }
+            _doomed = _effects.ToArray();
             _effects.Clear();
+            _effectsVersion++;
+        }
+
+        //The native twins have to be off the chain before we free what they point at
+        NativeChainReconciler();
+
+        foreach (var effect in _doomed)
+        {
+            try { effect?.Dispose(); }
+            catch (Exception ex) { Log.Error($"[SourceFx] Effect '{effect?.Name}' dispose failed", ex); }
         }
 
         try { _innerSource?.Dispose(); }

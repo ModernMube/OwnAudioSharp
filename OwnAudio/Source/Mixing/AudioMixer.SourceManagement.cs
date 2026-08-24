@@ -46,6 +46,9 @@ public sealed partial class AudioMixer
 
             if (_isRunning && source.State != AudioState.Playing)
             {
+                //On the clock first, otherwise it enters from the head of the file
+                AlignRustSourceToClock(source);
+
                 try { source.Play(); }
                 catch (Exception ex) { Log.Error($"[Mixer] Hot-swapped source '{source.Id}' failed to start", ex); }
             }

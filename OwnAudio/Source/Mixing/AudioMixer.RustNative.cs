@@ -182,6 +182,13 @@ public sealed partial class AudioMixer
     private readonly Dictionary<Guid, double> _rustAppliedStartOffsets = new Dictionary<Guid, double>();
 
     /// <summary>
+    /// Native track we handed each source at attach time. A source disposed before it was
+    /// removed hands back a null track, and without this the track would stay in the session
+    /// and keep playing. Guarded by _rustSessionLock.
+    /// </summary>
+    private readonly Dictionary<Guid, AudioTrack> _rustAttachedTracks = new Dictionary<Guid, AudioTrack>();
+
+    /// <summary>
     /// OutputChannelMapping last applied per source id, kept as an own clone so an in-place
     /// edit of the caller's array is still noticed. null value means routing is cleared.
     /// </summary>
@@ -358,10 +365,34 @@ public sealed partial class AudioMixer
 
             _applyChannelMap(source, sts.Id, sts.RustTrack);
             _applyOutputRoute(source, sts.Id, sts.RustTrack);
-
-            if (source is SourceWithEffects swe)
-                _rustEffectSources.Add(new RustTrackEffectRouting(swe, sts));
+            _rememberRustTrack(sts.Id, sts.RustTrack);
+            _routeTrackEffects(source, sts);
         }
+    }
+
+    /// <summary>
+    /// Files the track under the source id and wires the wrapper's chain to the native one,
+    /// so a chain edit reconciles on the caller thread instead of waiting for the tick.
+    /// Call under _rustSessionLock.
+    /// </summary>
+    /// <param name="source">the outermost mixer source</param>
+    /// <param name="backing">the source owning the native track</param>
+    private void _routeTrackEffects(IAudioSource source, IRustNativeChainSource backing)
+    {
+        if (source is not SourceWithEffects swe) return;
+
+        _rustEffectSources.Add(new RustTrackEffectRouting(swe, backing));
+        swe.NativeChainReconciler = ReconcileRustTrackEffectsOnce;
+    }
+
+    /// <summary>
+    /// Remembers the track we attached, keyed by source id. Call under _rustSessionLock.
+    /// </summary>
+    /// <param name="id"></param>
+    /// <param name="track"></param>
+    private void _rememberRustTrack(Guid id, AudioTrack? track)
+    {
+        if (track is not null) _rustAttachedTracks[id] = track;
     }
 
     /// <summary>
@@ -384,9 +415,8 @@ public sealed partial class AudioMixer
             //Routing set before the add still has to land on the very first rendered block
             _applyChannelMap(source, fs.Id, fs.RustTrack);
             _applyOutputRoute(source, fs.Id, fs.RustTrack);
-
-            if (source is SourceWithEffects swe)
-                _rustEffectSources.Add(new RustTrackEffectRouting(swe, fs));
+            _rememberRustTrack(fs.Id, fs.RustTrack);
+            _routeTrackEffects(source, fs);
         }
     }
 
@@ -406,9 +436,8 @@ public sealed partial class AudioMixer
 
             _applyChannelMap(source, ss.Id, ss.RustTrack);
             _applyOutputRoute(source, ss.Id, ss.RustTrack);
-
-            if (source is SourceWithEffects swe)
-                _rustEffectSources.Add(new RustTrackEffectRouting(swe, ss));
+            _rememberRustTrack(ss.Id, ss.RustTrack);
+            _routeTrackEffects(source, ss);
         }
     }
 
@@ -444,9 +473,8 @@ public sealed partial class AudioMixer
             _applyCaptureChannels(ins, _track);
             _applyChannelMap(source, ins.Id, ins.RustTrack);
             _applyOutputRoute(source, ins.Id, ins.RustTrack);
-
-            if (source is SourceWithEffects swe)
-                _rustEffectSources.Add(new RustTrackEffectRouting(swe, ins));
+            _rememberRustTrack(ins.Id, ins.RustTrack);
+            _routeTrackEffects(source, ins);
         }
     }
 
@@ -486,16 +514,22 @@ public sealed partial class AudioMixer
     /// </summary>
     /// <param name="source"></param>
     /// <param name="id">bookkeeping key of the backed source</param>
-    /// <param name="track">the native track before detaching</param>
+    /// <param name="track">the native track before detaching, null if the source was disposed already</param>
     /// <param name="detach">the backed source's own detach action</param>
     private void _detachBackedSource(IAudioSource source, Guid id, AudioTrack? track, Action detach)
     {
         lock (_rustSessionLock)
         {
+            //A source disposed before RemoveSource has nulled its track, ours is still good
+            if (track is null) _rustAttachedTracks.TryGetValue(id, out track);
+
+            if (source is SourceWithEffects swe) swe.NativeChainReconciler = SourceWithEffects.NoNativeChain;
+
             _rustEffectSources.RemoveAll(r => ReferenceEquals(r.Source, source));
             _rustAppliedStartOffsets.Remove(id);
             _rustAppliedChannelMaps.Remove(id);
             _rustAppliedRoutes.Remove(id);
+            _rustAttachedTracks.Remove(id);
 
             if (_rustAppliedCaptureMaps.Remove(id) && track is not null)
                 _rustCapture?.Detach(track);
@@ -627,6 +661,26 @@ public sealed partial class AudioMixer
         }
 
         _rustAppliedStartOffsets[fs.Id] = _offset;
+    }
+
+    /// <summary>
+    /// Drops a freshly attached track onto the clock before it is allowed to play. Without it
+    /// the track runs from the head of the file until the next tick catches it — 15 ms of the
+    /// wrong audio and an audible jump when it lands.
+    /// </summary>
+    /// <param name="source"></param>
+    internal void AlignRustSourceToClock(IAudioSource source)
+    {
+        if (!_rustNative) return;
+
+        FileSource? _fs = _resolveFileSource(source);
+        if (_fs?.RustTrack is null) return;
+
+        lock (_rustSessionLock)
+        {
+            try { _applyRustStartOffset(_fs, _masterClock.CurrentTimestamp); }
+            catch (Exception ex) { Log.Error($"[Mixer] Hot-swapped source '{_fs.Id}' could not be put on the clock", ex); }
+        }
     }
 
     /// <summary>
@@ -912,10 +966,8 @@ public sealed partial class AudioMixer
         {
             if (!vst.CanHostNatively)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[OwnAudio] Master VST3 effect '{effect.Name}' is not audio-initialized " +
-                    "(call and await VST3PluginHost.InitializeAudioAsync before adding it); it is " +
-                    "inactive in the Rust-native chain.");
+                Log.Warning($"[Mixer] Master VST3 '{effect.Name}' is not audio-initialized (await "
+                    + "VST3PluginHost.InitializeAudioAsync before adding it), it stays silent");
                 return;
             }
 
@@ -941,9 +993,8 @@ public sealed partial class AudioMixer
 
         if (!RustEffectAdapters.TryGetEffectType(effect, out var effectType))
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[OwnAudio] Master effect '{effect.GetType().Name}' has no native adapter and is " +
-                "inactive in the Rust-native chain.");
+            Log.Warning($"[Mixer] Master effect '{effect.GetType().Name}' has no native twin and stays "
+                + "silent — the managed Process path does not run on the rust chain");
             return;
         }
 
@@ -1050,8 +1101,8 @@ public sealed partial class AudioMixer
 
     /// <summary>
     /// Reconciles every wrapper's effect list onto its native track chain and mirrors the
-    /// params. Per-track effects are added on the wrapper, not the mixer, so there is no hook —
-    /// we poll the version and rebuild the chain in order whenever it moved.
+    /// params. Runs on the tick, and straight away on the caller thread whenever a wrapper's
+    /// chain is edited.
     /// </summary>
     internal void ReconcileRustTrackEffectsOnce()
     {
@@ -1065,38 +1116,62 @@ public sealed partial class AudioMixer
                 int _version = routing.Source.EffectsVersion;
                 if (_version != routing.CachedVersion)
                 {
-                    IEffectProcessor[] _managed = routing.Source.GetEffects();
-
-                    foreach (var pair in routing.Pairs)
-                        pair.RemoveNativeBestEffort();
-
-                    routing.Pairs.Clear();
-
-                    TrackEffectChain _chain = _track.Effects;
-                    foreach (IEffectProcessor effect in _managed)
-                    {
-                        if (effect is VST3EffectProcessor vst && vst.CanHostNatively)
-                        {
-                            object _native = _chain.AddVst(
-                                vst.NativePluginHandle,
-                                vst.NativeProcessAudioPointer,
-                                (ushort)_config.Channels,
-                                (uint)_config.BufferSize,
-                                (uint)Math.Max(0, vst.LatencySamples));
-                            routing.Pairs.Add(new RustEffectPair(effect, _native, _chain));
-                        }
-                        else if (RustEffectAdapters.TryGetEffectType(effect, out var effectType))
-                        {
-                            object _native = _chain.Add(effectType, (float)_config.SampleRate);
-                            routing.Pairs.Add(new RustEffectPair(effect, _native, _chain));
-                        }
-                    }
-
+                    _rebuildTrackChain(routing, _track.Effects);
                     routing.CachedVersion = _version;
                 }
 
                 foreach (var pair in routing.Pairs)
                     _mirrorPair(pair);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Brings one track's native chain in line with its wrapper. Everything up to the first
+    /// difference stays put — appending an effect mid-playback used to wipe every reverb tail
+    /// and compressor envelope on the track, which is plainly audible.
+    /// </summary>
+    /// <param name="routing"></param>
+    /// <param name="chain">the track's native chain</param>
+    private void _rebuildTrackChain(RustTrackEffectRouting routing, TrackEffectChain chain)
+    {
+        IEffectProcessor[] _managed = routing.Source.GetEffects();
+
+        int _keep = 0;
+        while (_keep < routing.Pairs.Count && _keep < _managed.Length
+            && ReferenceEquals(routing.Pairs[_keep].Managed, _managed[_keep]))
+        {
+            _keep++;
+        }
+
+        for (int i = _keep; i < routing.Pairs.Count; i++)
+            routing.Pairs[i].RemoveNativeBestEffort();
+
+        routing.Pairs.RemoveRange(_keep, routing.Pairs.Count - _keep);
+
+        for (int i = _keep; i < _managed.Length; i++)
+        {
+            IEffectProcessor _effect = _managed[i];
+
+            if (_effect is VST3EffectProcessor vst && vst.CanHostNatively)
+            {
+                object _native = chain.AddVst(
+                    vst.NativePluginHandle,
+                    vst.NativeProcessAudioPointer,
+                    (ushort)_config.Channels,
+                    (uint)_config.BufferSize,
+                    (uint)Math.Max(0, vst.LatencySamples));
+                routing.Pairs.Add(new RustEffectPair(_effect, _native, chain));
+            }
+            else if (RustEffectAdapters.TryGetEffectType(_effect, out var effectType))
+            {
+                object _native = chain.Add(effectType, (float)_config.SampleRate);
+                routing.Pairs.Add(new RustEffectPair(_effect, _native, chain));
+            }
+            else
+            {
+                Log.Warning($"[Mixer] Effect '{_effect.GetType().Name}' on source '{routing.Source.Id}' has no "
+                    + "native twin and stays silent — the managed Process path does not run on the rust chain");
             }
         }
     }
@@ -1431,7 +1506,12 @@ public sealed partial class AudioMixer
         {
             //Native effects live on the session mixer, disposing it frees them — just drop the pairings
             _rustMasterEffects.Clear();
+
+            foreach (var routing in _rustEffectSources)
+                routing.Source.NativeChainReconciler = SourceWithEffects.NoNativeChain;
+
             _rustEffectSources.Clear();
+            _rustAttachedTracks.Clear();
 
             try { _rustSession?.Dispose(); }
             catch (Exception ex) { Log.Error("[Mixer] Native session dispose failed, native tracks may leak", ex); }
