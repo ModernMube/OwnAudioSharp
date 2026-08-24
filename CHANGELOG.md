@@ -3,6 +3,140 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.5 — 2026-08-24
+
+### Fixed
+
+- **Removing an effect could free a plugin under the audio thread.** Track level effect edits were
+  only picked up by the 15 ms control tick, so `RemoveEffect` and `ClearEffects` returned while the
+  native twin was still on the chain and being called every block by the real time thread. Disposing
+  the effect right after — a VST3 in particular — freed the plugin out from under that thread.
+  `SourceWithEffects` now runs the reconcile on the caller's thread, through a hook the mixer
+  installs when the source is attached, and its `Dispose` clears the chain before freeing anything.
+- Reconciling no longer rebuilds the whole chain: the pairs matching the new list up to the first
+  difference stay in place, so adding an effect during playback keeps the reverb tails and
+  compressor envelopes already running on that track instead of wiping them.
+- `RemoveSource` could not detach a source that had been disposed first, because it read the (now
+  null) track off the source. The mixer keeps its own map and removes the native track either way.
+- A source hot added to a running mixer is put on the master clock before it is played, instead of
+  running from the head of the file until the next control tick.
+- An effect with no native twin is reported through `Log.Warning` on both the track and the master
+  path. The track path said nothing at all, and the master path only wrote to `Debug`.
+- **Five engine device tests never ran.** They injected `_engineStatusValue`, `_isDeviceDisconnected`
+  and `_disconnectedOutputDeviceName` through reflection — fields belonging to the removed
+  `NativeAudioEngine` — so the helper fell through to `Assert.Inconclusive` every time, and
+  `Start_NoLongerPausesDeviceMonitoring` read a missing `_isMonitoringPaused` field and passed on the
+  null fallback. They now assert what the Rust backend actually does: `Status` only walks
+  Idle/Running/Error, the four hot plug events are declared and never raised,
+  `Pause`/`ResumeDeviceMonitoring` are no-ops, and `GetStream` returns `IntPtr.Zero` because the Rust
+  engine keeps its streams behind SafeHandles. Putting hot plug back will fail these on purpose.
+
+### Changed
+
+- `AttachToClock` is a no-op when the source already rides that clock. Re-attaching used to detach
+  and seek back to the same position, and since `AddSource` and `AddSourcePrepared` attach every
+  source they register, a caller that also attached by hand paid a pointless seek on every add.
+  `IMasterClockSource` documents that the mixer does the attaching, and that `StartOffset` has to be
+  set before it.
+
+### Documentation
+
+- The redundant `AttachToClock` calls are gone from the recipes, the concept and API pages, the
+  package READMEs and the sample projects — they taught a step nobody needs. The multitrack player
+  example started its tracks before they reached the mixer and now registers first and plays second,
+  and the Android sample sets `StartOffset` before adding, since the offset is read when the source
+  is attached.
+
+## 4.0.5-preview.3 — 2026-08-23
+
+### Added
+
+- **Per-source output routing.** `OutputRoute` is destination indexed: bus channel `dst` takes source
+  channel `SourceForChannel[dst]` at `Gains[dst]`, with `-1` for a bus channel that gets nothing from
+  this source. Two destinations may name the same source channel, which is the fan-out — one mono
+  click onto two physical outputs — that the source indexed `OutputChannelMapping` cannot express.
+  The old map stays on its own branch rather than being converted, because it can sum several source
+  channels into one bus channel and folding that into a destination indexed table would silently
+  change what existing callers hear: set `OutputRoute` and it wins, leave it null and the map is
+  still in charge. Both `BaseAudioSource` and `SourceWithEffects` carry it, with a `RouteTo`
+  shorthand, and the mixer reconciles a changed route on its control tick, so a live re-patch never
+  reopens a stream.
+- **Per-track processing width.** `FileSource.DecodeChannels` decouples a track from the mixer bus:
+  a stereo file on an eight channel bus used to be decoded, time stretched and run through its effect
+  chain at eight channels, and now costs a stereo pass, with only the summation into the bus wide.
+  Null keeps the previous behaviour. On the native side `track_open_file` and `track_open_memory` set
+  the track's width from what they actually decoded; callers passing the session channel count — which
+  is everyone today — see no change.
+- **Master channel scope.** `AudioMixer.MasterChannelScope` confines the master chain, gain and pan to
+  named bus channels, so a click feed on 3/4 reaches the driver as it was mixed instead of being
+  squashed by the limiter working on the main pair. It runs in a pre-allocated scratch — two memcpys
+  per block, no allocation — and is handed to the session at creation, so a scope set before the first
+  source is added is not lost.
+- **Shared capture.** `InputSource.CaptureChannels` names the physical channels a track takes, and the
+  mixer moves onto a shared capture bridge: one device stream fanned out to every live input instead
+  of one stream each. On ASIO that is the only workable shape, since the driver takes a single client
+  and every registered callback walks its buffers. The default map still repeats the last channel, so
+  a mono microphone fills a stereo track the way it always did. `CaptureBridge` attaches and detaches
+  tracks to physical channels, and re-attaching replaces a track's map, which is how a live re-route
+  happens without touching a stream. The per-track `AddInputTrack` path is unchanged.
+- **`AudioConfig` describes the two directions separately.** A 2-in / 8-out interface cannot be
+  written down with `Channels` alone, so `OutputChannels` and `InputChannels` join it, both nullable
+  and both defaulting to null, which resolves to `Channels` — exactly the previous behaviour.
+  `EffectiveOutputChannels` / `EffectiveInputChannels` say what each direction really asks for, and
+  `Validate()` measures each channel selector against its own direction's width instead of against
+  `Channels`, rejecting an index past `MaxRouteChannels` since nothing beyond 16 is routable. The
+  output side follows `EffectiveOutputChannels` end to end — wrapper ring, mix bus, device stream — so
+  the producer and the stream cannot disagree.
+- The requested width is only a request, so `AudioEngineWrapper.ActualOutputChannels` and
+  `ActualInputChannels` expose the widths the streams really opened with; the engine type itself is
+  internal and they were unreachable from managed code. Underneath, both stream directions report the
+  channel count they were opened with, which the requested width never told anyone.
+- Managed bindings for all of it: `AudioTrack.SetOutputRoute` / `ClearOutputRoute` / `SourceChannels`,
+  `MultiTrackSession.MasterChannelScope` and an `AddFileTrack(path, channels)` overload, `CaptureBridge`
+  with transport and device side peaks, and `ChannelCount` on both stream types.
+- Every FFI export here is new — `ownaudio_v1_track_set_output_route` / `_clear_output_route`,
+  `_track_set_source_channels`, `_mixer_set_master_channel_scope`, the `ownaudio_v1_capture_*` family
+  with `_track_attach_capture` / `_detach_capture`, and the per-direction channel count exports. No
+  existing signature, parameter order or struct layout changed, and `ABI_VERSION` stays 1.
+
+### Fixed
+
+- **Every WAV was 8 bytes short.** The header patch subtracted 8 from a value that was already the
+  file length minus 8, so every file `WaveFileWriter` produced declared itself 8 bytes shorter than it
+  is. Tolerant players ignore it; strict ones drop the last two stereo frames. Found while covering
+  the writer with tests, which now check the header byte by byte and exercise the source-to-WAV loop
+  end to end.
+- **A latent tear in the routing tables.** Dropping a table's length to zero for the duration of a
+  write only protects a reader that loads the length inside the write window; one that loaded it a
+  moment earlier still walked a table being rewritten under it. It is a seqlock with bounded retries
+  now, and the track keeps its last clean snapshot, so a read landing mid-rewrite costs a block of
+  staleness rather than a block of wrong routing. A stress test covers it.
+- The MT3 raw f32 sample read goes through `as_chunks` to satisfy clippy.
+
+### Documentation
+
+- Routing is documented end to end: `OutputRoute` with fan-out, per-source decode width, capture
+  channel selection and the master scope, plus a recipe that puts playback on 1/2 and a click on 3/4
+  with the limiter kept off the cue feed. `AudioConfig` gains the per-direction widths, with a warning
+  that the requested width is only a request and the real one has to come off the engine.
+- **WAV writing was missing entirely.** `StartRecording` was documented, but `WaveFileWriter` — the
+  public writer behind it, and the way to get any single source onto disk — was not mentioned
+  anywhere. It is on the mixer page, in the recipes and in the main README now; the snippets are the
+  loop the new tests cover, including the `Play()` call without which a source only hands back
+  silence. The sidebar is duplicated across all thirteen pages, so the new anchors were patched into
+  every one of them.
+
+## 4.0.5-preview.2 — 2026-08-23
+
+### Fixed
+
+- **Output devices that only advertise a wider channel count were rejected.** CoreAudio reports a
+  single channel count per device, so a 2-in / 4-out interface only ever advertises four outputs and
+  an exact match validation turned it down outright. Output validation now adapts the same way the
+  input side already did: the mix keeps the session's own width until the last step spreads it into
+  the device buffer — channel *i* goes to channel *i*, unused outputs stay silent, and narrowing to
+  mono averages.
+
 ## 4.0.5-preview.1 — 2026-08-20
 
 ### Added
