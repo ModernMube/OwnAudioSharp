@@ -26,14 +26,18 @@ public static class AudioEngineFactory
     #region Public Factory Methods
 
     /// <summary>
-    /// Builds an engine and initializes it. Config has to pass <see cref="AudioConfig.Validate"/>.
+    /// Builds an engine and initializes it. Config has to pass <see cref="AudioConfig.Validate()"/>.
     /// </summary>
     /// <exception cref="AudioException">Nothing registered, bad config, or init came back non-zero.</exception>
     public static IAudioEngine Create(AudioConfig config)
     {
-        if (config == null || !config.Validate())
+        if (config == null)
             throw new AudioException("AudioEngineFactory ERROR: ",
-                new ArgumentException("Invalid audio configuration.", nameof(config)));
+                new ArgumentException("Audio configuration is null.", nameof(config)));
+
+        if (!config.Validate(out string? _invalid))
+            throw new AudioException("AudioEngineFactory ERROR: ",
+                new ArgumentException($"Invalid audio configuration: {_invalid}", nameof(config)));
 
         if (_creator == null)
             throw new AudioException("AudioEngineFactory ERROR: ",

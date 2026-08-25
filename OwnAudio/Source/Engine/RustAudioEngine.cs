@@ -43,6 +43,26 @@ internal sealed class RustAudioEngine : IAudioEngine
     private IReadOnlyList<RustSafe.AudioDevice> _outputDeviceSnapshot = Array.Empty<RustSafe.AudioDevice>();
     private IReadOnlyList<RustSafe.AudioDevice> _inputDeviceSnapshot = Array.Empty<RustSafe.AudioDevice>();
 
+    /// <summary>
+    /// The output stream a native session opened on our device, once it took playback off us.
+    /// Not ours to dispose — we only read diagnostics off it, so the numbers keep answering in
+    /// the mode everyone actually runs in. Guarded by _stateLock.
+    /// </summary>
+    private RustSafe.AudioOutputStream? _sessionOutputStream;
+
+    /// <summary>
+    /// Width the session's shared capture bridge opened at, 0 while no session holds capture.
+    /// </summary>
+    private int _sessionInputChannels;
+
+    /// <summary>
+    /// Last width and ring depth the hardware really gave us, kept across a release so a
+    /// diagnostic never has to fall back to guessing from the request.
+    /// </summary>
+    private int _openedOutputChannels;
+    private int _openedInputChannels;
+    private int _openedRingFrames;
+
     #endregion
 
     #region Properties
@@ -183,9 +203,11 @@ internal sealed class RustAudioEngine : IAudioEngine
         if (config == null)
             throw new ArgumentNullException(nameof(config));
 
-        if (!config.Validate())
-            throw new AudioEngineException(
-                "Invalid audio configuration. Check SampleRate, Channels, BufferSize, and Enable* flags.");
+        if (!config.Validate(out string? _invalid))
+        {
+            Log.Error($"[RustEngine] Invalid audio configuration: {_invalid}");
+            throw new AudioEngineException($"Invalid audio configuration: {_invalid}");
+        }
 
         lock (_stateLock)
         {
@@ -224,9 +246,7 @@ internal sealed class RustAudioEngine : IAudioEngine
                     _openOutputStream(config);
                 }
 
-                Log.Info($"[RustEngine] Initialized on {config.HostType}: {config.SampleRate}Hz {_channels}ch out / {config.EffectiveInputChannels}ch in, "
-                    + $"out '{_selectedOutputDevice?.Name ?? "(default)"}' in '{_selectedInputDevice?.Name ?? "(none)"}', "
-                    + $"latency out/in {_outputStream?.LatencyFrames ?? 0}/{_inputStream?.LatencyFrames ?? 0} frames");
+                _logOpenedStreams(config);
 
                 _status = EngineStatus.Idle;
                 return 0;
@@ -353,39 +373,87 @@ internal sealed class RustAudioEngine : IAudioEngine
     internal int OutputQueuedSamples => _outputStream?.QueuedSamples ?? 0;
 
     /// <summary>
-    /// Ring depth the engine actually opened with, in frames. Zero before Start.
+    /// Ring depth the engine actually opened with, in frames. Zero before the device is open,
+    /// and zero on a native session output too: that one renders inside the device callback,
+    /// so there is no ring between it and the DAC to pay for.
     /// </summary>
-    internal int OutputRingFrames => _outputStream?.RingFrames ?? 0;
+    internal int OutputRingFrames
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                if (_outputStream is { } _own) return _read(() => _own.RingFrames, _openedRingFrames);
+                if (_sessionOutputStream is { } _session) return _read(() => _session.RingFrames, 0);
+
+                return _openedRingFrames;
+            }
+        }
+    }
 
     /// <summary>
-    /// Frames the driver actually hands the render callback. Zero until audio runs.
+    /// Frames the driver actually hands the render callback. Zero until audio runs. Keeps
+    /// answering once a native session took playback, since it reads that stream instead.
     /// </summary>
-    internal int OutputCallbackFrames => _outputStream?.CallbackFrames ?? 0;
+    internal int OutputCallbackFrames
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                if (_outputStream is { } _own) return _read(() => _own.CallbackFrames, 0);
+                if (_sessionOutputStream is { } _session) return _read(() => _session.CallbackFrames, 0);
+
+                return 0;
+            }
+        }
+    }
 
     /// <summary>
-    /// Same on capture.
+    /// Same on capture. A native session drains the device through its shared capture bridge,
+    /// which keeps no such counter, so this reads 0 there — <see cref="ActualInputChannels"/>
+    /// is the one that still answers.
     /// </summary>
-    internal int InputCallbackFrames => _inputStream?.CallbackFrames ?? 0;
+    internal int InputCallbackFrames
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _inputStream is { } _s ? _read(() => _s.CallbackFrames, 0) : 0;
+            }
+        }
+    }
 
     /// <summary>
     /// Channels the playback device really opened with. The requested width is only a request —
     /// a device that can't serve it gets adapted to the nearest it supports — so anything drawing
     /// physical output sockets, or deciding how far a per-track route may reach, has to read this
-    /// rather than the config. Falls back to the requested width before Start.
+    /// rather than the config.
     /// </summary>
+    /// <remarks>
+    /// Survives a native session taking the device over: the session's own stream answers while
+    /// it holds it, and the last width the hardware opened with covers the gap between the two.
+    /// Only before anything was ever opened does this fall back to the requested width.
+    /// </remarks>
     public int ActualOutputChannels
     {
         get
         {
             lock (_stateLock)
             {
-                return _outputStream is { } _s ? _s.ChannelCount : _config?.EffectiveOutputChannels ?? 0;
+                if (_outputStream is { } _own) return _read(() => _own.ChannelCount, _openedOutputChannels);
+                if (_sessionOutputStream is { } _session)
+                    return _read(() => _session.ChannelCount, _openedOutputChannels);
+
+                return _openedOutputChannels > 0 ? _openedOutputChannels : _config?.EffectiveOutputChannels ?? 0;
             }
         }
     }
 
     /// <summary>
-    /// Same on capture.
+    /// Same on capture, and the range an InputSource.CaptureChannels map may address. Once a
+    /// native session opens its shared capture bridge, that bridge's width answers here.
     /// </summary>
     public int ActualInputChannels
     {
@@ -393,8 +461,58 @@ internal sealed class RustAudioEngine : IAudioEngine
         {
             lock (_stateLock)
             {
-                return _inputStream is { } _s ? _s.ChannelCount : _config?.EffectiveInputChannels ?? 0;
+                if (_inputStream is { } _s) return _read(() => _s.ChannelCount, _openedInputChannels);
+                if (_sessionInputChannels > 0) return _sessionInputChannels;
+
+                return _openedInputChannels > 0 ? _openedInputChannels : _config?.EffectiveInputChannels ?? 0;
             }
+        }
+    }
+
+    /// <summary>
+    /// Reads a diagnostic off a native stream without ever letting it throw at the caller. These
+    /// are numbers a meter polls on a UI timer, and a stream disposed a moment earlier must not
+    /// turn a level display into an exception.
+    /// </summary>
+    /// <param name="read"></param>
+    /// <param name="fallback">what to report when the stream can no longer answer</param>
+    private static int _read(Func<int> read, int fallback)
+    {
+        try { return read(); }
+        catch (ObjectDisposedException) { return fallback; }
+        catch (AudioEngineException) { return fallback; }
+    }
+
+    /// <summary>
+    /// Hands us the output stream a native session opened on our device, so the width, buffer
+    /// and ring diagnostics keep answering after <see cref="ReleaseOutput"/> closed ours. Not an
+    /// ownership transfer: the session opened it and the session disposes it, we only read.
+    /// Pass null when it goes away.
+    /// </summary>
+    /// <param name="stream"></param>
+    internal void TrackSessionOutput(RustSafe.AudioOutputStream? stream)
+    {
+        lock (_stateLock)
+        {
+            _sessionOutputStream = stream;
+            if (stream is null) return;
+
+            int _channels = _read(() => stream.ChannelCount, 0);
+            if (_channels > 0) _openedOutputChannels = _channels;
+        }
+    }
+
+    /// <summary>
+    /// Same for capture: the session's shared bridge opened at this width and ours is closed.
+    /// Pass 0 when the session hands capture back.
+    /// </summary>
+    /// <param name="channels"></param>
+    internal void TrackSessionCapture(int channels)
+    {
+        lock (_stateLock)
+        {
+            _sessionInputChannels = Math.Max(0, channels);
+            if (_sessionInputChannels > 0) _openedInputChannels = _sessionInputChannels;
         }
     }
 
@@ -558,7 +676,8 @@ internal sealed class RustAudioEngine : IAudioEngine
 
             _selectedOutputDevice = _device;
             _reopenOutputStream(_config);
-            Log.Info($"[RustEngine] Output stream reopened on '{_device.Name}'");
+            Log.Info($"[RustEngine] Output stream reopened on '{_device.Name}': "
+                + $"{_describeWidth(_config.EffectiveOutputChannels, _openedOutputChannels)}");
             return 0;
         }
     }
@@ -618,7 +737,8 @@ internal sealed class RustAudioEngine : IAudioEngine
 
             _selectedInputDevice = _device;
             _reopenInputStream(_config);
-            Log.Info($"[RustEngine] Input stream reopened on '{_device.Name}'");
+            Log.Info($"[RustEngine] Input stream reopened on '{_device.Name}': "
+                + $"{_describeWidth(_config.EffectiveInputChannels, _openedInputChannels)}");
             return 0;
         }
     }
@@ -716,17 +836,26 @@ internal sealed class RustAudioEngine : IAudioEngine
             _ringFrames(config));
 
         _outputStream = _engine!.OpenBufferedOutputStream(_selectedOutputDevice, _cfg);
+
+        _openedOutputChannels = _read(() => _outputStream.ChannelCount, config.EffectiveOutputChannels);
+        _openedRingFrames = _read(() => _outputStream.RingFrames, 0);
     }
 
     /// <summary>
-    /// Render ring depth in frames from the config's ms. Out of range means "engine default".
+    /// Render ring depth in frames from the config's ms. Out of range means "engine default",
+    /// which is never what the host meant, so it gets said out loud instead of being taken
+    /// quietly. Initialize rejects such a config outright; this catches the config being
+    /// mutated afterwards and picked up by a device switch or a restore.
     /// </summary>
     private static int _ringFrames(AudioConfig config)
     {
-        if (config.OutputRingMilliseconds <= 0 || config.OutputRingMilliseconds > 2000) return 0;
+        int _frames = config.OutputRingFrames;
 
-        long _frames = (long)config.SampleRate * config.OutputRingMilliseconds / 1000;
-        return (int)Math.Clamp(_frames, 16, 384_000);
+        if (_frames == 0)
+            Log.Warning($"[RustEngine] OutputRingMilliseconds {config.OutputRingMilliseconds} is outside "
+                + $"1..{AudioConfig.MaxOutputRingMilliseconds}, falling back to the engine default ring depth");
+
+        return _frames;
     }
 
     /// <summary>
@@ -742,6 +871,49 @@ internal sealed class RustAudioEngine : IAudioEngine
             _clampStreamBuffer(config.BufferSize));
 
         _inputStream = _engine!.OpenBufferedInputStream(_selectedInputDevice, _cfg);
+
+        _openedInputChannels = _read(() => _inputStream.ChannelCount, config.EffectiveInputChannels);
+    }
+
+    /// <summary>
+    /// Reports what the hardware actually granted, next to what was asked for. A device is free
+    /// to open wider than requested — CoreAudio offers one width per device, so a 2 in / 4 out
+    /// box hands back 4 for a stereo session — and the ring the engine settled on is rarely the
+    /// one the config named either. Both are silent adaptations that decide latency and which
+    /// physical socket a route reaches, so this is the line to ask for when a host reports
+    /// "it plays out of the wrong outputs".
+    /// </summary>
+    /// <param name="config"></param>
+    private void _logOpenedStreams(AudioConfig config)
+    {
+        string _out = _describeWidth(config.EffectiveOutputChannels, _openedOutputChannels);
+        string _in = _inputEnabled ? _describeWidth(config.EffectiveInputChannels, _openedInputChannels) : "off";
+
+        Log.Info($"[RustEngine] Initialized on {config.HostType}: {config.SampleRate}Hz {_out} out / {_in} in, "
+            + $"out '{_selectedOutputDevice?.Name ?? "(default)"}' in '{_selectedInputDevice?.Name ?? "(none)"}', "
+            + $"buffer {config.BufferSize} frames requested, ring {_describeRing(config)}, "
+            + $"latency out/in {_outputStream?.LatencyFrames ?? 0}/{_inputStream?.LatencyFrames ?? 0} frames");
+    }
+
+    /// <summary>
+    /// "2ch" when the device served the request, "2ch requested -> 4ch opened" when it did not.
+    /// </summary>
+    /// <param name="requested"></param>
+    /// <param name="opened"></param>
+    private static string _describeWidth(int requested, int opened) =>
+        opened <= 0 || opened == requested ? $"{requested}ch" : $"{requested}ch requested -> {opened}ch opened";
+
+    /// <summary>
+    /// The render ring as opened, against the milliseconds it was asked for.
+    /// </summary>
+    /// <param name="config"></param>
+    private string _describeRing(AudioConfig config)
+    {
+        if (!_outputEnabled) return "off";
+        if (_openedRingFrames <= 0) return $"{config.OutputRingMilliseconds}ms requested, engine default";
+
+        double _ms = _openedRingFrames * 1000.0 / Math.Max(1, config.SampleRate);
+        return $"{_openedRingFrames} frames ({_ms:F1}ms, {config.OutputRingMilliseconds}ms requested)";
     }
 
     /// <summary>
@@ -783,6 +955,10 @@ internal sealed class RustAudioEngine : IAudioEngine
         _outputStream = null;
         _inputStream = null;
         _engine = null;
+
+        //Borrowed, never ours to dispose — the session owns it and dies with us anyway
+        _sessionOutputStream = null;
+        _sessionInputChannels = 0;
     }
 
     /// <summary>

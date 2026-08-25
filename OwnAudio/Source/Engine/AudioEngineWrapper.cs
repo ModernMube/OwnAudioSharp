@@ -58,19 +58,23 @@ public sealed class AudioEngineWrapper : IDisposable
 
     /// <summary>
     /// Depth of the engine's render ring in frames, i.e. the playback headroom we're paying for
-    /// in latency. Comes from AudioConfig.OutputRingMilliseconds, clamped by the engine.
+    /// in latency. Comes from AudioConfig.OutputRingMilliseconds, clamped by the engine. 0 while
+    /// an AudioMixer drives the device off the native session: that path renders inside the
+    /// device callback and has no ring, so there the latency is the device buffer alone.
     /// </summary>
     public int OutputRingFrames => (_engine as RustAudioEngine)?.OutputRingFrames ?? 0;
 
     /// <summary>
     /// Frames the driver actually hands the render callback, as opposed to FramesPerBuffer, which
     /// is what we asked for. 0 until audio has run; drivers that vary the block size report the
-    /// last one. Worth comparing against FramesPerBuffer to catch a silent ASIO rounding.
+    /// last one. Worth comparing against FramesPerBuffer to catch a silent ASIO rounding. Keeps
+    /// reporting once a native session takes playback, since it reads that stream instead.
     /// </summary>
     public int OutputCallbackFrames => (_engine as RustAudioEngine)?.OutputCallbackFrames ?? 0;
 
     /// <summary>
-    /// Same on the capture side. Need not match the render side outside ASIO.
+    /// Same on the capture side. Need not match the render side outside ASIO. Reads 0 while a
+    /// native session holds capture — its shared bridge keeps no such counter.
     /// </summary>
     public int InputCallbackFrames => (_engine as RustAudioEngine)?.InputCallbackFrames ?? 0;
 
@@ -78,13 +82,15 @@ public sealed class AudioEngineWrapper : IDisposable
     /// Channels the playback device really opened with, as opposed to AudioConfig.OutputChannels,
     /// which is only a request — a device that can't serve it gets adapted to the nearest it
     /// supports. Anything drawing physical output sockets, or deciding how far a per-track route
-    /// may reach, has to read this. Falls back to the requested width before Start.
+    /// may reach, has to read this. It answers whether the engine or a native session holds the
+    /// device, and only falls back to the requested width before anything was ever opened.
     /// </summary>
     public int ActualOutputChannels =>
         (_engine as RustAudioEngine)?.ActualOutputChannels ?? _config.EffectiveOutputChannels;
 
     /// <summary>
-    /// Same on capture, and the range an InputSource.CaptureChannels map may address.
+    /// Same on capture, and the range an InputSource.CaptureChannels map may address. A native
+    /// session's shared capture bridge reports its own width here once it takes the device.
     /// </summary>
     public int ActualInputChannels =>
         (_engine as RustAudioEngine)?.ActualInputChannels ?? _config.EffectiveInputChannels;

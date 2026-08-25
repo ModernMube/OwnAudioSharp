@@ -332,7 +332,11 @@ public static partial class OwnaudioNet
     static IAudioEngine _createEngine(AudioConfig config, bool useMockEngine)
     {
         if (useMockEngine) return OwnaudioNET.Engine.AudioEngineFactory.CreateMockEngine(config, generateTestSignal: false);
-        if(!config.Validate()) throw new AudioEngineException("bad audio config, check SampleRate/Channels/BufferSize");
+        if (!config.Validate(out string? _invalid))
+        {
+            Log.Error($"[Ownaudio] Invalid audio configuration: {_invalid}");
+            throw new AudioEngineException($"Invalid audio configuration: {_invalid}");
+        }
 
         var _engine = new RustAudioEngine();
         int _result = _engine.Initialize(config);

@@ -403,7 +403,20 @@ public sealed class MultiTrackSession : IDisposable
     /// </summary>
     /// <param name="engine">The engine owning the output device.</param>
     /// <param name="device">null = system default.</param>
-    public AudioOutputStream OpenOutput(Safe.AudioEngine engine, AudioDevice? device = null)
+    public AudioOutputStream OpenOutput(Safe.AudioEngine engine, AudioDevice? device = null) =>
+        OpenOutput(engine, device, bufferFrames: 0);
+
+    /// <summary>
+    /// Same, with the device buffer size spelled out. That is the session's entire output
+    /// latency knob: the mixer renders inside the device callback, so unlike a push stream
+    /// there is no render ring stacked on top of the buffer to size as well. The driver takes
+    /// the size as a request, so read <see cref="AudioOutputStream.CallbackFrames"/> back once
+    /// audio runs to see what it granted.
+    /// </summary>
+    /// <param name="engine">The engine owning the output device.</param>
+    /// <param name="device">null = system default.</param>
+    /// <param name="bufferFrames">device buffer in frames, 0 lets the platform pick</param>
+    public AudioOutputStream OpenOutput(Safe.AudioEngine engine, AudioDevice? device, int bufferFrames)
     {
         _throwIfDisposed();
         ArgumentNullException.ThrowIfNull(engine);
@@ -411,7 +424,11 @@ public sealed class MultiTrackSession : IDisposable
         if (_outputStream is not null)
             throw new InvalidOperationException("An output stream has already been opened for this session.");
 
-        var config = new AudioStreamConfig((int)_sampleRate, _channels);
+        //Out of what the backend takes falls back to the platform default instead of throwing,
+        //so a host passing its own frames-per-buffer can't turn a stray value into a crash
+        int _frames = bufferFrames is >= 16 and <= 8192 ? bufferFrames : 0;
+
+        var config = new AudioStreamConfig((int)_sampleRate, _channels, SampleFormat.F32, _frames);
         AudioOutputStream stream = engine.OpenMixerOutputStream(_mixerHandle, device, config);
         stream.Play();
 

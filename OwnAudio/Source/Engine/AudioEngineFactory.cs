@@ -23,11 +23,10 @@ public static class AudioEngineFactory
         if (config == null)
             throw new ArgumentNullException(nameof(config));
 
-        if (!config.Validate())
+        if (!config.Validate(out string? _invalid))
         {
-            Log.Error($"[EngineFactory] Rejected config: {config.SampleRate}Hz {config.Channels}ch, buffer {config.BufferSize}");
-            throw new AudioEngineException(
-                "Invalid audio configuration. Check SampleRate, Channels, BufferSize, and Enable* flags.");
+            Log.Error($"[EngineFactory] Rejected config: {_invalid}");
+            throw new AudioEngineException($"Invalid audio configuration: {_invalid}");
         }
 
         Log.Info($"[EngineFactory] Creating {GetPlatformEngineName()}: {config.SampleRate}Hz {config.Channels}ch, buffer {config.BufferSize}");
@@ -72,9 +71,11 @@ public static class AudioEngineFactory
         if (config == null)
             throw new ArgumentNullException(nameof(config));
 
-        if (!config.Validate())
-            throw new AudioEngineException(
-                "Invalid audio configuration. Check SampleRate, Channels, BufferSize, and Enable* flags.");
+        if (!config.Validate(out string? _invalid))
+        {
+            Log.Error($"[EngineFactory] Rejected mock config: {_invalid}");
+            throw new AudioEngineException($"Invalid audio configuration: {_invalid}");
+        }
 
         var engine = new MockAudioEngine(generateTestSignal);
 

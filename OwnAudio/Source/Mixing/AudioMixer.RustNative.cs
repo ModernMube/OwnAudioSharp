@@ -263,6 +263,13 @@ public sealed partial class AudioMixer
     private RustAudioEngine? _rustReleasedEngine;
 
     /// <summary>
+    /// Engine we lent our streams to for its width and buffer diagnostics. Set as soon as the
+    /// session takes either direction of the device, which on an input-only mixer happens
+    /// without any output ever being released. Cleared when the session dies.
+    /// </summary>
+    private RustAudioEngine? _rustDiagnosticEngine;
+
+    /// <summary>
     /// Does this mixer run on the rust-native chain?
     /// </summary>
     internal bool IsRustNative => _rustNative;
@@ -363,8 +370,7 @@ public sealed partial class AudioMixer
             AudioTrack _track = _rustSession.AddTrack();
             sts.AttachRustTrack(_track);
 
-            _applyChannelMap(source, sts.Id, sts.RustTrack);
-            _applyOutputRoute(source, sts.Id, sts.RustTrack);
+            _applyRoutingAtAttach(source, sts.Id, sts.RustTrack);
             _rememberRustTrack(sts.Id, sts.RustTrack);
             _routeTrackEffects(source, sts);
         }
@@ -396,6 +402,30 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
+    /// Lays a source's channel map and output route onto the freshly attached track. Routing set
+    /// before the add still has to land on the very first rendered block, hence here and not on
+    /// the next tick.
+    /// </summary>
+    /// <remarks>
+    /// A route the engine won't take — past its 16 channel reach, or naming a source channel the
+    /// track hasn't got — is a mistake in the host's configuration, not a reason to abandon a
+    /// track that plays perfectly well unrouted. It gets reported and the track goes on the bus
+    /// plain, which is what the control tick does with the same failure; letting it out of
+    /// AddSource instead would leave the source registered on a half wired track.
+    /// </remarks>
+    /// <param name="source">the outermost mixer source</param>
+    /// <param name="id">bookkeeping key of the backed source</param>
+    /// <param name="track"></param>
+    private void _applyRoutingAtAttach(IAudioSource source, Guid id, AudioTrack? track)
+    {
+        try { _applyChannelMap(source, id, track); }
+        catch (Exception ex) { Log.Error($"[Mixer] Output channel map of source '{id}' rejected at attach, it plays unmapped", ex); }
+
+        try { _applyOutputRoute(source, id, track); }
+        catch (Exception ex) { Log.Error($"[Mixer] Output route of source '{id}' rejected at attach, it plays unrouted", ex); }
+    }
+
+    /// <summary>
     /// Attaches a natively decoded file source to the shared session.
     /// </summary>
     /// <param name="source"></param>
@@ -412,9 +442,7 @@ public sealed partial class AudioMixer
                 (ushort)(fs.DecodeChannels ?? _config.Channels));
             fs.AttachRustTrack(_track.Track, _track);
 
-            //Routing set before the add still has to land on the very first rendered block
-            _applyChannelMap(source, fs.Id, fs.RustTrack);
-            _applyOutputRoute(source, fs.Id, fs.RustTrack);
+            _applyRoutingAtAttach(source, fs.Id, fs.RustTrack);
             _rememberRustTrack(fs.Id, fs.RustTrack);
             _routeTrackEffects(source, fs);
         }
@@ -434,8 +462,7 @@ public sealed partial class AudioMixer
             MemoryTrack _track = _rustSession.AddMemoryTrack(ss.GetRustSampleSnapshot(), ss.Loop);
             ss.AttachRustTrack(_track.Track, _track);
 
-            _applyChannelMap(source, ss.Id, ss.RustTrack);
-            _applyOutputRoute(source, ss.Id, ss.RustTrack);
+            _applyRoutingAtAttach(source, ss.Id, ss.RustTrack);
             _rememberRustTrack(ss.Id, ss.RustTrack);
             _routeTrackEffects(source, ss);
         }
@@ -460,22 +487,58 @@ public sealed partial class AudioMixer
 
             //One device stream for every input track, not one each. On ASIO that's the whole
             //ballgame - a driver takes one client - and everywhere else it's just cheaper.
-            if (_rustCapture is null)
-            {
-                _rustEngine!.ReleaseInput();
-                _rustCapture = _rustSession.OpenCapture(
-                    _nativeEngine, _rustEngine.SelectedInputDevice, bufferFrames: (uint)_config.BufferSize);
-            }
+            if (_rustCapture is null && !_openRustCapture(_rustEngine!, _nativeEngine))
+                return;
 
             AudioTrack _track = _rustSession.AddTrack();
-            ins.AttachRustCapture(_track, _rustCapture);
+            ins.AttachRustCapture(_track, _rustCapture!);
 
-            _applyCaptureChannels(ins, _track);
-            _applyChannelMap(source, ins.Id, ins.RustTrack);
-            _applyOutputRoute(source, ins.Id, ins.RustTrack);
+            try { _applyCaptureChannels(ins, _track); }
+            catch (Exception ex)
+            {
+                Log.Error($"[Mixer] Capture channels of source '{ins.Id}' rejected at attach "
+                    + $"(the device opened {_rustCapture!.ChannelCount}ch), it stays silent", ex);
+            }
+
+            _applyRoutingAtAttach(source, ins.Id, ins.RustTrack);
             _rememberRustTrack(ins.Id, ins.RustTrack);
             _routeTrackEffects(source, ins);
         }
+    }
+
+    /// <summary>
+    /// Opens the one capture stream every input track taps, taking the device off the engine
+    /// first. Reports the width it landed on, because that is the range an InputSource's
+    /// CaptureChannels may address and there is no other way to find out what the card offers.
+    /// Call under _rustSessionLock.
+    /// </summary>
+    /// <param name="rustEngine"></param>
+    /// <param name="nativeEngine"></param>
+    /// <returns>False when the device would not open, the caller then attaches nothing.</returns>
+    private bool _openRustCapture(RustAudioEngine rustEngine, AudioEngine nativeEngine)
+    {
+        rustEngine.ReleaseInput();
+
+        try
+        {
+            _rustCapture = _rustSession!.OpenCapture(
+                nativeEngine, rustEngine.SelectedInputDevice, bufferFrames: (uint)_config.BufferSize);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"[Mixer] Shared capture cannot open on "
+                + $"'{rustEngine.SelectedInputDevice?.Name ?? "(default)"}', input sources stay silent", ex);
+            return false;
+        }
+
+        //Every input track taps this one stream, so its width is the whole capture surface
+        rustEngine.TrackSessionCapture(_rustCapture.ChannelCount);
+        _rustDiagnosticEngine = rustEngine;
+
+        Log.Info($"[Mixer] Shared capture opened on '{rustEngine.SelectedInputDevice?.Name ?? "(default)"}': "
+            + $"{_rustCapture.ChannelCount}ch, buffer {_config.BufferSize} frames requested");
+
+        return true;
     }
 
     /// <summary>
@@ -870,10 +933,18 @@ public sealed partial class AudioMixer
     {
         if (track is null || _rustCapture is null) return;
 
-        int[] _wanted = ins.CaptureChannels ?? _defaultCaptureMap(_rustCapture.ChannelCount);
+        int _deviceChannels = _rustCapture.ChannelCount;
+        int[] _wanted = ins.CaptureChannels ?? _defaultCaptureMap(_deviceChannels);
 
         if (_rustAppliedCaptureMaps.TryGetValue(ins.Id, out int[]? _applied) && _channelMapsEqual(_applied, _wanted))
             return;
+
+        //Past the equality check on purpose: a tap only lands at attach and on a real re-cable,
+        //so this can't turn into per-tick noise
+        if (ins.CaptureChannels is null && _deviceChannels < _config.Channels)
+            Log.Warning($"[Mixer] Source '{ins.Id}' wants {_config.Channels}ch but the device captures "
+                + $"{_deviceChannels}ch, channel {_deviceChannels - 1} is duplicated to fill the rest — "
+                + "set InputSource.CaptureChannels to pick the inputs yourself");
 
         _rustCapture.Attach(track, _wanted);
         _rustAppliedCaptureMaps[ins.Id] = (int[])_wanted.Clone();
@@ -1403,12 +1474,35 @@ public sealed partial class AudioMixer
             return;
         }
 
-        _rustOutputStream = _rustSession.OpenOutput(_nativeEngine, _rustEngine.SelectedOutputDevice);
+        //The device buffer is this path's whole latency knob: the mixer renders in the callback,
+        //so there is no render ring stacked on it the way a push stream has one
+        _rustOutputStream = _rustSession.OpenOutput(
+            _nativeEngine, _rustEngine.SelectedOutputDevice, _config.BufferSize);
         _rustLastStreamErrorCount = 0;
         _rustEngine.ReleaseOutput();
         _rustReleasedEngine = _rustEngine;
 
-        Log.Info($"[Mixer] Session output opened on '{_rustEngine.SelectedOutputDevice?.Name ?? "(default)"}'");
+        //Ours now drives the device, so the engine's width and buffer diagnostics read it
+        _rustEngine.TrackSessionOutput(_rustOutputStream);
+        _rustDiagnosticEngine = _rustEngine;
+
+        Log.Info($"[Mixer] Session output opened on '{_rustEngine.SelectedOutputDevice?.Name ?? "(default)"}': "
+            + $"{_describeSessionWidth(_rustEngine)}, buffer {_config.BufferSize} frames requested, "
+            + "no render ring (the mixer renders in the device callback)");
+    }
+
+    /// <summary>
+    /// The bus width against what the device opened with. They part company on a card that only
+    /// offers one width — the mix stays at the bus width and the engine spreads it over the rest
+    /// — and that is exactly when someone asks why a route landed on the wrong socket.
+    /// </summary>
+    /// <param name="engine"></param>
+    private string _describeSessionWidth(RustAudioEngine engine)
+    {
+        int _opened = engine.ActualOutputChannels;
+        return _opened <= 0 || _opened == _config.Channels
+            ? $"{_config.Channels}ch bus"
+            : $"{_config.Channels}ch bus -> {_opened}ch device";
     }
 
     /// <summary>
@@ -1521,6 +1615,11 @@ public sealed partial class AudioMixer
             _rustAppliedCaptureMaps.Clear();
             _rustAppliedRoutes.Clear();
             _rustOutputStream = null;
+
+            //What we lent the engine for its diagnostics died with the session
+            _rustDiagnosticEngine?.TrackSessionOutput(null);
+            _rustDiagnosticEngine?.TrackSessionCapture(0);
+            _rustDiagnosticEngine = null;
 
             _rustReleasedEngine?.RestoreOutput();
             _rustReleasedEngine = null;

@@ -41,7 +41,50 @@ namespace Ownaudio.Core
         /// buffer regardless of BufferSize. 100 is the safe default; live monitoring wants
         /// 10-20. Anything under three device buffers gets pulled back up.
         /// </summary>
+        /// <remarks>
+        /// Sizes the render ring on the push path, where managed code hands the engine samples
+        /// and a native ring feeds the device: <c>AudioEngineWrapper.Send</c> and any buffered
+        /// output stream. An <c>AudioMixer</c> on the native session has no ring to size — it
+        /// renders inside the device callback, which is the lower latency shape — so there
+        /// <see cref="BufferSize"/> is the whole knob. Either way the engine reports which one
+        /// it opened with, and out of range (1..<see cref="MaxOutputRingMilliseconds"/>) is a
+        /// logged warning rather than a silent fallback.
+        /// </remarks>
         public int OutputRingMilliseconds { get; set; } = 100;
+
+        /// <summary>
+        /// Deepest render ring anyone may ask for, in ms.
+        /// </summary>
+        public const int MaxOutputRingMilliseconds = 2000;
+
+        /// <summary>
+        /// <see cref="OutputRingMilliseconds"/> in frames at <see cref="SampleRate"/>, inside the
+        /// range the native side accepts. 0 when the request is out of range, which every engine
+        /// reads as "use your own default". The engine still pulls anything shallower than three
+        /// device buffers back up, so read the granted depth off the stream rather than assuming
+        /// this is what you got.
+        /// </summary>
+        public int OutputRingFrames
+        {
+            get
+            {
+                if (OutputRingMilliseconds <= 0 || OutputRingMilliseconds > MaxOutputRingMilliseconds)
+                    return 0;
+
+                long _frames = (long)SampleRate * OutputRingMilliseconds / 1000;
+                return (int)Math.Clamp(_frames, MinRingFrames, MaxRingFrames);
+            }
+        }
+
+        /// <summary>
+        /// Shallowest render ring the native side accepts, in frames.
+        /// </summary>
+        public const int MinRingFrames = 16;
+
+        /// <summary>
+        /// Deepest render ring the native side accepts, in frames.
+        /// </summary>
+        public const int MaxRingFrames = 384_000;
 
         /// <summary>
         /// Recording on/off.
@@ -89,18 +132,41 @@ namespace Ownaudio.Core
         /// Sanity check before we hand this to the engine.
         /// </summary>
         /// <returns>True if configuration is valid, false otherwise.</returns>
-        public bool Validate()
-        {
-            if (SampleRate <= 0 || SampleRate > 192000) return false;
-            if (Channels <= 0 || Channels > 256) return false;
-            if (OutputChannels is int _out && (_out <= 0 || _out > 256)) return false;
-            if (InputChannels is int _in && (_in <= 0 || _in > 256)) return false;
-            if (BufferSize <= 0 || BufferSize > 16384) return false;
-            if (OutputRingMilliseconds <= 0 || OutputRingMilliseconds > 2000) return false;
-            if (!EnableInput && !EnableOutput) return false;
+        public bool Validate() => Validate(out _);
 
-            return _selectorsOk(InputChannelSelectors, EffectiveInputChannels)
-                && _selectorsOk(OutputChannelSelectors, EffectiveOutputChannels);
+        /// <summary>
+        /// Same check, but it says which field was wrong. A config is rejected before a single
+        /// device is touched, so "invalid configuration" on its own leaves the host guessing
+        /// between nine settings — this is what the engine reports and logs instead.
+        /// </summary>
+        /// <param name="error">null when valid, otherwise the first field that failed and why</param>
+        /// <returns>True if configuration is valid, false otherwise.</returns>
+        public bool Validate(out string? error)
+        {
+            error = null;
+
+            if (SampleRate <= 0 || SampleRate > 192000)
+                error = $"SampleRate {SampleRate} is outside 1..192000";
+            else if (Channels <= 0 || Channels > 256)
+                error = $"Channels {Channels} is outside 1..256";
+            else if (OutputChannels is int _out && (_out <= 0 || _out > 256))
+                error = $"OutputChannels {_out} is outside 1..256";
+            else if (InputChannels is int _in && (_in <= 0 || _in > 256))
+                error = $"InputChannels {_in} is outside 1..256";
+            else if (BufferSize <= 0 || BufferSize > 16384)
+                error = $"BufferSize {BufferSize} is outside 1..16384";
+            else if (OutputRingMilliseconds <= 0 || OutputRingMilliseconds > MaxOutputRingMilliseconds)
+                error = $"OutputRingMilliseconds {OutputRingMilliseconds} is outside 1..{MaxOutputRingMilliseconds}";
+            else if (!EnableInput && !EnableOutput)
+                error = "both EnableInput and EnableOutput are off, there would be nothing to run";
+            else if (!_selectorsOk(InputChannelSelectors, EffectiveInputChannels))
+                error = $"InputChannelSelectors must hold {EffectiveInputChannels} distinct channels "
+                    + $"below {MaxRouteChannels}";
+            else if (!_selectorsOk(OutputChannelSelectors, EffectiveOutputChannels))
+                error = $"OutputChannelSelectors must hold {EffectiveOutputChannels} distinct channels "
+                    + $"below {MaxRouteChannels}";
+
+            return error is null;
         }
 
         /// <summary>
