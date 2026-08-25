@@ -253,6 +253,11 @@ public sealed partial class AudioMixer
     private ulong _rustLastStreamErrorCount;
 
     /// <summary>
+    /// Same for the shared capture stream, counted separately from the output's.
+    /// </summary>
+    private ulong _rustLastCaptureErrorCount;
+
+    /// <summary>
     /// Latches PlaybackEnded so the tick raises it once per run, not every 15ms.
     /// </summary>
     private bool _rustPlaybackEndedRaised;
@@ -530,6 +535,8 @@ public sealed partial class AudioMixer
                 + $"'{rustEngine.SelectedInputDevice?.Name ?? "(default)"}', input sources stay silent", ex);
             return false;
         }
+
+        _rustLastCaptureErrorCount = 0;
 
         //Every input track taps this one stream, so its width is the whole capture surface
         rustEngine.TrackSessionCapture(_rustCapture.ChannelCount);
@@ -1397,39 +1404,60 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
-    /// Polls the native stream error state and raises StreamFaulted once per fresh fault
-    /// (device lost, backend error). The count is monotonic, so comparing it catches a repeat
-    /// of the same kind too. Event goes out off the lock so a handler may call back in.
+    /// Polls both directions for a fresh fault (device lost, backend error): the session
+    /// output, and the shared capture every input source feeds off.
     /// </summary>
     internal void PollRustStreamFaultOnce()
     {
-        AudioStreamErrorKind _kind;
-        ulong _count;
+        AudioStreamErrorKind _outputKind = AudioStreamErrorKind.None;
+        AudioStreamErrorKind _captureKind = AudioStreamErrorKind.None;
+        ulong _outputCount = _rustLastStreamErrorCount;
+        ulong _captureCount = _rustLastCaptureErrorCount;
 
         lock (_rustSessionLock)
         {
-            AudioOutputStream? _stream = _rustOutputStream;
-            if (_stream is null)
-                return;
+            if (_rustOutputStream is { } _stream)
+                _outputKind = _stream.PollErrorState(out _outputCount);
 
-            _kind = _stream.PollErrorState(out _count);
+            if (_rustCapture is { } _capture)
+                _captureKind = _capture.PollErrorState(out _captureCount);
         }
 
-        if (_count == _rustLastStreamErrorCount)
+        _raiseRustFault(AudioStreamDirection.Output, _outputKind, _outputCount, ref _rustLastStreamErrorCount);
+        _raiseRustFault(AudioStreamDirection.Input, _captureKind, _captureCount, ref _rustLastCaptureErrorCount);
+    }
+
+    /// <summary>
+    /// Fires StreamFaulted once per fresh fault on one direction. The count is monotonic,
+    /// so comparing it catches a repeat of the same kind too. Off the session lock, so a
+    /// handler may call back in.
+    /// </summary>
+    /// <param name="direction"></param>
+    /// <param name="kind"></param>
+    /// <param name="count">error total the stream reported now</param>
+    /// <param name="lastSeen">that direction's last reported total</param>
+    private void _raiseRustFault(AudioStreamDirection direction, AudioStreamErrorKind kind, ulong count,
+        ref ulong lastSeen)
+    {
+        if (count == lastSeen)
             return;
 
-        _rustLastStreamErrorCount = _count;
+        lastSeen = count;
 
-        if (_kind == AudioStreamErrorKind.None)
+        if (kind == AudioStreamErrorKind.None)
             return;
 
-        AudioStreamFaultKind _fault = _kind == AudioStreamErrorKind.DeviceNotAvailable
+        AudioStreamFaultKind _fault = kind == AudioStreamErrorKind.DeviceNotAvailable
             ? AudioStreamFaultKind.DeviceNotAvailable
             : AudioStreamFaultKind.BackendSpecific;
 
-        Log.FatalError($"[Mixer] Native output stream faulted: {_fault} (fault #{_count})");
+        string _what = direction == AudioStreamDirection.Output
+            ? "output stream"
+            : "shared capture stream, every input source is silent";
 
-        StreamFaulted?.Invoke(this, new AudioStreamFaultEventArgs(_fault, _count));
+        Log.FatalError($"[Mixer] Native {_what} faulted: {_fault} (fault #{count})");
+
+        StreamFaulted?.Invoke(this, new AudioStreamFaultEventArgs(_fault, count, direction));
     }
 
     /// <summary>
@@ -1612,6 +1640,7 @@ public sealed partial class AudioMixer
 
             _rustSession = null;
             _rustCapture = null;
+            _rustLastCaptureErrorCount = 0;
             _rustAppliedCaptureMaps.Clear();
             _rustAppliedRoutes.Clear();
             _rustOutputStream = null;

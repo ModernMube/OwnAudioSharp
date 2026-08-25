@@ -729,6 +729,24 @@ int32_t ownaudio_v1_capture_get_peaks(struct OwnAudioCaptureHandle *capture,
                                       float *out_right);
 
 /**
+ * Polls the bridge's error state, writing the most recent error kind to `*out_kind` and
+ * the monotonic error count to `*out_count`.
+ *
+ * The counterpart of `ownaudio_v1_output_stream_get_error_state` on the capture side:
+ * without it a device lost mid-session just goes quiet, with every track that taps it.
+ * `*out_kind` is `0` = None, `1` = DeviceNotAvailable, `2` = BackendSpecific, and either
+ * out-pointer may be null to skip that field.
+ *
+ * # Safety
+ * - `capture` must be a live handle from `ownaudio_v1_capture_open` that has not been destroyed.
+ * - `out_kind` must point to a writable `u32`, `out_count` to a writable `u64`.
+ * - Null pointers are rejected with an error code rather than dereferenced.
+ */
+int32_t ownaudio_v1_capture_get_error_state(struct OwnAudioCaptureHandle *capture,
+                                            uint32_t *out_kind,
+                                            uint64_t *out_count);
+
+/**
  * Closes the bridge, stopping capture and releasing the input stream.
  *
  * Passing `null` is safe and has no effect. Attached tracks keep their ring readers until

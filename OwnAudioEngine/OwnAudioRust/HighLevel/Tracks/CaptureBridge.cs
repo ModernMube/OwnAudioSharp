@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using Ownaudio.Native.RustAudio.Interop;
+using Ownaudio.Safe;
 using Ownaudio.Safe.Exceptions;
 using Ownaudio.Safe.Handles;
 
@@ -155,6 +156,26 @@ public sealed class CaptureBridge : IDisposable
                 out float right);
             ErrorCodeMapper.ThrowIfError(code, nameof(GetInputPeaks));
             return (left, right);
+        }
+    }
+
+    /// <summary>
+    /// Error state the backend recorded on the capture stream. errorCount is a monotonic
+    /// total, compare it against the last seen value to catch a fresh fault.
+    /// </summary>
+    public AudioStreamErrorKind PollErrorState(out ulong errorCount)
+    {
+        lock (_sync)
+        {
+            if (_disposed) { errorCount = 0; return AudioStreamErrorKind.None; }
+
+            int code = OwnAudioNative.ownaudio_v1_capture_get_error_state(
+                _handle.DangerousGetHandle(),
+                out uint kind,
+                out errorCount);
+            ErrorCodeMapper.ThrowIfError(code, nameof(PollErrorState));
+
+            return (AudioStreamErrorKind)kind;
         }
     }
 

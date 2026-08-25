@@ -395,6 +395,48 @@ pub unsafe extern "C" fn ownaudio_v1_capture_get_peaks(
     crate::error_code::finish_catch_unwind(result)
 }
 
+/// Polls the bridge's error state, writing the most recent error kind to `*out_kind` and
+/// the monotonic error count to `*out_count`.
+///
+/// The counterpart of `ownaudio_v1_output_stream_get_error_state` on the capture side:
+/// without it a device lost mid-session just goes quiet, with every track that taps it.
+/// `*out_kind` is `0` = None, `1` = DeviceNotAvailable, `2` = BackendSpecific, and either
+/// out-pointer may be null to skip that field.
+///
+/// # Safety
+/// - `capture` must be a live handle from `ownaudio_v1_capture_open` that has not been destroyed.
+/// - `out_kind` must point to a writable `u32`, `out_count` to a writable `u64`.
+/// - Null pointers are rejected with an error code rather than dereferenced.
+#[no_mangle]
+pub unsafe extern "C" fn ownaudio_v1_capture_get_error_state(
+    capture: *mut OwnAudioCaptureHandle,
+    out_kind: *mut u32,
+    out_count: *mut u64,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wrapper = match unsafe { capture_from_ptr(capture) } {
+            Some(w) => w,
+            None => return OwnAudioErrorCode::InvalidHandle as i32,
+        };
+
+        let state = wrapper.stream.error_state();
+        if !out_kind.is_null() {
+            unsafe {
+                *out_kind = state.kind() as u32;
+            }
+        }
+        if !out_count.is_null() {
+            unsafe {
+                *out_count = state.count();
+            }
+        }
+
+        OwnAudioErrorCode::Success as i32
+    }));
+
+    crate::error_code::finish_catch_unwind(result)
+}
+
 /// Closes the bridge, stopping capture and releasing the input stream.
 ///
 /// Passing `null` is safe and has no effect. Attached tracks keep their ring readers until

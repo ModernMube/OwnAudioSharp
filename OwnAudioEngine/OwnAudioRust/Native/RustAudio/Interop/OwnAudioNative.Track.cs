@@ -470,6 +470,15 @@ internal static partial class OwnAudioNative
         out float outRight);
 
     /// <summary>
+    /// Error kind and monotonic error count the backend recorded on the capture stream.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_capture_get_error_state(
+        IntPtr capture,
+        out uint outKind,
+        out ulong outCount);
+
+    /// <summary>
     /// Closes the bridge and releases the stream. Zero handle is fine.
     /// </summary>
     /// <param name="capture"></param>

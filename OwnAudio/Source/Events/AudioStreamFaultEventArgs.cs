@@ -19,9 +19,25 @@ namespace OwnaudioNET.Events
     }
 
     /// <summary>
-    /// Native output stream died on us. The backend records the error on its own
-    /// callback, the mixer control tick polls it and fires this. Without it the
-    /// stream just goes silent and nobody notices.
+    /// Which side of the device faulted.
+    /// </summary>
+    public enum AudioStreamDirection
+    {
+        /// <summary>
+        /// Playback stream.
+        /// </summary>
+        Output = 0,
+
+        /// <summary>
+        /// Capture stream, shared by every live input source.
+        /// </summary>
+        Input = 1,
+    }
+
+    /// <summary>
+    /// Native stream died on us. The backend records the error on its own callback,
+    /// the mixer control tick polls it and fires this. Without it the stream just goes
+    /// silent and nobody notices.
     /// </summary>
     public class AudioStreamFaultEventArgs : EventArgs
     {
@@ -29,6 +45,11 @@ namespace OwnaudioNET.Events
         /// Which flavour of fault this is.
         /// </summary>
         public AudioStreamFaultKind Kind { get; }
+
+        /// <summary>
+        /// Playback or capture.
+        /// </summary>
+        public AudioStreamDirection Direction { get; }
 
         /// <summary>
         /// Total errors on this stream since it opened, keeps climbing.
@@ -45,10 +66,13 @@ namespace OwnaudioNET.Events
         /// </summary>
         /// <param name="kind"></param>
         /// <param name="errorCount"></param>
-        public AudioStreamFaultEventArgs(AudioStreamFaultKind kind, ulong errorCount)
+        /// <param name="direction">playback unless the capture stream faulted</param>
+        public AudioStreamFaultEventArgs(AudioStreamFaultKind kind, ulong errorCount,
+            AudioStreamDirection direction = AudioStreamDirection.Output)
         {
             Kind = kind;
             ErrorCount = errorCount;
+            Direction = direction;
             EventTimestamp = DateTime.UtcNow;
         }
 
@@ -57,7 +81,7 @@ namespace OwnaudioNET.Events
         /// </summary>
         public override string ToString()
         {
-            return $"Audio Stream Fault: {Kind} (error #{ErrorCount}) at {EventTimestamp:O}";
+            return $"Audio Stream Fault: {Direction} {Kind} (error #{ErrorCount}) at {EventTimestamp:O}";
         }
     }
 }

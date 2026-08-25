@@ -940,9 +940,15 @@ namespace OwnaudioNET.Events
         public System.DateTime Timestamp { get; }
         public override string ToString() { }
     }
+    public enum AudioStreamDirection
+    {
+        Output = 0,
+        Input = 1,
+    }
     public class AudioStreamFaultEventArgs : System.EventArgs
     {
-        public AudioStreamFaultEventArgs(OwnaudioNET.Events.AudioStreamFaultKind kind, ulong errorCount) { }
+        public AudioStreamFaultEventArgs(OwnaudioNET.Events.AudioStreamFaultKind kind, ulong errorCount, OwnaudioNET.Events.AudioStreamDirection direction = 0) { }
+        public OwnaudioNET.Events.AudioStreamDirection Direction { get; }
         public ulong ErrorCount { get; }
         public System.DateTime EventTimestamp { get; }
         public OwnaudioNET.Events.AudioStreamFaultKind Kind { get; }
@@ -2103,4 +2109,4 @@ namespace OwnaudioNET.Visualization
             RMS = 2,
         }
     }
-}
+}
