@@ -3,6 +3,45 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## Unreleased
+
+### Added
+
+- **`Log.Sink`.** Every line that passes `LoggerLevel` is handed to the host, so the engine's
+  diagnostics can go into a file, an `ILogger`, a UI panel or a bug report. Until now the only
+  destination was `Console.Write`, which is nowhere in a GUI, Android or iOS app — the init lines
+  reporting what the device actually granted were unreachable exactly where they are needed.
+  Subscribing turns the console fallback off, and a handler that throws or logs from inside itself
+  is ignored rather than allowed to take the caller down.
+- **`Log.ToFile`.** Opt-in file logging that cannot fill the drive: the live file rotates into
+  numbered siblings at `maxFileSizeKb`, only `keepFiles` generations are kept, and disk use is
+  therefore capped at roughly `maxFileSizeKb × (keepFiles + 1)`. Rotated files past the count, and
+  past `maxAgeDays`, are pruned when the file is opened — at open, because a process that crashes
+  never gets to clean up on the way out.
+- **The shared capture stream reports its faults.** `ownaudio_v1_capture_get_error_state` is the
+  capture counterpart of the output stream's error state, and the mixer control tick now polls both.
+  A capture device lost mid-session used to take every input source silent with nothing in the log;
+  it raises `StreamFaulted` and a fatal log line. `AudioStreamFaultEventArgs` carries a `Direction`
+  saying which side died.
+- **Orphaned temp files are swept once per process.** A killed process leaves its stream-decode spill
+  (`ownaudio_stream_*`) or matchering work directory (`enhanced_preset_*`) in the temp directory
+  forever, since the dispose or `finally` that removes them never ran. Entries older than 24 hours
+  are deleted at engine init and before the next spill is written.
+
+### Fixed
+
+- **A disabled logger still printed exceptions.** `Log.Error` and `Log.FatalError` wrote the
+  exception straight to the console, outside the level check, so a host that turned logging off got
+  the exception line anyway — without the message that says what failed, since that one was filtered
+  out. Both now go through the level filter as one line, and carry the whole inner-exception chain
+  and the stack trace instead of just the type and message.
+- **A route the engine cannot render is rejected instead of silently truncated.**
+  `ownaudio_v1_track_set_output_route` took a route longer than the 16 channel reach by dropping the
+  tail, took a source channel the track has not got by rendering silence there, and took a NaN gain
+  that spreads across the whole bus. All three now come back as `UnsupportedConfig` with a message,
+  the track keeps the routing it had, and the mixer reports it — the catch around the route apply
+  could not fire before, because nothing ever failed.
+
 ## 4.0.5 — 2026-08-24
 
 ### Fixed
