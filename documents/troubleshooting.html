@@ -37,7 +37,13 @@
 await OwnaudioNet.InitializeAsync(config, logLevel: Log.Level.Info);
 
 // or flip it at any time while running
-Log.LoggerLevel = Log.Level.Info;</code></pre></div>
+Log.LoggerLevel = Log.Level.Info;
+
+// No console (desktop, Android, iOS)? Write it to a rotating file, or take it yourself
+string? path = Log.ToFile();
+Log.Sink += (level, line) =&gt; _logger.Log(Map(level), line);</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><code>Log.ToFile()</code> caps itself — around 2 MB per file, three rotated generations, older ones pruned when it opens — so leaving it on in a released app will not fill anyone's drive. See <a href="api-core.html#log-destinations">log destinations</a>.</p></div>
 
 <!-- ───────────────────────────────────────────────────────────────────── -->
 <h2 id="no-sound">Nothing plays</h2>
@@ -113,7 +119,9 @@ await OwnaudioNet.ShutdownAsync();</code></pre></div>
 mixer.StreamFaulted += (_, e) =&gt;
 {
     if (e.Kind == AudioStreamFaultKind.DeviceNotAvailable)
-        ShowToast("Audio device disconnected");
+        ShowToast(e.Direction == AudioStreamDirection.Input
+            ? "Microphone disconnected — every input source is silent"
+            : "Audio device disconnected");
 };
 
 // Be told when the engine moves to a different device

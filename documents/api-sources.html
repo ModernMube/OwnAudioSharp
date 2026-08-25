@@ -329,6 +329,8 @@ mixer.AddSource(click);</code></pre></div>
 
 <div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>Both forms coexist: set <code>OutputRoute</code> and it wins, leave it <code>null</code> and <code>OutputChannelMapping</code> stays in charge. Either can be changed while audio is running — the mixer picks it up on its next control tick, without reopening a stream, which is what makes live re-patching safe on ASIO. At most 16 channels are routable.</p></div>
 
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>A route the engine cannot render is <strong>rejected</strong>, not quietly trimmed: more than 16 bus channels, a source channel the track has not got (a <code>2</code> on a stereo source), or a non-finite gain. The track keeps the routing it had and the mixer logs which source was refused and why — so if a route seems to have no effect, turn the log on and read the line.</p></div>
+
 <h3 id="decode-width">Per-source decode width</h3>
 <p>By default a source is decoded at the mixer's bus width, so an 8-channel bus meant an 8-channel decode, time-stretch and effect chain for every source — four times the work for a stereo song. <code>FileSource.DecodeChannels</code> unties the two: the source is processed at its own width and only the summation into the bus is wide.</p>
 
@@ -356,6 +358,8 @@ mixer.AddSource(guitar);
 int available = OwnaudioNet.Engine!.ActualInputChannels;</code></pre></div>
 
 <div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><code>null</code> keeps the old behaviour: the first N physical inputs, repeating the last one so a mono microphone still fills a stereo track. Changing it while running re-taps the source on the next control tick — no stream is reopened.</p></div>
+
+<p>Because that one stream feeds everything, losing it takes every live input silent at once. The mixer reports it through <a href="api-mixer.html#events"><code>StreamFaulted</code></a> with <code>Direction == AudioStreamDirection.Input</code>, so an unplugged interface is an event and a log line rather than a room full of dead microphones.</p>
 
 <h2 id="next">Next</h2>
 <div class="card-grid">

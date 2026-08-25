@@ -65,7 +65,7 @@
     <tr><td><code>PositionChanged</code></td><td>every source</td><td><code>EventArgs</code></td><td>Position moved noticeably. Throttled to ~50 ms.</td></tr>
     <tr><td><code>PlaybackEnded</code></td><td>mixer</td><td><code>EventArgs</code></td><td>Every source has reached its end.</td></tr>
     <tr><td><code>SourceError</code></td><td>mixer</td><td><code>AudioErrorEventArgs</code></td><td>One of the sources on the bus failed.</td></tr>
-    <tr><td><code>StreamFaulted</code></td><td>mixer</td><td><code>AudioStreamFaultEventArgs</code></td><td>The native output stream died — usually an unplugged device.</td></tr>
+    <tr><td><code>StreamFaulted</code></td><td>mixer</td><td><code>AudioStreamFaultEventArgs</code></td><td>A native stream died — usually an unplugged device. Covers playback and the shared capture.</td></tr>
     <tr><td><code>OutputDeviceChanged</code><br><code>InputDeviceChanged</code></td><td><code>OwnaudioNet.Engine</code></td><td><code>AudioDeviceChangedEventArgs</code></td><td>The engine moved to a different device.</td></tr>
     <tr><td><code>DeviceStateChanged</code></td><td><code>OwnaudioNet.Engine</code></td><td><code>AudioDeviceStateChangedEventArgs</code></td><td>A device was added, removed or changed state.</td></tr>
     <tr><td><code>NetworkSyncConnectionChanged</code></td><td><code>OwnaudioNet</code> (static)</td><td><code>ConnectionStateChangedEventArgs</code></td><td>Network sync connected or dropped.</td></tr>
@@ -114,7 +114,8 @@
   <thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead>
   <tbody>
     <tr><td><code>Kind</code></td><td><code>AudioStreamFaultKind</code></td><td><code>DeviceNotAvailable</code> (unplug, sleep/wake, rate change) or <code>BackendSpecific</code>.</td></tr>
-    <tr><td><code>ErrorCount</code></td><td><code>ulong</code></td><td>Faults recorded so far.</td></tr>
+    <tr><td><code>Direction</code></td><td><code>AudioStreamDirection</code></td><td><code>Output</code> for playback, <code>Input</code> for the shared capture stream — that one takes every live input source silent with it.</td></tr>
+    <tr><td><code>ErrorCount</code></td><td><code>ulong</code></td><td>Faults recorded so far on that stream.</td></tr>
     <tr><td><code>EventTimestamp</code></td><td><code>DateTime</code></td><td>When it was raised.</td></tr>
   </tbody>
 </table></div>

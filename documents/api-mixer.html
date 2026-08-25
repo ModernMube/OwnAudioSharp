@@ -214,7 +214,7 @@ _vuTimer = new Timer(_ =>
   <tbody>
     <tr><td><code>PlaybackEnded</code></td><td><code>EventArgs</code></td><td>All sources reached <code>EndOfStream</code>.</td></tr>
     <tr><td><code>SourceError</code></td><td><code>AudioErrorEventArgs</code></td><td>An error occurred in one of the sources.</td></tr>
-    <tr><td><code>StreamFaulted</code></td><td><code>AudioStreamFaultEventArgs</code></td><td>The native output stream died — usually a device being unplugged. Without this the stream just goes quiet and nothing tells you why.</td></tr>
+    <tr><td><code>StreamFaulted</code></td><td><code>AudioStreamFaultEventArgs</code></td><td>A native stream died — usually a device being unplugged. <code>Direction</code> says which side: the playback stream, or the shared capture every input source feeds off. Without this the stream just goes quiet and nothing tells you why.</td></tr>
   </tbody>
 </table></div>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">mixer.PlaybackEnded += (_, _) =>
@@ -225,7 +225,7 @@ _vuTimer = new Timer(_ =>
 mixer.StreamFaulted += (_, e) =>
 {
     if (e.Kind == AudioStreamFaultKind.DeviceNotAvailable)
-        Console.WriteLine("Output device disappeared.");
+        Console.WriteLine($"{e.Direction} device disappeared.");
 };
 
 // Underruns are counted by the engine, not the mixer

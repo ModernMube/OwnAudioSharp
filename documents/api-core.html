@@ -89,7 +89,7 @@ await OwnaudioNet.ShutdownAsync(cancellationToken);</code></pre></div>
 <div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><strong>bufferMultiplier</strong> is still accepted, but it no longer changes anything. Playback headroom moved into the engine's native render ring in 4.0 — tune it with <code>AudioConfig.OutputRingMilliseconds</code>. For a heavy mix, raise that, <code>AudioConfig.BufferSize</code>, or the mixer's <code>bufferSizeInFrames</code>.</p></div>
 
 <h2 id="logging">Logging — turn this on first when something is wrong</h2>
-<p>The library reports every initialization, teardown and parameter change to the console, together with any error it would otherwise swallow. It is <strong>off by default</strong> — pass <code>logLevel</code> to <code>Initialize</code> whenever you want to see what is happening under the hood.</p>
+<p>The library reports every initialization, teardown and parameter change, together with any error it would otherwise swallow. It is <strong>off by default</strong> — pass <code>logLevel</code> to <code>Initialize</code> whenever you want to see what is happening under the hood. The console is only the fallback destination; <a href="#log-destinations">a sink or a file</a> takes over when you set one.</p>
 
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using Logger;
 
@@ -118,13 +118,33 @@ Log.LoggerLevel = Log.Level.Disabled;  // off</code></pre></div>
 </table></div>
 
 <div class="code-block"><div class="code-header"><span>Sample output — Log.Level.Info</span><button class="copy-btn">Copy</button></div><pre><code class="language-text">[21:04:12] [INFO] [EngineFactory] Creating RustAudioEngine (cpal): 48000Hz 2ch, buffer 512
-[21:04:12] [INFO] [RustEngine] Initialized on CoreAudio: 48000Hz 2ch, out 'MacBook Pro Speakers' in '(none)', latency out/in 512/0 frames
+[21:04:12] [INFO] [RustEngine] Initialized on CoreAudio: 48000Hz 2ch requested -&gt; 4ch opened out / off in, out 'Scarlett 4i4' in '(none)', buffer 512 frames requested, ring 4800 frames (100.0ms, 100ms requested), latency out/in 512/0 frames
 [21:04:12] [INFO] [OwnaudioNet] Initialized
 [21:04:13] [INFO] [Mixer] Source 'a3f1c8e2-...' added (1 total)
 [21:04:13] [INFO] [Mixer] Started (rust-native), 1 sources
 [21:04:31] [ERROR] [RustEngine] No output device named 'Focusrite Scarlett 2i2'</code></pre></div>
 
 <div class="callout callout-info"><div class="callout-icon">💡</div><p>Audio-rate code never logs per buffer. A failing effect or a broken socket reports its first occurrence and then a periodic summary, so the log stays readable while audio keeps flowing.</p></div>
+
+<h3 id="log-destinations">Getting the log out of a GUI app</h3>
+<p>A desktop, Android or iOS app has no console, so the lines above go nowhere by default. Point them at your own logging with <code>Log.Sink</code>, or let the library write a self-rotating file.</p>
+
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using Logger;
+
+Log.LoggerLevel = Log.Level.Info;   // the filter still applies to both
+
+// Into your own logging: file, ILogger, a diagnostics panel, a bug report
+Log.Sink += (level, line) => _logger.Log(Map(level), line);
+
+// Or straight to disk: ~2 MB per file, 3 rotated generations kept (~8 MB total)
+string? path = Log.ToFile();
+
+// Your own path and budget
+Log.ToFile(@"C:\logs\myapp-audio.log", maxFileSizeKb: 512, keepFiles: 2, maxAgeDays: 14);
+
+Log.CloseFile();</code></pre></div>
+
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>The file can never fill the drive: it rotates at <code>maxFileSizeKb</code> into <code>name.1.log</code>, <code>name.2.log</code> …, keeps <code>keepFiles</code> generations, and prunes anything past that — or past <code>maxAgeDays</code> — when it is opened, so a crashed process still gets cleaned up on the next start. Total disk use stays at roughly <code>maxFileSizeKb × (keepFiles + 1)</code>. Subscribing a sink turns the console fallback off; a handler that throws is ignored.</p></div>
 
 <h2 id="config-factories">Three configs you don't have to write</h2>
 <p>Start from one of these and change what you need — they cover most cases.</p>
