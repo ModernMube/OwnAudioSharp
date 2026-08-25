@@ -68,6 +68,8 @@ public static class AudioDecoderFactory
         if (!stream.CanRead)
             throw new AudioException("AudioDecoderFactory ERROR: ", new ArgumentException("Stream must support reading.", nameof(stream)));
 
+        TempFileCleanup.SweepOnce();
+
         string tempPath = Path.Combine(Path.GetTempPath(), $"ownaudio_stream_{Guid.NewGuid():N}{_extensionFor(format)}");
 
         try

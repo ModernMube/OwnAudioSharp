@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Logger;
 using Ownaudio.Core;
+using Ownaudio.Core.Common;
 using OwnaudioNET.Engine;
 using OwnaudioNET.Exceptions;
 using OwnaudioNET.Mixing;
@@ -70,6 +71,8 @@ public static partial class OwnaudioNet
             }
 
             Log.Info($"[OwnaudioNet] {Version} starting up on {(useMockEngine ? "mock" : "rust")} engine");
+
+            TempFileCleanup.SweepOnce();
 
             _engineWrapper = new AudioEngineWrapper(_createEngine(config, useMockEngine), config, bufferMultiplier);
             _initialized = true;
