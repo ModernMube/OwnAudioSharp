@@ -259,6 +259,7 @@ mod track_source {
         ownaudio_v1_track_set_output_channel_map, ownaudio_v1_track_set_pan,
         ownaudio_v1_track_set_start_delay_frames,
     };
+    use ownaudio_ffi::error_code::ownaudio_v1_last_error_message;
     use ownaudio_ffi::ffi_track::{
         ownaudio_v1_mixer_set_master_channel_scope, ownaudio_v1_track_clear_output_route,
         ownaudio_v1_track_set_output_route, ownaudio_v1_track_set_source_channels,
@@ -394,6 +395,78 @@ mod track_source {
             );
             assert_eq!(
                 ownaudio_v1_track_set_source_channels(track, 0),
+                OwnAudioErrorCode::Success as i32
+            );
+
+            ownaudio_v1_track_destroy(track);
+            ownaudio_v1_mixer_destroy(mixer);
+        }
+    }
+
+    #[test]
+    fn output_route_rejects_what_it_cannot_render() {
+        unsafe {
+            let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+            assert_eq!(
+                ownaudio_v1_mixer_create(48_000.0, 4, &mut mixer),
+                OwnAudioErrorCode::Success as i32
+            );
+            let mut track: *mut OwnAudioTrackHandle = std::ptr::null_mut();
+            assert_eq!(
+                ownaudio_v1_track_create(mixer, &mut track),
+                OwnAudioErrorCode::Success as i32
+            );
+
+            // Past the engine's routable reach.
+            let long_route = [0i32; 17];
+            assert_eq!(
+                ownaudio_v1_track_set_output_route(
+                    track,
+                    long_route.as_ptr(),
+                    std::ptr::null(),
+                    long_route.len()
+                ),
+                OwnAudioErrorCode::UnsupportedConfig as i32
+            );
+            assert!(!ownaudio_v1_last_error_message().is_null());
+
+            // Naming a source channel a stereo track has not got.
+            assert_eq!(
+                ownaudio_v1_track_set_source_channels(track, 2),
+                OwnAudioErrorCode::Success as i32
+            );
+            let too_wide: [i32; 4] = [0, 1, 2, 0];
+            assert_eq!(
+                ownaudio_v1_track_set_output_route(
+                    track,
+                    too_wide.as_ptr(),
+                    std::ptr::null(),
+                    too_wide.len()
+                ),
+                OwnAudioErrorCode::UnsupportedConfig as i32
+            );
+
+            // A gain that would spread NaN across the whole bus.
+            let route: [i32; 2] = [0, 1];
+            let poisoned: [f32; 2] = [1.0, f32::NAN];
+            assert_eq!(
+                ownaudio_v1_track_set_output_route(
+                    track,
+                    route.as_ptr(),
+                    poisoned.as_ptr(),
+                    route.len()
+                ),
+                OwnAudioErrorCode::UnsupportedConfig as i32
+            );
+
+            // What the track can render still goes through.
+            assert_eq!(
+                ownaudio_v1_track_set_output_route(
+                    track,
+                    route.as_ptr(),
+                    std::ptr::null(),
+                    route.len()
+                ),
                 OwnAudioErrorCode::Success as i32
             );
 

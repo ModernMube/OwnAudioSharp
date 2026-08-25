@@ -1,6 +1,7 @@
 //! FFI exports for mixer and track lifecycle management.
 
 use ownaudio_core::multitrack::{command_channel, MultiTrackMixer};
+use ownaudio_core::MAX_ROUTE_CHANNELS;
 
 use crate::error_code::{set_last_error, OwnAudioErrorCode};
 use crate::handles::{
@@ -907,6 +908,11 @@ pub unsafe extern "C" fn ownaudio_v1_track_clear_output_channel_map(
 ///
 /// Passing `len == 0` clears the route. Returns `OwnAudioErrorCode::Success` (0) on success.
 ///
+/// A route longer than [`MAX_ROUTE_CHANNELS`], one naming a source channel the track has
+/// not got, or a non-finite gain is rejected with `UnsupportedConfig` and a message on
+/// `ownaudio_v1_last_error_message` — the track keeps the routing it had. Silently
+/// truncating instead would leave a misrouted track and nothing to diagnose it with.
+///
 /// # Safety
 /// - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
 /// - `map` must be valid for `len` `i32` values, and `gain` — when non-null — for `len` `f32` values.
@@ -933,12 +939,49 @@ pub unsafe extern "C" fn ownaudio_v1_track_set_output_route(
             return OwnAudioErrorCode::NullPointer as i32;
         }
 
+        if len > MAX_ROUTE_CHANNELS {
+            set_last_error(format!(
+                "output route covers {len} bus channels, at most {MAX_ROUTE_CHANNELS} are routable"
+            ));
+            return OwnAudioErrorCode::UnsupportedConfig as i32;
+        }
+
         let route = unsafe { std::slice::from_raw_parts(map, len) };
         let gains = if gain.is_null() {
             None
         } else {
             Some(unsafe { std::slice::from_raw_parts(gain, len) })
         };
+
+        let source_channels = wrapper.shared.source_channels() as i32;
+        let reach = if source_channels > 0 {
+            source_channels
+        } else {
+            MAX_ROUTE_CHANNELS as i32
+        };
+
+        for (dst, &src) in route.iter().enumerate() {
+            if src >= reach {
+                set_last_error(format!(
+                    "output route sends bus channel {dst} from source channel {src}, \
+                     the track only has {reach}"
+                ));
+                return OwnAudioErrorCode::UnsupportedConfig as i32;
+            }
+        }
+
+        if let Some(g) = gains {
+            for (dst, &value) in g.iter().enumerate() {
+                if !value.is_finite() {
+                    set_last_error(format!(
+                        "output route gain for bus channel {dst} is {value}, \
+                         which would poison the mix"
+                    ));
+                    return OwnAudioErrorCode::UnsupportedConfig as i32;
+                }
+            }
+        }
+
         wrapper.shared.set_output_route(route, gains);
 
         OwnAudioErrorCode::Success as i32

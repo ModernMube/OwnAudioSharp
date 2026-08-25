@@ -2655,6 +2655,11 @@ int32_t ownaudio_v1_track_clear_output_channel_map(struct OwnAudioTrackHandle *t
  *
  * Passing `len == 0` clears the route. Returns `OwnAudioErrorCode::Success` (0) on success.
  *
+ * A route longer than [`MAX_ROUTE_CHANNELS`], one naming a source channel the track has
+ * not got, or a non-finite gain is rejected with `UnsupportedConfig` and a message on
+ * `ownaudio_v1_last_error_message` — the track keeps the routing it had. Silently
+ * truncating instead would leave a misrouted track and nothing to diagnose it with.
+ *
  * # Safety
  * - `track` must be a live handle from `ownaudio_v1_track_create` that has not been destroyed.
  * - `map` must be valid for `len` `i32` values, and `gain` — when non-null — for `len` `f32` values.
