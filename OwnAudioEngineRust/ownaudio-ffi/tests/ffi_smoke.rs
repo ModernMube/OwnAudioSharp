@@ -237,6 +237,7 @@ fn output_stream_create_play_pause_destroy_smoke() {
 // ---------------------------------------------------------------------------
 
 mod track_source {
+    use ownaudio_ffi::error_code::ownaudio_v1_last_error_message;
     use ownaudio_ffi::error_code::OwnAudioErrorCode;
     use ownaudio_ffi::ffi_capture::{
         ownaudio_v1_capture_channel_count, ownaudio_v1_capture_close, ownaudio_v1_capture_pause,
@@ -259,7 +260,6 @@ mod track_source {
         ownaudio_v1_track_set_output_channel_map, ownaudio_v1_track_set_pan,
         ownaudio_v1_track_set_start_delay_frames,
     };
-    use ownaudio_ffi::error_code::ownaudio_v1_last_error_message;
     use ownaudio_ffi::ffi_track::{
         ownaudio_v1_mixer_set_master_channel_scope, ownaudio_v1_track_clear_output_route,
         ownaudio_v1_track_set_output_route, ownaudio_v1_track_set_source_channels,
