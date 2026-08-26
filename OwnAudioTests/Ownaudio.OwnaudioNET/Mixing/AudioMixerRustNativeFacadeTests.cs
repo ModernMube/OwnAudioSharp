@@ -242,6 +242,20 @@ public sealed class AudioMixerRustNativeFacadeTests : IDisposable
     }
 
     /// <summary>
+    /// No device, no load reading — and asking to reset one is not an error either.
+    /// </summary>
+    [Fact]
+    public void SessionLoad_WithoutADevice_IsNull()
+    {
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+        mixer.AddSource(new FileSource(_wavPath));
+
+        mixer.SessionLoad.Should().BeNull();
+
+        mixer.Invoking(m => m.ResetSessionLoad()).Should().NotThrow();
+    }
+
+    /// <summary>
     /// Deletes a file, ignoring any I/O error.
     /// </summary>
     /// <param name="path">The file path to remove.</param>

@@ -288,6 +288,24 @@ public sealed partial class AudioMixer
     }
 
     /// <summary>
+    /// What the session's callback is costing, null while it does not own the device. The one
+    /// dropout signal on this path — nothing drains a ring here, so a late block shows up as
+    /// PeakLoad crossing 1.0 rather than as an underrun. Cheap enough for a UI timer.
+    /// </summary>
+    public AudioStreamLoad? SessionLoad
+    {
+        get { lock (_rustSessionLock) return _rustOutputStream?.GetLoad(); }
+    }
+
+    /// <summary>
+    /// Zeroes the load tallies, worth a call once playback has settled.
+    /// </summary>
+    public void ResetSessionLoad()
+    {
+        lock (_rustSessionLock) { _rustOutputStream?.ResetLoad(); }
+    }
+
+    /// <summary>
     /// Digs out the FileSource behind a mixer source, unwrapping SourceWithEffects.
     /// </summary>
     /// <param name="source"></param>

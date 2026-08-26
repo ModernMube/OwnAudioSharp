@@ -196,7 +196,8 @@ public sealed partial class AudioMixer : IDisposable
     /// Underrun total — reserved, currently always zero.
     /// </summary>
     [Obsolete("Nothing counts underruns on the mixer since the native chain took over rendering, so this " +
-        "always reads zero. Use AudioEngineWrapper.TotalUnderruns for the engine's own counter.")]
+        "always reads zero. Watch SessionLoad instead, AudioEngineWrapper.TotalUnderruns only counts the " +
+        "engine's own push path, which is idle while the session drives the device.")]
     public long TotalUnderruns => Interlocked.Read(ref _totalUnderruns);
 
     /// <summary>
@@ -222,8 +223,8 @@ public sealed partial class AudioMixer : IDisposable
     /// Fires when the device reports a buffer underrun.
     /// </summary>
 #pragma warning disable CS0067
-    [Obsolete("Never raised: the managed MixThread that used to detect underruns is gone. Subscribe to " +
-        "AudioEngineWrapper.BufferUnderrun, or to StreamFaulted for a native output fault.")]
+    [Obsolete("Never raised: the managed MixThread that used to detect underruns is gone. Poll SessionLoad " +
+        "for late blocks, or subscribe to StreamFaulted for a native output fault.")]
     public event EventHandler<BufferUnderrunEventArgs>? BufferUnderrun;
 #pragma warning restore CS0067
 

@@ -222,7 +222,8 @@ public sealed class AudioEngineWrapper : IDisposable
                 throw new AudioEngineException($"Failed to stop audio engine. Error code: {_result}", _result);
             }
 
-            Log.Info($"[EngineWrapper] Stopped after {TotalPumpedFrames} frames, {TotalUnderruns} underruns");
+            Log.Info($"[EngineWrapper] Stopped after {TotalPumpedFrames} frames pushed, {TotalUnderruns} underruns " +
+                "(push path only, a session-driven device never comes through here)");
         }
         catch (Exception ex) when (ex is not AudioEngineException)
         {

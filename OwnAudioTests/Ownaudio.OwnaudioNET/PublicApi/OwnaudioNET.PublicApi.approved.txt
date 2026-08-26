@@ -1500,15 +1500,14 @@ namespace OwnaudioNET.Mixing
         public System.Guid MixerId { get; }
         public OwnaudioNET.Synchronization.ClockMode RenderingMode { get; set; }
         public float RightPeak { get; }
+        public Ownaudio.Safe.AudioStreamLoad? SessionLoad { get; }
         public int SourceCount { get; }
         public long TotalMixedFrames { get; }
-        [System.Obsolete("Nothing counts underruns on the mixer since the native chain took over rendering," +
-            " so this always reads zero. Use AudioEngineWrapper.TotalUnderruns for the engine" +
-            "\'s own counter.")]
+        [System.Obsolete(@"Nothing counts underruns on the mixer since the native chain took over rendering, so this always reads zero. Watch SessionLoad instead, AudioEngineWrapper.TotalUnderruns only counts the engine's own push path, which is idle while the session drives the device.")]
         public long TotalUnderruns { get; }
-        [System.Obsolete("Never raised: the managed MixThread that used to detect underruns is gone. Subscr" +
-            "ibe to AudioEngineWrapper.BufferUnderrun, or to StreamFaulted for a native outpu" +
-            "t fault.")]
+        [System.Obsolete("Never raised: the managed MixThread that used to detect underruns is gone. Poll S" +
+            "essionLoad for late blocks, or subscribe to StreamFaulted for a native output fa" +
+            "ult.")]
         public event System.EventHandler<OwnaudioNET.Events.BufferUnderrunEventArgs>? BufferUnderrun;
         public event System.EventHandler? PlaybackEnded;
         public event System.EventHandler<OwnaudioNET.Events.AudioErrorEventArgs>? SourceError;
@@ -1534,6 +1533,7 @@ namespace OwnaudioNET.Mixing
         public bool RemoveMasterEffect(OwnaudioNET.Interfaces.IEffectProcessor effect) { }
         public bool RemoveSource(OwnaudioNET.Interfaces.IAudioSource source) { }
         public bool RemoveSource(System.Guid sourceId) { }
+        public void ResetSessionLoad() { }
         public void Seek(double positionInSeconds) { }
         public void Start() { }
         public void StartPreparedSources(double startPosition = 0) { }

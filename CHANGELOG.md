@@ -35,6 +35,11 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
   loudest sample of each, sign and all, so nothing file-sized is ever allocated. A container that
   will not say how long it is halves its own bucket resolution as the scan runs, so it needs no
   length up front either.
+- **`AudioMixer.SessionLoad` and `ResetSessionLoad`.** The DSP load of the session's device callback,
+  where until now the host could not reach it: `AudioOutputStream.GetLoad` sits on a stream the
+  mixer keeps to itself. This is the only dropout signal on the rust-native path — the mixer renders
+  inside the callback, so no ring ever drains and every underrun counter in the process legitimately
+  reads zero. A late block shows up as `PeakLoad` crossing 1.0.
 
 ### Fixed
 
