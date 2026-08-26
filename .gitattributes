@@ -4,6 +4,12 @@
 * text=auto
 
 ###############################################################################
+# Approval baselines are compared as text on every platform, so pin them to LF
+# and keep a Windows checkout from rewriting the whole file.
+###############################################################################
+*.approved.txt text eol=lf
+
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by
