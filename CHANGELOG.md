@@ -27,9 +27,23 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
   (`ownaudio_stream_*`) or matchering work directory (`enhanced_preset_*`) in the temp directory
   forever, since the dispose or `finally` that removes them never ran. Entries older than 24 hours
   are deleted at engine init and before the next spill is written.
+- **`FileSource.GetPeaks`.** Signed peaks for a waveform display in one decoder pass. Building that
+  curve out of `GetFloatAudioData` meant either holding the whole file in memory or walking it in
+  windows — and every window opened a decoder of its own, so a four minute stereo track cost six
+  opens and a few hundred megabytes of large-object churn per track just to draw a few thousand
+  pixels. The scan buckets the file into as many points as the display asks for and keeps the
+  loudest sample of each, sign and all, so nothing file-sized is ever allocated. A container that
+  will not say how long it is halves its own bucket resolution as the scan runs, so it needs no
+  length up front either.
 
 ### Fixed
 
+- **Raw extraction held the file three times over.** `GetFloatAudioData` decoded into a
+  `MemoryStream`, copied that out with `ToArray`, then copied it again into the `float[]` it
+  returned — three full-size buffers on the large object heap for one read, and a five minute
+  stereo song is over eighty megabytes each. The read now sizes its result up front from the
+  stream info and decodes straight into it, growing instead when a header lied about the duration
+  or the container never gave one. `GetByteAudioData` returns the same bytes it always did.
 - **The log file never said what day it was.** Lines carry `[HH:mm:ss]` and nothing else, so a file
   holding more than one day's runs reads as if the clock jumped backwards. Opening or rotating the
   file now writes a dated line first.

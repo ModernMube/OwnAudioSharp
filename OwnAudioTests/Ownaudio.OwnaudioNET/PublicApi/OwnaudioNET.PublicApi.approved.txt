@@ -1894,6 +1894,7 @@ namespace OwnaudioNET.Sources
                 "left",
                 "right"})]
         public System.ValueTuple<float, float>? GetOutputLevels() { }
+        public float[] GetPeaks(int points) { }
         public override void Pause() { }
         public override void Play() { }
         [System.Obsolete("Empty since 4.0 — the native file track runs its own prefetch, there is nothing l" +
@@ -2109,4 +2110,4 @@ namespace OwnaudioNET.Visualization
             RMS = 2,
         }
     }
-}
+}
