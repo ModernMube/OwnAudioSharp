@@ -30,6 +30,9 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 
 ### Fixed
 
+- **The log file never said what day it was.** Lines carry `[HH:mm:ss]` and nothing else, so a file
+  holding more than one day's runs reads as if the clock jumped backwards. Opening or rotating the
+  file now writes a dated line first.
 - **A disabled logger still printed exceptions.** `Log.Error` and `Log.FatalError` wrote the
   exception straight to the console, outside the level check, so a host that turned logging off got
   the exception line anyway — without the message that says what failed, since that one was filtered

@@ -81,7 +81,7 @@ internal sealed class LogFileWriter : IDisposable
         try
         {
             long _size = Encoding.UTF8.GetByteCount(message) + Environment.NewLine.Length;
-            if (_bytes > 0 && _bytes + _size > _maxBytes) { _rotate(); }
+            if (_bytes > 0 && _bytes + _size > _maxBytes) { _rotate(); _stamp(); }
 
             _writer!.WriteLine(message);
             _bytes += _size;
@@ -116,6 +116,16 @@ internal sealed class LogFileWriter : IDisposable
         _writer = new StreamWriter(_stream, new UTF8Encoding(false)) { AutoFlush = true };
 
         if (_bytes >= _maxBytes) { _rotate(); }
+
+        _stamp();
+    }
+
+    /// <summary>
+    /// Dates the run, since the lines themselves only carry the clock.
+    /// </summary>
+    private void _stamp()
+    {
+        Write($"===== log opened {DateTime.Now:yyyy-MM-dd HH:mm:ss} =====");
     }
 
     private void _rotate()
