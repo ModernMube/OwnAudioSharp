@@ -3,7 +3,7 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
-## Unreleased
+## 4.0.6 — 2026-08-27
 
 ### Added
 
@@ -40,6 +40,23 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
   mixer keeps to itself. This is the only dropout signal on the rust-native path — the mixer renders
   inside the callback, so no ring ever drains and every underrun counter in the process legitimately
   reads zero. A late block shows up as `PeakLoad` crossing 1.0.
+- **Initialize reports what the device granted.** Every adaptation between the requested
+  configuration and what the hardware serves was silent: a device may open wider than asked —
+  CoreAudio hands a 2 in / 4 out box back as 4 for a stereo session — and the render ring the engine
+  settles on is rarely the depth the config named. Both decide latency and which physical socket a
+  route reaches. Init and the device-switch lines now put the opened widths next to the requested
+  ones, with the granted ring in frames and ms and the buffer; the shared capture bridge, which had
+  no logging at all, names its device and the width it opened at — the range an `InputSource`'s
+  `CaptureChannels` may address, and otherwise unknowable. The figures also survive a native session
+  taking the device, which is the mode everyone runs in: the engine's own streams are closed by
+  then, so the callback and ring numbers used to read zero and the widths quietly fell back to the
+  request, indistinguishable from a real answer.
+- **`AudioConfig.Validate(out string? error)`.** A config is rejected before a single device is
+  touched, and "invalid audio configuration" left the host guessing between nine settings. The
+  overload names the field that failed and why, and every call site reports it.
+- **`AudioConfig.OutputRingFrames`**, with `MaxOutputRingMilliseconds`, `MinRingFrames` and
+  `MaxRingFrames` — the requested ring depth in frames, inside the range the native side accepts,
+  and 0 when the request is out of range.
 
 ### Fixed
 
@@ -63,6 +80,13 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
   that spreads across the whole bus. All three now come back as `UnsupportedConfig` with a message,
   the track keeps the routing it had, and the mixer reports it — the catch around the route apply
   could not fire before, because nothing ever failed.
+- **`BufferSize` never reached the native session path.** `OpenOutput` always took the platform
+  default there, and that is the whole latency knob on the session path, since the mixer renders in
+  the device callback and stacks no ring on top of it.
+- **An attach the engine refuses no longer leaves a half-wired track.** An output route or capture
+  map rejected while a source was being added threw out of `AddSource`, with the source already
+  registered, while the identical failure on the control tick was caught and logged. Both log now
+  and leave the track playing plain.
 
 ## 4.0.5 — 2026-08-24
 
