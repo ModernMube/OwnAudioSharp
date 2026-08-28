@@ -9,10 +9,11 @@ public static class AudioConstants
     /// How many sources may play at once.
     /// </summary>
     /// <remarks>
-    /// 25 tracks at 0.8x runs around 375% CPU, so roughly 4 cores at 94%. Fine on
-    /// anything modern, not much headroom above that.
+    /// 25 tracks at 0.8x runs around 375% CPU, so roughly 4 cores at 94%. 30 is what a
+    /// full band plus MIDI instruments needs, and it only costs that much when every
+    /// one of them is stretched.
     /// </remarks>
-    public const int MaxAudioSources = 25;
+    public const int MaxAudioSources = 30;
 
     /// <summary>
     /// Slowest we allow, -20%.

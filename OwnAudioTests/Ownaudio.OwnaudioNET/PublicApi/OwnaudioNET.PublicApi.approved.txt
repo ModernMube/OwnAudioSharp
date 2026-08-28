@@ -42,7 +42,7 @@ namespace OwnaudioNET.Core
 {
     public static class AudioConstants
     {
-        public const int MaxAudioSources = 25;
+        public const int MaxAudioSources = 30;
         public const float MaxTempo = 1.2F;
         public const float MinTempo = 0.8F;
     }
@@ -2020,10 +2020,14 @@ namespace OwnaudioNET.Sources
     }
     public sealed class StreamingSource : OwnaudioNET.Sources.BaseAudioSource
     {
+        public const double DefaultLookAheadSeconds = 0.12D;
+        public const double MaxLookAheadSeconds = 1D;
+        public const double MinLookAheadSeconds = 0.005D;
         public StreamingSource(OwnaudioNET.Sources.AudioRenderCallback render, Ownaudio.Core.AudioConfig config) { }
         public override Ownaudio.Core.AudioConfig Config { get; }
         public override double Duration { get; }
         public override bool IsEndOfStream { get; }
+        public double LookAheadSeconds { get; set; }
         public override float PitchShift { get; set; }
         public override double Position { get; }
         public override Ownaudio.AudioStreamInfo StreamInfo { get; }

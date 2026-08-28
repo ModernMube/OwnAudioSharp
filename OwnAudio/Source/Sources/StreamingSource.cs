@@ -31,10 +31,18 @@ public sealed partial class StreamingSource : BaseAudioSource
     private const int IdlePollMilliseconds = 4;
 
     /// <summary>
-    /// How much audio we keep queued ahead. Way under the ring capacity on purpose:
-    /// queued audio was rendered with the old params, so this is the param-change latency.
+    /// How much audio we keep queued ahead unless told otherwise. Way under the ring capacity
+    /// on purpose: queued audio was rendered with the old params, so this is the param-change
+    /// latency.
     /// </summary>
-    private const double TargetLookAheadSeconds = 0.12;
+    public const double DefaultLookAheadSeconds = 0.12;
+
+    /// <summary>
+    /// Under this the feed starves before it fills, which is dropouts rather than latency.
+    /// </summary>
+    public const double MinLookAheadSeconds = 0.005;
+
+    public const double MaxLookAheadSeconds = 1.0;
 
     private readonly AudioRenderCallback _render;
     private readonly AudioConfig _config;
@@ -45,6 +53,12 @@ public sealed partial class StreamingSource : BaseAudioSource
 
     private Thread? _pumpThread;
     private volatile bool _stopRequested;
+
+    /// <summary>
+    /// The look-ahead in frames. Kept as an int so the pump can read it every chunk without
+    /// a lock and a change lands on the next one.
+    /// </summary>
+    private int _lookAheadFrames;
 
     /// <summary>
     /// Frame index the next render call gets. Pump thread only.
@@ -89,6 +103,25 @@ public sealed partial class StreamingSource : BaseAudioSource
     public override double Duration => double.PositiveInfinity;
 
     /// <summary>
+    /// How far ahead the pump renders, in seconds. The default suits anything scheduled, but
+    /// a generator being played live - notes off a keyboard - hears every millisecond of it,
+    /// and there it is worth trading CPU for. Clamped between Min and Max, and a change takes
+    /// effect once the audio already queued has drained - flushing it would only click.
+    /// </summary>
+    public double LookAheadSeconds
+    {
+        get => Volatile.Read(ref _lookAheadFrames) / (double)_config.SampleRate;
+        set
+        {
+            Volatile.Write(ref _lookAheadFrames, _framesFor(value));
+            _wake.Set();
+        }
+    }
+
+    private int _framesFor(double seconds)
+        => Math.Max(1, (int)(Math.Clamp(seconds, MinLookAheadSeconds, MaxLookAheadSeconds) * _config.SampleRate));
+
+    /// <summary>
     /// Always false, we never run dry.
     /// </summary>
     public override bool IsEndOfStream => false;
@@ -107,6 +140,7 @@ public sealed partial class StreamingSource : BaseAudioSource
         int _channels = Math.Max(1, _config.Channels);
         _chunkFrames = Math.Clamp(_config.SampleRate / 50, 128, 8192);
         _chunk = new float[_chunkFrames * _channels];
+        _lookAheadFrames = _framesFor(DefaultLookAheadSeconds);
 
         _rustNative = OwnaudioNET.Engine.RustNativeChain.Enabled;
     }
@@ -247,23 +281,25 @@ public sealed partial class StreamingSource : BaseAudioSource
     }
 
     /// <summary>
-    /// Keeps the native feed topped up to TargetLookAheadSeconds while playing. Not playing
-    /// means an untimed wait, not polling - Play/Seek/Stop all signal the handle, so an idle
-    /// source burns no CPU. The timed wait is only for a feed that's momentarily full.
+    /// Keeps the native feed topped up to LookAheadSeconds while playing. Not playing means an
+    /// untimed wait, not polling - Play/Seek/Stop all signal the handle, so an idle source
+    /// burns no CPU. The timed wait is only for a feed that's momentarily full, and the target
+    /// is re-read every chunk so lowering it takes effect without a restart.
     /// </summary>
     private void _pumpLoop()
     {
         int _channels = Math.Max(1, _config.Channels);
-        int _targetSamples = (int)(TargetLookAheadSeconds * _config.SampleRate) * _channels;
 
         while (!_stopRequested)
         {
             if (_consumeSeekRequest()) continue;
 
+            int _lookAhead = Volatile.Read(ref _lookAheadFrames);
+
             PumpStep _step;
             try
             {
-                _step = _feedStep(_targetSamples, _channels);
+                _step = _feedStep(_lookAhead * _channels, _channels);
             }
             catch (Exception ex)
             {
@@ -278,12 +314,19 @@ public sealed partial class StreamingSource : BaseAudioSource
                     _wake.Wait(); _wake.Reset();
                     break;
                 case PumpStep.Throttle:
-                    _wake.Wait(IdlePollMilliseconds); _wake.Reset();
+                    _wake.Wait(_throttleMilliseconds(_lookAhead)); _wake.Reset();
                     break;
                 //Progress: stuff landed, straight back for the next chunk
             }
         }
     }
+
+    /// <summary>
+    /// How long to nap on a full feed: a quarter of the look-ahead, so a short one gets topped
+    /// up often enough to stay short instead of starving at the default 4 ms poll.
+    /// </summary>
+    private int _throttleMilliseconds(int lookAheadFrames)
+        => Math.Clamp(lookAheadFrames * 250 / Math.Max(1, _config.SampleRate), 1, IdlePollMilliseconds);
 
     /// <summary>What one feed attempt did - tells the pump how long to wait before the next.</summary>
     private enum PumpStep

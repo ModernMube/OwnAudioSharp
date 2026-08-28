@@ -3,6 +3,26 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
+## 4.0.7 — Unreleased
+
+### Added
+
+- **`StreamingSource.LookAheadSeconds`.** How far ahead the pump renders is no longer a private
+  constant. The 0.12 s default is invisible on anything scheduled — a metronome, a sequenced part —
+  but it is the whole latency of a generator being *played*, so a VST instrument fed from a MIDI
+  keyboard through a `StreamingSource` was about 120 ms late and unusable for practice. Setting it
+  lower trades CPU for latency: the pump tops the feed up more often, and the nap on a full feed
+  follows the look-ahead down instead of sitting at the fixed 4 ms poll. Clamped to
+  `MinLookAheadSeconds` (5 ms — under that the feed starves before it fills, which is dropouts, not
+  lower latency) and `MaxLookAheadSeconds` (1 s). A change takes effect once the audio already
+  queued has drained; flushing it would only click.
+
+### Changed
+
+- **`AudioConstants.MaxAudioSources` is 30, up from 25.** A full band plus MIDI instruments runs
+  out at 25, and the ceiling only costs what it says when every one of those sources is being
+  time-stretched.
+
 ## 4.0.6 — 2026-08-27
 
 ### Added
