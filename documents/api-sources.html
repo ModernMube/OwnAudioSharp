@@ -15,7 +15,7 @@
   <button id="sidebar-toggle" class="btn-icon" title="Menu"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
   <a class="topnav-logo" href="../index.html"><img src="../ownaudio-logo.svg" alt="OwnAudioSharp" height="24"></a>
   <ul class="topnav-links"><li><a href="../index.html">Home</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="concepts.html">Concepts</a></li><li><a href="recipes.html">Recipes</a></li><li><a href="api-core.html" class="active">API</a></li><li><a href="api-midi.html">MIDI</a></li><li><a href="api-reference.html">Reference</a></li></ul>
-  <div class="topnav-right"><span class="badge-version">v4.0.6</span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
+  <div class="topnav-right"><span class="badge-version" data-version="v"></span><a href="https://github.com/ModernMube/OwnAudioSharp" target="_blank" class="btn-icon" title="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg></a><button id="theme-toggle" class="btn-icon" title="Toggle theme"></button></div>
 </nav>
 <div id="sidebar-overlay" class="sidebar-overlay"></div>
 <div class="layout">
@@ -172,7 +172,7 @@ synth.Clear();                   // flush buffer</code></pre></div>
 
 <!-- StreamingSource -->
 <h2 id="streamingsource">StreamingSource</h2>
-<p>An endless source whose audio is produced by your own callback. Where <code>SampleSource</code> serves a fixed buffer, <code>StreamingSource</code> generates audio continuously — ideal for synthesizers, metronomes, test tones, procedural audio, or streaming from a network buffer. A parameter change takes effect within the look-ahead window (~120 ms) without reloading or restarting anything.</p>
+<p>An endless source whose audio is produced by your own callback. Where <code>SampleSource</code> serves a fixed buffer, <code>StreamingSource</code> generates audio continuously — ideal for synthesizers, metronomes, test tones, procedural audio, or streaming from a network buffer. A parameter change takes effect within the <a href="#look-ahead">look-ahead window</a> (~120 ms by default, adjustable) without reloading or restarting anything.</p>
 
 <h3>Constructor</h3>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var source = new StreamingSource(
@@ -203,6 +203,30 @@ synth.Clear();                   // flush buffer</code></pre></div>
 </table></div>
 <p>The callback is not invoked until <code>Play()</code> is called, so constructing a source is cheap. While paused or stopped the pump thread sleeps on a wake handle and costs no CPU.</p>
 
+<h3 id="look-ahead">Look-ahead and latency</h3>
+<p>The pump keeps a little rendered audio queued ahead of playback. That queue is what makes a parameter change cheap — nothing reloads, the new value simply reaches the output once the audio rendered with the old one has played — but it is also the delay between setting a value and hearing it. The default 0.12 s is invisible on anything scheduled, a metronome or a sequenced part. A generator being <em>played</em> — a synth or a VST instrument fed from a MIDI keyboard — hears every millisecond of it, and there it is worth turning down.</p>
+<div class="table-wrap"><table class="prop-table">
+  <thead><tr><th>Member</th><th>Value</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>LookAheadSeconds</code></td><td><code>double</code></td><td>Read/write, any thread, while playing. The value you read back is rounded to whole frames.</td></tr>
+    <tr><td><code>DefaultLookAheadSeconds</code></td><td><code>0.12</code></td><td>What a new source starts on.</td></tr>
+    <tr><td><code>MinLookAheadSeconds</code></td><td><code>0.005</code></td><td>The floor. Under it the feed starves before it fills, which is dropouts rather than lower latency.</td></tr>
+    <tr><td><code>MaxLookAheadSeconds</code></td><td><code>1.0</code></td><td>The ceiling. Anything outside the two is clamped, not rejected.</td></tr>
+  </tbody>
+</table></div>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var synth = new StreamingSource(RenderSynth, config);
+
+// Live from a keyboard: trade CPU for latency
+synth.LookAheadSeconds = 0.02;          // ~20 ms
+
+// Long backing pad, nobody plays it: let the pump idle
+synth.LookAheadSeconds = 0.25;
+
+double now = synth.LookAheadSeconds;    // what it actually settled on</code></pre></div>
+<p>A shorter window costs CPU: the pump tops the feed up in the same chunks, just more often, and it naps proportionally shorter on a full feed instead of sitting at a fixed poll. Going the other way is nearly free, which is why the default is where it is.</p>
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>Lowering the value does not flush what is already queued — that would click. The shorter window is in force from the next chunk the pump renders, so you hear it once the old queue has drained, within one look-ahead of the assignment.</p></div>
+<p>This is only the source's share of the delay. The device buffer (<code>BufferSize ÷ SampleRate</code>) is added on top, and the driver's own latency after that — see <a href="troubleshooting.html#latency">What latency can I expect?</a> for the whole chain.</p>
+
 <h3>Complete Example — sine generator</h3>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var config = OwnaudioNet.CreateDefaultConfig();
 float frequency = 440f;   // live-adjustable from the UI thread
@@ -226,7 +250,7 @@ tone.Volume = 0.8f;
 mixer.AddSource(tone);
 tone.Play();
 
-frequency = 880f;   // takes effect within ~120 ms, no restart needed</code></pre></div>
+frequency = 880f;   // takes effect within LookAheadSeconds, no restart needed</code></pre></div>
 
 <div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><code>StreamingSource</code> works with <a href="#sourcewitheffects">SourceWithEffects</a> and <a href="#channel-routing">Channel Routing</a> exactly like every other source.</p></div>
 

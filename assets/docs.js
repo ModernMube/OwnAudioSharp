@@ -1,3 +1,9 @@
+/* ─── Version ─────────────────────────────────────────────────────────────────
+   The one place the site's version lives. Every page writes it as an empty
+   [data-version] element; the attribute value is whatever goes in front of the
+   number, so data-version="v" renders "v4.0.7".                              */
+const SITE_VERSION = '4.0.7';
+
 /* ─── Theme ───────────────────────────────────────────────────────────────── */
 (function () {
   const saved = localStorage.getItem('theme') ||
@@ -6,6 +12,11 @@
 })();
 
 document.addEventListener('DOMContentLoaded', () => {
+
+  /* Version badges and any inline mention */
+  document.querySelectorAll('[data-version]').forEach(el => {
+    el.textContent = (el.getAttribute('data-version') || '') + SITE_VERSION;
+  });
 
   /* Theme toggle */
   const toggleBtn = document.getElementById('theme-toggle');
