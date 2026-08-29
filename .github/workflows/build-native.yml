@@ -492,7 +492,7 @@ jobs:
         with:
           name: nupkg
           path: packages-out/*.nupkg
-          retention-days: 30
+          retention-days: 7
 
   # -------------------------------------------------------------------------
   # dotnet pack (mobile) — builds the net10.0-android + net10.0-ios TFMs, so it
@@ -563,7 +563,7 @@ jobs:
         with:
           name: nupkg-mobile
           path: packages-out/*.nupkg
-          retention-days: 30
+          retention-days: 7
 
   # -------------------------------------------------------------------------
   # Commit built native binaries back into runtimes/ for local development

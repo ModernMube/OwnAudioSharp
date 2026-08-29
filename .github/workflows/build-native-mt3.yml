@@ -297,4 +297,4 @@ jobs:
         with:
           name: mt3-nupkg
           path: nupkg-out/*.nupkg
-          retention-days: 30
+          retention-days: 7
