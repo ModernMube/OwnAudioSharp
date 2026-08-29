@@ -150,13 +150,32 @@ public sealed partial class StreamingSource : IRustNativeChainSource
 
         _rustTrack.Gain = Volume;
         _rustTrack.Pan = Pan;
-        _rustTrack.SetStretchAlwaysOn(true);
+
+        _pinStretchIfStretched();
+
         _rustTrack.Tempo = _tempo;
         _rustTrack.PitchSemitones = _pitchShift;
     }
 
     private float _tempo = 1.0f;
     private float _pitchShift = 0.0f;
+    private bool _everStretched;
+
+    /// <summary>
+    /// Pins the stretch stage the first time this source is actually asked to stretch, and
+    /// leaves it pinned from then on so later changes land on a warm FIFO.
+    ///
+    /// A generator is not a file: its tempo is baked into what it renders — a metronome's
+    /// pattern, a MIDI renderer's note grid — so most streaming sources never stretch at all.
+    /// Pinning one of those routes every block through SoundTouch for the life of the track and
+    /// never lets it back to bypass, which at unity is overlap-add on a signal that asked for
+    /// none; a sustained tone comes back from it bubbling. Call under the backend lock.
+    /// </summary>
+    private void _pinStretchIfStretched()
+    {
+        _everStretched |= _tempo != 1.0f || _pitchShift != 0.0f;
+        if (_everStretched) _rustTrack?.SetStretchAlwaysOn(true);
+    }
 
     /// <summary>
     /// Tempo multiplier, mirrored onto the native track.
@@ -169,6 +188,7 @@ public sealed partial class StreamingSource : IRustNativeChainSource
             _tempo = Math.Clamp(value, AudioConstants.MinTempo, AudioConstants.MaxTempo);
             lock (_rustBackendLock)
             {
+                _pinStretchIfStretched();
                 if (_rustTrack is not null) _rustTrack.Tempo = _tempo;
             }
         }
@@ -185,6 +205,7 @@ public sealed partial class StreamingSource : IRustNativeChainSource
             _pitchShift = Math.Clamp(value, -12.0f, 12.0f);
             lock (_rustBackendLock)
             {
+                _pinStretchIfStretched();
                 if (_rustTrack is not null) _rustTrack.PitchSemitones = _pitchShift;
             }
         }
