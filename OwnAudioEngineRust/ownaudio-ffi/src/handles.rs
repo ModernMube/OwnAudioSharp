@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use ownaudio_core::multitrack::{FxTapReader, MixerController};
 use ownaudio_core::{
@@ -266,7 +266,10 @@ pub struct OwnAudioCaptureHandle {
 /// of it (see `ownaudio_v1_mixer_open_output_stream`), at which point it becomes
 /// `None` and the mixer renders on the cpal audio thread.  Parameter reads and
 /// structural writes keep working through `controller` regardless.
-pub(crate) struct MixerWrapper {
+///
+/// Reachable only through [`MixerWrapper`], which is to say only one caller at a
+/// time — see the lock there for why.
+pub(crate) struct MixerState {
     /// Control-thread command queue / parameter shadow for the mixer.
     pub controller: MixerController,
     /// The mixer itself, until an output stream moves it onto the audio thread.
@@ -288,6 +291,37 @@ pub(crate) struct MixerWrapper {
     /// watch (`MASTER_EFFECT_TARGET` for the master chain). Installed by
     /// `ownaudio_v1_mixer_fx_tap_start`, dropped by `..._fx_tap_stop`.
     pub fx_tap_readers: Vec<(u64, FxTapReader)>,
+}
+
+/// The mixer handle itself: one lock over everything a caller can reach.
+///
+/// The callers are managed threads — a UI thread, a thread-pool worker running a
+/// transport command, a finalizer — and nothing on that side promises they arrive one
+/// at a time. Two of them inside [`MixerController`] at once means two `&mut` to the
+/// same retirement queue, and a removed track's ring buffer gets dropped twice; it
+/// takes hours of playing to hit and lands as a segfault in `Arc::drop_slow`.
+///
+/// The audio thread never comes here — it owns the [`MultiTrackMixer`] outright once a
+/// stream has taken it — so this lock is control-side only and cannot hold up a render
+/// block. What it does not solve is destroy racing use: `ownaudio_v1_mixer_destroy`
+/// frees the lock along with everything under it.
+pub(crate) struct MixerWrapper {
+    state: Mutex<MixerState>,
+}
+
+impl MixerWrapper {
+    pub fn new(state: MixerState) -> Self {
+        MixerWrapper {
+            state: Mutex::new(state),
+        }
+    }
+
+    /// Poisoning is nothing to act on here: the panic that set it was already caught at
+    /// the FFI boundary and turned into an error code, and this is still the only state
+    /// there is.
+    pub fn lock(&self) -> MutexGuard<'_, MixerState> {
+        self.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
 }
 
 /// References a track inside a mixer by its stable id.
@@ -397,7 +431,7 @@ pub(crate) struct InputSourceWrapper {
 /// through here.
 ///
 /// [`CaptureHub`]: ownaudio_core::CaptureHub
-pub(crate) struct CaptureWrapper {
+pub(crate) struct CaptureState {
     /// The one input stream every attached track feeds off.
     pub stream: InputStream,
     /// Attach / detach channel into the capture callback.
@@ -408,17 +442,42 @@ pub(crate) struct CaptureWrapper {
     pub peaks: Arc<InputPeaks>,
 }
 
+/// The capture handle: the same lock over the same kind of state as [`MixerWrapper`],
+/// for the same reason — `controller` is an `&mut` channel and the callers are managed
+/// threads that arrive whenever they like.
+///
+/// One function takes both this lock and the mixer's ([`ownaudio_v1_track_attach_capture`],
+/// mixer first, capture second). Keep that order if a second one ever needs the pair.
+///
+/// [`ownaudio_v1_track_attach_capture`]: crate::ffi_capture::ownaudio_v1_track_attach_capture
+pub(crate) struct CaptureWrapper {
+    state: Mutex<CaptureState>,
+}
+
+impl CaptureWrapper {
+    pub fn new(state: CaptureState) -> Self {
+        CaptureWrapper {
+            state: Mutex::new(state),
+        }
+    }
+
+    pub fn lock(&self) -> MutexGuard<'_, CaptureState> {
+        self.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
 unsafe impl Send for CaptureWrapper {}
 unsafe impl Sync for CaptureWrapper {}
 
-/// Casts a raw `*mut OwnAudioCaptureHandle` back to `&mut CaptureWrapper`.
+/// Casts a raw `*mut OwnAudioCaptureHandle` back to its state, locked for as long as the
+/// caller holds the guard.
 pub(crate) unsafe fn capture_from_ptr<'a>(
     ptr: *mut OwnAudioCaptureHandle,
-) -> Option<&'a mut CaptureWrapper> {
+) -> Option<MutexGuard<'a, CaptureState>> {
     if ptr.is_null() {
         None
     } else {
-        Some(&mut *(ptr as *mut CaptureWrapper))
+        Some((*(ptr as *mut CaptureWrapper)).lock())
     }
 }
 
@@ -436,14 +495,16 @@ unsafe impl Sync for InputSourceWrapper {}
 
 // Helper functions
 
-/// Casts a raw `*mut OwnAudioMixerHandle` back to `&mut MixerWrapper`.
+/// Casts a raw `*mut OwnAudioMixerHandle` back to its state, locked for as long as the
+/// caller holds the guard. Every entry point that touches a mixer comes through here,
+/// which is what makes the one-at-a-time rule true instead of hoped for.
 pub(crate) unsafe fn mixer_from_ptr<'a>(
     ptr: *mut OwnAudioMixerHandle,
-) -> Option<&'a mut MixerWrapper> {
+) -> Option<MutexGuard<'a, MixerState>> {
     if ptr.is_null() {
         None
     } else {
-        Some(&mut *(ptr as *mut MixerWrapper))
+        Some((*(ptr as *mut MixerWrapper)).lock())
     }
 }
 

@@ -378,7 +378,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_open_output_stream(
             return OwnAudioErrorCode::NullPointer as i32;
         }
 
-        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };

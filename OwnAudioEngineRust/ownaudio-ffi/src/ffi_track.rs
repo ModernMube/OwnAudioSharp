@@ -5,8 +5,8 @@ use ownaudio_core::MAX_ROUTE_CHANNELS;
 
 use crate::error_code::{set_last_error, OwnAudioErrorCode};
 use crate::handles::{
-    mixer_from_ptr, track_from_ptr, MixerWrapper, OwnAudioMixerHandle, OwnAudioTrackHandle,
-    TrackWrapper,
+    mixer_from_ptr, track_from_ptr, MixerState, MixerWrapper, OwnAudioMixerHandle,
+    OwnAudioTrackHandle, TrackWrapper,
 };
 
 /// Capacity of the control→audio command ring buffer (and its retirement
@@ -50,7 +50,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_create(
         mixer.attach_command_receiver(receiver);
         let master_shared = mixer.master_shared();
 
-        let boxed = Box::new(MixerWrapper {
+        let boxed = Box::new(MixerWrapper::new(MixerState {
             controller,
             mixer: Some(mixer),
             master_shared,
@@ -58,7 +58,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_create(
             channels,
             capture_reader: None,
             fx_tap_readers: Vec::new(),
-        });
+        }));
 
         unsafe {
             *out_mixer = Box::into_raw(boxed) as *mut OwnAudioMixerHandle;
@@ -307,7 +307,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_capture_start(
     capacity_samples: usize,
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
@@ -353,7 +353,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_capture_read(
             return OwnAudioErrorCode::NullPointer as i32;
         }
 
-        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
@@ -390,7 +390,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_capture_read(
 #[no_mangle]
 pub unsafe extern "C" fn ownaudio_v1_mixer_capture_stop(mixer: *mut OwnAudioMixerHandle) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
@@ -431,7 +431,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_create(
             return OwnAudioErrorCode::NullPointer as i32;
         }
 
-        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
@@ -503,7 +503,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_remove(
             return OwnAudioErrorCode::NullPointer as i32;
         }
 
-        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };

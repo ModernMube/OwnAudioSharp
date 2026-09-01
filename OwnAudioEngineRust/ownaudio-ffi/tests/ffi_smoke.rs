@@ -244,10 +244,16 @@ mod track_source {
         ownaudio_v1_capture_play, ownaudio_v1_track_attach_capture,
         ownaudio_v1_track_detach_capture,
     };
+    use ownaudio_ffi::ffi_config::{OwnAudioSampleFormat, OwnAudioStreamConfig};
     use ownaudio_ffi::ffi_source::{
         ownaudio_v1_track_clear_source, ownaudio_v1_track_set_ring_source,
         ownaudio_v1_track_source_destroy, ownaudio_v1_track_source_free_samples,
         ownaudio_v1_track_source_write,
+    };
+    use ownaudio_ffi::ffi_stream::{
+        ownaudio_v1_engine_create, ownaudio_v1_engine_destroy,
+        ownaudio_v1_mixer_open_output_stream, ownaudio_v1_output_stream_destroy,
+        ownaudio_v1_output_stream_play,
     };
     use ownaudio_ffi::ffi_track::{
         ownaudio_v1_mixer_create, ownaudio_v1_mixer_destroy, ownaudio_v1_mixer_get_master_peaks,
@@ -256,7 +262,7 @@ mod track_source {
         ownaudio_v1_track_clear_output_channel_map, ownaudio_v1_track_create,
         ownaudio_v1_track_destroy, ownaudio_v1_track_get_peaks,
         ownaudio_v1_track_get_rendered_content_frames, ownaudio_v1_track_get_rendered_frames,
-        ownaudio_v1_track_reset_position, ownaudio_v1_track_set_gain,
+        ownaudio_v1_track_remove, ownaudio_v1_track_reset_position, ownaudio_v1_track_set_gain,
         ownaudio_v1_track_set_output_channel_map, ownaudio_v1_track_set_pan,
         ownaudio_v1_track_set_start_delay_frames,
     };
@@ -265,7 +271,8 @@ mod track_source {
         ownaudio_v1_track_set_output_route, ownaudio_v1_track_set_source_channels,
     };
     use ownaudio_ffi::handles::{
-        OwnAudioMixerHandle, OwnAudioTrackHandle, OwnAudioTrackSourceHandle,
+        OwnAudioEngineHandle, OwnAudioMixerHandle, OwnAudioOutputStreamHandle, OwnAudioTrackHandle,
+        OwnAudioTrackSourceHandle,
     };
 
     #[test]
@@ -279,6 +286,87 @@ mod track_source {
                 ownaudio_v1_mixer_stop_all(std::ptr::null_mut()),
                 OwnAudioErrorCode::InvalidHandle as i32
             );
+        }
+    }
+
+    /// Four threads adding and removing tracks on one mixer handle, which is what the
+    /// managed side does without ever saying so: a UI thread loading a file while a
+    /// thread-pool worker takes the transport's sources back off. Before the handle had
+    /// a lock, two of them met inside `MixerController` with a `&mut` each and dropped a
+    /// removed track's ring buffer twice — a segfault hours into a run, never in a short
+    /// test.
+    ///
+    /// The stream is what makes it a real reproduction rather than a lock-contention
+    /// test: without an audio thread draining the command queue nothing is ever retired,
+    /// so there is nothing to drop twice. Where there is no device (CI) the test still
+    /// runs, just without that half.
+    #[test]
+    fn mixer_handle_survives_concurrent_track_churn() {
+        struct Handle(*mut OwnAudioMixerHandle);
+        unsafe impl Send for Handle {}
+
+        let mut engine: *mut OwnAudioEngineHandle = std::ptr::null_mut();
+        let mut mixer: *mut OwnAudioMixerHandle = std::ptr::null_mut();
+        let mut stream: *mut OwnAudioOutputStreamHandle = std::ptr::null_mut();
+
+        unsafe {
+            assert_eq!(
+                ownaudio_v1_mixer_create(48_000.0, 2, &mut mixer),
+                OwnAudioErrorCode::Success as i32
+            );
+            assert_eq!(
+                ownaudio_v1_engine_create(&mut engine),
+                OwnAudioErrorCode::Success as i32
+            );
+
+            let config = OwnAudioStreamConfig {
+                sample_rate: 48_000,
+                channels: 2,
+                sample_format: OwnAudioSampleFormat::F32,
+                buffer_size_frames: 0,
+            };
+
+            if ownaudio_v1_mixer_open_output_stream(
+                engine,
+                mixer,
+                std::ptr::null(),
+                &config,
+                &mut stream,
+            ) == OwnAudioErrorCode::Success as i32
+            {
+                ownaudio_v1_output_stream_play(stream);
+            }
+        }
+
+        let threads: Vec<_> = (0..4)
+            .map(|_| {
+                let handle = Handle(mixer);
+                std::thread::spawn(move || {
+                    let mixer = handle;
+                    for _ in 0..40 {
+                        let mut track: *mut OwnAudioTrackHandle = std::ptr::null_mut();
+                        unsafe {
+                            if ownaudio_v1_track_create(mixer.0, &mut track)
+                                != OwnAudioErrorCode::Success as i32
+                            {
+                                continue;
+                            }
+                            ownaudio_v1_track_remove(mixer.0, track);
+                            ownaudio_v1_track_destroy(track);
+                        }
+                    }
+                })
+            })
+            .collect();
+
+        for t in threads {
+            t.join().expect("a churn thread panicked");
+        }
+
+        unsafe {
+            ownaudio_v1_output_stream_destroy(stream);
+            ownaudio_v1_mixer_destroy(mixer);
+            ownaudio_v1_engine_destroy(engine);
         }
     }
 

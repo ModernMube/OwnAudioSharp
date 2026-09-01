@@ -8,11 +8,11 @@ use ownaudio_core::multitrack::MASTER_EFFECT_TARGET;
 
 use crate::error_code::{set_last_error, OwnAudioErrorCode};
 use crate::handles::{
-    mixer_from_ptr, track_from_ptr, MixerWrapper, OwnAudioMixerHandle, OwnAudioTrackHandle,
+    mixer_from_ptr, track_from_ptr, MixerState, OwnAudioMixerHandle, OwnAudioTrackHandle,
 };
 
 /// Installs a tap on `track_id`'s chain and keeps its reader on the wrapper.
-fn start(wrapper: &mut MixerWrapper, track_id: u64, capacity_samples: usize) -> i32 {
+fn start(wrapper: &mut MixerState, track_id: u64, capacity_samples: usize) -> i32 {
     match wrapper.controller.start_fx_tap(track_id, capacity_samples) {
         Ok(Some(reader)) => {
             wrapper.fx_tap_readers.retain(|(id, _)| *id != track_id);
@@ -36,7 +36,7 @@ fn start(wrapper: &mut MixerWrapper, track_id: u64, capacity_samples: usize) -> 
 /// `pre_out` and `post_out` must each be valid for `len` writable `f32` values,
 /// and `out_read` must point to a writable `usize`.
 unsafe fn read(
-    wrapper: &mut MixerWrapper,
+    wrapper: &mut MixerState,
     track_id: u64,
     pre_out: *mut f32,
     post_out: *mut f32,
@@ -69,7 +69,7 @@ unsafe fn read(
 }
 
 /// Drops the reader and tells the audio thread to stop mirroring.
-fn stop(wrapper: &mut MixerWrapper, track_id: u64) -> i32 {
+fn stop(wrapper: &mut MixerState, track_id: u64) -> i32 {
     wrapper.fx_tap_readers.retain(|(id, _)| *id != track_id);
     match wrapper.controller.stop_fx_tap(track_id) {
         Ok(()) => OwnAudioErrorCode::Success as i32,
@@ -111,12 +111,12 @@ pub unsafe extern "C" fn ownaudio_v1_track_fx_tap_start(
             Some(w) => w.id,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
-        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        start(wrapper, track_id, capacity_samples)
+        start(&mut wrapper, track_id, capacity_samples)
     }));
 
     crate::error_code::finish_catch_unwind(result)
@@ -151,12 +151,12 @@ pub unsafe extern "C" fn ownaudio_v1_track_fx_tap_read(
             Some(w) => w.id,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
-        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        unsafe { read(wrapper, track_id, pre_out, post_out, len, out_read) }
+        unsafe { read(&mut wrapper, track_id, pre_out, post_out, len, out_read) }
     }));
 
     crate::error_code::finish_catch_unwind(result)
@@ -178,12 +178,12 @@ pub unsafe extern "C" fn ownaudio_v1_track_fx_tap_stop(
             Some(w) => w.id,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
-        let wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        stop(wrapper, track_id)
+        stop(&mut wrapper, track_id)
     }));
 
     crate::error_code::finish_catch_unwind(result)
@@ -202,7 +202,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_master_fx_tap_start(
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         match unsafe { mixer_from_ptr(mixer) } {
-            Some(w) => start(w, MASTER_EFFECT_TARGET, capacity_samples),
+            Some(mut w) => start(&mut w, MASTER_EFFECT_TARGET, capacity_samples),
             None => OwnAudioErrorCode::InvalidHandle as i32,
         }
     }));
@@ -227,7 +227,16 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_master_fx_tap_read(
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         match unsafe { mixer_from_ptr(mixer) } {
-            Some(w) => unsafe { read(w, MASTER_EFFECT_TARGET, pre_out, post_out, len, out_read) },
+            Some(mut w) => unsafe {
+                read(
+                    &mut w,
+                    MASTER_EFFECT_TARGET,
+                    pre_out,
+                    post_out,
+                    len,
+                    out_read,
+                )
+            },
             None => OwnAudioErrorCode::InvalidHandle as i32,
         }
     }));
@@ -246,7 +255,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_master_fx_tap_stop(
 ) -> i32 {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         match unsafe { mixer_from_ptr(mixer) } {
-            Some(w) => stop(w, MASTER_EFFECT_TARGET),
+            Some(mut w) => stop(&mut w, MASTER_EFFECT_TARGET),
             None => OwnAudioErrorCode::InvalidHandle as i32,
         }
     }));

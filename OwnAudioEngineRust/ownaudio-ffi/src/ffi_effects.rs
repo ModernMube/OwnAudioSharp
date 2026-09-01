@@ -92,7 +92,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_add_effect(
             }
         };
 
-        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
@@ -166,7 +166,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_add_master_effect(
             }
         };
 
-        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
@@ -231,7 +231,7 @@ pub unsafe extern "C" fn ownaudio_v1_mixer_remove_master_effect(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
@@ -286,7 +286,7 @@ fn add_vst_effect_to(
         }
     };
 
-    let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+    let mut mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
         Some(w) => w,
         None => return OwnAudioErrorCode::InvalidHandle as i32,
     };
@@ -484,7 +484,7 @@ pub unsafe extern "C" fn ownaudio_v1_effect_remove(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
@@ -541,7 +541,7 @@ pub unsafe extern "C" fn ownaudio_v1_effect_set_param(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
@@ -595,7 +595,7 @@ pub unsafe extern "C" fn ownaudio_v1_effect_reset(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };

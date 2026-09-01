@@ -56,7 +56,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_set_ring_source(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
@@ -213,7 +213,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_clear_source(
 
         let track_id = track_wrapper.id;
 
-        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };

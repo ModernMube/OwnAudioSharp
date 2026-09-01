@@ -23,8 +23,9 @@ use ownaudio_core::{
 use crate::error_code::{set_last_error, OwnAudioErrorCode};
 use crate::ffi_stream::parse_device_name;
 use crate::handles::{
-    capture_from_ptr, engine_from_ptr, mixer_from_ptr, track_from_ptr, CaptureWrapper, InputPeaks,
-    OwnAudioCaptureHandle, OwnAudioEngineHandle, OwnAudioMixerHandle, OwnAudioTrackHandle,
+    capture_from_ptr, engine_from_ptr, mixer_from_ptr, track_from_ptr, CaptureState,
+    CaptureWrapper, InputPeaks, OwnAudioCaptureHandle, OwnAudioEngineHandle, OwnAudioMixerHandle,
+    OwnAudioTrackHandle,
 };
 
 /// Per-track ring depth, in seconds of capture. Same sizing as the per-track input bridge:
@@ -143,12 +144,12 @@ pub unsafe extern "C" fn ownaudio_v1_capture_open(
             }
         };
 
-        let boxed = Box::new(CaptureWrapper {
+        let boxed = Box::new(CaptureWrapper::new(CaptureState {
             stream,
             controller,
             channels,
             peaks,
-        });
+        }));
         unsafe {
             *out_capture = Box::into_raw(boxed) as *mut OwnAudioCaptureHandle;
         }
@@ -233,11 +234,11 @@ pub unsafe extern "C" fn ownaudio_v1_track_attach_capture(
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
-        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
-        let capture_wrapper = match unsafe { capture_from_ptr(capture) } {
+        let mut capture_wrapper = match unsafe { capture_from_ptr(capture) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
@@ -294,7 +295,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_detach_capture(
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
-        let capture_wrapper = match unsafe { capture_from_ptr(capture) } {
+        let mut capture_wrapper = match unsafe { capture_from_ptr(capture) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };

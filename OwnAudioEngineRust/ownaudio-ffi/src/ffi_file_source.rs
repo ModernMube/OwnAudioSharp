@@ -82,7 +82,7 @@ pub unsafe extern "C" fn ownaudio_v1_track_open_file(
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
 
-        let mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
+        let mut mixer_wrapper = match unsafe { mixer_from_ptr(mixer) } {
             Some(w) => w,
             None => return OwnAudioErrorCode::InvalidHandle as i32,
         };
