@@ -7,6 +7,12 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 
 ### Added
 
+- **`OwnReverbEffect`.** A 16-line feedback delay network next to the existing Freeverb: pre-delay,
+  all-pass input diffusion, per-line low-pass and low-shelf damping, LFO-modulated read taps,
+  tapped early reflections, mid/side width and a ducker driven by the dry signal. `Decay` is a real
+  RT60 in seconds because the Hadamard feedback matrix is orthogonal, so the loop itself neither
+  gains nor loses energy. 14 presets, and the delay lines are sized for the widest `Size` at
+  construction, so `Process` never allocates.
 - **`StreamingSource.LookAheadSeconds`.** How far ahead the pump renders is no longer a private
   constant. The 0.12 s default is invisible on anything scheduled — a metronome, a sequenced part —
   but it is the whole latency of a generator being *played*, so a VST instrument fed from a MIDI

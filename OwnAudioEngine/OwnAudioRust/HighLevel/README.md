@@ -370,6 +370,7 @@ public enum EffectType
     Reverb, Equalizer, Equalizer30, Compressor, Limiter,
     Delay, Chorus, Distortion, Overdrive, Flanger, Phaser,
     Rotary, AutoGain, Enhancer, Gate, PitchShift, DynamicAmp,
+    OwnReverb,
 }
 ```
 
@@ -401,6 +402,7 @@ public enum EffectType
 | **`GateEffect`** | `ThresholdDb`, `AttackMs`, `ReleaseMs` |
 | **`PitchShiftEffect`** | `Semitones` |
 | **`DynamicAmpEffect`** | `Attack`, `Sustain` (transient designer) |
+| **`OwnReverbEffect`** | `PreDelay`, `Decay`, `Size`, `Damping`, `LowDamping`, `Diffusion`, `ModRate`, `ModDepth`, `Width`, `EarlyLevel`, `LateLevel`, `DuckDepth`, `DuckAttack`, `DuckRelease`, `Freeze` (16-line FDN reverb) |
 
 ### Effects Usage Example
 

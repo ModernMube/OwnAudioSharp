@@ -65,7 +65,7 @@ actually meet it, and answers "how do I build this?" as well as "what does this 
 | Playback & Mixing | Multi-track sync, real-time tempo/pitch, per-track volume |
 | Recording | Low-latency capture with device selection, WAV writing |
 | Channel routing | Per-source routing onto a multi-channel interface, with fan-out |
-| Effects | 15 real-time DSP effects (reverb, EQ, compressor, limiter, …) |
+| Effects | 16 real-time DSP effects (reverb, OwnReverb, EQ, compressor, limiter, …) |
 | Plugins | VST3 effect plugins with cross-platform editor GUI |
 | MIDI | Hardware I/O, SMF file read/write, hardware-accurate clock |
 | Network | Sample-accurate multi-device sync over LAN |
@@ -150,8 +150,8 @@ Play multiple audio files in perfect sync using a shared central clock. Each tra
 ### Real-Time Tempo & Pitch
 Adjust playback speed and pitch independently, in real time, across multiple tracks simultaneously.
 
-### 15 Real-Time DSP Effects
-Reverb, equalizer, compressor, limiter, chorus, delay, distortion and more — freely combinable, inserted per-track or on the master bus.
+### 16 Real-Time DSP Effects
+Reverb, OwnReverb (16-line FDN reverb with ducking), equalizer, compressor, limiter, chorus, delay, distortion and more — freely combinable, inserted per-track or on the master bus.
 
 ### VST3 Plugin Support
 Load VST3 effect plugins and use their native cross-platform editor GUI, integrated into the effect chain like any built-in effect.

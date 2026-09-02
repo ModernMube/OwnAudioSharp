@@ -35,7 +35,7 @@ Cross-platform audio I/O library for OwnAudioSharp, built on [`cpal`](https://gi
 - **Format conversion** — bidirectional i16/u16/f32 with interleave/deinterleave utilities
 - **Lock-free ring buffer** — SPSC, safe to use between audio callback and application threads
 - **High-quality resampler** — sinc-based SRC via `rubato`
-- **17 built-in audio effects** — reverb, compressor, EQ (10 or 30 band), delay, chorus, etc.
+- **18 built-in audio effects** — reverb, OwnReverb (16-line FDN), compressor, EQ (10 or 30 band), delay, chorus, etc.
 - **Multi-track mixer** — per-track gain, mute, solo, tempo/pitch, effect chains, transport clock
 - **Zero-allocation audio path** — all buffers pre-allocated; no heap activity in callbacks
 
@@ -333,6 +333,7 @@ pub enum EffectType {
     PitchShift   = 14,
     DynamicAmp   = 15,
     Equalizer30  = 16,  // 30-band 1/3-octave ISO
+    OwnReverb    = 19,  // 16-line FDN reverb
 }
 ```
 
@@ -372,6 +373,10 @@ Parameter IDs start at `2` for each effect type:
 **Equalizer (10-band):** Parameter IDs 2–11 correspond to the 10 ISO center frequencies. Value is gain in dB.
 
 **Equalizer30 (30-band):** Parameter IDs 2–31. Value is gain in dB for each 1/3-octave band.
+
+**OwnReverb:** Parameter IDs 2–16, in order: pre-delay (ms), decay/RT60 (s), size, damping,
+low damping, diffusion, modulation rate (Hz), modulation depth, width, early level, late level,
+duck depth, duck attack (ms), duck release (ms), freeze (`0.0` / `1.0`).
 
 ### EffectChain
 

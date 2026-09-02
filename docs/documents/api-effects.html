@@ -6,7 +6,7 @@
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-93P1X5V4Z5');</script>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Effects &amp; VST3 — OwnAudioSharp</title>
-  <meta name="description" content="The 15 built-in DSP effects, the SmartMaster chain, VST3 plugin hosting and the before/after effect tap in OwnAudioSharp.">
+  <meta name="description" content="The 16 built-in DSP effects, the SmartMaster chain, VST3 plugin hosting and the before/after effect tap in OwnAudioSharp.">
   <link rel="stylesheet" href="../assets/docs.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 </head>
@@ -29,7 +29,7 @@
 
 <p class="section-eyebrow">Step 4 of 8</p>
 <h1 class="page-title">Effects &amp; VST3</h1>
-<p class="page-subtitle">Shaping the sound — 15 built-ins, an adaptive mastering chain, any VST3 plugin, and a tap to see what they did. Namespace: <code>OwnaudioNET.Effects</code></p>
+<p class="page-subtitle">Shaping the sound — 16 built-ins, an adaptive mastering chain, any VST3 plugin, and a tap to see what they did. Namespace: <code>OwnaudioNET.Effects</code></p>
 
 <p>Every effect, built-in or plugin, is an <code>IEffectProcessor</code>, and they all go in one of two places:</p>
 
@@ -120,6 +120,7 @@ comp.SetPreset(CompressorPreset.VocalGentle);</code></pre></div>
   <thead><tr><th>Class</th><th>Description</th></tr></thead>
   <tbody>
     <tr><td><code>ReverbEffect</code></td><td>Freeverb-based reverb with presets</td></tr>
+    <tr><td><code>OwnReverbEffect</code></td><td>16-line FDN reverb with diffusion, damping, modulation and a ducker</td></tr>
     <tr><td><code>DelayEffect</code></td><td>Stereo delay with ping-pong and damping</td></tr>
     <tr><td><code>EqualizerEffect</code></td><td>10-band parametric EQ</td></tr>
     <tr><td><code>Equalizer30BandEffect</code></td><td>30-band graphic EQ</td></tr>
