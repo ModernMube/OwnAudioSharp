@@ -463,6 +463,54 @@ namespace OwnaudioNET.Effects
         Bass = 6,
         Screamer = 7,
     }
+    public sealed class OwnReverbEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
+    {
+        public OwnReverbEffect() { }
+        public OwnReverbEffect(OwnaudioNET.Effects.OwnReverbPreset preset) { }
+        public float Damping { get; set; }
+        public float Decay { get; set; }
+        public float Diffusion { get; set; }
+        public float DuckAttack { get; set; }
+        public float DuckDepth { get; set; }
+        public float DuckRelease { get; set; }
+        public float EarlyLevel { get; set; }
+        public bool Enabled { get; set; }
+        public bool Freeze { get; set; }
+        public System.Guid Id { get; }
+        public float LateLevel { get; set; }
+        public float LowDamping { get; set; }
+        public float Mix { get; set; }
+        public float ModDepth { get; set; }
+        public float ModRate { get; set; }
+        public string Name { get; set; }
+        public float PreDelay { get; set; }
+        public int ResetGeneration { get; }
+        public float Size { get; set; }
+        public float Width { get; set; }
+        public void Dispose() { }
+        public void Initialize(Ownaudio.Core.AudioConfig config) { }
+        public void Process(System.Span<float> buffer, int frameCount) { }
+        public void Reset() { }
+        public void SetPreset(OwnaudioNET.Effects.OwnReverbPreset preset) { }
+        public override string ToString() { }
+    }
+    public enum OwnReverbPreset
+    {
+        Default = 0,
+        SmallRoom = 1,
+        Chamber = 2,
+        LargeHall = 3,
+        Cathedral = 4,
+        Plate = 5,
+        VocalPlate = 6,
+        DrumRoom = 7,
+        Gated = 8,
+        Bloom = 9,
+        AmbientPad = 10,
+        DuckedVocal = 11,
+        InfiniteHold = 12,
+        Subtle = 13,
+    }
     public sealed class PhaserEffect : OwnaudioNET.Interfaces.IEffectProcessor, System.IDisposable
     {
         public PhaserEffect(OwnaudioNET.Effects.PhaserPreset preset, int sampleRate = 44100) { }

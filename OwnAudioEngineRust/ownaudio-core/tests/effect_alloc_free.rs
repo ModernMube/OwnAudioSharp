@@ -19,7 +19,7 @@ use std::cell::Cell;
 
 use ownaudio_core::effects::{
     AutoGain, Chorus, Compressor, Delay, Distortion, DynamicAmp, Effect, Enhancer, Equalizer,
-    Equalizer30, Flanger, Gate, Limiter, Overdrive, Phaser, Reverb, Rotary, SmartMaster,
+    Equalizer30, Flanger, Gate, Limiter, Overdrive, OwnReverb, Phaser, Reverb, Rotary, SmartMaster,
     VstAudioBuffer, VstEffect,
 };
 use ownaudio_core::multitrack::{MultiTrackMixer, TrackSource, TrackState};
@@ -97,6 +97,7 @@ fn effect_process_is_allocation_free_in_steady_state() {
     // and any internal buffers allocate freely here.
     let effects: Vec<(&str, Box<dyn Effect>)> = vec![
         ("Reverb", Box::new(Reverb::new(SAMPLE_RATE))),
+        ("OwnReverb", Box::new(OwnReverb::new(SAMPLE_RATE))),
         ("Equalizer", Box::new(Equalizer::new(SAMPLE_RATE))),
         ("Equalizer30", Box::new(Equalizer30::new(SAMPLE_RATE))),
         ("Compressor", Box::new(Compressor::new(SAMPLE_RATE))),

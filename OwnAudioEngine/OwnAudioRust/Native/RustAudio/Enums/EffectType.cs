@@ -24,4 +24,5 @@ internal enum NativeEffectType : uint
     Equalizer30 = 16,       //1/3 octave
     Vst = 17,               //external plugin over C ABI
     SmartMaster = 18,       //whole mastering chain as one effect
+    OwnReverb = 19,         //16 line FDN reverb with ducker
 }

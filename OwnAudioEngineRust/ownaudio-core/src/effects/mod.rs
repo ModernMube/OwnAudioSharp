@@ -13,6 +13,7 @@ pub mod flanger;
 pub mod gate;
 pub mod limiter;
 pub mod overdrive;
+pub mod ownreverb;
 pub mod phaser;
 pub mod pitch_shift;
 pub mod reverb;
@@ -33,6 +34,7 @@ pub use flanger::Flanger;
 pub use gate::Gate;
 pub use limiter::Limiter;
 pub use overdrive::Overdrive;
+pub use ownreverb::OwnReverb;
 pub use phaser::Phaser;
 pub use pitch_shift::PitchShift;
 pub use reverb::Reverb;
@@ -93,6 +95,9 @@ pub enum EffectType {
     /// compressor → crossover/phase alignment → limiter), hosted as one native
     /// effect (see [`smartmaster::SmartMaster`]).
     SmartMaster = 18,
+    /// Feedback-delay-network reverb with diffusion, damping, modulation and a
+    /// sidechain ducker (see [`ownreverb::OwnReverb`]).
+    OwnReverb = 19,
 }
 
 impl TryFrom<u32> for EffectType {
@@ -119,6 +124,7 @@ impl TryFrom<u32> for EffectType {
             16 => Ok(Self::Equalizer30),
             17 => Ok(Self::Vst),
             18 => Ok(Self::SmartMaster),
+            19 => Ok(Self::OwnReverb),
             _ => Err(()),
         }
     }

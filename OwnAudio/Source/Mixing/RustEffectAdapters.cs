@@ -38,6 +38,7 @@ internal static class RustEffectAdapters
         new Dictionary<Type, Adapter>
         {
             [typeof(ME.ReverbEffect)]           = new Adapter(EffectType.Reverb, _mirrorReverb),
+            [typeof(ME.OwnReverbEffect)]        = new Adapter(EffectType.OwnReverb, _mirrorOwnReverb),
             [typeof(ME.EqualizerEffect)]        = new Adapter(EffectType.Equalizer, _mirrorEqualizer),
             [typeof(ME.Equalizer30BandEffect)]  = new Adapter(EffectType.Equalizer30, _mirrorEqualizer30),
             [typeof(ME.CompressorEffect)]       = new Adapter(EffectType.Compressor, _mirrorCompressor),
@@ -94,6 +95,26 @@ internal static class RustEffectAdapters
         sink(4, r.Width);
         sink(5, r.WetLevel);
         sink(6, r.DryLevel);
+    }
+
+    private static void _mirrorOwnReverb(IEffectProcessor e, ParamSink sink)
+    {
+        var r = (ME.OwnReverbEffect)e;
+        sink(2, r.PreDelay);
+        sink(3, r.Decay);
+        sink(4, r.Size);
+        sink(5, r.Damping);
+        sink(6, r.LowDamping);
+        sink(7, r.Diffusion);
+        sink(8, r.ModRate);
+        sink(9, r.ModDepth);
+        sink(10, r.Width);
+        sink(11, r.EarlyLevel);
+        sink(12, r.LateLevel);
+        sink(13, r.DuckDepth);
+        sink(14, r.DuckAttack);
+        sink(15, r.DuckRelease);
+        sink(16, r.Freeze ? 1f : 0f);
     }
 
     private static void _mirrorEqualizer(IEffectProcessor e, ParamSink sink)

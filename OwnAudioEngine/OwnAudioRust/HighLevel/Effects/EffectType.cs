@@ -68,4 +68,9 @@ public enum EffectType : uint
     /// packed into one native effect.
     /// </summary>
     SmartMaster = 18,
+
+    /// <summary>
+    /// 16 line FDN reverb, diffusion + damping + modulation, with a built in ducker.
+    /// </summary>
+    OwnReverb = 19,
 }

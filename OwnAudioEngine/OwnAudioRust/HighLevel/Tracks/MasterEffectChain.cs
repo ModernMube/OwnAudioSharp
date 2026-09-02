@@ -235,6 +235,7 @@ public sealed class MasterEffectChain
             [typeof(PitchShiftEffect)]  = EffectType.PitchShift,
             [typeof(DynamicAmpEffect)]  = EffectType.DynamicAmp,
             [typeof(Equalizer30Effect)] = EffectType.Equalizer30,
+            [typeof(OwnReverbEffect)]   = EffectType.OwnReverb,
         };
 
     private object _createWrapper(EffectType effectType, EffectHandle handle)
@@ -259,6 +260,7 @@ public sealed class MasterEffectChain
             EffectType.DynamicAmp  => new DynamicAmpEffect(handle, _mixerHandle),
             EffectType.Equalizer30 => new Equalizer30Effect(handle, _mixerHandle),
             EffectType.SmartMaster => new NativeSmartMasterEffect(),
+            EffectType.OwnReverb   => new OwnReverbEffect(handle, _mixerHandle),
             _ => throw new ArgumentOutOfRangeException(nameof(effectType)),
         };
     }
