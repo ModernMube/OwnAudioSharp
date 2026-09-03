@@ -47,6 +47,9 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/.cache/ort.pyke.io
+            ~/Library/Caches/ort.pyke.io
+            ~/AppData/Local/ort.pyke.io
           key: cargo-mt3-test-${{ hashFiles('OwnAudio/Source/Mt3/rust-mt3/**/Cargo.lock') }}
 
       - name: Format
@@ -82,6 +85,9 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/.cache/ort.pyke.io
+            ~/Library/Caches/ort.pyke.io
+            ~/AppData/Local/ort.pyke.io
           key: cargo-mt3-windows-${{ hashFiles('OwnAudio/Source/Mt3/rust-mt3/**/Cargo.lock') }}
 
       - name: Install cargo-xwin (MSVC cross-linker)
@@ -89,11 +95,23 @@ jobs:
 
       - name: Build win-x64
         working-directory: OwnAudio/Source/Mt3/rust-mt3
-        run: cargo build --release -p ownaudio-mt3-ffi --target x86_64-pc-windows-msvc
+        run: |
+          for attempt in 1 2 3; do
+            cargo build --release -p ownaudio-mt3-ffi --target x86_64-pc-windows-msvc && exit 0
+            echo "build attempt $attempt failed, retrying in 20s"
+            sleep 20
+          done
+          exit 1
 
       - name: Build win-arm64
         working-directory: OwnAudio/Source/Mt3/rust-mt3
-        run: cargo xwin build --release -p ownaudio-mt3-ffi --target aarch64-pc-windows-msvc
+        run: |
+          for attempt in 1 2 3; do
+            cargo xwin build --release -p ownaudio-mt3-ffi --target aarch64-pc-windows-msvc && exit 0
+            echo "build attempt $attempt failed, retrying in 20s"
+            sleep 20
+          done
+          exit 1
 
       - name: Collect artifacts
         run: |
@@ -124,11 +142,20 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/.cache/ort.pyke.io
+            ~/Library/Caches/ort.pyke.io
+            ~/AppData/Local/ort.pyke.io
           key: cargo-mt3-linux-x64-${{ hashFiles('OwnAudio/Source/Mt3/rust-mt3/**/Cargo.lock') }}
 
       - name: Build linux-x64
         working-directory: OwnAudio/Source/Mt3/rust-mt3
-        run: cargo build --release -p ownaudio-mt3-ffi --target x86_64-unknown-linux-gnu
+        run: |
+          for attempt in 1 2 3; do
+            cargo build --release -p ownaudio-mt3-ffi --target x86_64-unknown-linux-gnu && exit 0
+            echo "build attempt $attempt failed, retrying in 20s"
+            sleep 20
+          done
+          exit 1
 
       - name: Collect artifacts
         run: |
@@ -158,11 +185,20 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/.cache/ort.pyke.io
+            ~/Library/Caches/ort.pyke.io
+            ~/AppData/Local/ort.pyke.io
           key: cargo-mt3-linux-arm64-${{ hashFiles('OwnAudio/Source/Mt3/rust-mt3/**/Cargo.lock') }}
 
       - name: Build linux-arm64
         working-directory: OwnAudio/Source/Mt3/rust-mt3
-        run: cargo build --release -p ownaudio-mt3-ffi --target aarch64-unknown-linux-gnu
+        run: |
+          for attempt in 1 2 3; do
+            cargo build --release -p ownaudio-mt3-ffi --target aarch64-unknown-linux-gnu && exit 0
+            echo "build attempt $attempt failed, retrying in 20s"
+            sleep 20
+          done
+          exit 1
 
       - name: Collect artifacts
         run: |
@@ -194,11 +230,20 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/.cache/ort.pyke.io
+            ~/Library/Caches/ort.pyke.io
+            ~/AppData/Local/ort.pyke.io
           key: cargo-mt3-macos-${{ hashFiles('OwnAudio/Source/Mt3/rust-mt3/**/Cargo.lock') }}
 
       - name: Build osx-arm64
         working-directory: OwnAudio/Source/Mt3/rust-mt3
-        run: cargo build --release -p ownaudio-mt3-ffi --target aarch64-apple-darwin
+        run: |
+          for attempt in 1 2 3; do
+            cargo build --release -p ownaudio-mt3-ffi --target aarch64-apple-darwin && exit 0
+            echo "build attempt $attempt failed, retrying in 20s"
+            sleep 20
+          done
+          exit 1
 
       - name: Collect artifacts
         run: |
