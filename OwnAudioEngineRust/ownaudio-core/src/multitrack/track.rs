@@ -2,7 +2,7 @@
 //! an effect chain.
 
 use std::sync::atomic::{
-    AtomicBool, AtomicI32, AtomicU16, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering,
+    fence, AtomicBool, AtomicI32, AtomicU16, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering,
 };
 use std::sync::Arc;
 
@@ -397,7 +397,8 @@ impl TrackShared {
                 out.gain[dst] = f32::from_bits(self.out_route_gain[dst].load(Ordering::Relaxed));
             }
 
-            if self.route_version.load(Ordering::Acquire) == before {
+            fence(Ordering::Acquire);
+            if self.route_version.load(Ordering::Relaxed) == before {
                 out.map_len = map_len;
                 out.route_len = route_len;
                 return true;
