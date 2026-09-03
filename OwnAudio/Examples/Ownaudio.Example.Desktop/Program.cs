@@ -249,31 +249,50 @@ public class TestProgram
             instBus.AddEffect(_instComp);
             instBus.AddEffect(_instEq);
             
-            //Female lead, so we start from the vocal plate and tune it for her range.
+            //VOCAL BUS - comp -> delay -> reverb, so the repeats land in the same room as
+            //the voice. Makeup covers the dry the two Mix crossfades eat, about -3.9 dB.
+            var _vocalComp = new CompressorEffect(
+                threshold: 0.32f,
+                ratio: 3.0f,
+                attackTime: 12f,
+                releaseTime: 150f,
+                makeupGain: 1.55f,
+                sampleRate: targetSampleRate);
+
+            //Dotted eighth at the measured 100 BPM, ping-pong so the centre stays clear
+            var _vocalDelay = new DelayEffect(
+                time: 450,
+                repeat: 0.24f,
+                mix: 0.12f,
+                damping: 0.62f,
+                sampleRate: targetSampleRate,
+                pingPong: true);
+
+            //Female lead: damped and heavily diffused so the tail stays soft
             var _vocalReverb = new OwnReverbEffect(OwnReverbPreset.VocalPlate);
             _vocalReverb.PreDelay = 55f;
-            _vocalReverb.Decay = 1.8f;
-            _vocalReverb.Size = 0.62f;
-            _vocalReverb.Damping = 0.46f;
-            _vocalReverb.LowDamping = 0.52f;
-            _vocalReverb.Diffusion = 0.94f;
+            _vocalReverb.Decay = 2.0f;
+            _vocalReverb.Size = 0.68f;
+            _vocalReverb.Damping = 0.55f;
+            _vocalReverb.LowDamping = 0.50f;
+            _vocalReverb.Diffusion = 0.96f;
             _vocalReverb.EarlyLevel = 0f;
-            _vocalReverb.ModRate = 1.1f;
-            _vocalReverb.ModDepth = 0.32f;
-            _vocalReverb.Width = 1.15f;
-            _vocalReverb.DuckDepth = 0.32f;
-            _vocalReverb.DuckAttack = 8f;
-            _vocalReverb.DuckRelease = 260f;
-
-            //Audible, but the dry voice stays out in front
-            _vocalReverb.Mix = 0.32f;
+            _vocalReverb.ModRate = 0.85f;
+            _vocalReverb.ModDepth = 0.42f;
+            _vocalReverb.Width = 1.20f;
+            _vocalReverb.DuckDepth = 0.35f;
+            _vocalReverb.DuckAttack = 10f;
+            _vocalReverb.DuckRelease = 280f;
+            _vocalReverb.Mix = 0.28f;
 
             var vocalBus = new SourceWithEffects(fileSource3);
+            vocalBus.AddEffect(_vocalComp);
+            vocalBus.AddEffect(_vocalDelay);
             vocalBus.AddEffect(_vocalReverb);
 
             //Staged demo: the first 15s is the raw mix, then one group joins every 15 seconds
             IEffectProcessor[] _instrumentFx = { _drumComp, _drumAir, _bassComp, _bassEq, _instComp, _instEq };
-            IEffectProcessor[] _vocalFx = { _vocalReverb };
+            IEffectProcessor[] _vocalFx = { _vocalComp, _vocalDelay, _vocalReverb };
             IEffectProcessor[] _masterFx = { _masterEq, _glue, _exciter };
 
             foreach (var _fx in _instrumentFx) _fx.Enabled = false;
@@ -322,7 +341,7 @@ public class TestProgram
             Console.WriteLine("\n[6/6] Playing audio...");
             Console.WriteLine("  0s - 15s : raw mix, no processing (the limiter stays on for peak safety)");
             Console.WriteLine("     15s   : instruments in - drums comp+enhancer, bass comp+eq, other comp+eq");
-            Console.WriteLine("     30s   : vocals in - OwnReverb only, ducked vocal plate");
+            Console.WriteLine("     30s   : vocals in - comp -> dotted 1/8 ping-pong delay -> OwnReverb");
             Console.WriteLine("     45s   : master bus in - eq -> glue comp -> exciter\n");
             Console.WriteLine("Press any key to stop playback early.\n");
 
