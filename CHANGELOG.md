@@ -3,7 +3,7 @@
 All notable changes to OwnAudioSharp are documented here.
 Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com/ModernMube/OwnAudioSharp/releases) page.
 
-## 4.0.7 — Unreleased
+## 4.0.7 — 2026-09-03
 
 ### Added
 
@@ -28,6 +28,31 @@ Releases before 4.0.0 are documented on the [GitHub Releases](https://github.com
 - **`AudioConstants.MaxAudioSources` is 30, up from 25.** A full band plus MIDI instruments runs
   out at 25, and the ceiling only costs what it says when every one of those sources is being
   time-stretched.
+
+### Fixed
+
+- **Two threads in the mixer could free a track's ring buffer twice.** `mixer_from_ptr` and
+  `capture_from_ptr` handed every caller a `&mut` to the same state, and nothing on the managed side
+  ever promised the calls arrive one at a time. Two threads inside `MixerController` meant two
+  `&mut` to one retirement queue, and a removed track's ring buffer was dropped twice — a segfault
+  in `Arc::drop_slow` hours into a session, with nothing in the log pointing at it. The state now
+  lives behind a mutex and both cast helpers return a guard, so every entry point is serialized by
+  construction. The lock is control-side only: once a stream has taken the mixer the audio thread
+  owns it outright, so no render block ever waits on it.
+- **The audio thread could render one block with a half-written output route.** `load_routing` is a
+  seqlock, and it read the route table `Relaxed` but closed with an `Acquire` load of the version.
+  Acquire only orders what follows it, so on a weak memory model — every ARM machine, meaning every
+  Apple Silicon Mac and every phone — those table loads were free to sink below the check and pick
+  up a route the control thread was still writing. The reader accepted it as consistent, and a
+  channel went to the wrong output for one block. An `Acquire` fence before the version check pins
+  the loads above it. The existing torn-route test failed 8 runs in 30 before the fix and 0 in 60
+  after it.
+- **Sustained tones bubbled on a streaming source that never changed tempo.** The rust-native path
+  pinned the SoundTouch stage on for every `StreamingSource`, so a unity-tempo generator — a synth,
+  a VST instrument fed from a keyboard, a metronome — was routed through overlap-add for the life of
+  the track whether or not anything was being stretched. The stage is now pinned on the first
+  non-unity tempo or pitch and stays pinned from then on, so later changes still land on a warm
+  FIFO.
 
 ## 4.0.6 — 2026-08-27
 
