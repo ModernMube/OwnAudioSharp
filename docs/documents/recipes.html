@@ -57,8 +57,9 @@ mixer.AddSource(track);
 Console.WriteLine("Playing. Press Enter to stop.");
 Console.ReadLine();
 
-track.Dispose();
+// Mixer first: its Dispose stops and drops every source it still holds
 mixer.Dispose();
+track.Dispose();
 await OwnaudioNet.ShutdownAsync();</code></pre></div>
 
 <p>To wait for the track to finish instead of for a keypress, let the mixer tell you:</p>
@@ -258,7 +259,9 @@ private void OnVuTick()   // 100 ms timer
     MasterLeftDb  = ToDbFs(_mixer.LeftPeak);
     MasterRightDb = ToDbFs(_mixer.RightPeak);
 
-    // per track — every source exposes OutputLevels as a linear peak pair
+    // per track — OutputLevels is a linear peak pair. It sits on the concrete source
+    // (BaseAudioSource / SourceWithEffects), not on IAudioSource, and it only moves
+    // while that source is actually playing
     foreach (var track in Tracks)
     {
         if (track.Source is null) continue;
@@ -311,6 +314,12 @@ SourceWithEffects EnsureChain(FileSource source)
     if (_chains.TryGetValue(source.Id, out var existing)) return existing;
 
     var chain = new SourceWithEffects(source);
+
+    // The wrapper takes the source's place on the bus, so it has to take its patch too —
+    // leave this out and the track jumps back to the identity route on 1/2
+    chain.OutputRoute = source.OutputRoute;
+    chain.OutputChannelMapping = source.OutputChannelMapping;
+
     _mixer.RemoveSource(source.Id);   // out with the raw one
     _mixer.AddSource(chain);          // in with the wrapper
     _chains[source.Id] = chain;
@@ -325,16 +334,12 @@ chain.AddEffect(new ReverbEffect { RoomSize = 0.6f, Mix = 0.25f });</code></pre>
 
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">reverb.Enabled = false;   // stays in the chain, stops processing</code></pre></div>
 
-<div class="callout callout-danger"><div class="callout-icon">🚫</div><p>Don't dispose an effect the instant you remove it — the audio thread may still be inside <code>Process()</code>. Take it out of the chain first, then dispose it a moment later.</p></div>
+<p>Removal is synchronous all the way down: <code>RemoveEffect</code> reconciles the native chain on the calling thread and returns only once the native twin is gone, so disposing right after is safe.</p>
 
-<div class="code-block"><div class="code-header"><span>C# — safe removal</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">chain.RemoveEffect(reverb);
+<div class="code-block"><div class="code-header"><span>C# — removal</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">chain.RemoveEffect(reverb);
+reverb.Dispose();</code></pre></div>
 
-var doomed = reverb;
-_ = Task.Run(async () =&gt;
-{
-    await Task.Delay(100).ConfigureAwait(false);
-    doomed.Dispose();
-});</code></pre></div>
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>What you must not do is dispose an effect that is <em>still in a chain</em>. Take it out first — the order above, not the other way round.</p></div>
 
 <p>A VST3 plugin goes into the very same slot — load it, initialize its audio, hand over its processor:</p>
 
@@ -384,7 +389,22 @@ mixer.StopRecording();</code></pre></div>
 <h2 id="metronome">Generate audio yourself — a metronome</h2>
 <p><code>StreamingSource</code> asks you for samples and you fill the buffer. Derive your phase from <code>framePosition</code>, not from a counter of your own, and a seek automatically lands the click on the right beat.</p>
 
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">private readonly AudioConfig _config = OwnaudioNet.CreateDefaultConfig();
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Mirror the live engine, and take the width from EffectiveOutputChannels: a StreamingSource
+// feeds a bare native track, which runs at the bus width. CreateDefaultConfig() would hand you
+// 48 kHz stereo whatever the device actually opened with, and the frames come out interleaved wrong.
+private static AudioConfig ClickConfig()
+{
+    var engine = OwnaudioNet.Engine!.Config;
+
+    return new AudioConfig
+    {
+        SampleRate = engine.SampleRate,
+        Channels   = engine.EffectiveOutputChannels,
+        BufferSize = engine.BufferSize
+    };
+}
+
+private readonly AudioConfig _config = ClickConfig();
 
 // ClickPattern is your own class — bpm, frames per beat, click length.
 // Swapped as one reference, so the callback never sees half a pattern.
@@ -430,14 +450,12 @@ click.Seek(positionSeconds);</code></pre></div>
 
 <!-- ───────────────────────────────────────────────────────────────────── -->
 <h2 id="render">Render a mix to a WAV file</h2>
-<p>Realtime mode drops audio it can't produce in time — fine for playback, wrong for a bounce. Offline mode makes the mix thread wait for every source, so the result is deterministic no matter how slow the machine is.</p>
+<p>The mixer records what it is playing: the native session mixes in the device callback and copies the master output into a ring that a background thread drains to disk. That makes a bounce a <strong>realtime</strong> pass — a four-minute song takes four minutes — and it means the sources have to be registered <em>before</em> you ask for the recording, because the native session (and with it the capture) only exists once there is something on the bus.</p>
 
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">mixer.RenderingMode = ClockMode.Offline;
-
-foreach (var src in sources)
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">foreach (var src in sources)
     mixer.AddSourcePrepared(src);   // registering also attaches the source to mixer.MasterClock
 
-mixer.StartRecording("bounce.wav");
+mixer.StartRecording("bounce.wav");   // needs a session: sources first, or this throws
 mixer.StartPreparedSources(0.0);
 mixer.Start();
 
@@ -450,6 +468,8 @@ mixer.Stop();
 mixer.StopRecording();</code></pre></div>
 
 <div class="callout callout-info"><div class="callout-icon">💡</div><p>Master effects are printed into the file — the recording is taken after the master chain, so what you hear is what you get.</p></div>
+
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p><code>ClockMode.Offline</code> is still in the enum, but since 4.0 nothing reads it: the managed mix thread it used to steer is gone, and the rust session always renders against the device clock. Setting <code>mixer.RenderingMode</code> does not make a bounce faster or more deterministic. For a faster-than-realtime export, pull the source yourself — that is the next recipe.</p></div>
 
 <!-- ───────────────────────────────────────────────────────────────────── -->
 <h2 id="bounce-source">Write one source to a WAV file</h2>
@@ -483,7 +503,14 @@ source.Dispose();</code></pre></div>
 <h2 id="multichannel-routing">Send the click to its own outputs</h2>
 <p>On a multi-channel interface the drummer's cue does not belong in the front-of-house mix. Route each source onto the channels you want, and keep the master limiter off the cue feed.</p>
 
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">OwnaudioNet.Initialize(new AudioConfig { OutputChannels = 8, SampleRate = 48000 });
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">using Ownaudio.Core;                  // AudioConfig
+using OwnaudioNET.Effects.SmartMaster;
+
+// OutputChannels widens the mix bus; Channels stays the stereo the sources decode to
+await OwnaudioNet.InitializeAsync(new AudioConfig { OutputChannels = 8, SampleRate = 48000 });
+OwnaudioNet.Start();
+
+var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine);
 
 var music = new FileSource("backing.flac");
 music.DecodeChannels = 2;                       // stereo chain on an 8-channel bus
@@ -494,16 +521,20 @@ click.RouteTo(new[] { -1, -1, 0, 0 });          // one mono click onto 3 AND 4
 
 // The limiter owns the main pair only — 3/4 reach the interface as mixed
 mixer.MasterChannelScope = new[] { 0, 1 };
-mixer.AddMasterEffect(new SmartMaster());
+mixer.AddMasterEffect(new SmartMasterEffect());
 
+// Start the mixer first: AddSource only starts a source on a running mixer, and a source
+// the managed side never saw start does not drive the master clock
+mixer.Start();
 mixer.AddSource(music);
 mixer.AddSource(click);
-mixer.Start();
 
 // Re-patch while it plays: the change lands on the next control tick
 click.RouteTo(new[] { -1, -1, -1, -1, 0, 0 });</code></pre></div>
 
 <div class="callout callout-info"><div class="callout-icon">💡</div><p>Draw your patch bay from <code>OwnaudioNet.Engine!.ActualOutputChannels</code>, not from <code>AudioConfig</code> — a device that could not serve the requested width was adapted, and only the engine knows to what.</p></div>
+
+<div class="callout callout-info"><div class="callout-icon">💡</div><p>Two mappings, two shapes. <code>RouteToChannels</code> is <em>source</em>-indexed, so its array has to be exactly as long as the source's own channel count (<code>Config.Channels</code>, which for a <code>FileSource</code> is its <code>targetChannels</code>) — anything else throws. <code>RouteTo</code> is <em>destination</em>-indexed (<code>-1</code> = nothing on that bus channel), and it is the only one that can fan a single source channel out to several outputs. <a href="api-sources.html#channel-routing">Channel routing →</a></p></div>
 
 <!-- ───────────────────────────────────────────────────────────────────── -->
 <h2 id="fx-analyzer">Compare the signal before and after an effect</h2>
@@ -535,7 +566,7 @@ void StopAnalyzing()
 
 <p>Both spans are <code>BinCount</code> long (<code>fftSize / 2</code>) in dBFS, and <code>Frequencies</code> gives the centre of each bin in Hz. A bigger <code>fftSize</code> buys frequency detail at the cost of update rate: 2048 is about 23 Hz per bin at 48 kHz, which is fine for watching an EQ or a compressor work.</p>
 
-<p>Swap <code>CreateEffectTap(sourceId)</code> for <code>CreateMasterEffectTap()</code> to watch the master chain instead — same analyzer, it just sees the summed mix.</p>
+<p>Swap <code>CreateEffectTap(sourceId)</code> for <code>CreateMasterEffectTap()</code> to watch the master chain instead — same analyzer, it just sees the summed mix. Both need a native session behind them, so open a tap only once the source is on the bus; asked for too early they throw rather than hand back a dead tap.</p>
 
 <div class="callout callout-info"><div class="callout-icon">💡</div><p>The dry side is held back by the chain's own latency, so a look-ahead limiter or a VST3 doesn't smear the comparison. If you want the raw audio rather than a spectrum, use <code>tap.Read(pre, post)</code> directly. <a href="api-effects.html#analysis">Effect tap reference →</a></p></div>
 
@@ -563,24 +594,6 @@ await OwnaudioNet.InitializeAsync(config);
 OwnaudioNet.Start();</code></pre></div>
 
 <div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Opening a VST3 editor while device hot-plug monitoring is running can interfere with enumeration. Wrap it: <code>PauseDeviceMonitoring()</code> before, <code>ResumeDeviceMonitoring()</code> after.</p></div>
-
-<!-- ───────────────────────────────────────────────────────────────────── -->
-<h2 id="multi-out">Send tracks to separate outputs</h2>
-<p>On a multi-channel interface each source can be pinned to specific hardware channels — click into the drummer's cans, the band into the mains.</p>
-
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var config = OwnaudioNet.CreateDefaultConfig();
-config.Channels = 4;                 // bus channel 0..3 → physical 0..3
-
-await OwnaudioNet.InitializeAsync(config);
-OwnaudioNet.Start();
-
-band.RouteToChannels(0, 1);          // front of house
-click.RouteToChannels(2, 3);         // in-ear monitors
-
-mixer.AddSource(band);
-mixer.AddSource(click);</code></pre></div>
-
-<div class="callout callout-info"><div class="callout-icon">💡</div><p>The mapping array must be as long as the source's own channel count. Need to change that count, use <code>targetChannels</code> when you construct the <code>FileSource</code> — it up- or downmixes in the decoder. <a href="api-sources.html#channel-routing">Channel routing →</a></p></div>
 
 <!-- ───────────────────────────────────────────────────────────────────── -->
 <h2 id="next">Where next</h2>

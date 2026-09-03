@@ -80,10 +80,10 @@ mixer.Start();</code></pre></div>
     <tr><td><code>MasterVolume</code></td><td><code>float</code></td><td>Master output volume (0.0 – 1.0). Settable at any time.</td></tr>
     <tr><td><code>MasterPan</code></td><td><code>float</code></td><td>Master stereo pan (-1.0 left … 0.0 center … +1.0 right). Settable at any time.</td></tr>
     <tr><td><code>LeftPeak</code> / <code>RightPeak</code></td><td><code>float</code></td><td>Real-time peak levels (0.0 – 1.0) for VU metering.</td></tr>
-    <tr><td><code>TotalMixedFrames</code></td><td><code>long</code></td><td>Total frames processed since last <code>Start()</code>.</td></tr>
+    <tr><td><code>TotalMixedFrames</code></td><td><code>long</code></td><td>The master clock's sample position. It follows a <code>Seek</code>, so it is a playhead, not a running total.</td></tr>
     <tr><td><code>IsRecording</code></td><td><code>bool</code></td><td>Whether WAV recording is active.</td></tr>
     <tr><td><code>MasterClock</code></td><td><code>MasterClock</code></td><td>Timeline clock for synchronized multi-track sync.</td></tr>
-    <tr><td><code>RenderingMode</code></td><td><code>ClockMode</code></td><td><code>Realtime</code> (default) or <code>Offline</code>.</td></tr>
+    <tr><td><code>RenderingMode</code></td><td><code>ClockMode</code></td><td>The master clock's mode. Set by the network sync helpers; <code>Offline</code> is inert since 4.0 — see <a href="api-sync.html#offline-mode">Offline rendering</a>.</td></tr>
     <tr><td><code>MasterChannelScope</code></td><td><code>int[]</code></td><td>Bus channels the master chain, volume and pan act on. Empty (default) = the whole bus. See <a href="#master-scope">Master scope</a>.</td></tr>
     <tr><td><code>SessionLoad</code></td><td><code>AudioStreamLoad?</code></td><td>What the device callback the mix renders in is costing. <code>null</code> while the mixer does not own the device. See <a href="#session-load">Callback load</a>.</td></tr>
   </tbody>
@@ -92,13 +92,14 @@ mixer.Start();</code></pre></div>
 <h2 id="lifecycle">Lifecycle</h2>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">mixer.Start();                      // begin audio processing
 mixer.Pause();                      // freeze mix thread
-mixer.Stop();                       // stop and clear all sources
-mixer.Seek(double positionInSec);   // seek master clock + all attached sources
+mixer.Stop();                       // stop every source, but they stay registered
+mixer.Seek(double positionInSec);   // move the master clock and every file track with it
 mixer.Dispose();                    // release all resources</code></pre></div>
 
 <h2 id="sources">Sources on the bus</h2>
-<p><code>AddSource()</code> adds <em>and starts</em>. When several tracks must begin on the same frame, add them <em>prepared</em> instead and release them together.</p>
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Add and immediately start
+<p><code>AddSource()</code> adds <em>and starts</em> — but only onto a mixer that is already running. On a stopped mixer it merely registers the source, and <code>Start()</code> does not go back and start it: the managed source stays <code>Stopped</code>, which means it never drives the master clock and its <code>OutputLevels</code> stay at zero. Start the mixer first, or use the prepared path. When several tracks must begin on the same frame, add them <em>prepared</em> and release them together.</p>
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Add and immediately start — the mixer has to be running for the "start" half
+mixer.Start();
 mixer.AddSource(source);
 
 // Add without starting — launch all at once for tight sync
@@ -113,7 +114,7 @@ mixer.ClearSources();                // remove + stop all
 
 // Query
 IAudioSource[] all = mixer.GetSources();</code></pre></div>
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><code>AddSource()</code> and <code>RemoveSource()</code> are lock-free hot-swap operations — safe to call while the mixer is running.</p></div>
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p><code>AddSource()</code> and <code>RemoveSource()</code> are hot-swap operations — safe to call while the mixer is running. They take the session lock on the caller's thread, so keep them off the audio thread and off a tight loop, but a track can come and go mid-playback without reopening the stream.</p></div>
 <p>Maximum simultaneous sources per mixer: <code>AudioConstants.MaxAudioSources</code> = <strong>30</strong></p>
 
 <h2 id="master-effects">Master effects</h2>
@@ -130,7 +131,7 @@ IEffectProcessor[] fx = mixer.GetMasterEffects();</code></pre></div>
 <div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>The effect must have <code>IsReady == true</code> before adding. For VST3 effects, call <code>await host.InitializeAudioAsync()</code> first.</p></div>
 
 <h2 id="recording">Recording</h2>
-<p>Records the final mixed output — post master-effects — to a WAV file.</p>
+<p>Records the final mixed output — post master-effects — to a WAV file. The capture belongs to the native session, which is built with the first source, so register your sources before you call this; on an empty mixer it throws rather than opening a file that would stay silent.</p>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">mixer.StartRecording("session.wav"); // start capturing
 // ... playback ...
 mixer.StopRecording();               // finalize and close the WAV file
@@ -178,7 +179,7 @@ using (var wav = new WaveFileWriter("bounce.wav", source.Config))
 
 <div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Output is always Float32 PCM (WAV format tag 3), 32 bits per sample — not 16-bit integer. Most editors and players handle it, but a few older tools do not. The writer is not thread-safe: one writer, one thread.</p></div>
 
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>Wanting the <em>mix</em> rather than one source, but faster and more reliably than real time? Set <code>mixer.RenderingMode = ClockMode.Offline</code> before <code>StartRecording</code> — see <a href="api-sync.html#offline-mode">Offline rendering</a>. The older <code>AudioRecorder</code> class still exists but is obsolete: it holds the whole take in managed memory.</p></div>
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>Wanting the <em>mix</em> rather than one source? <code>StartRecording</code> is the way, and it runs in real time — the session mixes in the device callback and the recorder drains what came out. There is no faster-than-realtime mix bounce; <code>ClockMode.Offline</code> does not provide one (see <a href="api-sync.html#offline-mode">Offline rendering</a>). The older <code>AudioRecorder</code> class still exists but is obsolete: it holds the whole take in managed memory.</p></div>
 
 <h2 id="master-scope">Master scope</h2>
 <p>The master effect chain, master volume and master pan run over every bus channel by default. On a multi-channel interface that is rarely what you want: a limiter meant for the main pair would also squash the click feed on channels 3/4. <code>MasterChannelScope</code> confines the whole master stage to the channels you name, and everything outside it reaches the driver exactly as mixed — a clean direct out.</p>
@@ -186,7 +187,8 @@ using (var wav = new WaveFileWriter("bounce.wav", source.Config))
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Master chain owns the main pair only; 2–7 pass through untouched
 mixer.MasterChannelScope = new[] { 0, 1 };
 
-mixer.AddMasterEffect(new SmartMaster());   // limits 0+1, never the cue mix
+// SmartMasterEffect lives in OwnaudioNET.Effects.SmartMaster
+mixer.AddMasterEffect(new SmartMasterEffect());   // limits 0+1, never the cue mix
 
 // Back to the whole bus
 mixer.MasterChannelScope = Array.Empty&lt;int&gt;();</code></pre></div>

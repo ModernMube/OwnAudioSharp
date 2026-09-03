@@ -135,6 +135,7 @@ _ReSharper*/
 #Claude code folder
 .vscode/
 .claude/
+.grok/
 .markdowns/
 .rust_plans/
 ClearFolders.bat

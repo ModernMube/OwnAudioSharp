@@ -80,7 +80,7 @@ await OwnaudioNet.ShutdownAsync();</code></pre></div>
     <tr><td><code>InitializeAsync()</code></td><td>Opens the audio device and starts the native engine. One per app. <a href="api-core.html">Engine &amp; Config →</a></td></tr>
     <tr><td><code>new AudioMixer(…)</code></td><td>The bus. Sums sources, holds master volume, effects, meters and the clock. <a href="api-mixer.html">Mixer →</a></td></tr>
     <tr><td><code>new FileSource(…)</code></td><td>One thing that makes sound. Files, microphones, buffers and your own generators are all sources. <a href="api-sources.html">Sources →</a></td></tr>
-    <tr><td><code>AddSource(track)</code></td><td>Puts it on the bus and starts it. Safe to call while other audio is playing.</td></tr>
+    <tr><td><code>AddSource(track)</code></td><td>Puts it on the bus and starts it — the starting half needs the mixer to be running already, which is why <code>mixer.Start()</code> comes first above. Safe to call while other audio is playing.</td></tr>
   </tbody>
 </table></div>
 

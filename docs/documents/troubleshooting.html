@@ -150,14 +150,12 @@ mixer.StartPreparedSources(0.0);
 // Not sure a track made it onto the clock? Ask it.
 Console.WriteLine(sources[0].IsAttachedToClock);   // false = free-running</code></pre></div>
 
-<p>If they are attached and <em>still</em> drift, the engine is telling you it's under pressure:</p>
+<p>If they are attached and <em>still</em> drift, ask the mixer what the callback is costing — a machine that cannot render a block inside its period is the usual culprit:</p>
 
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var diag = fileSource.SyncDiagnostics;
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">if (mixer.SessionLoad is { } load && load.HasOverrun)
+    Console.WriteLine($"late block — {load}");   // PeakLoad >= 1.0</code></pre></div>
 
-if (diag.IsRelaxed)
-    Console.WriteLine($"Tolerances widened {diag.AdaptiveScale:F1}× — the mix thread is struggling");</code></pre></div>
-
-<p>A scale above <code>1.0</code> means the sync engine had to relax its thresholds to keep up. Treat it as the same symptom as <a href="#crackling">crackling</a> and give the mix a larger buffer.</p>
+<p>Treat an overrun as the same symptom as <a href="#crackling">crackling</a> and give the mix a larger buffer. Don't reach for <code>FileSource.SyncDiagnostics</code> here: in 4.x it only echoes the configured thresholds back, its <code>AdaptiveScale</code> is hardwired to <code>1.0</code> and <code>IsRelaxed</code> is never true. See <a href="api-mixer.html#session-load">Callback load</a>.</p>
 
 <!-- ───────────────────────────────────────────────────────────────────── -->
 <h2 id="file-wont-load">A file won't load</h2>

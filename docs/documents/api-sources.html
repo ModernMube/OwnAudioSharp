@@ -292,11 +292,11 @@ trackFx.RemoveEffect(effect);   // returns bool
 trackFx.ClearEffects();
 int count           = trackFx.EffectCount;
 IEffectProcessor[] fx = trackFx.GetEffects();</code></pre></div>
-<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>If you add effects to a source that is already in the mixer, remove the raw source and add the <code>SourceWithEffects</code> wrapper: <code>mixer.RemoveSource(source.Id); mixer.AddSource(trackFx);</code></p></div>
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>If you add effects to a source that is already in the mixer, remove the raw source and add the <code>SourceWithEffects</code> wrapper: <code>mixer.RemoveSource(source.Id); mixer.AddSource(trackFx);</code> — and copy the patch over with it (<code>trackFx.OutputRoute = source.OutputRoute;</code>, same for <code>OutputChannelMapping</code>). The wrapper is a different source as far as the mixer is concerned, so without that the track falls back to the identity route on channels 1/2.</p></div>
 
 <!-- Channel Routing -->
 <h2 id="channel-routing">Channel Routing</h2>
-<p>Route individual sources onto specific channels of a multi-channel output. Routing is done entirely with the per-source <code>OutputChannelMapping</code>: it places each source onto the channels of the <strong>mixer bus</strong>, and the bus's <code>Config.Channels</code> channels map straight through to the audio interface in order (bus channel 0 → physical 0, 1 → 1, …).</p>
+<p>Route individual sources onto specific channels of a multi-channel output. There are two per-source forms — <code>OutputChannelMapping</code>, below, and the destination-indexed <a href="#output-route"><code>OutputRoute</code></a> that can fan one channel out to several outputs. Both place the source onto the channels of the <strong>mixer bus</strong>, whose width is <code>AudioConfig.EffectiveOutputChannels</code> (that is <code>OutputChannels</code> when you set it, otherwise <code>Channels</code>), and the bus channels reach the interface in order: bus 0 → physical 0, 1 → 1, and so on.</p>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Open a 4-channel output — the 4 bus channels drive physical channels 0–3 in order
 var config = new AudioConfig
 {

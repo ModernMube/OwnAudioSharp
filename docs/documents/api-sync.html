@@ -34,7 +34,9 @@
 <p>Start two files at "the same time" and they will separate — different decoders, different buffer boundaries, different rounding. Over a few minutes it becomes an audible flam. The master clock is the cure: one shared timeline that every attached source is continuously nudged back onto.</p>
 
 <h2 id="masterclock">MasterClock</h2>
-<p>Every <code>AudioMixer</code> owns one, and it is the single answer to "where are we". It advances by itself as the mixer processes frames — you read it for your playhead, and seek it to move everything at once.</p>
+<p>Every <code>AudioMixer</code> owns one, and it is the single answer to "where are we". You read it for your playhead, and seek it to move everything at once.</p>
+
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p><strong>Playing file tracks are what move it.</strong> The mixer's control tick takes the furthest-along <code>FileSource</code> whose managed state is <code>Playing</code> and puts the clock there. A source that was registered but never started does not count — and a mixer carrying only <code>StreamingSource</code> or <code>InputSource</code> tracks (a click-only session, a live monitor) has no file track to read, so its clock sits wherever you last seeked it. Drive your own timeline in that case.</p></div>
 
 <h3>Properties</h3>
 <div class="table-wrap"><table class="prop-table">
@@ -44,7 +46,7 @@
     <tr><td><code>CurrentSamplePosition</code></td><td><code>long</code></td><td>Current position in samples (lock-free read).</td></tr>
     <tr><td><code>SampleRate</code></td><td><code>int</code></td><td>Sample rate in Hz.</td></tr>
     <tr><td><code>Channels</code></td><td><code>int</code></td><td>Channel count.</td></tr>
-    <tr><td><code>Mode</code></td><td><code>ClockMode</code></td><td>Rendering mode: <code>Realtime</code>, <code>Offline</code>, <code>NetworkServer</code>, <code>NetworkClient</code>.</td></tr>
+    <tr><td><code>Mode</code></td><td><code>ClockMode</code></td><td><code>Realtime</code>, <code>Offline</code>, <code>NetworkServer</code>, <code>NetworkClient</code>. The network helpers set it; <code>Offline</code> is inert — see <a href="#offline-mode">below</a>.</td></tr>
     <tr><td><code>IsNetworkControlled</code></td><td><code>bool</code></td><td>True when driven by a remote network server.</td></tr>
   </tbody>
 </table></div>
@@ -54,7 +56,8 @@
 mixer.MasterClock.SeekTo(double timestamp);   // position in seconds
 mixer.MasterClock.Reset();                    // seek to 0.0
 
-// Advance manually (Offline mode only)
+// Advance manually. Nothing inside the library calls this — it is for a clock
+// you own and drive yourself, outside a mixer.
 mixer.MasterClock.Advance(int frameCount);
 
 // Convert between units
@@ -135,54 +138,32 @@ private void OnPositionTimer()
 }</code></pre></div>
 
 <h2 id="drift-zones">Drift correction, in three zones</h2>
-<p>On every buffer, an attached source's position is compared to the clock. What happens next depends on how far off it is — and all of it is automatic.</p>
+<p>Local playback does not need drift correction any more. Since 4.0 every track is rendered by the same native session inside one device callback, off one sample counter — they cannot separate, so there is nothing to pull back. What the three zones govern is the <strong>network-controlled</strong> clock: a client following a remote server has a timeline that is not its own, and that is where a source's position gets compared to the clock and nudged.</p>
 <div class="table-wrap"><table>
   <thead><tr><th>Zone</th><th>Drift Range</th><th>Action</th></tr></thead>
   <tbody>
-    <tr><td><strong>Green</strong></td><td>&lt; <code>SyncTolerance</code> (5ms default)</td><td>No correction — within acceptable range.</td></tr>
-    <tr><td><strong>Yellow</strong></td><td><code>SyncTolerance</code> … <code>SoftSyncTolerance</code> (5–25ms)</td><td>Soft sync: gradual tempo adjustment up to ±2%.</td></tr>
-    <tr><td><strong>Red</strong></td><td>&gt; <code>SoftSyncTolerance</code> (25ms)</td><td>Hard sync: skip/fill buffer to realign immediately.</td></tr>
+    <tr><td><strong>Green</strong></td><td>&lt; <code>SyncTolerance</code> (5 ms default)</td><td>No correction — tempo goes back to the track's own.</td></tr>
+    <tr><td><strong>Yellow</strong></td><td><code>SyncTolerance</code> … <code>SoftSyncTolerance</code> (5–25 ms)</td><td>Soft sync: tempo nudge, scaled with the drift, up to <code>SoftSyncMaxTempoAdjustment</code> (±2%).</td></tr>
+    <tr><td><strong>Red</strong></td><td>&gt; <code>SoftSyncTolerance</code> (25 ms)</td><td>Hard sync: seek the track to the clock position, converted to content time by its tempo.</td></tr>
   </tbody>
 </table></div>
-<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>Red Zone corrections are handled inside the native chain and are not surfaced as an event. To see how hard the sync engine is working, read <code>FileSource.SyncDiagnostics</code>.</p></div>
+<div class="callout callout-info"><div class="callout-icon">ℹ️</div><p>All three thresholds are per-source and settable: <code>FileSource.SyncTolerance</code>, <code>SoftSyncTolerance</code> and <code>SoftSyncMaxTempoAdjustment</code>. The correction runs on the mixer's control tick and is not surfaced as an event.</p></div>
 
-<h2 id="adaptive-tolerance">Adaptive Tolerance</h2>
-<p>The sync engine monitors red-zone hit frequency and automatically widens the tolerance thresholds on hardware that cannot sustain the strict defaults. No configuration is required — the system self-tunes at runtime.</p>
-<div class="table-wrap"><table>
-  <thead><tr><th>AdaptiveScale</th><th>Green Zone</th><th>Yellow Zone</th><th>Meaning</th></tr></thead>
-  <tbody>
-    <tr><td><code>1.0</code></td><td>5 ms</td><td>25 ms</td><td>Optimal — strict defaults active.</td></tr>
-    <tr><td><code>2.0</code></td><td>10 ms</td><td>50 ms</td><td>Moderate load — tolerances doubled.</td></tr>
-    <tr><td><code>4.0</code></td><td>20 ms</td><td>100 ms</td><td>High load — fully relaxed (original values).</td></tr>
-  </tbody>
-</table></div>
-<p>The scale increases by <code>0.5</code> steps when ≥ 5 red-zone hits occur within a 3-second window, and decreases by <code>0.5</code> steps after 8 consecutive seconds in the green zone.</p>
-<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>A scale above <code>1.0</code> means the engine is compensating for processing pressure. Use <code>SyncDiagnostics</code> to detect this condition — it may indicate a bug or performance issue in a custom effect or processing pipeline.</p></div>
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">SyncDiagnosticsSnapshot diag = fileSource.SyncDiagnostics;
-
-if (diag.IsRelaxed)
-{
-    Console.WriteLine($"Adaptive tolerance active — Scale: {diag.AdaptiveScale:F1}x");
-    Console.WriteLine($"Green zone: {diag.EffectiveSyncToleranceMs:F1} ms (baseline: 5 ms)");
-    Console.WriteLine($"Yellow zone: {diag.EffectiveSoftSyncToleranceMs:F1} ms (baseline: 25 ms)");
-    Console.WriteLine($"Red zone hits in window: {diag.RedZoneHitsInWindow}");
-}</code></pre></div>
-<p><code>SyncDiagnosticsSnapshot</code> is a <code>readonly struct</code> — zero heap allocation, safe to call from any thread.</p>
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p><code>FileSource.SyncDiagnostics</code> still returns a <code>SyncDiagnosticsSnapshot</code>, but in 4.x it only reports the thresholds back: <code>AdaptiveScale</code> is always <code>1.0</code>, <code>RedZoneHitsInWindow</code> always <code>0</code>, so <code>IsRelaxed</code> is never true. There is no adaptive tolerance machinery behind it any more — don't build a load indicator on it. For "is the machine keeping up", read <a href="api-mixer.html#session-load"><code>mixer.SessionLoad</code></a> instead.</p></div>
 
 <h2 id="offline-mode">Offline rendering</h2>
-<p>Realtime mode drops audio it can't produce in time — right for playback, wrong for a bounce. Offline mode makes the mix thread wait for every source, so the file comes out identical no matter how busy the machine is.</p>
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">mixer.RenderingMode = ClockMode.Offline;
-mixer.StartRecording("render.wav");
-mixer.Start();
-// In Offline mode the mix thread blocks until all sources provide data
-// — no dropouts, deterministic output
-mixer.Stop();
-mixer.StopRecording();</code></pre></div>
+<p>There isn't any — not since 4.0, and this is the section people arrive at expecting one.</p>
+<p><code>ClockMode.Offline</code> is still in the enum, but nothing reads it: the managed mix thread it used to steer is gone, and the rust session always renders against the device clock. Setting <code>mixer.RenderingMode = ClockMode.Offline</code> compiles, changes no behaviour, and does not make a bounce faster or more deterministic.</p>
+<p>What you actually have is two options:</p>
+<ul>
+  <li><strong>The whole mix</strong> — <a href="api-mixer.html#recording"><code>mixer.StartRecording</code></a>, which captures the master output as it plays. Real time: a four-minute song takes four minutes, master chain printed in.</li>
+  <li><strong>One source, faster than real time</strong> — pull it yourself into a <a href="api-mixer.html#wavefilewriter"><code>WaveFileWriter</code></a>. No mixer, no device, so it runs as fast as the disk allows — but also without the master chain.</li>
+</ul>
 
 <h2 id="next">Next</h2>
 <div class="card-grid">
   <a href="api-network.html" class="card"><div class="card-icon">🌐</div><div class="card-title">6 · Network Sync</div><div class="card-desc">The same timeline, across several machines.</div></a>
-  <a href="recipes.html#render" class="card"><div class="card-icon">🍳</div><div class="card-title">Render to WAV</div><div class="card-desc">A complete offline bounce.</div></a>
+  <a href="recipes.html#render" class="card"><div class="card-icon">🍳</div><div class="card-title">Render to WAV</div><div class="card-desc">A complete bounce, and the faster single-source route.</div></a>
   <a href="troubleshooting.html#drift" class="card"><div class="card-icon">🩺</div><div class="card-title">Still drifting?</div><div class="card-desc">What adaptive tolerance is telling you.</div></a>
 </div>
 

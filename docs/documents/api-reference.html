@@ -161,10 +161,11 @@ AudioState.EndOfStream  // Reached end (Loop = false)
 AudioState.Error        // Fatal error in source</code></pre></div>
 
 <h3>ClockMode</h3>
-<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">ClockMode.Realtime       // Non-blocking — dropouts produce silence (live playback)
-ClockMode.Offline        // Blocking — waits for data (deterministic file rendering)
+<div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">ClockMode.Realtime       // Live playback — the default, and what local playback always runs
+ClockMode.Offline        // Inert since 4.0: nothing reads it, it does not give you a faster bounce
 ClockMode.NetworkServer  // Broadcasts clock to LAN clients
 ClockMode.NetworkClient  // Follows a remote server clock</code></pre></div>
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p>Only the two network values change anything, and the <a href="api-network.html">network sync helpers</a> set those for you. See <a href="api-sync.html#offline-mode">Offline rendering</a> for what to do instead of <code>Offline</code>.</p></div>
 
 <h3>EngineStatus</h3>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">EngineStatus.Idle               // Initialized, not started
