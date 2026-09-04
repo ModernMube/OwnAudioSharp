@@ -186,6 +186,12 @@ namespace OwnaudioNET.Effects
         public float CurrentGain => _native.GetParam(NativeEffectEngine.MeterCurrentGain) ?? _currentGain;
 
         /// <summary>
+        /// The gain the rider starts from and comes back to on Reset. Internal: it is a
+        /// constructor argument, not a property, and the api baseline stays put.
+        /// </summary>
+        internal float InitialGain => _initialGain;
+
+        /// <summary>
         /// Builds the effect with hand picked values. The noise threshold takes dB, but a
         /// 0-1 value is accepted too and read as linear, for older callers.
         /// </summary>

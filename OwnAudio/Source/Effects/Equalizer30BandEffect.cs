@@ -239,6 +239,12 @@ namespace OwnaudioNET.Effects
         }
 
         /// <summary>
+        /// Q of one band. Internal: the shape reaches the engine through the mirror,
+        /// the public way in is SetBandGain, and the api baseline stays put.
+        /// </summary>
+        internal float BandQAt(int band) => band < 0 || band >= BANDS ? BandQ : _qFactors[band];
+
+        /// <summary>
         /// Copy of all 30 gains.
         /// </summary>
         public float[] GetAllGains()

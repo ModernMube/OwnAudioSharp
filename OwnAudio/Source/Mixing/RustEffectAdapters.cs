@@ -136,7 +136,12 @@ internal static class RustEffectAdapters
     {
         var q = (ME.Equalizer30BandEffect)e;
         for (int i = 0; i < 30; i++)
+        {
             sink((uint)(2 + i), q[i]);
+            //SetBandGain takes a Q and a centre too, and Matchering varies both
+            sink((uint)(32 + i), q.BandQAt(i));
+            sink((uint)(62 + i), q.GetBandFrequency(i));
+        }
     }
 
     private static void _mirrorCompressor(IEffectProcessor e, ParamSink sink)
@@ -246,6 +251,7 @@ internal static class RustEffectAdapters
         sink(7, d.MaxGainReductionDb);
         sink(8, d.RmsWindowSeconds);
         sink(9, d.MaxGainChangePerSecondDb);
+        sink(10, d.InitialGain);
     }
 
     /// <summary>
