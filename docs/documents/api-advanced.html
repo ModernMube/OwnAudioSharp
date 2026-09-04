@@ -250,7 +250,7 @@ var eq = new Equalizer30BandEffect(sampleRate: 48000f);
 for (int band = 0; band &lt; 30; band++)
     eq.SetBandGain(band, eq.GetBandFrequency(band), profile.QFactors[band], profile.BandGainsDb[band]);
 
-compressor.Threshold = CompressorEffect.DbToLinear(profile.CompThresholdDb);
+compressor.Threshold = profile.CompThresholdDb;   // the property is dB
 compressor.Ratio     = profile.CompRatio;
 dynamicAmp.TargetRmsLevelDb = profile.TargetLoudness;</code></pre></div>
 
@@ -260,7 +260,7 @@ dynamicAmp.TargetRmsLevelDb = profile.TargetLoudness;</code></pre></div>
     <tr><td><code>WantedCurveDb[30]</code></td><td>The curve we want to hear, dB. This is the one worth drawing.</td></tr>
     <tr><td><code>BandGainsDb[30]</code></td><td>What the filter bank has to be <em>set to</em> for that curve to come out of it. A 1/3-octave bell bleeds into its neighbours, so setting each band to its wanted value overshoots by 60–120%; these gains come from solving the bank's response matrix.</td></tr>
     <tr><td><code>QFactors[30]</code></td><td>The Q the solution assumed per band.</td></tr>
-    <tr><td><code>CompThresholdDb</code>, <code>CompRatio</code></td><td>Compressor settings. The threshold is in dB — <code>CompressorEffect</code> wants it linear, so run it through <code>CompressorEffect.DbToLinear</code>.</td></tr>
+    <tr><td><code>CompThresholdDb</code>, <code>CompRatio</code></td><td>Compressor settings. The threshold is in dB, which is what <code>CompressorEffect.Threshold</code> takes — only the constructor argument is linear, and that is what <code>CompressorEffect.DbToLinear</code> is for.</td></tr>
     <tr><td><code>TargetLoudness</code>, <code>MaxGain</code></td><td>AGC target and gain ceiling for <code>DynamicAmpEffect</code>.</td></tr>
     <tr><td><code>SourceLoudness</code>, <code>SourceCrestDb</code>, <code>TargetCrestDb</code></td><td>Measured values, for a status readout.</td></tr>
     <tr><td><code>CutOnlyShiftDb</code></td><td>How far the curve got pushed down; 0 when <code>cutOnly</code> was off.</td></tr>

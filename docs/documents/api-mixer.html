@@ -36,7 +36,7 @@
 <p>One mixer is enough for almost every application.</p>
 
 <h2 id="constructor">Creating one</h2>
-<div class="code-block"><div class="code-header"><span>C# — Standard (up to ~8 sources, no VST effects)</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Direct path: mix thread writes straight to the platform audio engine
+<div class="code-block"><div class="code-header"><span>C# — Standard</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">// Wired straight at the engine: the rust session renders, a control tick mirrors state
 var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine, bufferSizeInFrames: 512);</code></pre></div>
 <div class="table-wrap"><table class="prop-table">
   <thead><tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
@@ -75,7 +75,7 @@ mixer.Start();</code></pre></div>
   <tbody>
     <tr><td><code>MixerId</code></td><td><code>Guid</code></td><td>Unique identifier.</td></tr>
     <tr><td><code>Config</code></td><td><code>AudioConfig</code></td><td>Audio configuration in use.</td></tr>
-    <tr><td><code>IsRunning</code></td><td><code>bool</code></td><td>Whether the mix thread is active.</td></tr>
+    <tr><td><code>IsRunning</code></td><td><code>bool</code></td><td>True between a successful <code>Start</code> and the next <code>Stop</code>/<code>Dispose</code>.</td></tr>
     <tr><td><code>SourceCount</code></td><td><code>int</code></td><td>Number of active sources.</td></tr>
     <tr><td><code>MasterVolume</code></td><td><code>float</code></td><td>Master output volume (0.0 – 1.0). Settable at any time.</td></tr>
     <tr><td><code>MasterPan</code></td><td><code>float</code></td><td>Master stereo pan (-1.0 left … 0.0 center … +1.0 right). Settable at any time.</td></tr>
@@ -91,7 +91,7 @@ mixer.Start();</code></pre></div>
 
 <h2 id="lifecycle">Lifecycle</h2>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">mixer.Start();                      // begin audio processing
-mixer.Pause();                      // freeze mix thread
+mixer.Pause();                      // hold the mix where it is
 mixer.Stop();                       // stop every source, but they stay registered
 mixer.Seek(double positionInSec);   // move the master clock and every file track with it
 mixer.Dispose();                    // release all resources</code></pre></div>

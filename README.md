@@ -282,7 +282,7 @@ Getting to a truly dependable real-time audio API took four generations — each
 | **3.0** | Optimized native engines (MiniAudio + PortAudio + FFmpeg); mixing, effects and sync in managed code | Fast — but the managed processing stage could still be stalled by the *host* application under load. |
 | **4.0** | The **entire** audio chain runs in native Rust; the whole API is wrapped in a thin managed layer | A C# audio API whose real-time path is completely independent of the host application — professional, industry-standard behavior for real-world .NET audio apps. |
 
-**4.0 is the payoff:** no matter what the surrounding C# code does, the audio never stutters — because not a single sample is processed in managed code.
+**4.0 is the payoff:** no matter what the surrounding C# code does, the audio never stutters — because not a single sample on the audio path is processed in managed code. Offline analysis (waveform, chord and note detection, Matchering's measurement pass) still runs in C#, well away from the real-time thread.
 
 ---
 

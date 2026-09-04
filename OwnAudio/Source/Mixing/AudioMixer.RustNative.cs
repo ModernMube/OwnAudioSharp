@@ -1070,7 +1070,7 @@ public sealed partial class AudioMixer
 
     /// <summary>
     /// Routes a managed master effect onto the native master bus: a native twin is built and
-    /// the managed params get mirrored onto it, the managed DSP itself never runs.
+    /// the managed params get mirrored onto it. The effect's own Process is never called here.
     /// AddMasterEffect has already rejected anything without an adapter by this point.
     /// </summary>
     /// <param name="effect"></param>

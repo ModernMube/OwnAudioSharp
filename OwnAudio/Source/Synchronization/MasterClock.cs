@@ -47,7 +47,7 @@ namespace OwnaudioNET.Synchronization
             _mode = mode;
         }
 
-        // MixThread calls this after each buffer; lock-free bump + timestamp refresh
+        // the control tick calls this once the rust session has rendered; lock-free bump + timestamp refresh
         public void Advance(int frameCount)
         {
             ThrowIfDisposed();

@@ -387,22 +387,28 @@ public enum EffectType
 |---|---|
 | **`ReverbEffect`** | `RoomSize`, `Damping`, `Width`, `WetLevel`, `DryLevel` |
 | **`EqualizerEffect`** | `Band0`…`Band9` (gains in dB, ±12 dB max) |
-| **`Equalizer30Effect`** | `Band0`…`Band29` (gains in dB, ±12 dB max) |
-| **`CompressorEffect`** | `ThresholdDb`, `Ratio`, `AttackMs`, `ReleaseMs`, `MakeupGainDb` |
-| **`LimiterEffect`** | `ThresholdDb`, `ReleaseMs` |
-| **`DelayEffect`** | `DelayTimeMs`, `Feedback`, `PingPong` |
-| **`ChorusEffect`** | `RateHz`, `Depth`, `Feedback` |
-| **`DistortionEffect`** | `Drive`, `Gain` |
-| **`OverdriveEffect`** | `Drive`, `Tone` |
-| **`FlangerEffect`** | `RateHz`, `Depth`, `Feedback` |
-| **`PhaserEffect`** | `RateHz`, `Depth`, `Feedback` |
-| **`RotaryEffect`** | `SpeedHz` (Leslie cabinet simulation) |
-| **`AutoGainEffect`** | `TargetLevelDb`, `Speed` |
-| **`EnhancerEffect`** | `FrequencyHz`, `Drive` |
-| **`GateEffect`** | `ThresholdDb`, `AttackMs`, `ReleaseMs` |
+| **`Equalizer30Effect`** | `Band0`…`Band29` (gains in dB, ±18 dB max) |
+| **`CompressorEffect`** | `ThresholdDb`, `Ratio`, `AttackMs`, `ReleaseMs`, `MakeupDb`. The native knee (param 7) has no property here, so it stays at its 6 dB default. |
+| **`LimiterEffect`** | `ThresholdDb`, `CeilingDb`, `ReleaseMs`, `LookaheadMs` |
+| **`DelayEffect`** | `TimeMs`, `Feedback`, `Damping`, `PingPong` |
+| **`ChorusEffect`** | `Rate`, `Depth`, `Voices` |
+| **`DistortionEffect`** | `Drive`, `OutputGain` |
+| **`OverdriveEffect`** | `Gain`, `Tone`, `OutputLevel` |
+| **`FlangerEffect`** | `Rate`, `Depth`, `Feedback` |
+| **`PhaserEffect`** | `Rate`, `Depth`, `Feedback`, `Stages` |
+| **`RotaryEffect`** | `HornSpeed`, `RotorSpeed`, `Intensity`, `IsFast` (Leslie cabinet simulation) |
+| **`AutoGainEffect`** | `TargetLevel`, `AttackCoefficient`, `ReleaseCoefficient`, `MaxGain`, `MinGain`, `GateThreshold` |
+| **`EnhancerEffect`** | `Gain`, `CutoffFrequency` |
+| **`GateEffect`** | `ThresholdDb`, `AttackMs`, `ReleaseMs`, `HoldMs` |
 | **`PitchShiftEffect`** | `Semitones` |
-| **`DynamicAmpEffect`** | `Attack`, `Sustain` (transient designer) |
+| **`DynamicAmpEffect`** | `TargetRmsDb`, `AttackTime`, `ReleaseTime`, `NoiseGateDb`, `MaxGain`, `MaxGainReductionDb`, `RmsWindowSeconds`, `MaxGainChangeDbPerSecond` |
 | **`OwnReverbEffect`** | `PreDelay`, `Decay`, `Size`, `Damping`, `LowDamping`, `Diffusion`, `ModRate`, `ModDepth`, `Width`, `EarlyLevel`, `LateLevel`, `DuckDepth`, `DuckAttack`, `DuckRelease`, `Freeze` (16-line FDN reverb) |
+
+Every one of them also carries `IsEnabled`, and all but the compressor, limiter and
+auto-gain carry `Mix`.
+The names here are not the ones on `OwnaudioNET.Effects` — that surface calls the same
+native parameters `Enabled`, `Time`, `Repeat`, `Threshold` and so on. Two spellings, one
+engine; neither list grows an alias for the other.
 
 ### Effects Usage Example
 
@@ -419,7 +425,7 @@ comp.ThresholdDb  = -12f;
 comp.Ratio        = 3f;
 comp.AttackMs     = 10f;
 comp.ReleaseMs    = 200f;
-comp.MakeupGainDb = 2f;
+comp.MakeupDb     = 2f;
 
 var limiter = (LimiterEffect)track.Effects.Add(EffectType.Limiter, 48_000f);
 limiter.ThresholdDb = -0.5f;

@@ -65,7 +65,7 @@ Console.WriteLine(mixer.LeftPeak);              // 0 while playing → nothing r
 
 <!-- ───────────────────────────────────────────────────────────────────── -->
 <h2 id="crackling">Crackling, clicks or stuttering</h2>
-<p><strong>Why:</strong> the engine asked for the next block of audio and it wasn't ready. The mix thread is not keeping up with the buffer size you gave it.</p>
+<p><strong>Why:</strong> the engine asked for the next block of audio and it wasn't ready. The render callback is not keeping up with the buffer size you gave it.</p>
 
 <p>Fix it in this order — each step costs a little more latency than the last.</p>
 

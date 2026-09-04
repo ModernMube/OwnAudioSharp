@@ -32,7 +32,7 @@
 
 <!-- Architecture -->
 <h2 id="architecture">Architecture (4.0)</h2>
-<p>OwnAudioSharp 4.0 is a thin C# surface over a purpose-built native <strong>Rust</strong> engine. The public API is unchanged from 3.x — the change is entirely underneath it. From the first sample to the last byte, decoding, mixing, effects, resampling, playback and capture all run in native code, so <strong>not a single sample is processed in managed code</strong>. The result is an audio path that is completely unaffected by the .NET runtime.</p>
+<p>OwnAudioSharp 4.0 is a thin C# surface over a purpose-built native <strong>Rust</strong> engine. The public API is unchanged from 3.x — the change is entirely underneath it. From the first sample to the last byte, decoding, mixing, effects, resampling, playback and capture all run in native code, so <strong>not a single sample on the audio path is processed in managed code</strong>. Offline analysis — waveform drawing, chord and note detection, Matchering's measurement pass — still runs in C#, but it never touches the real-time thread. The result is an audio path that is completely unaffected by the .NET runtime.</p>
 
 <div class="code-block"><div class="code-header"><span>Layer stack</span><button class="copy-btn">Copy</button></div><pre><code>Application
   └─ OwnaudioNet / AudioMixer / sources / effects   [your unchanged C# code]

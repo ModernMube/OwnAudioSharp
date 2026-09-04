@@ -139,7 +139,7 @@ MatcheringProfile profile = analyzer.CalculateProfile(mix, reference, 48000);
 for (int band = 0; band < 30; band++)
     eq.SetBandGain(band, Centre(band), profile.QFactors[band], profile.BandGainsDb[band]);
 
-compressor.Threshold = CompressorEffect.DbToLinear(profile.CompThresholdDb);
+compressor.Threshold = profile.CompThresholdDb;   // the property is dB
 compressor.Ratio = profile.CompRatio;
 ```
 
@@ -148,8 +148,10 @@ compressor.Ratio = profile.CompRatio;
 equalizer, because the engine has no per-band Q parameter: that is the only Q that
 ever actually plays. Handing the deconvolution the optimized per-band Qs would solve
 for a filter bank that isn't the one making the sound. Pass `fixedQ: 0` to get the
-per-band Qs anyway (that is what the offline render uses, since it runs the managed
-EQ where the Q does get through).
+per-band Qs anyway — but note that nothing plays them any more: `Process` runs the
+native EQ now, and only the 30 band gains are mirrored across, so the offline render
+hears the same constant Q the mixer does even though it still calls `SetBandGain`
+with its own.
 
 **`cutOnly`** — subtracts the curve's maximum from all 30 bands, so the loudest band
 lands on 0 dB and everything else goes negative. The offline chain buys its headroom
@@ -355,7 +357,7 @@ the base sample's own crest.
 | `smoothingFactor` | `SmoothSpectrum` | Curve smoothness before diffing. |
 | Q clamp (2.5…8.0) | `CalculateOptimalQFactors` | EQ band width limits. |
 | `eqOnlyMode` | `ProcessWithEnhancedPreset`, `GetPresetTargetSpectrum` | Leaves the preset compressor out of the bake; the loudness normalization runs either way. |
-| `fixedQ` | `CalculateProfile` | Q the deconvolution solves against; `NativeBandQ` for the native EQ, `0` for per-band Qs. |
+| `fixedQ` | `CalculateProfile` | Q the deconvolution solves against. `NativeBandQ` is the one the engine actually plays; `0` solves for per-band Qs that no longer reach the DSP. |
 | `cutOnly` | `CalculateProfile` | Cut-only curve for a chain with no gain stage in front. |
 
 ## Requirements & notes

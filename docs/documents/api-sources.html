@@ -280,7 +280,7 @@ var (leftLevel, rightLevel) = mic.GetInputLevels();</code></pre></div>
 var trackFx  = new SourceWithEffects(source);
 
 // Build effect chain
-trackFx.AddEffect(new CompressorEffect { Threshold = 0.7f, Ratio = 4f });
+trackFx.AddEffect(new CompressorEffect { Threshold = -12f, Ratio = 4f });
 trackFx.AddEffect(new ReverbEffect { RoomSize = 0.4f, Mix = 0.2f });
 trackFx.AddEffect(new EqualizerEffect());
 

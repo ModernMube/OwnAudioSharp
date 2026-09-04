@@ -29,7 +29,7 @@ public sealed partial class AudioMixer
             _masterEffects.Add(effect);
         }
 
-        //The managed DSP is inert without a MixThread, so route it onto the native master bus
+        //The mixer never calls Process, so the effect only reaches the bus through its native twin
         AttachMasterEffectToRust(effect);
     }
 

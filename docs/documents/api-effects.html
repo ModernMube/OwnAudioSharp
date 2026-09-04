@@ -81,7 +81,7 @@ reverb.SetPreset(ReverbPreset.LargeHall);</code></pre></div>
 {
     Time     = 375,    // ms (1–5000)
     Repeat   = 0.4f,   // feedback 0.0–1.0
-    Damping  = 0.3f,   // high-freq damping 0.0–1.0
+    Damping  = 0.3f,   // 0.0–1.0, and against the name higher = brighter repeats (0 = silent)
     Mix      = 0.3f,
     PingPong = true    // stereo ping-pong
 };
@@ -105,17 +105,19 @@ eq.SetPreset(EqualizerPreset.Rock);</code></pre></div>
 <p>Professional dynamic range compressor with makeup gain.</p>
 <div class="code-block"><div class="code-header"><span>C#</span><button class="copy-btn">Copy</button></div><pre><code class="language-csharp">var comp = new CompressorEffect
 {
-    Threshold    = 0.7f,   // 0.0–1.0 linear amplitude
+    Threshold    = -12.0f, // dB, -60–0
     Ratio        = 4.0f,   // 1.0–100.0 (N:1)
     AttackTime   = 10f,    // 0.1–1000ms
     ReleaseTime  = 100f,   // 1–2000ms
-    MakeupGain   = 1.2f    // linear amplitude multiplier
+    KneeWidth    = 6.0f,   // dB, 0 = hard knee
+    MakeupGain   = 1.6f    // dB
 };
 comp.SetPreset(CompressorPreset.VocalGentle);</code></pre></div>
 <p><strong>Presets:</strong> <code>Default</code>, <code>VocalGentle</code>, <code>VocalAggressive</code>, <code>Drums</code>, <code>Bass</code>, <code>MasteringLimiter</code>, <code>Vintage</code></p>
+<div class="callout callout-warning"><div class="callout-icon">⚠️</div><p><strong>The constructor and the properties do not use the same units.</strong> <code>Threshold</code> and <code>MakeupGain</code> are dB as properties, but the constructor arguments of the same name are <em>linear</em> — <code>new CompressorEffect(0.5f, makeupGain: 1.2f)</code> is the default −6 dB threshold with +1.6 dB of makeup. Set them through the properties and you never have to think about it.</p></div>
 
 <h2 id="all-effects">The whole list</h2>
-<p>Every one of these is allocation-free and processes in place. The four above have presets and detailed parameters; the rest follow the same pattern.</p>
+<p>Every one of these processes in place, on the native engine, and allocates nothing on the managed side. The four above have presets and detailed parameters; the rest follow the same pattern.</p>
 <div class="table-wrap"><table>
   <thead><tr><th>Class</th><th>Description</th></tr></thead>
   <tbody>
