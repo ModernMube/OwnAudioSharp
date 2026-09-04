@@ -156,4 +156,66 @@ internal static partial class OwnAudioNative
         IntPtr effect);
 
     #endregion
+
+    #region Standalone effect
+
+    /// <summary>
+    /// Mixer-free effect for Process() / Matchering / tests. Handle lands in outEffect.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_standalone_effect_create(
+        uint effectType,
+        float sampleRate,
+        ushort channels,
+        out IntPtr outEffect);
+
+    /// <summary>
+    /// Applies a param right now, no command queue.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_standalone_effect_set_param(
+        IntPtr effect,
+        uint paramId,
+        float value);
+
+    /// <summary>
+    /// Reads a param back.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_standalone_effect_get_param(
+        IntPtr effect,
+        uint paramId,
+        out float outValue);
+
+    /// <summary>
+    /// In-place process, interleaved f32, frameCount frames.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_standalone_effect_process(
+        IntPtr effect,
+        ref float buffer,
+        uint frameCount,
+        ushort channels);
+
+    /// <summary>
+    /// Drops the tail, params stay.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_standalone_effect_reset(IntPtr effect);
+
+    /// <summary>
+    /// Look-ahead latency in frames.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial int ownaudio_v1_standalone_effect_latency(
+        IntPtr effect,
+        out uint outLatency);
+
+    /// <summary>
+    /// Frees the standalone handle. Zero is fine.
+    /// </summary>
+    [LibraryImport(NativeLibraryLoader.LogicalName)]
+    internal static partial void ownaudio_v1_standalone_effect_destroy(IntPtr effect);
+
+    #endregion
 }
