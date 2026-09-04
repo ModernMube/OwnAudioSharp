@@ -38,6 +38,13 @@ pub const PARAM_MAX_GAIN_REDUCTION_DB: u32 = 7;
 pub const PARAM_RMS_WINDOW_SECONDS: u32 = 8;
 /// Param ID 9 — maximum gain change rate in dB/second (≥ 1.0).
 pub const PARAM_MAX_GAIN_CHANGE_DB_S: u32 = 9;
+/// Param ID 10 — the gain the rider starts from, linear (0.1 … 20.0).
+///
+/// Not a setting so much as a seed. Matchering pulls the whole file down to make
+/// room for its EQ boosts and expects the rider to open back up from the inverse
+/// of that; starting at unity instead, the slew limit lets it climb only a few dB
+/// a second and the first seconds come out quiet. `reset` returns here too.
+pub const PARAM_INITIAL_GAIN: u32 = 10;
 
 /// Hysteresis ratio applied to the noise gate open threshold (≈ 3 dB).
 const HYSTERESIS_RATIO: f32 = 1.5;
@@ -68,6 +75,8 @@ pub struct DynamicAmp {
     max_gain_reduction_db: f32,
     rms_window_seconds: f32,
     max_gain_change_db_s: f32,
+    /// Where `current_gain` starts and what `reset` returns to.
+    initial_gain: f32,
     sample_rate: f32,
 
     current_gain: f32,
@@ -95,6 +104,7 @@ impl DynamicAmp {
             max_gain_reduction_db: 12.0,
             rms_window_seconds: 0.5,
             max_gain_change_db_s: 12.0,
+            initial_gain: 1.0,
             sample_rate,
             current_gain: 1.0,
             rms_fast_state: 0.0,
@@ -235,6 +245,12 @@ impl Effect for DynamicAmp {
                 self.max_gain_change_db_s = value.max(1.0);
                 true
             }
+            PARAM_INITIAL_GAIN => {
+                self.initial_gain = value.clamp(0.1, 20.0);
+                self.current_gain = self.initial_gain;
+                self.last_gain_db = linear_to_db(self.initial_gain);
+                true
+            }
             _ => false,
         }
     }
@@ -251,16 +267,17 @@ impl Effect for DynamicAmp {
             PARAM_MAX_GAIN_REDUCTION_DB => Some(self.max_gain_reduction_db),
             PARAM_RMS_WINDOW_SECONDS => Some(self.rms_window_seconds),
             PARAM_MAX_GAIN_CHANGE_DB_S => Some(self.max_gain_change_db_s),
+            PARAM_INITIAL_GAIN => Some(self.initial_gain),
             METER_CURRENT_GAIN => Some(self.current_gain),
             _ => None,
         }
     }
 
     fn reset(&mut self) {
-        self.current_gain = 1.0;
+        self.current_gain = self.initial_gain;
         self.rms_fast_state = 0.0;
         self.rms_slow_state = 0.0;
-        self.last_gain_db = 0.0;
+        self.last_gain_db = linear_to_db(self.initial_gain);
         self.is_above_noise_gate = false;
     }
 
@@ -583,5 +600,50 @@ mod tests {
             "subnormal in slow RMS state: {:e}",
             d.rms_slow_state
         );
+    }
+
+    /// Matchering attenuates the file to make room for its EQ boosts and expects the
+    /// rider to open back up from the inverse. Starting at unity, the slew limit lets
+    /// it climb only a few dB a second, so the head of the master comes out quiet.
+    #[test]
+    fn initial_gain_seeds_the_rider() {
+        let mut d = DynamicAmp::new(48_000.0);
+        d.set_param(PARAM_INITIAL_GAIN, 2.0);
+        assert_eq!(d.get_param(PARAM_INITIAL_GAIN), Some(2.0));
+        assert_eq!(d.get_param(METER_CURRENT_GAIN), Some(2.0));
+
+        // One short block: far too little time to slew 6 dB, so anything near 2x
+        // can only have come from the seed.
+        let mut buf: Vec<f32> = (0..512)
+            .flat_map(|i| {
+                let v = 0.05 * (2.0 * std::f32::consts::PI * 1_000.0 * i as f32 / 48_000.0).sin();
+                [v, v]
+            })
+            .collect();
+        let dry = buf.clone();
+        d.process(&mut buf, 2);
+
+        let rms = |x: &[f32]| -> f64 {
+            (x.iter().map(|v| (*v as f64) * (*v as f64)).sum::<f64>() / x.len() as f64).sqrt()
+        };
+        let lift = 20.0 * (rms(&buf) / rms(&dry)).log10();
+        assert!(
+            lift > 3.0,
+            "the first block has to come out near the seeded 2x (+6 dB), got {lift:.2} dB"
+        );
+    }
+
+    /// And reset returns to the seed, not to unity - otherwise a second render pass
+    /// starts from the wrong place.
+    #[test]
+    fn reset_returns_to_the_seeded_gain() {
+        let mut d = DynamicAmp::new(48_000.0);
+        d.set_param(PARAM_INITIAL_GAIN, 1.5);
+
+        let mut buf = vec![0.3f32; 1_024];
+        d.process(&mut buf, 2);
+        d.reset();
+
+        assert_eq!(d.get_param(METER_CURRENT_GAIN), Some(1.5));
     }
 }

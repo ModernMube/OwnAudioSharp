@@ -33,6 +33,23 @@ pub const PARAM_BAND_0: u32 = 2;
 /// Last band gain parameter ID (band index 29, 16 kHz).
 pub const PARAM_BAND_29: u32 = 31;
 
+/// First band Q parameter ID; bands occupy `PARAM_BAND_Q_0 ..= PARAM_BAND_Q_0 + 29`.
+///
+/// Defaults to the constant-Q value below, which is what a plain 1/3-octave EQ
+/// wants. Matchering deconvolves its band gains against a Q it picks per band, so
+/// feeding those gains into a fixed-Q filterbank draws a different curve.
+pub const PARAM_BAND_Q_0: u32 = 32;
+/// Last band Q parameter ID.
+pub const PARAM_BAND_Q_29: u32 = 61;
+
+/// First band centre-frequency parameter ID (Hz); occupies 30 ids like the others.
+///
+/// Defaults to the ISO centre for that band. Only worth touching if you want the
+/// band somewhere other than its nominal centre.
+pub const PARAM_BAND_FREQ_0: u32 = 62;
+/// Last band centre-frequency parameter ID.
+pub const PARAM_BAND_FREQ_29: u32 = 91;
+
 const BANDS: usize = 30;
 
 /// Per-band gain clamp, matching the reference C# (extended ±18 dB range for
@@ -75,12 +92,24 @@ const STANDARD_FREQUENCIES: [f32; BANDS] = [
 /// what the sliders read.
 const BAND_Q: f32 = 4.318_474;
 
+/// Q clamp, same range the managed `Equalizer30BandEffect.SetBandGain` accepts.
+const Q_MIN: f32 = 0.1;
+const Q_MAX: f32 = 10.0;
+
+/// Centre-frequency clamp, ditto.
+const FREQ_MIN: f32 = 20.0;
+const FREQ_MAX: f32 = 20_000.0;
+
 /// 30-band 1/3-octave parametric equalizer.
 pub struct Equalizer30 {
     enabled: bool,
     mix: f32,
     sample_rate: f32,
     gains_db: [f32; BANDS],
+    // Per-band bell shape. Both default to the 1/3-octave values, so an EQ nobody
+    // reshapes behaves exactly as it did before these two parameters existed.
+    q: [f32; BANDS],
+    freqs: [f32; BANDS],
 
     // Normalized peaking-biquad coefficients (structure-of-arrays, one per band).
     b0: [f32; BANDS],
@@ -121,6 +150,8 @@ impl Equalizer30 {
             mix: 1.0,
             sample_rate,
             gains_db: [0.0; BANDS],
+            q: [BAND_Q; BANDS],
+            freqs: STANDARD_FREQUENCIES,
             b0: [1.0; BANDS],
             b1: [0.0; BANDS],
             b2: [0.0; BANDS],
@@ -161,10 +192,10 @@ impl Equalizer30 {
     }
 
     /// Recomputes the normalized RBJ peaking-biquad coefficients for one band
-    /// from its fixed centre frequency / Q and its current gain.
+    /// from its centre frequency / Q and its current gain.
     fn update_filter(&mut self, band: usize) {
-        let freq = STANDARD_FREQUENCIES[band];
-        let q = BAND_Q;
+        let freq = self.freqs[band];
+        let q = self.q[band];
         let gain = self.gains_db[band];
 
         let omega = 2.0 * std::f32::consts::PI * freq / self.sample_rate;
@@ -292,6 +323,26 @@ impl Effect for Equalizer30 {
                 self.gain_ramps[idx].set(value.clamp(GAIN_MIN_DB, GAIN_MAX_DB));
                 true
             }
+            // Shape, unlike gain, is not smoothed: it is set up before the render,
+            // not dragged while one runs.
+            PARAM_BAND_Q_0..=PARAM_BAND_Q_29 => {
+                let idx = (param_id - PARAM_BAND_Q_0) as usize;
+                let q = value.clamp(Q_MIN, Q_MAX);
+                if (self.q[idx] - q).abs() > f32::EPSILON {
+                    self.q[idx] = q;
+                    self.update_filter(idx);
+                }
+                true
+            }
+            PARAM_BAND_FREQ_0..=PARAM_BAND_FREQ_29 => {
+                let idx = (param_id - PARAM_BAND_FREQ_0) as usize;
+                let freq = value.clamp(FREQ_MIN, FREQ_MAX);
+                if (self.freqs[idx] - freq).abs() > f32::EPSILON {
+                    self.freqs[idx] = freq;
+                    self.update_filter(idx);
+                }
+                true
+            }
             _ => false,
         }
     }
@@ -304,6 +355,10 @@ impl Effect for Equalizer30 {
                 // Report the value the user set (the ramp target), not the point
                 // the glide currently sits at.
                 Some(self.gain_ramps[(param_id - PARAM_BAND_0) as usize].target())
+            }
+            PARAM_BAND_Q_0..=PARAM_BAND_Q_29 => Some(self.q[(param_id - PARAM_BAND_Q_0) as usize]),
+            PARAM_BAND_FREQ_0..=PARAM_BAND_FREQ_29 => {
+                Some(self.freqs[(param_id - PARAM_BAND_FREQ_0) as usize])
             }
             _ => None,
         }
@@ -482,8 +537,8 @@ mod tests {
         let mut eq = Equalizer30::new(48_000.0);
         assert!(!eq.set_param(999, 1.0));
         assert_eq!(eq.get_param(999), None);
-        // One past the last band must not be accepted.
-        assert!(!eq.set_param(PARAM_BAND_29 + 1, 1.0));
+        // One past the last shape parameter must not be accepted.
+        assert!(!eq.set_param(PARAM_BAND_FREQ_29 + 1, 1.0));
     }
 
     #[test]
@@ -712,5 +767,91 @@ mod tests {
                 "profile {profile:?}: RMS error {err:.1} dB exceeds -60 dB"
             );
         }
+    }
+
+    /// A narrower bell has to leave its neighbours alone. Matchering deconvolves its
+    /// band gains against a Q it picks per band, so a fixed-Q filterbank draws a
+    /// different curve out of the same numbers.
+    #[test]
+    fn band_q_changes_the_skirt_of_the_bell() {
+        let tone = |freq: f32, frames: usize| -> Vec<f32> {
+            (0..frames)
+                .flat_map(|i| {
+                    let v = 0.25 * (2.0 * std::f32::consts::PI * freq * i as f32 / 48_000.0).sin();
+                    [v, v]
+                })
+                .collect::<Vec<f32>>()
+        };
+
+        // Band 17 is 1 kHz; 1.25 kHz is the neighbouring ISO centre.
+        let neighbour = tone(1_250.0, 4_800);
+
+        let boost_at = |q: f32| -> f64 {
+            let mut eq = Equalizer30::new(48_000.0);
+            eq.set_param(PARAM_BAND_Q_0 + 17, q);
+            eq.set_param(PARAM_BAND_0 + 17, 12.0);
+            let mut buf = neighbour.clone();
+            eq.process(&mut buf, 2);
+
+            // Compare the settled tail, past the filter's own start-up.
+            let tail = &buf[buf.len() / 2..];
+            let dry = &neighbour[neighbour.len() / 2..];
+            let rms = |x: &[f32]| -> f64 {
+                (x.iter().map(|v| (*v as f64) * (*v as f64)).sum::<f64>() / x.len() as f64).sqrt()
+            };
+            20.0 * (rms(tail) / rms(dry)).log10()
+        };
+
+        let wide = boost_at(1.0);
+        let narrow = boost_at(9.0);
+
+        assert!(
+            wide > narrow + 3.0,
+            "a wide bell must spill onto the neighbour far more than a narrow one \
+             (Q=1 gave {wide:.2} dB, Q=9 gave {narrow:.2} dB)"
+        );
+    }
+
+    /// Both shape parameters default to the 1/3-octave values, so an EQ nobody
+    /// reshapes is bit-identical to one built before they existed.
+    #[test]
+    fn shape_defaults_match_the_fixed_third_octave_values() {
+        let eq = Equalizer30::new(48_000.0);
+        for band in 0..BANDS as u32 {
+            assert_eq!(eq.get_param(PARAM_BAND_Q_0 + band), Some(BAND_Q));
+            assert_eq!(
+                eq.get_param(PARAM_BAND_FREQ_0 + band),
+                Some(STANDARD_FREQUENCIES[band as usize])
+            );
+        }
+    }
+
+    /// Moving a band's centre moves where it bites.
+    #[test]
+    fn band_frequency_moves_the_bell() {
+        let mut eq = Equalizer30::new(48_000.0);
+        eq.set_param(PARAM_BAND_FREQ_0, 5_000.0);
+        assert_eq!(eq.get_param(PARAM_BAND_FREQ_0), Some(5_000.0));
+
+        eq.set_param(PARAM_BAND_0, 12.0);
+
+        let frames = 4_800;
+        let mut buf: Vec<f32> = (0..frames)
+            .flat_map(|i| {
+                let v = 0.25 * (2.0 * std::f32::consts::PI * 5_000.0 * i as f32 / 48_000.0).sin();
+                [v, v]
+            })
+            .collect();
+        let dry = buf.clone();
+        eq.process(&mut buf, 2);
+
+        let rms = |x: &[f32]| -> f64 {
+            (x.iter().map(|v| (*v as f64) * (*v as f64)).sum::<f64>() / x.len() as f64).sqrt()
+        };
+        let lift = 20.0 * (rms(&buf[frames..]) / rms(&dry[frames..])).log10();
+        assert!(
+            lift > 6.0,
+            "band 0 retuned to 5 kHz has to lift a 5 kHz tone, got {lift:.2} dB"
+        );
     }
 }
