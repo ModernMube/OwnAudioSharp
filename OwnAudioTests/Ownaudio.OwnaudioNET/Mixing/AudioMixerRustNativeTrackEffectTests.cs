@@ -5,6 +5,7 @@ using Ownaudio.Audio.Tracks;
 using Ownaudio.Core;
 using OwnaudioNET.Effects;
 using OwnaudioNET.Engine;
+using OwnaudioNET.Interfaces;
 using OwnaudioNET.Mixing;
 using OwnaudioNET.Sources;
 using Xunit;
@@ -89,6 +90,43 @@ public sealed class AudioMixerRustNativeTrackEffectTests : IDisposable
         fileSource.RustTrack!.Effects.Effects.Count.Should().Be(0, "removing it reconciles the native chain back to empty");
     }
 
+    /// <summary>
+    /// An effect with no native twin would be inaudible on the mixer, so AddEffect refuses it —
+    /// and refuses it before the list is touched. The tick runs the same rebuild, so a wrapper
+    /// left carrying one would throw out of the control loop every 15 ms and take the master
+    /// clock down with it.
+    /// </summary>
+    [Fact]
+    public void EffectWithoutNativeTwin_IsRefusedAndLeavesTheTickClean()
+    {
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+
+        var fileSource = new FileSource(_wavPath);
+        var wrapped = new SourceWithEffects(fileSource);
+        mixer.AddSource(wrapped);
+        mixer.ReconcileRustTrackEffectsOnce();
+
+        wrapped.Invoking(w => w.AddEffect(new NoNativeTwinEffect()))
+            .Should().Throw<InvalidOperationException>().WithMessage("*no native twin*");
+
+        wrapped.GetEffects().Should().BeEmpty("the refusal happens before the effect goes on the chain");
+        mixer.Invoking(m => m.ReconcileRustTrackEffectsOnce()).Should().NotThrow("the tick must stay clean");
+    }
+
+    /// <summary>
+    /// Same for the master bus, and the effect must not be left on the managed list either.
+    /// </summary>
+    [Fact]
+    public void MasterEffectWithoutNativeTwin_IsRefusedBeforeItLands()
+    {
+        using var mixer = new AudioMixer(_engine, MixerBufferFrames);
+
+        mixer.Invoking(m => m.AddMasterEffect(new NoNativeTwinEffect()))
+            .Should().Throw<InvalidOperationException>().WithMessage("*no native twin*");
+
+        mixer.GetMasterEffects().Should().BeEmpty("a rejected effect can't stay on the master list");
+    }
+
     private static string WriteTempWav(int channels, int sampleRate, int frames)
     {
         string path = Path.Combine(Path.GetTempPath(), $"ownaudio_trackfx_{Guid.NewGuid():N}.wav");
@@ -119,4 +157,20 @@ public sealed class AudioMixerRustNativeTrackEffectTests : IDisposable
         }
         return path;
     }
+}
+
+/// <summary>
+/// A caller-written effect: valid off a mixer, but the rust chain has nothing to build for it.
+/// </summary>
+internal sealed class NoNativeTwinEffect : IEffectProcessor
+{
+    public Guid Id { get; } = Guid.NewGuid();
+    public string Name => "NoNativeTwin";
+    public bool Enabled { get; set; } = true;
+    public float Mix { get; set; } = 1.0f;
+
+    public void Initialize(AudioConfig config) { }
+    public void Process(Span<float> buffer, int frameCount) { }
+    public void Reset() { }
+    public void Dispose() { }
 }

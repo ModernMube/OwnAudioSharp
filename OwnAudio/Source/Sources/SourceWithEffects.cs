@@ -12,7 +12,8 @@ namespace OwnaudioNET.Sources;
 
 /// <summary>
 /// Decorator that bolts an effect chain onto any IAudioSource. Delegates everything to the inner
-/// source, intercepts ReadSamples to run the fx. Effect list is thread-safe.
+/// source, intercepts ReadSamples to run the fx (built-ins go through their native Process).
+/// On a mixer the rust track chain is the live path and ReadSamples is not the playback bus.
 /// </summary>
 public sealed class SourceWithEffects : IAudioSource, IMasterClockSource, ISynchronizable
 {
@@ -61,6 +62,18 @@ public sealed class SourceWithEffects : IAudioSource, IMasterClockSource, ISynch
     /// member here flips the type's nullable context and churns the frozen api baseline.
     /// </summary>
     internal static readonly Action NoNativeChain = static () => { };
+
+    /// <summary>
+    /// Set by the mixer next to the reconciler: throws for an effect the native chain can't host.
+    /// It runs before the effect goes on the list, so the rebuild never meets one it has to skip.
+    /// Off a mixer anything goes — there the managed Process is the chain.
+    /// </summary>
+    internal Action<IEffectProcessor> NativeChainValidator { get; set; } = NoNativeChainCheck;
+
+    /// <summary>
+    /// The off-mixer fallback for the validator, same nullable-context reason as above.
+    /// </summary>
+    internal static readonly Action<IEffectProcessor> NoNativeChainCheck = static _ => { };
 
     /// <summary>
     /// Throwing effects are counted, not logged per buffer — the read path runs at audio rate.
@@ -423,6 +436,8 @@ public sealed class SourceWithEffects : IAudioSource, IMasterClockSource, ISynch
                 $"Effect '{effect.Name}' is not ready for audio processing. " +
                 $"For VST3 effects call and await VST3PluginHost.InitializeAudioAsync() first.");
         }
+
+        NativeChainValidator(effect);
 
         lock (_effectsLock)
         {

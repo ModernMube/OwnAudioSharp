@@ -21,6 +21,8 @@ public sealed partial class AudioMixer
                 $"Effect '{effect.Name}' is not ready for audio processing. " +
                 $"For VST3 effects call and await VST3PluginHost.InitializeAudioAsync() first.");
 
+        if (_rustNative) ThrowIfNoNativeTwin(effect, "the master bus");
+
         lock (_effectsLock)
         {
             effect.Initialize(_config);

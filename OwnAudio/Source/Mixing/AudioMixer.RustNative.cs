@@ -410,8 +410,30 @@ public sealed partial class AudioMixer
     {
         if (source is not SourceWithEffects swe) return;
 
+        //The wrapper may already carry a chain from before it was handed to the mixer
+        foreach (IEffectProcessor effect in swe.GetEffects())
+            ThrowIfNoNativeTwin(effect, $"source '{swe.Id}'");
+
         _rustEffectSources.Add(new RustTrackEffectRouting(swe, backing));
         swe.NativeChainReconciler = ReconcileRustTrackEffectsOnce;
+        swe.NativeChainValidator = _effect => ThrowIfNoNativeTwin(_effect, $"source '{swe.Id}'");
+    }
+
+    /// <summary>
+    /// Everything the mixer plays runs as a native twin, so a managed type with no adapter would
+    /// simply be inaudible. Better a hard error at the call site than a silent chain — and better
+    /// than throwing out of the rebuild, which the control tick would then hit every 15 ms.
+    /// </summary>
+    /// <param name="effect"></param>
+    /// <param name="where">for the message: which chain rejected it</param>
+    internal static void ThrowIfNoNativeTwin(IEffectProcessor effect, string where)
+    {
+        if (effect is VST3EffectProcessor || RustEffectAdapters.TryGetEffectType(effect, out _))
+            return;
+
+        throw new InvalidOperationException(
+            $"Effect '{effect.GetType().Name}' has no native twin and cannot run on {where}. "
+            + "Only built-in OwnaudioNET.Effects types (and VST3) are hosted natively.");
     }
 
     /// <summary>
@@ -1049,7 +1071,7 @@ public sealed partial class AudioMixer
     /// <summary>
     /// Routes a managed master effect onto the native master bus: a native twin is built and
     /// the managed params get mirrored onto it, the managed DSP itself never runs.
-    /// No-op on legacy or when the effect type has no native adapter yet.
+    /// AddMasterEffect has already rejected anything without an adapter by this point.
     /// </summary>
     /// <param name="effect"></param>
     internal void AttachMasterEffectToRust(IEffectProcessor effect)
@@ -1087,10 +1109,10 @@ public sealed partial class AudioMixer
             return;
         }
 
+        //AddMasterEffect rejects these up front; getting here means someone bypassed it
         if (!RustEffectAdapters.TryGetEffectType(effect, out var effectType))
         {
-            Log.Warning($"[Mixer] Master effect '{effect.GetType().Name}' has no native twin and stays "
-                + "silent — the managed Process path does not run on the rust chain");
+            Log.Error($"[Mixer] Master effect '{effect.GetType().Name}' has no native twin, it stays off the bus");
             return;
         }
 
@@ -1266,8 +1288,11 @@ public sealed partial class AudioMixer
             }
             else
             {
-                Log.Warning($"[Mixer] Effect '{_effect.GetType().Name}' on source '{routing.Source.Id}' has no "
-                    + "native twin and stays silent — the managed Process path does not run on the rust chain");
+                //AddEffect rejects these through NativeChainValidator, so this is belt and braces —
+                //and it must not throw: the tick runs the same rebuild, and a throwing one here
+                //would take the master clock and the EOS poll down with it every 15 ms
+                Log.Error($"[Mixer] Effect '{_effect.GetType().Name}' on source '{routing.Source.Id}' has no "
+                    + "native twin, it is skipped");
             }
         }
     }

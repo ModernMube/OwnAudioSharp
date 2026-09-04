@@ -9,11 +9,11 @@ namespace OwnaudioNET.Mixing;
 
 /// <summary>
 /// Pairs a managed effect with its native Rust twin and shoves the managed
-/// parameters onto the native side. In the rust-native chain the managed
-/// Process never runs — the managed object is just the parameter model the UI
-/// binds to; the control-rate tick pushes its values across via Mirror.
-/// VST3 isn't routed here (own native bridge); effects without an adapter get
-/// no native processing.
+/// parameters onto the native side. The mixer never calls Process — the twin
+/// on the audio thread is the live DSP. Direct Process() / Matchering use a
+/// separate standalone native instance (same engine, different handle).
+/// VST3 isn't routed here (own native bridge); a type with no adapter throws
+/// when it is added to a mixer.
 /// </summary>
 internal static class RustEffectAdapters
 {
